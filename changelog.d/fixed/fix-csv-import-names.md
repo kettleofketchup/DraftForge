@@ -1,0 +1,1 @@
+- CSV import conflict messages now name people the way the site does, including their Discord name, instead of only the site nickname or username.

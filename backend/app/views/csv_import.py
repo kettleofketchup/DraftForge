@@ -1,15 +1,20 @@
 """CSV import views for bulk-adding users to organizations and tournaments."""
 
+from typing import Any
+
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
+from app.display_names import user_display_name
 from app.models import (
     CustomUser,
+    League,
     Organization,
     OrgLog,
     PositionsModel,
@@ -28,7 +33,7 @@ MAX_ROWS = 500
 STEAM_ID_64_MIN = 76561197960265728  # Smallest valid Steam64 ID
 
 
-def _parse_int(value, field_name):
+def _parse_int(value: Any, field_name: str) -> tuple[int | None, str | None]:
     """Parse a string to int, returning (value, error)."""
     if value is None or value == "":
         return None, None
@@ -49,7 +54,7 @@ POSITION_NUM_TO_FIELD = {
 }
 
 
-def _parse_positions(value):
+def _parse_positions(value: Any) -> tuple[dict[str, int] | None, str | None]:
     """Parse ranked positions string (e.g. '1:3:2').
 
     Format: colon-separated position numbers (1-5) in preference order.
@@ -83,7 +88,9 @@ def _parse_positions(value):
     return result, None
 
 
-def _update_positions_if_empty(user, positions_dict):
+def _update_positions_if_empty(
+    user: CustomUser, positions_dict: dict[str, int] | None
+) -> None:
     """Update user positions only if all current values are 0 (default)."""
     if not positions_dict or not user.positions:
         return
@@ -93,7 +100,9 @@ def _update_positions_if_empty(user, positions_dict):
         user.positions.save()
 
 
-def _resolve_user_for_csv_row(row):
+def _resolve_user_for_csv_row(
+    row: dict[str, Any],
+) -> tuple[CustomUser | None, bool, str | None, list[CustomUser] | None]:
     """
     Resolve or create a user from a CSV row.
 
@@ -149,10 +158,8 @@ def _resolve_user_for_csv_row(row):
 
     # Conflict: both identifiers resolve to different users
     if steam_user and discord_user and steam_user.pk != discord_user.pk:
-        steam_name = steam_user.nickname or steam_user.username or f"#{steam_user.pk}"
-        discord_name = (
-            discord_user.nickname or discord_user.username or f"#{discord_user.pk}"
-        )
+        steam_name = user_display_name(steam_user)
+        discord_name = user_display_name(discord_user)
         return (
             None,
             False,
@@ -164,7 +171,7 @@ def _resolve_user_for_csv_row(row):
         user = steam_user
         # Conflict: user's discord doesn't match provided discord
         if discord_id and user.discordId and user.discordId != discord_id:
-            name = user.nickname or user.username or f"#{user.pk}"
+            name = user_display_name(user)
             return (
                 None,
                 False,
@@ -175,7 +182,7 @@ def _resolve_user_for_csv_row(row):
         user = discord_user
         # Conflict: user's steam doesn't match provided steam
         if steam_id and user.steamid and user.steamid != steam_id:
-            name = user.nickname or user.username or f"#{user.pk}"
+            name = user_display_name(user)
             return (
                 None,
                 False,
@@ -228,7 +235,7 @@ def _resolve_user_for_csv_row(row):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def import_csv_org(request, org_id):
+def import_csv_org(request: Request, org_id: int) -> Response:
     """
     Bulk-import users to an organization from parsed CSV data.
 
@@ -379,7 +386,13 @@ def import_csv_org(request, org_id):
     return Response({"summary": summary, "results": results})
 
 
-def _update_mmr_for_target(user, org, league, mmr_target, base_mmr):
+def _update_mmr_for_target(
+    user: CustomUser,
+    org: Organization | None,
+    league: League | None,
+    mmr_target: str | None,
+    base_mmr: int,
+) -> None:
     """Update MMR at the specified target level (organization or league)."""
     if mmr_target == "league" and league and org:
         org_user = OrgUser.objects.filter(user=user, organization=org).first()
@@ -395,7 +408,7 @@ def _update_mmr_for_target(user, org, league, mmr_target, base_mmr):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def import_csv_tournament(request, tournament_id):
+def import_csv_tournament(request: Request, tournament_id: int) -> Response:
     """
     Bulk-import users to a tournament from parsed CSV data.
 
