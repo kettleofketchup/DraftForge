@@ -1,6 +1,6 @@
 ---
 name: brand
-description: DraftForge brand/theming review. Flags raw <button> over PrimaryButton/SecondaryButton, hardcoded violet/slate over brand tokens, inline styles, missing UserAvatar/EntityBreadcrumb.
+description: DraftForge brand/theming review. Flags raw <button> over PrimaryButton/SecondaryButton, raw palette colors over brand/domain tokens, inline styles, missing UserAvatar/EntityBreadcrumb.
 ---
 
 # DraftForge Brand & Theming Review
@@ -9,7 +9,7 @@ DraftForge's visual identity is "Neon Cyber Esports" — a violet/indigo primary
 
 ## Canonical Sources (priority order)
 
-1. **`docs/THEMING-GUIDE.md`** — single source of truth. Palette, brand button system (`PrimaryButton`/`SecondaryButton`/`ConfirmButton`/`EditButton`), `bg-base-*` scale, status colors, gradient utilities, glow effects, mandatory `<UserAvatar>` / `<EntityBreadcrumb>` components, button policy. Read first.
+1. **`docs/THEMING-GUIDE.md`** — single source of truth. Palette, brand button system (`PrimaryButton`/`SecondaryButton`/`ConfirmButton`/`EditButton`), `bg-base-*` scale, status colors, domain colors (Radiant/Dire, pick/ban, positions, roles), gradient utilities, glow effects, mandatory `<UserAvatar>` / `<EntityBreadcrumb>` components, button policy. Read first.
 2. **`docs/theming-guide/ai/references/`** — AI-targeted review references (hidden from MkDocs nav, linked from the canonical guide's `## References` section).
 3. **`frontend/app/app.css`** — token SSOT (CSS variables for palette, oklch values, gradients).
 4. **`frontend/app/components/ui/buttons/styles.ts`** — exported brand style constants (`brandGradient`, `brandSecondary`, `brandErrorBg`, `brandSuccessBg`, `brandBg`, `buttonLift`, etc.).

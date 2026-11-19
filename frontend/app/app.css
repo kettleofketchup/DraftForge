@@ -222,6 +222,45 @@ body {
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
 
+  /* Domain colors (values in the "Domain colors" :root block) */
+  --color-radiant: var(--radiant);
+  --color-radiant-surface: var(--radiant-surface);
+  --color-dire: var(--dire);
+  --color-dire-surface: var(--dire-surface);
+  --color-pick: var(--pick);
+  --color-pick-surface: var(--pick-surface);
+  --color-ban: var(--ban);
+  --color-ban-surface: var(--ban-surface);
+  --color-turn: var(--turn);
+  --color-turn-foreground: var(--turn-foreground);
+  --color-draft-snake: var(--draft-snake);
+  --color-draft-normal: var(--draft-normal);
+  --color-draft-shuffle: var(--draft-shuffle);
+  --color-pos-carry: var(--pos-carry);
+  --color-pos-carry-surface: var(--pos-carry-surface);
+  --color-pos-mid: var(--pos-mid);
+  --color-pos-mid-surface: var(--pos-mid-surface);
+  --color-pos-offlane: var(--pos-offlane);
+  --color-pos-offlane-surface: var(--pos-offlane-surface);
+  --color-pos-soft-support: var(--pos-soft-support);
+  --color-pos-soft-support-surface: var(--pos-soft-support-surface);
+  --color-pos-hard-support: var(--pos-hard-support);
+  --color-pos-hard-support-surface: var(--pos-hard-support-surface);
+  --color-role-owner: var(--role-owner);
+  --color-role-admin: var(--role-admin);
+  --color-role-staff: var(--role-staff);
+  --color-rank-ranked: var(--rank-ranked);
+  --color-rank-unranked: var(--rank-unranked);
+  --color-medal-gold: var(--medal-gold);
+  --color-medal-silver: var(--medal-silver);
+  --color-medal-bronze: var(--medal-bronze);
+  --color-online: var(--online);
+  --color-offline: var(--offline);
+  --color-live: var(--live);
+  --color-stat-gold: var(--stat-gold);
+  --color-stat-xp: var(--stat-xp);
+  --color-discord: var(--discord);
+
   /* Brand shadows */
   --shadow-brand-glow:
     0 4px 8px -2px rgba(0, 0, 0, 0.4), 0 8px 20px -4px rgba(0, 0, 0, 0.3);
@@ -420,6 +459,69 @@ body {
   --sidebar-accent-foreground: oklch(0.968 0.007 248);
   --sidebar-border: oklch(0.372 0.044 257);
   --sidebar-ring: oklch(0.702 0.183 293);
+}
+
+/* ===== Domain colors =====
+   Fixed meanings that must look the same on every page (docs/THEMING-GUIDE.md,
+   "Domain Colors"). One value for both themes: the site renders dark-only.
+   Change a meaning's color here, never at the call site. */
+:root {
+  /* Team sides */
+  --radiant: oklch(0.792 0.209 151.7);
+  --radiant-surface: oklch(0.266 0.065 152.9);
+  --dire: oklch(0.704 0.191 22.2);
+  --dire-surface: oklch(0.258 0.092 26);
+
+  /* Draft actions */
+  --pick: oklch(0.792 0.209 151.7);
+  --pick-surface: oklch(0.266 0.065 152.9);
+  --ban: oklch(0.704 0.191 22.2);
+  --ban-surface: oklch(0.258 0.092 26);
+  --turn: oklch(0.852 0.199 91.9);
+  --turn-foreground: oklch(0.21 0.034 264.7);
+
+  /* Draft styles */
+  --draft-snake: oklch(0.723 0.219 149.6);
+  --draft-normal: oklch(0.705 0.213 47.6);
+  --draft-shuffle: oklch(0.627 0.265 303.9);
+
+  /* Positions: accent for text and icons, surface for badges */
+  --pos-carry: oklch(0.892 0.058 10);
+  --pos-carry-surface: oklch(0.41 0.159 10.3);
+  --pos-mid: oklch(0.917 0.08 205);
+  --pos-mid-surface: oklch(0.398 0.07 227.4);
+  --pos-offlane: oklch(0.905 0.093 164.2);
+  --pos-offlane-surface: oklch(0.378 0.077 168.9);
+  --pos-soft-support: oklch(0.894 0.057 293.3);
+  --pos-soft-support-surface: oklch(0.38 0.189 293.7);
+  --pos-hard-support: oklch(0.87 0.065 274);
+  --pos-hard-support-surface: oklch(0.359 0.144 278.7);
+
+  /* Site roles */
+  --role-owner: oklch(0.795 0.184 86);
+  --role-admin: oklch(0.577 0.245 27.3);
+  --role-staff: oklch(0.546 0.245 262.9);
+
+  /* Dota rank status */
+  --rank-ranked: oklch(0.879 0.169 91.6);
+  --rank-unranked: oklch(0.809 0.105 251.8);
+
+  /* Placings and trophies */
+  --medal-gold: oklch(0.795 0.184 86);
+  --medal-silver: oklch(0.707 0.022 261.3);
+  --medal-bronze: oklch(0.555 0.163 49);
+
+  /* Presence */
+  --online: oklch(0.723 0.219 149.6);
+  --offline: oklch(0.707 0.022 261.3);
+  --live: oklch(0.637 0.237 25.3);
+
+  /* Match stats */
+  --stat-gold: oklch(0.852 0.199 91.9);
+  --stat-xp: oklch(0.707 0.165 254.6);
+
+  /* Third-party brands */
+  --discord: oklch(0.585 0.204 277.1);
 }
 /* body{
 

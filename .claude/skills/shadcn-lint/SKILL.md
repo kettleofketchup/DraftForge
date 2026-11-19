@@ -33,6 +33,12 @@ them (`UserAvatar.tsx`, `avatar.tsx`, `lib/userDisplayName.ts`, `lib/displayOrg.
 field (an `@handle`, a labelled "Username:" row, a Discord member picker), opt out on that
 line with a reason: `// eslint-disable-next-line draftforge/use-display-name -- shows the handle`.
 
+To fix a `no-raw-colors` hit, choose the token by meaning from THEMING-GUIDE.md "Domain
+Colors" (`text-radiant`, `bg-ban-surface/60`, `fill-pos-carry`, `bg-role-admin`, ...) or
+its generic table (`success`, `error`, `base-*`). The rule's "nearest theme tokens" hint
+matches shade only and can name the wrong meaning. A new meaning gets a token in the
+"Domain colors" block of `app/app.css`, not a raw class.
+
 Runtime hook classes that are not Tailwind utilities go in the rule's `allow` list
 (`nodrag`/`nopan` for React Flow, `toaster` for sonner, `spinner` for an inline `<style>`).
 Add one only for a class some JS or CSS actually reads; a typo belongs in the fix, not the list.
