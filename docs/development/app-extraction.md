@@ -174,6 +174,13 @@ grep -rn "functions/herodraft\|functions\.herodraft\|herodraft_tick\.py\|tasks\.
   | grep -v "docs/plans/\|docs/superpowers\|docs/development/app-extraction.md"
 ```
 
+The grep matches module paths only, so it misses code snippets that show where a moved class is wired. Also check routing, URL and admin snippets that name the moved consumers, views or models:
+
+```bash
+grep -rn "app/routing\.py\|app/urls\.py\|HeroDraftConsumer\|HeroDraftSSRView" docs .claude --include='*.md' \
+  | grep -v "docs/plans/\|docs/superpowers"
+```
+
 Match module paths, not bare names: `herodraft_tick` on its own is also the WebSocket message type, which does not change. Plans under `docs/plans/` are historical; leave them.
 
 ### 11. Verify and write the changelog
