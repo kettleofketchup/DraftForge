@@ -130,6 +130,7 @@ class ReopenEventServiceTest(ReopenTestBase):
                 "from": EventState.COMPLETED,
                 "to": EventState.SIGNUPS_OPEN,
                 "revoked": 3,
+                "attendance_reopened": 0,
             },
         )
 

@@ -8,6 +8,7 @@ from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, OrgLog
 from events.constants import EVENT_REOPEN_TRANSITIONS, EventState
 from events.models import Event
+from org.conduct.lifecycle import reopen_event_outcomes
 from org.contributions.kinds import EVENT_STAFF_KINDS
 from org.models import ContributionEntry
 from telemetry.logging import get_logger
@@ -54,6 +55,7 @@ def reopen_event(event: Event, *, actor: CustomUser | None) -> ReopenResult:
         ).update(
             state=REOPEN_TARGET,
             contributions_awarded_at=None,
+            conduct_finalized_at=None,
             updated_at=timezone.now(),
         )
         if not changed:
@@ -78,6 +80,7 @@ def reopen_event(event: Event, *, actor: CustomUser | None) -> ReopenResult:
             )
             .delete()
         )
+        deleted, kept = reopen_event_outcomes(event)
         OrgLog.objects.create(
             organization_id=event.organization_id,
             actor=actor,
@@ -87,6 +90,7 @@ def reopen_event(event: Event, *, actor: CustomUser | None) -> ReopenResult:
                 "from": current,
                 "to": REOPEN_TARGET.value,
                 "revoked": revoked,
+                "attendance_reopened": deleted + kept,
             },
         )
         stale = copy.copy(event)

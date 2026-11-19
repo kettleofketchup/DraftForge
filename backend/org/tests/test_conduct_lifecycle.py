@@ -8,8 +8,10 @@ from app.models import OrgLog, Tournament
 from events.completion import close_event
 from events.constants import EventState
 from events.models import Event
+from events.reopen import reopen_event
+from events.services import restart_event_tournament
 from org.conduct.constants import Outcome, OutcomeSource
-from org.conduct.lifecycle import void_event_outcomes
+from org.conduct.lifecycle import reopen_event_outcomes, void_event_outcomes
 from org.models_conduct import AttendanceOutcome
 from org.tests.conduct_base import ConductTestCase
 
@@ -128,3 +130,119 @@ class VoidOnCancelTest(ConductTestCase):
         self.assertEqual(resp.status_code, 400, resp.content)
         row.refresh_from_db()
         self.assertIsNone(row.voided_at)
+
+
+class ReopenCleanupTest(ConductTestCase):
+    def _seed(self, event: Event) -> dict[str, AttendanceOutcome]:
+        now = tz.now()
+        sources = {
+            OutcomeSource.DEFAULT: {},
+            OutcomeSource.READY_CHECK: {"outcome": Outcome.NO_SHOW},
+            OutcomeSource.VOICE: {},
+            OutcomeSource.STAFF: {"outcome": Outcome.EXCUSED, "reason": "sick"},
+            OutcomeSource.LATE_CANCEL: {
+                "outcome": Outcome.LATE_CANCEL,
+                "cancelled_at": now,
+            },
+        }
+        return {
+            source: self.outcome(
+                self.make_user(),
+                event=event,
+                source=source,
+                voided_at=now,
+                **extra,
+            )
+            for source, extra in sources.items()
+        }
+
+    def _reopen_logs(self, event: Event) -> list[OrgLog]:
+        return list(
+            OrgLog.objects.filter(
+                organization=self.org,
+                action="reopen_event",
+                details__event_id=event.pk,
+            )
+        )
+
+    def test_reopen_deletes_automatic_keeps_staff_and_late_cancel(self) -> None:
+        self.unlock()
+        event = self.make_event(state=EventState.COMPLETED)
+        Event.objects.filter(pk=event.pk).update(conduct_finalized_at=tz.now())
+        rows = self._seed(event)
+        other = self.outcome(self.make_user(), event=self.make_event())
+
+        result = reopen_event(event, actor=self.admin)
+
+        self.assertTrue(result.reopened)
+        remaining = AttendanceOutcome.objects.nocache().filter(event=event)
+        self.assertEqual(
+            set(remaining.values_list("source", flat=True)),
+            {OutcomeSource.STAFF, OutcomeSource.LATE_CANCEL},
+        )
+        for row in remaining:
+            self.assertIsNone(row.finalized_at)
+            self.assertIsNone(row.voided_at)
+        self.assertEqual(
+            AttendanceOutcome.objects.nocache()
+            .get(pk=rows[OutcomeSource.STAFF].pk)
+            .outcome,
+            Outcome.EXCUSED,
+        )
+        self.assertIsNone(Event.objects.nocache().get(pk=event.pk).conduct_finalized_at)
+        other.refresh_from_db()
+        self.assertIsNotNone(other.finalized_at)
+        logs = self._reopen_logs(event)
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0].details["attendance_reopened"], 5)
+
+    def test_reopen_runs_with_feature_locked(self) -> None:
+        event = self.make_event(state=EventState.CANCELLED)
+        Event.objects.filter(pk=event.pk).update(conduct_finalized_at=tz.now())
+        self._seed(event)
+
+        reopen_event(event, actor=self.admin)
+
+        self.assertEqual(
+            AttendanceOutcome.objects.nocache().filter(event=event).count(), 2
+        )
+        self.assertFalse(
+            AttendanceOutcome.objects.nocache()
+            .filter(event=event, voided_at__isnull=False)
+            .exists()
+        )
+        self.assertIsNone(Event.objects.nocache().get(pk=event.pk).conduct_finalized_at)
+
+    def test_reopen_event_outcomes_counts(self) -> None:
+        event = self.make_event()
+        self._seed(event)
+        with transaction.atomic():
+            deleted, kept = reopen_event_outcomes(event)
+        self.assertEqual((deleted, kept), (3, 2))
+
+    def test_skipped_reopen_leaves_rows(self) -> None:
+        event = self.make_event(state=EventState.SIGNUPS_OPEN)
+        rows = self._seed(event)
+        result = reopen_event(event, actor=self.admin)
+        self.assertFalse(result.reopened)
+        self.assertEqual(
+            AttendanceOutcome.objects.nocache().filter(event=event).count(),
+            len(rows),
+        )
+
+    def test_restart_event_tournament_reaches_cleanup(self) -> None:
+        tournament = Tournament.objects.create(
+            name="Restart Tourney", date_played=tz.now(), state="past"
+        )
+        event = self.make_event(state=EventState.COMPLETED, tournament=tournament)
+        Event.objects.filter(pk=event.pk).update(conduct_finalized_at=tz.now())
+        self.outcome(self.make_user(), event=event, source=OutcomeSource.DEFAULT)
+
+        restart_event_tournament(event, actor=self.admin, can_reopen=True)
+
+        self.assertFalse(
+            AttendanceOutcome.objects.nocache()
+            .filter(event=event, source=OutcomeSource.DEFAULT)
+            .exists()
+        )
+        self.assertIsNone(Event.objects.nocache().get(pk=event.pk).conduct_finalized_at)
