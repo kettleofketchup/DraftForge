@@ -147,23 +147,28 @@ def follow_captain(
     *,
     actor: CustomUser | None,
 ) -> dict[str, Any]:
-    """Move unpicked rounds to the new captain, reset presence, refresh live drafts."""
+    """Move the team's rounds to the new captain, reset presence, refresh live drafts.
+
+    Picked rounds move too: rounds resolve their team by captain, and the
+    player_picked DraftEvent keeps who actually picked.
+    """
     extras: dict[str, Any] = {}
     if old is None:
         extras["draft_rounds_updated"] = 0
         extras["draft_rounds_skipped_reason"] = "no_previous_captain"
     else:
         rounds = DraftRound.objects.nocache().filter(
-            draft__tournament_id=team.tournament_id,
-            captain=old,
-            choice__isnull=True,
+            draft__tournament_id=team.tournament_id, captain=old
         )
         updated = 0
+        picked = 0
         for draft_round in rounds.order_by("pk"):
             draft_round.captain = new
             draft_round.save(update_fields=["captain"])
             updated += 1
+            picked += draft_round.choice_id is not None
         extras["draft_rounds_updated"] = updated
+        extras["draft_picked_rounds_updated"] = picked
 
     for field in PRESENCE_FIELDS:
         setattr(team, field, False)
@@ -194,6 +199,20 @@ def follow_captain(
         .order_by("pk")
     )
     if herodrafts:
+        # Only the ready gate is reset; mid-draft, a stale is_connected makes
+        # the heartbeat check pause until the new captain connects.
+        waiting = DraftTeam.objects.nocache().filter(
+            tournament_team=team,
+            draft__in=herodrafts,
+            draft__state=HeroDraftState.WAITING_FOR_CAPTAINS,
+        )
+        reset_ids: list[int] = []
+        for draft_team in waiting.order_by("pk"):
+            draft_team.is_ready = False
+            draft_team.is_connected = False
+            draft_team.save(update_fields=["is_ready", "is_connected"])
+            reset_ids.append(draft_team.pk)
+        extras["herodraft_teams_reset"] = reset_ids
         draft_teams = list(DraftTeam.objects.nocache().filter(draft__in=herodrafts))
         transaction.on_commit(
             partial(_refresh_herodrafts, team, herodrafts, draft_teams)

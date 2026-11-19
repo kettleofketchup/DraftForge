@@ -720,7 +720,7 @@ class CaptainDraftFollowUpTests(TeamManagementFixture, TestCase):
         DraftTeam.objects.create(draft=herodraft, tournament_team=self.other)
         return herodraft
 
-    def test_unpicked_rounds_follow(self) -> None:
+    def test_team_rounds_follow(self) -> None:
         draft = self.make_draft(TeamDraftState.DRAFTING)
         picked = DraftRound.objects.create(
             draft=draft, captain=self.c, pick_number=1, choice=self.p1
@@ -732,11 +732,56 @@ class CaptainDraftFollowUpTests(TeamManagementFixture, TestCase):
         change = self.captain(self.m1)
 
         captains = dict(DraftRound.objects.nocache().values_list("pk", "captain_id"))
-        self.assertEqual(captains[picked.pk], self.c.pk)
+        self.assertEqual(captains[picked.pk], self.m1.pk)
         self.assertEqual(captains[open_a.pk], self.m1.pk)
         self.assertEqual(captains[open_b.pk], self.m1.pk)
         self.assertEqual(captains[other.pk], self.o1.pk)
-        self.assertEqual(change.log.details["draft_rounds_updated"], 2)
+        self.assertEqual(change.log.details["draft_rounds_updated"], 3)
+        self.assertEqual(change.log.details["draft_picked_rounds_updated"], 1)
+
+    def test_picked_rounds_keep_their_team(self) -> None:
+        draft = self.make_draft(TeamDraftState.DRAFTING)
+        picked = DraftRound.objects.create(
+            draft=draft, captain=self.c, pick_number=1, choice=self.p1
+        )
+
+        self.captain(self.m1)
+
+        fresh = DraftRound.objects.nocache().get(pk=picked.pk)
+        self.assertEqual(fresh.team, self.team)
+
+    def test_undo_old_captain_pick_after_captain_change(self) -> None:
+        draft = self.make_draft(TeamDraftState.DRAFTING)
+        DraftRound.objects.create(
+            draft=draft, captain=self.o1, pick_number=1, choice=self.p2
+        )
+        last = DraftRound.objects.create(
+            draft=draft, captain=self.c, pick_number=2, choice=self.p1
+        )
+        self.other.members.add(self.p2)
+        self.team.members.add(self.p1)
+        self.captain(self.m1)
+        staff = CustomUser.objects.create_superuser(
+            username="roster_admin", password="test"
+        )
+        client = APIClient()
+        client.force_authenticate(staff)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = client.post(
+                "/api/tournaments/undo-pick", {"draft_pk": draft.pk}, format="json"
+            )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertNotIn(self.p1.pk, self.member_pks(self.team))
+        fresh = DraftRound.objects.nocache().get(pk=last.pk)
+        self.assertIsNone(fresh.choice_id)
+        self.assertEqual(fresh.captain_id, self.m1.pk)
+        self.assertEqual(fresh.team, self.team)
+        event = DraftEvent.objects.get(draft=draft, event_type="pick_undone")
+        self.assertEqual(event.payload["team_id"], self.team.pk)
+        remaining = Draft.objects.nocache().get(pk=draft.pk).users_remaining
+        self.assertIn(self.p1.pk, set(remaining.values_list("pk", flat=True)))
 
     def test_shuffle_null_rounds_untouched(self) -> None:
         draft = self.make_draft(TeamDraftState.DRAFTING, style="shuffle")
@@ -801,6 +846,42 @@ class CaptainDraftFollowUpTests(TeamManagementFixture, TestCase):
         self.captain(self.m1)
 
         self.assertFalse(DraftEvent.objects.filter(draft=draft).exists())
+
+    def test_waiting_herodraft_ready_reset(self) -> None:
+        herodraft = self.make_herodraft(HeroDraftState.WAITING_FOR_CAPTAINS)
+        DraftTeam.objects.filter(draft=herodraft).update(
+            is_ready=True, is_connected=True
+        )
+
+        with patch.object(team_management, "broadcast_herodraft_state"):
+            with self.captureOnCommitCallbacks(execute=True):
+                self.captain(self.m1)
+
+        flags = {
+            dt.tournament_team_id: (dt.is_ready, dt.is_connected)
+            for dt in DraftTeam.objects.nocache().filter(draft=herodraft)
+        }
+        self.assertEqual(flags[self.team.pk], (False, False))
+        self.assertEqual(flags[self.other.pk], (True, True))
+        self.assertEqual(
+            HeroDraft.objects.nocache().get(pk=herodraft.pk).state,
+            HeroDraftState.WAITING_FOR_CAPTAINS,
+        )
+
+    def test_drafting_herodraft_keeps_connected(self) -> None:
+        herodraft = self.make_herodraft(HeroDraftState.DRAFTING)
+        DraftTeam.objects.filter(draft=herodraft).update(
+            is_ready=True, is_connected=True
+        )
+
+        with patch.object(team_management, "broadcast_herodraft_state"):
+            with self.captureOnCommitCallbacks(execute=True):
+                self.captain(self.m1)
+
+        own = DraftTeam.objects.nocache().get(
+            draft=herodraft, tournament_team=self.team
+        )
+        self.assertTrue(own.is_connected)
 
     def test_live_herodrafts_broadcast_each(self) -> None:
         first = self.make_herodraft()

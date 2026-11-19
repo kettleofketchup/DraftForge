@@ -483,11 +483,12 @@ class SuccessionAuditTests(TestCase):
             DraftRound.objects.nocache().get(pk=unpicked.pk).captain_id, deputy.pk
         )
         self.assertEqual(
-            DraftRound.objects.nocache().get(pk=picked.pk).captain_id, captain.pk
+            DraftRound.objects.nocache().get(pk=picked.pk).captain_id, deputy.pk
         )
         row = TeamLog.objects.get(team=self.team)
         self.assertEqual(row.action, "system_succession")
-        self.assertEqual(row.details["draft_rounds_updated"], 1)
+        self.assertEqual(row.details["draft_rounds_updated"], 2)
+        self.assertEqual(row.details["draft_picked_rounds_updated"], 1)
         self.assertTrue(row.details["presence_reset"])
         self.assertTrue(
             DraftEvent.objects.filter(draft=draft, event_type="team_changed").exists()
