@@ -1,5 +1,28 @@
 // Shared styles
-export { brandBg, brandGlowLift, brandDialogPanel, brandErrorBg, brandErrorCard, brandErrorPrimary, brandGlow, brandGradient, brandHighlight, brandHighlightText, brandLabelOnGradient, brandReadableDestructive, brandReadableSuccess, brandReadableWarning, brandSecondary, brandSecondaryLift, brandSecondaryOpaque, brandSecondaryOpaqueLift, brandSuccessBg, buttonLift, buttonDisabled, brandButtonVariants } from './styles';
+export {
+  brandBg,
+  brandButtonVariants,
+  brandDialogPanel,
+  brandErrorBg,
+  brandErrorCard,
+  brandErrorPrimary,
+  brandGlow,
+  brandGlowLift,
+  brandGradient,
+  brandHighlight,
+  brandHighlightText,
+  brandLabelOnGradient,
+  brandReadableDestructive,
+  brandReadableSuccess,
+  brandReadableWarning,
+  brandSecondary,
+  brandSecondaryLift,
+  brandSecondaryOpaque,
+  brandSecondaryOpaqueLift,
+  brandSuccessBg,
+  buttonDisabled,
+  buttonLift,
+} from './styles';
 export type { BrandButtonVariant } from './styles';
 
 // Shared affordances
@@ -15,9 +38,9 @@ export type { CancelButtonProps, CancelButtonVariant } from './CancelButton';
 
 export { ConfirmButton } from './ConfirmButton';
 
+export type { ConfirmButtonProps, ConfirmButtonVariant } from './ConfirmButton';
 export { HighlightButton } from './HighlightButton';
 export type { HighlightButtonProps } from './HighlightButton';
-export type { ConfirmButtonProps, ConfirmButtonVariant } from './ConfirmButton';
 
 export { DestructiveButton } from './DestructiveButton';
 export type { DestructiveButtonProps } from './DestructiveButton';
@@ -35,7 +58,7 @@ export { PrimaryButton } from './PrimaryButton';
 export type { PrimaryButtonColor, PrimaryButtonProps } from './PrimaryButton';
 
 export { SecondaryButton } from './SecondaryButton';
-export type { SecondaryColor, SecondaryButtonProps } from './SecondaryButton';
+export type { SecondaryButtonProps, SecondaryColor } from './SecondaryButton';
 
 export { SubmitButton } from './SubmitButton';
 export type { SubmitButtonProps } from './SubmitButton';
@@ -48,6 +71,7 @@ export {
   ChevronNavButton,
   EditIconButton,
   PlusIconButton,
+  RemoveIconButton,
   SendIconButton,
   TrashIconButton,
   ViewIconButton,
@@ -60,6 +84,7 @@ export type {
   EditIconButtonProps,
   IconButtonSize,
   PlusIconButtonProps,
+  RemoveIconButtonProps,
   SendIconButtonProps,
   TrashIconButtonProps,
   ViewIconButtonProps,

@@ -228,13 +228,15 @@ class BulkUpdateMemberNamesTest(TestCase):
 
 class ClientWrapperTest(TestCase):
     def test_targets_returns_empty_on_failure(self) -> None:
-        with mock.patch.object(internal_client, "_get", return_value=None):
+        with mock.patch.object(internal_client.transport, "get", return_value=None):
             self.assertEqual(internal_client.list_discord_name_sync_targets(), [])
 
     def test_targets_passes_params(self) -> None:
         resp = mock.Mock(ok=True)
         resp.json.return_value = [{"org_id": 1, "guild_id": "111"}]
-        with mock.patch.object(internal_client, "_get", return_value=resp) as get:
+        with mock.patch.object(
+            internal_client.transport, "get", return_value=resp
+        ) as get:
             rows = internal_client.list_discord_name_sync_targets(
                 scope="all", org_id=5, lock=True
             )
@@ -247,7 +249,9 @@ class ClientWrapperTest(TestCase):
     def test_targets_omits_org_and_lock_when_unset(self) -> None:
         resp = mock.Mock(ok=True)
         resp.json.return_value = []
-        with mock.patch.object(internal_client, "_get", return_value=resp) as get:
+        with mock.patch.object(
+            internal_client.transport, "get", return_value=resp
+        ) as get:
             internal_client.list_discord_name_sync_targets(lock=False)
         get.assert_called_once_with(
             "/orgs/discord-name-sync-targets/", params={"scope": "active"}
@@ -255,15 +259,15 @@ class ClientWrapperTest(TestCase):
 
     def test_targets_returns_empty_on_bad_status_or_json(self) -> None:
         bad = mock.Mock(ok=False)
-        with mock.patch.object(internal_client, "_get", return_value=bad):
+        with mock.patch.object(internal_client.transport, "get", return_value=bad):
             self.assertEqual(internal_client.list_discord_name_sync_targets(), [])
         broken = mock.Mock(ok=True, text="x")
         broken.json.side_effect = ValueError
-        with mock.patch.object(internal_client, "_get", return_value=broken):
+        with mock.patch.object(internal_client.transport, "get", return_value=broken):
             self.assertEqual(internal_client.list_discord_name_sync_targets(), [])
 
     def test_bulk_update_returns_none_on_failure(self) -> None:
-        with mock.patch.object(internal_client, "_post", return_value=None):
+        with mock.patch.object(internal_client.transport, "post", return_value=None):
             self.assertIsNone(
                 internal_client.bulk_update_member_names(
                     "111", [1], [], complete=True, fetched_at=1.0
@@ -277,7 +281,9 @@ class ClientWrapperTest(TestCase):
         members = [
             {"discord_id": "42", "username": "u", "nick": None, "global_name": None}
         ]
-        with mock.patch.object(internal_client, "_post", return_value=resp) as post:
+        with mock.patch.object(
+            internal_client.transport, "post", return_value=resp
+        ) as post:
             result = internal_client.bulk_update_member_names(
                 "111", [1, 2], members, complete=True, fetched_at=2.5
             )

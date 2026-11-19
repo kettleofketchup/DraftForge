@@ -43,6 +43,15 @@ script *args:
 test *args:
     {{quote(root / "scripts/in-env.sh")}} test backend {{quote(python)}} -m pytest "$@"
 
+# Write frontend/app/lib/opsnotices/noticeTypes.generated.ts from backend/*/ops_notices.py
+[group('py')]
+gen-notice-types:
+    {{quote(python)}} -I {{quote(backend / "opsnotices/export_schema.py")}}
+
+# Exit 1 with a diff when the generated notice types are stale (needs the poetry venv)
+[group('py')]
+notice-types-check:
+    {{quote(python)}} -I {{quote(backend / "opsnotices/export_schema.py")}} --check
 # Regenerate frontend/app/lib/notifications/messageTypes.generated.ts from the message registry; --check fails instead of writing when stale
 [group('py')]
 gen-message-types *args:
