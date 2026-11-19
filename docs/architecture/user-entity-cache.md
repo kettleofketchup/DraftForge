@@ -394,8 +394,8 @@ sequenceDiagram
 | `backend/org/serializers.py` | `OrgUserSerializer` (org-scoped MMR + `orgUserPk`) |
 | `backend/league/serializers.py` | `LeagueUserSerializer` (league-scoped MMR) |
 | `backend/app/views_main.py` | Injects `_users` dict on tournament/draft GET responses |
-| `backend/app/consumers.py` | Injects `_users` dict on WebSocket draft state |
-| `backend/app/broadcast.py` | Injects `_users` dict on broadcast events |
+| `backend/app/consumers.py` | Injects `_users` dict on team-draft WebSocket state (via `app/draft_state.py`) |
+| `backend/app/broadcast.py` | Injects `_users` dict on team-draft broadcast events (via `app/draft_state.py`) |
 
 ### Frontend
 
