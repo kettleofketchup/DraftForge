@@ -1,6 +1,9 @@
 // DraftForge design-system rules for people: avatars go through UserAvatar, names
 // through DisplayName (which picks org server nickname, Discord name or username).
 
+const GUIDE = '.claude/skills/frontend-development/resources/users.md';
+const see = (rule) => ` See ${GUIDE}#${rule}`;
+
 const NAME_FIELDS = new Set([
   'username',
   'nickname',
@@ -135,9 +138,14 @@ function isQuietContext(node) {
 const useDisplayName = {
   meta: {
     type: 'problem',
-    docs: { description: 'Render person names through DisplayName' },
+    docs: {
+      description: 'Render person names through DisplayName',
+      url: `${GUIDE}#use-display-name`,
+    },
     messages: {
-      raw: 'Person name `.{{field}}` rendered directly; use DisplayName(user) so org server nicknames and Discord names apply.',
+      raw:
+        'Person name `.{{field}}` rendered directly; use DisplayName(user) so org server nicknames and Discord names apply.' +
+        see('use-display-name'),
     },
     schema: [],
   },
@@ -186,9 +194,14 @@ const useDisplayName = {
 const useUserAvatar = {
   meta: {
     type: 'problem',
-    docs: { description: 'Render user avatars through UserAvatar' },
+    docs: {
+      description: 'Render user avatars through UserAvatar',
+      url: `${GUIDE}#use-user-avatar`,
+    },
     messages: {
-      raw: 'User avatar rendered with raw <AvatarImage>; use <UserAvatar user={...} /> for the shared fallback, sizes and Discord URL handling.',
+      raw:
+        'User avatar rendered with raw <AvatarImage>; use <UserAvatar user={...} /> for the shared fallback, sizes and Discord URL handling.' +
+        see('use-user-avatar'),
     },
     schema: [],
   },
@@ -214,10 +227,14 @@ const useUserAvatar = {
 const noDisplayOrgArg = {
   meta: {
     type: 'suggestion',
-    docs: { description: 'Let DisplayName derive the org from the route' },
+    docs: {
+      description: 'Let DisplayName derive the org from the route',
+      url: `${GUIDE}#no-display-org-arg`,
+    },
     messages: {
       explicit:
-        'DisplayName derives the org from the current page; drop the org argument. For a deliberate override, disable this line with a reason.',
+        'DisplayName derives the org from the current page; drop the org argument. For a deliberate override, disable this line with a reason.' +
+        see('no-display-org-arg'),
     },
     schema: [],
   },
@@ -239,10 +256,14 @@ const noDisplayOrgArg = {
 const noUserReshape = {
   meta: {
     type: 'suggestion',
-    docs: { description: 'Pass the user payload to UserAvatar as-is' },
+    docs: {
+      description: 'Pass the user payload to UserAvatar as-is',
+      url: `${GUIDE}#no-user-reshape`,
+    },
     messages: {
       reshape:
-        'UserAvatar resolves {{root}} by pk / user_id and fills the rest from the user cache; pass user={{{root}}} instead of copying its fields.',
+        'UserAvatar resolves {{root}} by pk / user_id and fills the rest from the user cache; pass user={{{root}}} instead of copying its fields.' +
+        see('no-user-reshape'),
     },
     schema: [],
   },
@@ -283,10 +304,14 @@ const noUserReshape = {
 const noDirectNameResolver = {
   meta: {
     type: 'suggestion',
-    docs: { description: 'Use DisplayName / UserAvatar, not the resolvers' },
+    docs: {
+      description: 'Use DisplayName / UserAvatar, not the resolvers',
+      url: `${GUIDE}#no-direct-name-resolver`,
+    },
     messages: {
       direct:
-        '{{name}} is internal to the name and avatar helpers; use DisplayName(user) or <UserAvatar user={...} />.',
+        '{{name}} is internal to the name and avatar helpers; use DisplayName(user) or <UserAvatar user={...} />.' +
+        see('no-direct-name-resolver'),
     },
     schema: [],
   },
@@ -372,12 +397,17 @@ function callsDisplayName(node) {
 const noAvatarFallback = {
   meta: {
     type: 'problem',
-    docs: { description: 'Let UserAvatar render the no-user fallback' },
+    docs: {
+      description: 'Let UserAvatar render the no-user fallback',
+      url: `${GUIDE}#no-avatar-fallback`,
+    },
     messages: {
       branch:
-        'UserAvatar renders the fallback when there is no user; use one <UserAvatar user={...} fallbackName={...} /> instead of a raw <Avatar> branch.',
+        'UserAvatar renders the fallback when there is no user; use one <UserAvatar user={...} fallbackName={...} /> instead of a raw <Avatar> branch.' +
+        see('no-avatar-fallback'),
       initials:
-        'Person initials in <AvatarFallback>; use <UserAvatar user={...} />, which derives them from the display name.',
+        'Person initials in <AvatarFallback>; use <UserAvatar user={...} />, which derives them from the display name.' +
+        see('no-avatar-fallback'),
     },
     schema: [],
   },
