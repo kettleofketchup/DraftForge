@@ -60,7 +60,9 @@ from events.discord.embeds import (
 from events.signup_post_lock import (
     acquire_lock,
     clear_pending,
+    mark_dirty,
     mark_pending,
+    now_ms,
     release_lock,
 )
 from events.utils import starts_in_future
@@ -73,6 +75,8 @@ logger = get_logger(__name__)
 log = get_logger(__name__)
 
 T = TypeVar("T")
+
+SIGNUP_POST_LAG_WARN_MS = 10_000
 
 
 def _bind_celery_context(
@@ -792,12 +796,14 @@ def _serialised_signup_update(
         return f"Rescheduled: signup post for event {event_id} is being edited"
 
     # Cleared before the read, so a change during this run queues another.
-    clear_pending(event_id)
+    dirty_since_ms = clear_pending(event_id)
     try:
-        return _send_signup_update_impl(event_id, interaction_id)
+        return _send_signup_update_impl(event_id, interaction_id, dirty_since_ms)
     except InternalAPIUnavailable as exc:
         release_lock(event_id, token)
         token = None
+        if dirty_since_ms is not None:
+            mark_dirty(event_id, dirty_since_ms)
         attempt = task.request.retries
         exhausted = attempt >= config.read_retries
         skipped = _skip_signup_list_unavailable(
@@ -854,7 +860,26 @@ def _resolve_signup_edit_channel(
     return discord_state.signup_thread_id or discord_state.signup_channel_id
 
 
-def _send_signup_update_impl(event_id: int, interaction_id: str | None) -> str:
+def _log_signup_post_edit_applied(
+    fields: dict, message_id: str, dirty_since_ms: int | None
+) -> None:
+    lag_ms = None if dirty_since_ms is None else max(now_ms() - dirty_since_ms, 0)
+    emit = (
+        log.warning
+        if lag_ms is not None and lag_ms > SIGNUP_POST_LAG_WARN_MS
+        else log.info
+    )
+    emit(
+        "signup_post_edit_applied",
+        lag_ms=lag_ms,
+        message_id=str(message_id),
+        **fields,
+    )
+
+
+def _send_signup_update_impl(
+    event_id: int, interaction_id: str | None, dirty_since_ms: int | None = None
+) -> str:
     fields = _celery_bookend_fields("send_signup_update", event_id, interaction_id)
 
     event = get_event_for_task(event_id)
@@ -911,7 +936,7 @@ def _send_signup_update_impl(event_id: int, interaction_id: str | None) -> str:
     # None for other transient failures. Treat the typed exception as a
     # signal to clear dedup state so the next sync recreates the post.
     try:
-        sync_edit_message(
+        edited = sync_edit_message(
             channel_id=edit_channel_id,
             message_id=message_id,
             embed=result["embeds"],
@@ -928,6 +953,11 @@ def _send_signup_update_impl(event_id: int, interaction_id: str | None) -> str:
         )
         return f"Recovered: cleared dedup for event {event.pk} (orphaned message)"
 
+    if edited is None:
+        if dirty_since_ms is not None:
+            mark_dirty(event_id, dirty_since_ms)
+        return f"Failed: could not edit announcement for event {event.pk}"
+    _log_signup_post_edit_applied(fields, message_id, dirty_since_ms)
     return f"Updated announcement for event {event.pk}"
 
 
