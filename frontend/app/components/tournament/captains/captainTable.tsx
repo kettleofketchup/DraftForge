@@ -10,13 +10,14 @@ import {
   TableRow,
 } from '~/components/ui/table';
 import { PositionEnum } from '~/components/user';
-import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserStrip } from '~/components/user/UserStrip';
+import type { TeamType } from '~/index';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
-import type { TeamType } from '~/index';
 import { DraftOrderButton } from './draftOrder';
 import { UpdateCaptainButton } from './UpdateCaptainButton';
 
@@ -79,7 +80,7 @@ export const CaptainTable: React.FC = () => {
                         size="md"
                         className="hover:ring-2 hover:ring-primary transition-all"
                       />
-                      <span>{user.nickname || user.username}</span>
+                      <span>{DisplayName(user)}</span>
                     </div>
                   </PlayerPopover>
                 </TableCell>
@@ -108,7 +109,10 @@ interface CaptainStripRowProps {
   isCaptain: boolean;
 }
 
-const CaptainStripRow: React.FC<CaptainStripRowProps> = ({ user, isCaptain }) => {
+const CaptainStripRow: React.FC<CaptainStripRowProps> = ({
+  user,
+  isCaptain,
+}) => {
   const tournament = useUserStore((state) => state.tournament);
   const team = useMemo<TeamType | undefined>(
     () => tournament?.teams?.find((t) => t.captain?.pk === user.pk),

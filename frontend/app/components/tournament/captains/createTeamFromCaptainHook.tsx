@@ -6,6 +6,7 @@ import {
   fetchTournament,
 } from '~/components/api/api';
 import type { CreateTeamFromCaptainAPI } from '~/components/api/types';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
@@ -76,10 +77,10 @@ export const createTeamFromCaptainHook = async ({
     log.debug(`Team found for captain: ${captain.username}...deleting team`);
     if (team.captain && team.captain.pk === captain.pk) setIsCaptain?.(false);
     toast.promise(deleteTeam(team.pk!), {
-      loading: `Deleting team for ${captain.username}`,
+      loading: `Deleting team for ${DisplayName(captain)}`,
       success: () => {
         setDraftOrder?.('0');
-        return `Team for ${captain.username} has been deleted`;
+        return `Team for ${DisplayName(captain)} has been deleted`;
       },
       error: (err) => {
         log.error('Failed to delete team', err);
@@ -108,7 +109,7 @@ export const createTeamFromCaptainHook = async ({
   log.debug(`${msg} captain for user: ${captain.username}`, newTournament);
 
   toast.promise(createTeamFromCaptain(data), {
-    loading: `${msg} ${captain.username} as captain...`,
+    loading: `${msg} ${DisplayName(captain)} as captain...`,
     success: (rawData) => {
       setTournament(
         hydrateTournament(
