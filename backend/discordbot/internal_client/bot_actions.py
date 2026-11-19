@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.internal_client import _post
+from app.internal_client import transport
 from discordbot.schemas import (
     LegacyEventCreateResponse,
     LegacyRsvpResponse,
@@ -38,7 +38,7 @@ def check_site_admin(*, discord_user_id: str) -> dict[str, Any]:
     ``error="internal_api_unreachable"`` so the decorator can surface a
     distinct CheckFailure rather than silently allowing the command.
     """
-    resp = _post(
+    resp = transport.post(
         "/discord/check-site-admin/",
         {"discord_user_id": str(discord_user_id)},
     )
@@ -69,7 +69,7 @@ def reaction_signup(
     Returns ``{success, detail}``. ``detail == "not_event_message"`` tells
     the bot to fall through to the legacy RSVP path.
     """
-    resp = _post(
+    resp = transport.post(
         "/discord/reaction-signup/",
         {
             "discord_message_id": str(discord_message_id),
@@ -95,7 +95,7 @@ def reaction_cancel(
     Returns ``{success, detail}``. ``detail == "not_event_message"`` tells
     the bot to fall through to the legacy RSVP path.
     """
-    resp = _post(
+    resp = transport.post(
         "/discord/reaction-cancel/",
         {
             "discord_message_id": str(discord_message_id),
@@ -119,7 +119,7 @@ def set_legacy_rsvp(
     discord_username: str,
 ) -> dict[str, Any]:
     """Create/update a legacy ScheduledEvent RSVP for an emoji reaction."""
-    resp = _post(
+    resp = transport.post(
         "/discord/legacy-rsvp/set/",
         {
             "discord_message_id": str(discord_message_id),
@@ -151,7 +151,7 @@ def remove_legacy_rsvp(
     discord_user_id: str,
 ) -> dict[str, Any]:
     """Remove a legacy ScheduledEvent RSVP when the reaction is removed."""
-    resp = _post(
+    resp = transport.post(
         "/discord/legacy-rsvp/remove/",
         {
             "discord_message_id": str(discord_message_id),
@@ -182,7 +182,7 @@ def create_legacy_event(
     channel_id: str,
 ) -> dict[str, Any]:
     """Create a one-shot EventTemplate + ScheduledEvent (admin /event)."""
-    resp = _post(
+    resp = transport.post(
         "/discord/legacy-event/create/",
         {
             "name": name,

@@ -57,7 +57,7 @@ def _get_event_for_task_orm(pk):
 
 
 def _get_event_orm(pk):
-    """Read event data; mimics _api_get response. Returns ResponseLike or None."""
+    """Read event data; mimics transport.api_get response. Returns ResponseLike or None."""
     from events.models import Event
     from events.serializers import EventSerializer
 
@@ -433,6 +433,8 @@ _PATCH_MAP = {
 # imported name lives on the importer's namespace, so patching only
 # ``app.internal_client.X`` is not enough.
 _CALLSITE_MODULES = (
+    "app.internal_client.discord",
+    "app.internal_client.events",
     "events.discord.embeds",
     "events.tasks",
     "discordbot.utils",
