@@ -1,7 +1,12 @@
 """sync_future_events: returns touched events + cascades reminder fields."""
 
-from django.test import TestCase
+from datetime import datetime, time, timedelta
+from datetime import timezone as dt_tz
 
+from django.utils import timezone as tz
+
+from events.constants import SignupOpenMode
+from events.models import Event, EventRepeater
 from events.services import sync_future_events
 from events.tests.test_discord_tasks import _DiscordTaskTestCase
 
@@ -10,9 +15,6 @@ class SyncFutureEventsReturnTypeTest(_DiscordTaskTestCase):
     def test_returns_list_of_touched_events(self):
         # _DiscordTaskTestCase already creates self.event; create another
         # in upcoming state for the same repeater
-        from events.models import Event, EventRepeater
-        from datetime import datetime, time, timezone as dt_tz
-
         repeater = EventRepeater.objects.create(
             organization=self.event.organization,
             name="Test Repeater",
@@ -44,9 +46,6 @@ class SyncFutureEventsReturnTypeTest(_DiscordTaskTestCase):
         self.assertEqual({e.pk for e in result}, {e1.pk, e2.pk})
 
     def test_does_not_touch_past_state_events(self):
-        from events.models import Event, EventRepeater
-        from datetime import datetime, time, timezone as dt_tz
-
         repeater = EventRepeater.objects.create(
             organization=self.event.organization,
             name="Test Repeater 2",
@@ -70,3 +69,41 @@ class SyncFutureEventsReturnTypeTest(_DiscordTaskTestCase):
         past_event.refresh_from_db()
         self.assertFalse(past_event.discord_announcement)
         self.assertNotIn(past_event, result)
+
+
+class SyncFutureEventsSignupPolicyTest(_DiscordTaskTestCase):
+    def _setup(self) -> tuple[EventRepeater, Event, datetime]:
+        repeater = EventRepeater.objects.create(
+            organization=self.event.organization,
+            name="Policy Repeater",
+            day_of_week=1,
+            time_of_day=time(20, 0),
+            timezone="UTC",
+            starts_at=tz.now().date(),
+            signup_open_mode=SignupOpenMode.SCHEDULED,
+            signups_open_hours_before=10,
+        )
+        hand_set = tz.now() + timedelta(days=1)
+        event = Event.objects.create(
+            organization=self.event.organization,
+            event_repeater=repeater,
+            name="Policy Future",
+            scheduled_at=tz.now() + timedelta(days=6),
+            state="upcoming",
+            signups_open_at=hand_set,
+        )
+        return repeater, event, hand_set
+
+    def test_policy_changed_recomputes(self) -> None:
+        repeater, event, _ = self._setup()
+        sync_future_events(repeater, policy_changed=True)
+        event.refresh_from_db()
+        self.assertEqual(
+            event.signups_open_at, event.scheduled_at - timedelta(hours=10)
+        )
+
+    def test_plain_cascade_keeps_open_time(self) -> None:
+        repeater, event, hand_set = self._setup()
+        sync_future_events(repeater)
+        event.refresh_from_db()
+        self.assertEqual(event.signups_open_at, hand_set)

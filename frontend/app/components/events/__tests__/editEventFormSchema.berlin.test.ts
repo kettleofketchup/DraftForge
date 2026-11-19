@@ -5,6 +5,7 @@ import {
   DISCORD_CONFIG_DEFAULTS,
   DOTA_LOBBY_CONFIG_DEFAULTS,
   editEventFormSchema,
+  SIGNUP_OPEN_DEFAULTS,
   utcToLocalInput,
 } from '../schemas';
 
@@ -42,6 +43,7 @@ describe('edit form prefill in a Berlin browser', () => {
       tournament_league: null,
       ...DISCORD_CONFIG_DEFAULTS,
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
+      ...SIGNUP_OPEN_DEFAULTS,
     });
     expect(result.error?.issues ?? []).toEqual([]);
     expect(result.success).toBe(true);

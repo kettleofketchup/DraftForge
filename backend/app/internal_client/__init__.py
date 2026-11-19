@@ -26,6 +26,7 @@ on that module too.
 """
 
 from app.internal_client import transport
+from app.internal_client.transport import InternalAPIUnavailable
 from app.internal_client.discord import (
     check_message_log_exists,
     claim_discord_message_log,
@@ -95,6 +96,7 @@ from app.internal_client.users import (
 )
 
 __all__ = [
+    "InternalAPIUnavailable",
     "OpsNoticeTransientError",
     "auto_close_event",
     "batch_upsert_matches",

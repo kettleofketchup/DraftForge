@@ -2,13 +2,16 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from datetime import timezone as tz
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import requests as req
-from celery import shared_task
+from celery import Task, shared_task
+from celery.exceptions import Retry
+from django.conf import settings
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from app.internal_client import (
+    InternalAPIUnavailable,
     auto_close_event,
     check_message_log_exists,
     claim_discord_message_log,
@@ -54,6 +57,12 @@ from events.discord.embeds import (
     build_announcement_v2,
     build_subscriber_dm_embed,
 )
+from events.signup_post_lock import (
+    acquire_lock,
+    clear_pending,
+    mark_pending,
+    release_lock,
+)
 from events.utils import starts_in_future
 from telemetry.logging import get_logger
 
@@ -62,6 +71,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 log = get_logger(__name__)
+
+T = TypeVar("T")
 
 
 def _bind_celery_context(
@@ -97,25 +108,48 @@ def _celery_bookend_fields(
     return fields
 
 
+def _skip_signup_list_unavailable(
+    task_name: str, event_id: int, exc: InternalAPIUnavailable, **extra: Any
+) -> str:
+    log.warning(
+        "signup_list_unavailable",
+        system="discord",
+        subsystem="celery",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        task=task_name,
+        event_id=event_id,
+        error=str(exc),
+        **extra,
+    )
+    return f"Skipped: signup list unavailable for event {event_id}"
+
+
 def _run_with_bookends(
     task_name: str,
     event_id: int,
     interaction_id: str | None,
-    work: Callable[[], str],
+    work: Callable[[], T],
     **extra: Any,
-) -> str:
+) -> T:
     """Wrap a task body with celery_task_started/finished/failed bookend logs.
 
     `work` is a zero-arg callable returning the task's return value. Extra
-    contextvar fields (e.g. user_id) are merged into the bookend kwargs.
+    contextvar fields (e.g. user_id) are merged into the bookend kwargs. A
+    ``Retry`` raised by the body logs celery_task_retry instead of a bookend.
     """
     _bind_celery_context(task_name, event_id, interaction_id)
     fields = _celery_bookend_fields(task_name, event_id, interaction_id, **extra)
     log.info("celery_task_started", **fields)
     started = time.monotonic()
     failed = False
+    retried = False
     try:
         return work()
+    except Retry:
+        retried = True
+        log.info("celery_task_retry", **fields)
+        raise
     except Exception as exc:
         failed = True
         log.error(
@@ -127,7 +161,7 @@ def _run_with_bookends(
         )
         raise
     finally:
-        if not failed:
+        if not failed and not retried:
             log.info(
                 "celery_task_finished",
                 duration_ms=round((time.monotonic() - started) * 1000),
@@ -502,7 +536,10 @@ def _send_event_announcement_impl(event_id: int) -> str:
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcement disabled"
 
-    result = build_announcement_v2(event)
+    try:
+        result = build_announcement_v2(event)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable("send_event_announcement", event_id, exc)
     embeds = result["embeds"]
     components = result["components"]
     signup_content = result.get("content")
@@ -626,7 +663,10 @@ def send_attendance_reminder(event_id: int) -> str:
     if not event.discord_confirm_attendance:
         return f"Attendance reminder disabled for event {event_id}"
 
-    result = build_attendance_reminder_embed(event)
+    try:
+        result = build_attendance_reminder_embed(event)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable("send_attendance_reminder", event_id, exc)
     response = sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
         embed=result["embed"],
@@ -675,7 +715,10 @@ def send_profile_reminder(event_id: int) -> str:
     if not event.discord_profile_reminder:
         return f"Profile reminder disabled for event {event_id}"
 
-    result = build_profile_reminder_embed(event)
+    try:
+        result = build_profile_reminder_embed(event)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable("send_profile_reminder", event_id, exc)
     response = sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
         embed=result["embed"],
@@ -702,19 +745,77 @@ def send_profile_reminder(event_id: int) -> str:
     return f"Sent profile reminder for event {event_id}"
 
 
-@shared_task
-def send_signup_update(event_id: int, interaction_id: str | None = None) -> str:
+@shared_task(bind=True)
+def send_signup_update(
+    self: Task, event_id: int, interaction_id: str | None = None, busy_passes: int = 0
+) -> str:
     """Edit the original announcement embed with updated signup lists.
 
-    Tries DiscordEvent.signup_message first, falls back to
+    One run per event at a time: a run that finds the edit lock held
+    reschedules itself. Tries DiscordEvent.signup_message first, falls back to
     DiscordMessageLog for pre-migration events.
     """
     return _run_with_bookends(
         "send_signup_update",
         event_id,
         interaction_id,
-        lambda: _send_signup_update_impl(event_id, interaction_id),
+        lambda: _serialised_signup_update(self, event_id, interaction_id, busy_passes),
     )
+
+
+def _reschedule_signup_update(
+    event_id: int, interaction_id: str | None, busy_passes: int
+) -> None:
+    send_signup_update.apply_async(
+        (event_id,),
+        {"interaction_id": interaction_id, "busy_passes": busy_passes},
+        countdown=settings.SIGNUP_POST.retry_seconds,
+    )
+
+
+def _serialised_signup_update(
+    task: Task, event_id: int, interaction_id: str | None, busy_passes: int
+) -> str:
+    fields = _celery_bookend_fields("send_signup_update", event_id, interaction_id)
+    config = settings.SIGNUP_POST
+    token = acquire_lock(event_id)
+    if token is None:
+        log.debug("signup_update_lock_busy", busy_passes=busy_passes, **fields)
+        if busy_passes == config.busy_warn_passes:
+            log.warning(
+                "signup_update_lock_stalled",
+                busy_passes=busy_passes,
+                waited_seconds=busy_passes * config.retry_seconds,
+                **fields,
+            )
+        _reschedule_signup_update(event_id, interaction_id, busy_passes + 1)
+        return f"Rescheduled: signup post for event {event_id} is being edited"
+
+    # Cleared before the read, so a change during this run queues another.
+    clear_pending(event_id)
+    try:
+        return _send_signup_update_impl(event_id, interaction_id)
+    except InternalAPIUnavailable as exc:
+        release_lock(event_id, token)
+        token = None
+        attempt = task.request.retries
+        exhausted = attempt >= config.read_retries
+        skipped = _skip_signup_list_unavailable(
+            "send_signup_update",
+            event_id,
+            exc,
+            attempt=attempt,
+            retries_exhausted=exhausted,
+        )
+        if exhausted:
+            return skipped
+        mark_pending(event_id)
+        raise task.retry(
+            countdown=config.retry_seconds, max_retries=config.read_retries
+        ) from exc
+    finally:
+        if token is not None:
+            release_lock(event_id, token)
 
 
 def _resolve_signup_edit_channel(
@@ -768,8 +869,6 @@ def _send_signup_update_impl(event_id: int, interaction_id: str | None) -> str:
     #   and log so we can backfill via a migration.
     edit_channel_id = None
     message_id = None
-    signup_msg = None
-    discord_event = None
 
     discord_state = get_discord_event_state(event_id)
     if (
@@ -811,9 +910,8 @@ def _send_signup_update_impl(event_id: int, interaction_id: str | None) -> str:
     # specific "the post is gone" case (Discord 404 + code 10008) and returns
     # None for other transient failures. Treat the typed exception as a
     # signal to clear dedup state so the next sync recreates the post.
-    edit_response = None
     try:
-        edit_response = sync_edit_message(
+        sync_edit_message(
             channel_id=edit_channel_id,
             message_id=message_id,
             embed=result["embeds"],
@@ -829,23 +927,6 @@ def _send_signup_update_impl(event_id: int, interaction_id: str | None) -> str:
             **fields,
         )
         return f"Recovered: cleared dedup for event {event.pk} (orphaned message)"
-
-    # Update tracking via internal API
-    if signup_msg:
-        create_or_update_signup_message(
-            event_id=event.pk,
-            channel_id=signup_msg.channel_id,
-            message_last_updated=datetime.now(tz.utc).isoformat(),
-        )
-
-        if discord_event:
-            create_event_log(
-                discord_event_id=discord_event.pk,
-                action="edit_signup_post",
-                target_type="DiscordEventMsgSignup",
-                message_id=message_id,
-                success=edit_response is not None,
-            )
 
     return f"Updated announcement for event {event.pk}"
 
@@ -1232,7 +1313,10 @@ def fire_event_reminder(
     if not event.discord_announcement_channel_id:
         return f"No announcement channel configured for event {event_id}"
 
-    result = builder(event)
+    try:
+        result = builder(event)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable("fire_event_reminder", event_id, exc)
     response = sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
         embed=result["embed"],
@@ -1321,8 +1405,15 @@ def send_subscriber_notifications(event_id: int) -> str:
         return "No Discord event"
     discord_event_pk = discord_state.discord_event_pk
 
-    # Build embed up front (used both as the lease payload AND each subscriber DM)
-    dm_data = build_subscriber_dm_embed(event)
+    # Read signups and build the embed before claiming the lease, so a failed
+    # read neither DMs users who already signed up nor strands a lease.
+    try:
+        all_signups = get_event_signups(event_id)
+        dm_data = build_subscriber_dm_embed(event)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable(
+            "send_subscriber_notifications", event_id, exc
+        )
     embed = dm_data["embed"]
     components = dm_data.get("components")
 
@@ -1345,9 +1436,6 @@ def send_subscriber_notifications(event_id: int) -> str:
         )
         return f"Signup reminder for event {event_id}: lease held by another worker"
 
-    # Get user PKs who already signed up — skip them
-
-    all_signups = get_event_signups(event_id)
     signed_up_user_pks = {s.user for s in all_signups if s.status != "cancelled"}
 
     subscribers = get_repeater_subscribers(event.event_repeater_id)

@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/1.10/ref/settings/
 """
 
 import contextlib
-import functools
 import os
 import secrets
 import sys
@@ -30,6 +29,8 @@ from config.discord_api import DISCORD_API_BASE_URL  # noqa: F401
 from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 from config.leagues import app_config
+from config.redis_host import is_docker, resolve_redis_host
+from config.signup_post import SignupPostConfig
 from telemetry.config import init_telemetry
 
 # Show cacheops Redis connection warning only once (not on every import)
@@ -315,19 +316,13 @@ if os.environ.get("SQLITE_PATH"):
     DATABASES["default"]["NAME"] = Path(os.environ["SQLITE_PATH"])
 
 
-@functools.lru_cache(maxsize=1)
-def is_docker(root: Path = Path("/")) -> bool:
-    """Check if running inside a Docker or podman container."""
-    if (root / ".dockerenv").exists() or (root / "run/.containerenv").exists():
-        return True
-    try:
-        return "docker" in (root / "proc/1/cgroup").read_text()
-    except Exception:
-        return False
-
-
 IN_DOCKER = is_docker()
-REDIS_HOST = os.environ.get("REDIS_HOST") or ("redis" if IN_DOCKER else "localhost")
+REDIS_HOST = resolve_redis_host(in_docker=IN_DOCKER)
+# Prefix for raw Redis keys (app.redis_keys) when deployments share one Redis.
+REDIS_KEY_SCOPE: str = os.environ.get("REDIS_KEY_SCOPE", "")
+# Discord signup-post debounce and lock (config/signup_post.py), shared with
+# config/settings_celery.py. Off under the test runner unless a test opts in.
+SIGNUP_POST = SignupPostConfig.from_env(disabled_default=RUNNING_TESTS)
 
 # Cacheops/Redis cache configuration
 if not env_bool("DISABLE_CACHE"):

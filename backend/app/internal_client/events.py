@@ -41,14 +41,18 @@ def get_event(pk: int) -> requests.Response | None:
 def get_event_signups(event_id: int) -> list["EventSignupSchema"]:
     """Get signup list for an event via public API.
 
-    Returns list of EventSignupData (Pydantic), or empty list on error.
+    Raises InternalAPIUnavailable on a network or HTTP error, so a failed
+    read is never mistaken for an event with no signups.
     """
     from events.schemas import EventSignupSchema
 
     resp = transport.api_get("/events/signups/", params={"event": event_id})
-    if resp and resp.ok:
-        return [EventSignupSchema.model_validate(s) for s in resp.json()]
-    return []
+    if resp is None or not resp.ok:
+        status = resp.status_code if resp is not None else None
+        raise transport.InternalAPIUnavailable(
+            f"signup list for event {event_id} unavailable (status={status})"
+        )
+    return [EventSignupSchema.model_validate(s) for s in resp.json()]
 
 
 def get_events_list(**params: Any) -> list[dict[str, Any]]:

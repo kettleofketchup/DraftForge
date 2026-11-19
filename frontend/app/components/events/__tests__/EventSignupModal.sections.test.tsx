@@ -1,0 +1,54 @@
+// @vitest-environment jsdom
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { GAME_TYPE } from '~/components/game/constants';
+import { EventSignupModal } from '../EventSignupModal';
+import type { EventType } from '../schemas';
+import { event, Wrapper } from './eventModalFixtures';
+
+vi.mock('~/hooks/useEvent', () => ({
+  useSignupMutation: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
+}));
+
+function renderModal(overrides: Partial<EventType>) {
+  render(
+    <EventSignupModal
+      event={{ ...event, ...overrides }}
+      intent="rsvp"
+      profile={null}
+      steamAccountId={null}
+      open
+      onOpenChange={() => {}}
+    />,
+    { wrapper: Wrapper },
+  );
+}
+
+describe('EventSignupModal sections follow the event configuration', () => {
+  it('shows only the friend ID entry on a Deadlock event', () => {
+    renderModal({ game_type: GAME_TYPE.DEADLOCK, require_steam_id: true });
+
+    expect(screen.getByTestId('signup-friend-id')).toBeInTheDocument();
+    expect(screen.queryByTestId('signup-rank-status')).toBeNull();
+    expect(screen.queryByTestId('position-choices')).toBeNull();
+  });
+
+  it('shows friend ID, rank status and positions on a Dota event', () => {
+    renderModal({ game_type: GAME_TYPE.DOTA2, require_steam_id: true });
+
+    expect(screen.getByTestId('signup-friend-id')).toBeInTheDocument();
+    expect(screen.getByTestId('signup-rank-status')).toBeInTheDocument();
+    expect(screen.getByTestId('position-choices')).toBeInTheDocument();
+  });
+
+  it('hides the friend ID entry when the event does not require it', () => {
+    renderModal({ game_type: GAME_TYPE.DOTA2, require_steam_id: false });
+
+    expect(screen.queryByTestId('signup-friend-id')).toBeNull();
+    expect(screen.getByTestId('signup-rank-status')).toBeInTheDocument();
+  });
+});

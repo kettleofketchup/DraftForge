@@ -1,11 +1,10 @@
 from datetime import date, time, timedelta
 from unittest.mock import patch
 
-from django.test import TestCase
 from django.utils import timezone as tz
 
 from events.constants import RepeatFrequency
-from events.models import Event, EventRepeater
+from events.models import EventRepeater
 from events.tests.base import EventTestCase
 
 PATCH_TODAY = "events.services._today"
@@ -165,7 +164,9 @@ class WeekdayConventionTests(EventTestCase):
         events = generate_events_for_repeater(repeater)
         self.assertEqual(len(events), 1)
         local = events[0].scheduled_at.astimezone(ZoneInfo(repeater.timezone))
-        self.assertEqual(local.weekday(), 6, f"expected Sunday, got {local:%A %Y-%m-%d}")
+        self.assertEqual(
+            local.weekday(), 6, f"expected Sunday, got {local:%A %Y-%m-%d}"
+        )
 
     @patch(PATCH_TODAY, return_value=date(2026, 3, 2))
     def test_day_of_week_two_generates_tuesday(self, mock_today):
@@ -177,7 +178,9 @@ class WeekdayConventionTests(EventTestCase):
         events = generate_events_for_repeater(repeater)
         self.assertEqual(len(events), 1)
         local = events[0].scheduled_at.astimezone(ZoneInfo(repeater.timezone))
-        self.assertEqual(local.weekday(), 1, f"expected Tuesday, got {local:%A %Y-%m-%d}")
+        self.assertEqual(
+            local.weekday(), 1, f"expected Tuesday, got {local:%A %Y-%m-%d}"
+        )
 
 
 class DSTTests(EventTestCase):
@@ -205,3 +208,51 @@ class DSTTests(EventTestCase):
         # All events should have valid scheduled_at datetimes
         for event in events:
             self.assertIsNotNone(event.scheduled_at)
+
+
+class SignupOpenPolicyGenerationTests(EventTestCase):
+    def _create_repeater(self, **kwargs: object) -> EventRepeater:
+        defaults: dict[str, object] = dict(
+            organization=self.org,
+            name="Policy Weekly",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=2,
+            time_of_day=time(19, 0),
+            starts_at=date(2026, 3, 1),
+            generate_days_ahead=7,
+            is_active=True,
+            created_by=self.admin,
+        )
+        defaults.update(kwargs)
+        return EventRepeater.objects.create(**defaults)
+
+    @patch(PATCH_TODAY, return_value=date(2026, 3, 2))
+    def test_generation_per_mode(self, mock_today: object) -> None:
+        from events.constants import SignupOpenMode
+        from events.services import generate_events_for_repeater
+
+        manual = generate_events_for_repeater(self._create_repeater())[0]
+        self.assertIsNone(manual.signups_open_at)
+
+        scheduled = generate_events_for_repeater(
+            self._create_repeater(
+                name="Scheduled",
+                signup_open_mode=SignupOpenMode.SCHEDULED,
+                signups_open_hours_before=48,
+            )
+        )[0]
+        self.assertEqual(
+            scheduled.signups_open_at, scheduled.scheduled_at - timedelta(hours=48)
+        )
+
+        before = tz.now()
+        immediate = generate_events_for_repeater(
+            self._create_repeater(
+                name="Immediate", signup_open_mode=SignupOpenMode.IMMEDIATE
+            )
+        )[0]
+        assert immediate.signups_open_at is not None
+        self.assertGreaterEqual(immediate.signups_open_at, before)
+        self.assertLessEqual(immediate.signups_open_at, tz.now())
+        immediate.refresh_from_db()
+        self.assertIsNotNone(immediate.signups_open_at)

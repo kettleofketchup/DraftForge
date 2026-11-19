@@ -4,10 +4,12 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
+from app.internal_client import InternalAPIUnavailable
 from events.discord.embeds import (
     _signup_counts,
     build_announcement_embeds,
     build_announcement_v2,
+    build_signup_reminder_embed,
 )
 from events.schemas import EventSignupSchema
 from events.tests.base import EventTestCase
@@ -131,3 +133,23 @@ class SignedUpFollowsHoldsSeatTest(EventTestCase):
         with patch("events.discord.embeds.get_event_signups", return_value=rows):
             active, confirmed = _signup_counts(self.event)
         self.assertEqual((active, confirmed), (2, 1))
+
+
+class SignupReadUnavailableEmbedTest(EventTestCase):
+    """Builders propagate a failed read instead of rendering an empty list."""
+
+    def test_builders_raise_when_signups_unavailable(self) -> None:
+        builders = (
+            _signup_counts,
+            build_announcement_embeds,
+            build_announcement_v2,
+            build_signup_reminder_embed,
+        )
+        with patch(
+            "events.discord.embeds.get_event_signups",
+            side_effect=InternalAPIUnavailable("signups"),
+        ):
+            for builder in builders:
+                with self.subTest(builder=builder.__name__):
+                    with self.assertRaises(InternalAPIUnavailable):
+                        builder(self.event)

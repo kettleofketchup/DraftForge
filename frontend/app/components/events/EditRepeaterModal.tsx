@@ -43,7 +43,15 @@ import {
   READY_CHECK_CONFIG_DEFAULTS,
   readyCheckConfigSchema,
   refineReadyCheck,
+  SIGNUP_OPEN_DEFAULTS,
+  signupOpenSchema,
 } from './schemas';
+import { signupOpenFrom } from './signupOpen';
+import {
+  SERIES_IMMEDIATE_HELP,
+  SERIES_POLICY_CHANGE_HELP,
+  SignupOpenSection,
+} from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';
 import { SignupRulesSection } from './SignupRulesSection';
 
@@ -61,6 +69,7 @@ const editRepeaterSchema = eventIdentitySchema
   .merge(dotaLobbyConfigSchema)
   .merge(DraftSettingsFormSchema)
   .merge(readyCheckConfigSchema)
+  .merge(signupOpenSchema)
   .superRefine(refineLobbyPassword);
 
 const ids = eventFieldTestIds('edit-series');
@@ -113,6 +122,7 @@ export function EditRepeaterModal({
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
       ...READY_CHECK_CONFIG_DEFAULTS,
       ...draftSettingsToFormInput(null),
+      ...SIGNUP_OPEN_DEFAULTS,
     },
   });
 
@@ -141,6 +151,7 @@ export function EditRepeaterModal({
         discord_notify_new_events: repeater.discord_notify_new_events,
         ...discordResetValues(repeater),
         ...signupRulesFrom(repeater),
+        ...signupOpenFrom(repeater),
         ...dotaLobbyResetValues(repeater, { savedFromMode: true }),
         ...readyCheckResetValues(repeater),
       });
@@ -233,6 +244,10 @@ export function EditRepeaterModal({
               <TimezoneField
                 control={form.control}
                 triggerTestId={ids.timezone}
+              />
+              <SignupOpenSection
+                control={form.control}
+                helpText={`${SERIES_POLICY_CHANGE_HELP} ${SERIES_IMMEDIATE_HELP}`}
               />
               <SignupRulesSection control={form.control} />
             </>

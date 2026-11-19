@@ -9,11 +9,13 @@
  * Uses the E2E Signup Event (signups_open state after reset).
  */
 
+import type { BrowserContext, Page } from '@playwright/test';
 import {
   expect,
   getEventsTestData,
   loginEventAdmin,
   loginEventPlayer,
+  loginEventPlayer4,
   patchWithCsrf,
   postWithCsrf,
   resetEventsData,
@@ -30,6 +32,47 @@ let eventInfo: EventInfo;
 // (signups_open → roll_call → finished). With CI's `fullyParallel: true`
 // + `--workers=2`, parallel tests would race on the same event PK and
 // flake the "Start Roll Call" button visibility. Force serial execution.
+/** Two players RSVP, both end up approved, and the admin lands on roll call. */
+async function openRollCallWithTwoApproved(
+  context: BrowserContext,
+  page: Page,
+): Promise<{ id: number; status: string }[]> {
+  for (const login of [loginEventPlayer, loginEventPlayer4]) {
+    await login(context);
+    const resp = await postWithCsrf(
+      context,
+      `${API_URL}/events/${eventInfo.pk}/signup/`,
+      { intent: 'rsvp' },
+    );
+    expect(resp.ok()).toBeTruthy();
+  }
+
+  await loginEventAdmin(context);
+  const signupsResp = await context.request.get(
+    `${API_URL}/events/signups/?event=${eventInfo.pk}`,
+  );
+  const signups: { id: number; status: string }[] = await signupsResp.json();
+  expect(signups.length).toBeGreaterThanOrEqual(2);
+  for (const s of signups) {
+    if (s.status === 'rsvp' || s.status === 'pending_approval') {
+      const resp = await postWithCsrf(
+        context,
+        `${API_URL}/events/signups/${s.id}/approve/`,
+      );
+      expect(resp.ok()).toBeTruthy();
+    }
+  }
+
+  await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
+  await page.getByTestId('event-start-rollcall-btn').click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: /start roll call/i })
+    .click();
+  await page.waitForURL(/\/rollcall\//);
+  return signups;
+}
+
 test.describe.serial('Roll Call Flow (@cicd)', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
@@ -148,6 +191,63 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     await expect(
       page.getByTestId(`rollcall-cancel-btn-${signup.id}`),
     ).toBeVisible();
+  });
+
+  test('admin can run roll call from the keyboard', async ({
+    context,
+    page,
+  }) => {
+    const signups = await openRollCallWithTwoApproved(context, page);
+    await expect(page.getByTestId('rollcall-keyboard-legend')).toBeVisible();
+
+    const awaiting = page
+      .getByTestId('rollcall-awaiting-section')
+      .locator('xpath=..')
+      .locator('[data-rollcall-row]');
+    await expect(awaiting).toHaveCount(signups.length);
+    const firstId = await awaiting.nth(0).getAttribute('data-rollcall-row');
+    const secondId = await awaiting.nth(1).getAttribute('data-rollcall-row');
+    const row = (id: string | null) => page.getByTestId(`rollcall-row-${id}`);
+
+    // The cursor starts on the first awaiting player and moves with the arrows.
+    await expect(row(firstId)).toHaveAttribute('data-focused', 'true');
+    await page.keyboard.press('ArrowDown');
+    await expect(row(secondId)).toHaveAttribute('data-focused', 'true');
+    await page.keyboard.press('k');
+    await expect(row(firstId)).toHaveAttribute('data-focused', 'true');
+
+    // 1 opens Confirm attendance; Enter accepts it and the cursor advances.
+    await page.keyboard.press('1');
+    await expect(page.getByTestId('rollcall-confirm-summary')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('rollcall-confirm-summary')).toHaveCount(0);
+    await expect(row(secondId)).toHaveAttribute('data-focused', 'true');
+    await expect(
+      page.getByTestId(`rollcall-cancel-btn-${firstId}`),
+    ).toBeVisible();
+
+    // 2 opens Remove; Backspace backs out without changing anything.
+    await page.keyboard.press('2');
+    await expect(page.getByTestId('rollcall-reject-summary')).toBeVisible();
+    await page.keyboard.press('Backspace');
+    await expect(page.getByTestId('rollcall-reject-summary')).toHaveCount(0);
+    await expect(row(secondId)).toHaveAttribute('data-focused', 'true');
+
+    // S opens Start Tournament (this event has no minimum).
+    await page.keyboard.press('1');
+    await page.keyboard.press('Enter');
+    await expect(
+      page.getByTestId(`rollcall-cancel-btn-${secondId}`),
+    ).toBeVisible();
+    await expect(page.getByTestId('rollcall-start-btn')).toBeEnabled();
+    await page.keyboard.press('s');
+    await expect(
+      page.getByTestId('rollcall-start-dialog-confirm'),
+    ).toBeVisible();
+    await page.keyboard.press('Backspace');
+    await expect(page.getByTestId('rollcall-start-dialog-confirm')).toHaveCount(
+      0,
+    );
   });
 
   test('approved players join the roster only after confirming when the flag is on', async ({
