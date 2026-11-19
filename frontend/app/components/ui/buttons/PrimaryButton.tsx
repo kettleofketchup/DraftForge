@@ -1,12 +1,21 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { brandGlowLift, brandGradient, brandLabelOnGradient, buttonLift, buttonDisabled } from './styles';
+import {
+  brandGlowLift,
+  brandGradient,
+  brandGradientDisabled,
+  brandLabelOnGradient,
+  buttonDisabled,
+  buttonLift,
+} from './styles';
 
 export type PrimaryButtonColor = 'green' | 'blue' | 'yellow';
 
-export interface PrimaryButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
+export interface PrimaryButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant'
+> {
   /** Color theme for the button (omit for brand gradient) */
   color?: PrimaryButtonColor;
   /** Whether to apply the soft-shadow lift (default: true) */
@@ -26,7 +35,7 @@ const colorClasses: Record<PrimaryButtonColor, string> = {
 const primaryTextStroke =
   '[text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5)]';
 
-const brandExtras = `${brandGlowLift} ${brandLabelOnGradient}`;
+const brandExtras = `${brandGlowLift} ${brandLabelOnGradient} ${brandGradientDisabled}`;
 
 const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
   ({ color, className, children, depth = true, ...props }, ref) => {
@@ -38,15 +47,17 @@ const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
           depth && buttonLift,
           depth && buttonDisabled,
           !depth && 'shadow-lg shadow-black/30',
-          isBrand ? [brandGradient, brandExtras] : [colorClasses[color], primaryTextStroke],
-          className
+          isBrand
+            ? [brandGradient, brandExtras]
+            : [colorClasses[color], primaryTextStroke],
+          className,
         )}
         {...props}
       >
         {children}
       </Button>
     );
-  }
+  },
 );
 
 PrimaryButton.displayName = 'PrimaryButton';

@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { OrganizationType } from '../schemas';
 
 const updateOrganization = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
+const access = vi.hoisted(() => ({
+  visibleSectionIds: ['staff-placement'] as string[],
+}));
 
 vi.mock('~/hooks/usePermissions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/hooks/usePermissions')>()),
@@ -16,7 +20,7 @@ vi.mock('../tabs/orgSettings/useOrgSettingsTabAccess', () => ({
   useOrgSettingsTabAccess: () => ({
     canView: true,
     settled: true,
-    visibleSectionIds: ['staff-placement'],
+    visibleSectionIds: access.visibleSectionIds,
   }),
 }));
 vi.mock('../tabs/orgSettings/StaffPlacementSection', () => ({
@@ -56,14 +60,23 @@ const org = {
   members_private: false,
 } as unknown as OrganizationType;
 
-function renderTab() {
+let currentSearch = '';
+function LocationProbe() {
+  currentSearch = useLocation().search;
+  return null;
+}
+
+function renderTab(url = '/organizations/7?tab=settings') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={qc}>
-      <TooltipProvider>
-        <OrgSettingsTab organization={org} />
-      </TooltipProvider>
-    </QueryClientProvider>,
+    <MemoryRouter initialEntries={[url]}>
+      <QueryClientProvider client={qc}>
+        <TooltipProvider>
+          <OrgSettingsTab organization={org} />
+        </TooltipProvider>
+      </QueryClientProvider>
+      <LocationProbe />
+    </MemoryRouter>,
   );
 }
 
@@ -75,6 +88,7 @@ describe('OrgSettingsTab as one settings page', () => {
   beforeEach(() => {
     updateOrganization.mockReset();
     toastError.mockClear();
+    access.visibleSectionIds = ['staff-placement'];
   });
 
   it('lists the organization, admin team and settings sections in a sidebar', () => {
@@ -144,5 +158,42 @@ describe('OrgSettingsTab as one settings page', () => {
     expect(screen.queryByTestId('admin-team-section')).toBeNull();
     fireEvent.mouseDown(tab('admins'), { button: 0 });
     expect(screen.getByTestId('admin-team-section')).toBeInTheDocument();
+  });
+});
+
+describe('OrgSettingsTab section deep link', () => {
+  beforeEach(() => {
+    access.visibleSectionIds = ['staff-placement'];
+  });
+
+  it('opens the section named in ?section=', () => {
+    renderTab('/organizations/7?tab=settings&section=staff-placement');
+    expect(isActive('staff-placement')).toBe(true);
+    expect(screen.getByTestId('staff-placement-stub')).toBeVisible();
+  });
+
+  it('falls back to the first section for an unknown section', () => {
+    renderTab('/organizations/7?tab=settings&section=nope');
+    expect(isActive('general')).toBe(true);
+  });
+
+  it('falls back to the first section for a hidden section', () => {
+    access.visibleSectionIds = [];
+    renderTab('/organizations/7?tab=settings&section=staff-placement');
+    expect(screen.queryByTestId('org-settings-tab-staff-placement')).toBeNull();
+    expect(isActive('general')).toBe(true);
+  });
+
+  it('writes the selected section to the URL and clears it for the first', () => {
+    renderTab();
+    fireEvent.mouseDown(tab('staff-placement'), { button: 0 });
+    expect(isActive('staff-placement')).toBe(true);
+    expect(new URLSearchParams(currentSearch).get('section')).toBe(
+      'staff-placement',
+    );
+    expect(new URLSearchParams(currentSearch).get('tab')).toBe('settings');
+    fireEvent.mouseDown(tab('general'), { button: 0 });
+    expect(isActive('general')).toBe(true);
+    expect(new URLSearchParams(currentSearch).has('section')).toBe(false);
   });
 });
