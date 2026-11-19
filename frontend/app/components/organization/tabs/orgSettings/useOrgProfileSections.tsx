@@ -1,25 +1,25 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  Building2,
-  ScrollText,
-  ShieldCheck,
-  Users,
-  type LucideIcon,
-} from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Building2, ScrollText, Users, type LucideIcon } from 'lucide-react';
+import { useEffect, useState, type ReactNode, type RefObject } from 'react';
 import { useForm, type FieldErrors } from 'react-hook-form';
 import { toast } from 'sonner';
-import { z } from 'zod';
+import type { z } from 'zod';
 
-import { AdminTeamSection } from '~/components/admin-team';
 import { updateOrganization } from '~/components/api/api';
 import { DiscordIcon } from '~/components/events/DiscordConfigSection';
+import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
 import {
-  SettingsDialog,
-  type SettingsDialogHandle,
-  type SettingsSection,
+  EditOrganizationSchema,
+  type EditOrganizationInput,
+  type OrganizationType,
+} from '~/components/organization/schemas';
+import type {
+  SettingsDialogHandle,
+  SettingsSection,
 } from '~/components/patterns/SettingsDialog';
 import { COMMON_TIMEZONES } from '~/components/tournament/schemas';
+import { CancelButton, SubmitButton } from '~/components/ui/buttons';
 import {
   Form,
   FormControl,
@@ -39,17 +39,11 @@ import {
 } from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
-import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
-import {
-  EditOrganizationSchema,
-  type EditOrganizationInput,
-  type OrganizationType,
-} from '../schemas';
 
-type OrgSection = 'general' | 'discord' | 'members' | 'rules' | 'admins';
+export type OrgProfileSection = 'general' | 'discord' | 'members' | 'rules';
 
-const SECTION_META: Record<
-  OrgSection,
+const META: Record<
+  OrgProfileSection,
   { label: string; icon: LucideIcon; keywords: string[] }
 > = {
   general: {
@@ -68,104 +62,102 @@ const SECTION_META: Record<
     keywords: ['privacy', 'private', 'member list'],
   },
   rules: { label: 'Rules', icon: ScrollText, keywords: ['template', 'league'] },
-  admins: {
-    label: 'Admin Team',
-    icon: ShieldCheck,
-    keywords: ['owner', 'admin', 'staff', 'promoter', 'roles'],
-  },
 };
 
-interface EditOrganizationModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  organization: OrganizationType;
-  onSuccess?: () => void;
+function valuesFrom(
+  organization: OrganizationType,
+): z.input<typeof EditOrganizationSchema> {
+  return {
+    name: organization.name || '',
+    description: organization.description || '',
+    logo: organization.logo || '',
+    discord_link: organization.discord_link || '',
+    discord_server_id: organization.discord_server_id || '',
+    rules_template: organization.rules_template || '',
+    timezone: organization.timezone || 'America/New_York',
+    members_private: organization.members_private ?? false,
+  };
 }
 
-export function EditOrganizationModal({
-  open,
-  onOpenChange,
-  organization,
-  onSuccess,
-}: EditOrganizationModalProps) {
+/**
+ * The organization's own fields (formerly the Edit Organization dialog) as
+ * settings sections sharing one form, plus a save bar for unsaved changes.
+ */
+export function useOrgProfileSections(
+  organization: OrganizationType,
+  sectionsRef: RefObject<SettingsDialogHandle<string> | null>,
+): { sections: SettingsSection<OrgProfileSection>[]; saveBar: ReactNode } {
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const isOrgAdmin = useIsOrganizationAdmin(organization);
-  const sections = useRef<SettingsDialogHandle<OrgSection>>(null);
 
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
-  // See https://github.com/react-hook-form/resolvers/issues/792.
   const form = useForm<
     z.input<typeof EditOrganizationSchema>,
     unknown,
     EditOrganizationInput
   >({
     resolver: zodResolver(EditOrganizationSchema),
-    defaultValues: {
-      name: organization.name || '',
-      description: organization.description || '',
-      logo: organization.logo || '',
-      discord_link: organization.discord_link || '',
-      discord_server_id: organization.discord_server_id || '',
-      rules_template: organization.rules_template || '',
-      timezone: organization.timezone || 'America/New_York',
-      members_private: organization.members_private ?? false,
-    },
+    defaultValues: valuesFrom(organization),
   });
 
-  // Reset form when organization changes or modal opens
+  // Adopt refetched values while there are no local edits.
   useEffect(() => {
-    if (open) {
-      form.reset({
-        name: organization.name || '',
-        description: organization.description || '',
-        logo: organization.logo || '',
-        discord_link: organization.discord_link || '',
-        discord_server_id: organization.discord_server_id || '',
-        rules_template: organization.rules_template || '',
-        timezone: organization.timezone || 'America/New_York',
-        members_private: organization.members_private ?? false,
-      });
-    }
-  }, [open, organization, form]);
+    if (!form.formState.isDirty) form.reset(valuesFrom(organization));
+  }, [organization, form]);
+
+  const sectionFor = (field: string): string =>
+    sectionsRef.current?.sectionOfField(field) ?? 'general';
 
   async function onSubmit(data: EditOrganizationInput) {
     if (isSubmitting || !organization.pk) return;
     setIsSubmitting(true);
-
     try {
       await updateOrganization(organization.pk, data);
       toast.success('Organization updated successfully');
-      onOpenChange(false);
-      onSuccess?.();
+      form.reset(data);
+      queryClient.invalidateQueries({
+        queryKey: organizationQueryKey(organization.pk),
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['discordBotStatus', organization.pk],
+      });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Failed to update organization';
-      toast.error(message);
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to update organization',
+      );
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  const errorKeys = Object.keys(form.formState.errors).filter(
-    (k) => k !== 'root',
-  );
-  const sectionFor = (field: string): OrgSection =>
-    (sections.current?.sectionOfField(field) as OrgSection | undefined) ??
-    'general';
-
   function onInvalid(errors: FieldErrors<EditOrganizationInput>) {
     const [key, error] = Object.entries(errors)[0] ?? [];
     if (!key) return;
-    sections.current?.selectSection(sectionFor(key));
+    sectionsRef.current?.selectSection(sectionFor(key));
     toast.error('Please fix the highlighted fields', {
       description:
         typeof error?.message === 'string' ? error.message : undefined,
     });
   }
 
-  const content: Record<Exclude<OrgSection, 'admins'>, React.ReactNode> = {
-    general: (
+  const save = form.handleSubmit(onSubmit, onInvalid);
+  const wrap = (children: ReactNode) => (
+    <Form {...form}>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        {children}
+      </form>
+    </Form>
+  );
+
+  const content: Record<OrgProfileSection, ReactNode> = {
+    general: wrap(
       <>
         <FormField
           control={form.control}
@@ -255,9 +247,9 @@ export function EditOrganizationModal({
             </FormItem>
           )}
         />
-      </>
+      </>,
     ),
-    discord: (
+    discord: wrap(
       <>
         <FormField
           control={form.control}
@@ -301,9 +293,9 @@ export function EditOrganizationModal({
             </FormItem>
           )}
         />
-      </>
+      </>,
     ),
-    members: (
+    members: wrap(
       <>
         <FormField
           control={form.control}
@@ -327,9 +319,9 @@ export function EditOrganizationModal({
             </FormItem>
           )}
         />
-      </>
+      </>,
     ),
-    rules: (
+    rules: wrap(
       <>
         <FormField
           control={form.control}
@@ -352,53 +344,47 @@ export function EditOrganizationModal({
             </FormItem>
           )}
         />
-      </>
+      </>,
     ),
   };
 
-  const formSections: SettingsSection<OrgSection>[] = (
-    Object.keys(content) as Exclude<OrgSection, 'admins'>[]
-  ).map((value) => ({
-    value,
-    ...SECTION_META[value],
-    content: content[value],
-    invalid: errorKeys.some((k) => sectionFor(k) === value),
-  }));
-
-  return (
-    <Form {...form}>
-      <SettingsDialog
-        open={open}
-        onOpenChange={onOpenChange}
-        title="Edit Organization"
-        description="Update organization information and settings."
-        submitLabel="Save Changes"
-        isSubmitting={isSubmitting}
-        onSubmit={form.handleSubmit(onSubmit, onInvalid)}
-        // Opening should not pop the search keyboard on phones; / and Ctrl/Cmd+K reach it.
-        autoFocus={false}
-        sectionRef={sections}
-        testIdPrefix="edit-org"
-        data-testid="edit-organization-modal"
-        sections={[
-          ...formSections,
-          ...(isOrgAdmin
-            ? [
-                {
-                  value: 'admins' as const,
-                  ...SECTION_META.admins,
-                  lazy: true,
-                  content: (
-                    <AdminTeamSection
-                      organization={organization}
-                      onUpdate={onSuccess}
-                    />
-                  ),
-                },
-              ]
-            : []),
-        ]}
-      />
-    </Form>
+  const errorKeys = Object.keys(form.formState.errors).filter(
+    (k) => k !== 'root',
   );
+  const sections = (Object.keys(content) as OrgProfileSection[]).map(
+    (value) => ({
+      value,
+      ...META[value],
+      content: content[value],
+      invalid: errorKeys.some((k) => sectionFor(k) === value),
+    }),
+  );
+
+  const saveBar = form.formState.isDirty ? (
+    <div
+      className="sticky bottom-4 mx-auto mt-6 flex w-full max-w-4xl items-center justify-end gap-2 rounded-lg border border-border bg-background/95 p-3 shadow-lg backdrop-blur"
+      data-testid="org-profile-save-bar"
+    >
+      <span className="mr-auto text-sm text-muted-foreground">
+        Unsaved changes
+      </span>
+      <CancelButton
+        type="button"
+        disabled={isSubmitting}
+        onClick={() => form.reset(valuesFrom(organization))}
+        data-testid="org-profile-discard"
+      >
+        Discard
+      </CancelButton>
+      <SubmitButton
+        loading={isSubmitting}
+        onClick={() => void save()}
+        data-testid="org-profile-save"
+      >
+        Save changes
+      </SubmitButton>
+    </div>
+  ) : null;
+
+  return { sections, saveBar };
 }
