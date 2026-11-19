@@ -85,8 +85,13 @@ test.describe('Events - Settings sidebar (@cicd)', () => {
 
     await search.fill('tournament name');
     await expect(page.getByTestId(`${P}-tab-tournament`)).toBeVisible();
-    await expect(page.getByTestId(`${P}-tab-event`)).toHaveCount(0);
     await expect(page.getByTestId(`${P}-tab-discord`)).toHaveCount(0);
+    await expect(page.getByTestId(`${P}-tab-lobby`)).toHaveCount(0);
+    // The active category stays listed even when it doesn't match.
+    await expect(page.getByTestId(`${P}-tab-event`)).toHaveAttribute(
+      'data-state',
+      'active',
+    );
 
     const hit = page.getByTestId(`${P}-search-hit`).filter({
       has: page.locator('span', { hasText: /^Tournament Name$/ }),
