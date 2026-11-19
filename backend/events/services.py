@@ -3,14 +3,19 @@ import datetime
 import re
 from collections.abc import Collection
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
+from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
+from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.teamdraft import apply_draft_options
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser, Organization, PositionsModel, Team, Tournament
+from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
+from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
@@ -25,6 +30,13 @@ from events.discord import (
     notify_new_event,
     notify_signup_changed,
 )
+from events.eligibility import (
+    refresh_unmet_requirements,
+    sync_steam_account_from_profiles,
+    unmet_codes,
+    unmet_requirements,
+    validate_friend_id,
+)
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -33,11 +45,29 @@ from events.models import (
     EventConfigMixin,
     EventRepeater,
     EventSignup,
+    EventTeam,
     TournamentTemplateMixin,
 )
 from events.reopen import ReopenNotPermitted, reopen_event
+from events.roster import (
+    RosterPhase,
+    RosterSyncResult,
+    joins_roster,
+    leaving_statuses,
+    roster_phase,
+    roster_statuses,
+    start_phase,
+    team_bound_user_pks,
+)
+from events.schemas import DotaModalConfig
 from lobby.passwords import PasswordMode, generate_password
+from org.models import OrgUser
+from org.models_profiles import PlayerDotaProfile
 from telemetry.logging import get_logger
+
+if TYPE_CHECKING:
+    from discordbot.models import DiscordEvent
+    from events.schemas import SignupInputPatch
 
 logger = get_logger(__name__)
 log = get_logger(__name__)
@@ -53,7 +83,7 @@ SCREENSHOT_URL_RE = re.compile(r"^https?://.+\.(png|jpe?g|webp)(\?.*)?$", re.IGN
 SCREENSHOT_BAD_URL_MESSAGE = "Screenshot must be a direct .png/.jpg/.jpeg/.webp URL."
 
 
-def clear_signup_dedup_state(event_id):
+def clear_signup_dedup_state(event_id: int) -> dict[str, int]:
     """Reset the dedup gates that block recreating a Discord signup post.
 
     Two gates need to flip so the next sync_discord_events run treats the
@@ -95,69 +125,19 @@ def clear_signup_dedup_state(event_id):
     }
 
 
-def _validate_screenshot_url(url):
+def _validate_screenshot_url(url: str | None) -> None:
     if url and not SCREENSHOT_URL_RE.match(url):
-        from django.core.exceptions import ValidationError
-
         raise ValidationError(SCREENSHOT_BAD_URL_MESSAGE, code="screenshot_bad_url")
 
 
-def check_requirements(event, user):
+def check_requirements(event: Event, user: CustomUser) -> bool:
     """Check if user meets event confirmation requirements."""
-    from org.models import OrgUser
-    from org.models_profiles import PlayerDotaProfile
-
-    if event.require_steam_id and not user.steamid:
-        return False
-    if event.require_mmr_verified:
-        try:
-            org_user = OrgUser.objects.get(user=user, organization=event.organization)
-            if not org_user.has_active_dota_mmr:
-                return False
-        except OrgUser.DoesNotExist:
-            return False
-
-    # Check rank type restrictions and screenshot requirements (Dota 2 only)
-    try:
-        org_user = OrgUser.objects.get(user=user, organization=event.organization)
-        profile = PlayerDotaProfile.objects.get(org_user=org_user)
-
-        # Rank type allowed?
-        if profile.rank_status == "active" and not event.allow_active_mmr:
-            return False
-        if profile.rank_status == "previous" and not event.allow_previous_rank:
-            return False
-        if profile.rank_status == "never" and not event.allow_battlecup_rating:
-            return False
-
-        # Screenshot required but missing?
-        if event.discord_require_rank_screenshot and profile.rank_status in (
-            "active",
-            "previous",
-        ):
-            if not profile.rank_screenshot:
-                return False
-        if (
-            event.discord_require_battlecup_screenshot
-            and profile.rank_status == "never"
-        ):
-            if not profile.battlecup_screenshot:
-                return False
-
-        # Min MMR check
-        if event.min_mmr and profile.rank_status == "active":
-            if not profile.mmr or profile.mmr < event.min_mmr:
-                return False
-    except (OrgUser.DoesNotExist, PlayerDotaProfile.DoesNotExist):
-        pass  # No profile = skip Dota-specific checks
-
-    if event.require_profile_complete:
-        if not (user.nickname and user.steamid and user.discordId):
-            return False
-    return True
+    return not unmet_requirements(event, user)
 
 
-def resolve_or_create_org_user(user, organization):
+def resolve_or_create_org_user(
+    user: CustomUser, organization: Organization
+) -> "OrgUser":
     """Get or create OrgUser for (user, organization).
 
     Single source of truth for "user joins org by signing up." Used by:
@@ -166,29 +146,57 @@ def resolve_or_create_org_user(user, organization):
       - staff_add_signup()
       - approve_signup()
     """
-    from org.models import OrgUser
-
     org_user, _ = OrgUser.objects.get_or_create(user=user, organization=organization)
     return org_user
 
 
-def _get_active_signup_count(event):
-    """Count non-cancelled, non-rejected, non-waitlisted signups."""
-    return (
-        EventSignup.objects.filter(event=event)
-        .exclude(
-            status__in=[
-                SignupStatus.CANCELLED,
-                SignupStatus.REJECTED,
-                SignupStatus.WAITLISTED,
-            ],
-        )
-        .count()
+def _decide_signup_status(event: Event, unmet: list[str]) -> SignupStatus:
+    """Status for a signup taking a seat. Auto-approve events approve (or
+    confirm) eligible players and hold the rest for staff; manual-approval
+    events leave everyone at RSVP."""
+    if not event.auto_approve:
+        return SignupStatus.RSVP
+    if unmet:
+        return SignupStatus.PENDING_APPROVAL
+    if event.auto_confirm:
+        return SignupStatus.CONFIRMED
+    return SignupStatus.APPROVED
+
+
+def _roster_add_if_joins(signup: EventSignup) -> None:
+    """Add the player when their status joins the roster in the current phase.
+    Never removes: a status outside the roster leaves existing membership alone."""
+    if joins_roster(signup.event, signup.status):
+        add_user_to_tournament(signup.event, signup.user)
+
+
+def _log_kept_on_team(
+    event: Event, tournament: Tournament, user_id: int, **context: str
+) -> None:
+    log.info(
+        "event_roster_sync_skipped_team_member",
+        system="events",
+        subsystem="services",
+        event_id=event.pk,
+        tournament_id=tournament.pk,
+        user_id=user_id,
+        **context,
     )
 
 
+def _roster_remove_if_left(signup: EventSignup) -> None:
+    """Remove the player when their status no longer joins the roster. This
+    is an explicit staff or player action, so it also drops them from their
+    team; only the bulk sync in sync_event_roster keeps team members."""
+    if joins_roster(signup.event, signup.status):
+        return
+    remove_user_from_tournament(signup.event, signup.user)
+
+
 @transaction.atomic
-def _create_signup(event, user, event_team=None):
+def _create_signup(
+    event: Event, user: CustomUser, event_team: EventTeam | None = None
+) -> EventSignup:
     """Internal: create a signup with no state check.
 
     Handles existing-signup detection, waitlist placement, auto-approve / auto-confirm,
@@ -231,8 +239,10 @@ def _create_signup(event, user, event_team=None):
             raise ValueError("User has already signed up for this event.")
 
     signup_type = SignupType.TEAM if event_team else SignupType.USER
+    _sync_signup_steam_account(event, user)
+    unmet = unmet_codes(event, user)
 
-    if event.max_players and _get_active_signup_count(event) >= event.max_players:
+    if not has_free_seat(lock_event(event)):
         max_pos = (
             EventSignup.objects.filter(event=event, status=SignupStatus.WAITLISTED)
             .order_by("-waitlist_position")
@@ -246,8 +256,8 @@ def _create_signup(event, user, event_team=None):
             signup_type=signup_type,
             status=SignupStatus.WAITLISTED,
             waitlist_position=max_pos + 1,
+            unmet_requirements=unmet,
         )
-        apply_signup_writethrough(signup)
         invalidate_after_commit(event)
         log.info(
             "signup_post_commit_hooks_scheduled",
@@ -259,27 +269,16 @@ def _create_signup(event, user, event_team=None):
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
 
-    status = SignupStatus.RSVP
-    if event.auto_approve:
-        if check_requirements(event, user):
-            status = SignupStatus.APPROVED
-            if event.auto_confirm:
-                status = SignupStatus.CONFIRMED
-        else:
-            status = SignupStatus.PENDING_APPROVAL
-
+    status = _decide_signup_status(event, unmet)
     signup = EventSignup.objects.create(
         event=event,
         user=user,
         event_team=event_team,
         signup_type=signup_type,
         status=status,
+        unmet_requirements=unmet,
     )
-    apply_signup_writethrough(signup)
-    if status == SignupStatus.CONFIRMED:
-        add_user_to_tournament(event, user)
-    elif status == SignupStatus.APPROVED and not event.roll_call_enabled:
-        add_user_to_tournament(event, user)
+    _roster_add_if_joins(signup)
     invalidate_after_commit(event)
     log.info(
         "signup_post_commit_hooks_scheduled",
@@ -294,8 +293,10 @@ def _create_signup(event, user, event_team=None):
     return signup
 
 
-def process_rsvp(event, user, event_team=None):
-    """Public-path signup. Locked to SIGNUPS_OPEN."""
+def process_rsvp(
+    event: Event, user: CustomUser, event_team: EventTeam | None = None
+) -> EventSignup:
+    """Public-path signup. Self-serve admission applies (events.admission)."""
     log.info(
         "process_rsvp_started",
         system="events",
@@ -303,8 +304,7 @@ def process_rsvp(event, user, event_team=None):
         event_id=event.pk,
         user_id=user.pk,
     )
-    if event.state != EventState.SIGNUPS_OPEN:
-        raise ValueError("Event is not accepting signups.")
+    ensure_self_serve(event, user)
     signup = _create_signup(event, user, event_team=event_team)
     # Defer signup_created log until the outermost atomic commits — otherwise
     # rollback paths produce a log claiming a signup that doesn't persist.
@@ -323,13 +323,13 @@ def process_rsvp(event, user, event_team=None):
 
 
 @transaction.atomic
-def create_tentative_signup(event, user):
+def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
     """Create a TENTATIVE EventSignup, upgrading any active signup to tentative.
 
     Funnel point for both the DRF action and the Discord tentative button.
 
     Behavior:
-      - Event must be SIGNUPS_OPEN.
+      - Self-serve admission applies (events.admission).
       - If existing TENTATIVE signup -> raise ValueError (already tentative).
       - If existing active signup (RSVP/APPROVED/CONFIRMED/PENDING/WAITLISTED)
         -> cancel it, delete the row, then create a fresh TENTATIVE.
@@ -338,8 +338,7 @@ def create_tentative_signup(event, user):
         (cancel_signup also schedules one when invoked; we skip registering
         a duplicate in that case).
     """
-    if event.state != EventState.SIGNUPS_OPEN:
-        raise ValueError("Event is not accepting signups")
+    ensure_self_serve(event, user)
 
     existing = EventSignup.objects.filter(event=event, user=user).first()
     notify_scheduled_by_cancel = False
@@ -384,12 +383,15 @@ def decline_signup(event: Event, user: CustomUser) -> EventSignup:
     return signup
 
 
-def apply_signup_input(*, org_user, event, patch):
+def apply_signup_input(
+    *, org_user: "OrgUser", event: Event, patch: "SignupInputPatch"
+) -> "PlayerDotaProfile | None":
     """Idempotently write any provided fields onto the OrgUser's PlayerDotaProfile.
 
     Used by both the web `/signup/` endpoint and the Discord adapters so the
     write path is identical. Per-field branches:
-      - unverified_friend_id: site-wide uniqueness check, then write.
+      - unverified_friend_id: validate_friend_id (digits, site-wide
+        uniqueness), then write.
       - positions: priorities dict or list[int] of roles; writes pos_1..pos_5
         booleans and CustomUser.positions priorities.
       - rank_status: validated against event.allow_* flags before writing.
@@ -406,31 +408,18 @@ def apply_signup_input(*, org_user, event, patch):
         active and fires immediately otherwise. Do NOT wrap in an outer
         transaction.on_commit.
     """
-    from django.core.exceptions import ValidationError
-
-    from org.models_profiles import PlayerDotaProfile
-
     set_fields = patch.model_dump(exclude_unset=True)
     if not set_fields:
         return None
 
-    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
+    friend_id: str | None = None
     if "unverified_friend_id" in set_fields:
-        fid = set_fields["unverified_friend_id"]
-        if fid:
-            # Global scope: Friend ID is unique site-wide, not per-org.
-            collision = (
-                PlayerDotaProfile.objects.filter(unverified_friend_id=fid)
-                .exclude(org_user=org_user)
-                .exists()
-            )
-            if collision:
-                raise ValidationError(
-                    f"Friend ID {fid} is already registered to another account. "
-                    f"Contact an admin or login to https://dota.kettle.sh to claim it.",
-                    code="duplicate_friend_id",
-                )
-        profile.unverified_friend_id = fid
+        friend_id = validate_friend_id(
+            set_fields["unverified_friend_id"] or "", org_user
+        )
+    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
+    if friend_id is not None:
+        profile.unverified_friend_id = friend_id
     if "positions" in set_fields:
         # Two accepted input shapes (normalized to per-role priorities here):
         #   - dict {carry, mid, offlane, soft_support, hard_support} each 0..5
@@ -485,8 +474,6 @@ def apply_signup_input(*, org_user, event, patch):
         # Write priorities to the user's main PositionsModel so the
         # edit-profile page reflects them. Auto-create the row if missing
         # (matches CustomUser.save() default).
-        from app.models import PositionsModel
-
         user = org_user.user
         user_positions = user.positions
         if user_positions is None:
@@ -510,17 +497,12 @@ def apply_signup_input(*, org_user, event, patch):
             invalidate_after_commit(user_positions, user)
     if "rank_status" in set_fields:
         status = set_fields["rank_status"]
-        allowed = (
-            (status == "active" and event.allow_active_mmr)
-            or (status == "previous" and event.allow_previous_rank)
-            or (status == "never" and event.allow_battlecup_rating)
-        )
-        if not allowed:
+        if not DotaModalConfig.from_event(event).allows_rank_status(status):
             raise ValidationError(
                 RANK_STATUS_DISALLOWED_MESSAGES[status],
                 code="rank_status_disallowed",
             )
-        profile.rank_status = status
+        profile.declare_rank(status)
 
     if "rank_medal" in set_fields:
         profile.rank_medal = set_fields["rank_medal"] or ""
@@ -538,6 +520,7 @@ def apply_signup_input(*, org_user, event, patch):
 
     profile.save()
     invalidate_after_commit(profile, org_user, event)
+    refresh_unmet_requirements(org_user)
     log.info(
         "signup_input_applied",
         system="events",
@@ -549,10 +532,12 @@ def apply_signup_input(*, org_user, event, patch):
     return profile
 
 
-def staff_add_signup(event, user, event_team=None):
+def staff_add_signup(
+    event: Event, user: CustomUser, event_team: EventTeam | None = None
+) -> EventSignup:
     """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
     if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
-        raise ValueError("Event is not accepting signups.")
+        raise ValueError(NOT_ACCEPTING_MESSAGE)
     # Admin-added users join the organization so per-org data (MMR, history)
     # has somewhere to live before they're approved.
     if event.organization_id:
@@ -568,10 +553,8 @@ APPROVABLE_STATUSES = [
 
 
 @transaction.atomic
-def approve_signup(signup, mmr_override=None):
+def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> EventSignup:
     """Approve a signup, optionally setting the user's MMR."""
-    from django.utils import timezone as tz
-
     if signup.status not in APPROVABLE_STATUSES:
         raise ValueError(f"Cannot approve signup in '{signup.status}' status.")
 
@@ -582,60 +565,70 @@ def approve_signup(signup, mmr_override=None):
         org_user = resolve_or_create_org_user(signup.user, signup.event.organization)
         org_user.mmr = mmr_override
         org_user.has_active_dota_mmr = True
-        org_user.dota_mmr_last_verified = tz.now()
+        org_user.dota_mmr_last_verified = timezone.now()
         org_user.save(
             update_fields=["mmr", "has_active_dota_mmr", "dota_mmr_last_verified"]
         )
         invalidate_after_commit(org_user)
+        refresh_unmet_requirements(org_user)
 
     signup.status = SignupStatus.APPROVED
     signup.waitlist_position = None
-    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
-    # If no roll call, approved means ready for tournament
-    if not signup.event.roll_call_enabled:
-        add_user_to_tournament(signup.event, signup.user)
+    signup.unmet_requirements = []
+    signup.save(
+        update_fields=[
+            "status",
+            "waitlist_position",
+            "unmet_requirements",
+            "updated_at",
+        ]
+    )
+    _roster_add_if_joins(signup)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
 @transaction.atomic
-def reject_signup(signup):
+def reject_signup(signup: EventSignup) -> EventSignup:
     """Reject a signup."""
     if signup.status in [SignupStatus.REJECTED, SignupStatus.CANCELLED]:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
+    prior_status = signup.status
     signup.status = SignupStatus.REJECTED
     signup.save(update_fields=["status", "updated_at"])
-    remove_user_from_tournament(signup.event, signup.user)
-    _promote_from_waitlist(signup.event)
+    _roster_remove_if_left(signup)
+    if prior_status in seat_holding_statuses(signup.event):
+        _promote_from_waitlist(signup.event)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
 @transaction.atomic
-def confirm_signup(signup):
+def confirm_signup(signup: EventSignup) -> EventSignup:
     """Confirm a signup (e.g., during roll call)."""
     if signup.status != SignupStatus.APPROVED:
         raise ValueError("Only approved signups can be confirmed.")
     signup.status = SignupStatus.CONFIRMED
     signup.save(update_fields=["status", "updated_at"])
-    add_user_to_tournament(signup.event, signup.user)
+    _roster_add_if_joins(signup)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
 @transaction.atomic
-def cancel_signup(signup):
+def cancel_signup(signup: EventSignup) -> EventSignup:
     """Cancel a signup."""
     if signup.status in [SignupStatus.CANCELLED, SignupStatus.REJECTED]:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
     signup.save(update_fields=["status", "updated_at"])
-    remove_user_from_tournament(signup.event, signup.user)
-    _promote_from_waitlist(signup.event)
+    _roster_remove_if_left(signup)
+    if prior_status in seat_holding_statuses(signup.event):
+        _promote_from_waitlist(signup.event)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     # Log on commit, not on entry — same reason as signup_created in process_rsvp:
@@ -655,109 +648,65 @@ def cancel_signup(signup):
     return signup
 
 
-@transaction.atomic
-def apply_signup_writethrough(signup):
-    """Mirror signup-submitted PlayerDotaProfile fields to the User-level fields.
-
-    Issue #196a — steam_account_id is first-write-wins on User.steam_account_id
-    (sourced from PlayerDotaProfile.unverified_friend_id — a CharField of digits on
-    PlayerProfileMixin). Positions are NOT mirrored (apply_signup_input owns them)
-    and MMR is NOT touched here (it routes through approve_signup).
-    Cache invalidation is deferred to commit so the 'incomplete profile' panel
-    reflects the writethrough on the next render rather than after the cacheops
-    1-hour TTL.
-    """
-    from app.models import PositionsModel
-    from org.models import OrgUser
-    from org.models_profiles import PlayerDotaProfile
-
-    user = signup.user
-    org = signup.event.organization
-    if org is None:
-        return signup
-
-    try:
-        org_user = OrgUser.objects.get(user=user, organization=org)
-    except OrgUser.DoesNotExist:
-        return signup
-
-    try:
-        profile = PlayerDotaProfile.objects.get(org_user=org_user)
-    except PlayerDotaProfile.DoesNotExist:
-        return signup
-
-    # Positions are not mirrored from pos_N here: apply_signup_input already
-    # writes the user's priorities to CustomUser.positions, and copying the
-    # binary pos_N flags would flatten them.
-    user_positions = user.positions
-    if user_positions is None:
-        user_positions = PositionsModel.objects.create()
-        user.positions = user_positions
-
-    # steam_account_id: first-write-wins on User.steam_account_id (unique=True).
-    # Source: profile.unverified_friend_id (CharField of digits; empty string = none).
-    profile_friend_id = profile.unverified_friend_id
-    if profile_friend_id and not user.steam_account_id:
-        try:
-            user.steam_account_id = int(profile_friend_id)
-            user.save(update_fields=["steam_account_id", "steamid"])
-        except (ValueError, Exception):
-            # Non-numeric or integrity conflict; skip silently.
-            pass
-
-    tournament = signup.event.tournament
-    objs_to_invalidate = [user, org_user]
-    if tournament is not None:
-        objs_to_invalidate.append(tournament)
-    invalidate_after_commit(*objs_to_invalidate)
-    return signup
-
-
-def _promote_from_waitlist(event):
-    """Promote the next waitlisted user when a slot opens."""
-    if not event.max_players:
-        return
-    if _get_active_signup_count(event) >= event.max_players:
-        return
-    next_waitlisted = (
-        EventSignup.objects.filter(event=event, status=SignupStatus.WAITLISTED)
-        .order_by("waitlist_position")
-        .first()
+def _sync_signup_steam_account(event: Event, user: CustomUser) -> None:
+    """Mirror the profile friend ID onto ``User.steam_account_id`` once per
+    signup decision, before requirements are checked."""
+    wrote = sync_steam_account_from_profiles(
+        user, event.organization, event_id=event.pk
     )
-    if next_waitlisted:
+    if wrote and event.tournament_id is not None:
+        invalidate_after_commit(event.tournament)
+
+
+def _promote_from_waitlist(event: Event) -> list[EventSignup]:
+    """Promote waitlisted signups, in waitlist order, into every free seat."""
+    locked = lock_event(event)
+    promoted: list[EventSignup] = []
+    while has_free_seat(locked):
+        next_waitlisted = (
+            EventSignup.objects.nocache()
+            .filter(event=locked, status=SignupStatus.WAITLISTED)
+            .order_by("waitlist_position")
+            .first()
+        )
+        if next_waitlisted is None:
+            break
         next_waitlisted.waitlist_position = None
-        if event.auto_approve and check_requirements(event, next_waitlisted.user):
-            next_waitlisted.status = SignupStatus.APPROVED
-            if event.auto_confirm:
-                next_waitlisted.status = SignupStatus.CONFIRMED
-                add_user_to_tournament(event, next_waitlisted.user)
-            elif not event.roll_call_enabled:
-                add_user_to_tournament(event, next_waitlisted.user)
-        elif event.auto_approve:
-            next_waitlisted.status = SignupStatus.PENDING_APPROVAL
-        else:
-            next_waitlisted.status = SignupStatus.RSVP
+        _sync_signup_steam_account(locked, next_waitlisted.user)
+        unmet = unmet_codes(locked, next_waitlisted.user)
+        next_waitlisted.unmet_requirements = unmet
+        next_waitlisted.status = _decide_signup_status(locked, unmet)
+        _roster_add_if_joins(next_waitlisted)
         next_waitlisted.save(
-            update_fields=["status", "waitlist_position", "updated_at"]
+            update_fields=[
+                "status",
+                "waitlist_position",
+                "unmet_requirements",
+                "updated_at",
+            ]
         )
         invalidate_after_commit(next_waitlisted)
+        promoted.append(next_waitlisted)
+    if promoted:
+        invalidate_after_commit(locked)
+    return promoted
 
 
 @transaction.atomic
-def unconfirm_signup(signup):
+def unconfirm_signup(signup: EventSignup) -> EventSignup:
     """Revert a confirmed signup back to approved (e.g., during roll call adjustments)."""
     if signup.status != SignupStatus.CONFIRMED:
         raise ValueError("Only confirmed signups can be unconfirmed.")
     signup.status = SignupStatus.APPROVED
     signup.save(update_fields=["status", "updated_at"])
-    remove_user_from_tournament(signup.event, signup.user)
+    _roster_remove_if_left(signup)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
 @transaction.atomic
-def demote_to_waitlist(signup):
+def demote_to_waitlist(signup: EventSignup) -> EventSignup:
     """Move an active signup to the end of the waitlist."""
     if signup.status in [
         SignupStatus.CANCELLED,
@@ -774,18 +723,19 @@ def demote_to_waitlist(signup):
     signup.status = SignupStatus.WAITLISTED
     signup.waitlist_position = max_pos + 1
     signup.save(update_fields=["status", "waitlist_position", "updated_at"])
-    remove_user_from_tournament(signup.event, signup.user)
+    _roster_remove_if_left(signup)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
 @transaction.atomic
-def reinstate_signup(signup):
+def reinstate_signup(signup: EventSignup) -> EventSignup:
     """Bring a removed signup back into the active list.
 
     Behavior depends on event state:
-      - signups_open: CANCELLED → RSVP (or WAITLISTED if full).
+      - signups_open: CANCELLED → the status a new signup would get
+                      (``_decide_signup_status``), or WAITLISTED if full.
       - roll_call:    CANCELLED or REJECTED → APPROVED, so the player
                       reappears in the Awaiting Confirmation list and admins
                       can re-confirm without leaving the rollcall screen.
@@ -798,7 +748,15 @@ def reinstate_signup(signup):
             )
         signup.status = SignupStatus.APPROVED
         signup.waitlist_position = None
-        signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+        signup.unmet_requirements = []
+        signup.save(
+            update_fields=[
+                "status",
+                "waitlist_position",
+                "unmet_requirements",
+                "updated_at",
+            ]
+        )
         invalidate_after_commit(signup, event)
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
@@ -806,10 +764,11 @@ def reinstate_signup(signup):
     if signup.status != SignupStatus.CANCELLED:
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
-        raise ValueError("Event is not accepting signups.")
-    # Check capacity — if full, go to waitlist
-    active_count = _get_active_signup_count(event)
-    if event.max_players and active_count >= event.max_players:
+        raise ValueError(NOT_ACCEPTING_MESSAGE)
+    locked = lock_event(event)
+    _sync_signup_steam_account(locked, signup.user)
+    unmet = unmet_codes(locked, signup.user)
+    if not has_free_seat(locked):
         max_pos = (
             EventSignup.objects.filter(
                 event=event, status=SignupStatus.WAITLISTED
@@ -819,9 +778,18 @@ def reinstate_signup(signup):
         signup.status = SignupStatus.WAITLISTED
         signup.waitlist_position = max_pos + 1
     else:
-        signup.status = SignupStatus.RSVP
+        signup.status = _decide_signup_status(locked, unmet)
         signup.waitlist_position = None
-    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+        _roster_add_if_joins(signup)
+    signup.unmet_requirements = unmet
+    signup.save(
+        update_fields=[
+            "status",
+            "waitlist_position",
+            "unmet_requirements",
+            "updated_at",
+        ]
+    )
     invalidate_after_commit(signup, event)
     transaction.on_commit(lambda: notify_signup_changed(event))
     return signup
@@ -882,7 +850,7 @@ def apply_event_draft_options(
 
 
 @transaction.atomic
-def create_tournament_for_event(event):
+def create_tournament_for_event(event: Event) -> Tournament:
     """Create a future Tournament from event template fields. Returns Tournament."""
     tournament = Tournament.objects.create(
         name=event.tournament_name,
@@ -915,7 +883,7 @@ def create_tournament_for_event(event):
     return tournament
 
 
-def ensure_discord_event(event):
+def ensure_discord_event(event: Event) -> "DiscordEvent | None":
     """Auto-create a DiscordEvent row if the org has a discord_server_id.
 
     This ensures the Discord tab works immediately after event creation
@@ -941,21 +909,21 @@ def ensure_discord_event(event):
     return de
 
 
-def add_user_to_tournament(event, user):
+def add_user_to_tournament(event: Event, user: CustomUser) -> None:
     """Add a user to the event's linked future tournament."""
     if event.tournament and event.tournament.state == "future":
         event.tournament.users.add(user)
         invalidate_obj(event.tournament)
 
 
-def remove_user_from_tournament(event, user):
+def remove_user_from_tournament(event: Event, user: CustomUser) -> None:
     """Remove a user from the event's linked future tournament."""
     if event.tournament and event.tournament.state == "future":
         event.tournament.users.remove(user)
         invalidate_obj(event.tournament)
 
 
-def finalize_event_tournament(event):
+def finalize_event_tournament(event: Event) -> None:
     """Transition linked tournament from future to in_progress."""
     if event.tournament and event.tournament.state == "future":
         event.tournament.state = "in_progress"
@@ -1038,79 +1006,80 @@ def restart_event_tournament(
     event.save(update_fields=["tournament", "updated_at"])
     old_tournament.delete()
 
-    tournament = create_tournament_for_event(event)
-
-    statuses = [SignupStatus.CONFIRMED]
-    if not event.roll_call_enabled:
-        statuses.append(SignupStatus.APPROVED)
-    roster = EventSignup.objects.filter(
-        event=event, status__in=statuses
-    ).select_related("user")
-    for signup in roster:
-        tournament.users.add(signup.user)
-
-    invalidate_after_commit(tournament, event)
-    return tournament
+    create_tournament_for_event(event)
+    return sync_event_roster(event, RosterPhase.SIGNUPS).tournament
 
 
 @transaction.atomic
-def ensure_tournament_with_signups(event: Event) -> Tournament:
-    """Self-heal: create event.tournament if missing, then sync its roster.
+def sync_event_roster(
+    event: Event, phase: RosterPhase | None = None
+) -> RosterSyncResult:
+    """Bring event.tournament.users in line with the roster rule for a phase.
 
-    From ROLL_CALL only CONFIRMED players belong in the tournament (#378), so
-    APPROVED signups (did not confirm) are left out, and removed if present.
-    Otherwise APPROVED + CONFIRMED are added.
-
-    Issue #200 — start_tournament previously silently no-op'd when event.tournament
-    was None (legacy events created before perform_create wired create_tournament_for_event).
-    Idempotent: safe to call multiple times; M2M add()/remove() are no-ops when
-    already applied.
-
-    Cache invalidation deferred to commit so the tournament UI reflects the change
-    immediately rather than after the cacheops 1-hour TTL — Django M2M does NOT
-    auto-invalidate cacheops.
+    Creates the tournament if missing (#200). Adds every signup whose status
+    joins the roster; removes signed-up users whose status left it, except
+    members, captains and deputies of a team in the tournament, who are kept
+    and reported. Users on the roster without a signup are left alone.
+    Idempotent. M2M writes are not tracked by cacheops, so the tournament,
+    the event and every touched user are invalidated on commit.
     """
+    phase = phase or roster_phase(event)
     if event.tournament is None:
         create_tournament_for_event(event)
         event.refresh_from_db()
-
     tournament = event.tournament
-    from_roll_call = event.state == EventState.ROLL_CALL
-    statuses = [SignupStatus.CONFIRMED]
-    if not from_roll_call:
-        statuses.append(SignupStatus.APPROVED)
 
-    roster = EventSignup.objects.filter(
-        event=event, status__in=statuses
-    ).select_related("user")
-    added_users = [signup.user for signup in roster]
-    tournament.users.add(*added_users)
+    added = [
+        signup.user
+        for signup in EventSignup.objects.nocache()
+        .filter(event=event, status__in=roster_statuses(event, phase))
+        .select_related("user")
+    ]
+    tournament.users.add(*added)
 
-    removed_users: list[CustomUser] = []
-    if from_roll_call:
-        removed_users = list(
-            tournament.users.filter(
-                event_signups__event=event,
-                event_signups__status=SignupStatus.APPROVED,
-            )
+    leaving = list(
+        tournament.users.all()
+        .nocache()
+        .filter(
+            event_signups__event=event,
+            event_signups__status__in=leaving_statuses(event, phase),
         )
-        tournament.users.remove(*removed_users)
+        .distinct()
+    )
+    team_bound = team_bound_user_pks(tournament) if leaving else set()
+    kept_on_team = [user for user in leaving if user.pk in team_bound]
+    removed = [user for user in leaving if user.pk not in team_bound]
+    tournament.users.remove(*removed)
+    for user in kept_on_team:
+        _log_kept_on_team(event, tournament, user.pk, phase=str(phase))
 
-    log.info(
-        "event_tournament_roster_synced",
-        system="events",
-        subsystem="services",
-        event_id=event.pk,
-        tournament_id=tournament.pk,
-        from_roll_call=from_roll_call,
-        added_count=len(added_users),
-        removed_count=len(removed_users),
+    sync_fields: dict[str, object] = {
+        "system": "events",
+        "subsystem": "services",
+        "event_id": event.pk,
+        "tournament_id": tournament.pk,
+        "phase": str(phase),
+        "added_count": len(added),
+        "removed_count": len(removed),
+        "kept_on_team_count": len(kept_on_team),
+    }
+    if phase == RosterPhase.ROLL_CALL:
+        log.info("event_roster_synced_on_roll_call", **sync_fields)
+    else:
+        log.info("event_tournament_roster_synced", **sync_fields)
+    invalidate_after_commit(tournament, event, *added, *removed)
+    return RosterSyncResult(
+        tournament=tournament, added=added, removed=removed, kept_on_team=kept_on_team
     )
 
-    # M2M change invalidates both sides: tournament.users.all() AND user.tournament_set.all().
-    # cacheops doesn't auto-track M2M, so we invalidate every user we touched.
-    invalidate_after_commit(tournament, event, *added_users, *removed_users)
-    return tournament
+
+def ensure_tournament_with_signups(
+    event: Event, phase: RosterPhase | None = None
+) -> Tournament:
+    """Self-heal before a tournament starts: create it if missing and sync its
+    roster. Defaults to the start rule: confirmed only from roll call (#378),
+    approved and confirmed when starting straight from signups."""
+    return sync_event_roster(event, phase or start_phase(event)).tournament
 
 
 def teardown_event(event: Event) -> None:
@@ -1168,7 +1137,9 @@ def teardown_event(event: Event) -> None:
 REGISTERED_SIGNUP_STATUSES = (SignupStatus.APPROVED, SignupStatus.CONFIRMED)
 
 
-def is_registered_for_event(user, event: Event) -> bool:
+def is_registered_for_event(
+    user: CustomUser | AnonymousUser | None, event: Event
+) -> bool:
     """The user plays in the event: an accepted signup, or on a team roster.
 
     Accepted means APPROVED or CONFIRMED. rsvp, pending_approval,
@@ -1291,7 +1262,7 @@ REPEATER_CREATE_COPY_FIELDS = (
 )
 
 
-def _python_weekday(sunday_zero_dow):
+def _python_weekday(sunday_zero_dow: int) -> int:
     """Convert Sunday=0 day-of-week to Python's datetime.weekday() (Monday=0).
 
     EventRepeater.day_of_week uses the JS/frontend convention (Sunday=0..Saturday=6)
@@ -1301,7 +1272,9 @@ def _python_weekday(sunday_zero_dow):
     return (sunday_zero_dow - 1) % 7
 
 
-def _get_next_occurrences(repeater, from_date, to_date):
+def _get_next_occurrences(
+    repeater: EventRepeater, from_date: datetime.date, to_date: datetime.date
+) -> list[datetime.datetime]:
     """Calculate next occurrence datetimes for a repeater within a date range."""
     tz_info = ZoneInfo(repeater.timezone)
     occurrences = []
@@ -1356,18 +1329,20 @@ def _get_next_occurrences(repeater, from_date, to_date):
     return occurrences
 
 
-def _copy_mixin_fields(source, target, field_names):
+def _copy_mixin_fields(
+    source: models.Model, target: models.Model, field_names: list[str]
+) -> None:
     """Copy mixin field values from source to target model instance."""
     for field_name in field_names:
         setattr(target, field_name, getattr(source, field_name))
 
 
-def _today():
+def _today() -> datetime.date:
     """Return today's date. Extracted for testability."""
     return datetime.date.today()
 
 
-def generate_events_for_repeater(repeater):
+def generate_events_for_repeater(repeater: EventRepeater) -> list[Event]:
     """Generate upcoming events for a repeater. Returns list of created Events."""
     if not repeater.is_active:
         return []
@@ -1485,7 +1460,9 @@ def create_off_schedule_event(
 
 
 @transaction.atomic
-def sync_future_events(repeater, *, realign_schedule=False):
+def sync_future_events(
+    repeater: EventRepeater, *, realign_schedule: bool = False
+) -> list[Event]:
     """Propagate repeater changes to all upcoming events in the series.
 
     Only updates events that haven't progressed past 'upcoming' state

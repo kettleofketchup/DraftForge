@@ -1,10 +1,17 @@
 """API views for player profiles scoped to organizations."""
 
+from typing import Any
+
+from django.core.exceptions import ValidationError
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.request import Request
 from rest_framework.response import Response
 
+from app.cache_utils import invalidate_obj
+from app.models import Organization
 from app.permissions_org import has_org_staff_access
+from events.eligibility import refresh_unmet_requirements, validate_friend_id
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 
@@ -25,7 +32,7 @@ DOTA_PROFILE_FIELDS = {
 }
 
 
-def _serialize_dota_profile(profile):
+def _serialize_dota_profile(profile: PlayerDotaProfile) -> dict[str, Any]:
     return {
         "id": profile.pk,
         "org_user_id": profile.org_user_id,
@@ -45,9 +52,56 @@ def _serialize_dota_profile(profile):
     }
 
 
+def _invalid_rank_status(data: dict[str, Any]) -> Response | None:
+    if "rank_status" in data and (
+        data["rank_status"] not in PlayerDotaProfile.RANK_STATUSES
+    ):
+        return Response(
+            {
+                "rank_status": (
+                    f"Must be one of {', '.join(PlayerDotaProfile.RANK_STATUSES)}."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return None
+
+
+def _canonical_friend_id(fid: str) -> str:
+    return str(int(fid)) if fid.isascii() and fid.isdigit() else fid
+
+
+def _apply_dota_profile_patch(
+    org_user: OrgUser, data: dict[str, Any]
+) -> PlayerDotaProfile:
+    """Raises ValidationError for a bad friend ID before writing anything."""
+    fields = {f: data[f] for f in DOTA_PROFILE_FIELDS if f in data}
+    if "unverified_friend_id" in fields:
+        submitted = str(fields["unverified_friend_id"] or "").strip()
+        stored = (
+            PlayerDotaProfile.objects.filter(org_user=org_user)
+            .values_list("unverified_friend_id", flat=True)
+            .first()
+        )
+        if stored and _canonical_friend_id(submitted) == stored:
+            fields["unverified_friend_id"] = stored
+        else:
+            fields["unverified_friend_id"] = validate_friend_id(submitted, org_user)
+    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
+    previous_status = profile.rank_status
+    for field, value in fields.items():
+        setattr(profile, field, value)
+    profile.sync_rank_declaration(previous_status)
+    profile.save()
+    invalidate_obj(profile)
+    invalidate_obj(org_user)
+    refresh_unmet_requirements(org_user)
+    return profile
+
+
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
-def get_my_dota_profile(request, org_id):
+def get_my_dota_profile(request: Request, org_id: int) -> Response:
     """Get the current user's Dota 2 profile for an organization.
     GET /api/organizations/<org_id>/my-dota-profile/
     """
@@ -65,7 +119,7 @@ def get_my_dota_profile(request, org_id):
 
 @api_view(["PATCH"])
 @permission_classes([permissions.IsAuthenticated])
-def update_my_dota_profile(request, org_id):
+def update_my_dota_profile(request: Request, org_id: int) -> Response:
     """Update the current user's Dota 2 profile for an organization.
     PATCH /api/organizations/<org_id>/my-dota-profile/
     """
@@ -77,28 +131,24 @@ def update_my_dota_profile(request, org_id):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    for field in DOTA_PROFILE_FIELDS:
-        if field in request.data:
-            setattr(profile, field, request.data[field])
-    profile.save()
-
-    from app.cache_utils import invalidate_obj
-
-    invalidate_obj(profile)
-    invalidate_obj(org_user)
-
+    if (error := _invalid_rank_status(request.data)) is not None:
+        return error
+    try:
+        profile = _apply_dota_profile_patch(org_user, request.data)
+    except ValidationError as e:
+        return Response(
+            {"unverified_friend_id": e.messages[0]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     return Response(_serialize_dota_profile(profile))
 
 
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
-def get_user_dota_profile(request, org_id, user_pk):
+def get_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Response:
     """Get any user's Dota 2 profile for an org (org staff only).
     GET /api/organizations/<org_id>/users/<user_pk>/dota-profile/
     """
-    from app.models import Organization
-
     try:
         org = Organization.objects.get(pk=org_id)
     except Organization.DoesNotExist:
@@ -121,12 +171,10 @@ def get_user_dota_profile(request, org_id, user_pk):
 
 @api_view(["PATCH"])
 @permission_classes([permissions.IsAuthenticated])
-def update_user_dota_profile(request, org_id, user_pk):
+def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Response:
     """Update any user's Dota 2 profile (org staff only).
     PATCH /api/organizations/<org_id>/users/<user_pk>/dota-profile/
     """
-    from app.models import Organization
-
     try:
         org = Organization.objects.get(pk=org_id)
     except Organization.DoesNotExist:
@@ -143,28 +191,24 @@ def update_user_dota_profile(request, org_id, user_pk):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    for field in DOTA_PROFILE_FIELDS:
-        if field in request.data:
-            setattr(profile, field, request.data[field])
-    profile.save()
-
-    from app.cache_utils import invalidate_obj
-
-    invalidate_obj(profile)
-    invalidate_obj(org_user)
-
+    if (error := _invalid_rank_status(request.data)) is not None:
+        return error
+    try:
+        profile = _apply_dota_profile_patch(org_user, request.data)
+    except ValidationError as e:
+        return Response(
+            {"unverified_friend_id": e.messages[0]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     return Response(_serialize_dota_profile(profile))
 
 
 @api_view(["DELETE"])
 @permission_classes([permissions.IsAuthenticated])
-def delete_user_dota_profile(request, org_id, user_pk):
+def delete_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Response:
     """Delete a user's Dota 2 profile (org staff only).
     DELETE /api/organizations/<org_id>/users/<user_pk>/dota-profile/
     """
-    from app.models import Organization
-
     try:
         org = Organization.objects.get(pk=org_id)
     except Organization.DoesNotExist:
@@ -180,7 +224,6 @@ def delete_user_dota_profile(request, org_id, user_pk):
 
     deleted, _ = PlayerDotaProfile.objects.filter(org_user=org_user).delete()
     if deleted:
-        from app.cache_utils import invalidate_obj
-
         invalidate_obj(org_user)
+        refresh_unmet_requirements(org_user)
     return Response(status=status.HTTP_204_NO_CONTENT)

@@ -49,6 +49,8 @@ import {
   localToUTC,
   refineEventEnd,
 } from './schemas';
+import { signupRulesFrom } from './signupRules';
+import { SignupRulesSection } from './SignupRulesSection';
 
 const ids = eventFieldTestIds('event');
 
@@ -144,6 +146,7 @@ export function CreateEventModal({
         signup_mode: 'immediate' as const,
         signup_days_before: 3,
         ...discordResetValues(orgDefaults),
+        ...signupRulesFrom(orgDefaults),
         is_recurring: false,
         frequency: Frequency.WEEKLY,
         generate_days_ahead: 7,
@@ -448,7 +451,13 @@ export function CreateEventModal({
         {
           value: 'approval',
           content: (
-            <ApprovalConfigSection control={form.control} watch={form.watch} />
+            <div className="space-y-6">
+              <ApprovalConfigSection
+                control={form.control}
+                watch={form.watch}
+              />
+              <SignupRulesSection control={form.control} />
+            </div>
           ),
         },
         {

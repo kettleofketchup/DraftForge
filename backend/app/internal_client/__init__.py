@@ -532,7 +532,7 @@ def get_users_for_avatar_check(
 # ---- User writes ----
 
 
-def update_user_avatar(pk: int, avatar: str) -> requests.Response | None:
+def update_user_avatar(pk: int, avatar: str | None) -> requests.Response | None:
     """Update CustomUser avatar hash."""
     return _patch(f"/users/{pk}/avatar/", {"avatar": avatar})
 
