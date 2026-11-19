@@ -26,9 +26,10 @@ just frontend::lint-shadcn-prune   # after fixing baselined violations
 | `draftforge/no-user-reshape` | `<UserAvatar user={{ pk: x.pk, username: x.username, … }} />` copying same-named fields from one object (or `pk` from `user_id`/`user`/`id`). Pass `user={x}`; `UserAvatar` resolves the user by id and fills the rest from the user cache. Translations such as `{ username: payload.captain_name }` are not flagged. |
 | `draftforge/no-direct-name-resolver` | Calling `resolveDisplayName` or `AvatarUrl` outside the helpers. Use `DisplayName(user)` / `<UserAvatar user={…} />`. Off in tests. |
 | `draftforge/no-avatar-fallback` | A raw `<Avatar>` branch beside a `<UserAvatar>` (`captain ? <UserAvatar …/> : <Avatar>…</Avatar>`), and `<AvatarFallback>` built from a person's name (`…username`, `…nickname`, a `displayName`/`username`/`nickname` variable, or `DisplayName(…)`). `UserAvatar` renders the no-user fallback itself: pass `fallbackName` for the initials when there is no user. Team initials (`team.name`) are not flagged. |
+| `draftforge/no-raw-color-strings` | Raw palette classes in **any** string, for the ones `no-raw-colors` cannot trace to a `className`: lookup maps (`{ str: 'bg-red-900/40' }`), arrays, function returns, unused constants, `ui/buttons/styles.ts`. The `dedupe-raw-colors` processor drops its report when `no-raw-colors` already reported the same class on the same lines, so each class counts once. Off in tests. |
 
-The `draftforge/*` rules are local (`frontend/eslint-rules/user-display.js`, tests in
-`frontend/tests/unit/eslint-user-display.test.ts`) and are off in the helpers that implement
+The `draftforge/*` rules are local (`frontend/eslint-rules/`, combined in `index.js`; tests in
+`frontend/tests/unit/eslint-*.test.ts`). The person rules are off in the helpers that implement
 them (`UserAvatar.tsx`, `avatar.tsx`, `lib/userDisplayName.ts`, `lib/displayOrg.ts`, `ui/**`). When a screen deliberately shows one specific
 field (an `@handle`, a labelled "Username:" row, a Discord member picker), opt out on that
 line with a reason: `// eslint-disable-next-line draftforge/use-display-name -- shows the handle`.
