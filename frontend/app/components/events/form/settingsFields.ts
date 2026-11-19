@@ -32,18 +32,19 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       keywords: ['start', 'date', 'when'],
     },
     event_ends_at: { label: 'End Date & Time', keywords: ['finish'] },
-    signup_mode: {
+    signup_open_mode: {
       label: 'When to open signups',
-      keywords: ['registration', 'open immediately', 'open manually'],
+      keywords: [
+        'registration',
+        'open immediately',
+        'open manually',
+        'schedule signups',
+      ],
     },
-    signup_days_before: {
+    signups_open_hours_before: {
       label: 'Days before event',
-      description: 'Signups will open this many days before the scheduled date',
-    },
-    open_signups: {
-      label: 'Open signups immediately',
-      description:
-        'Otherwise the event stays upcoming until you open signups by hand.',
+      description: 'Signups open this many days before the scheduled start',
+      keywords: ['hours before'],
     },
     timezone: { label: 'Timezone', keywords: ['time zone', 'tz', 'utc'] },
     frequency: {

@@ -400,6 +400,32 @@ describe('EventFormDialog search', () => {
     expect(isActive('tournament')).toBe(true);
   });
 
+  it('keeps option labels inside a field row searchable', () => {
+    const tabs: EventFormTab[] = [
+      {
+        value: 'event',
+        content: (
+          <FormField
+            name="name"
+            render={() => (
+              <FormItem>
+                <FormLabel>When to open signups</FormLabel>
+                <label htmlFor="opt-now">Open immediately</label>
+                <input id="opt-now" type="radio" />
+              </FormItem>
+            )}
+          />
+        ),
+      },
+      { value: 'tournament', content: <div /> },
+    ];
+    render(<Harness tabs={tabs} />);
+    type('immediately');
+    expect(hit('Open immediately')).toBeInTheDocument();
+    type('when to open');
+    expect(hit('When to open signups')).toBeInTheDocument();
+  });
+
   it('does not put the cursor in search when the dialog opens', () => {
     render(<Harness />);
     expect(search()).not.toHaveFocus();

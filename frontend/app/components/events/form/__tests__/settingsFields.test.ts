@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { DraftSettingsFormSchema } from '~/components/teamdraft/schemas';
-import { dotaLobbyConfigSchema, readyCheckConfigSchema } from '../../schemas';
+import {
+  createEventInputSchema,
+  createSeriesEventInputSchema,
+  dotaLobbyConfigSchema,
+  editEventFormSchema,
+  readyCheckConfigSchema,
+} from '../../schemas';
 import { EVENT_SECTION_FIELDS } from '../settingsFields';
 import { EVENT_TAB_META } from '../tabs';
 
@@ -32,5 +38,20 @@ describe('EVENT_SECTION_FIELDS', () => {
     expect(Object.keys(EVENT_SECTION_FIELDS.ready).sort()).toEqual(
       Object.keys(readyCheckConfigSchema.shape).sort(),
     );
+  });
+
+  it('only lists fields an event form actually has', () => {
+    const formFields = new Set([
+      ...Object.keys(createEventInputSchema.shape),
+      ...Object.keys(createSeriesEventInputSchema.shape),
+      ...Object.keys(editEventFormSchema.shape),
+      // EditOrgDefaultsModal keeps these in its own local schema.
+      'max_players',
+      'auto_approve',
+    ]);
+    const stale = Object.values(EVENT_SECTION_FIELDS)
+      .flatMap(Object.keys)
+      .filter((field) => !formFields.has(field));
+    expect(stale).toEqual([]);
   });
 });

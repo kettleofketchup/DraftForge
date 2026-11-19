@@ -212,16 +212,22 @@ export function SettingsDialog<V extends string>({
       panel.querySelectorAll<HTMLElement>(SEARCHABLE).forEach((el, i) => {
         const label = el.textContent?.trim();
         if (!label) return;
-        const field = el.closest<HTMLElement>('[data-field]')?.dataset.field;
+        // Only a row's first label names the field; option labels inside it stay plain hits.
+        const row = el.closest<HTMLElement>('[data-field]');
+        const field =
+          row && row.querySelector('label') === el
+            ? row.dataset.field
+            : undefined;
         if (field) {
           if (seen.has(field)) return;
           seen.add(field);
         }
         const info = field ? registry.get(field) : undefined;
-        const description = el
-          .closest('[data-field]')
-          ?.querySelector('[id$="-form-item-description"]')
-          ?.textContent?.trim();
+        const description = field
+          ? row
+              ?.querySelector('[id$="-form-item-description"]')
+              ?.textContent?.trim()
+          : undefined;
         add(
           { key: `${s.value}:${i}`, section: s.value, label, el, field },
           [
