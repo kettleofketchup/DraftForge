@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -15,12 +17,12 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 # Steam account IDs are unsigned 32-bit; 0 is never assigned.
-STEAM_ACCOUNT_ID_RANGE = range(1, 2**32)
+STEAM_ACCOUNT_ID_RANGE: Final[range] = range(1, 2**32)
 # Range of the CustomUser.steam_account_id IntegerField.
-STORED_STEAM_ACCOUNT_ID_MAX = 2**31 - 1
-FRIEND_ID_MAX_LENGTH = 20
+STORED_STEAM_ACCOUNT_ID_MAX: Final[int] = 2**31 - 1
+FRIEND_ID_MAX_LENGTH: Final[int] = 20
 
-_PROFILE_ATTRS = ("dota_profile", "deadlock_profile")
+_PROFILE_ATTRS: Final[tuple[str, ...]] = ("dota_profile", "deadlock_profile")
 
 
 def steam_friend_id_from_profiles(org_user: OrgUser | None) -> str:

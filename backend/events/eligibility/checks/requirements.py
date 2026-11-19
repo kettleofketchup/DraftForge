@@ -52,7 +52,7 @@ RULES: dict[ReasonCode, str] = {
     ReasonCode.BELOW_MIN_MMR: Rule.DOTA_MIN_MMR,
 }
 
-_PROFILE_FIXABLE = frozenset(
+_PROFILE_FIXABLE: frozenset[ReasonCode] = frozenset(
     {ReasonCode.STEAM_ID_MISSING, ReasonCode.PROFILE_INCOMPLETE}
 )
 

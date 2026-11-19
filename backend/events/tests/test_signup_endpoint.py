@@ -361,6 +361,19 @@ class SignupRefusalReasonsTests(EventTestCase):
         self.assertEqual(resp.json()["reasons"], [])
         self.assertIn("intent", resp.json()["error"])
 
+    def test_non_string_intent_returns_400(self) -> None:
+        ev = self.make_event()
+        self.api.force_authenticate(self.make_user())
+        for intent in (["rsvp"], {"rsvp": True}, 1):
+            with self.subTest(intent=intent):
+                resp = self.api.post(
+                    f"/api/events/{ev.pk}/signup/", {"intent": intent}, format="json"
+                )
+                self.assertEqual(resp.status_code, 400, resp.content)
+                body = resp.json()
+                self.assertIn("intent", body["error"])
+                self.assertEqual(body["reasons"], [])
+
 
 class EventEligibilityEndpointTests(EventTestCase):
     def setUp(self) -> None:

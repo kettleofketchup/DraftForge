@@ -28,6 +28,7 @@ from events.services import check_requirements
 from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
+from org.settings_constants import ALL_CODES
 
 PROFILE_URL = f"{settings.SITE_URL}/profile"
 
@@ -257,6 +258,12 @@ class PortedRuleTests(EvaluatorTestCase):
         self.assertEqual(entry["codes"], ["steam_id_missing"])
         self.assertTrue(entry["admissible"])
         self.assertEqual(entry["intent"], "maybe")
+
+
+class ReasonCodeNamespaceTests(EvaluatorTestCase):
+    def test_codes_disjoint_from_seating_overrides(self) -> None:
+        # #585 treats codes outside ALL_CODES as always-confirm eligibility codes.
+        self.assertTrue(set(ReasonCode.values).isdisjoint(ALL_CODES))
 
 
 class RegistryTests(EvaluatorTestCase):

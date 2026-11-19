@@ -886,7 +886,7 @@ class EventViewSet(viewsets.ModelViewSet):
         except ValueError as exc:
             return _signup_refusal(event, request.user, intent, str(exc))
 
-        if intent not in _SIGNUP_INTENT_COMMITMENT:
+        if not isinstance(intent, str) or intent not in _SIGNUP_INTENT_COMMITMENT:
             return _signup_refusal(
                 event, request.user, intent, "intent must be 'rsvp' or 'tentative'"
             )

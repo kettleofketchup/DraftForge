@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Final
 
 from django.db import models
 
@@ -37,14 +37,14 @@ class FixKind(models.TextChoices):
 class Rule:
     """Slugs naming the rule each reason enforces."""
 
-    REQUIRE_STEAM_ID = "require-steam-id"
-    REQUIRE_MMR_VERIFIED = "require-mmr-verified"
-    REQUIRE_PROFILE_COMPLETE = "require-profile-complete"
-    DOTA_RANK_DECLARED = "dota-rank-declared"
-    DOTA_RANK_TYPE = "dota-rank-type"
-    DOTA_RANK_SCREENSHOT = "dota-rank-screenshot"
-    DOTA_BATTLECUP_SCREENSHOT = "dota-battlecup-screenshot"
-    DOTA_MIN_MMR = "dota-min-mmr"
+    REQUIRE_STEAM_ID: Final = "require-steam-id"
+    REQUIRE_MMR_VERIFIED: Final = "require-mmr-verified"
+    REQUIRE_PROFILE_COMPLETE: Final = "require-profile-complete"
+    DOTA_RANK_DECLARED: Final = "dota-rank-declared"
+    DOTA_RANK_TYPE: Final = "dota-rank-type"
+    DOTA_RANK_SCREENSHOT: Final = "dota-rank-screenshot"
+    DOTA_BATTLECUP_SCREENSHOT: Final = "dota-battlecup-screenshot"
+    DOTA_MIN_MMR: Final = "dota-min-mmr"
 
 
 @dataclass(frozen=True, slots=True)
