@@ -162,6 +162,31 @@ tournament's signups are open as defined above.
 | GET | `/api/teams/` | List teams |
 | POST | `/api/teams/` | Create team |
 | GET | `/api/teams/{id}/` | Get team |
+| PATCH / PUT | `/api/teams/{id}/` | Update team (tournament staff) |
+
+### Updating a team
+
+- A captain or deputy who is not a member, or a deputy who is also the captain, is
+  refused with 400.
+- New members are added before old ones are removed, so replacing the whole roster in
+  one request keeps the team.
+- Emptying `member_ids` on a team that bracket games or hero drafts use is refused with
+  400:
+
+    ```json
+    {"member_ids": ["This team is used by bracket games or hero drafts; remove it from those first."]}
+    ```
+
+- Emptying `member_ids` on a team nothing uses deletes the team, and the response is
+  `204 No Content` with an empty body instead of the team.
+- A change of `captain_id` moves every draft round of the old captain in that tournament
+  (picked and unpicked) to the new captain, resets the team's draft presence, and
+  refreshes a live team draft or hero draft. The `player_picked` events keep the
+  original picker. Setting the captain to `null` moves no rounds.
+- Every update that changes the name, captain, deputy or roster writes one `legacy_patch`
+  row to the team audit log (`TeamLog`), with the roster before and after and the fields
+  that changed. Updates to only `draft_order`, `current_points`, `placement` or the
+  tournament write no row.
 
 ## Games
 
