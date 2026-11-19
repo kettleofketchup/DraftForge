@@ -15,10 +15,7 @@ from app.models import (
     HeroDraftRound,
     HeroDraftState,
 )
-from app.tasks.draft_tick import (  # noqa: F401
-    CLIENT_PICK_TIME_MAX_AGE_S,
-    evaluate_client_pick_time,
-)
+from app.tasks.draft_tick import evaluate_client_pick_time
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

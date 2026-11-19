@@ -212,7 +212,11 @@ def handle_tournament_user_addition(
             )
 
 
-@receiver(pre_save, sender="app.Game")
+@receiver(
+    pre_save,
+    sender="app.Game",
+    dispatch_uid="draft_reset_herodraft_on_team_change",
+)
 def reset_herodraft_on_team_change(
     sender: type[Game], instance: Game, **kwargs: object
 ) -> None:

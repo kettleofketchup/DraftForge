@@ -2044,14 +2044,3 @@ class HeroDraftSerializer(serializers.ModelSerializer):
             obj.roll_winner,
         )
         return HeroDraftTeamSerializer(winner, context=self.context).data
-
-
-class HeroDraftTickSerializer(serializers.Serializer):
-    """Serializer for WebSocket tick updates."""
-
-    current_round = serializers.IntegerField()
-    active_team_id = serializers.IntegerField()
-    grace_time_remaining_ms = serializers.IntegerField()
-    team_a_reserve_ms = serializers.IntegerField()
-    team_b_reserve_ms = serializers.IntegerField()
-    draft_state = serializers.CharField()
