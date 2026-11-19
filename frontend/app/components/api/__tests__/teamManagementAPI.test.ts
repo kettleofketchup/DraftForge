@@ -68,6 +68,11 @@ describe('ManagedTeamSchema', () => {
     ).toBe(true);
   });
 
+  it('accepts a legacy team with a null draft_order', () => {
+    const team = ManagedTeamSchema.parse({ ...managedTeam, draft_order: null });
+    expect(team.draft_order).toBeNull();
+  });
+
   it('rejects an unknown leadership problem code', () => {
     const bad = {
       ...ghostCaptainTeam,
