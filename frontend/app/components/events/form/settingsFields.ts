@@ -1,0 +1,300 @@
+import type { EventFormTabValue } from './tabs';
+
+export interface SettingsFieldMeta {
+  label: string;
+  description?: string;
+  /** Extra search terms that appear in neither the label nor the description. */
+  keywords?: readonly string[];
+}
+
+export type SectionFieldMeta = Record<
+  EventFormTabValue,
+  Record<string, SettingsFieldMeta>
+>;
+
+/**
+ * Every event-form field, under the section that renders it by default, with the
+ * text the settings search matches. A modal that renders a field elsewhere (signup
+ * rules sit on the Event section of the series and defaults forms) is resolved from
+ * the DOM at runtime; this map is the fallback and the source for unmounted panels.
+ */
+export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
+  event: {
+    name: { label: 'Event Name', keywords: ['title'] },
+    description: { label: 'Description' },
+    is_recurring: {
+      label: 'Recurring Event (Event Repeater)',
+      description: 'Automatically generates events on a schedule',
+      keywords: ['series', 'repeat', 'weekly'],
+    },
+    scheduled_at: {
+      label: 'Scheduled Date & Time',
+      keywords: ['start', 'date', 'when'],
+    },
+    event_ends_at: { label: 'End Date & Time', keywords: ['finish'] },
+    signup_mode: {
+      label: 'When to open signups',
+      keywords: ['registration', 'open immediately', 'open manually'],
+    },
+    signup_days_before: {
+      label: 'Days before event',
+      description: 'Signups will open this many days before the scheduled date',
+    },
+    open_signups: {
+      label: 'Open signups immediately',
+      description:
+        'Otherwise the event stays upcoming until you open signups by hand.',
+    },
+    timezone: { label: 'Timezone', keywords: ['time zone', 'tz', 'utc'] },
+    frequency: {
+      label: 'Frequency',
+      keywords: ['daily', 'weekly', 'monthly', 'repeat'],
+    },
+    day_of_week: { label: 'Day of Week', keywords: ['weekday'] },
+    time_of_day: { label: 'Time', keywords: ['start time'] },
+    starts_at: { label: 'Starts', keywords: ['start date', 'first event'] },
+    ends_at: { label: 'Ends', keywords: ['end date', 'last event'] },
+    generate_days_ahead: {
+      label: 'Generate Days Ahead',
+      keywords: ['create in advance', 'schedule'],
+    },
+    max_players: { label: 'Max Players', keywords: ['limit', 'capacity'] },
+    auto_approve: { label: 'Auto-approve signups' },
+    auto_confirm: { label: 'Auto-confirm signups' },
+  },
+  tournament: {
+    tournament_name: { label: 'Tournament Name' },
+    tournament_league: { label: 'League' },
+    tournament_type: {
+      label: 'Bracket type',
+      keywords: ['format', 'elimination', 'swiss', 'round robin'],
+    },
+    game_type: { label: 'Game', keywords: ['dota'] },
+    people_per_team: {
+      label: 'People Per Team',
+      keywords: ['team size', 'players'],
+    },
+    number_of_teams: { label: 'Max Teams', keywords: ['unlimited'] },
+    draft_type: {
+      label: 'Draft type',
+      description: 'How captains build their teams',
+      keywords: ['snake', 'shuffle', 'captains'],
+    },
+    draft_timer_enabled: {
+      label: 'Team draft timer',
+      description:
+        'Captains get a countdown for each player pick. Unchecked, they pick without a time limit.',
+      keywords: ['player pick timer'],
+    },
+    draft_grace_time_s: {
+      label: 'Grace time (seconds)',
+      description: 'Resets every pick',
+      keywords: ['team draft timer'],
+    },
+    draft_reserve_time_s: {
+      label: 'Reserve time (seconds)',
+      description: 'Bank each captain draws on after grace runs out',
+      keywords: ['team draft timer'],
+    },
+    draft_timeout_action: {
+      label: 'On timeout',
+      description: 'When grace and reserve both run out',
+      keywords: ['auto pick', 'random pick'],
+    },
+    hero_timer_enabled: {
+      label: 'Hero draft timer',
+      description:
+        'Each team gets a countdown for hero picks and bans. Unchecked, there is no time limit.',
+      keywords: ['ban timer'],
+    },
+    hero_grace_time_s: {
+      label: 'Grace per pick (seconds)',
+      description: 'Resets every pick or ban',
+      keywords: ['hero draft timer'],
+    },
+    hero_reserve_time_s: {
+      label: 'Reserve per team (seconds)',
+      description: 'Shared bank for the whole hero draft',
+      keywords: ['hero draft timer'],
+    },
+  },
+  lobby: {
+    game_mode: {
+      label: 'Game Mode',
+      keywords: ["captain's mode", 'turbo', 'normal', 'custom'],
+    },
+    custom_game_name: { label: 'Custom Game Name' },
+    captains_draft_time: {
+      label: 'Draft Time (seconds)',
+      description: "Seconds per pick in Captain's Mode draft",
+    },
+    lobby_steam_league_id: {
+      label: 'Steam League ID',
+      keywords: ['ticket', 'dota league'],
+    },
+    dota_lobby_mode: {
+      label: 'Hosted lobbies',
+      description:
+        "A lobby bot creates each match's in-game lobby and invites the players.",
+      keywords: ['bot', 'automatic lobby'],
+    },
+    dota_lobby_launch: {
+      label: 'Match start',
+      keywords: ['launch', 'ready'],
+    },
+    dota_lobby_region: {
+      label: 'Server region',
+      description: 'A region name the lobby service knows, such as us_east.',
+      keywords: ['location'],
+    },
+    discord_send_lobby_info: {
+      label: 'Send lobby info',
+      description:
+        'DM players the in-game lobby name, password and side when their lobby is created',
+    },
+    dota_lobby_password_mode: {
+      label: 'Password',
+      keywords: ['lobby password', 'random', 'fixed'],
+    },
+    dota_lobby_password: { label: 'Lobby password' },
+    dota_lobby_password_saved: { label: 'Saved lobby password' },
+  },
+  approval: {
+    allow_active_mmr: {
+      label: 'Active MMR Players',
+      description: 'Players with a current ranked medal',
+    },
+    discord_require_rank_screenshot: {
+      label: 'Require MMR screenshot',
+      description: 'Player must upload a screenshot before signup completes',
+      keywords: ['rank screenshot', 'proof'],
+    },
+    min_mmr: { label: 'Minimum MMR', keywords: ['rank', 'skill'] },
+    allow_previous_rank: {
+      label: 'Previously Ranked Players',
+      description: 'Players who had a rank but are no longer active',
+    },
+    allow_battlecup_rating: {
+      label: 'Battle Cup Players (Never Ranked)',
+      description:
+        'Players who have never played ranked — use battle cup tier for estimation',
+    },
+    discord_require_battlecup_screenshot: {
+      label: 'Require battle cup screenshot',
+      description:
+        'Player must upload a screenshot of their battle cup ticket tier',
+    },
+    require_steam_id: {
+      label: 'Require Friend ID',
+      description: 'Player must provide their Dota 2 Friend ID',
+      keywords: ['steam'],
+    },
+    require_mmr_verified: {
+      label: 'Require verified MMR',
+      description: 'Player must have admin-verified MMR on their org profile',
+    },
+    require_profile_complete: {
+      label: 'Require complete profile',
+      description: 'Player must have nickname, Steam ID, and Discord linked',
+    },
+    roll_call_enabled: {
+      label: 'Players join the roster only after confirming',
+      description:
+        'Approved players wait for roll-call confirmation before they are added to the tournament.',
+      keywords: ['roll call', 'check in'],
+    },
+    roll_call_mode: { label: 'Roll-call mode', keywords: ['check in'] },
+    allow_user_signups: {
+      label: 'Members can sign themselves up',
+      description: 'When off, only organizers can add players.',
+      keywords: ['self signup'],
+    },
+  },
+  discord: {
+    discord_create_event: {
+      label: 'Create Discord scheduled event',
+      description:
+        'Automatically creates a scheduled event in your Discord server',
+    },
+    discord_sync_signups: {
+      label: 'Synchronize signups',
+      description: 'Keep website and Discord event signups in sync',
+    },
+    discord_mark_interested: {
+      label: 'Mark signups as interested',
+      description:
+        'Players who sign up will be marked as interested on the Discord event',
+    },
+    discord_event_title: {
+      label: 'Event title',
+      description:
+        'Custom title for the Discord event. If blank, the event name is used.',
+    },
+    discord_event_description: {
+      label: 'Event description',
+      description:
+        'Shown as the main description of the Discord scheduled event',
+    },
+    discord_event_info: {
+      label: 'Additional info',
+      description: 'Extra information appended to the Discord event details',
+    },
+    discord_signup_reminder: {
+      label: 'Send signup reminder',
+      description: "DM users who haven't signed up yet before the event starts",
+    },
+    discord_signup_reminder_hours: {
+      label: 'Signup reminder: hours before event',
+    },
+    discord_profile_reminder: {
+      label: 'Profile update reminder',
+      description:
+        'DM signed-up users to complete their profile (Steam ID, MMR) before the event',
+    },
+    discord_profile_reminder_hours: { label: 'Profile reminder: when to send' },
+    discord_confirm_attendance: {
+      label: 'Confirm attendance via Discord',
+      description:
+        "Require players to reply to a Discord message on event day to confirm they'll attend",
+    },
+    discord_confirm_attendance_hours: {
+      label: 'Attendance check: when to send',
+    },
+    discord_post_signups: {
+      label: 'Post event signup embed',
+      description:
+        'Post an embed to a channel where users can react to sign up',
+    },
+    discord_post_signups_channel_id: {
+      label: 'Signup channel',
+      description: 'Channel where the signup embed will be posted',
+    },
+    discord_signup_role_ids: {
+      label: 'Mention roles in signup post',
+      description: 'Discord role IDs to @mention in the signup post',
+      keywords: ['ping'],
+    },
+    discord_announcement: {
+      label: 'Pre-day announcement',
+      description: 'Post an announcement in a channel before the event',
+    },
+    discord_announcement_channel_id: {
+      label: 'Announcement channel',
+      description: 'Channel where the announcement will be posted',
+    },
+    discord_announcement_hours: {
+      label: 'Hours before event',
+      description: 'How many hours before the event to post the announcement',
+    },
+    discord_announcement_role_ids: {
+      label: 'Mention roles in announcement',
+      description: 'Discord role IDs to @mention when announcement is posted',
+      keywords: ['ping'],
+    },
+    discord_notify_new_events: {
+      label: 'Message interested users',
+      description:
+        'DM subscribed users when new events are created or cancelled',
+    },
+  },
+};
