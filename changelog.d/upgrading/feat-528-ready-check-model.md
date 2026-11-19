@@ -1,0 +1,3 @@
+Migration `events.0029_backfill_ready_check_open_minutes` sets the new `ready_check_open_minutes` on every existing event, series and organization default to `discord_confirm_attendance_hours` × 60, capped at 1440 (rows with no hours, or under 1, keep the default of 120). `discord_confirm_attendance_hours` is kept, since the attendance reminder still reads it. Reversing the migration does nothing.
+
+The event create form now pre-fills `roll_call_enabled` and `roll_call_mode` from the organization's event defaults. Until now those defaults could only be set through the API and the form ignored them, so an organization that set them that way will see roll call on for new events. `auto_confirm` is still not inherited.

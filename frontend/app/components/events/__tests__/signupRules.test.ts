@@ -19,35 +19,13 @@ describe('rollCallSummary', () => {
 });
 
 describe('signupRulesFrom', () => {
-  it('copies both flags from a loaded entity', () => {
-    expect(
-      signupRulesFrom({
-        roll_call_enabled: true,
-        allow_user_signups: false,
-        roll_call_mode: 'manual',
-      }),
-    ).toEqual({
-      roll_call_enabled: true,
+  it('copies the self sign-up flag from a loaded entity', () => {
+    expect(signupRulesFrom({ allow_user_signups: false })).toEqual({
       allow_user_signups: false,
-      roll_call_mode: 'manual',
     });
   });
 
-  it('drops a roll-call mode the form does not offer', () => {
-    expect(
-      signupRulesFrom({
-        roll_call_enabled: false,
-        allow_user_signups: true,
-        roll_call_mode: 'none',
-      }).roll_call_mode,
-    ).toBeUndefined();
-  });
-
-  it('falls back to the defaults for missing flags', () => {
-    expect(signupRulesFrom({})).toEqual({
-      roll_call_enabled: false,
-      allow_user_signups: true,
-      roll_call_mode: undefined,
-    });
+  it('falls back to the default when the flag is missing', () => {
+    expect(signupRulesFrom({})).toEqual({ allow_user_signups: true });
   });
 });

@@ -5,7 +5,7 @@ from typing import Any, NoReturn
 import nh3
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models, router, transaction
 from django.db.models import F
 from django.db.models.expressions import DatabaseDefault
@@ -37,6 +37,16 @@ from events.constants import (  # noqa: F401 — re-exported for backward compat
     SignupType,
 )
 from events.exceptions import ImmutableFieldError, LedgerAppendOnlyError
+from events.ready_check_constants import (
+    READY_CHECK_FIELD_RANGES,
+    PostCullFillMode,
+    ReadyCheckConfirmVia,
+    ReadyCheckEntryState,
+    ReadyCheckLowCompletionAction,
+    ReadyCheckOutcome,
+    ReadyCheckPhase,
+    ReadyCheckScope,
+)
 from lobby import passwords as lobby_passwords
 from telemetry.logging import get_logger
 
@@ -49,7 +59,13 @@ discord_id_validator = RegexValidator(
 
 
 class RollCallMode(models.TextChoices):
-    MANUAL = "manual", "Manual"
+    MANUAL = "manual", "Staff-verified"
+    AUTOMATIC = "automatic", "Automatic"
+
+
+def _range_validators(field: str) -> list[MinValueValidator | MaxValueValidator]:
+    low, high = READY_CHECK_FIELD_RANGES[field]
+    return [MinValueValidator(low), MaxValueValidator(high)]
 
 
 class TournamentTemplateMixin(models.Model):
@@ -133,6 +149,68 @@ class EventConfigMixin(models.Model):
         max_length=20,
         choices=RollCallMode.choices,
         default=RollCallMode.MANUAL,
+    )
+    ready_check_scope = models.CharField(
+        max_length=20,
+        choices=ReadyCheckScope.choices,
+        default=ReadyCheckScope.MAIN_ONLY,
+        help_text="Which signups the ready check asks to confirm",
+    )
+    ready_check_open_minutes = models.PositiveIntegerField(
+        default=120,
+        validators=_range_validators("ready_check_open_minutes"),
+        help_text="Minutes before start that the ready check opens",
+    )
+    ready_check_escalation_minutes = models.PositiveIntegerField(
+        default=30,
+        validators=_range_validators("ready_check_escalation_minutes"),
+        help_text="Minutes before start to nudge unconfirmed members (0 = off)",
+    )
+    ready_check_close_minutes = models.PositiveIntegerField(
+        default=10,
+        validators=_range_validators("ready_check_close_minutes"),
+        help_text="Minutes before start that the ready check closes",
+    )
+    ready_check_chase_minutes = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        default=30,
+        validators=_range_validators("ready_check_chase_minutes"),
+        help_text="Minutes before close to alert staff about each unconfirmed member (blank = off)",
+    )
+    ready_check_min_completion_pct = models.PositiveSmallIntegerField(
+        default=70,
+        validators=_range_validators("ready_check_min_completion_pct"),
+        help_text="Minimum percentage confirmed for the check to be binding",
+    )
+    ready_check_low_completion_action = models.CharField(
+        max_length=20,
+        choices=ReadyCheckLowCompletionAction.choices,
+        default=ReadyCheckLowCompletionAction.NON_BINDING,
+        help_text="What happens when completion is below the minimum",
+    )
+    ready_check_notify_on_signup = models.BooleanField(
+        default=True,
+        help_text="Tell members at signup that a ready check will run",
+    )
+    ready_check_drop_notice = models.BooleanField(
+        default=True,
+        help_text="Notify members who are dropped by the ready check",
+    )
+    start_cull_enabled = models.BooleanField(
+        default=False,
+        help_text="Drop members who are not present shortly after start",
+    )
+    start_cull_minutes_after = models.PositiveIntegerField(
+        default=1,
+        validators=_range_validators("start_cull_minutes_after"),
+        help_text="Minutes after start to run the start cull",
+    )
+    post_cull_fill_mode = models.CharField(
+        max_length=20,
+        choices=PostCullFillMode.choices,
+        default=PostCullFillMode.LINE_ORDER,
+        help_text="How freed seats are filled after drops",
     )
     # Approval Requirements — which rank types are allowed
     allow_active_mmr = models.BooleanField(
@@ -250,6 +328,17 @@ class DiscordEventConfigMixin(models.Model):
         null=True,
         blank=True,
         help_text="Minimum MMR required for event approval (null = no minimum)",
+    )
+    event_voice_channel_id = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        validators=[discord_id_validator],
+        help_text="Discord voice channel ID for the event call",
+    )
+    voice_presence_confirms = models.BooleanField(
+        default=False,
+        help_text="Joining the event voice channel confirms the ready check",
     )
 
     class Meta:
@@ -973,3 +1062,161 @@ class OrgEventDefaults(
 
     def __str__(self) -> str:
         return f"Event defaults for {self.organization.name}"
+
+
+class ReadyCheck(models.Model):
+    event = models.ForeignKey(
+        Event, on_delete=models.CASCADE, related_name="ready_checks"
+    )
+    phase = models.CharField(
+        max_length=20,
+        choices=ReadyCheckPhase.choices,
+        default=ReadyCheckPhase.OPEN,
+    )
+    outcome = models.CharField(
+        max_length=20, choices=ReadyCheckOutcome.choices, blank=True, default=""
+    )
+    settings_snapshot = models.JSONField(default=dict, blank=True)
+    completion_pct = models.PositiveSmallIntegerField(null=True, blank=True)
+    opened_at = models.DateTimeField(default=tz.now)
+    escalated_at = models.DateTimeField(null=True, blank=True)
+    chased_at = models.DateTimeField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    last_progress_at = models.DateTimeField(default=tz.now)
+    opened_by = models.ForeignKey(
+        "app.CustomUser",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    resolved_by = models.ForeignKey(
+        "app.CustomUser",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    resolve_reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event"],
+                condition=~models.Q(phase=ReadyCheckPhase.CANCELLED),
+                name="events_readycheck_one_live_per_event",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["phase"], name="events_readycheck_phase_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Ready check {self.pk} ({self.event_id}, {self.phase})"
+
+
+class ReadyCheckEntry(models.Model):
+    ready_check = models.ForeignKey(
+        ReadyCheck, on_delete=models.CASCADE, related_name="entries"
+    )
+    signup = models.ForeignKey(
+        EventSignup,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ready_check_entries",
+    )
+    user = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.CASCADE,
+        related_name="ready_check_entries",
+    )
+    state = models.CharField(
+        max_length=20,
+        choices=ReadyCheckEntryState.choices,
+        default=ReadyCheckEntryState.PENDING,
+    )
+    confirmed_via = models.CharField(
+        max_length=20, choices=ReadyCheckConfirmVia.choices, blank=True, default=""
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    nudged_at = models.DateTimeField(null=True, blank=True)
+    dropped_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ready_check", "signup"],
+                name="events_rcentry_unique_signup",
+            ),
+            models.UniqueConstraint(
+                fields=["ready_check", "user"], name="events_rcentry_unique_user"
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["ready_check", "state"], name="events_rcentry_state_idx"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} in ready check {self.ready_check_id} ({self.state})"
+
+    @classmethod
+    def for_signup(
+        cls, ready_check: ReadyCheck, signup: EventSignup
+    ) -> "ReadyCheckEntry":
+        return cls(ready_check=ready_check, signup=signup, user_id=signup.user_id)
+
+    def clean(self) -> None:
+        super().clean()
+        if self.signup_id is None or self.ready_check_id is None:
+            return
+        if self.signup.user_id != self.user_id:
+            raise ValidationError({"user": "Must match the signup's user."})
+        if self.signup.event_id != self.ready_check.event_id:
+            raise ValidationError({"signup": "Must belong to the ready check's event."})
+
+
+class EventVoicePresence(models.Model):
+    event = models.ForeignKey(
+        Event, on_delete=models.CASCADE, related_name="voice_presences"
+    )
+    user = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.CASCADE,
+        related_name="event_voice_presences",
+    )
+    guild_id = models.CharField(
+        max_length=20, blank=True, default="", validators=[discord_id_validator]
+    )
+    channel_id = models.CharField(
+        max_length=20, blank=True, default="", validators=[discord_id_validator]
+    )
+    present = models.BooleanField(default=False)
+    first_joined_at = models.DateTimeField(null=True, blank=True)
+    last_joined_at = models.DateTimeField(null=True, blank=True)
+    last_left_at = models.DateTimeField(null=True, blank=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event", "user"], name="events_voicepresence_unique"
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["event", "present"], name="events_voicepres_present_idx"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} voice presence for event {self.event_id}"

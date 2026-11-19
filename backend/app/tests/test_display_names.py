@@ -30,8 +30,14 @@ class UserDisplayNameTest(TestCase):
         user = CustomUser.objects.create(username="dc", discordNickname="Gwaihir")
         self.assertEqual(user_display_name(user, guild_nickname="  "), "Gwaihir")
 
-    def test_site_nickname_over_global_name(self) -> None:
+    def test_global_name_over_site_nickname(self) -> None:
         user = CustomUser.objects.create(username="dc", discordNickname="Gwaihir")
+        user.nickname = "Site Nick"
+        user.save()
+        self.assertEqual(user_display_name(user), "Gwaihir")
+
+    def test_site_nickname_over_username(self) -> None:
+        user = CustomUser.objects.create(username="dc", discordNickname=None)
         user.nickname = "Site Nick"
         user.save()
         self.assertEqual(user_display_name(user), "Site Nick")
@@ -44,11 +50,11 @@ class UserDisplayNameTest(TestCase):
             user_display_name(user, guild_nickname="DragonClaw"), "DragonClaw"
         )
 
-    def test_blank_site_nickname_falls_to_global_name(self) -> None:
-        user = CustomUser.objects.create(username="dc", discordNickname="Gwaihir")
+    def test_blank_site_nickname_falls_to_username(self) -> None:
+        user = CustomUser.objects.create(username="dc", discordNickname=None)
         user.nickname = "  "
         user.save()
-        self.assertEqual(user_display_name(user), "Gwaihir")
+        self.assertEqual(user_display_name(user), "dc")
 
     def test_empty_global_name_falls_to_username(self) -> None:
         user = CustomUser.objects.create(username="dc", discordNickname="")

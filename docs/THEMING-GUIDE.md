@@ -112,6 +112,73 @@ Use accents **intentionally** - don't scatter random colors.
 
 ---
 
+## Domain Colors
+
+Some colors carry a fixed meaning: Radiant is always the same green, a ban is always
+the same red, carry always has the same badge. Each of those meanings has its own token
+in the "Domain colors" `:root` block of `frontend/app/app.css`, so changing one is a
+one-line edit and every page follows it.
+
+Pick a token by **meaning**, not by shade. `pick` and `radiant` share a value today but
+are separate tokens, so either can change without touching the other. The
+`shadcn/no-raw-colors` "nearest theme tokens" hint matches shade only. It may offer
+`bg-live` for an error badge, which is the wrong meaning.
+
+Accents are text, border, ring and icon colors. `-surface` tokens are dark fills that go
+behind an accent. Use opacity modifiers for tints (`bg-radiant-surface/60`,
+`border-ban/40`) rather than adding a token per shade.
+
+| Group | Tokens | Use for | Replaces |
+|-------|--------|---------|----------|
+| Team sides | `radiant`, `radiant-surface`, `dire`, `dire-surface` | Radiant/Dire labels, team panels, stat rows, side borders | `green-*` / `red-*` keyed on `team === 'radiant'` or `is_radiant` |
+| Draft actions | `pick`, `pick-surface`, `ban`, `ban-surface` | Hero pick/ban slots, toasts, history, grid tints; team-draft "picked" | `green-*` / `red-*` keyed on `isPick`, `isBan`, `currentAction` |
+| Draft turn | `turn`, `turn-foreground` | The slot or captain acting now, in hero and team drafts | `yellow-400` active slot; `green-600`/`green-500` current pick |
+| Draft styles | `draft-snake`, `draft-normal`, `draft-shuffle` | Draft style cards and labels | `green`/`orange`/`purple` `-100`/`-600`/`-800` chips |
+| Positions | `pos-carry`, `pos-mid`, `pos-offlane`, `pos-soft-support`, `pos-hard-support`, each with `-surface` | Position badges, tooltips and the position SVG icons (`fill-pos-*`) | `rose`/`cyan`/`emerald`/`violet`/`indigo` `-200`/`-800`/`-900`, icon hex fills |
+| Site roles | `role-owner`, `role-admin`, `role-staff` | Owner/Admin/Staff badges and icons | `yellow-500` crown, `red-600`/`700` admin, `blue-600`/`700` staff |
+| Rank status | `rank-ranked`, `rank-unranked` | Dota rank-status badges (active/previous vs never ranked) | `amber-300` / `blue-300` outline badges |
+| Dota rank medals | `tier-herald`, `tier-guardian`, `tier-crusader`, `tier-archon`, `tier-legend`, `tier-ancient`, `tier-divine`, `tier-immortal` | Medal badges: `bg-tier-x/15 text-tier-x border-tier-x/30` | `zinc`/`amber`/`lime`/`sky`/`violet`/`red`/`cyan`/`yellow` medal maps |
+| Hero attributes | `attr-str`, `attr-agi`, `attr-int`, `attr-all` | Attribute headers and tints in the hero grid | `red`/`green`/`blue`/`yellow` `-900/40` |
+| Bracket sections | `bracket-losers`, `bracket-grand-finals`, `bracket-swiss` | Section and header tints for non-winners brackets (surfaces) | `red`/`purple`/`blue` `-900`/`-950` tints |
+| Signup status | `signup-tentative` | The Tentative badge; other statuses use `info`/`warning`/`primary`/`success`/`error` | `violet-300`/`-500` |
+| Placings | `medal-gold`, `medal-silver`, `medal-bronze` | 1st/2nd/3rd, trophies | `yellow-500`, `gray-400`, `amber-700` |
+| Presence | `online`, `offline`, `live` | Online dots, draft connection state, live match badges | `green-500` / `gray-400`/`500` / `red-500` dots |
+| Match stats | `stat-gold`, `stat-xp` | GPM and XPM numbers | `yellow-400`, `blue-400` |
+| Third-party | `discord` | Discord buttons and links | `indigo-*` on Discord actions |
+
+```tsx
+// Team panel header
+<div className={cn(team === 'radiant' ? 'bg-radiant-surface/60' : 'bg-dire-surface/60')}>
+  <span className={team === 'radiant' ? 'text-radiant' : 'text-dire'}>{label}</span>
+</div>
+
+// Ban slot
+<div className="border-ban/40 bg-ban-surface/60 text-ban">BAN</div>
+
+// Position badge and icon
+<Badge className="bg-pos-carry-surface text-pos-carry">Carry</Badge>
+<path className="fill-pos-carry" d="..." />
+```
+
+### Generic meanings use existing tokens
+
+Not everything needs a domain token. Map these to the tokens above them in this guide:
+
+| Meaning | Token | Typical raw class today |
+|---------|-------|-------------------------|
+| Match won, positive delta, approved, verified | `success` | `text-green-500`, `bg-green-600` |
+| Paused, pending, caution banner | `warning` | `yellow-*`, `amber-*` banners |
+| Failed to load, rejected, negative delta, clock running out | `error` / `destructive` | `text-red-500`, `bg-red-600/30` |
+| Tips and informational callouts | `info` | `blue-50`/`blue-950` panels |
+| Neutral text, borders and surfaces | `muted-foreground`, `border`, `base-*`, `card`, `popover` | `gray-*`, `slate-*`, `neutral-*` |
+| Brand gradients, selection, focus | `primary`, `selection`, `glow-violet`, brand constants | `violet-*` / `blue-*` gradients |
+| Two-series comparisons | `chart-1` ... `chart-5` | `blue-500` vs `orange-500` bars |
+
+If a meaning fits neither table, add a domain token (raw value in the "Domain colors"
+block, `--color-*` mapping in `@theme inline`, a row above) rather than a raw class.
+
+---
+
 ## Gradient Utilities
 
 ### Button Gradients

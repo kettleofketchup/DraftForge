@@ -75,6 +75,27 @@ class SignupLineRankApiTests(TestCase):
         self.assertEqual(statuses[signups[4].pk], SignupStatus.WAITLISTED)
         self.assertIsNone(self._ranks(event)[cancelled.pk])
 
+    def test_dropped_keeps_seq_without_rank(self) -> None:
+        event = self._event(max_players=10)
+        signups = [process_rsvp(event, u) for u in self.users[:3]]
+        dropped = signups[1]
+        seq = dropped.line_seq
+        dropped.status = SignupStatus.DROPPED
+        dropped.save(update_fields=["status", "updated_at"])
+        dropped.refresh_from_db()
+        self.assertEqual(dropped.line_seq, seq)
+        self.assertEqual(
+            self._ranks(event),
+            {signups[0].pk: 1, dropped.pk: None, signups[2].pk: 2},
+        )
+        request = APIRequestFactory().get("/")
+        request.user = AnonymousUser()
+        data = EventSignupSerializer(dropped, context={"request": request}).data
+        self.assertIsNone(data["line_rank"])
+        self.assertEqual(data["status"], SignupStatus.DROPPED)
+        data = EventSignupSerializer(signups[2], context={"request": request}).data
+        self.assertEqual(data["line_rank"], 2)
+
     def test_line_rank_per_event(self) -> None:
         first = self._event(name="First")
         second = self._event(name="Second")

@@ -21,9 +21,13 @@ class TournamentUserSchemaDisplayNameTest(SimpleTestCase):
     def test_all_null(self) -> None:
         self.assertEqual(TournamentUserSchema(pk=1).display_name, "User 1")
 
-    def test_site_nickname_between_server_and_global_name(self) -> None:
+    def test_site_nickname_between_global_name_and_username(self) -> None:
         schema = TournamentUserSchema.model_validate(
             {"pk": 1, "nickname": "Site", "discordNickname": "G", "username": "u"}
+        )
+        self.assertEqual(schema.display_name, "G")
+        schema = TournamentUserSchema.model_validate(
+            {"pk": 1, "nickname": "Site", "username": "u"}
         )
         self.assertEqual(schema.display_name, "Site")
         schema = TournamentUserSchema.model_validate(

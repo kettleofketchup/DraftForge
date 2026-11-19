@@ -135,10 +135,14 @@ class PlayerNameTest(TestCase):
         )
         self.assertEqual(player_name(user, guild_nickname="DragonClaw"), "DragonClaw")
 
-    def test_site_nickname_before_global_name(self) -> None:
+    def test_global_name_before_site_nickname(self) -> None:
         user = self._user(
             discordNickname="DiscNick", discordUsername="discuser", nickname="SiteNick"
         )
+        self.assertEqual(player_name(user), "DiscNick")
+
+    def test_site_nickname_without_global_name(self) -> None:
+        user = self._user(nickname="SiteNick")
         self.assertEqual(player_name(user), "SiteNick")
 
     def test_blank_site_nickname_is_skipped(self) -> None:
@@ -162,7 +166,7 @@ class PlayerNameTest(TestCase):
         spec = next(p for p in PLACEHOLDERS if p["key"] == "player")
         self.assertEqual(
             spec["description"],
-            "Recipient's server nickname, site nickname, Discord name, or username",
+            "Recipient's server nickname, Discord name, site nickname, or username",
         )
 
 

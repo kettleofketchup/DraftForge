@@ -42,6 +42,7 @@ import { toast } from 'sonner';
 import { EventStateBadge, MmrApprovalModal } from '~/components/events';
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
+import { canRestoreSignup } from '~/components/events/signupPartitions';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -615,9 +616,7 @@ function SignupStrip({
     onRequestApproval(signup);
   };
 
-  const isRemoved =
-    signup.status === SignupStatus.REJECTED ||
-    signup.status === SignupStatus.CANCELLED;
+  const canRestore = canRestoreSignup(signup.status);
 
   const actionSlot = isAdmin ? (
     <div className="flex gap-1">
@@ -680,7 +679,7 @@ function SignupStrip({
           </DestructiveButton>
         </>
       )}
-      {isRemoved && (
+      {canRestore && (
         <SecondaryButton
           size="sm"
           data-testid="rollcall-restore-btn"
