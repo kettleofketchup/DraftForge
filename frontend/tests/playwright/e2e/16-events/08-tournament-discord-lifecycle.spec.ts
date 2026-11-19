@@ -471,9 +471,11 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     await page.getByTestId('restart-draft-confirm').click();
     await refusal;
 
-    await expect(page.getByTestId('draft-force-reset-dialog')).toContainText(
-      'games and other records use these teams',
-    );
+    const forceDialog = page.getByTestId('draft-force-reset-dialog');
+    await expect(forceDialog).toContainText('Resetting keeps those records');
+    await expect(
+      forceDialog.getByTestId('draft-force-reset-usage-row').first(),
+    ).toContainText(/^1 game\b/);
     const forced = page.waitForRequest(
       (r) => isInitDraft(r.url()) && r.postDataJSON()?.force === true,
     );
