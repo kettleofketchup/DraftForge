@@ -50,18 +50,19 @@ class TeamNameFromCaptainTest(TestCase):
         tournament = self._tournament(self._org(private=False), 1)
         self.assertEqual(self._team_name(tournament, self.captain), "DragonClaw's Team")
 
-    def test_private_org_uses_site_nickname(self) -> None:
+    def test_private_org_uses_global_name(self) -> None:
         tournament = self._tournament(self._org(private=True), 2)
-        self.assertEqual(self._team_name(tournament, self.captain), "SiteDragon's Team")
-
-    def test_no_org_uses_site_nickname(self) -> None:
-        tournament = self._tournament(None, 3)
-        self.assertEqual(self._team_name(tournament, self.captain), "SiteDragon's Team")
-
-    def test_global_name_without_site_nickname(self) -> None:
-        self.captain.nickname = None
-        tournament = self._tournament(None, 5)
         self.assertEqual(self._team_name(tournament, self.captain), "Gwaihir's Team")
+
+    def test_no_org_uses_global_name(self) -> None:
+        tournament = self._tournament(None, 3)
+        self.assertEqual(self._team_name(tournament, self.captain), "Gwaihir's Team")
+
+    def test_site_nickname_without_global_name(self) -> None:
+        self.captain.discordNickname = None
+        self.captain.save()
+        tournament = self._tournament(None, 5)
+        self.assertEqual(self._team_name(tournament, self.captain), "SiteDragon's Team")
 
     def test_steam_only_captain(self) -> None:
         steam = CustomUser.objects.create(username=None, steamid=76561198000077001)

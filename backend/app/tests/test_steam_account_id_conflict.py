@@ -169,10 +169,17 @@ class SteamAccountIdConflictLabelTests(TestCase):
             body["error"], "Friend ID 1 is already assigned to Gwaihir (@dc)."
         )
 
-    def test_site_nickname_before_global_name(self) -> None:
+    def test_global_name_before_site_nickname(self) -> None:
         user = CustomUser.objects.create(
             username="dc", nickname="Site", discordNickname="Gwaihir"
         )
+        body = steam_account_id_conflict_payload(1, user)
+        self.assertEqual(
+            body["error"], "Friend ID 1 is already assigned to Gwaihir (@dc)."
+        )
+
+    def test_site_nickname_without_global_name(self) -> None:
+        user = CustomUser.objects.create(username="dc", nickname="Site")
         body = steam_account_id_conflict_payload(1, user)
         self.assertEqual(
             body["error"], "Friend ID 1 is already assigned to Site (@dc)."
