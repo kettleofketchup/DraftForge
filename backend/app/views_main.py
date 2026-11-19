@@ -634,6 +634,7 @@ TEAM_MANAGE_ACTIONS: frozenset[str] = frozenset(
         "sub_in",
         "rename",
         "history",
+        "usage",
     }
 )
 
@@ -925,6 +926,9 @@ class TeamView(viewsets.ModelViewSet):
         )
         if team is None:
             if not scopes:
+                # Non-staff get 403 either way, so the status doesn't reveal ids.
+                if not request.user.is_staff:
+                    raise not_permitted()
                 raise Http404
             log.debug(
                 "team_history_orphan_access",
@@ -951,6 +955,21 @@ class TeamView(viewsets.ModelViewSet):
 
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
+
+    @action(detail=True, methods=["get"])
+    def usage(self, request: Request, pk: str | None = None) -> Response:
+        """What a DELETE would refuse on, without deleting anything."""
+        teams = Team.objects.nocache().select_related("tournament__league")
+        team = get_object_or_404(teams, pk=pk)
+        self.check_object_permissions(request, team)
+        usage = team_usage([team])
+        return Response(
+            {
+                "in_use": bool(usage),
+                "detail": _team_in_use_detail(team.name, usage) if usage else None,
+                "usage": usage,
+            }
+        )
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Legacy DELETE: refuses teams other rows still use, audits the rest."""

@@ -1,1 +1,1 @@
-- Teams: deleting a team that games or drafts still use is refused instead of deleting them with it, regenerating tournament teams stops at such a team, and team deletions are recorded in the team audit log (#545).
+- Teams: deleting a team that games or drafts still use is refused instead of deleting them with it, regenerating tournament teams checks every team first and deletes none if any is still used, and team deletions are recorded in the team audit log (#545).

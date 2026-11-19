@@ -1361,7 +1361,7 @@ def _leadership_problem_rows(team: Team) -> list[dict[str, str]]:
 
 
 class ManagedTeamSerializer(TeamSerializer):
-    """Read-only team detail for staff management; never used for writes."""
+    """Public team detail and staff action responses; never used for writes."""
 
     left_members = serializers.SerializerMethodField()
     leadership_problems = serializers.SerializerMethodField()
