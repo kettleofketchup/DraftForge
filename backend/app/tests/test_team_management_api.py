@@ -52,6 +52,7 @@ from app.services import team_management
 from app.tests.test_draft_state_queries import make_fixture
 from app.tests.test_team_management import TeamManagementFixture
 from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
+from user.tests.test_cacheops_integration import _redis_reachable
 
 
 class TeamActionRequestSerializerTests(TeamManagementFixture, TestCase):
@@ -540,12 +541,20 @@ class LeadershipActionTests(TeamApiFixture, TestCase):
 
 
 class CachedPermissionTests(TeamApiFixture, TransactionTestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._redis_ok = _redis_reachable()
+
     def setUp(self) -> None:
         if not cacheops_settings.CACHEOPS_ENABLED:
             self.skipTest("cacheops disabled")
+        if not self._redis_ok:
+            self.skipTest("Cacheops Redis not reachable")
         super().setUp()
-        invalidate_model(Team)
-        invalidate_model(Tournament)
+        for model in (Team, Tournament):
+            invalidate_model(model)
+            self.addCleanup(invalidate_model, model)
 
     def test_permission_ignores_cached_team(self) -> None:
         Team.objects.get(pk=self.team.pk)
@@ -565,4 +574,5 @@ class CachedPermissionTests(TeamApiFixture, TransactionTestCase):
             "rename", {"name": "Moved", "reason": "move"}, user=self.league_admin
         )
         self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.json()["code"], "not_permitted")
         self.assertEqual(self.log_count(), before)
