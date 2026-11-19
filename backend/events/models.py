@@ -502,6 +502,7 @@ class Event(
         "app.CustomUser", blank=True, related_name="helped_events"
     )
     contributions_awarded_at = models.DateTimeField(null=True, blank=True)
+    conduct_finalized_at = models.DateTimeField(null=True, blank=True)
     is_off_schedule = models.BooleanField(
         default=False,
         help_text=(

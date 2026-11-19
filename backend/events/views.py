@@ -549,7 +549,12 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         )
 
 
-_CONCURRENTLY_WRITTEN_EVENT_FIELDS = ["state", "contributions_awarded_at", "host"]
+_CONCURRENTLY_WRITTEN_EVENT_FIELDS = [
+    "state",
+    "contributions_awarded_at",
+    "conduct_finalized_at",
+    "host",
+]
 
 
 def _parse_datetime_param(params: QueryDict, name: str) -> datetime | None:
