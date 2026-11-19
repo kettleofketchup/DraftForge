@@ -526,12 +526,12 @@ function useSettingsLayout<V extends string>({
             data-testid={`${testIdPrefix}-search-hit`}
             data-active={i === cursor || undefined}
             className={cn(
-              'h-auto w-full justify-start gap-1.5 px-2 py-1.5 text-left font-normal data-[active]:bg-accent data-[active]:text-accent-foreground',
+              'group h-auto w-full flex-col items-start justify-center gap-0.5 px-2 py-1.5 text-left font-normal whitespace-normal data-[active]:bg-accent data-[active]:text-accent-foreground',
               isMobile ? 'min-h-11' : 'min-h-8',
             )}
           >
-            <span className="min-w-0 truncate">{hit.label}</span>
-            <span className="shrink-0 text-xs text-muted-foreground">
+            <span className="min-w-0 break-words">{hit.label}</span>
+            <span className="text-xs text-muted-foreground group-data-[active]:text-accent-foreground/85">
               {sectionLabel(hit.section)}
             </span>
           </Button>
