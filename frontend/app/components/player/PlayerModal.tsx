@@ -1,26 +1,30 @@
+import { UserPlus } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { claimUserProfile, fetchUser } from '~/components/api/api';
+import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
 import { Badge } from '~/components/ui/badge';
-import { DotabuffButton, PrimaryButton, ViewIconButton } from '~/components/ui/buttons';
+import {
+  DotabuffButton,
+  PrimaryButton,
+  ViewIconButton,
+} from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
 import { useSharedPopover } from '~/components/ui/shared-popover-context';
-import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
 import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
-import { UserAvatar } from '~/components/user/UserAvatar';
-import { DisplayName } from '~/components/user/avatar';
 import { getLogger } from '~/lib/logger';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
-import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
-import { UserPlus } from 'lucide-react';
 
 const log = getLogger('PlayerModal');
 
@@ -122,7 +126,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     currentUser?.discordId &&
     currentUser?.pk !== player.pk;
 
-  const statsLeaguePk = ctx?.statsLeagueId !== undefined ? ctx.statsLeagueId : leagueId;
+  const statsLeaguePk =
+    ctx?.statsLeagueId !== undefined ? ctx.statsLeagueId : leagueId;
 
   // Fetch full user data when modal opens
   useEffect(() => {
@@ -163,22 +168,19 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
 
     setIsClaiming(true);
     const claim = claimUserProfile(player.pk);
-    toast.promise(
-      claim,
-      {
-        loading: 'Claiming profile...',
-        success: (updatedUser) => {
-          // Update current user with merged data
-          setCurrentUser(updatedUser);
-          onOpenChange(false);
-          return `Profile claimed! Your Steam data has been linked.`;
-        },
-        error: (err) => {
-          log.error('Failed to claim profile', err);
-          return err?.response?.data?.error || 'Failed to claim profile';
-        },
-      }
-    );
+    toast.promise(claim, {
+      loading: 'Claiming profile...',
+      success: (updatedUser) => {
+        // Update current user with merged data
+        setCurrentUser(updatedUser);
+        onOpenChange(false);
+        return `Profile claimed! Your Steam data has been linked.`;
+      },
+      error: (err) => {
+        log.error('Failed to claim profile', err);
+        return err?.response?.data?.error || 'Failed to claim profile';
+      },
+    });
 
     try {
       await claim;
@@ -215,13 +217,15 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
           </div>
           {/* Action buttons */}
           <div className="flex items-center gap-2">
-            {canEdit && displayPlayer.pk && (
-              isLoadingUser ? (
-                <span className="text-xs text-muted-foreground">Loading...</span>
+            {canEdit &&
+              displayPlayer.pk &&
+              (isLoadingUser ? (
+                <span className="text-xs text-muted-foreground">
+                  Loading...
+                </span>
               ) : (
                 <UserEditModal user={editUser} scope={editScope} />
-              )
-            )}
+              ))}
             {displayPlayer.pk && (
               <ViewIconButton
                 onClick={handleViewFullProfile}
@@ -235,12 +239,16 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
         <div className="space-y-2 text-sm">
           {displayPlayer.username && (
             <div>
-              <span className="font-semibold">Username:</span> {displayPlayer.username}
+              <span className="font-semibold">Username:</span>{' '}
+              {/* eslint-disable-next-line draftforge/use-display-name -- labelled Username field shows the account handle */}
+              {displayPlayer.username}
             </div>
           )}
           {displayPlayer.nickname && (
             <div>
-              <span className="font-semibold">Nickname:</span> {displayPlayer.nickname}
+              <span className="font-semibold">Nickname:</span>{' '}
+              {/* eslint-disable-next-line draftforge/use-display-name -- labelled Nickname field shows the site nickname itself */}
+              {displayPlayer.nickname}
             </div>
           )}
           {displayPlayer.mmr && (
@@ -254,7 +262,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
           </div>
           {displayPlayer.steam_account_id && (
             <div>
-              <span className="font-semibold">Friend ID:</span> {displayPlayer.steam_account_id}
+              <span className="font-semibold">Friend ID:</span>{' '}
+              {displayPlayer.steam_account_id}
             </div>
           )}
         </div>
@@ -262,7 +271,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
         {/* League Stats (if context provided) */}
         {statsLeaguePk && player.pk ? (
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-muted-foreground">League Stats</h3>
+            <h3 className="text-sm font-semibold text-muted-foreground">
+              League Stats
+            </h3>
             <PlayerLeagueSummary leaguePk={statsLeaguePk} userId={player.pk} />
           </div>
         ) : null}
@@ -270,8 +281,12 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
         {/* Organization Stats placeholder (if context provided) */}
         {organizationId && !statsLeaguePk && (
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-muted-foreground">Organization Stats</h3>
-            <div className="text-sm text-muted-foreground">Organization stats coming soon</div>
+            <h3 className="text-sm font-semibold text-muted-foreground">
+              Organization Stats
+            </h3>
+            <div className="text-sm text-muted-foreground">
+              Organization stats coming soon
+            </div>
           </div>
         )}
 

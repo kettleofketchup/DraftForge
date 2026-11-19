@@ -1,11 +1,12 @@
+import { useQueryClient } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
 import React, { useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 import { updateTournament } from '~/components/api/api';
 import type { TournamentType } from '~/components/tournament/types';
 import { TrashIconButton } from '~/components/ui/buttons';
+import { DisplayName } from '~/components/user/avatar';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
@@ -46,22 +47,30 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
         ['tournament', tournament.pk],
         (old) =>
           old
-            ? { ...old, users: old.users?.filter((u) =>
-                typeof u === 'number' ? u !== user.pk : u.username !== user.username
-              ) ?? null }
+            ? {
+                ...old,
+                users:
+                  old.users?.filter((u) =>
+                    typeof u === 'number'
+                      ? u !== user.pk
+                      : u.username !== user.username,
+                  ) ?? null,
+              }
             : old,
       );
 
       toast.promise(
         updateTournament(tournament.pk, { user_ids: updatedUserIds ?? [] }),
         {
-          loading: `Removing ${user.username}...`,
-          success: () => `${user.username} has been removed`,
+          loading: `Removing ${DisplayName(user)}...`,
+          success: () => `${DisplayName(user)} has been removed`,
           error: (err: unknown) => {
             log.error('Failed to remove user', err);
             // Revert optimistic update on failure
-            queryClient.invalidateQueries({ queryKey: ['tournament', tournament.pk] });
-            return `Failed to remove ${user.username}`;
+            queryClient.invalidateQueries({
+              queryKey: ['tournament', tournament.pk],
+            });
+            return `Failed to remove ${DisplayName(user)}`;
           },
         },
       );

@@ -5,6 +5,7 @@ import {
   ComboboxOptions,
 } from '@headlessui/react';
 import React from 'react';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { useUserStore } from '~/store/userStore';
@@ -35,7 +36,8 @@ export const SearchUserDropdown: React.FC<Props> = ({
           const q = query.toLowerCase();
           return (
             person.username?.toLowerCase().includes(q) ||
-            person.nickname?.toLowerCase().includes(q)
+            person.nickname?.toLowerCase().includes(q) ||
+            DisplayName(person).toLowerCase().includes(q)
           );
         });
 
@@ -91,7 +93,9 @@ export const SearchUserDropdown: React.FC<Props> = ({
                 >
                   <div className="flex items-center gap-2">
                     <UserAvatar user={user} size="md" />
+                    {/* eslint-disable-next-line draftforge/use-display-name -- labelled Username field shows the account handle */}
                     <span>Username: {user.username}</span>
+                    {/* eslint-disable-next-line draftforge/use-display-name -- labelled Nick field shows the site nickname itself */}
                     Nick: {user.nickname && <span>{user.nickname}</span>}
                   </div>
                 </ComboboxOption>

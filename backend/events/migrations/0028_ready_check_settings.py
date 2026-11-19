@@ -10,7 +10,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events', '0025_eventsignup_unmet_requirements'),
+        ('events', '0027_backfill_signup_line'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

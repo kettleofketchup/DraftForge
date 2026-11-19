@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
 import { useQueryClient } from '@tanstack/react-query';
+import React, { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import type { UserClassType } from '~/components/user/types';
 import { EditIconButton } from '~/components/ui/buttons';
 import { FormDialog } from '~/components/ui/dialogs';
 import { Form } from '~/components/ui/form';
+import { DisplayName } from '~/components/user/avatar';
+import type { UserClassType } from '~/components/user/types';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { UserEditForm } from './editForm';
 import {
   buildDefaults,
   dispatchPatch,
@@ -19,7 +21,6 @@ import {
   type EditUserInput,
   type EditUserScope,
 } from './editUserSchema';
-import { UserEditForm } from './editForm';
 import { steamAccountIdConflictFromError } from './steamAccountIdConflict';
 
 interface Props {
@@ -30,7 +31,11 @@ interface Props {
   fields?: Partial<Record<EditableField, boolean>>;
 }
 
-export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Props) {
+export function UserEditModal({
+  user,
+  scope = { kind: 'global' },
+  fields,
+}: Props) {
   const canEdit = useScopedEditPermission(scope);
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -51,7 +56,9 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
     // Cast: z.coerce produces input=unknown / output=EditUserInput, but we
     // already pass clean numeric defaults from buildDefaults() and the
     // form's NumberField coerces on every keystroke.
-    resolver: zodResolver(EditUserSchema) as unknown as import('react-hook-form').Resolver<EditUserInput>,
+    resolver: zodResolver(
+      EditUserSchema,
+    ) as unknown as import('react-hook-form').Resolver<EditUserInput>,
     defaultValues: buildDefaults(user, scope),
   });
 
@@ -68,13 +75,24 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
     scope.kind === 'org'
       ? scope.organization.pk
       : scope.kind === 'league'
-        ? (scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk ?? null)
+        ? (scope.orgId ??
+          scope.organization?.pk ??
+          scope.league.organization?.pk ??
+          null)
         : null;
   const scopeLeaguePk = scope.kind === 'league' ? scope.league.pk : null;
   useEffect(() => {
     if (open) form.reset(buildDefaults(user, scope));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scope is read inline; deps cover its identity keys
-  }, [open, user.pk, user.orgUserPk, scope.kind, scopeOrgPk, scopeLeaguePk, form]);
+  }, [
+    open,
+    user.pk,
+    user.orgUserPk,
+    scope.kind,
+    scopeOrgPk,
+    scopeLeaguePk,
+    form,
+  ]);
 
   // useCallback so handleSubmit returns a stable wrapper across renders —
   // otherwise FormDialog's onSubmit prop changes every render and forces
@@ -96,19 +114,24 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
         if (user.pk) {
           queryClient.invalidateQueries({ queryKey: ['user', user.pk] });
         }
-        toast.success(`${user.username} updated`);
+        toast.success(`${DisplayName(user)} updated`);
         setOpen(false);
       } catch (err) {
         const conflict = steamAccountIdConflictFromError(
           (err as { response?: { data?: unknown } })?.response?.data,
         );
         if (conflict) {
-          form.setError('steam_account_id', { type: 'server', message: conflict });
+          form.setError('steam_account_id', {
+            type: 'server',
+            message: conflict,
+          });
           toast.error(conflict);
           return;
         }
         const message =
-          err instanceof Error ? err.message : `Failed to update ${user.username}`;
+          err instanceof Error
+            ? err.message
+            : `Failed to update ${DisplayName(user)}`;
         toast.error(message);
       }
     },
@@ -148,17 +171,28 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       const testId = KEY_TO_TESTID[e.key.toLowerCase()];
       if (!testId) return;
-      const target = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+      const target = document.querySelector<HTMLElement>(
+        `[data-testid="${testId}"]`,
+      );
       if (!target) return;
       // Already on the matched element — let the keystroke through.
       if (document.activeElement === target) return;
       // Typing into another editable element — never steal focus.
       const active = document.activeElement as HTMLElement | null;
       const tag = active?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || active?.isContentEditable) return;
+      if (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        active?.isContentEditable
+      )
+        return;
       e.preventDefault();
       target.focus();
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
+      ) {
         // Inputs: select the existing value so typing replaces it.
         target.select();
       } else if (target instanceof HTMLButtonElement) {
@@ -183,7 +217,7 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
       <FormDialog
         open={open}
         onOpenChange={setOpen}
-        title={`Edit ${user.nickname || user.username}`}
+        title={`Edit ${DisplayName(user)}`}
         description="Update this user's profile."
         submitLabel="Save Changes"
         isSubmitting={isSubmitting}

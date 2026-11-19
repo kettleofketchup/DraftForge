@@ -13,13 +13,13 @@ HOURS_TO_MINUTES: dict[int, int] = {3: 180, 0: 120, 48: 1440}
 
 
 class BackfillReadyCheckOpenMinutesMigrationTest(MigratorTestCase):
-    """events 0027: ready_check_open_minutes seeded from attendance hours."""
+    """events 0029: ready_check_open_minutes seeded from attendance hours."""
 
     migrate_from = [
         ("app", "0106_draftoptions_hero_grace_time_ms_and_more"),
-        ("events", "0026_ready_check_settings"),
+        ("events", "0028_ready_check_settings"),
     ]
-    migrate_to = ("events", "0027_backfill_ready_check_open_minutes")
+    migrate_to = ("events", "0029_backfill_ready_check_open_minutes")
 
     def prepare(self) -> None:
         apps = self.old_state.apps

@@ -75,6 +75,11 @@ export const POST_CULL_FILL_MODE_LABELS: Record<PostCullFillMode, string> = {
 
 const DISCORD_ID_REGEX = /^(\d{17,20})?$/;
 
+export const Commitment = {
+  MAIN: 'main',
+  MAYBE: 'maybe',
+} as const;
+
 export const GameMode = {
   NORMAL: 'normal',
   CAPTAINS_MODE: 'captains_mode',
@@ -275,6 +280,13 @@ export const eventSignupSchema = z.object({
   waitlist_position: z.number().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
+  signed_up_at: z.string().nullable().default(null),
+  commitment: z
+    .enum([Commitment.MAIN, Commitment.MAYBE])
+    .default(Commitment.MAIN),
+  rsvp_class: z.string().default('standard'),
+  first_signed_up_at: z.string().nullable().default(null),
+  line_rank: z.number().int().nullable().default(null),
 });
 
 export type EventSignupType = z.infer<typeof eventSignupSchema>;

@@ -1,6 +1,7 @@
 import React, { useCallback, useRef } from 'react';
 import type { TeamType } from '~/components/tournament/types';
 import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
+import { DisplayName } from '~/components/user/avatar';
 
 interface TeamPopoverTriggerProps {
   team: TeamType;
@@ -11,10 +12,12 @@ export const TeamPopoverTrigger: React.FC<TeamPopoverTriggerProps> = ({
   team,
   children,
 }) => {
-  const { showTeamPopover, hidePopover, scheduleHidePopover, openTeamModal } = useSharedPopoverActions();
+  const { showTeamPopover, hidePopover, scheduleHidePopover, openTeamModal } =
+    useSharedPopoverActions();
   const triggerRef = useRef<HTMLSpanElement>(null);
   const captain = team.captain;
-  const teamName = team.name || `${captain?.nickname || captain?.username || 'Unknown'}'s Team`;
+  const teamName =
+    team.name || `${captain ? DisplayName(captain) : 'Unknown'}'s Team`;
 
   const handleMouseEnter = useCallback(() => {
     if (triggerRef.current) {
@@ -26,20 +29,26 @@ export const TeamPopoverTrigger: React.FC<TeamPopoverTriggerProps> = ({
     scheduleHidePopover();
   }, [scheduleHidePopover]);
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openTeamModal(team);
-  }, [team, openTeamModal]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
       e.preventDefault();
+      e.stopPropagation();
       openTeamModal(team);
-    } else if (e.key === 'Escape') {
-      hidePopover();
-    }
-  }, [team, openTeamModal, hidePopover]);
+    },
+    [team, openTeamModal],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openTeamModal(team);
+      } else if (e.key === 'Escape') {
+        hidePopover();
+      }
+    },
+    [team, openTeamModal, hidePopover],
+  );
 
   return (
     <span

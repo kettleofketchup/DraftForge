@@ -107,8 +107,7 @@ function fallbackName(pk: number | undefined): string {
   return pk == null ? '?' : `User ${pk}`;
 }
 
-// Site nickname stays until its removal lands, so names outside an org match main.
-/** Org server nickname (with an org) > site nickname > global Discord name > username > `User <pk>` > `?`. */
+/** Org server nickname (with an org) > global Discord name > site nickname > username > `User <pk>` > `?`. */
 export function resolveDisplayName(
   user: UserRef | DiscordMemberLike | null | undefined,
   opts?: ResolveOptions,
@@ -126,8 +125,8 @@ export function resolveDisplayName(
     const merged = mergeCachedUser(user, entry);
     const chain = [
       isNum(orgId) ? orgNickname(user, entry, orgId) : undefined,
-      merged.nickname,
       merged.discordNickname,
+      merged.nickname,
       merged.username,
     ];
     name = chain.find(present) ?? fallbackName(pk);

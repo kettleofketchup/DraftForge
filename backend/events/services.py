@@ -19,6 +19,7 @@ from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
+    Commitment,
     EventState,
     RepeatFrequency,
     SignupStatus,
@@ -154,6 +155,16 @@ def resolve_or_create_org_user(
     return org_user
 
 
+def _first_fields_carry(existing: EventSignup | None) -> dict[str, Any]:
+    if existing is None:
+        return {}
+    return {
+        "first_signed_up_at": existing.first_signed_up_at,
+        "first_commitment": existing.first_commitment,
+        "first_rsvp_class": existing.first_rsvp_class,
+    }
+
+
 def _decide_signup_status(event: Event, unmet: list[str]) -> SignupStatus:
     """Status for a signup taking a seat. Auto-approve events approve (or
     confirm) eligible players and hold the rest for staff; manual-approval
@@ -211,6 +222,7 @@ def _create_signup(
     re-warm it with stale data.
     """
     existing = EventSignup.objects.filter(event=event, user=user).first()
+    carry = _first_fields_carry(existing)
     if existing:
         logger.info(
             "signup_existing_found",
@@ -263,6 +275,7 @@ def _create_signup(
             status=SignupStatus.WAITLISTED,
             waitlist_position=max_pos + 1,
             unmet_requirements=unmet,
+            **carry,
         )
         invalidate_after_commit(event)
         log.info(
@@ -283,6 +296,7 @@ def _create_signup(
         signup_type=signup_type,
         status=status,
         unmet_requirements=unmet,
+        **carry,
     )
     _roster_add_if_joins(signup)
     invalidate_after_commit(event)
@@ -348,6 +362,7 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
     ensure_self_serve(event, user)
 
     existing = EventSignup.objects.filter(event=event, user=user).first()
+    carry = _first_fields_carry(existing)
     notify_scheduled_by_cancel = False
     if existing:
         if existing.status == SignupStatus.TENTATIVE:
@@ -360,7 +375,7 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
         EventSignup.objects.filter(pk=existing.pk).delete()
 
     signup = EventSignup.objects.create(
-        event=event, user=user, status=SignupStatus.TENTATIVE
+        event=event, user=user, status=SignupStatus.TENTATIVE, **carry
     )
     # invalidate_after_commit is on_commit-aware internally; do NOT wrap.
     invalidate_after_commit(signup, event)
@@ -753,11 +768,13 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
             )
         signup.status = SignupStatus.APPROVED
         signup.waitlist_position = None
+        signup.commitment = Commitment.MAIN
         signup.unmet_requirements = []
         signup.save(
             update_fields=[
                 "status",
                 "waitlist_position",
+                "commitment",
                 "unmet_requirements",
                 "updated_at",
             ]
@@ -786,11 +803,13 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
         signup.status = _decide_signup_status(locked, unmet)
         signup.waitlist_position = None
         _roster_add_if_joins(signup)
+    signup.commitment = Commitment.MAIN
     signup.unmet_requirements = unmet
     signup.save(
         update_fields=[
             "status",
             "waitlist_position",
+            "commitment",
             "unmet_requirements",
             "updated_at",
         ]

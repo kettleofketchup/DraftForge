@@ -205,6 +205,7 @@ class SeatCountSurfacesTests(EventTestCase):
     def test_signup_list_holds_seat_no_extra_queries(self) -> None:
         event = self._one_signup_per_status()
         view = EventSignupViewSet()
+        view.action = "list"
         view.request = Request(
             APIRequestFactory().get("/api/events/signups/", {"event": event.pk})
         )
