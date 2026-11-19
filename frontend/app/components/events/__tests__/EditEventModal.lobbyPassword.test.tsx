@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 process.env.TZ = 'Europe/Berlin';
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
@@ -34,6 +40,16 @@ vi.mock('sonner', () => ({
 }));
 
 import { EditEventModal } from '../EditEventModal';
+
+Element.prototype.scrollIntoView ??= vi.fn();
+
+const searchHits = (prefix: string) =>
+  screen.queryAllByTestId(`${prefix}-search-hit`).map((el) => {
+    const [label, section] = [...el.querySelectorAll('span')].map(
+      (s) => s.textContent,
+    );
+    return { el, label, section };
+  });
 
 // FormDialog renders a Radix ScrollArea, which jsdom cannot satisfy.
 class ResizeObserverStub {
@@ -362,6 +378,23 @@ describe('EditEventModal tabs and payload parity', () => {
       expect(screen.getByTestId(`edit-event-tab-${tab}`)).toBeInTheDocument();
     }
     expect(screen.getByTestId('edit-event-tab-event')).toHaveAttribute(
+      'data-state',
+      'active',
+    );
+  });
+
+  it('finds signup rules under the Approval section and jumps to them', async () => {
+    renderModal(event);
+    fireEvent.change(screen.getByTestId('edit-event-search'), {
+      target: { value: 'sign themselves' },
+    });
+    const result = searchHits('edit-event').find(
+      (h) => h.label === 'Members can sign themselves up',
+    );
+    expect(result?.section).toBe('Approval');
+    fireEvent.click(result!.el);
+    await act(() => new Promise((r) => requestAnimationFrame(r)));
+    expect(screen.getByTestId('edit-event-tab-approval')).toHaveAttribute(
       'data-state',
       'active',
     );

@@ -299,6 +299,7 @@ export function ReadyCheckConfigSection<
     open: boolean,
     onOpenChange: (open: boolean) => void,
     testId: string,
+    fields: readonly (keyof ReadyCheckFields)[],
     title: string,
     children: ReactNode,
     disabled = false,
@@ -307,6 +308,8 @@ export function ReadyCheckConfigSection<
       open={open}
       onOpenChange={onOpenChange}
       disabled={disabled}
+      // Lets the settings search find and open fields while collapsed.
+      data-fields={fields.join(' ')}
       className="rounded-md border border-border"
     >
       <CollapsibleTrigger
@@ -359,6 +362,7 @@ export function ReadyCheckConfigSection<
           if (!open) resetInvalid(SETTINGS_INPUTS);
         },
         IDS.settingsTrigger,
+        SETTINGS_FIELDS,
         'Ready check settings',
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -461,6 +465,7 @@ export function ReadyCheckConfigSection<
           if (!open) resetInvalid(VOICE_INPUTS);
         },
         IDS.voiceTrigger,
+        VOICE_FIELDS,
         'Start cull and voice',
         <>
           <FormField
