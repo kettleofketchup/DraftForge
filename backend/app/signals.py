@@ -29,6 +29,7 @@ from app.models import (
     Team,
     Tournament,
 )
+from app.services.team_signals import team_roster_changed as team_roster_changed
 from app.services.tournament_completion import sync_tournament_completion
 from league.models import LeagueUser
 from org.discord_names import reset_org_guild_nicknames
