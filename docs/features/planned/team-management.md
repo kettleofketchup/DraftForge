@@ -205,8 +205,10 @@ Rules:
   A captain who is not on the team (a ghost captain) can be re-seated.
 - A change never adds a leadership problem, so a team with an existing problem can
   still be repaired one step at a time.
-- A reason is required when the change affects anyone other than the actor (except
-  system changes).
+- A reason is required when the change affects a player other than the actor (except
+  system changes). A rename affects no player, so it needs no reason. Reasons are at
+  most 500 characters (`reason_too_long`). The API maps `reason_required` and the other
+  refusal codes to 400 (#545).
 - A dropout that would empty the team is refused; sub in a stand-in instead. Dropouts
   stay in the tournament. When the captain drops out, the deputy takes over, then the
   highest org MMR, then the lowest user id.
@@ -215,11 +217,19 @@ Rules:
   (`team_standin_cap`, rule `override-warning`) or failing the source event's eligibility
   requirements (rule `staff-override`) needs a staff override: the actor acknowledges the
   codes and gives a reason, and the codes are stored in `override_rules`. The override
-  check is the non-seating slice of #585 (`events/overrides.py`).
-- A captain change moves that captain's draft rounds in the tournament to the new
-  captain, adds the new captain to the tournament if needed, resets the team's draft
-  presence, posts a `team_changed` event to a live team draft and refreshes a live hero
-  draft.
+  check is the shared #585 contract (`events/overrides.py`); team codes are outside the
+  org's warning codes, so the staff override policy does not change them.
+- A captain change moves that captain's draft rounds in the tournament, picked and
+  unpicked, to the new captain. Rounds find their team through the captain, so leaving
+  picked rounds behind would point them at no team and break undo. When the old or new
+  captain also captains another team in the tournament the rounds cannot be told
+  apart, so none move (`draft_rounds_skipped_reason: old_captain_leads_other_team`).
+  The change also adds the new captain to the tournament if needed, resets the team's
+  draft presence, posts a `team_changed` event to a live team draft and refreshes a live
+  hero draft.
+- Subbing in a stand-in adds them to the tournament if needed (`added_to_tournament`,
+  `org_user_created`, `league_user_created` in the row). A benched stand-in is not a
+  tournament user.
 
 ### Changes to existing paths
 
@@ -227,11 +237,22 @@ Rules:
   (`empty_team_kept` row) instead of deleting it and those games. An unused team is
   still deleted (`team_deleted` row). The kept team keeps its captain, which then shows
   as a leadership problem (#604).
-- Captain succession after a member leaves writes a `system_succession` row.
+- Captain succession after a member leaves writes a `system_succession` row. The
+  `system_succession`, `empty_team_kept` and `team_deleted` rows invalidate caches and
+  send `team_roster_changed` like service rows. Removing a regular member through the
+  signal path, a draft reset clearing stand-ins and dropouts, and team creation write
+  no row.
 - The old team PATCH (`/api/teams/{id}/`) writes a `legacy_patch` row, adds members
   before removing them, refuses emptying a used team and returns 204 when it deletes an
   unused one. See [API endpoints](../../api/endpoints.md#updating-a-team).
-- Current members and stand-ins of the tournament's teams are left out of the draft pool.
+- Current members, stand-ins and dropouts of the tournament's teams are left out of the
+  draft pool.
+- Undoing a pick refuses with 409 `pick_is_captain` when the picked player has since
+  been made captain, and clears the player's dropout entry when they were marked as a
+  dropout.
+- `draft-rebuild` on a draft with rounds refuses with 409 `team_changes_logged` when any
+  team in the tournament has a non-system audit row, since rebuilding from the picks
+  would undo those changes. A rebuild skips picks who are now dropouts.
 
 ---
 
