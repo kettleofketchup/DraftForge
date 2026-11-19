@@ -157,36 +157,52 @@ export function EventFormDialog<
     // `available` derives from `tabs`.
   }, [query, tabs, visited, placements]);
 
+  const find = (section: EventFormTabValue, selector: string) =>
+    panelsRef.current?.querySelector<HTMLElement>(
+      `[data-section="${section}"] ${selector}`,
+    ) ?? panelsRef.current?.querySelector<HTMLElement>(selector);
+
   const pickResult = (entry: SettingsIndexEntry) => {
-    selectTab(entry.section);
+    const { field, section } = entry;
+    if (!find(section, `[data-field="${field}"]`)) {
+      // Open the collapsed container that declares the field, in this same event.
+      find(section, `[data-fields~="${field}"]`)
+        ?.querySelector<HTMLButtonElement>(
+          '[aria-expanded="false"]:not(:disabled)',
+        )
+        ?.click();
+    }
+    selectTab(section);
     setQuery('');
-    setJump({ field: entry.field, section: entry.section });
+    setJump({ field, section });
   };
 
   React.useEffect(() => {
     if (!jump) return;
-    const root = panelsRef.current;
-    const row =
-      root?.querySelector<HTMLElement>(
-        `[data-section="${jump.section}"] [data-field="${jump.field}"]`,
-      ) ?? root?.querySelector<HTMLElement>(`[data-field="${jump.field}"]`);
-    if (!row) return;
+    const row = find(jump.section, `[data-field="${jump.field}"]`);
+    const box = row
+      ? null
+      : find(jump.section, `[data-fields~="${jump.field}"]`);
+    const target = row ?? box;
+    if (!target) return;
     const reduce = window.matchMedia?.(
       '(prefers-reduced-motion: reduce)',
     ).matches;
-    row.scrollIntoView?.({
+    target.scrollIntoView?.({
       block: 'center',
       behavior: reduce ? 'auto' : 'smooth',
     });
-    row.setAttribute('data-search-hit', '');
-    row.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: true });
+    target.setAttribute('data-search-hit', '');
+    target
+      .querySelector<HTMLElement>(box ? '[aria-expanded]' : FOCUSABLE)
+      ?.focus({ preventScroll: true });
     const timer = window.setTimeout(
-      () => row.removeAttribute('data-search-hit'),
+      () => target.removeAttribute('data-search-hit'),
       HIT_MS,
     );
     return () => {
       window.clearTimeout(timer);
-      row.removeAttribute('data-search-hit');
+      target.removeAttribute('data-search-hit');
     };
   }, [jump]);
 

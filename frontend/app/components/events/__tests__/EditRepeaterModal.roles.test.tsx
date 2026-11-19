@@ -149,6 +149,21 @@ describe('EditRepeaterModal tabs', () => {
     expect(screen.getByTestId('edit-series-modal')).toBeInTheDocument();
   });
 
+  it('finds ready check settings that sit in a collapsed block', () => {
+    render(
+      <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    fireEvent.change(screen.getByTestId('edit-series-settings-search'), {
+      target: { value: 'closes' },
+    });
+    expect(
+      within(screen.getByTestId('edit-series-search-group-ready')).getByTestId(
+        'edit-series-search-result-ready_check_close_minutes',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('finds the signup rule under the Event section, where this form renders it', () => {
     render(
       <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,

@@ -11,6 +11,11 @@ import { useForm, useFormContext } from 'react-hook-form';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '~/components/ui/collapsible';
+import {
   FormControl,
   FormDescription,
   FormField,
@@ -330,6 +335,64 @@ describe('EventFormDialog search', () => {
     );
     expect(isActive('discord')).toBe(true);
     expect(panelOf('panel-discord')).not.toHaveAttribute('hidden');
+  });
+
+  it('opens a collapsed container to reach a field it declares', () => {
+    const tabs: EventFormTab[] = [
+      {
+        value: 'event',
+        content: <NumberOrText name="name" label="Event Name" />,
+      },
+      {
+        value: 'tournament',
+        content: (
+          <Collapsible data-fields="people_per_team">
+            <CollapsibleTrigger data-testid="more">More</CollapsibleTrigger>
+            <CollapsibleContent>
+              <NumberOrText name="people_per_team" label="People Per Team" />
+            </CollapsibleContent>
+          </Collapsible>
+        ),
+      },
+    ];
+    render(<Harness tabs={tabs} />);
+    expect(screen.queryByTestId('input-people_per_team')).toBeNull();
+    type('people');
+    fireEvent.click(screen.getByTestId('test-search-result-people_per_team'));
+    expect(isActive('tournament')).toBe(true);
+    const input = screen.getByTestId('input-people_per_team');
+    expect(input.closest('[data-field]')).toHaveAttribute('data-search-hit');
+    expect(input).toHaveFocus();
+  });
+
+  it('highlights a disabled container when it cannot be opened', () => {
+    const tabs: EventFormTab[] = [
+      {
+        value: 'event',
+        content: <NumberOrText name="name" label="Event Name" />,
+      },
+      {
+        value: 'tournament',
+        content: (
+          <Collapsible
+            disabled
+            data-fields="people_per_team"
+            data-testid="locked"
+          >
+            <CollapsibleTrigger data-testid="more">More</CollapsibleTrigger>
+            <CollapsibleContent>
+              <NumberOrText name="people_per_team" label="People Per Team" />
+            </CollapsibleContent>
+          </Collapsible>
+        ),
+      },
+    ];
+    render(<Harness tabs={tabs} />);
+    type('people');
+    fireEvent.click(screen.getByTestId('test-search-result-people_per_team'));
+    expect(isActive('tournament')).toBe(true);
+    expect(screen.getByTestId('locked')).toHaveAttribute('data-search-hit');
+    expect(screen.queryByTestId('input-people_per_team')).toBeNull();
   });
 
   it('moves through results with the arrow keys and picks with Enter', () => {

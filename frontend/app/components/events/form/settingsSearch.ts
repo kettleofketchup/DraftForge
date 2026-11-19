@@ -26,7 +26,11 @@ export interface SettingsSearchGroup {
 const text = (el: Element | null): string | undefined =>
   el?.textContent?.trim() || undefined;
 
-/** Reads every `[data-field]` inside a `[data-section]` panel under `root`. */
+/**
+ * Reads every `[data-field]` inside a `[data-section]` panel under `root`, plus
+ * the fields a collapsed container declares in `data-fields` (space-separated)
+ * while its content is not rendered.
+ */
 export function scanFieldPlacements(root: ParentNode): FieldPlacements {
   const placements = new Map<string, FieldPlacement>();
   root.querySelectorAll<HTMLElement>('[data-field]').forEach((el) => {
@@ -39,6 +43,14 @@ export function scanFieldPlacements(root: ParentNode): FieldPlacements {
       label: text(el.querySelector('label')),
       description: text(el.querySelector('[id$="-form-item-description"]')),
     });
+  });
+  root.querySelectorAll<HTMLElement>('[data-fields]').forEach((el) => {
+    const section = el.closest<HTMLElement>('[data-section]')?.dataset
+      .section as EventFormTabValue | undefined;
+    if (!section) return;
+    for (const field of (el.dataset.fields ?? '').split(/\s+/)) {
+      if (field && !placements.has(field)) placements.set(field, { section });
+    }
   });
   return placements;
 }

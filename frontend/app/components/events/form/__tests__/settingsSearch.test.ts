@@ -69,6 +69,23 @@ describe('scanFieldPlacements', () => {
   });
 });
 
+describe('scanFieldPlacements with collapsed containers', () => {
+  it('places fields a closed container declares, rendered rows winning', () => {
+    document.body.innerHTML = `
+      <div data-section="ready">
+        <div data-fields="ready_check_open_minutes roll_call_mode"></div>
+        <div data-field="roll_call_mode"><label>Mode</label></div>
+      </div>`;
+    const map = scanFieldPlacements(document.body);
+    expect(map.get('ready_check_open_minutes')).toEqual({ section: 'ready' });
+    expect(map.get('roll_call_mode')).toEqual({
+      section: 'ready',
+      label: 'Mode',
+      description: undefined,
+    });
+  });
+});
+
 describe('buildSettingsIndex', () => {
   it('keeps fields rendered in the modal at the section they render in', () => {
     const index = buildSettingsIndex({
