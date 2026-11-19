@@ -14,6 +14,11 @@ from rest_framework.validators import UniqueValidator
 from app.cache_utils import invalidate_after_commit
 from app.permissions_org import check_lobby_steam_league_id, request_user
 from app.services.team_references import team_references
+from events.overrides import (
+    REASON_MAX_LENGTH,
+    OverrideReasonRequired,
+    OverrideRequestSerializer,
+)
 from league.models import LeagueUser
 from org.models import OrgUser
 from telemetry.logging import get_logger
@@ -1340,6 +1345,50 @@ class TeamSerializer(serializers.ModelSerializer):
             "total_mmr",
             "placement",
         )
+
+
+class TeamActionRequestSerializer(OverrideRequestSerializer):
+    reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        default="",
+        trim_whitespace=True,
+        max_length=REASON_MAX_LENGTH,
+    )
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        attrs["reason"] = (attrs.get("reason") or "").strip()
+        if not attrs["reason"]:
+            if attrs.get("acknowledged_codes"):
+                raise OverrideReasonRequired()
+            raise serializers.ValidationError({"reason": ["This field is required."]})
+        return attrs
+
+
+class TeamUserActionRequestSerializer(TeamActionRequestSerializer):
+    user_id = serializers.PrimaryKeyRelatedField(queryset=CustomUser.objects.all())
+
+
+class TeamDeputyRequestSerializer(TeamActionRequestSerializer):
+    user_id = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.all(), allow_null=True
+    )
+
+
+class TeamSubInRequestSerializer(TeamActionRequestSerializer):
+    standin_id = serializers.PrimaryKeyRelatedField(queryset=CustomUser.objects.all())
+    replacing_id = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+
+
+class TeamRenameRequestSerializer(TeamActionRequestSerializer):
+    # Blank/length/unchanged checks belong to the service so codes have one source.
+    name = serializers.CharField(allow_blank=True, trim_whitespace=False)
 
 
 class TournamentSerializer(serializers.ModelSerializer):
