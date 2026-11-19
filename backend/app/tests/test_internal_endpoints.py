@@ -321,7 +321,7 @@ class RepeaterEndpointTest(TestCase):
     def test_get_active_repeaters(self):
         from events.models import EventRepeater
 
-        repeater = EventRepeater.objects.create(
+        EventRepeater.objects.create(
             organization=self.org,
             name="Weekly Inhouse",
             is_active=True,
@@ -384,15 +384,15 @@ class InternalClientIntegrationTest(LiveServerTestCase):
         import os
         from unittest.mock import patch
 
-        import app.internal_client as client
+        from app.internal_client import create_message_log, transport
         from discordbot.models import DiscordMessageLog
 
-        old_url = client.INTERNAL_API_URL
-        client.INTERNAL_API_URL = f"{self.live_server_url}/api/internal"
+        old_url = transport.INTERNAL_API_URL
+        transport.INTERNAL_API_URL = f"{self.live_server_url}/api/internal"
         try:
             # Client reads token from env; server reads via override_settings.
             with patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": TOKEN}):
-                resp = client.create_message_log(
+                resp = create_message_log(
                     channel_id="live-integration-test",
                     source="test_integration",
                     source_id=1,
@@ -408,7 +408,7 @@ class InternalClientIntegrationTest(LiveServerTestCase):
                 ).exists()
             )
         finally:
-            client.INTERNAL_API_URL = old_url
+            transport.INTERNAL_API_URL = old_url
 
 
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)

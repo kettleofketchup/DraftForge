@@ -70,4 +70,5 @@ Use the `/brand-update` slash command (defined at `.claude/commands/brand-update
 - Canonical brand guide: `docs/THEMING-GUIDE.md`
 - AI hub: `docs/theming-guide/ai/index.md`
 - Update command: `.claude/commands/brand-update.md`
+- Table build guide (how, not the rule): `.claude/skills/table/SKILL.md`
 - Sibling skills that delegate here: `.claude/skills/aesthetic/SKILL.md`, `.claude/skills/ui-styling/SKILL.md`, `.claude/skills/frontend-development/SKILL.md`

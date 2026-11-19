@@ -593,3 +593,9 @@ if isTestEnvironment():
     urlpatterns += [
         path("api/tests/", include("tests.urls")),
     ]
+
+urlpatterns += [
+    path("api/internal/ops-notices/", include("opsnotices.internal_urls")),
+]
+
+urlpatterns += [path("", include("opsnotices.urls"))]

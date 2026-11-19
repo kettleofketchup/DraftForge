@@ -5,8 +5,8 @@ between the bot and Daphne containers means writes from the bot are invisible
 to the backend). Every callback that used to call ``events.discord.handle_*``
 in-process now POSTs here so the backend is the sole writer.
 
-The lower-level transport helpers (``_post``, ``X-Internal-Token`` auth,
-URL/timeout config) live in ``app.internal_client`` — this module just
+The lower-level transport helpers (``post``, ``X-Internal-Token`` auth,
+URL/timeout config) live in ``app.internal_client.transport`` — this module just
 contains the bot-side wrappers for the 13 signup-flow endpoints.
 
 Each function mirrors the handler's keyword signature and returns the
@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.internal_client import _post
+from app.internal_client import transport
 from events.schemas import RankFlowStateResponse, SignupActionResponse
 
 
@@ -53,7 +53,7 @@ def signup_button(
     if discord_username is not None:
         payload["discord_username"] = discord_username
     return _validated(
-        _post("/discord/signup-button/", payload),
+        transport.post("/discord/signup-button/", payload),
         default={"action": "error", "message": "Signup service unavailable."},
     )
 
@@ -66,7 +66,7 @@ def signup_modal_submit(
     values: dict[str, Any] | None,
 ) -> dict[str, Any]:
     return _validated(
-        _post(
+        transport.post(
             "/discord/signup-modal-submit/",
             {
                 "event_id": event_id,
@@ -86,7 +86,7 @@ def rank_status_select(
     rank_status: str,
 ) -> None:
     """Original handler returns None — preserve that contract."""
-    _post(
+    transport.post(
         "/discord/rank-status-select/",
         {
             "event_id": event_id,
@@ -104,7 +104,7 @@ def rank_medal_select(
     medal: str,
 ) -> dict[str, Any]:
     return _validated(
-        _post(
+        transport.post(
             "/discord/rank-medal-select/",
             {
                 "event_id": event_id,
@@ -124,7 +124,7 @@ def previous_rank_submit(
     date_text: str = "",
 ) -> dict[str, Any]:
     return _validated(
-        _post(
+        transport.post(
             "/discord/previous-rank-submit/",
             {
                 "event_id": event_id,
@@ -144,7 +144,7 @@ def battle_cup_submit(
     tier: str,
 ) -> dict[str, Any]:
     return _validated(
-        _post(
+        transport.post(
             "/discord/battle-cup-submit/",
             {
                 "event_id": event_id,
@@ -164,7 +164,7 @@ def screenshot_upload(
     attachment_url: str,
 ) -> dict[str, Any]:
     return _validated(
-        _post(
+        transport.post(
             "/discord/screenshot-upload/",
             {
                 "event_id": event_id,
@@ -183,7 +183,7 @@ def notify_button(
     discord_user_id: str,
 ) -> dict[str, Any]:
     return _validated(
-        _post(
+        transport.post(
             "/discord/notify-button/",
             {"event_id": event_id, "discord_user_id": discord_user_id},
         ),
@@ -201,7 +201,7 @@ def decline_button(
     if discord_username is not None:
         payload["discord_username"] = discord_username
     return _validated(
-        _post("/discord/decline-button/", payload),
+        transport.post("/discord/decline-button/", payload),
         default={"action": "error", "message": "Decline service unavailable."},
     )
 
@@ -216,7 +216,7 @@ def tentative_button(
     if discord_username is not None:
         payload["discord_username"] = discord_username
     return _validated(
-        _post("/discord/tentative-button/", payload),
+        transport.post("/discord/tentative-button/", payload),
         default={"action": "error", "message": "Tentative service unavailable."},
     )
 
@@ -229,7 +229,7 @@ def save_positions(
 ) -> dict[str, Any]:
     """Persist Dota position picks. ``positions``: list[int]."""
     return _validated(
-        _post(
+        transport.post(
             "/discord/save-positions/",
             {
                 "event_id": event_id,
@@ -249,7 +249,7 @@ def set_position(
 ) -> dict[str, Any]:
     """Set a single pos_N=True on the user's Dota profile (legacy per-click flow)."""
     return _validated(
-        _post(
+        transport.post(
             "/discord/set-position/",
             {
                 "event_id": event_id,
@@ -272,7 +272,7 @@ def get_rank_flow_state(
     ``SignupActionResponse`` — this endpoint returns rank state, not an
     action). Returns a plain dict so the bot can branch on ``state["error"]``.
     """
-    resp = _post(
+    resp = transport.post(
         "/discord/rank-flow-state/",
         {"event_id": event_id, "discord_user_id": discord_user_id},
     )

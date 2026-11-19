@@ -228,7 +228,7 @@ class EventForTaskEndsAtTest(EventTestCase):
 
 
 class AutoCloseClientTest(EventTestCase):
-    @patch("app.internal_client._post")
+    @patch("app.internal_client.transport.post")
     def test_returns_json_on_success(self, mock_post: MagicMock) -> None:
         mock_post.return_value = MagicMock(
             ok=True, json=lambda: {"closed": True, "state": "completed"}
@@ -236,7 +236,7 @@ class AutoCloseClientTest(EventTestCase):
         self.assertEqual(auto_close_event(5), {"closed": True, "state": "completed"})
         mock_post.assert_called_once_with("/events/5/auto-close/", {})
 
-    @patch("app.internal_client._post")
+    @patch("app.internal_client.transport.post")
     def test_returns_none_on_error(self, mock_post: MagicMock) -> None:
         mock_post.return_value = MagicMock(ok=False, status_code=400)
         self.assertIsNone(auto_close_event(5))
