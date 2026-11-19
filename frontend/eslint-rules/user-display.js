@@ -310,7 +310,7 @@ const PERSON_NAME =
 const PERSON_NAME_VAR = /^(displayName|username|nickname)$/;
 const PERSON_AVATAR = /(^|_)avatar(url)?$/i;
 
-// Member property names or bare identifiers that match `pattern`.
+// Reads a member whose name matches `pattern`, or a bare identifier matching `bareIdentifiers`.
 function readsMatching(node, pattern, bareIdentifiers) {
   let found = false;
   const visit = (n) => {
