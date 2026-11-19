@@ -313,9 +313,11 @@ export const useAppState = create<AppState>((set) => ({
 
 ---
 
-## User Avatars
+## Names and avatars
 
-**[📖 See dedicated guide: user-avatar.md](user-avatar.md)**
+`DisplayName(x)` and `<UserAvatar user={x} />` for every person; pass the payload as-is.
+
+**[📖 See dedicated guide: users.md](users.md)**
 
 ---
 
@@ -323,7 +325,7 @@ export const useAppState = create<AppState>((set) => ({
 
 **Common Patterns:**
 - ✅ useAuth hook for current user (id, email, roles, username)
-- ✅ AvatarUrl helper for all user avatars
+- ✅ `DisplayName` / `<UserAvatar>` for every person's name and avatar
 - ✅ React Hook Form + Zod for forms
 - ✅ Dialog with icon + close button
 - ✅ DataGrid wrapper contracts

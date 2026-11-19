@@ -271,16 +271,18 @@ if (isLoading) {
 
 ---
 
-### 👤 User Avatars
+### 👤 Names and avatars
 
-**ALWAYS use `AvatarUrl` helper** for user avatars - handles empty strings, Discord IDs, and fallback generation.
+**Every person goes through `DisplayName(x)` and `<UserAvatar user={x} />`**: pass the payload as-is, no org argument, no hand-built `nickname || username`. They read the user cache and take the org from the page; the `draftforge/*` lint rules enforce it.
 
 ```typescript
-import { AvatarUrl } from "~/components/user/avatar";
-<img src={AvatarUrl(user)} />
+import { DisplayName } from "~/components/user/avatar";
+import { UserAvatar } from "~/components/user/UserAvatar";
+<UserAvatar user={player} size="sm" />
+<span>{DisplayName(player)}</span>
 ```
 
-**[📖 Complete Guide: resources/user-avatar.md](resources/user-avatar.md)**
+**[📖 Complete Guide: resources/users.md](resources/users.md)**
 
 ---
 
@@ -311,7 +313,7 @@ import { AvatarUrl } from "~/components/user/avatar";
 | Optimize performance | [performance.md](resources/performance.md) |
 | TypeScript types | [typescript-standards.md](resources/typescript-standards.md) |
 | Forms/Auth/DataGrid | [common-patterns.md](resources/common-patterns.md) |
-| Display user avatars | [user-avatar.md](resources/user-avatar.md) |
+| Show a person's name or avatar | [users.md](resources/users.md) |
 | See full examples | [complete-examples.md](resources/complete-examples.md) |
 
 ---
