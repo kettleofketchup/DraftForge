@@ -22,12 +22,13 @@ export async function fetchTeam(pk: number): Promise<TeamType> {
   return response.data as TeamType;
 }
 
+/** Resolves to undefined when the PATCH emptied the team and it was deleted (204). */
 export async function updateTeam(
   pk: number,
   data: Partial<TeamType>,
-): Promise<TeamType> {
+): Promise<TeamType | undefined> {
   const response = await axios.patch<TeamType>(`/teams/${pk}/`, data);
-  return response.data;
+  return response.status === 204 ? undefined : response.data;
 }
 
 export async function deleteTeam(pk: number): Promise<void> {

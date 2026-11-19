@@ -13,6 +13,7 @@ from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
 from app.permissions_org import check_lobby_steam_league_id, request_user
+from app.services.team_references import team_references
 from league.models import LeagueUser
 from org.models import OrgUser
 from telemetry.logging import get_logger
@@ -1235,7 +1236,51 @@ class TeamSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {self._LEADERSHIP_ERROR_FIELDS[k]: v for k, v in errors.items()}
             )
+        if (
+            instance is not None
+            and "members" in attrs
+            and not attrs["members"]
+            and team_references([instance])
+        ):
+            raise serializers.ValidationError(
+                {
+                    "member_ids": [
+                        "This team is used by bracket games or hero drafts; "
+                        "remove it from those first."
+                    ]
+                }
+            )
         return attrs
+
+    # Members last: emptying them may delete the team (see app.signals).
+    _ROSTER_FIELDS: ClassVar[tuple[str, ...]] = (
+        "dropin_members",
+        "left_members",
+        "members",
+    )
+
+    def update(self, instance: Team, validated_data: dict[str, Any]) -> Team:
+        """Apply the roster adding before removing, so a swap never empties the team."""
+        rosters = {
+            name: {user.pk for user in validated_data.pop(name)}
+            for name in self._ROSTER_FIELDS
+            if name in validated_data
+        }
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        removals: dict[str, set[int]] = {}
+        for name, wanted in rosters.items():
+            manager = getattr(instance, name)
+            current = set(manager.nocache().values_list("pk", flat=True))
+            if wanted - current:
+                manager.add(*(wanted - current))
+            removals[name] = current - wanted
+        for name, gone in removals.items():
+            if gone and instance.pk is not None:
+                getattr(instance, name).remove(*gone)
+        return instance
 
     def get_total_mmr(self, obj: Team) -> int:
         """Sum of captain MMR + all member MMRs (excluding captain from members to avoid double-counting)."""

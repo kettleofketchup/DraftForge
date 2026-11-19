@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from cacheops import cached_as
 from django.contrib.auth import login
@@ -37,7 +37,19 @@ from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 from social_django.utils import load_strategy, psa
 
 from app import tournament_buckets
+from app.cache_utils import invalidate_after_commit
 from app.functions.teamdraft import apply_draft_options
+from app.services.team_audit import (
+    log_snapshot_fields,
+    roster_snapshot,
+    write_team_log,
+)
+from app.services.team_management import follow_captain
+from app.services.team_signals import (
+    change_from_log,
+    owning_team_audit,
+    send_roster_changed_on_commit,
+)
 from app.tournament_buckets import (
     tournament_bucket_cutoff,
     upcoming_q,
@@ -86,6 +98,8 @@ from .models import (
     Organization,
     ProfileClaimRequest,
     Team,
+    TeamLogAction,
+    TeamLogVia,
     Tournament,
 )
 from .permissions import IsStaff
@@ -664,6 +678,109 @@ class TeamView(viewsets.ModelViewSet):
 
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
+
+    # Serializer source name -> roster_snapshot key, for rows on a deleted team.
+    _SNAPSHOT_KEYS: ClassVar[dict[str, str]] = {
+        "name": "name",
+        "captain": "captain_id",
+        "deputy_captain": "deputy_captain_id",
+        "members": "member_ids",
+        "dropin_members": "dropin_ids",
+        "left_members": "left_ids",
+    }
+
+    def _requested_snapshot(self, data: dict[str, Any]) -> dict[str, Any]:
+        requested: dict[str, Any] = {}
+        for name, key in self._SNAPSHOT_KEYS.items():
+            if name not in data:
+                continue
+            value = data[name]
+            if key.endswith("_ids"):
+                requested[key] = sorted(user.pk for user in value)
+            elif key.endswith("_id"):
+                requested[key] = getattr(value, "pk", None)
+            else:
+                requested[key] = value
+        return requested
+
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Legacy PATCH/PUT: audited, follows captain changes, 204 if the team is gone."""
+        partial = kwargs.pop("partial", False)
+        with transaction.atomic(), owning_team_audit():
+            team = (
+                Team.objects.nocache()
+                .select_for_update()
+                .select_related("tournament__league")
+                .get(pk=self.get_object().pk)
+            )
+            before = roster_snapshot(team)
+            snapshot = log_snapshot_fields(team)
+            old_captain = team.captain
+            tournament = team.tournament
+
+            serializer = self.get_serializer(team, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+
+            deleted = serializer.instance.pk is None
+            extras: dict[str, Any] = {}
+            after: dict[str, Any] | None = None
+            if deleted:
+                team = None
+                requested = self._requested_snapshot(serializer.validated_data)
+                fields_changed = sorted(
+                    k for k, v in requested.items() if before[k] != v
+                )
+            else:
+                team = (
+                    Team.objects.nocache()
+                    .select_related("tournament__league")
+                    .get(pk=team.pk)
+                )
+                if team.captain_id != before["captain_id"] and team.captain is not None:
+                    extras = follow_captain(
+                        team, old_captain, team.captain, actor=request.user
+                    )
+                after = roster_snapshot(team)
+                fields_changed = sorted(k for k in before if before[k] != after[k])
+
+            if fields_changed:
+                team_log = write_team_log(
+                    team,
+                    snapshot=snapshot,
+                    action=TeamLogAction.LEGACY_PATCH,
+                    via=TeamLogVia.WEB,
+                    actor=request.user,
+                    details={
+                        "before": before,
+                        "after": after,
+                        "fields_changed": fields_changed,
+                        **({"team_deleted": True} if deleted else {}),
+                        **extras,
+                    },
+                )
+                if deleted or set(fields_changed) - {"name"}:
+                    send_roster_changed_on_commit(change_from_log(team_log))
+                user_ids = {
+                    *before["member_ids"],
+                    *before["dropin_ids"],
+                    *before["left_ids"],
+                    *((after or {}).get("member_ids") or []),
+                    *((after or {}).get("dropin_ids") or []),
+                    *((after or {}).get("left_ids") or []),
+                }
+                to_invalidate: list[Any] = list(
+                    CustomUser.objects.nocache().filter(pk__in=user_ids)
+                )
+                if team is not None:
+                    to_invalidate.append(team)
+                if tournament is not None:
+                    to_invalidate.append(tournament)
+                invalidate_after_commit(*to_invalidate)
+
+        if deleted:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(self.get_serializer(team).data)
 
 
 @permission_classes((IsAuthenticated,))

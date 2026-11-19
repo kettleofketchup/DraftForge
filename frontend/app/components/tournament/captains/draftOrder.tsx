@@ -63,12 +63,12 @@ export const DraftOrderButton: React.FC<{
 
       success: (data) => {
         getCurrentTournament();
-        if (data.draft_order !== undefined) {
+        if (data?.draft_order !== undefined) {
           log.debug('draft_order state updated', data.draft_order);
           setDraftOrder(String(data.draft_order));
         }
         log.debug(data);
-        return `${tournament?.name} has updated the draft_order to ${data.draft_order}`;
+        return `${tournament?.name} has updated the draft_order to ${data?.draft_order}`;
       },
       error: (err) => {
         const val = err.response.data;

@@ -2,16 +2,33 @@
 
 import itertools
 from io import StringIO
+from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel, Team, Tournament
+from app.models import (
+    CustomUser,
+    Draft,
+    DraftEvent,
+    DraftRound,
+    Game,
+    PositionsModel,
+    Team,
+    TeamDraftState,
+    TeamLog,
+    TeamLogAction,
+    TeamLogVia,
+    Tournament,
+)
 from app.serializers import TeamSerializer
 from app.services.team_leadership import teams_with_leadership_problems
+from app.services.team_signals import TeamRosterChange, team_roster_changed
+from app.tests.test_team_management import TeamManagementFixture
 
 _discord_ids = itertools.count(571000)
 
@@ -272,3 +289,229 @@ class TeamLeadershipAuditTests(TestCase):
             output,
         )
         self.assertNotIn(f"team={self.good.pk} ", output)
+
+
+class TeamLegacyPatchTests(TeamManagementFixture, TestCase):
+    """Legacy PATCH applies rosters safely, audits, and follows captain changes (#544)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.staff = CustomUser.objects.create_user(
+            username="legacy_staff", password="x", is_staff=True
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.staff)
+        self.n1 = self.make_user("legacy_n1")
+        self.n2 = self.make_user("legacy_n2")
+        self.tournament.users.add(self.n1, self.n2)
+
+    def _patch(self, data: dict[str, Any], team: Team | None = None) -> Response:
+        pk = (team or self.team).pk
+        return self.client.patch(f"/api/teams/{pk}/", data, format="json")
+
+    def _legacy_rows(self) -> list[TeamLog]:
+        return list(
+            TeamLog.objects.filter(action=TeamLogAction.LEGACY_PATCH).order_by("pk")
+        )
+
+    def _round_captains(self) -> dict[int, int | None]:
+        return dict(DraftRound.objects.nocache().values_list("pk", "captain_id"))
+
+    def _make_rounds(self) -> tuple[DraftRound, DraftRound]:
+        draft = Draft.objects.create(
+            tournament=self.tournament,
+            state=TeamDraftState.DRAFTING,
+            draft_style="snake",
+        )
+        own = DraftRound.objects.create(draft=draft, captain=self.c, pick_number=1)
+        other = DraftRound.objects.create(draft=draft, captain=self.o1, pick_number=2)
+        return own, other
+
+    def _reference(self, team: Team | None = None) -> None:
+        Game.objects.create(tournament=self.tournament, radiant_team=team or self.team)
+
+    def test_patch_writes_legacy_row(self) -> None:
+        response = self._patch({"name": "Renamed"})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        rows = self._legacy_rows()
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row.team_id, self.team.pk)
+        self.assertEqual(row.via, TeamLogVia.WEB)
+        self.assertEqual(row.actor_id, self.staff.pk)
+        self.assertEqual(row.reason, "")
+        self.assertEqual(row.event_id, self.event.pk)
+        self.assertEqual(row.details["fields_changed"], ["name"])
+        self.assertEqual(row.details["before"]["name"], "Rostered")
+        self.assertEqual(row.details["after"]["name"], "Renamed")
+
+    def test_noop_patch_writes_none(self) -> None:
+        response = self._patch({"name": "Rostered", "draft_order": 4})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(self._legacy_rows(), [])
+
+    def test_patch_non_member_captain_400(self) -> None:
+        response = self._patch({"captain_id": self.outsider.pk})
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn("captain_id", response.data)
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_patch_captain_change_moves_team_rounds(self) -> None:
+        own, other = self._make_rounds()
+
+        response = self._patch({"captain_id": self.m1.pk})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        captains = self._round_captains()
+        self.assertEqual(captains[own.pk], self.m1.pk)
+        self.assertEqual(captains[other.pk], self.o1.pk)
+        row = self._legacy_rows()[0]
+        self.assertEqual(row.details["draft_rounds_updated"], 1)
+        self.assertEqual(row.details["fields_changed"], ["captain_id"])
+
+    def test_patch_dropping_captain_moves_rounds_to_successor(self) -> None:
+        own, _ = self._make_rounds()
+
+        response = self._patch({"member_ids": [self.d.pk, self.m1.pk, self.m2.pk]})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        team = self.refresh(self.team)
+        self.assertEqual(team.captain_id, self.d.pk)
+        self.assertEqual(self._round_captains()[own.pk], self.d.pk)
+        rows = list(TeamLog.objects.all())
+        self.assertEqual([r.action for r in rows], [TeamLogAction.LEGACY_PATCH])
+        self.assertEqual(
+            rows[0].details["fields_changed"],
+            ["captain_id", "deputy_captain_id", "member_ids"],
+        )
+        self.assertEqual(
+            DraftEvent.objects.filter(
+                draft=own.draft, event_type="team_changed"
+            ).count(),
+            1,
+        )
+
+    def _assert_swapped(self, response: Response) -> None:
+        self.assertEqual(response.status_code, 200, response.data)
+        team = self.refresh(self.team)
+        self.assertEqual(
+            set(team.members.nocache().values_list("pk", flat=True)),
+            {self.n1.pk, self.n2.pk},
+        )
+        self.assertEqual(team.captain_id, self.n1.pk)
+        self.assertIsNone(team.deputy_captain_id)
+        rows = list(TeamLog.objects.all())
+        self.assertEqual([r.action for r in rows], [TeamLogAction.LEGACY_PATCH])
+        self.assertEqual(rows[0].team_id, self.team.pk)
+
+    def test_full_swap_unreferenced_team_kept(self) -> None:
+        response = self._patch(
+            {"member_ids": [self.n1.pk, self.n2.pk], "captain_id": self.n1.pk}
+        )
+
+        self._assert_swapped(response)
+
+    def test_full_swap_referenced_team_kept(self) -> None:
+        self._reference()
+
+        response = self._patch(
+            {"member_ids": [self.n1.pk, self.n2.pk], "captain_id": self.n1.pk}
+        )
+
+        self._assert_swapped(response)
+
+    def test_empty_referenced_team_400(self) -> None:
+        self._reference()
+
+        response = self._patch({"member_ids": []})
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(
+            [str(m) for m in response.data["member_ids"]],
+            [
+                "This team is used by bracket games or hero drafts; "
+                "remove it from those first."
+            ],
+        )
+        self.assertEqual(self.refresh(self.team).members.nocache().count(), 4)
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_empty_unreferenced_team_deleted_cleanly(self) -> None:
+        old_pk = self.team.pk
+
+        response = self._patch({"member_ids": [], "dropin_member_ids": [self.n1.pk]})
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.content, b"")
+        self.assertFalse(Team.objects.nocache().filter(pk=old_pk).exists())
+        rows = list(TeamLog.objects.all())
+        self.assertEqual([r.action for r in rows], [TeamLogAction.LEGACY_PATCH])
+        row = rows[0]
+        self.assertIsNone(row.team_id)
+        self.assertEqual(row.team_snapshot_id, old_pk)
+        self.assertEqual(row.team_name, "Rostered")
+        self.assertTrue(row.details["team_deleted"])
+        self.assertIsNone(row.details["after"])
+        self.assertEqual(row.details["fields_changed"], ["dropin_ids", "member_ids"])
+
+    def test_name_only_patch_on_empty_kept_team_ok(self) -> None:
+        self._reference()
+        self.team.members.clear()
+        self.assertTrue(Team.objects.nocache().filter(pk=self.team.pk).exists())
+
+        response = self._patch({"name": "Still Here"})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(self.refresh(self.team).name, "Still Here")
+
+    def test_post_create_team_still_works(self) -> None:
+        response = self.client.post(
+            "/api/teams/",
+            {
+                "name": "Fresh",
+                "tournament_id": self.tournament.pk,
+                "member_ids": [self.n1.pk, self.n2.pk],
+                "captain_id": self.n1.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertTrue(Team.objects.filter(name="Fresh").exists())
+
+    def _capture_signal(self) -> list[TeamRosterChange]:
+        changes: list[TeamRosterChange] = []
+
+        def receiver(sender: type, change: TeamRosterChange, **kwargs: Any) -> None:
+            changes.append(change)
+
+        team_roster_changed.connect(receiver, sender=Team, weak=False)
+        self.addCleanup(team_roster_changed.disconnect, receiver, sender=Team)
+        return changes
+
+    def test_patch_sends_roster_signal_on_member_change(self) -> None:
+        changes = self._capture_signal()
+        members = [self.c.pk, self.d.pk, self.m1.pk, self.m2.pk, self.n1.pk]
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self._patch({"member_ids": members})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(changes), 1)
+        sent = changes[0]
+        self.assertEqual(sent.action, TeamLogAction.LEGACY_PATCH)
+        self.assertEqual(sent.log_id, self._legacy_rows()[0].pk)
+        self.assertEqual(sent.after["member_ids"], sorted(members))
+
+    def test_name_only_patch_sends_no_roster_signal(self) -> None:
+        changes = self._capture_signal()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self._patch({"name": "Quiet"})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(changes, [])
+        self.assertEqual(len(self._legacy_rows()), 1)
