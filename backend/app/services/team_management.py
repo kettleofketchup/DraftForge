@@ -41,6 +41,7 @@ from app.services.team_signals import (
 )
 from events.eligibility import unmet_codes, unmet_labels
 from events.overrides import (
+    REASON_MAX_LENGTH,
     OverrideReasonRequired,
     OverrideRequired,
     Violation,
@@ -159,6 +160,23 @@ def follow_captain(
     if old is None:
         extras["draft_rounds_updated"] = 0
         extras["draft_rounds_skipped_reason"] = "no_previous_captain"
+    elif (
+        Team.objects.nocache()
+        .filter(tournament_id=team.tournament_id, captain_id__in=[old.pk, new.pk])
+        .exclude(pk=team.pk)
+        .exists()
+    ):
+        # Rounds have no team FK: with a shared captain they can't be told apart.
+        extras["draft_rounds_updated"] = 0
+        extras["draft_rounds_skipped_reason"] = "old_captain_leads_other_team"
+        log.warning(
+            "team_rounds_not_followed",
+            system="tournament",
+            subsystem="teams",
+            team_id=team.pk,
+            old_captain_id=old.pk,
+            new_captain_id=new.pk,
+        )
     else:
         rounds = DraftRound.objects.nocache().filter(
             draft__tournament_id=team.tournament_id, captain=old
@@ -234,36 +252,41 @@ def follow_captain(
     return extras
 
 
+def _ensure_tournament_user(team: Team, user: CustomUser) -> dict[str, Any]:
+    tournament = team.tournament
+    if tournament is None or tournament.users.filter(pk=user.pk).exists():
+        return {}
+    league = tournament.league
+    org_id = league.organization_id if league is not None else None
+    had_org_user = (
+        org_id is not None
+        and OrgUser.objects.filter(user=user, organization_id=org_id).exists()
+    )
+    had_league_user = (
+        league is not None
+        and LeagueUser.objects.filter(user=user, league=league).exists()
+    )
+    tournament.users.add(user)
+    return {
+        "added_to_tournament": True,
+        "org_user_created": (
+            org_id is not None
+            and not had_org_user
+            and OrgUser.objects.filter(user=user, organization_id=org_id).exists()
+        ),
+        "league_user_created": (
+            league is not None
+            and not had_league_user
+            and LeagueUser.objects.filter(user=user, league=league).exists()
+        ),
+    }
+
+
 def _change_captain(
     team: Team, new: CustomUser, *, actor: CustomUser | None
 ) -> dict[str, Any]:
     old = team.captain
-    extras: dict[str, Any] = {}
-    tournament = team.tournament
-    if tournament is not None and not tournament.users.filter(pk=new.pk).exists():
-        league = tournament.league
-        org_id = league.organization_id if league is not None else None
-        had_org_user = (
-            org_id is not None
-            and OrgUser.objects.filter(user=new, organization_id=org_id).exists()
-        )
-        had_league_user = (
-            league is not None
-            and LeagueUser.objects.filter(user=new, league=league).exists()
-        )
-        tournament.users.add(new)
-        extras["added_to_tournament"] = True
-        extras["org_user_created"] = (
-            org_id is not None
-            and not had_org_user
-            and OrgUser.objects.filter(user=new, organization_id=org_id).exists()
-        )
-        extras["league_user_created"] = (
-            league is not None
-            and not had_league_user
-            and LeagueUser.objects.filter(user=new, league=league).exists()
-        )
-
+    extras = _ensure_tournament_user(team, new)
     team.captain = new
     team.save(update_fields=["captain"])
     extras.update(follow_captain(team, old, new, actor=actor))
@@ -285,6 +308,11 @@ def _apply(
     touched: Collection[LeadershipKey] | TouchedOf,
 ) -> TeamChange:
     reason = (reason or "").strip()
+    if len(reason) > REASON_MAX_LENGTH:
+        raise TeamManagementError(
+            "reason_too_long",
+            f"Reasons can be at most {REASON_MAX_LENGTH} characters.",
+        )
     fields: dict[str, Any] = {
         "system": "tournament",
         "subsystem": "teams",
@@ -363,7 +391,22 @@ def _apply(
                 override_rules=overridden,
                 details=details,
             )
-            to_invalidate: list[Any] = [changed, *affected]
+            user_ids = {
+                pk
+                for snap in (before, after)
+                for key in ("member_ids", "dropin_ids", "left_ids")
+                for pk in snap[key]
+            } | {
+                pk
+                for snap in (before, after)
+                for pk in (snap["captain_id"], snap["deputy_captain_id"])
+                if pk is not None
+            }
+            to_invalidate: list[Any] = [
+                changed,
+                *affected,
+                *CustomUser.objects.nocache().filter(pk__in=user_ids),
+            ]
             if changed.tournament is not None:
                 to_invalidate.append(changed.tournament)
             invalidate_after_commit(*to_invalidate)
@@ -430,7 +473,7 @@ def rename(
         reason=reason,
         acknowledged_codes=acknowledged_codes,
         target_user=lambda locked: None,
-        affected_users=lambda locked: list(locked.members.nocache().order_by("pk")),
+        affected_users=lambda locked: [],
         validate=validate,
         mutate=mutate,
         touched=(),
@@ -681,11 +724,11 @@ def set_captain(
             locked.members.add(user)
             locked.dropin_members.remove(user)
             locked.left_members.remove(user)
-        if reseat:
-            return {}
         if locked.deputy_captain_id == user.pk:
             locked.deputy_captain = None
             locked.save(update_fields=["deputy_captain"])
+        if reseat:
+            return {}
         return _change_captain(locked, user, actor=actor)
 
     return _apply(
@@ -788,11 +831,12 @@ def sub_in(
         return []
 
     def mutate(locked: Team) -> dict[str, Any]:
+        extras: dict[str, Any] = {
+            "replacing_user_id": replacing.pk if replacing is not None else None,
+            **_ensure_tournament_user(locked, standin),
+        }
         locked.members.add(standin)
         locked.dropin_members.remove(standin)
-        extras: dict[str, Any] = {
-            "replacing_user_id": replacing.pk if replacing is not None else None
-        }
         if replacing is not None:
             extras.update(_dropout_mutation(locked, replacing, actor=actor))
         return extras

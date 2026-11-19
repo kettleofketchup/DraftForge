@@ -1651,6 +1651,7 @@ class Draft(models.Model):
             .exclude(id__in=self.tournament.draft_locked_user_ids())
             .exclude(teams_as_member__tournament=self.tournament)
             .exclude(teams_as_dropin__tournament=self.tournament)
+            .exclude(teams_as_left__tournament=self.tournament)
             .distinct()
         )
 
@@ -1749,6 +1750,12 @@ class Draft(models.Model):
                     continue
                 if not draft_round.choice:
                     continue  # Skip rounds with no choice (e.g., after restart)
+                if (
+                    team.left_members.nocache()
+                    .filter(pk=draft_round.choice_id)
+                    .exists()
+                ):
+                    continue
                 log.debug(
                     "rebuild_teams_adding_pick",
                     system="tournament",

@@ -50,7 +50,11 @@ from app.services.team_management import (
 from app.services.team_signals import TeamRosterChange, team_roster_changed
 from events.eligibility import UNMET_LABELS, Unmet, unmet_codes
 from events.models import Event
-from events.overrides import OverrideReasonRequired, OverrideRequired
+from events.overrides import (
+    REASON_MAX_LENGTH,
+    OverrideReasonRequired,
+    OverrideRequired,
+)
 from league.models import LeagueUser
 from org.models import OrgSettings, OrgUser
 from org.models_profiles import PlayerDotaProfile
@@ -210,11 +214,29 @@ class RenameTests(TeamManagementFixture, TestCase):
             sorted([self.c.pk, self.d.pk, self.m1.pk, self.m2.pk]),
         )
 
-    def test_rename_requires_reason(self) -> None:
+    def test_rename_needs_no_reason(self) -> None:
+        rename(self.team, "New", actor=self.actor, via=TeamLogVia.WEB)
+        self.assertEqual(self.refresh(self.team).name, "New")
+        self.assertEqual(self.only_log().reason, "")
+
+    def test_reason_over_limit_refused(self) -> None:
         with self.assertRaises(TeamManagementError) as ctx:
-            rename(self.team, "New", actor=self.actor, via=TeamLogVia.WEB)
-        self.assertEqual(ctx.exception.code, "reason_required")
-        self.assertEqual(self.refresh(self.team).name, "Rostered")
+            set_deputy(
+                self.team,
+                self.m1,
+                actor=self.actor,
+                via=TeamLogVia.WEB,
+                reason="r" * (REASON_MAX_LENGTH + 1),
+            )
+        self.assertEqual(ctx.exception.code, "reason_too_long")
+        self.assertEqual(self.refresh(self.team).deputy_captain_id, self.d.pk)
+        set_deputy(
+            self.team,
+            self.m1,
+            actor=self.actor,
+            via=TeamLogVia.WEB,
+            reason="r" * REASON_MAX_LENGTH,
+        )
 
     def test_rename_blank_refused(self) -> None:
         with self.assertRaises(TeamManagementError) as ctx:
@@ -1436,4 +1458,227 @@ class AddStandinTests(TeamManagementFixture, TestCase):
             self.add(self.outsider)
         self.assertEqual(
             [v.code for v in ctx.exception.violations], ["team_standin_cap"]
+        )
+
+
+class DraftBookkeepingTests(TeamManagementFixture, TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.p1 = self.make_user("roster_p1")
+        self.p2 = self.make_user("roster_p2")
+        self.tournament.users.add(self.p1, self.p2)
+        self.draft = Draft.objects.create(
+            tournament=self.tournament,
+            state=TeamDraftState.DRAFTING,
+            draft_style="snake",
+        )
+        staff = CustomUser.objects.create_superuser(
+            username="roster_admin", password="test"
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(staff)
+
+    def pick(self, captain: CustomUser, player: CustomUser, number: int) -> DraftRound:
+        draft_round = DraftRound.objects.create(
+            draft=self.draft, captain=captain, pick_number=number, choice=player
+        )
+        Team.objects.get(captain=captain, tournament=self.tournament).members.add(
+            player
+        )
+        return draft_round
+
+    def undo(self) -> Any:
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(
+                "/api/tournaments/undo-pick", {"draft_pk": self.draft.pk}, format="json"
+            )
+
+    def pool(self) -> set[int]:
+        fresh = Draft.objects.nocache().get(pk=self.draft.pk)
+        remaining = set(fresh.users_remaining.values_list("pk", flat=True))
+        state = tournament_state_queryset(fresh=True).get(pk=self.tournament.pk)
+        self.assertEqual(set(_users_remaining_pks(state.draft)), remaining)
+        return remaining
+
+    def test_dropout_not_in_pool(self) -> None:
+        DraftRound.objects.create(draft=self.draft, captain=self.c, pick_number=1)
+
+        mark_dropout(
+            self.team, self.m1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+        self.assertNotIn(self.m1.pk, self.pool())
+
+    def test_dropped_out_captain_not_in_pool(self) -> None:
+        DraftRound.objects.create(draft=self.draft, captain=self.c, pick_number=1)
+
+        mark_dropout(
+            self.team, self.c, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+        self.assertNotIn(self.c.pk, self.pool())
+
+    def test_undo_pick_of_new_captain_refused(self) -> None:
+        last = self.pick(self.c, self.p1, 1)
+        set_captain(
+            self.team, self.p1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+        response = self.undo()
+
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(response.json()["code"], "pick_is_captain")
+        team = self.refresh(self.team)
+        self.assertEqual(team.captain_id, self.p1.pk)
+        self.assertIn(self.p1.pk, self.member_pks(team))
+        self.assertEqual(
+            DraftRound.objects.nocache().get(pk=last.pk).choice_id, self.p1.pk
+        )
+        self.assertFalse(
+            TeamLog.objects.filter(action=TeamLogAction.SYSTEM_SUCCESSION).exists()
+        )
+
+    def test_undo_pick_of_dropout_clears_dropout(self) -> None:
+        last = self.pick(self.c, self.p1, 1)
+        mark_dropout(
+            self.team, self.p1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+        self.assertNotIn(self.p1.pk, self.pool())
+
+        response = self.undo()
+
+        self.assertEqual(response.status_code, 200, response.content)
+        team = self.refresh(self.team)
+        self.assertFalse(team.left_members.nocache().filter(pk=self.p1.pk).exists())
+        self.assertIsNone(DraftRound.objects.nocache().get(pk=last.pk).choice_id)
+        self.assertIn(self.p1.pk, self.pool())
+
+    def test_rounds_stay_when_old_captain_leads_another_team(self) -> None:
+        Team.objects.filter(pk=self.other.pk).update(captain=self.c)
+        draft_round = DraftRound.objects.create(
+            draft=self.draft, captain=self.c, pick_number=1
+        )
+
+        change = set_captain(
+            self.team, self.m1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+        self.assertEqual(
+            DraftRound.objects.nocache().get(pk=draft_round.pk).captain_id, self.c.pk
+        )
+        self.assertEqual(change.log.details["draft_rounds_updated"], 0)
+        self.assertEqual(
+            change.log.details["draft_rounds_skipped_reason"],
+            "old_captain_leads_other_team",
+        )
+
+    def test_rebuild_with_rounds_refused_after_staff_changes(self) -> None:
+        self.pick(self.c, self.p1, 1)
+        add_standin(
+            self.team, self.p2, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+        response = self.client.post(
+            "/api/tournaments/draft-rebuild",
+            {"tournament_pk": self.tournament.pk},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(response.json()["code"], "team_changes_logged")
+        team = self.refresh(self.team)
+        self.assertTrue(team.dropin_members.nocache().filter(pk=self.p2.pk).exists())
+        self.assertIn(self.m1.pk, self.member_pks(team))
+
+    def test_rebuild_skips_dropped_out_picks(self) -> None:
+        self.pick(self.c, self.p1, 1)
+        self.team.members.remove(self.p1)
+        self.team.left_members.add(self.p1)
+
+        self.draft.rebuild_teams()
+
+        self.assertNotIn(self.p1.pk, self.member_pks(self.team))
+
+
+class ReseatGhostDeputyTests(TeamManagementFixture, TestCase):
+    def test_reseat_ghost_captain_who_is_also_deputy(self) -> None:
+        team = self.drop_member_silently(self.team, self.c)
+        Team.objects.filter(pk=team.pk).update(deputy_captain=self.c)
+
+        change = set_captain(
+            self.team, self.c, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+        team = self.refresh(self.team)
+        self.assertEqual(team.captain_id, self.c.pk)
+        self.assertIsNone(team.deputy_captain_id)
+        self.assertIn(self.c.pk, self.member_pks(team))
+        self.assertEqual(_problems(team), {})
+        self.assertIsNone(change.log.details["after"]["deputy_captain_id"])
+
+
+class SubInTournamentUserTests(TeamManagementFixture, TestCase):
+    def test_sub_in_adds_standin_to_tournament(self) -> None:
+        standin = self.make_user("roster_sub")
+        self.team.dropin_members.add(standin)
+
+        change = sub_in(
+            self.team, standin, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+        self.assertTrue(self.tournament.users.filter(pk=standin.pk).exists())
+        self.assertTrue(change.log.details["added_to_tournament"])
+        self.assertTrue(
+            LeagueUser.objects.filter(user=standin, league=self.league).exists()
+        )
+        self.assertTrue(change.log.details["league_user_created"])
+        self.assertFalse(change.log.details["org_user_created"])
+
+    def test_sub_in_existing_tournament_user_not_flagged(self) -> None:
+        standin = self.make_user("roster_sub2")
+        self.tournament.users.add(standin)
+        self.team.dropin_members.add(standin)
+
+        change = sub_in(
+            self.team, standin, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+        self.assertNotIn("added_to_tournament", change.log.details)
+
+
+class TournamentCacheTests(TeamManagementFixture, TransactionTestCase):
+    def setUp(self) -> None:
+        if not _redis_reachable():
+            self.skipTest("Cacheops Redis not reachable")
+        super().setUp()
+
+    def roster(self, client: APIClient) -> dict[str, Any]:
+        data = client.get(f"/api/tournaments/{self.tournament.pk}/").json()
+        return next(t for t in data["teams"] if t["pk"] == self.team.pk)
+
+    def pks(self, entries: list[Any]) -> set[int]:
+        return {e["pk"] if isinstance(e, dict) else e for e in entries}
+
+    def test_dropout_visible_through_tournament_cache(self) -> None:
+        client = APIClient()
+        self.assertIn(self.m1.pk, self.pks(self.roster(client)["members"]))
+
+        mark_dropout(
+            self.team, self.m1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+        team = self.roster(client)
+        self.assertNotIn(self.m1.pk, self.pks(team["members"]))
+        self.assertIn(self.m1.pk, self.pks(team["left_members"]))
+
+    def test_standin_visible_through_tournament_cache(self) -> None:
+        client = APIClient()
+        self.assertEqual(self.pks(self.roster(client)["dropin_members"]), set())
+
+        add_standin(
+            self.team, self.outsider, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+        self.assertEqual(
+            self.pks(self.roster(client)["dropin_members"]), {self.outsider.pk}
         )

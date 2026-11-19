@@ -797,6 +797,7 @@ def _users_remaining_pks(draft: Draft) -> list[int]:
         | {t.captain_id for t in teams if t.captain_id}
         | {m.pk for t in teams for m in t.members.all()}
         | {m.pk for t in teams for m in t.dropin_members.all()}
+        | {m.pk for t in teams for m in t.left_members.all()}
     )
     remaining = (
         tournament.users.nocache()
