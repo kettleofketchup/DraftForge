@@ -506,12 +506,33 @@ class TeamLegacyPatchTests(TeamManagementFixture, TestCase):
         self.assertEqual(sent.log_id, self._legacy_rows()[0].pk)
         self.assertEqual(sent.after["member_ids"], sorted(members))
 
-    def test_name_only_patch_sends_no_roster_signal(self) -> None:
+    def test_name_only_patch_sends_roster_signal(self) -> None:
         changes = self._capture_signal()
 
         with self.captureOnCommitCallbacks(execute=True):
-            response = self._patch({"name": "Quiet"})
+            response = self._patch({"name": "Renamed"})
 
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(changes, [])
-        self.assertEqual(len(self._legacy_rows()), 1)
+        rows = self._legacy_rows()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual([c.log_id for c in changes], [rows[0].pk])
+        self.assertEqual(changes[0].after["name"], "Renamed")
+
+    def test_rename_patch_snapshot_uses_new_name(self) -> None:
+        response = self._patch({"name": "Renamed"})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(self._legacy_rows()[0].team_name, "Renamed")
+
+    def test_tournament_move_snapshot_uses_new_tournament(self) -> None:
+        moved = Tournament.objects.create(
+            name="Moved Cup", date_played=timezone.now(), league=self.tournament.league
+        )
+
+        response = self._patch({"tournament_id": moved.pk})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        row = self._legacy_rows()[0]
+        self.assertEqual(row.tournament_id, moved.pk)
+        self.assertEqual(row.details["fields_changed"], ["tournament_id"])
+        self.assertEqual(row.details["before_tournament_id"], self.tournament.pk)

@@ -725,6 +725,7 @@ class TeamView(viewsets.ModelViewSet):
             deleted = serializer.instance.pk is None
             extras: dict[str, Any] = {}
             after: dict[str, Any] | None = None
+            moved_to: Tournament | None = None
             if deleted:
                 team = None
                 requested = self._requested_snapshot(serializer.validated_data)
@@ -743,6 +744,11 @@ class TeamView(viewsets.ModelViewSet):
                     )
                 after = roster_snapshot(team)
                 fields_changed = sorted(k for k in before if before[k] != after[k])
+                if team.tournament_id != snapshot["tournament_id"]:
+                    fields_changed.append("tournament_id")
+                    extras["before_tournament_id"] = snapshot["tournament_id"]
+                    moved_to = team.tournament
+                snapshot = log_snapshot_fields(team)
 
             if fields_changed:
                 team_log = write_team_log(
@@ -759,8 +765,7 @@ class TeamView(viewsets.ModelViewSet):
                         **extras,
                     },
                 )
-                if deleted or set(fields_changed) - {"name"}:
-                    send_roster_changed_on_commit(change_from_log(team_log))
+                send_roster_changed_on_commit(change_from_log(team_log))
                 user_ids = {
                     *before["member_ids"],
                     *before["dropin_ids"],
@@ -776,6 +781,8 @@ class TeamView(viewsets.ModelViewSet):
                     to_invalidate.append(team)
                 if tournament is not None:
                     to_invalidate.append(tournament)
+                if moved_to is not None:
+                    to_invalidate.append(moved_to)
                 invalidate_after_commit(*to_invalidate)
 
         if deleted:

@@ -37,7 +37,11 @@ from app.services.team_audit import log_snapshot_fields, roster_snapshot, write_
 from app.services.team_leadership import successor_after_removal
 from app.services.team_management import follow_captain
 from app.services.team_references import team_references
-from app.services.team_signals import team_audit_owner
+from app.services.team_signals import (
+    change_from_log,
+    send_roster_changed_on_commit,
+    team_audit_owner,
+)
 from app.services.team_signals import team_roster_changed as team_roster_changed
 from app.services.tournament_completion import sync_tournament_completion
 from league.models import LeagueUser
@@ -98,6 +102,29 @@ def _handle_reverse_member_change(
         _after_members_removed(team, {user.pk})
 
 
+def _write_system_log(team: Team, **kwargs: Any) -> None:
+    """Write a via=system row, then invalidate and notify like the service does."""
+    row = write_team_log(
+        team, snapshot=log_snapshot_fields(team), via=TeamLogVia.SYSTEM, **kwargs
+    )
+    details = row.details or {}
+    user_ids = {
+        pk
+        for snap in (details.get("before") or {}, details.get("after") or {})
+        for pk in (snap.get("captain_id"), snap.get("deputy_captain_id"))
+        if pk is not None
+    }
+    to_invalidate: list[Any] = list(
+        CustomUser.objects.nocache().filter(pk__in=user_ids)
+    )
+    if team.pk is not None:
+        to_invalidate.append(team)
+    if team.tournament_id is not None:
+        to_invalidate.append(team.tournament)
+    invalidate_after_commit(*to_invalidate)
+    send_roster_changed_on_commit(change_from_log(row))
+
+
 def _before_removal(team: Team, removed_pks: set[int]) -> dict[str, Any]:
     before = roster_snapshot(team)
     before["member_ids"] = sorted(set(before["member_ids"]) | removed_pks)
@@ -132,11 +159,9 @@ def _after_members_removed(team: Team, removed_pks: set[int]) -> None:
     follow_up: dict[str, Any] = {}
     if captain is not None and captain.pk != getattr(old_captain, "pk", None):
         follow_up = follow_captain(team, old_captain, captain, actor=None)
-    write_team_log(
+    _write_system_log(
         team,
-        snapshot=log_snapshot_fields(team),
         action=TeamLogAction.SYSTEM_SUCCESSION,
-        via=TeamLogVia.SYSTEM,
         target_user=captain,
         details={
             "before": before,
@@ -161,11 +186,9 @@ def _handle_empty_team(team: Team, removed_pks: set[int]) -> None:
             references=references,
         )
         if not owned:
-            write_team_log(
+            _write_system_log(
                 team,
-                snapshot=log_snapshot_fields(team),
                 action=TeamLogAction.EMPTY_TEAM_KEPT,
-                via=TeamLogVia.SYSTEM,
                 details={
                     "before": _before_removal(team, removed_pks),
                     "after": roster_snapshot(team),
@@ -175,11 +198,9 @@ def _handle_empty_team(team: Team, removed_pks: set[int]) -> None:
         return
 
     if not owned:
-        write_team_log(
+        _write_system_log(
             team,
-            snapshot=log_snapshot_fields(team),
             action=TeamLogAction.TEAM_DELETED,
-            via=TeamLogVia.SYSTEM,
             details={"before": _before_removal(team, removed_pks)},
         )
     log.info(

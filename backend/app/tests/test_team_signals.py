@@ -8,6 +8,9 @@ Verifies:
 - Cascade from tournament.users to team.members
 """
 
+from typing import Any
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.utils import timezone
 
@@ -26,7 +29,11 @@ from app.models import (
     Tournament,
 )
 from app.services.team_leadership import successor_after_removal
-from app.services.team_signals import owning_team_audit
+from app.services.team_signals import (
+    TeamRosterChange,
+    owning_team_audit,
+    team_roster_changed,
+)
 from org.models import OrgUser
 
 
@@ -643,3 +650,67 @@ class SuccessorAfterRemovalTests(TestCase):
             successor_after_removal(self.team, {self.users[0].pk}),
             (self.users[1], None, "lowest_pk"),
         )
+
+
+class SystemRowSignalTests(TestCase):
+    def setUp(self) -> None:
+        self.tournament = Tournament.objects.create(
+            name="Signal Tournament",
+            tournament_type="single_elimination",
+            date_played=timezone.now(),
+        )
+        self.users = [_make_user(f"sig_{i}") for i in range(3)]
+        self.tournament.users.set(self.users)
+        self.team = Team.objects.create(tournament=self.tournament, name="Sig Team")
+        self.team.members.set(self.users)
+        self.team.captain = self.users[0]
+        self.team.deputy_captain = self.users[1]
+        self.team.save()
+        self.changes: list[TeamRosterChange] = []
+
+        def receiver(sender: type, change: TeamRosterChange, **kwargs: Any) -> None:
+            self.changes.append(change)
+
+        team_roster_changed.connect(receiver, sender=Team, weak=False)
+        self.addCleanup(team_roster_changed.disconnect, receiver, sender=Team)
+
+    def test_succession_row_sends_signal_and_invalidates(self) -> None:
+        with patch("app.signals.invalidate_after_commit") as invalidate:
+            with self.captureOnCommitCallbacks(execute=True):
+                self.tournament.users.remove(self.users[0])
+
+        row = TeamLog.objects.get(team=self.team)
+        self.assertEqual([c.log_id for c in self.changes], [row.pk])
+        self.assertEqual(self.changes[0].action, "system_succession")
+        invalidated = {
+            (type(obj).__name__, obj.pk)
+            for c in invalidate.call_args_list
+            for obj in c.args
+        }
+        self.assertIn(("Team", self.team.pk), invalidated)
+        self.assertIn(("Tournament", self.tournament.pk), invalidated)
+        self.assertIn(("CustomUser", self.users[1].pk), invalidated)
+
+    def test_deleted_team_row_sends_signal(self) -> None:
+        old_pk = self.team.pk
+        with self.captureOnCommitCallbacks(execute=True):
+            self.team.members.clear()
+
+        row = TeamLog.objects.get(team_snapshot_id=old_pk)
+        self.assertEqual([c.log_id for c in self.changes], [row.pk])
+        self.assertEqual(self.changes[0].action, "team_deleted")
+
+    def test_kept_team_row_sends_signal(self) -> None:
+        Game.objects.create(tournament=self.tournament, radiant_team=self.team)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.team.members.clear()
+
+        row = TeamLog.objects.get(team_snapshot_id=self.team.pk)
+        self.assertEqual([c.action for c in self.changes], ["empty_team_kept"])
+        self.assertEqual(self.changes[0].log_id, row.pk)
+
+    def test_owned_changes_send_nothing_from_signal_path(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            with owning_team_audit():
+                self.team.members.remove(self.users[0])
+        self.assertEqual(self.changes, [])
