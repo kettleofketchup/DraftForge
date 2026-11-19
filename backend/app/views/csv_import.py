@@ -63,8 +63,6 @@ def _parse_positions(value: Any) -> tuple[dict[str, int] | None, str | None]:
     Unlisted positions default to 0.
 
     Example: '1:3:2' → carry=5, offlane=4, mid=3, soft_support=0, hard_support=0
-
-    Returns (dict, error) tuple.
     """
     if not value or str(value).strip() == "":
         return None, None
@@ -84,7 +82,7 @@ def _parse_positions(value: Any) -> tuple[dict[str, int] | None, str | None]:
     result = {f: 0 for f in POSITION_FIELDS}
     for rank, pos_num in enumerate(pos_nums):
         field = POSITION_NUM_TO_FIELD[pos_num]
-        result[field] = 5 - rank  # rank 0 → 5, rank 1 → 4, etc.
+        result[field] = 5 - rank
     return result, None
 
 
@@ -103,14 +101,11 @@ def _update_positions_if_empty(
 def _resolve_user_for_csv_row(
     row: dict[str, Any],
 ) -> tuple[CustomUser | None, bool, str | None, list[CustomUser] | None]:
-    """
-    Resolve or create a user from a CSV row.
+    """Resolve or create a user from a CSV row.
 
-    Returns (user, created, error, conflict_users) tuple.
-    - user: CustomUser instance or None
-    - created: bool - True if a new stub user was created
-    - error: str or None - error message (user will be None)
-    - conflict_users: list[CustomUser] or None - users involved in ID conflict
+    Returns (user, created, error, conflict_users). created is True for a new
+    stub user; on error, user is None and conflict_users lists any users whose
+    IDs clash.
     """
     steam_id_str = row.get("steam_friend_id")
     discord_id_str = row.get("discord_id")
@@ -125,7 +120,6 @@ def _resolve_user_for_csv_row(
     if discord_id == "" or discord_id == "None":
         discord_id = None
 
-    # Clean discord_username
     discord_username = (
         str(discord_username_str).strip() if discord_username_str else None
     )
@@ -209,7 +203,6 @@ def _resolve_user_for_csv_row(
                     user.discordUsername = discord_username
                     if not user.username:
                         user.username = f"discord_{discord_username}"
-                # Set nickname from 'name' column if provided
                 name = row.get("name")
                 if name:
                     name = str(name).strip()
@@ -296,30 +289,25 @@ def import_csv_org(request: Request, org_id: int) -> Response:
             summary["errors"] += 1
             continue
 
-        # Parse base_mmr
         base_mmr, mmr_err = _parse_int(row.get("mmr"), "mmr")
         if mmr_err:
             results.append({"row": i + 1, "status": "error", "reason": mmr_err})
             summary["errors"] += 1
             continue
 
-        # Parse positions
         positions_dict, pos_err = _parse_positions(row.get("positions"))
         if pos_err:
             results.append({"row": i + 1, "status": "error", "reason": pos_err})
             summary["errors"] += 1
             continue
 
-        # Set nickname from CSV 'name' column if user has no nickname.
-        # T1.5+: nickname is a property over base_profile.nickname; the
-        # setter already persists via bp.save(update_fields=["nickname"]).
-        # An explicit CustomUser.save(update_fields=["nickname"]) would now
-        # crash because `nickname` is not a model field.
+        # Set nickname from CSV 'name' column if user has no nickname. The
+        # setter persists to base_profile; nickname is not a CustomUser field,
+        # so save(update_fields=["nickname"]) would raise.
         csv_name = (row.get("name") or "").strip()
         if csv_name and not user.nickname:
             user.nickname = csv_name
 
-        # Update positions if user has all defaults (zeros)
         _update_positions_if_empty(user, positions_dict)
 
         # Try to create OrgUser (savepoint needed for SQLite IntegrityError recovery)
@@ -375,7 +363,6 @@ def import_csv_org(request: Request, org_id: int) -> Response:
         results.append(result)
         summary["added"] += 1
 
-        # Log the action
         OrgLog.objects.create(
             organization=org,
             actor=request.user,
@@ -488,33 +475,27 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
             summary["errors"] += 1
             continue
 
-        # Parse base_mmr
         base_mmr, mmr_err = _parse_int(row.get("mmr"), "mmr")
         if mmr_err:
             results.append({"row": i + 1, "status": "error", "reason": mmr_err})
             summary["errors"] += 1
             continue
 
-        # Parse positions
         positions_dict, pos_err = _parse_positions(row.get("positions"))
         if pos_err:
             results.append({"row": i + 1, "status": "error", "reason": pos_err})
             summary["errors"] += 1
             continue
 
-        # Set nickname from CSV 'name' column if user has no nickname.
-        # T1.5+: nickname is a property over base_profile.nickname; the
-        # setter already persists via bp.save(update_fields=["nickname"]).
-        # An explicit CustomUser.save(update_fields=["nickname"]) would now
-        # crash because `nickname` is not a model field.
+        # Set nickname from CSV 'name' column if user has no nickname. The
+        # setter persists to base_profile; nickname is not a CustomUser field,
+        # so save(update_fields=["nickname"]) would raise.
         csv_name = (row.get("name") or "").strip()
         if csv_name and not user.nickname:
             user.nickname = csv_name
 
-        # Update positions if user has all defaults (zeros)
         _update_positions_if_empty(user, positions_dict)
 
-        # Check if already in tournament
         if tournament.users.filter(pk=user.pk).exists():
             if update_mmr and base_mmr is not None:
                 _update_mmr_for_target(user, org, league, mmr_target, base_mmr)
@@ -563,7 +544,6 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
                     defaults={"org_user": org_user, "mmr": base_mmr},
                 )
 
-        # Add to tournament
         tournament.users.add(user)
 
         # Handle team assignment
