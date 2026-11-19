@@ -187,7 +187,7 @@ class OrgCSVImportTest(TestCase):
         )
 
     def test_conflict_name_falls_back_to_user_pk(self) -> None:
-        steam_only = CustomUser.objects.create(
+        nameless = CustomUser.objects.create(
             username=None, steamid=76561198055555555, discordId="555555555555555555"
         )
         reason = self._conflict_reason(
@@ -198,7 +198,7 @@ class OrgCSVImportTest(TestCase):
         )
         self.assertEqual(
             reason,
-            f"User {steam_only.pk} is already linked to a different Discord account",
+            f"User {nameless.pk} is already linked to a different Discord account",
         )
 
     def test_import_update_mmr_for_existing_member(self):
