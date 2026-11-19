@@ -23,27 +23,18 @@
     }
   },
   "app/components/bracket/modals/MatchStatsModal.tsx": {
-    "draftforge/use-user-avatar": {
-      "count": 1
-    },
     "shadcn/no-raw-colors": {
       "count": 8
     }
   },
   "app/components/bracket/modals/PlayerStatsTable.tsx": {
-    "draftforge/use-display-name": {
-      "count": 1
-    },
     "shadcn/no-raw-colors": {
       "count": 15
     }
   },
   "app/components/bracket/modals/SteamMatchCard.tsx": {
-    "draftforge/use-user-avatar": {
-      "count": 1
-    },
     "shadcn/no-raw-colors": {
-      "count": 4
+      "count": 3
     }
   },
   "app/components/bracket/nodes/HeroIconRow.tsx": {
@@ -94,17 +85,11 @@
     }
   },
   "app/components/game/gameCard/gameCard.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
       "count": 3
     }
   },
   "app/components/herodraft/CompletedDraftView.tsx": {
-    "draftforge/use-user-avatar": {
-      "count": 1
-    },
     "shadcn/no-raw-colors": {
       "count": 7
     }
@@ -273,9 +258,6 @@
     }
   },
   "app/components/teamdraft/TeamPositionCoverage.tsx": {
-    "draftforge/use-display-name": {
-      "count": 4
-    },
     "shadcn/no-raw-colors": {
       "count": 11
     }
