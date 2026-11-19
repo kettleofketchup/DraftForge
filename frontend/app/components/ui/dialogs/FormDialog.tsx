@@ -57,6 +57,10 @@ export interface FormDialogProps {
   'data-testid'?: string;
   /** Test ID for the title heading */
   titleTestId?: string;
+  /** Wraps the scrollable body, e.g. to put navigation beside it. */
+  frame?: (body: React.ReactNode) => React.ReactNode;
+  /** Replaces the size's default class on the body's ScrollArea. */
+  scrollClassName?: string;
 }
 
 const sizeClasses: Record<FormDialogSize, string> = {
@@ -104,6 +108,8 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       className,
       'data-testid': dataTestId,
       titleTestId,
+      frame,
+      scrollClassName,
     },
     ref,
   ) => {
@@ -187,6 +193,16 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
           event.preventDefault();
           return;
         }
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLInputElement &&
+          active.dataset.escapeClears !== undefined &&
+          active.value
+        ) {
+          // The input's own keydown clears it.
+          event.preventDefault();
+          return;
+        }
         if (!escapeBlursToContent) return;
         if (document.activeElement === contentRef.current) return;
         event.preventDefault();
@@ -220,6 +236,26 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
     );
 
     const isScreen = size === 'screen';
+
+    const scrollBody = (
+      <ScrollArea
+        className={
+          scrollClassName ??
+          (isScreen
+            ? 'flex-1 min-h-0 overflow-hidden -mx-6 px-6'
+            : 'max-h-[calc(100svh-10rem)] sm:max-h-[60vh] pr-4')
+        }
+      >
+        {/* px-1 py-1 leaves room for focus rings (3px box-shadow on
+            shadcn Input/Button) which would otherwise be clipped by
+            Radix Viewport's overflow:hidden. `relative` keeps absolutely
+            positioned hidden inputs (Radix Select's native select) inside
+            the scroll viewport instead of overflowing the root. */}
+        <form onSubmit={handleSubmit} className="relative space-y-4 px-1 py-1">
+          {children}
+        </form>
+      </ScrollArea>
+    );
 
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -260,25 +296,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
             )}
           </DialogHeader>
 
-          <ScrollArea
-            className={
-              isScreen
-                ? 'flex-1 min-h-0 overflow-hidden -mx-6 px-6'
-                : 'max-h-[calc(100svh-10rem)] sm:max-h-[60vh] pr-4'
-            }
-          >
-            {/* px-1 py-1 leaves room for focus rings (3px box-shadow on
-                shadcn Input/Button) which would otherwise be clipped by
-                Radix Viewport's overflow:hidden. `relative` keeps absolutely
-                positioned hidden inputs (Radix Select's native select) inside
-                the scroll viewport instead of overflowing the root. */}
-            <form
-              onSubmit={handleSubmit}
-              className="relative space-y-4 px-1 py-1"
-            >
-              {children}
-            </form>
-          </ScrollArea>
+          {frame ? frame(scrollBody) : scrollBody}
 
           {showFooter && (
             <DialogFooter className="flex-row justify-end gap-2">
