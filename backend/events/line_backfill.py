@@ -1,9 +1,9 @@
 """Stamp line position and add ``backfilled`` ledger entries for existing signups.
 
-Shared by migration 0026 and the ``backfill_signup_line`` command. Models are
+Shared by migration 0027 and the ``backfill_signup_line`` command. Models are
 resolved from the registry passed in, never imported, and every read and write
 goes through ``_base_manager`` so the live ``first_*`` guards do not apply. If a
-later schema change breaks this module, freeze its current body into 0026.
+later schema change breaks this module, freeze its current body into 0027.
 """
 
 from collections import defaultdict
@@ -240,7 +240,7 @@ def backfill_signup_line(apps: Apps) -> BackfillResult:
 
 
 def unbackfill_signup_line(apps: Apps) -> None:
-    """Reverse of 0026 only; never call it on the live registry."""
+    """Reverse of 0027 only; never call it on the live registry."""
     EventSignup = apps.get_model("events", "EventSignup")
     SignupLedgerEntry = apps.get_model("events", "SignupLedgerEntry")
     SignupLedgerEntry._base_manager.filter(action=SignupAction.BACKFILLED).delete()

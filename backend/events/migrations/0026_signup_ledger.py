@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('app', '0106_draftoptions_hero_grace_time_ms_and_more'),
-        ('events', '0024_backfill_event_draft_options'),
+        ('events', '0025_eventsignup_unmet_requirements'),
         ('user', '0004_backfill_game_profiles'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

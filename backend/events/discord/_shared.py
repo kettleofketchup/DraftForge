@@ -16,7 +16,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from discordbot.models import DiscordEventLog
+from events.admission import self_serve_refusal
 from events.constants import SignupStatus
+from events.eligibility import steam_friend_id_from_profiles, unmet_labels
 from events.models import Event, EventSignup
 from telemetry.logging import get_logger
 
@@ -28,17 +30,7 @@ log = get_logger(__name__)
 
 
 def _steam_friend_id_prefill(org_user: OrgUser) -> str:
-    """Steam friend id from either game profile.
-
-    One Steam account backs both games, so a Deadlock signup prefills from a
-    known Dota friend id and vice versa. Splitting the handlers per game
-    (#274) dropped this cross-game fallback; keep it in one place.
-    """
-    for attr in ("dota_profile", "deadlock_profile"):
-        value = getattr(getattr(org_user, attr, None), "unverified_friend_id", "")
-        if value:
-            return value
-    return ""
+    return steam_friend_id_from_profiles(org_user)
 
 
 def _log_interaction(
@@ -91,6 +83,23 @@ def _log_signup(
             error=str(e),
             exc_info=True,
         )
+
+
+def _discord_self_serve_refusal(event: Event, discord_user_id: int | str) -> str | None:
+    """Refusal message when members may not add themselves, logged; else None."""
+    reason = self_serve_refusal(event)
+    if reason is not None:
+        log.info(
+            "signup_self_serve_refused",
+            system="discord",
+            subsystem="interaction",
+            tags=["events", "signup"],
+            tags_csv="events,signup",
+            event_id=event.pk,
+            discord_user_id=str(discord_user_id),
+            reason=reason,
+        )
+    return reason
 
 
 def _load_event(
@@ -205,7 +214,7 @@ def _existing_active_signup(event: Event, user: CustomUser) -> EventSignup | Non
     )
 
 
-def _direct_signup(event: Event, user: CustomUser) -> dict[str, str]:
+def _direct_signup(event: Event, user: CustomUser) -> dict[str, object]:
     """process_rsvp happy path: persist + log signup_persisted, return dict.
 
     Raises ValueError on rejection so callers can attach endpoint-specific
@@ -222,4 +231,7 @@ def _direct_signup(event: Event, user: CustomUser) -> dict[str, str]:
         signup_id=signup.pk,
         signup_status=signup.status,
     )
-    return {"action": "signed_up", "status": signup.status}
+    result: dict[str, object] = {"action": "signed_up", "status": signup.status}
+    if signup.status == SignupStatus.PENDING_APPROVAL:
+        result["unmet_labels"] = unmet_labels(signup.unmet_requirements)
+    return result

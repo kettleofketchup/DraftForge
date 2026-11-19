@@ -35,10 +35,10 @@ def _ids(rows: list[dict[str, Any]], statuses: set[str]) -> list[int]:
 
 class BackfillSignupLineMigrationTest(MigratorTestCase):
     migrate_from = [
-        ("events", "0024_backfill_event_draft_options"),
+        ("events", "0025_eventsignup_unmet_requirements"),
         ("user", "0004_backfill_game_profiles"),
     ]
-    migrate_to = ("events", "0026_backfill_signup_line")
+    migrate_to = ("events", "0027_backfill_signup_line")
 
     def prepare(self) -> None:
         apps = self.old_state.apps
@@ -192,8 +192,8 @@ class BackfillSignupLineMigrationTest(MigratorTestCase):
 
 
 class BackfillSignupLineReverseTest(MigratorTestCase):
-    migrate_from = ("events", "0026_backfill_signup_line")
-    migrate_to = ("events", "0025_signup_ledger")
+    migrate_from = ("events", "0027_backfill_signup_line")
+    migrate_to = ("events", "0026_signup_ledger")
 
     def prepare(self) -> None:
         apps = self.old_state.apps
@@ -231,7 +231,7 @@ class BackfillSignupLineReverseTest(MigratorTestCase):
         self.assertEqual(EventSignup.objects.filter(line_seq=None).count(), 3)
 
         state = self._migrator.apply_tested_migration(
-            ("events", "0026_backfill_signup_line")
+            ("events", "0027_backfill_signup_line")
         )
         Entry = state.apps.get_model("events", "SignupLedgerEntry")
         EventSignup = state.apps.get_model("events", "EventSignup")

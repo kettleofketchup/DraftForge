@@ -25,7 +25,7 @@ transport package. Request bodies for the same endpoints live in
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -65,6 +65,7 @@ class EventTaskSchema(BaseModel):
     name: str
     description: str = ""
     state: str
+    allow_user_signups: bool = True
     scheduled_at: datetime
     ends_at: datetime | None = None
     signups_open_at: Optional[datetime] = None
@@ -162,6 +163,8 @@ class EventSignupSchema(BaseModel):
     signup_type: str = "user"
     status: str = "rsvp"
     waitlist_position: Optional[int] = None
+    holds_seat: bool | None = None
+    unmet_requirements: list[str] = Field(default_factory=list)
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     signed_up_at: Optional[str] = None
@@ -248,13 +251,19 @@ class SignupInputPatch(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    unverified_friend_id: Optional[str] = Field(default=None, max_length=20)
+    # Format and uniqueness are checked by eligibility.validate_friend_id.
+    unverified_friend_id: Optional[str] = None
     positions: Optional[PositionPriorities | list[int]] = None
     rank_status: Optional[Literal["active", "previous", "never"]] = None
     rank_medal: Optional[str] = Field(default=None, max_length=64)
     battle_cup_tier: Optional[int] = Field(default=None, ge=1, le=8)
     rank_screenshot: Optional[str] = Field(default=None, max_length=500)
     battlecup_screenshot: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("unverified_friend_id", mode="before")
+    @classmethod
+    def _strip_friend_id(cls, v: object) -> object:
+        return v.strip() if isinstance(v, str) else v
 
     @field_validator("positions")
     @classmethod
@@ -285,6 +294,18 @@ class SignupModalConfig(BaseModel):
     require_steam_id: bool = True
 
 
+class SupportsDotaGates(Protocol):
+    """The Event fields the Dota gates read."""
+
+    require_steam_id: bool
+    discord_require_rank_screenshot: bool
+    discord_require_battlecup_screenshot: bool
+    min_mmr: int | None
+    allow_active_mmr: bool
+    allow_previous_rank: bool
+    allow_battlecup_rating: bool
+
+
 class DotaModalConfig(SignupModalConfig):
     kind: Literal["dota"] = "dota"
     require_rank_screenshot: bool = False
@@ -293,6 +314,30 @@ class DotaModalConfig(SignupModalConfig):
     allow_active_mmr: bool = True
     allow_previous_rank: bool = True
     allow_battlecup_rating: bool = True
+
+    @classmethod
+    def from_event(cls, event: SupportsDotaGates) -> DotaModalConfig:
+        return cls(
+            require_steam_id=event.require_steam_id,
+            require_rank_screenshot=event.discord_require_rank_screenshot,
+            require_battlecup_screenshot=event.discord_require_battlecup_screenshot,
+            min_mmr=event.min_mmr,
+            allow_active_mmr=event.allow_active_mmr,
+            allow_previous_rank=event.allow_previous_rank,
+            allow_battlecup_rating=event.allow_battlecup_rating,
+        )
+
+    def allows_rank_status(self, rank_status: str) -> bool:
+        """Whether the event accepts this rank type; unknown types are refused."""
+        flag = _RANK_STATUS_ALLOW_FLAGS.get(rank_status)
+        return flag is not None and getattr(self, flag)
+
+
+_RANK_STATUS_ALLOW_FLAGS: dict[str, str] = {
+    "active": "allow_active_mmr",
+    "previous": "allow_previous_rank",
+    "never": "allow_battlecup_rating",
+}
 
 
 class DeadlockModalConfig(SignupModalConfig):
@@ -311,9 +356,10 @@ ModalConfig = Annotated[
 def dota_require_screenshot(rank_status: str, cfg: "DotaModalConfig") -> bool:
     """Single home for the screenshot-required rule.
 
-    Called by the Dota modal follow-up (``discordbot/components/dota.py``) and
-    by ``DotaHandler`` (``events/discord/providers/dota.py``). Pure over the
-    transported config so both processes call it.
+    Called by the Dota modal follow-up (``discordbot/components/dota.py``),
+    ``DotaHandler`` (``events/discord/providers/dota.py``) and the signup
+    eligibility check (``events/eligibility.py``). Pure over the transported
+    config so every process calls it.
     """
     if rank_status == "active":
         return cfg.require_rank_screenshot
@@ -336,6 +382,7 @@ class SignupActionResponse(BaseModel):
     # already_declined | already_tentative | positions_saved |
     # position_set
     status: str | None = None  # SignupStatus value when action == "signed_up"
+    unmet_labels: list[str] | None = None  # set when status is pending_approval
     message: str | None = None  # human-readable for error / already_declined / etc.
 
     # signup_modal_submit / signup_button: needs_modal payload
@@ -400,3 +447,11 @@ def _rebuild_forward_refs() -> None:
 
 
 _rebuild_forward_refs()
+
+
+def signed_up_text(status: str, unmet_labels: list[str] | None) -> str:
+    """Discord reply after a signup; lists why it is held for approval."""
+    text = f"You're signed up! Status: **{status}**"
+    if unmet_labels:
+        text += "\nPending approval: " + ", ".join(unmet_labels)
+    return text

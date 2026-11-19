@@ -15,7 +15,7 @@ def reverse(apps: Apps, schema_editor: BaseDatabaseSchemaEditor) -> None:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("events", "0025_signup_ledger"),
+        ("events", "0026_signup_ledger"),
     ]
 
     operations = [

@@ -1,4 +1,5 @@
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 from structlog.contextvars import clear_contextvars
 
@@ -38,6 +39,7 @@ class HandleSignupButtonTest(EventTestCase):
         PlayerDotaProfile.objects.create(
             org_user=self.org_user,
             rank_status="active",
+            rank_declared_at=timezone.now(),
             rank_medal="Legend",
             pos_1=True,
             pos_2=True,

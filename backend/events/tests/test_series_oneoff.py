@@ -422,7 +422,7 @@ class CreateEventEndpointTest(EventTestCase):
         )
         self.assertEqual(resp.status_code, 400, resp.content)
 
-    @patch("app.cache_utils.invalidate_after_commit")
+    @patch("events.views.invalidate_after_commit")
     @patch("events.services.ensure_discord_event")
     @patch("events.services.create_tournament_for_event")
     @patch("events.services.notify_create_discord_event")
@@ -515,7 +515,7 @@ class ReactivateEndpointTest(EventTestCase):
         for event in survivors:
             self.assertEqual(event.name, "Renamed While Paused")
 
-    @patch("app.cache_utils.invalidate_after_commit")
+    @patch("events.views.invalidate_after_commit")
     @patch("events.services.ensure_discord_event")
     @patch("events.services.create_tournament_for_event")
     @patch("events.services.notify_create_discord_event")
