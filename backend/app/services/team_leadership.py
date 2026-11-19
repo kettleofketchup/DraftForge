@@ -27,7 +27,7 @@ def teams_with_leadership_problems(
 def successor_after_removal(
     team: Team, removed_pks: set[int]
 ) -> tuple[CustomUser | None, CustomUser | None, str]:
-    """Leadership after removing removed_pks: (captain, deputy, how). Reads current members."""
+    """Leadership after removing removed_pks: (captain, deputy, how). Works before or after removal."""
     captain_removed = team.captain_id is not None and team.captain_id in removed_pks
     deputy_removed = (
         team.deputy_captain_id is not None and team.deputy_captain_id in removed_pks
@@ -37,7 +37,7 @@ def successor_after_removal(
             return team.captain, None, "deputy_cleared"
         return team.captain, team.deputy_captain, "unchanged"
 
-    remaining = team.members.nocache().order_by("pk")
+    remaining = team.members.nocache().exclude(pk__in=removed_pks).order_by("pk")
     if (
         team.deputy_captain_id is not None
         and not deputy_removed

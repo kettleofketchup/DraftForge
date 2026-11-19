@@ -37,12 +37,14 @@ from app.services.team_management import (
     TeamManagementError,
     _apply,
     _other_team_user_ids,
+    mark_dropout,
     remove_standin,
     rename,
     restore_member,
     set_captain,
     set_deputy,
     standin_cap,
+    sub_in,
 )
 from app.services.team_signals import TeamRosterChange, team_roster_changed
 from events.models import Event
@@ -942,3 +944,281 @@ class HeroDraftCaptainCacheTests(TeamManagementFixture, TransactionTestCase):
             )
 
         self.assertEqual(self.captain_pk(), self.m1.pk)
+
+
+class DropoutTests(TeamManagementFixture, TestCase):
+    def dropout(self, user: CustomUser, **kwargs: Any) -> TeamChange:
+        kwargs.setdefault("reason", "r")
+        return mark_dropout(
+            self.team, user, actor=self.actor, via=TeamLogVia.WEB, **kwargs
+        )
+
+    def left_pks(self, team: Team) -> set[int]:
+        return set(
+            self.refresh(team).left_members.nocache().values_list("pk", flat=True)
+        )
+
+    def test_dropout_member(self) -> None:
+        change = self.dropout(self.m1)
+
+        team = self.refresh(self.team)
+        self.assertNotIn(self.m1.pk, self.member_pks(team))
+        self.assertIn(self.m1.pk, self.left_pks(team))
+        self.assertEqual(team.captain_id, self.c.pk)
+        self.assertEqual(team.deputy_captain_id, self.d.pk)
+        self.assertTrue(self.tournament.users.filter(pk=self.m1.pk).exists())
+        row = self.only_log()
+        self.assertEqual(row.pk, change.log.pk)
+        self.assertEqual(row.action, TeamLogAction.MARK_DROPOUT)
+        self.assertEqual(row.target_user_id, self.m1.pk)
+        self.assertEqual(row.details["succession"], "unchanged")
+        self.assertIn(self.m1.pk, row.details["before"]["member_ids"])
+        self.assertNotIn(self.m1.pk, row.details["after"]["member_ids"])
+
+    def test_dropout_requires_reason(self) -> None:
+        with self.assertRaises(TeamManagementError) as ctx:
+            self.dropout(self.m1, reason="")
+        self.assertEqual(ctx.exception.code, "reason_required")
+        self.assertIn(self.m1.pk, self.member_pks(self.team))
+
+    def test_self_dropout_needs_no_reason(self) -> None:
+        mark_dropout(self.team, self.m1, actor=self.m1, via=TeamLogVia.WEB)
+        self.assertNotIn(self.m1.pk, self.member_pks(self.team))
+
+    def test_dropout_non_member_refused(self) -> None:
+        with self.assertRaises(TeamManagementError) as ctx:
+            self.dropout(self.outsider)
+        self.assertEqual(ctx.exception.code, "not_member")
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_dropout_last_member_refused(self) -> None:
+        with self.assertRaises(TeamManagementError) as ctx:
+            mark_dropout(
+                self.other, self.o1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+            )
+        self.assertEqual(ctx.exception.code, "last_member")
+        other = self.refresh(self.other)
+        self.assertEqual(self.member_pks(other), {self.o1.pk})
+        self.assertEqual(other.captain_id, self.o1.pk)
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_dropout_deputy_clears_deputy(self) -> None:
+        change = self.dropout(self.d)
+
+        team = self.refresh(self.team)
+        self.assertIsNone(team.deputy_captain_id)
+        self.assertEqual(team.captain_id, self.c.pk)
+        self.assertIn(self.d.pk, self.left_pks(team))
+        self.assertEqual(change.log.details["succession"], "deputy_cleared")
+        self.assertEqual(_problems(team), {})
+
+    def test_dropout_captain_uses_deputy(self) -> None:
+        draft = Draft.objects.create(
+            tournament=self.tournament,
+            state=TeamDraftState.DRAFTING,
+            draft_style="snake",
+        )
+        open_round = DraftRound.objects.create(
+            draft=draft, captain=self.c, pick_number=1
+        )
+
+        change = self.dropout(self.c)
+
+        team = self.refresh(self.team)
+        self.assertEqual(team.captain_id, self.d.pk)
+        self.assertIsNone(team.deputy_captain_id)
+        self.assertIn(self.c.pk, self.left_pks(team))
+        self.assertEqual(
+            DraftRound.objects.nocache().get(pk=open_round.pk).captain_id, self.d.pk
+        )
+        details = change.log.details
+        self.assertEqual(details["succession"], "deputy")
+        self.assertEqual(details["draft_rounds_updated"], 1)
+        self.assertNotIn("added_to_tournament", details)
+        self.assertEqual(_problems(team), {})
+
+    def test_dropout_captain_mmr_successor_added_to_tournament(self) -> None:
+        Team.objects.filter(pk=self.team.pk).update(deputy_captain=None)
+        high = CustomUser.objects.create_user(username="roster_high", password="t")
+        OrgUser.objects.create(user=high, organization=self.org, mmr=9000)
+        self.team.members.add(high)
+        OrgUser.objects.filter(user=self.c).update(mmr=12000)
+        self.assertFalse(self.tournament.users.filter(pk=high.pk).exists())
+
+        change = self.dropout(self.c)
+
+        team = self.refresh(self.team)
+        self.assertEqual(team.captain_id, high.pk)
+        self.assertTrue(self.tournament.users.filter(pk=high.pk).exists())
+        self.assertTrue(self.tournament.users.filter(pk=self.c.pk).exists())
+        details = change.log.details
+        self.assertEqual(details["succession"], "org_mmr")
+        self.assertTrue(details["added_to_tournament"])
+
+    def test_dropout_does_not_fire_signal_rows(self) -> None:
+        draft = Draft.objects.create(
+            tournament=self.tournament,
+            state=TeamDraftState.DRAFTING,
+            draft_style="snake",
+        )
+        DraftRound.objects.create(draft=draft, captain=self.c, pick_number=1)
+        DraftRound.objects.create(draft=draft, captain=self.c, pick_number=3)
+
+        follow = patch.object(
+            team_management,
+            "follow_captain",
+            wraps=team_management.follow_captain,
+        )
+        with follow as spy:
+            change = self.dropout(self.c)
+
+        spy.assert_called_once()
+        self.assertEqual(TeamLog.objects.count(), 1)
+        self.assertEqual(self.only_log().pk, change.log.pk)
+        self.assertEqual(change.log.details["draft_rounds_updated"], 2)
+        self.assertEqual(
+            DraftEvent.objects.filter(draft=draft, event_type="team_changed").count(),
+            1,
+        )
+
+    def test_dropout_on_ghost_captain_team(self) -> None:
+        team = self.make_ghost_captain(self.team, self.outsider)
+
+        mark_dropout(team, self.m1, actor=self.actor, via=TeamLogVia.WEB, reason="r")
+
+        self.assertEqual(
+            _problems(self.team), {"captain": LeadershipProblem.CAPTAIN_NOT_MEMBER}
+        )
+
+    def test_dropout_captain_repairs_deputy_is_captain(self) -> None:
+        self.make_deputy_is_captain(self.team)
+
+        change = self.dropout(self.c)
+
+        team = self.refresh(self.team)
+        self.assertNotEqual(team.captain_id, self.c.pk)
+        self.assertIn(team.captain_id, self.member_pks(team))
+        self.assertIsNone(team.deputy_captain_id)
+        self.assertEqual(change.log.details["succession"], "org_mmr")
+        self.assertEqual(_problems(team), {})
+
+
+class SubInTests(TeamManagementFixture, TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.standin = self.make_user("roster_standin")
+        self.team.dropin_members.add(self.standin)
+
+    def sub(
+        self, standin: CustomUser, replacing: CustomUser | None = None, **kwargs: Any
+    ) -> TeamChange:
+        kwargs.setdefault("reason", "r")
+        return sub_in(
+            self.team,
+            standin,
+            replacing,
+            actor=self.actor,
+            via=TeamLogVia.WEB,
+            **kwargs,
+        )
+
+    def test_sub_in_grows_roster(self) -> None:
+        change = self.sub(self.standin)
+
+        team = self.refresh(self.team)
+        self.assertEqual(
+            self.member_pks(team),
+            {self.c.pk, self.d.pk, self.m1.pk, self.m2.pk, self.standin.pk},
+        )
+        self.assertFalse(
+            team.dropin_members.nocache().filter(pk=self.standin.pk).exists()
+        )
+        row = self.only_log()
+        self.assertEqual(row.pk, change.log.pk)
+        self.assertEqual(row.action, TeamLogAction.SUB_IN)
+        self.assertEqual(row.target_user_id, self.standin.pk)
+        self.assertIsNone(row.details["replacing_user_id"])
+        self.assertNotIn("succession", row.details)
+
+    def test_sub_in_replacing_member(self) -> None:
+        change = self.sub(self.standin, self.m1)
+
+        team = self.refresh(self.team)
+        self.assertIn(self.standin.pk, self.member_pks(team))
+        self.assertNotIn(self.m1.pk, self.member_pks(team))
+        self.assertTrue(team.left_members.nocache().filter(pk=self.m1.pk).exists())
+        details = self.only_log().details
+        self.assertEqual(details["replacing_user_id"], self.m1.pk)
+        self.assertEqual(details["succession"], "unchanged")
+        self.assertEqual(change.log.target_user_id, self.standin.pk)
+
+    def test_sub_in_replacing_captain(self) -> None:
+        draft = Draft.objects.create(
+            tournament=self.tournament,
+            state=TeamDraftState.DRAFTING,
+            draft_style="snake",
+        )
+        open_round = DraftRound.objects.create(
+            draft=draft, captain=self.c, pick_number=1
+        )
+
+        change = self.sub(self.standin, self.c)
+
+        team = self.refresh(self.team)
+        self.assertEqual(team.captain_id, self.d.pk)
+        self.assertIsNone(team.deputy_captain_id)
+        self.assertIn(self.standin.pk, self.member_pks(team))
+        self.assertTrue(team.left_members.nocache().filter(pk=self.c.pk).exists())
+        self.assertEqual(
+            DraftRound.objects.nocache().get(pk=open_round.pk).captain_id, self.d.pk
+        )
+        details = change.log.details
+        self.assertEqual(details["succession"], "deputy")
+        self.assertEqual(details["replacing_user_id"], self.c.pk)
+        self.assertEqual(TeamLog.objects.count(), 1)
+        self.assertEqual(_problems(team), {})
+
+    def test_sub_in_replacing_last_member(self) -> None:
+        self.other.dropin_members.add(self.outsider)
+
+        sub_in(
+            self.other,
+            self.outsider,
+            self.o1,
+            actor=self.actor,
+            via=TeamLogVia.WEB,
+            reason="r",
+        )
+
+        other = self.refresh(self.other)
+        self.assertEqual(self.member_pks(other), {self.outsider.pk})
+        self.assertEqual(other.captain_id, self.outsider.pk)
+        self.assertTrue(self.tournament.users.filter(pk=self.outsider.pk).exists())
+
+    def test_sub_in_non_standin_refused(self) -> None:
+        with self.assertRaises(TeamManagementError) as ctx:
+            self.sub(self.outsider)
+        self.assertEqual(ctx.exception.code, "not_standin")
+        self.assertIn("add them as a stand-in first", ctx.exception.message)
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_sub_in_replacing_non_member_refused(self) -> None:
+        with self.assertRaises(TeamManagementError) as ctx:
+            self.sub(self.standin, self.outsider)
+        self.assertEqual(ctx.exception.code, "replacing_not_member")
+        team = self.refresh(self.team)
+        self.assertTrue(
+            team.dropin_members.nocache().filter(pk=self.standin.pk).exists()
+        )
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_sub_in_reason_covers_replaced_player(self) -> None:
+        with self.assertRaises(TeamManagementError) as ctx:
+            sub_in(
+                self.team,
+                self.standin,
+                self.m1,
+                actor=self.standin,
+                via=TeamLogVia.WEB,
+            )
+        self.assertEqual(ctx.exception.code, "reason_required")

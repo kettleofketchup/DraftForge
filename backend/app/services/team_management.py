@@ -33,6 +33,7 @@ from app.services.team_audit import (
     source_event,
     write_team_log,
 )
+from app.services.team_leadership import successor_after_removal
 from app.services.team_signals import (
     change_from_log,
     owning_team_audit,
@@ -69,6 +70,7 @@ Validate = Callable[[Team], Iterable[Violation]]
 Mutate = Callable[[Team], dict[str, Any] | None]
 UsersOf = Callable[[Team], Iterable[CustomUser | None]]
 UserOf = Callable[[Team], CustomUser | None]
+TouchedOf = Callable[[Team], Collection[LeadershipKey]]
 
 
 class TeamManagementError(Exception):
@@ -279,7 +281,7 @@ def _apply(
     affected_users: UsersOf,
     validate: Validate,
     mutate: Mutate,
-    touched: Collection[LeadershipKey],
+    touched: Collection[LeadershipKey] | TouchedOf,
 ) -> TeamChange:
     reason = (reason or "").strip()
     fields: dict[str, Any] = {
@@ -302,6 +304,7 @@ def _apply(
             pairs_before = _problem_pairs(before)
 
             violations = list(validate(locked))
+            touched_keys = set(touched(locked) if callable(touched) else touched)
             affected = [u for u in affected_users(locked) if u is not None]
             target = target_user(locked)
             if (
@@ -330,7 +333,7 @@ def _apply(
             after = roster_snapshot(changed)
             pairs_after = _problem_pairs(after)
             new_pairs = pairs_after - pairs_before
-            dirty = sorted(key for key, _ in pairs_after if key in set(touched))
+            dirty = sorted(key for key, _ in pairs_after if key in touched_keys)
             if new_pairs or dirty:
                 log.error(
                     "team_change_invariant_failed",
@@ -625,4 +628,113 @@ def set_captain(
         validate=validate,
         mutate=mutate,
         touched=("captain",),
+    )
+
+
+def _dropout_mutation(
+    team: Team, user: CustomUser, *, actor: CustomUser | None
+) -> dict[str, Any]:
+    """Leadership first, then add to left_members before removing from members."""
+    captain, deputy, how = successor_after_removal(team, {user.pk})
+    extras: dict[str, Any] = {"succession": how}
+    if team.deputy_captain_id != getattr(deputy, "pk", None):
+        team.deputy_captain = deputy
+        team.save(update_fields=["deputy_captain"])
+    if captain is not None and captain.pk != team.captain_id:
+        extras.update(_change_captain(team, captain, actor=actor))
+    team.left_members.add(user)
+    team.members.remove(user)
+    return extras
+
+
+def _leadership_touched_by(user: CustomUser | None) -> TouchedOf:
+    def touched(locked: Team) -> tuple[LeadershipKey, ...]:
+        if user is not None and user.pk == locked.captain_id:
+            return ("captain", "deputy_captain")
+        return ()
+
+    return touched
+
+
+def mark_dropout(
+    team: Team,
+    user: CustomUser,
+    *,
+    actor: CustomUser | None,
+    via: TeamLogVia,
+    reason: str = "",
+    acknowledged_codes: Collection[str] = (),
+) -> TeamChange:
+    def validate(locked: Team) -> list[Violation]:
+        if not _is_member(locked, user):
+            raise TeamManagementError(
+                "not_member", "Only members of this team can be marked as dropouts."
+            )
+        if not locked.members.nocache().exclude(pk=user.pk).exists():
+            raise TeamManagementError(
+                "last_member",
+                "This is the team's last member. Sub in a stand-in to replace them.",
+            )
+        return []
+
+    return _apply(
+        team,
+        TeamLogAction.MARK_DROPOUT,
+        actor=actor,
+        via=via,
+        reason=reason,
+        acknowledged_codes=acknowledged_codes,
+        target_user=lambda locked: user,
+        affected_users=lambda locked: [user],
+        validate=validate,
+        mutate=lambda locked: _dropout_mutation(locked, user, actor=actor),
+        touched=_leadership_touched_by(user),
+    )
+
+
+def sub_in(
+    team: Team,
+    standin: CustomUser,
+    replacing: CustomUser | None = None,
+    *,
+    actor: CustomUser | None,
+    via: TeamLogVia,
+    reason: str = "",
+    acknowledged_codes: Collection[str] = (),
+) -> TeamChange:
+    def validate(locked: Team) -> list[Violation]:
+        if not _is_standin(locked, standin):
+            raise TeamManagementError(
+                "not_standin",
+                "Only stand-ins can be subbed in: add them as a stand-in first.",
+            )
+        if replacing is not None and not _is_member(locked, replacing):
+            raise TeamManagementError(
+                "replacing_not_member",
+                "The player being replaced must be a member of this team.",
+            )
+        return []
+
+    def mutate(locked: Team) -> dict[str, Any]:
+        locked.members.add(standin)
+        locked.dropin_members.remove(standin)
+        extras: dict[str, Any] = {
+            "replacing_user_id": replacing.pk if replacing is not None else None
+        }
+        if replacing is not None:
+            extras.update(_dropout_mutation(locked, replacing, actor=actor))
+        return extras
+
+    return _apply(
+        team,
+        TeamLogAction.SUB_IN,
+        actor=actor,
+        via=via,
+        reason=reason,
+        acknowledged_codes=acknowledged_codes,
+        target_user=lambda locked: standin,
+        affected_users=lambda locked: [standin, replacing],
+        validate=validate,
+        mutate=mutate,
+        touched=_leadership_touched_by(replacing),
     )
