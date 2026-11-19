@@ -47,6 +47,7 @@ from discordbot.internal_client.signup_actions import (
     signup_modal_submit,
 )
 from discordbot.log_context import discord_log_context
+from events.schemas import signed_up_text
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -403,7 +404,7 @@ class DotaComponents(GameComponentProvider):
                 )
             else:
                 await interaction.edit_original_response(
-                    content=f"✅ {label} set to **{medal_with_star}**. You're signed up! Status: **{result['status']}**",
+                    content=f"✅ {label} set to **{medal_with_star}**. {signed_up_text(result['status'], result.get('unmet_labels'))}",
                     view=None,
                 )
 
@@ -454,7 +455,7 @@ class DotaComponents(GameComponentProvider):
                 )
             else:
                 await interaction.edit_original_response(
-                    content=f"✅ Battle Cup tier {tier} saved. You're signed up! Status: **{result['status']}**",
+                    content=f"✅ Battle Cup tier {tier} saved. {signed_up_text(result['status'], result.get('unmet_labels'))}",
                     view=None,
                 )
 
@@ -618,7 +619,7 @@ class DotaSignupModal(ui.Modal):
             elif result["action"] == "signed_up":
                 await respond_to_signup_user(
                     interaction,
-                    content=f"✅ You're signed up! Status: **{result['status']}**",
+                    content=f"✅ {signed_up_text(result['status'], result.get('unmet_labels'))}",
                 )
             elif result["action"] == "error":
                 await interaction.response.send_message(

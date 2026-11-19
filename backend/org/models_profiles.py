@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 class PlayerProfileMixin(models.Model):
@@ -28,6 +29,15 @@ class PlayerDotaProfile(PlayerProfileMixin):
         ("previous", "Previously Ranked"),
         ("never", "Never Ranked"),
     ]
+    RANK_STATUSES = tuple(value for value, _ in RANK_STATUS_CHOICES)
+    DEFAULT_RANK_STATUS = "never"
+    # Same rule as the org 0011 backfill (org/tests/rank_evidence_cases.py).
+    RANK_EVIDENCE_FIELDS = (
+        "rank_medal",
+        "battle_cup_tier",
+        "rank_screenshot",
+        "battlecup_screenshot",
+    )
 
     org_user = models.OneToOneField(
         "org.OrgUser",
@@ -35,7 +45,12 @@ class PlayerDotaProfile(PlayerProfileMixin):
         related_name="dota_profile",
     )
     rank_status = models.CharField(
-        max_length=10, choices=RANK_STATUS_CHOICES, default="never"
+        max_length=10, choices=RANK_STATUS_CHOICES, default=DEFAULT_RANK_STATUS
+    )
+    rank_declared_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the player last chose a rank status; null means undeclared",
     )
     rank_medal = models.CharField(
         max_length=50,
@@ -76,10 +91,41 @@ class PlayerDotaProfile(PlayerProfileMixin):
     pos_4 = models.BooleanField(default=False, help_text="Soft Support")
     pos_5 = models.BooleanField(default=False, help_text="Hard Support")
 
+    def declare_rank(self, rank_status: str) -> None:
+        """Record an explicit rank answer; the caller saves."""
+        if rank_status not in self.RANK_STATUSES:
+            raise ValueError(f"Unknown rank status: {rank_status!r}")
+        self.rank_status = rank_status
+        self.rank_declared_at = timezone.now()
+
+    @property
+    def is_rank_declared(self) -> bool:
+        return (
+            self.rank_declared_at is not None and self.rank_status in self.RANK_STATUSES
+        )
+
+    def has_rank_evidence(self) -> bool:
+        """True when the row departs from the default rank answer."""
+        return self.rank_status != self.DEFAULT_RANK_STATUS or any(
+            getattr(self, field) not in ("", None)
+            for field in self.RANK_EVIDENCE_FIELDS
+        )
+
+    def sync_rank_declaration(self, previous_status: str) -> None:
+        """Declare after an edit that changed the status or added rank evidence.
+
+        Re-sending the stored status alone (as the profile card does) is not a
+        declaration; the caller saves.
+        """
+        if self.rank_status != previous_status or (
+            self.rank_declared_at is None and self.has_rank_evidence()
+        ):
+            self.declare_rank(self.rank_status)
+
     class Meta:
         verbose_name = "Player Dota Profile"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.org_user} — Dota ({self.rank_status})"
 
 
@@ -106,5 +152,5 @@ class PlayerDeadlockProfile(PlayerProfileMixin):
     class Meta:
         verbose_name = "Player Deadlock Profile"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.org_user} — Deadlock ({self.rank or 'unranked'})"

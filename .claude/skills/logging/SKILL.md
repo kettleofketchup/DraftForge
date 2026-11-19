@@ -40,7 +40,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `herodraft` | `view` | — | `app/functions/herodraft_views.py` | HeroDraft HTTP actions: create, roll, choice/pick submit, abandon, reset |
 | `celery` | `task` | — | `telemetry/celery.py` | Generic Celery task lifecycle bookends (started/completed/failed) |
 | `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
-| `events` | `scheduling` | — | `events/tasks.py` | Event generation, signup opening, repeaters |
+| `events` | `scheduling` | — | `events/tasks.py`, `events/management/` | Event generation, signup opening, repeaters |
 | `tournament` | `discord` | — | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
 | `avatars` | `endpoint` | — | `user/internal/avatar.py` | Internal endpoints: list-linked-users, list-guild-ids, bulk-update + invalidate |
 | `avatars` | `refresh` | — | `app/tasks/avatar_refresh.py::refresh_avatars_batched` | Daily Celery beat: read guild-member cache, diff against DB, POST bulk-update |

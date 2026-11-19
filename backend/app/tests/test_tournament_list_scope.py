@@ -172,7 +172,10 @@ class TournamentListScopeTests(TestCase):
             ("organizations=0", "organizations"),
             ("organizations=-3", "organizations"),
             ("organizations=1,,2", "organizations"),
-            ("organizations=" + ",".join(str(i) for i in range(1, 102)), "organizations"),
+            (
+                "organizations=" + ",".join(str(i) for i in range(1, 102)),
+                "organizations",
+            ),
             ("open_signups=yes", "open_signups"),
             ("open_signups=", "open_signups"),
             (f"organization={1}&organizations=2", "organizations"),
@@ -189,7 +192,6 @@ class TournamentListScopeTests(TestCase):
         event = Event.objects.get(tournament=self.rows["away_open"])
         event.signup_deadline_hours = 1
         event.signups_open_at = NOW + timedelta(hours=1)
-        event.allow_user_signups = False
         event.save()
         later = event.scheduled_at - timedelta(minutes=30)
         with mock.patch("app.tournament_buckets._now", return_value=later):
@@ -197,3 +199,9 @@ class TournamentListScopeTests(TestCase):
         self.assertEqual(
             {row["pk"] for row in response.json()}, self.pk_set("away_open")
         )
+
+    def test_open_signups_excludes_events_without_self_serve(self) -> None:
+        event = Event.objects.get(tournament=self.rows["away_open"])
+        event.allow_user_signups = False
+        event.save()
+        self.assertEqual(self.pks("?bucket=upcoming&open_signups=1"), set())

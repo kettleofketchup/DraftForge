@@ -21,7 +21,9 @@ class UserSignupsOpenTournamentIdsTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.org = Organization.objects.create(name="Window Org")
         cls.league = League.objects.create(organization=cls.org, name="Window League")
-        cls.user = CustomUser.objects.create_user(username="window_player", password="x")
+        cls.user = CustomUser.objects.create_user(
+            username="window_player", password="x"
+        )
         cls.user.positions = PositionsModel.objects.create()
         cls.user.save()
 
@@ -74,7 +76,6 @@ class UserSignupsOpenTournamentIdsTests(TestCase):
         for overrides in (
             {"signups_open_at": now + timedelta(days=1)},
             {"scheduled_at": now + timedelta(minutes=30), "signup_deadline_hours": 1},
-            {"allow_user_signups": False},
         ):
             with self.subTest(**{k: str(v) for k, v in overrides.items()}):
                 _, tournament = self._event(**overrides)
