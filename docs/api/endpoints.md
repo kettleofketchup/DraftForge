@@ -230,12 +230,12 @@ organization's owner, admins and staff. A team without a tournament can't be man
 | Method | Endpoint | Body |
 |--------|----------|------|
 | POST | `/api/teams/{id}/set-captain/` | `{user_id, reason, acknowledged_codes?}` |
-| POST | `/api/teams/{id}/set-deputy/` | `{user_id: int \| null, reason, acknowledged_codes?}` (`null` clears the deputy) |
+| POST | `/api/teams/{id}/set-deputy/` | `{user_id, reason, acknowledged_codes?}`; `user_id` is an int or `null` (`null` clears the deputy) |
 | POST | `/api/teams/{id}/dropout/` | `{user_id, reason, acknowledged_codes?}` |
 | POST | `/api/teams/{id}/restore/` | `{user_id, reason, acknowledged_codes?}` |
 | POST | `/api/teams/{id}/standins/` | `{user_id, reason, acknowledged_codes?}` |
 | POST | `/api/teams/{id}/standins/remove/` | `{user_id, reason, acknowledged_codes?}` |
-| POST | `/api/teams/{id}/sub-in/` | `{standin_id, replacing_id?: int \| null, reason, acknowledged_codes?}` |
+| POST | `/api/teams/{id}/sub-in/` | `{standin_id, replacing_id?, reason, acknowledged_codes?}`; `replacing_id` is an int or `null` |
 | POST | `/api/teams/{id}/rename/` | `{name, reason, acknowledged_codes?}` |
 | GET | `/api/teams/{id}/history/?page=&page_size=` | none |
 
@@ -255,15 +255,19 @@ eligibility rules).
 | Refused by the team service | 400 | `{code, detail}`, e.g. `{"code": "not_member", "detail": "..."}` |
 | Override needed | 409 | The staff override body |
 
-Refusal codes include `already_captain`, `already_deputy`, `no_deputy`,
-`deputy_is_standin`, `not_member`, `not_dropout`, `not_standin`, `already_on_team`,
-`on_other_team`, `replacing_not_member`, `last_member` (a dropout can't empty the team),
+Refusal codes include `already_captain`, `captain_not_member` (`set-captain/` with a
+user who is neither a member nor a stand-in), `already_deputy`, `no_deputy`,
+`deputy_is_captain`, `deputy_not_member`, `deputy_is_standin`, `not_member`,
+`not_dropout`, `not_standin`, `already_on_team`, `on_other_team`,
+`replacing_not_member`, `last_member` (a dropout can't empty the team),
 `leadership_invariant`, `name_blank`, `name_too_long` and `name_unchanged`.
+`captain_not_member`, `deputy_not_member` and `deputy_is_captain` are the same code
+strings that `leadership_problems` uses (below).
 
-A successful action can also change rows outside the team: a stand-in or new captain
-joins the tournament's players, and a captain change moves draft rounds and resets hero
-draft readiness. Refetch the tournament after a success; the returned team is for the
-management dialog.
+A successful action can also change rows outside the team: a subbed-in stand-in or a new
+captain joins the tournament's players, and a captain change moves draft rounds and
+resets hero draft readiness. Refetch the tournament after a success; the returned team is
+for the management dialog.
 
 #### Stand-in override
 
