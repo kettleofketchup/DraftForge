@@ -82,12 +82,7 @@ export function MemberBreakdown({
         {data ? (
           <div className="flex items-center gap-2">
             <UserAvatar
-              user={{
-                pk: data.member.user_pk,
-                username: data.member.username,
-                nickname: data.member.nickname,
-                avatarUrl: data.member.avatarUrl,
-              }}
+              user={{ ...data.member, pk: data.member.user_pk }}
               size="md"
             />
             <h3 className="text-lg font-semibold">

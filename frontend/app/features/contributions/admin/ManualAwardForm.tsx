@@ -19,6 +19,7 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
+import { DisplayName } from '~/components/user/avatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
@@ -56,10 +57,6 @@ export interface ManualAwardFormProps {
   /** Edit this manual entry instead of creating a new award. */
   entry?: AdminEntry;
   onDone?: () => void;
-}
-
-function memberName(member: AwardMember): string {
-  return member.nickname || member.username;
 }
 
 function numberOrNaN(value: string): number {
@@ -145,9 +142,7 @@ export function ManualAwardForm({
         {isEdit ? (
           <p className="text-sm">
             Member:{' '}
-            <span className="font-medium">
-              {entry.member.nickname || entry.member.username}
-            </span>
+            <span className="font-medium">{DisplayName(entry.member)}</span>
           </p>
         ) : (
           <FormField
@@ -176,7 +171,7 @@ export function ManualAwardForm({
                         value={String(m.pk)}
                         data-testid={`manual-award-member-${m.pk}`}
                       >
-                        {memberName(m)}
+                        {DisplayName(m)}
                       </BrandSelectItem>
                     ))}
                   </BrandSelectContent>

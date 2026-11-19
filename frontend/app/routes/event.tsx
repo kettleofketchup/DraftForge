@@ -120,6 +120,7 @@ import {
 import type { DotaProfileData } from '~/components/user';
 import { UserEventStrip } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import {
   removeFeatureQueries,
@@ -1249,9 +1250,7 @@ function SignupsTab({
                         size="sm"
                         depth={false}
                         onClick={() => {
-                          const name = user
-                            ? user.nickname || user.username
-                            : `User #${signup.user}`;
+                          const name = DisplayName(user ?? signup);
                           setRemoveSignup({ signup, name });
                         }}
                       >
@@ -1341,7 +1340,7 @@ function SignupsTab({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">
-                  {signup.username ?? `User #${signup.user}`}
+                  {DisplayName(signup)}
                 </p>
               </div>
               {statusSlot}
@@ -1358,10 +1357,9 @@ function SignupsTab({
         }}
         onApprove={(signupId, mmr) => {
           const previousMmr = approvalSignup?.org_user_mmr ?? null;
-          const playerName =
-            approvalSignup?.user_data?.username ??
-            approvalSignup?.username ??
-            `User #${approvalSignup?.user ?? signupId}`;
+          const playerName = approvalSignup
+            ? DisplayName(approvalSignup)
+            : `User #${signupId}`;
           signupActions.approve.mutate(
             { id: signupId, mmr },
             {
@@ -1389,10 +1387,9 @@ function SignupsTab({
         isApproving={signupActions.approve.isPending}
         isRejecting={signupActions.reject.isPending}
         onReject={(signupId) => {
-          const playerName =
-            approvalSignup?.user_data?.username ??
-            approvalSignup?.username ??
-            `User #${approvalSignup?.user ?? signupId}`;
+          const playerName = approvalSignup
+            ? DisplayName(approvalSignup)
+            : `User #${signupId}`;
           signupActions.reject.mutate(signupId, {
             onSuccess: () => {
               setApprovalSignup(null);

@@ -246,6 +246,31 @@ describe('contributions admin section', () => {
     expect(screen.getByTestId('ledger-row-31')).toHaveTextContent('Casting');
   });
 
+  it('names ledger members by their org server nickname on the org page', async () => {
+    vi.mocked(getEntries).mockResolvedValue({
+      count: 1,
+      limit: 50,
+      offset: 0,
+      results: [
+        {
+          ...entry(31, 'manual'),
+          member: { ...member, nickname: 'Ali', guildNickname: 'ServerAlice' },
+          awarded_by: { pk: 8, username: 'boss' },
+        },
+      ],
+    });
+    window.history.pushState({}, '', '/organizations/7');
+    try {
+      renderTab(admin);
+      const row = await screen.findByTestId('ledger-row-31');
+      expect(row).toHaveTextContent('ServerAlice');
+      expect(row).not.toHaveTextContent('Ali ');
+      expect(row).toHaveTextContent('by boss');
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
+  });
+
   it('blocks a manual award with a blank reason', async () => {
     renderTab(admin);
     fireEvent.click(await screen.findByTestId('manual-award-submit'));

@@ -662,12 +662,8 @@ export function AdminTeamSection({
         description={
           <>
             Are you sure you want to transfer ownership to{' '}
-            <strong>
-              {transferTarget?.guildNickname ||
-                transferTarget?.discordNickname ||
-                transferTarget?.username}
-            </strong>
-            ? You will become an admin after the transfer.
+            <strong>{transferTarget && DisplayName(transferTarget)}</strong>?
+            You will become an admin after the transfer.
           </>
         }
         confirmLabel="Transfer"
