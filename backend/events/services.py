@@ -20,6 +20,7 @@ from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
     REGISTERED_SIGNUP_STATUSES,
+    ActorRole,
     Commitment,
     EventState,
     RepeatFrequency,
@@ -40,6 +41,7 @@ from events.eligibility import (
     unmet_requirements,
     validate_friend_id,
 )
+from events.ledger import SignupActor
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -69,6 +71,7 @@ from events.roster import (
 from events.schemas import DotaModalConfig
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
 from lobby.passwords import PasswordMode, generate_password
+from org.conduct.capture import capture_late_cancel
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 from telemetry.logging import get_logger
@@ -346,7 +349,9 @@ def process_rsvp(
 
 
 @transaction.atomic
-def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
+def create_tentative_signup(
+    event: Event, user: CustomUser, *, actor: SignupActor | None = None
+) -> EventSignup:
     """Create a TENTATIVE EventSignup, upgrading any active signup to tentative.
 
     Funnel point for both the DRF action and the Discord tentative button.
@@ -373,6 +378,14 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
         if existing.status == SignupStatus.DROPPED:
             raise ValueError(DROPPED_SIGNUP_MESSAGE)
         if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+            if (
+                actor is not None
+                and actor.role == ActorRole.MEMBER
+                and existing.status in seat_holding_statuses(event)
+            ):
+                capture_late_cancel(
+                    existing, prior_status=existing.status, now=timezone.now()
+                )
             cancel_signup(existing)
             notify_scheduled_by_cancel = True
         EventSignup.objects.filter(pk=existing.pk).delete()
@@ -389,7 +402,9 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
 
 
 @transaction.atomic
-def decline_signup(event: Event, user: CustomUser) -> EventSignup:
+def decline_signup(
+    event: Event, user: CustomUser, *, actor: SignupActor | None = None
+) -> EventSignup:
     """Record that a user declined an event.
 
     Cancels an existing active/tentative signup, or creates a CANCELLED row so
@@ -400,7 +415,7 @@ def decline_signup(event: Event, user: CustomUser) -> EventSignup:
     if existing:
         if existing.status in REMOVED_SIGNUP_STATUSES:
             raise ValueError("Already declined")
-        return cancel_signup(existing)
+        return cancel_signup(existing, actor=actor)
 
     signup = EventSignup.objects.create(
         event=event, user=user, status=SignupStatus.CANCELLED
@@ -646,13 +661,17 @@ def confirm_signup(signup: EventSignup) -> EventSignup:
 
 
 @transaction.atomic
-def cancel_signup(signup: EventSignup) -> EventSignup:
+def cancel_signup(
+    signup: EventSignup, *, actor: SignupActor | None = None
+) -> EventSignup:
     """Cancel a signup."""
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
     signup.save(update_fields=["status", "updated_at"])
+    if actor is not None and actor.role == ActorRole.MEMBER:
+        capture_late_cancel(signup, prior_status=prior_status, now=timezone.now())
     _roster_remove_if_left(signup)
     if prior_status in seat_holding_statuses(signup.event):
         _promote_from_waitlist(signup.event)

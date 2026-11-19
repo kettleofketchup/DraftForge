@@ -1,11 +1,17 @@
 from datetime import datetime, timedelta
 
 from django.db import transaction
+from django.urls import reverse
 from django.utils import timezone as tz
+from rest_framework.test import APIClient
 
 from app.models import CustomUser
-from events.constants import EventState, SignupStatus
+from discordbot.models import DiscordMessageLog
+from events.constants import ActorRole, EventState, SignupMeans, SignupStatus
+from events.discord import handle_decline_button, handle_reaction_cancel
+from events.ledger import SignupActor
 from events.models import Event, EventSignup
+from events.services import cancel_signup, create_tentative_signup
 from org.conduct.capture import capture_late_cancel
 from org.conduct.constants import Outcome, OutcomeSource
 from org.models import OrgUser
@@ -185,3 +191,119 @@ class CaptureLateCancelTest(ConductTestCase):
         assert row is not None
         org_user = OrgUser.objects.nocache().get(user=user, organization=self.org)
         self.assertEqual(row.org_user_id, org_user.pk)
+
+
+class CaptureWiringTest(ConductTestCase):
+    def setUp(self) -> None:
+        self.unlock()
+        self.client = APIClient()
+        self.member = self.make_user()
+        self.member.discordId = "555000111222333444"
+        self.member.save()
+        self.event = self.make_event(scheduled_at=tz.now() + timedelta(hours=1))
+
+    def _rows(self) -> int:
+        return AttendanceOutcome.objects.nocache().filter(event=self.event).count()
+
+    def _web_cancel(self, actor: CustomUser, signup: EventSignup) -> None:
+        self.client.force_authenticate(actor)
+        response = self.client.post(
+            reverse("event-signup-cancel-signup", args=[signup.pk])
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def _member_actor(self) -> SignupActor:
+        return SignupActor(
+            user=self.member, role=ActorRole.MEMBER, means=SignupMeans.WEB
+        )
+
+    def test_member_web_cancel_captures(self) -> None:
+        signup = self.signup(self.event, self.member, SignupStatus.APPROVED)
+        self._web_cancel(self.member, signup)
+        row = AttendanceOutcome.objects.nocache().get(event=self.event)
+        self.assertEqual(row.outcome, Outcome.LATE_CANCEL)
+        self.assertEqual(row.source, OutcomeSource.LATE_CANCEL)
+
+    def test_staff_web_cancel_does_not_capture(self) -> None:
+        signup = self.signup(self.event, self.member, SignupStatus.APPROVED)
+        self._web_cancel(self.admin, signup)
+        self.assertEqual(self._rows(), 0)
+
+    def test_staff_cancelling_own_signup_captures(self) -> None:
+        signup = self.signup(self.event, self.admin, SignupStatus.APPROVED)
+        self._web_cancel(self.admin, signup)
+        row = AttendanceOutcome.objects.nocache().get(event=self.event)
+        self.assertEqual(row.org_user.user_id, self.admin.pk)
+
+    def test_discord_decline_captures(self) -> None:
+        self.signup(self.event, self.member, SignupStatus.APPROVED)
+        result = handle_decline_button(self.event.pk, self.member.discordId)
+        self.assertEqual(result["action"], "declined")
+        row = AttendanceOutcome.objects.nocache().get(event=self.event)
+        self.assertEqual(row.outcome, Outcome.LATE_CANCEL)
+
+    def _reaction_message(self) -> str:
+        DiscordMessageLog.objects.create(
+            channel_id="1482767177063858216",
+            embed_data={"title": "Test"},
+            source="event_announcement",
+            source_id=self.event.pk,
+            discord_message_id="777666555",
+            success=True,
+        )
+        return "777666555"
+
+    def test_reaction_removal_captures(self) -> None:
+        message_id = self._reaction_message()
+        self.signup(self.event, self.member, SignupStatus.APPROVED)
+        success, detail = handle_reaction_cancel(message_id, self.member.discordId)
+        self.assertTrue(success, detail)
+        row = AttendanceOutcome.objects.nocache().get(event=self.event)
+        self.assertEqual(row.outcome, Outcome.LATE_CANCEL)
+
+    def test_reaction_removal_on_completed_event_noop(self) -> None:
+        message_id = self._reaction_message()
+        Event.objects.filter(pk=self.event.pk).update(
+            state=EventState.COMPLETED, conduct_finalized_at=tz.now()
+        )
+        self.signup(self.event, self.member, SignupStatus.APPROVED)
+        before = self.outcome(self.member, event=self.event)
+        handle_reaction_cancel(message_id, self.member.discordId)
+        after = AttendanceOutcome.objects.nocache().get(pk=before.pk)
+        self.assertEqual(after.outcome, Outcome.ATTENDED)
+        self.assertEqual(after.updated_at, before.updated_at)
+        self.assertEqual(self._rows(), 1)
+
+    def test_member_cancel_after_completed_and_finalized_noop(self) -> None:
+        Event.objects.filter(pk=self.event.pk).update(
+            state=EventState.COMPLETED, conduct_finalized_at=tz.now()
+        )
+        signup = self.signup(self.event, self.member, SignupStatus.APPROVED)
+        before = self.outcome(self.member, event=self.event)
+        self._web_cancel(self.member, signup)
+        after = AttendanceOutcome.objects.nocache().get(pk=before.pk)
+        self.assertEqual(after.outcome, Outcome.ATTENDED)
+        self.assertEqual(after.updated_at, before.updated_at)
+
+    def test_cancel_after_staff_cancel_creates_no_row(self) -> None:
+        Event.objects.filter(pk=self.event.pk).update(state=EventState.CANCELLED)
+        signup = self.signup(self.event, self.member, SignupStatus.APPROVED)
+        with transaction.atomic():
+            cancel_signup(signup, actor=self._member_actor())
+        self.assertEqual(self._rows(), 0)
+
+    def test_tentative_switch_captures_once(self) -> None:
+        self.signup(self.event, self.member, SignupStatus.APPROVED)
+        create_tentative_signup(self.event, self.member, actor=self._member_actor())
+        self.assertEqual(AttendanceOutcome.objects.nocache().count(), 1)
+        row = AttendanceOutcome.objects.nocache().get(event=self.event)
+        self.assertEqual(row.outcome, Outcome.LATE_CANCEL)
+        self.assertEqual(
+            EventSignup.objects.get(event=self.event, user=self.member).status,
+            SignupStatus.TENTATIVE,
+        )
+
+    def test_tentative_from_waitlist_no_capture(self) -> None:
+        self.signup(self.event, self.member, SignupStatus.WAITLISTED)
+        create_tentative_signup(self.event, self.member, actor=self._member_actor())
+        self.assertEqual(self._rows(), 0)

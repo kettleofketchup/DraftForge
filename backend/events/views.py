@@ -44,8 +44,9 @@ from app.permissions_org import (
 from events.admission import ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
-from events.constants import EventState
+from events.constants import ActorRole, EventState
 from events.discord import notify_create_discord_event, notify_signup_changed
+from events.ledger import SignupActor
 from events.models import (
     Event,
     EventRepeater,
@@ -890,7 +891,9 @@ class EventViewSet(viewsets.ModelViewSet):
                 if intent == "rsvp":
                     signup = process_rsvp(event, request.user)
                 else:
-                    signup = create_tentative_signup(event, request.user)
+                    signup = create_tentative_signup(
+                        event, request.user, actor=SignupActor.from_request(request)
+                    )
         except DjangoValidationError as exc:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
             return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
@@ -1272,14 +1275,16 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"])
     def cancel_signup(self, request: Request, pk: str | None = None) -> Response:
         signup = self.get_object()
-        if signup.user != request.user and not has_event_staff_access(
-            request.user, signup.event
-        ):
+        is_staff_action = signup.user_id != request.user.pk
+        if is_staff_action and not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        actor = SignupActor.from_request(
+            request, role=ActorRole.STAFF if is_staff_action else ActorRole.MEMBER
+        )
         try:
             return Response(
                 EventSignupSerializer(
-                    cancel_signup(signup), context={"request": request}
+                    cancel_signup(signup, actor=actor), context={"request": request}
                 ).data
             )
         except ValueError as e:
