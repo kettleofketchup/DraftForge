@@ -1,8 +1,8 @@
+import type { EventSignupType } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
 import { RolePositions } from '~/components/user/positions';
-import { dotaProfileToPositions } from '~/components/user/UserEventStrip';
 import type { UserType } from '~/components/user/types';
-import type { EventSignupType } from '~/components/events/schemas';
+import { dotaProfileToPositions } from '~/components/user/UserEventStrip';
 
 import { BaseRankSignalsCard } from '../BaseRankSignalsCard';
 
@@ -10,7 +10,9 @@ interface Dota2RankSignalsCardProps {
   signup: EventSignupType;
 }
 
-function rangeSourceLabel(source: EventSignupType['suggested_mmr_range_source']) {
+function rangeSourceLabel(
+  source: EventSignupType['suggested_mmr_range_source'],
+) {
   if (source === 'medal') return 'medal';
   if (source === 'battle_cup') return 'battle cup';
   return null;
@@ -27,7 +29,14 @@ function computeRangeDiscrepancy(signup: EventSignupType) {
 
   const gap = prior < low ? low - prior : prior - high;
   const pct = gap / prior;
-  return { prior, low, high, sourceLabel, direction: prior < low ? 'below' : 'above', pct };
+  return {
+    prior,
+    low,
+    high,
+    sourceLabel,
+    direction: prior < low ? 'below' : 'above',
+    pct,
+  };
 }
 
 /**
@@ -41,7 +50,10 @@ export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
   const [rangeLow, rangeHigh] = signup.suggested_mmr_range;
 
   const positionsUser = profile?.positions
-    ? ({ ...({} as UserType), positions: dotaProfileToPositions(profile.positions) } as UserType)
+    ? ({
+        ...({} as UserType),
+        positions: dotaProfileToPositions(profile.positions),
+      } as UserType)
     : null;
 
   const isPrevious = profile?.rank_status === 'previous';
@@ -50,34 +62,44 @@ export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
   const warning = discrepancy ? (
     <div
       data-testid="rank-signals-discrepancy"
-      className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-200"
+      className="mt-2 rounded-md border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning"
     >
       <span className="font-semibold">Possible discrepancy: </span>
       previously approved MMR ({discrepancy.prior.toLocaleString()}) is{' '}
-      {Math.round(discrepancy.pct * 100)}% {discrepancy.direction} the {discrepancy.sourceLabel}{' '}
-      range ({discrepancy.low.toLocaleString()}&ndash;{discrepancy.high.toLocaleString()}).
-      Verify before approving.
+      {Math.round(discrepancy.pct * 100)}% {discrepancy.direction} the{' '}
+      {discrepancy.sourceLabel} range ({discrepancy.low.toLocaleString()}&ndash;
+      {discrepancy.high.toLocaleString()}). Verify before approving.
     </div>
   ) : null;
 
   return (
     <BaseRankSignalsCard signup={signup} warning={warning}>
       {/* Self-Reported MMR (Dota — pulled from PlayerDotaProfile.mmr) */}
-      <div className="flex justify-between items-center" data-testid="rank-signals-self-report">
+      <div
+        className="flex justify-between items-center"
+        data-testid="rank-signals-self-report"
+      >
         <span className="text-muted-foreground">Self-Reported MMR</span>
-        <span className={profile?.mmr != null ? 'font-mono' : 'text-muted-foreground'}>
+        <span
+          className={
+            profile?.mmr != null ? 'font-mono' : 'text-muted-foreground'
+          }
+        >
           {profile?.mmr != null ? profile.mmr.toLocaleString() : '—'}
         </span>
       </div>
 
       {/* Rank (medal) */}
-      <div className="flex justify-between items-center" data-testid="rank-signals-medal">
+      <div
+        className="flex justify-between items-center"
+        data-testid="rank-signals-medal"
+      >
         <span className="text-muted-foreground">Rank</span>
         {profile?.rank_medal ? (
           <span className="flex items-center">
             <Badge
               variant="outline"
-              className="px-1.5 py-0 text-xs font-medium text-amber-300 border-amber-500/30"
+              className="px-1.5 py-0 text-xs font-medium text-rank-ranked border-rank-ranked/30"
             >
               {profile.rank_medal}
             </Badge>
@@ -92,12 +114,16 @@ export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
       </div>
 
       {/* Battle Cup Tier */}
-      <div className="flex justify-between items-center" data-testid="rank-signals-battle-cup">
+      <div
+        className="flex justify-between items-center"
+        data-testid="rank-signals-battle-cup"
+      >
         <span className="text-muted-foreground">Battle Cup Tier</span>
-        {profile?.rank_status === 'never' && profile?.battle_cup_tier != null ? (
+        {profile?.rank_status === 'never' &&
+        profile?.battle_cup_tier != null ? (
           <Badge
             variant="outline"
-            className="px-1.5 py-0 text-xs font-medium text-blue-300 border-blue-500/30"
+            className="px-1.5 py-0 text-xs font-medium text-rank-unranked border-rank-unranked/30"
           >
             Tier {profile.battle_cup_tier}
           </Badge>
@@ -113,7 +139,12 @@ export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
           data-testid="rank-signals-positions"
         >
           <span className="text-muted-foreground">Positions</span>
-          <RolePositions user={positionsUser} compact disableTooltips unranked />
+          <RolePositions
+            user={positionsUser}
+            compact
+            disableTooltips
+            unranked
+          />
         </div>
       )}
     </BaseRankSignalsCard>

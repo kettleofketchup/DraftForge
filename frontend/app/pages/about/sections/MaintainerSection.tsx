@@ -71,7 +71,7 @@ export function MaintainerSection() {
               <UserAvatar user={getKettle()} size="xl" />
             </div>
             <div>
-              <h2 className="text-red-500 text-xl font-semibold leading-snug">
+              <h2 className="text-role-admin text-xl font-semibold leading-snug">
                 KettleOfKetchup
               </h2>
               <p className="text-base-content/70">Site Owner & Developer</p>
@@ -79,22 +79,22 @@ export function MaintainerSection() {
           </div>
 
           <div className="bg-base-content/5 rounded-lg p-6 border border-base-content/10">
-            <h3 className="text-xl font-semibold text-red-600 mb-3">
+            <h3 className="text-xl font-semibold text-role-admin mb-3">
               About Me
             </h3>
             <p className="text-base-content mb-4">
               The driving force behind this website, KettleOfKetchup is
               responsible for maintaining, developing, and continuously
-              improving this tournament and guild management system. With a passion for both
-              Dota 2 and software development, they ensure that DraftForge remains a
-              cutting-edge solution for gaming communities.
+              improving this tournament and guild management system. With a
+              passion for both Dota 2 and software development, they ensure that
+              DraftForge remains a cutting-edge solution for gaming communities.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Badge className="bg-indigo-800 text-white">
+              <Badge className="bg-role-staff text-white">
                 <Code />
                 Software Developer
               </Badge>
-              <Badge className="bg-red-800 text-white">
+              <Badge className="bg-role-admin text-white">
                 <Binary />
                 Exploitation Dev
               </Badge>
