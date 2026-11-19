@@ -244,14 +244,6 @@
       "count": 2
     }
   },
-  "app/components/teamdraft/TeamPositionCoverage.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 15
-    },
-    "shadcn/no-raw-colors": {
-      "count": 11
-    }
-  },
   "app/components/teamdraft/TieRollPopup.tsx": {
     "shadcn/no-raw-colors": {
       "count": 5
@@ -473,36 +465,6 @@
       "count": 6
     }
   },
-  "app/components/user/positions/icons/carry.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/user/positions/icons/hardSupportIcon.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
-  "app/components/user/positions/icons/mid.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/user/positions/icons/offlane.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/user/positions/icons/softSupport.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
-  "app/components/user/positions/index.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 28
-    }
-  },
   "app/components/user/searchUser.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 1
@@ -544,11 +506,6 @@
   "app/pages/herodraft/HeroDraftPage.tsx": {
     "shadcn/no-raw-colors": {
       "count": 3
-    }
-  },
-  "app/pages/profile/forms/position.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
     }
   },
   "app/pages/profile/profile.tsx": {
