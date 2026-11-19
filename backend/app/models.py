@@ -1639,6 +1639,7 @@ class Draft(models.Model):
             self.tournament.users.nocache()
             .exclude(id__in=excluded_ids)
             .exclude(id__in=self.tournament.draft_locked_user_ids())
+            .exclude(teams_as_member__tournament=self.tournament)
             .distinct()
         )
 

@@ -2,15 +2,31 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Literal
 
+from cacheops import invalidate_obj
 from django.db import transaction
 from django.db.models import Q
 
+from app.broadcast import broadcast_herodraft_state
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Team, TeamLog, TeamLogAction, TeamLogVia
+from app.functions.teamdraft import emit_event
+from app.models import (
+    CustomUser,
+    Draft,
+    DraftRound,
+    DraftTeam,
+    HeroDraft,
+    HeroDraftState,
+    Team,
+    TeamDraftState,
+    TeamLog,
+    TeamLogAction,
+    TeamLogVia,
+)
 from app.services.team_audit import (
     log_snapshot_fields,
     roster_snapshot,
@@ -28,7 +44,8 @@ from events.overrides import (
     Violation,
     check_overrides,
 )
-from org.models import OrgSettings
+from league.models import LeagueUser
+from org.models import OrgSettings, OrgUser
 from org.settings_service import get_org_settings
 from telemetry.logging import get_logger
 
@@ -36,6 +53,16 @@ log = get_logger(__name__)
 
 DEFAULT_MAX_STANDINS: int = 2
 NAME_MAX_LENGTH: int = 255
+
+PRESENCE_FIELDS: tuple[str, ...] = (
+    "draft_is_ready",
+    "draft_is_connected",
+    "draft_has_connected",
+)
+_DONE_HERODRAFT_STATES: tuple[str, ...] = (
+    HeroDraftState.COMPLETED,
+    HeroDraftState.ABANDONED,
+)
 
 LeadershipKey = Literal["captain", "deputy_captain"]
 Validate = Callable[[Team], Iterable[Violation]]
@@ -102,6 +129,123 @@ def _is_standin(team: Team, user: CustomUser) -> bool:
 
 def _is_dropout(team: Team, user: CustomUser) -> bool:
     return team.left_members.nocache().filter(pk=user.pk).exists()
+
+
+def _refresh_herodrafts(
+    team: Team, drafts: Sequence[HeroDraft], draft_teams: Sequence[DraftTeam]
+) -> None:
+    for obj in (team, *drafts, *draft_teams):
+        invalidate_obj(obj)
+    for draft in drafts:
+        broadcast_herodraft_state(draft, "team_changed")
+
+
+def follow_captain(
+    team: Team,
+    old: CustomUser | None,
+    new: CustomUser,
+    *,
+    actor: CustomUser | None,
+) -> dict[str, Any]:
+    """Move unpicked rounds to the new captain, reset presence, refresh live drafts."""
+    extras: dict[str, Any] = {}
+    if old is None:
+        extras["draft_rounds_updated"] = 0
+        extras["draft_rounds_skipped_reason"] = "no_previous_captain"
+    else:
+        rounds = DraftRound.objects.nocache().filter(
+            draft__tournament_id=team.tournament_id,
+            captain=old,
+            choice__isnull=True,
+        )
+        updated = 0
+        for draft_round in rounds.order_by("pk"):
+            draft_round.captain = new
+            draft_round.save(update_fields=["captain"])
+            updated += 1
+        extras["draft_rounds_updated"] = updated
+
+    for field in PRESENCE_FIELDS:
+        setattr(team, field, False)
+    team.save(update_fields=list(PRESENCE_FIELDS))
+    extras["presence_reset"] = True
+
+    draft = (
+        Draft.objects.nocache()
+        .filter(tournament_id=team.tournament_id)
+        .exclude(state=TeamDraftState.COMPLETED)
+        .first()
+        if team.tournament_id is not None
+        else None
+    )
+    if draft is not None:
+        emit_event(
+            draft,
+            "team_changed",
+            {"team_id": team.pk, "team_name": team.name, "pick_number": None},
+            actor,
+        )
+
+    herodrafts = list(
+        HeroDraft.objects.nocache()
+        .filter(draft_teams__tournament_team=team)
+        .exclude(state__in=_DONE_HERODRAFT_STATES)
+        .distinct()
+        .order_by("pk")
+    )
+    if herodrafts:
+        draft_teams = list(DraftTeam.objects.nocache().filter(draft__in=herodrafts))
+        transaction.on_commit(
+            partial(_refresh_herodrafts, team, herodrafts, draft_teams)
+        )
+
+    log.info(
+        "team_captain_followed",
+        system="tournament",
+        subsystem="teams",
+        team_id=team.pk,
+        old_captain_id=old.pk if old is not None else None,
+        new_captain_id=new.pk,
+        draft_rounds_updated=extras["draft_rounds_updated"],
+        herodraft_ids=[d.pk for d in herodrafts],
+    )
+    return extras
+
+
+def _change_captain(
+    team: Team, new: CustomUser, *, actor: CustomUser | None
+) -> dict[str, Any]:
+    old = team.captain
+    extras: dict[str, Any] = {}
+    tournament = team.tournament
+    if tournament is not None and not tournament.users.filter(pk=new.pk).exists():
+        league = tournament.league
+        org_id = league.organization_id if league is not None else None
+        had_org_user = (
+            org_id is not None
+            and OrgUser.objects.filter(user=new, organization_id=org_id).exists()
+        )
+        had_league_user = (
+            league is not None
+            and LeagueUser.objects.filter(user=new, league=league).exists()
+        )
+        tournament.users.add(new)
+        extras["added_to_tournament"] = True
+        extras["org_user_created"] = (
+            org_id is not None
+            and not had_org_user
+            and OrgUser.objects.filter(user=new, organization_id=org_id).exists()
+        )
+        extras["league_user_created"] = (
+            league is not None
+            and not had_league_user
+            and LeagueUser.objects.filter(user=new, league=league).exists()
+        )
+
+    team.captain = new
+    team.save(update_fields=["captain"])
+    extras.update(follow_captain(team, old, new, actor=actor))
+    return extras
 
 
 def _apply(
@@ -402,4 +546,64 @@ def restore_member(
         validate=validate,
         mutate=mutate,
         touched=(),
+    )
+
+
+def set_captain(
+    team: Team,
+    user: CustomUser,
+    *,
+    actor: CustomUser | None,
+    via: TeamLogVia,
+    reason: str = "",
+    acknowledged_codes: Collection[str] = (),
+) -> TeamChange:
+    def is_reseat(locked: Team) -> bool:
+        return user.pk == locked.captain_id and not _is_member(locked, user)
+
+    def validate(locked: Team) -> list[Violation]:
+        if is_reseat(locked):
+            if user.pk in _other_team_user_ids(locked):
+                raise TeamManagementError(
+                    "on_other_team",
+                    "This player is on another team in this tournament. "
+                    "Remove them there first.",
+                )
+            return []
+        if user.pk == locked.captain_id:
+            raise TeamManagementError(
+                "already_captain", "This player is already the captain."
+            )
+        if not (_is_member(locked, user) or _is_standin(locked, user)):
+            raise TeamManagementError(
+                "captain_not_member",
+                "The captain must be a member or stand-in of the team. Add them first.",
+            )
+        return []
+
+    def mutate(locked: Team) -> dict[str, Any]:
+        reseat = is_reseat(locked)
+        if not _is_member(locked, user):
+            locked.members.add(user)
+            locked.dropin_members.remove(user)
+            locked.left_members.remove(user)
+        if reseat:
+            return {}
+        if locked.deputy_captain_id == user.pk:
+            locked.deputy_captain = None
+            locked.save(update_fields=["deputy_captain"])
+        return _change_captain(locked, user, actor=actor)
+
+    return _apply(
+        team,
+        TeamLogAction.SET_CAPTAIN,
+        actor=actor,
+        via=via,
+        reason=reason,
+        acknowledged_codes=acknowledged_codes,
+        target_user=lambda locked: user,
+        affected_users=lambda locked: [user, locked.captain],
+        validate=validate,
+        mutate=mutate,
+        touched=("captain",),
     )

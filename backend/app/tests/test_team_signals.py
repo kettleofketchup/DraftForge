@@ -13,11 +13,15 @@ from django.utils import timezone
 
 from app.models import (
     CustomUser,
+    Draft,
+    DraftEvent,
+    DraftRound,
     Game,
     League,
     Organization,
     PositionsModel,
     Team,
+    TeamDraftState,
     TeamLog,
     Tournament,
 )
@@ -460,6 +464,62 @@ class SuccessionAuditTests(TestCase):
         self.assertEqual(row.details["after"]["captain_id"], deputy.pk)
         self.assertIsNone(row.details["after"]["deputy_captain_id"])
         self.assertNotIn(captain.pk, row.details["after"]["member_ids"])
+
+    def test_signal_succession_follows_captain(self) -> None:
+        captain, deputy = self.users[0], self.users[1]
+        draft = Draft.objects.create(
+            tournament=self.tournament, state=TeamDraftState.DRAFTING
+        )
+        picked = DraftRound.objects.create(
+            draft=draft, captain=captain, pick_number=1, choice=self.users[2]
+        )
+        unpicked = DraftRound.objects.create(
+            draft=draft, captain=captain, pick_number=3
+        )
+
+        self.tournament.users.remove(captain)
+
+        self.assertEqual(
+            DraftRound.objects.nocache().get(pk=unpicked.pk).captain_id, deputy.pk
+        )
+        self.assertEqual(
+            DraftRound.objects.nocache().get(pk=picked.pk).captain_id, captain.pk
+        )
+        row = TeamLog.objects.get(team=self.team)
+        self.assertEqual(row.action, "system_succession")
+        self.assertEqual(row.details["draft_rounds_updated"], 1)
+        self.assertTrue(row.details["presence_reset"])
+        self.assertTrue(
+            DraftEvent.objects.filter(draft=draft, event_type="team_changed").exists()
+        )
+
+    def test_owned_succession_does_not_follow_captain(self) -> None:
+        captain = self.users[0]
+        draft = Draft.objects.create(
+            tournament=self.tournament, state=TeamDraftState.DRAFTING
+        )
+        unpicked = DraftRound.objects.create(
+            draft=draft, captain=captain, pick_number=1
+        )
+
+        with owning_team_audit():
+            self.team.members.remove(captain)
+
+        self.assertEqual(
+            DraftRound.objects.nocache().get(pk=unpicked.pk).captain_id, captain.pk
+        )
+        self.assertFalse(DraftEvent.objects.filter(draft=draft).exists())
+
+    def test_deputy_cleared_does_not_follow_captain(self) -> None:
+        draft = Draft.objects.create(
+            tournament=self.tournament, state=TeamDraftState.DRAFTING
+        )
+
+        self.team.members.remove(self.users[1])
+
+        row = TeamLog.objects.get(team=self.team)
+        self.assertNotIn("draft_rounds_updated", row.details)
+        self.assertFalse(DraftEvent.objects.filter(draft=draft).exists())
 
     def test_deputy_removal_writes_deputy_cleared_row(self) -> None:
         self.team.members.remove(self.users[1])

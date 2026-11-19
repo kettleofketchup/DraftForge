@@ -790,9 +790,12 @@ def _users_remaining_pks(draft: Draft) -> list[int]:
         return [u.pk for u in draft.users_remaining]
     if not tournament.users.exists():
         return []
-    excluded = {r.choice_id for r in draft.draft_rounds.all() if r.choice_id} | {
-        t.captain_id for t in tournament.teams.all() if t.captain_id
-    }
+    teams = tournament.teams.all()
+    excluded = (
+        {r.choice_id for r in draft.draft_rounds.all() if r.choice_id}
+        | {t.captain_id for t in teams if t.captain_id}
+        | {m.pk for t in teams for m in t.members.all()}
+    )
     remaining = (
         tournament.users.nocache()
         .exclude(id__in=excluded)

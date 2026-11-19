@@ -9,17 +9,27 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from app.draft_state import herodraft_state_queryset, tournament_state_queryset
 from app.models import (
     CustomUser,
+    Draft,
+    DraftEvent,
+    DraftRound,
+    DraftTeam,
+    Game,
+    HeroDraft,
+    HeroDraftState,
     LeadershipProblem,
     League,
     Organization,
     Team,
+    TeamDraftState,
     TeamLog,
     TeamLogAction,
     TeamLogVia,
     Tournament,
 )
+from app.serializers import HeroDraftSerializer, _users_remaining_pks
 from app.services import team_management
 from app.services.team_management import (
     DEFAULT_MAX_STANDINS,
@@ -30,11 +40,13 @@ from app.services.team_management import (
     remove_standin,
     rename,
     restore_member,
+    set_captain,
     set_deputy,
     standin_cap,
 )
 from app.services.team_signals import TeamRosterChange, team_roster_changed
 from events.models import Event
+from league.models import LeagueUser
 from org.models import OrgUser
 from user.tests.test_cacheops_integration import _redis_reachable
 
@@ -566,3 +578,286 @@ class TeamManagementCacheTests(TeamManagementFixture, TransactionTestCase):
         rename(self.team, "Fresh", actor=self.actor, via=TeamLogVia.WEB, reason="r")
 
         self.assertEqual(client.get(url).json()["name"], "Fresh")
+
+
+class SetCaptainTests(TeamManagementFixture, TestCase):
+    def captain(self, user: CustomUser, **kwargs: Any) -> TeamChange:
+        kwargs.setdefault("reason", "r")
+        return set_captain(
+            self.team, user, actor=self.actor, via=TeamLogVia.WEB, **kwargs
+        )
+
+    def test_set_captain_member(self) -> None:
+        change = self.captain(self.m1)
+
+        team = self.refresh(self.team)
+        self.assertEqual(team.captain_id, self.m1.pk)
+        self.assertEqual(team.deputy_captain_id, self.d.pk)
+        self.assertIn(self.c.pk, self.member_pks(team))
+        row = self.only_log()
+        self.assertEqual(row.pk, change.log.pk)
+        self.assertEqual(row.action, TeamLogAction.SET_CAPTAIN)
+        self.assertEqual(row.target_user_id, self.m1.pk)
+        self.assertEqual(row.details["before"]["captain_id"], self.c.pk)
+        self.assertEqual(row.details["after"]["captain_id"], self.m1.pk)
+        self.assertEqual(row.details["draft_rounds_updated"], 0)
+        self.assertTrue(row.details["presence_reset"])
+        self.assertNotIn("added_to_tournament", row.details)
+
+    def test_set_captain_requires_reason(self) -> None:
+        with self.assertRaises(TeamManagementError) as ctx:
+            self.captain(self.m1, reason="")
+        self.assertEqual(ctx.exception.code, "reason_required")
+        self.assertEqual(self.refresh(self.team).captain_id, self.c.pk)
+
+    def test_set_captain_deputy_clears_deputy(self) -> None:
+        self.captain(self.d)
+
+        team = self.refresh(self.team)
+        self.assertEqual(team.captain_id, self.d.pk)
+        self.assertIsNone(team.deputy_captain_id)
+        self.assertEqual(_problems(team), {})
+
+    def test_set_captain_standin_moves_into_members(self) -> None:
+        standin = CustomUser.objects.create_user(username="roster_s", password="t")
+        self.team.dropin_members.add(standin)
+
+        self.captain(standin)
+
+        team = self.refresh(self.team)
+        self.assertEqual(team.captain_id, standin.pk)
+        self.assertIn(standin.pk, self.member_pks(team))
+        self.assertIn(self.c.pk, self.member_pks(team))
+        self.assertFalse(team.dropin_members.nocache().filter(pk=standin.pk).exists())
+        self.assertTrue(self.tournament.users.filter(pk=standin.pk).exists())
+        details = self.only_log().details
+        self.assertTrue(details["added_to_tournament"])
+        self.assertTrue(details["org_user_created"])
+        self.assertTrue(details["league_user_created"])
+        self.assertTrue(
+            LeagueUser.objects.filter(user=standin, league=self.league).exists()
+        )
+
+    def test_set_captain_same_refused(self) -> None:
+        with self.assertRaises(TeamManagementError) as ctx:
+            self.captain(self.c)
+        self.assertEqual(ctx.exception.code, "already_captain")
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_set_captain_non_member_refused(self) -> None:
+        with self.assertRaises(TeamManagementError) as ctx:
+            self.captain(self.outsider)
+        self.assertEqual(ctx.exception.code, "captain_not_member")
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_reseat_ghost_captain(self) -> None:
+        team = self.drop_member_silently(self.team, self.c)
+        self.assertIn("captain", _problems(team))
+
+        change = self.captain(self.c)
+
+        team = self.refresh(self.team)
+        self.assertEqual(team.captain_id, self.c.pk)
+        self.assertIn(self.c.pk, self.member_pks(team))
+        self.assertEqual(_problems(team), {})
+        self.assertNotIn("draft_rounds_updated", change.log.details)
+
+    def test_reseat_from_left_members(self) -> None:
+        self.drop_member_silently(self.team, self.c)
+        self.team.left_members.add(self.c)
+
+        self.captain(self.c)
+
+        team = self.refresh(self.team)
+        self.assertIn(self.c.pk, self.member_pks(team))
+        self.assertFalse(team.left_members.nocache().filter(pk=self.c.pk).exists())
+
+    def test_reseat_refused_when_on_other_team(self) -> None:
+        self.drop_member_silently(self.team, self.c)
+        Team.members.through.objects.create(
+            team_id=self.other.pk, customuser_id=self.c.pk
+        )
+
+        with self.assertRaises(TeamManagementError) as ctx:
+            self.captain(self.c)
+        self.assertEqual(ctx.exception.code, "on_other_team")
+        self.assertNotIn(self.c.pk, self.member_pks(self.team))
+
+    def test_repair_ghost_captain_and_deputy_stepwise(self) -> None:
+        team = self.make_ghost_captain(self.team, self.outsider)
+        team = self.make_ghost_deputy(team, self.o1)
+        self.assertEqual(set(_problems(team)), {"captain", "deputy_captain"})
+
+        set_deputy(team, None, actor=self.actor, via=TeamLogVia.WEB, reason="r")
+        self.assertEqual(set(_problems(self.team)), {"captain"})
+        self.captain(self.m1)
+
+        self.assertEqual(_problems(self.team), {})
+        self.assertEqual(self.refresh(self.team).captain_id, self.m1.pk)
+
+
+class CaptainDraftFollowUpTests(TeamManagementFixture, TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.p1 = self.make_user("roster_p1")
+        self.p2 = self.make_user("roster_p2")
+        self.tournament.users.add(self.p1, self.p2)
+
+    def make_draft(self, state: str, style: str = "snake") -> Draft:
+        return Draft.objects.create(
+            tournament=self.tournament, state=state, draft_style=style
+        )
+
+    def captain(self, user: CustomUser) -> TeamChange:
+        return set_captain(
+            self.team, user, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+    def make_herodraft(self, state: str = HeroDraftState.DRAFTING) -> HeroDraft:
+        game = Game.objects.create(tournament=self.tournament)
+        herodraft = HeroDraft.objects.create(game=game, state=state)
+        DraftTeam.objects.create(draft=herodraft, tournament_team=self.team)
+        DraftTeam.objects.create(draft=herodraft, tournament_team=self.other)
+        return herodraft
+
+    def test_unpicked_rounds_follow(self) -> None:
+        draft = self.make_draft(TeamDraftState.DRAFTING)
+        picked = DraftRound.objects.create(
+            draft=draft, captain=self.c, pick_number=1, choice=self.p1
+        )
+        open_a = DraftRound.objects.create(draft=draft, captain=self.c, pick_number=3)
+        open_b = DraftRound.objects.create(draft=draft, captain=self.c, pick_number=5)
+        other = DraftRound.objects.create(draft=draft, captain=self.o1, pick_number=2)
+
+        change = self.captain(self.m1)
+
+        captains = dict(DraftRound.objects.nocache().values_list("pk", "captain_id"))
+        self.assertEqual(captains[picked.pk], self.c.pk)
+        self.assertEqual(captains[open_a.pk], self.m1.pk)
+        self.assertEqual(captains[open_b.pk], self.m1.pk)
+        self.assertEqual(captains[other.pk], self.o1.pk)
+        self.assertEqual(change.log.details["draft_rounds_updated"], 2)
+
+    def test_shuffle_null_rounds_untouched(self) -> None:
+        draft = self.make_draft(TeamDraftState.DRAFTING, style="shuffle")
+        null_rounds = [
+            DraftRound.objects.create(draft=draft, captain=None, pick_number=n)
+            for n in (1, 2, 3)
+        ]
+        Team.objects.filter(pk=self.team.pk).update(captain=None)
+
+        change = self.captain(self.m1)
+
+        self.assertEqual(
+            set(
+                DraftRound.objects.nocache()
+                .filter(pk__in=[r.pk for r in null_rounds])
+                .values_list("captain_id", flat=True)
+            ),
+            {None},
+        )
+        self.assertEqual(change.log.details["draft_rounds_updated"], 0)
+        self.assertEqual(
+            change.log.details["draft_rounds_skipped_reason"], "no_previous_captain"
+        )
+
+    def test_old_captain_not_in_pool(self) -> None:
+        draft = self.make_draft(TeamDraftState.DRAFTING)
+        DraftRound.objects.create(draft=draft, captain=self.c, pick_number=1)
+
+        self.captain(self.m1)
+
+        fresh = Draft.objects.nocache().get(pk=draft.pk)
+        remaining = set(fresh.users_remaining.values_list("pk", flat=True))
+        self.assertNotIn(self.c.pk, remaining)
+        self.assertEqual(remaining, {self.p1.pk, self.p2.pk})
+        state = tournament_state_queryset(fresh=True).get(pk=self.tournament.pk)
+        pool = _users_remaining_pks(state.draft)
+        self.assertNotIn(self.c.pk, pool)
+        self.assertEqual(set(pool), {self.p1.pk, self.p2.pk})
+
+    def test_presence_reset_and_pending_emits(self) -> None:
+        draft = self.make_draft(TeamDraftState.PENDING)
+        Team.objects.filter(pk=self.team.pk).update(
+            draft_is_ready=True, draft_is_connected=True, draft_has_connected=True
+        )
+
+        self.captain(self.m1)
+
+        team = self.refresh(self.team)
+        self.assertFalse(team.draft_is_ready)
+        self.assertFalse(team.draft_is_connected)
+        self.assertFalse(team.draft_has_connected)
+        event = DraftEvent.objects.get(draft=draft, event_type="team_changed")
+        self.assertEqual(
+            event.payload,
+            {"team_id": self.team.pk, "team_name": "Rostered", "pick_number": None},
+        )
+        self.assertEqual(event.actor_id, self.actor.pk)
+
+    def test_completed_draft_emits_nothing(self) -> None:
+        draft = self.make_draft(TeamDraftState.COMPLETED)
+
+        self.captain(self.m1)
+
+        self.assertFalse(DraftEvent.objects.filter(draft=draft).exists())
+
+    def test_live_herodrafts_broadcast_each(self) -> None:
+        first = self.make_herodraft()
+        second = self.make_herodraft(HeroDraftState.WAITING_FOR_CAPTAINS)
+        self.make_herodraft(HeroDraftState.COMPLETED)
+        self.make_herodraft(HeroDraftState.ABANDONED)
+
+        refresh = patch.object(
+            team_management,
+            "_refresh_herodrafts",
+            wraps=team_management._refresh_herodrafts,
+        )
+        order: list[str] = []
+        with (
+            refresh as refresh_spy,
+            patch.object(team_management, "broadcast_herodraft_state") as spy,
+            patch.object(team_management, "invalidate_obj") as invalidate,
+        ):
+            spy.side_effect = lambda *a, **k: order.append("broadcast")
+            invalidate.side_effect = lambda *a, **k: order.append("invalidate")
+            with self.captureOnCommitCallbacks(execute=True):
+                self.captain(self.m1)
+                spy.assert_not_called()
+
+        refresh_spy.assert_called_once()
+        # team + 2 drafts + 4 draft teams, all before any broadcast
+        self.assertEqual(order, ["invalidate"] * 7 + ["broadcast"] * 2)
+        self.assertEqual(
+            sorted(call.args[0].pk for call in spy.call_args_list),
+            sorted([first.pk, second.pk]),
+        )
+        self.assertEqual(
+            {call.args[1] for call in spy.call_args_list}, {"team_changed"}
+        )
+
+
+class HeroDraftCaptainCacheTests(TeamManagementFixture, TransactionTestCase):
+    def setUp(self) -> None:
+        if not _redis_reachable():
+            self.skipTest("Cacheops Redis not reachable")
+        super().setUp()
+        game = Game.objects.create(tournament=self.tournament)
+        self.herodraft = HeroDraft.objects.create(
+            game=game, state=HeroDraftState.DRAFTING
+        )
+        DraftTeam.objects.create(draft=self.herodraft, tournament_team=self.team)
+
+    def captain_pk(self) -> int:
+        draft = herodraft_state_queryset().get(id=self.herodraft.pk)
+        return HeroDraftSerializer(draft).data["draft_teams"][0]["captain"]["pk"]
+
+    def test_herodraft_read_shows_new_captain(self) -> None:
+        self.assertEqual(self.captain_pk(), self.c.pk)
+
+        with patch.object(team_management, "broadcast_herodraft_state"):
+            set_captain(
+                self.team, self.m1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+            )
+
+        self.assertEqual(self.captain_pk(), self.m1.pk)

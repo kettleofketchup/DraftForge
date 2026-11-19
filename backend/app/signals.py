@@ -35,6 +35,7 @@ from app.models import (
 )
 from app.services.team_audit import log_snapshot_fields, roster_snapshot, write_team_log
 from app.services.team_leadership import successor_after_removal
+from app.services.team_management import follow_captain
 from app.services.team_references import team_references
 from app.services.team_signals import team_audit_owner
 from app.services.team_signals import team_roster_changed as team_roster_changed
@@ -114,6 +115,7 @@ def _after_members_removed(team: Team, removed_pks: set[int]) -> None:
 
     owned = team_audit_owner.get()
     before = None if owned else _before_removal(team, removed_pks)
+    old_captain = team.captain
     team.captain = captain
     team.deputy_captain = deputy
     team.save(update_fields=["captain", "deputy_captain"])
@@ -127,6 +129,9 @@ def _after_members_removed(team: Team, removed_pks: set[int]) -> None:
     )
     if before is None:
         return
+    follow_up: dict[str, Any] = {}
+    if captain is not None and captain.pk != getattr(old_captain, "pk", None):
+        follow_up = follow_captain(team, old_captain, captain, actor=None)
     write_team_log(
         team,
         snapshot=log_snapshot_fields(team),
@@ -137,6 +142,7 @@ def _after_members_removed(team: Team, removed_pks: set[int]) -> None:
             "before": before,
             "after": roster_snapshot(team),
             "succession": how,
+            **follow_up,
         },
     )
 
