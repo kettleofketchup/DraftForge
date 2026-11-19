@@ -89,10 +89,10 @@ export function OverrideWarningDialog({
         </DialogHeader>
 
         <ul className="flex flex-col gap-2" data-testid="override-violations">
-          {violations.map((violation) => (
+          {violations.map((violation, i) => (
             <li
-              key={violation.code}
-              data-testid={`override-violation-${violation.code}`}
+              key={`${i}-${violation.code}`}
+              data-testid={`override-violation-${violation.code}-${i}`}
               data-blocking={violation.blocking}
               className={cn(
                 'rounded-md border p-3',

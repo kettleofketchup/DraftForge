@@ -60,7 +60,7 @@ def _min_mmr() -> Violation:
         "staff-override",
         "MMR 2,400 is below Roster A's 3,000 gate",
         "eligibility",
-        params={"mmr": 2400, "gate": 3000},
+        params={"mmr": 2400, "min_mmr": 3000},
     )
 
 
@@ -361,7 +361,7 @@ class ExceptionHandlerTest(SimpleTestCase):
                         "category": "eligibility",
                         "message": "MMR 2,400 is below Roster A's 3,000 gate",
                         "blocking": False,
-                        "params": {"mmr": 2400, "gate": 3000},
+                        "params": {"mmr": 2400, "min_mmr": 3000},
                     }
                 ],
             },

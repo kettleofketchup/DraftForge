@@ -77,7 +77,7 @@ so a view or service only has to raise them:
           "category": "eligibility",
           "message": "MMR 2,400 is below Roster A's 3,000 gate",
           "blocking": false,
-          "params": {"mmr": 2400, "gate": 3000}
+          "params": {"mmr": 2400, "min_mmr": 3000}
         }
       ]
     }
@@ -114,8 +114,9 @@ result = resolve_overrides(
 - `~/components/api/overridesAPI` holds the Zod schemas and the guards
   `getOverrideRequired(err)`, `isOverrideRequiredError(err)` and
   `isOverrideReasonRequiredError(err)`.
-- `useOverrideRetry(action)` calls `action({acknowledged_codes, reason})`, opens the
-  dialog on a `409`, and resends with every code acknowledged so far when staff confirm.
+- `useOverrideRetry(action)` calls `action({acknowledged_codes: []})` first, opens the
+  dialog on a `409`, and resends `{acknowledged_codes, reason}` with every code
+  acknowledged so far when staff confirm. The first attempt has no `reason` key.
 - `OverrideWarningDialog` lists each violation by rule and message and requires a
   reason. When `blocked` is true it marks the blocking rows, has no Confirm button, and
   links org admins to the Staff placement settings; other staff are told to ask an org
@@ -129,4 +130,14 @@ const retry = useOverrideRetry(
 
 <PrimaryButton onClick={() => void retry.run()}>Place</PrimaryButton>
 <OverrideWarningDialog {...retry.dialogProps} organization={organization} />
+```
+
+An endpoint that takes its own `reason` (a staff note on the action) shares the field
+with the override contract. Put the caller's reason first and spread `ack` after it:
+the first attempt sends the caller's reason, and a retry sends the dialog's reason.
+
+```tsx
+const retry = useOverrideRetry((ack) =>
+  removePlayer(eventId, { user_id, reason: staffNote, ...ack }),
+);
 ```

@@ -46,10 +46,7 @@ describe('useOverrideRetry', () => {
     );
 
     await act(() => result.current.run());
-    expect(action).toHaveBeenLastCalledWith({
-      acknowledged_codes: [],
-      reason: '',
-    });
+    expect(action).toHaveBeenLastCalledWith({ acknowledged_codes: [] });
     expect(result.current.dialogProps.open).toBe(true);
 
     await act(() => result.current.dialogProps.onConfirm('why'));
@@ -77,6 +74,28 @@ describe('useOverrideRetry', () => {
     expect(action).toHaveBeenLastCalledWith({
       acknowledged_codes: ['a', 'b'],
       reason: 'why',
+    });
+  });
+
+  it('keeps the caller reason on the first attempt, dialog reason on retry', async () => {
+    const send = vi.fn<(body: Record<string, unknown>) => Promise<string>>();
+    send
+      .mockRejectedValueOnce(axiosError(409, overrideBody(['a'])))
+      .mockResolvedValueOnce('done');
+    const { result } = renderHook(() =>
+      useOverrideRetry((ack) => send({ reason: 'caller', ...ack })),
+    );
+
+    await act(() => result.current.run());
+    expect(send).toHaveBeenLastCalledWith({
+      reason: 'caller',
+      acknowledged_codes: [],
+    });
+
+    await act(() => result.current.dialogProps.onConfirm('dialog'));
+    expect(send).toHaveBeenLastCalledWith({
+      reason: 'dialog',
+      acknowledged_codes: ['a'],
     });
   });
 

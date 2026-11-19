@@ -90,13 +90,40 @@ describe('OverrideWarningDialog', () => {
   it('lists each violation by rule and message', () => {
     renderDialog(confirmable);
     expect(
-      screen.getByTestId('override-violation-below_min_mmr'),
+      screen.getByTestId('override-violation-below_min_mmr-0'),
     ).toHaveTextContent(
       "staff-overrideMMR 2,400 is below Roster A's 3,000 gate",
     );
     expect(
-      screen.getByTestId('override-violation-team_standin_cap'),
+      screen.getByTestId('override-violation-team_standin_cap-1'),
     ).toHaveTextContent('Stand-in cap 2 reached');
+  });
+
+  it('renders every row when a code repeats', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const capacity = {
+      code: 'over_capacity',
+      rule: 'override-warning',
+      category: 'seating',
+      blocking: false,
+      params: {},
+    } as const;
+    renderDialog({
+      code: 'override_required',
+      blocked: false,
+      violations: [
+        { ...capacity, message: 'Roster A is over capacity (11/10)' },
+        { ...capacity, message: 'Roster B is over capacity (6/5)' },
+      ],
+    });
+    expect(
+      screen.getByTestId('override-violation-over_capacity-0'),
+    ).toHaveTextContent('Roster A');
+    expect(
+      screen.getByTestId('override-violation-over_capacity-1'),
+    ).toHaveTextContent('Roster B');
+    expect(errors.mock.calls.flat().join(' ')).not.toMatch(/same key/);
+    errors.mockRestore();
   });
 
   it('requires a reason before confirming', async () => {
@@ -128,10 +155,10 @@ describe('OverrideWarningDialog', () => {
     expect(screen.queryByTestId('override-confirm')).toBeNull();
     expect(screen.queryByTestId('override-reason')).toBeNull();
     expect(
-      screen.getByTestId('override-violation-over_capacity'),
+      screen.getByTestId('override-violation-over_capacity-1'),
     ).toHaveAttribute('data-blocking', 'true');
     expect(
-      screen.getByTestId('override-violation-below_min_mmr'),
+      screen.getByTestId('override-violation-below_min_mmr-0'),
     ).toHaveAttribute('data-blocking', 'false');
     expect(screen.getAllByTestId('override-blocking-badge')).toHaveLength(1);
     expect(screen.getByTestId('override-blocked-policy')).toHaveTextContent(

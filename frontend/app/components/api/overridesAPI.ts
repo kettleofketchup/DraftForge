@@ -37,14 +37,14 @@ export const OverrideReasonFormSchema = z.object({
 });
 export type OverrideReasonFormValues = z.infer<typeof OverrideReasonFormSchema>;
 
+// First attempt omits `reason` so a caller's own reason field survives `...ack`.
 export interface OverrideAcknowledgement {
   acknowledged_codes: string[];
-  reason: string;
+  reason?: string;
 }
 
 export const NO_ACKNOWLEDGEMENT: OverrideAcknowledgement = {
   acknowledged_codes: [],
-  reason: '',
 };
 
 function responseBody(err: unknown, status: number): unknown {

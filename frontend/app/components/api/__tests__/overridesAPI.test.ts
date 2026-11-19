@@ -28,7 +28,7 @@ const body = {
       category: 'eligibility',
       message: "MMR 2,400 is below Roster A's 3,000 gate",
       blocking: false,
-      params: { mmr: 2400, gate: 3000 },
+      params: { mmr: 2400, min_mmr: 3000 },
     },
   ],
 };
@@ -36,7 +36,7 @@ const body = {
 describe('override error guards', () => {
   it('parses a 409 override body', () => {
     const parsed = getOverrideRequired(axiosError(409, body));
-    expect(parsed?.violations[0].params).toEqual({ mmr: 2400, gate: 3000 });
+    expect(parsed?.violations[0].params).toEqual({ mmr: 2400, min_mmr: 3000 });
     expect(isOverrideRequiredError(axiosError(409, body))).toBe(true);
   });
 
