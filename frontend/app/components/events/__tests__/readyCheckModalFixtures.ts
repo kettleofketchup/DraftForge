@@ -55,6 +55,8 @@ export const baseEvent: EventType = {
   require_profile_complete: false,
   roll_call_enabled: false,
   roll_call_mode: 'manual',
+  signup_open_mode: 'manual',
+  signups_open_hours_before: 72,
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,
@@ -135,6 +137,8 @@ export const baseRepeater = {
   require_profile_complete: false,
   roll_call_enabled: false,
   roll_call_mode: 'manual',
+  signup_open_mode: 'manual',
+  signups_open_hours_before: 72,
   ready_check_scope: 'main_only',
   ready_check_open_minutes: 120,
   ready_check_escalation_minutes: 30,
@@ -185,6 +189,8 @@ export const baseRepeater = {
 
 export const baseOrgDefaults: OrgEventDefaultsType = {
   ...READY_CHECK_CONFIG_DEFAULTS,
+  signup_open_mode: 'manual',
+  signups_open_hours_before: 72,
   id: 3,
   organization: 1,
   tournament_name: 'Weekly Cup',

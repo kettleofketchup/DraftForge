@@ -33,6 +33,7 @@ from events.constants import (  # noqa: F401 — re-exported for backward compat
     RsvpClass,
     SignupAction,
     SignupMeans,
+    SignupOpenMode,
     SignupStatus,
     SignupType,
 )
@@ -224,6 +225,21 @@ class EventConfigMixin(models.Model):
     allow_battlecup_rating = models.BooleanField(
         default=True,
         help_text="Allow never-ranked players (battle cup tier) to sign up",
+    )
+    signup_open_mode = models.CharField(
+        max_length=16,
+        choices=SignupOpenMode.choices,
+        default=SignupOpenMode.MANUAL,
+        help_text=(
+            "How signups open. Manual: staff open them. Immediately: opens "
+            "signups for every upcoming event already generated in the series "
+            "horizon. Hours before start: opens signups_open_hours_before the "
+            "event starts."
+        ),
+    )
+    signups_open_hours_before = models.PositiveIntegerField(
+        default=72,
+        help_text="Hours before the start that signups open (scheduled mode)",
     )
 
     class Meta:

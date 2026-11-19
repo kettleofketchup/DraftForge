@@ -1,0 +1,7 @@
+Migration `events.0030_signup_open_policy` adds the sign-up open policy (`signup_open_mode`, `signups_open_hours_before`) to events, series and org defaults. Every existing row gets manual mode and 72 hours. For series, org defaults and events with no stored `signups_open_at`, nothing opens on its own until an organizer picks "immediately" or a number of days before start; events that already have a stored `signups_open_at` keep it and still open on schedule. Migration `events.0031_backfill_signup_open_policy` then switches every upcoming event that already has a `signups_open_at` to the days-before-start mode, with the hours taken from that stored time (rounded, between 0 and 1440), so the edit form shows the schedule the event will actually follow and "Open manually" can cancel it. Both run in the normal migrate step. Once a series is switched to "immediately", the next run of the open-signups beat task opens every upcoming event that series has already generated, and their announcements and sign-up posts go out. Switching a series to "Open manually" cancels the scheduled openings of its upcoming events; edits to other series settings leave each event's own open policy and time alone.
+
+The backfill writes with `bulk_update`, which skips cache invalidation, so cached event lists can show the old policy for up to their cache lifetime. After migrating, clear the event cache from `/app/backend` in the backend container:
+
+```
+python manage.py shell -c "from cacheops import invalidate_model; from events.models import Event; invalidate_model(Event)"
+```

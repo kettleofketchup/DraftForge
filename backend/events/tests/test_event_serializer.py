@@ -1,7 +1,12 @@
+from datetime import timedelta
+
 from django.test import TestCase
 from django.utils import timezone
+from django.utils import timezone as tz
+from rest_framework.exceptions import ValidationError
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser, League, Organization, PositionsModel
+from events.constants import EventState
 from events.models import Event, EventRepeater
 from events.serializers import EventSerializer
 
@@ -42,18 +47,6 @@ class EventRepeaterNameSerializerTest(TestCase):
         )
         serializer = EventSerializer(event)
         self.assertEqual(serializer.data["event_repeater_name"], "Weekly Inhouse")
-
-
-from datetime import timedelta
-
-from django.test import TestCase
-from django.utils import timezone as tz
-from rest_framework.exceptions import ValidationError
-
-from app.models import CustomUser, League, Organization, PositionsModel
-from events.constants import EventState
-from events.models import Event
-from events.serializers import EventSerializer
 
 
 class ValidateTournamentLeagueTest(TestCase):
@@ -122,3 +115,21 @@ class ValidateTournamentLeagueTest(TestCase):
             initial_data={"organization": self.org_a.pk},
         )
         self.assertEqual(result, self.league_a_alt)
+
+
+class SignupOpenPolicyFieldsTest(TestCase):
+    def test_policy_fields_on_all_config_serializers(self) -> None:
+        from events.serializers import (
+            EventRepeaterSerializer,
+            OneOffEventCreateSerializer,
+            OrgEventDefaultsSerializer,
+        )
+
+        for serializer in (
+            EventSerializer,
+            EventRepeaterSerializer,
+            OrgEventDefaultsSerializer,
+            OneOffEventCreateSerializer,
+        ):
+            for field in ("signup_open_mode", "signups_open_hours_before"):
+                self.assertIn(field, serializer.Meta.fields, serializer.__name__)

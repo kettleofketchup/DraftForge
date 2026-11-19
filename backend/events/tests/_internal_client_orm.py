@@ -20,6 +20,7 @@ Usage::
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import patch
 
 # ---- ORM-direct reads ----
@@ -83,6 +84,12 @@ def _get_events_list_orm(**params):
         qs = qs.filter(event_repeater__isnull=False)
     if params.get("has_announcement_channel") == "true":
         qs = qs.exclude(discord_announcement_channel_id="")
+    signups_due_before = params.get("signups_due_before")
+    if signups_due_before:
+        qs = qs.filter(
+            signups_open_at__isnull=False,
+            signups_open_at__lte=datetime.fromisoformat(signups_due_before),
+        )
 
     return [EventSerializer(e).data for e in qs]
 
@@ -327,6 +334,18 @@ def _create_or_update_signup_message_orm(**data):
     return _ResponseLike(201 if created else 200, {"id": msg.pk, "created": created})
 
 
+def _transition_event_state_orm(event_pk, new_state):
+    """Mirror POST /api/internal/events/<pk>/transition/."""
+    from events.models import Event
+
+    event = Event.objects.nocache().get(pk=event_pk)
+    try:
+        event.transition_state(new_state)
+    except ValueError as exc:
+        return _ResponseLike(400, {"error": str(exc)})
+    return _ResponseLike(200, {"id": event.pk, "state": event.state})
+
+
 def _clear_event_signup_state_orm(event_id):
     """ORM shim mirroring POST /api/internal/discord/signup-message/clear/.
 
@@ -427,6 +446,7 @@ _PATCH_MAP = {
     "clear_event_signup_state": _clear_event_signup_state_orm,
     "create_or_update_announcement": _create_or_update_announcement_orm,
     "get_repeater_subscribers": _get_repeater_subscribers_orm,
+    "transition_event_state": _transition_event_state_orm,
 }
 
 # Modules that ``from app.internal_client import X`` at module level — the

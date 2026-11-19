@@ -4,6 +4,7 @@ import type {
   EventType,
   ReadyCheckFields,
   RollCallMode,
+  SignupOpenMode,
 } from '~/components/events/schemas';
 import axios from './axios';
 
@@ -252,6 +253,8 @@ export interface EventRepeaterType extends ReadyCheckSettings {
   require_profile_complete: boolean;
   roll_call_enabled: boolean;
   roll_call_mode: RollCallMode;
+  signup_open_mode: SignupOpenMode;
+  signups_open_hours_before: number;
   allow_active_mmr: boolean;
   allow_previous_rank: boolean;
   allow_battlecup_rating: boolean;
@@ -372,6 +375,8 @@ export interface OrgEventDefaultsType extends ReadyCheckSettings {
   require_profile_complete: boolean;
   roll_call_enabled: boolean;
   roll_call_mode: RollCallMode;
+  signup_open_mode: SignupOpenMode;
+  signups_open_hours_before: number;
   allow_active_mmr: boolean;
   allow_previous_rank: boolean;
   allow_battlecup_rating: boolean;
@@ -454,6 +459,7 @@ export type SeriesOneOffPayload = Omit<
 > & {
   dota_lobby_password_mode?: 'random' | 'fixed';
   dota_lobby_password?: string;
+  open_signups?: boolean;
 };
 
 export async function createSeriesOneOffEvent(

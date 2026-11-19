@@ -72,6 +72,12 @@ UNMET_TRACKED_STATUSES: frozenset[str] = frozenset(
 )
 
 
+class SignupOpenMode(models.TextChoices):
+    MANUAL = "manual", "Manual"
+    IMMEDIATE = "immediate", "Immediately"
+    SCHEDULED = "scheduled", "Hours before start"
+
+
 class SignupType(models.TextChoices):
     USER = "user", "User"
     TEAM = "team", "Team"

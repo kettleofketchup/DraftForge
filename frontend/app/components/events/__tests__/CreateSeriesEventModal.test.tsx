@@ -115,6 +115,8 @@ const repeater = {
   post_cull_fill_mode: 'line_order',
   event_voice_channel_id: '',
   voice_presence_confirms: false,
+  signup_open_mode: 'manual' as const,
+  signups_open_hours_before: 72,
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,
@@ -203,5 +205,58 @@ describe('CreateSeriesEventModal', () => {
       ),
     );
     expect(screen.queryByText('Message interested users')).toBeNull();
+  });
+});
+
+describe('CreateSeriesEventModal signup open policy', () => {
+  beforeEach(() => {
+    createSeriesOneOffEvent.mockClear();
+  });
+
+  it("starts from the series' policy and sends it", async () => {
+    render(
+      <CreateSeriesEventModal
+        repeater={{
+          ...repeater,
+          signup_open_mode: 'scheduled',
+          signups_open_hours_before: 48,
+        }}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+    expect(screen.getByTestId('signup-open-days-input')).toHaveValue(2);
+    await submitWithScheduledAt();
+    expect(createSeriesOneOffEvent.mock.calls[0][1]).toMatchObject({
+      signup_open_mode: 'scheduled',
+      signups_open_hours_before: 48,
+    });
+  });
+
+  it('has one control for opening signups, not a separate checkbox', () => {
+    renderModal();
+    expect(screen.queryByTestId('one-off-open-signups-checkbox')).toBeNull();
+    expect(screen.getAllByTestId('signup-open-section')).toHaveLength(1);
+  });
+
+  it.each([
+    ['manual', false],
+    ['scheduled', false],
+    ['immediate', true],
+  ] as const)('opens signups on create only for %s=%s', async (mode, open) => {
+    render(
+      <CreateSeriesEventModal
+        repeater={{ ...repeater, signup_open_mode: mode }}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+    await submitWithScheduledAt();
+    expect(createSeriesOneOffEvent.mock.calls[0][1]).toMatchObject({
+      signup_open_mode: mode,
+      open_signups: open,
+    });
   });
 });
