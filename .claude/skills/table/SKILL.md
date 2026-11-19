@@ -16,7 +16,7 @@ Brand rule ("lists use `DataTable`"): `docs/theming-guide/ai/references/componen
 
 | Layer | File | Owns |
 |---|---|---|
-| `DataTable` | `ui/data-table/DataTable.tsx` | feature set, sorting, pagination (hidden when it fits), striping, row click, empty row, `table-fixed` layout, `scrollX` |
+| `DataTable` | `ui/data-table/DataTable.tsx` | feature set, sorting, filtering + toolbar, pagination (hidden when it fits), striping, row click, empty row, `table-fixed` layout, `scrollX` |
 | `make<Domain>Columns(options)` | `components/<domain>/<domain>Columns.tsx` | every column def, keyed by a `<Domain>ColumnId` union, plus `DEFAULT_<DOMAIN>_COLUMNS` |
 | `<Domain>Table` | `components/<domain>/<Domain>Table.tsx` | `useMemo` over the factory, `getRowId`, test-id prefix, default sort |
 
@@ -74,7 +74,30 @@ where allowed, disabled while pending, don't trigger row click), one header re-s
 stacked mobile line, empty message. `DataTable` itself: `ui/data-table/__tests__/DataTable.test.tsx`.
 jsdom has no `matchMedia`; `useMediaQuery` returns `false`, so every breakpoint reads "small".
 
+## Filters (`enableToolbar`)
+
+The toolbar (`DataTableToolbar.tsx`) builds itself from column `meta`; nothing renders unless a
+column opts in or a search is given. Domain tables expose it as one prop (`OpsNoticeTable filters`).
+
+| Want | Column / prop | Notes |
+|---|---|---|
+| Multi-select filter with live counts | `filterFn: 'oneOf'` + `meta.filterLabel: 'Severity'` | Facets are the column's **accessor values**, so faceted columns must return the display value (a string), not a sort rank; put ranking in `sortFn`. `meta.facetLabel(v)` relabels, `meta.facetOrder` orders options; `null`/`''` show as "Not set". |
+| Show/hide a column | `meta.columnLabel: 'Event'` | Columns without it can't be hidden. |
+| Client-side search | `globalSearch={{ placeholder }}` | TanStack global filter (`includesString`) over string columns. |
+| Server/page search | `search={{ value, onChange }}` | Page owns the state; replaces `globalSearch`. |
+| Start filtered | `initialColumnFilters`, `initialColumnVisibility` | Uncontrolled. |
+
+- Active selections show as removable chips (`RemoveIconButton`), and **Reset** clears filters and search.
+  An all-filtered-out table shows `emptyFilteredMessage`.
+- Below `sm` the controls move into a **Filters** sheet; search and chips stay on the bar.
+- Test ids use `toolbarTestIdPrefix` (domain tables pass their `testIdPrefix`):
+  `${p}-toolbar`, `${p}-search`, `${p}-facet-trigger-<col>`, `${p}-facet-option-<col>-<slug>`,
+  `${p}-filter-chip-<col>-<slug>`, `${p}-filter-chip-remove-…`, `${p}-filters-reset`,
+  `${p}-columns-trigger`, `${p}-columns-option-<col>`, `${p}-filters-sheet-trigger`.
+- jsdom tests that open a facet need `ResizeObserver` and `Element.prototype.scrollIntoView`
+  stubs (the command list uses both); see `DataTableToolbar.test.tsx`.
+
 ## Not built yet
 
-Toolbar (faceted filters, group-by), column visibility toggles, controlled/URL state, a table
-title, fill-height layouts. Add each as an opt-in prop so existing tables don't change.
+Group-by, controlled/URL state, a table title, fill-height layouts. Add each as an opt-in prop
+so existing tables don't change; new features go into `appTableFeatures`.

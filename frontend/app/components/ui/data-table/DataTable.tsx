@@ -1,8 +1,16 @@
 import {
+  columnFacetingFeature,
+  columnFilteringFeature,
   columnVisibilityFeature,
+  constructFilterFn,
+  createFacetedRowModel,
+  createFacetedUniqueValues,
+  createFilteredRowModel,
   createPaginatedRowModel,
   createSortedRowModel,
+  filterFn_includesString,
   flexRender,
+  globalFilteringFeature,
   metaHelper,
   rowPaginationFeature,
   rowSortingFeature,
@@ -12,6 +20,8 @@ import {
   useTable,
   type Column,
   type ColumnDef,
+  type ColumnFiltersState,
+  type ColumnVisibilityState,
   type Row,
   type RowData,
   type SortingState,
@@ -31,7 +41,26 @@ import {
 import { useMediaQuery } from '~/hooks/useMediaQuery';
 import { cn } from '~/lib/utils';
 
+import {
+  DataTableToolbar,
+  type DataTableGlobalSearch,
+  type DataTableSearch,
+  type ToolbarColumnMeta,
+} from './DataTableToolbar';
 import { ScrollFrame } from './ScrollFrame';
+
+/**
+ * Multi-select "is any of" for faceted filters; an empty selection matches everything.
+ * Both sides are compared as strings because facet values are stringified for display.
+ */
+export const filterFn_oneOf = constructFilterFn({
+  filter: (dataValue, filterValue) =>
+    !Array.isArray(filterValue) ||
+    filterValue.length === 0 ||
+    filterValue.includes(String(dataValue)),
+  autoRemove: (filterValue) =>
+    !Array.isArray(filterValue) || filterValue.length === 0,
+});
 
 /**
  * The app's TanStack v9 feature set. v9 registers features explicitly: an API that is
@@ -39,17 +68,26 @@ import { ScrollFrame } from './ScrollFrame';
  * per-column classes DataTable reads.
  */
 export const appTableFeatures = tableFeatures({
+  columnFilteringFeature,
+  globalFilteringFeature,
+  columnFacetingFeature,
   columnVisibilityFeature,
   rowSortingFeature,
   rowPaginationFeature,
+  filteredRowModel: createFilteredRowModel(),
+  facetedRowModel: createFacetedRowModel(),
+  facetedUniqueValues: createFacetedUniqueValues(),
   sortedRowModel: createSortedRowModel(),
   paginatedRowModel: createPaginatedRowModel(),
+  filterFns: { includesString: filterFn_includesString, oneOf: filterFn_oneOf },
   sortFns: { alphanumeric: sortFn_alphanumeric, basic: sortFn_basic },
-  columnMeta: metaHelper<{
-    headClassName?: string;
-    cellClassName?: string;
-    headTestId?: string;
-  }>(),
+  columnMeta: metaHelper<
+    {
+      headClassName?: string;
+      cellClassName?: string;
+      headTestId?: string;
+    } & ToolbarColumnMeta
+  >(),
 });
 
 export type AppFeatures = typeof appTableFeatures;
@@ -109,6 +147,18 @@ export interface DataTableProps<TData extends RowData> {
   getRowProps?: (row: TData) => HTMLAttributes<HTMLTableRowElement>;
   onRowClick?: (row: TData) => void;
   initialSorting?: SortingState;
+  /** Show the filter bar built from columns' `meta.filterLabel` / `meta.columnLabel`. */
+  enableToolbar?: boolean;
+  /** Client-side search across string columns, shown in the toolbar. */
+  globalSearch?: DataTableGlobalSearch;
+  /** Page-owned search (e.g. server-side), shown in the toolbar instead of `globalSearch`. */
+  search?: DataTableSearch;
+  initialColumnFilters?: ColumnFiltersState;
+  initialColumnVisibility?: ColumnVisibilityState;
+  /** Test-id namespace for the toolbar controls (default `table`). */
+  toolbarTestIdPrefix?: string;
+  /** Shown instead of `emptyMessage` when filters or search hide every row. */
+  emptyFilteredMessage?: ReactNode;
   /** Rows per page; pagination hides itself when everything fits. */
   pageSize?: number;
   emptyMessage?: ReactNode;
@@ -136,6 +186,13 @@ export function DataTable<TData extends RowData>({
   getRowProps,
   onRowClick,
   initialSorting = [],
+  enableToolbar = false,
+  globalSearch,
+  search,
+  initialColumnFilters = [],
+  initialColumnVisibility = {},
+  toolbarTestIdPrefix = 'table',
+  emptyFilteredMessage = 'No results match these filters.',
   pageSize = 25,
   emptyMessage = 'No results.',
   density = 'default',
@@ -146,19 +203,29 @@ export function DataTable<TData extends RowData>({
   'data-testid': testId,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
+  const [columnFilters, setColumnFilters] =
+    useState<ColumnFiltersState>(initialColumnFilters);
+  const [columnVisibility, setColumnVisibility] =
+    useState<ColumnVisibilityState>(initialColumnVisibility);
+  const [globalFilter, setGlobalFilter] = useState<string>('');
   const bp = useCellBreakpoints();
   const table = useTable({
     features: appTableFeatures,
     data,
     columns,
     getRowId: (row: TData) => String(getRowId(row)),
-    state: { sorting },
+    state: { sorting, columnFilters, columnVisibility, globalFilter },
     onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
+    onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn: 'includesString',
     enableMultiSort: false,
     initialState: { pagination: { pageIndex: 0, pageSize } },
   });
 
   const rows = table.getRowModel().rows;
+  const filtering = columnFilters.length > 0 || globalFilter !== '';
   const pageCount = table.getPageCount();
   const { pageIndex } = table.state.pagination;
   const totalRows = table.getPrePaginatedRowModel().rows.length;
@@ -255,7 +322,7 @@ export function DataTable<TData extends RowData>({
               colSpan={renderedSpan}
               className="h-16 text-center text-muted-foreground"
             >
-              {emptyMessage}
+              {filtering ? emptyFilteredMessage : emptyMessage}
             </TableCell>
           </TableRow>
         )}
@@ -265,6 +332,14 @@ export function DataTable<TData extends RowData>({
 
   return (
     <div className={cn('flex flex-col gap-3', className)}>
+      {enableToolbar && (
+        <DataTableToolbar
+          table={table}
+          search={search}
+          globalSearch={globalSearch}
+          testIdPrefix={toolbarTestIdPrefix}
+        />
+      )}
       {scrollX ? (
         <ScrollFrame testId={scrollTestId} label={scrollLabel}>
           {body}

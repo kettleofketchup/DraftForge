@@ -472,6 +472,7 @@ import { DisplayName } from '~/components/user/avatar';
 - The table fits its container (`table-fixed`): secondary columns get fixed widths and hide on small screens (`hidden md:table-cell`), one main column takes the rest and wraps. Sideways scrolling (`scrollX`) is opt-in.
 - Data hidden on phones is stacked under the main cell in `text-xs text-muted-foreground`.
 - Severity/state/category cells are `Badge`s; row actions are brand buttons (`SecondaryButton size="sm"`); numbers are right-aligned `tabular-nums`.
+- Filtering uses the built-in toolbar (`enableToolbar`, columns opt in with `meta.filterLabel` / `meta.columnLabel`), not a hand-built filter row above the table.
 
 **DO NOT** build record lists from flex rows: on mobile the text column collapses to one character per line. Build guide: the `table` skill.
 

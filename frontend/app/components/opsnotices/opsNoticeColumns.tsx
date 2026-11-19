@@ -82,7 +82,8 @@ export function makeOpsNoticeColumns({
   const all: Record<OpsNoticeColumnId, AppColumnDef<OpsNotice> | null> = {
     severity: {
       id: 'severity',
-      accessorFn: (n) => SEVERITY_RANK[n.severity],
+      accessorFn: (n) => n.severity,
+      filterFn: 'oneOf',
       enableSorting: sortable,
       sortDescFirst: true,
       sortFn: bySeverityThenLastSeen,
@@ -94,12 +95,18 @@ export function makeOpsNoticeColumns({
           {row.original.severity}
         </Badge>
       ),
-      meta: { headClassName: 'w-24 sm:w-28', cellClassName: 'w-24 sm:w-28' },
+      meta: {
+        headClassName: 'w-24 sm:w-28',
+        cellClassName: 'w-24 sm:w-28',
+        filterLabel: 'Severity',
+        facetOrder: ['critical', 'warning', 'info'],
+      },
     },
     category: {
       id: 'category',
       accessorKey: 'category',
       enableSorting: false,
+      filterFn: 'oneOf',
       header: 'Type',
       cell: ({ row }) => (
         <Badge variant="outline">{row.original.category}</Badge>
@@ -107,6 +114,9 @@ export function makeOpsNoticeColumns({
       meta: {
         headClassName: 'hidden w-24 sm:table-cell',
         cellClassName: 'hidden w-24 sm:table-cell',
+        filterLabel: 'Type',
+        facetOrder: ['urgent', 'task', 'log'],
+        columnLabel: 'Type',
       },
     },
     summary: {
@@ -140,11 +150,14 @@ export function makeOpsNoticeColumns({
       id: 'event',
       accessorKey: 'event_name',
       enableSorting: false,
+      filterFn: 'oneOf',
       header: 'Event',
       cell: ({ row }) => row.original.event_name || '—',
       meta: {
         headClassName: 'hidden w-48 lg:table-cell',
         cellClassName: 'hidden w-48 text-muted-foreground lg:table-cell',
+        filterLabel: 'Event',
+        columnLabel: 'Event',
       },
     },
     occurrences: {
@@ -158,6 +171,7 @@ export function makeOpsNoticeColumns({
         headClassName: 'hidden w-20 text-right sm:table-cell',
         cellClassName:
           'hidden w-20 text-right tabular-nums text-muted-foreground sm:table-cell',
+        columnLabel: 'Count',
       },
     },
     last_seen: {
@@ -172,6 +186,7 @@ export function makeOpsNoticeColumns({
       meta: {
         headClassName: 'hidden w-36 md:table-cell',
         cellClassName: 'hidden w-36 text-muted-foreground md:table-cell',
+        columnLabel: 'Last seen',
       },
     },
     actions: onResolve

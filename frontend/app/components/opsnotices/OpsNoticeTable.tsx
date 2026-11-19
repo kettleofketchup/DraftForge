@@ -17,6 +17,8 @@ export interface OpsNoticeTableProps {
   testIdPrefix?: string;
   columns?: readonly OpsNoticeColumnId[];
   sortable?: boolean;
+  /** Filter bar: severity/type/event facets, notice search and a Columns menu. */
+  filters?: boolean;
   noticeHref?: (n: OpsNotice) => string;
   onResolve?: (n: OpsNotice) => void;
   resolving?: boolean;
@@ -27,12 +29,15 @@ export interface OpsNoticeTableProps {
   scrollX?: boolean;
 }
 
+const NOTICE_SEARCH = { label: 'Search', placeholder: 'Search notices' };
+
 /** The shared operations-notice table: DataTable over makeOpsNoticeColumns. */
 export function OpsNoticeTable({
   notices,
   testIdPrefix = 'ops-notice',
   columns = DEFAULT_OPS_NOTICE_COLUMNS,
   sortable = true,
+  filters = false,
   noticeHref,
   onResolve,
   resolving = false,
@@ -64,6 +69,9 @@ export function OpsNoticeTable({
       initialSorting={
         columns.includes('severity') ? [{ id: 'severity', desc: true }] : []
       }
+      enableToolbar={filters}
+      globalSearch={filters ? NOTICE_SEARCH : undefined}
+      toolbarTestIdPrefix={testIdPrefix}
       pageSize={pageSize}
       density={density}
       emptyMessage={emptyMessage}

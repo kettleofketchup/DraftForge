@@ -115,6 +115,7 @@ export function OpsNoticesCard({ eventId, noticeHref }: OpsNoticesCardProps) {
         <OpsNoticeTable
           notices={data}
           columns={EVENT_CARD_COLUMNS}
+          filters
           noticeHref={noticeHref}
           onResolve={onResolve}
           resolving={resolve.isPending}

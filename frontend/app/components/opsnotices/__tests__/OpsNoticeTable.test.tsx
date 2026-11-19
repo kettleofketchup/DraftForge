@@ -171,6 +171,31 @@ describe('OpsNoticeTable', () => {
     expect(rowIds()[0]).toBe('ops-notice-row-2');
   });
 
+  it('filters by severity name and searches notices when filters is on', () => {
+    globalThis.ResizeObserver ??= class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    Element.prototype.scrollIntoView ??= vi.fn();
+    renderTable({ filters: true });
+    expect(screen.getByTestId('ops-notice-toolbar')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('ops-notice-facet-trigger-severity'));
+    fireEvent.click(
+      screen.getByTestId('ops-notice-facet-option-severity-warning'),
+    );
+    expect(rowIds()).toEqual(['ops-notice-row-3', 'ops-notice-row-2']);
+    fireEvent.change(screen.getByTestId('ops-notice-search'), {
+      target: { value: 'reminder' },
+    });
+    expect(rowIds()).toEqual(['ops-notice-row-2']);
+  });
+
+  it('has no filter bar by default', () => {
+    renderTable();
+    expect(screen.queryByTestId('ops-notice-toolbar')).toBeNull();
+  });
+
   it('shows the empty message with no notices', () => {
     render(
       <MemoryRouter>
