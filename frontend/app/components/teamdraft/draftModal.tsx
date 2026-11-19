@@ -74,6 +74,7 @@ import { refreshTournamentHook } from './hooks/refreshTournamentHook';
 import { useAutoRefreshDraft } from './hooks/useAutoRefreshDraft';
 import { useConfirmForceReset } from './hooks/useConfirmForceReset';
 import { useDraftLive } from './hooks/useDraftLive';
+import { useDraftResetSummary } from './hooks/useDraftResetSummary';
 import { isCaptainOf } from './isCaptainOf';
 import { DraftRoundIndicator, LiveAutoButtons } from './liveView';
 import { TieRollPopup, tieRollKey } from './TieRollPopup';
@@ -113,6 +114,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
   >('snake');
   const [isStarting, setIsStarting] = useState(false);
   const { confirmForce, confirmForceDialog } = useConfirmForceReset();
+  const { showResetSummary, resetSummaryDialog } = useDraftResetSummary();
   const [tieResolution, setTieResolution] = useState<TieResolution | null>(
     null,
   );
@@ -136,6 +138,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
         setCurDraftRound,
         draftStyle: selectedStyle,
         confirmForce,
+        onReport: showResetSummary,
       });
     } finally {
       setIsStarting(false);
@@ -886,6 +889,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
           showTrigger={false}
         />
         {confirmForceDialog}
+        {resetSummaryDialog}
       </DialogContent>
     </Dialog>
   );

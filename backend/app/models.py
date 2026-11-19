@@ -1390,6 +1390,21 @@ class Draft(models.Model):
         )
         broadcast_event_after_commit(event)
 
+    def _emit_draft_started(self, team_count: int) -> None:
+        # Cycle: app.broadcast imports app.models.
+        from app.broadcast import broadcast_event_after_commit
+
+        event = DraftEvent.objects.create(
+            draft=self,
+            event_type="draft_started",
+            payload={
+                "draft_id": self.pk,
+                "draft_style": self.draft_style,
+                "team_count": team_count,
+            },
+        )
+        broadcast_event_after_commit(event)
+
     def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # Invalidate tournament cache when draft is modified
@@ -1864,6 +1879,9 @@ class Draft(models.Model):
         self.save()
         if self.state == TeamDraftState.PENDING:
             self._emit_lobby_opened(options)
+        else:
+            # Without a lobby event nothing tells open clients the rounds were rebuilt.
+            self._emit_draft_started(num_teams)
 
     def go_back(self) -> bool:
         """

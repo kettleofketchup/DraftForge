@@ -206,6 +206,7 @@ def generate_draft_rounds(request: Request) -> Response:
                     "error": str(refused),
                     "code": "draft_reset_has_references",
                     "references": refused.references,
+                    "usage": refused.usage,
                 },
                 status=409,
             )
