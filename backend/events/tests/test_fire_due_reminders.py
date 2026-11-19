@@ -38,7 +38,9 @@ class FireDueRemindersTest(_DiscordTaskTestCase):
         self.event.discord_announcement = True
         self.event.discord_announcement_channel_id = "ch_1"
         self.event.discord_announcement_hours = 24
-        self.event.scheduled_at = timezone.now() + timedelta(days=7)  # threshold +6 days
+        self.event.scheduled_at = timezone.now() + timedelta(
+            days=7
+        )  # threshold +6 days
         self.event.state = "upcoming"
         self.event.save()
 
@@ -93,3 +95,57 @@ class FireDueRemindersTest(_DiscordTaskTestCase):
 
         fire_due_reminders()
         mock_delay.assert_not_called()
+
+    @patch("events.tasks.send_start_mention.delay")
+    def test_fires_minute_reminder_once_threshold_passed(self, mock_delay):
+        from events.scheduling.fire import fire_due_reminders
+
+        self.event.discord_start_mention = True
+        self.event.discord_start_mention_minutes = 15
+        self.event.scheduled_at = timezone.now() + timedelta(minutes=10)
+        self.event.state = "roll_call"
+        self.event.save()
+
+        fire_due_reminders()
+        mock_delay.assert_called_once_with(self.event.pk)
+
+    @patch("events.tasks.send_start_mention.delay")
+    def test_minute_reminder_waits_for_threshold(self, mock_delay):
+        from events.scheduling.fire import fire_due_reminders
+
+        self.event.discord_start_mention = True
+        self.event.discord_start_mention_minutes = 15
+        # 20 minutes out: an hours-based reading of 15 would already fire.
+        self.event.scheduled_at = timezone.now() + timedelta(minutes=20)
+        self.event.save()
+
+        fire_due_reminders()
+        mock_delay.assert_not_called()
+
+    @patch("events.tasks.send_start_mention.delay")
+    def test_minute_reminder_skips_disabled(self, mock_delay):
+        from events.scheduling.fire import fire_due_reminders
+
+        self.event.discord_start_mention = False
+        self.event.discord_start_mention_minutes = 15
+        self.event.scheduled_at = timezone.now() + timedelta(minutes=5)
+        self.event.save()
+
+        fire_due_reminders()
+        mock_delay.assert_not_called()
+
+    @patch("events.tasks.send_attendance_reminder.delay")
+    def test_hour_reminder_unchanged_beside_minute_reminder(self, mock_delay):
+        from events.scheduling.fire import fire_due_reminders
+
+        self.event.discord_confirm_attendance = True
+        self.event.discord_confirm_attendance_hours = 2
+        self.event.discord_start_mention = True
+        self.event.discord_start_mention_minutes = 15
+        self.event.scheduled_at = timezone.now() + timedelta(minutes=90)
+        self.event.save()
+
+        with patch("events.tasks.send_start_mention.delay") as mention_delay:
+            fire_due_reminders()
+        mock_delay.assert_called_once_with(self.event.pk)
+        mention_delay.assert_not_called()

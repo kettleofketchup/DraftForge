@@ -1559,6 +1559,9 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
         return entry
 
     has_channel = bool(event.discord_announcement_channel_id)
+    has_signup_post = (event.discord_announcement and has_channel) or (
+        event.discord_post_signups and bool(event.discord_post_signups_channel_id)
+    )
 
     tasks = [
         _task(
@@ -1636,6 +1639,24 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             description=f"Posts {event.discord_profile_reminder_hours}h before event",
         ),
         _task(
+            "start_mention",
+            "Start Mention",
+            enabled=event.discord_start_mention and has_signup_post,
+            fires_at=(
+                event.scheduled_at
+                - timedelta(minutes=event.discord_start_mention_minutes)
+                if event.discord_start_mention
+                else None
+            ),
+            log_source="start_mention",
+            check_interval="Every 30s",
+            misconfigured=event.discord_start_mention and not has_signup_post,
+            description=(
+                f"Mentions signed-up members on the signup post "
+                f"{event.discord_start_mention_minutes}m before event"
+            ),
+        ),
+        _task(
             "signup_update",
             "Signup Update",
             enabled=event.discord_announcement and has_channel,
@@ -1684,6 +1705,7 @@ FIREABLE_TASKS = {
     "confirm_attendance": "events.tasks.fire_event_reminder",
     "profile_reminder": "events.tasks.fire_event_reminder",
     "signup_update": "events.tasks.send_signup_update",
+    "start_mention": "events.tasks.send_start_mention",
     "open_signups": "events.tasks.open_scheduled_signups",
     "draft_dm": "events.tournament_tasks.send_tournament_draft_links",
     "herodraft_dm": "events.tournament_tasks.send_tournament_herodraft_links",
@@ -1694,6 +1716,7 @@ TASK_LOG_SOURCES = {
     "announcement": "event_announcement",
     "confirm_attendance": "attendance_reminder",
     "profile_reminder": "profile_reminder",
+    "start_mention": "start_mention",
 }
 
 
@@ -1768,6 +1791,12 @@ def fire_event_task(request: Request, event_id: int, task_name: str) -> Response
     # Signup reminder → send_subscriber_notifications (DMs, takes event_id only)
     if task_name == "signup_reminder":
         current_app.send_task(celery_task, args=[event_id])
+    elif task_name == "start_mention":
+        current_app.send_task(
+            celery_task,
+            args=[event_id],
+            kwargs={"fired_by_user_id": request.user.pk},
+        )
     # Channel-post reminders: fire per-event with reminder_type and fired_by
     elif task_name in ("confirm_attendance", "profile_reminder"):
         current_app.send_task(
