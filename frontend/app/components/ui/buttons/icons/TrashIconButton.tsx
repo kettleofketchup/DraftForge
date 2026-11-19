@@ -6,8 +6,10 @@ import { cn } from '~/lib/utils';
 
 export type IconButtonSize = 'sm' | 'default';
 
-export interface TrashIconButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
+export interface TrashIconButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant' | 'size'
+> {
   /** Optional tooltip text */
   tooltip?: string;
   /** Button size */
@@ -32,34 +34,39 @@ const sizeClasses: Record<IconButtonSize, { button: string; icon: string }> = {
 const TrashIconButton = React.forwardRef<
   HTMLButtonElement,
   TrashIconButtonProps
->(({ tooltip, size = 'default', className, type = 'button', ...props }, ref) => {
-  const sizeConfig = sizeClasses[size];
+>(
+  (
+    { tooltip, size = 'default', className, type = 'button', ...props },
+    ref,
+  ) => {
+    const sizeConfig = sizeClasses[size];
 
-  const button = (
-    <Button
-      ref={ref}
-      type={type}
-      variant="destructive"
-      size="icon"
-      className={cn(
-        'rounded-full',
-        'shadow-lg shadow-red-900/50 transition-all duration-75',
-        sizeConfig.button,
-        className
-      )}
-      {...props}
-    >
-      <Trash2 className={sizeConfig.icon} />
-      <span className="sr-only">{tooltip || 'Delete'}</span>
-    </Button>
-  );
+    const button = (
+      <Button
+        ref={ref}
+        type={type}
+        variant="destructive"
+        size="icon"
+        className={cn(
+          'rounded-full',
+          'shadow-lg shadow-destructive/25 transition-all duration-75',
+          sizeConfig.button,
+          className,
+        )}
+        {...props}
+      >
+        <Trash2 className={sizeConfig.icon} />
+        <span className="sr-only">{tooltip || 'Delete'}</span>
+      </Button>
+    );
 
-  if (tooltip) {
-    return <FastTooltip content={tooltip}>{button}</FastTooltip>;
-  }
+    if (tooltip) {
+      return <FastTooltip content={tooltip}>{button}</FastTooltip>;
+    }
 
-  return button;
-});
+    return button;
+  },
+);
 
 TrashIconButton.displayName = 'TrashIconButton';
 

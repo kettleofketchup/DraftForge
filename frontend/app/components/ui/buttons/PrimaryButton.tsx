@@ -1,12 +1,20 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { brandGlowLift, brandGradient, brandLabelOnGradient, buttonLift, buttonDisabled } from './styles';
+import {
+  brandGlowLift,
+  brandGradient,
+  brandLabelOnGradient,
+  buttonDisabled,
+  buttonLift,
+} from './styles';
 
 export type PrimaryButtonColor = 'green' | 'blue' | 'yellow';
 
-export interface PrimaryButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
+export interface PrimaryButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant'
+> {
   /** Color theme for the button (omit for brand gradient) */
   color?: PrimaryButtonColor;
   /** Whether to apply the soft-shadow lift (default: true) */
@@ -14,9 +22,9 @@ export interface PrimaryButtonProps
 }
 
 const colorClasses: Record<PrimaryButtonColor, string> = {
-  green: 'bg-green-700 hover:bg-green-600 text-white shadow-green-900/50',
-  blue: 'bg-blue-700 hover:bg-blue-600 text-white shadow-blue-900/50',
-  yellow: 'bg-yellow-600 hover:bg-yellow-500 text-black shadow-yellow-900/50',
+  green: 'bg-success/60 hover:bg-success/80 text-white shadow-success/20',
+  blue: 'bg-accent hover:brightness-110 text-white shadow-accent/30',
+  yellow: 'bg-warning/80 hover:bg-warning/95 text-black shadow-warning/20',
 };
 
 // Two-layer dark text-shadow under every PrimaryButton label: a hard 1px
@@ -38,15 +46,17 @@ const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
           depth && buttonLift,
           depth && buttonDisabled,
           !depth && 'shadow-lg shadow-black/30',
-          isBrand ? [brandGradient, brandExtras] : [colorClasses[color], primaryTextStroke],
-          className
+          isBrand
+            ? [brandGradient, brandExtras]
+            : [colorClasses[color], primaryTextStroke],
+          className,
         )}
         {...props}
       >
         {children}
       </Button>
     );
-  }
+  },
 );
 
 PrimaryButton.displayName = 'PrimaryButton';

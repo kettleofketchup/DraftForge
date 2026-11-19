@@ -347,89 +347,24 @@
       "count": 2
     }
   },
-  "app/components/ui/brand-dropdown-menu.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 13
-    }
-  },
-  "app/components/ui/brand-select.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 18
-    }
-  },
   "app/components/ui/button-handle.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
     }
   },
-  "app/components/ui/buttons/AddDiscordBotButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 4
-    }
-  },
-  "app/components/ui/buttons/CancelButton.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 4
-    }
-  },
-  "app/components/ui/buttons/ConfirmButton.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 4
-    }
-  },
-  "app/components/ui/buttons/DestructiveButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/ui/buttons/HighlightButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 9
-    }
-  },
-  "app/components/ui/buttons/PrimaryButton.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 9
-    }
-  },
   "app/components/ui/buttons/SecondaryButton.tsx": {
     "draftforge/no-raw-color-strings": {
-      "count": 27
-    }
-  },
-  "app/components/ui/buttons/SubmitButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/ui/buttons/WarningButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/ui/buttons/icons/TrashIconButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
+      "count": 3
     }
   },
   "app/components/ui/buttons/styles.ts": {
     "draftforge/no-raw-color-strings": {
-      "count": 56
-    }
-  },
-  "app/components/ui/buttons/user/DotabuffIconButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/ui/dialog.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 4
+      "count": 5
     }
   },
   "app/components/ui/dialogs/ConfirmDialog.tsx": {
     "draftforge/no-raw-color-strings": {
-      "count": 5
+      "count": 4
     }
   },
   "app/components/ui/labeled-group-node.tsx": {
@@ -449,7 +384,7 @@
   },
   "app/components/ui/sonner.tsx": {
     "draftforge/no-raw-color-strings": {
-      "count": 8
+      "count": 2
     }
   },
   "app/components/user/DiscordUserDropdown.tsx": {
