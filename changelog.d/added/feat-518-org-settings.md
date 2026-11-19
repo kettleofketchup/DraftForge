@@ -1,0 +1,1 @@
+- Organization admins have a new Settings tab (#518) with a staff placement policy (Silent, Confirm or Block) and the seating rules staff are warned about. It has no effect until staff placement checks ship.

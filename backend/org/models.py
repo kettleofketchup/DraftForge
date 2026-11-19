@@ -14,6 +14,7 @@ from org.models_promotion import (
     PromoSend,  # noqa: F401
     PromoTemplate,  # noqa: F401
 )
+from org.models_settings import OrgSettings  # noqa: F401
 
 
 class OrgUser(models.Model):

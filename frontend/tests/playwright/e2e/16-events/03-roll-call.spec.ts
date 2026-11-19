@@ -9,20 +9,20 @@
  * Uses the E2E Signup Event (signups_open state after reset).
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   getEventsTestData,
-  resetEventsData,
   loginEventAdmin,
   loginEventPlayer,
+  patchWithCsrf,
   postWithCsrf,
+  resetEventsData,
+  test,
   verifyDiscordMessages,
+  visitAndWaitForHydration,
   type EventInfo,
 } from '../../fixtures';
-
+import { API_URL } from '../../fixtures/base-url';
 
 let eventInfo: EventInfo;
 
@@ -47,7 +47,11 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
   }) => {
     // Step 1: Player RSVPs to the event
     await loginEventPlayer(context);
-    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${eventInfo.pk}/signup/`, { intent: 'rsvp' });
+    const rsvpResp = await postWithCsrf(
+      context,
+      `${API_URL}/events/${eventInfo.pk}/signup/`,
+      { intent: 'rsvp' },
+    );
     expect(rsvpResp.ok()).toBeTruthy();
 
     // Step 2: Admin checks the signup (auto_approve may have already approved it)
@@ -61,7 +65,10 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     // Approve only if not already approved (auto_approve may have done it)
     const signup = signups[0];
     if (signup.status === 'rsvp' || signup.status === 'pending_approval') {
-      const approveResp = await postWithCsrf(context, `${API_URL}/events/signups/${signup.id}/approve/`);
+      const approveResp = await postWithCsrf(
+        context,
+        `${API_URL}/events/signups/${signup.id}/approve/`,
+      );
       expect(approveResp.ok()).toBeTruthy();
     }
 
@@ -77,7 +84,9 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     await expect(confirmDialog).toContainText('Start Roll Call');
 
     // Confirm the roll call
-    const confirmBtn = confirmDialog.getByRole('button', { name: /start roll call/i });
+    const confirmBtn = confirmDialog.getByRole('button', {
+      name: /start roll call/i,
+    });
     await confirmBtn.click();
 
     // Step 5: Should navigate to roll call page
@@ -93,24 +102,38 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     page,
   }) => {
     await loginEventPlayer(context);
-    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${eventInfo.pk}/signup/`, { intent: 'rsvp' });
+    const rsvpResp = await postWithCsrf(
+      context,
+      `${API_URL}/events/${eventInfo.pk}/signup/`,
+      { intent: 'rsvp' },
+    );
     expect(rsvpResp.ok()).toBeTruthy();
 
     await loginEventAdmin(context);
-    const signupsResp = await context.request.get(`${API_URL}/events/signups/?event=${eventInfo.pk}`);
+    const signupsResp = await context.request.get(
+      `${API_URL}/events/signups/?event=${eventInfo.pk}`,
+    );
     const signups = await signupsResp.json();
     const signup = signups[0];
     if (signup.status === 'rsvp' || signup.status === 'pending_approval') {
-      const approveResp = await postWithCsrf(context, `${API_URL}/events/signups/${signup.id}/approve/`);
+      const approveResp = await postWithCsrf(
+        context,
+        `${API_URL}/events/signups/${signup.id}/approve/`,
+      );
       expect(approveResp.ok()).toBeTruthy();
     }
-    const confirmResp = await postWithCsrf(context, `${API_URL}/events/signups/${signup.id}/confirm/`);
+    const confirmResp = await postWithCsrf(
+      context,
+      `${API_URL}/events/signups/${signup.id}/confirm/`,
+    );
     expect(confirmResp.ok()).toBeTruthy();
 
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
     await page.getByTestId('event-start-rollcall-btn').click();
     const startConfirm = page.getByRole('alertdialog');
-    await startConfirm.getByRole('button', { name: /start roll call/i }).click();
+    await startConfirm
+      .getByRole('button', { name: /start roll call/i })
+      .click();
     await page.waitForURL(/\/rollcall\//);
 
     // Confirmed player has the new Remove (cancel) button — verify dialog opens.
@@ -122,7 +145,91 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     // Cancel preserves the confirmed state — no API call should fire.
     await page.getByTestId('rollcall-cancel-dialog-cancel').click();
     await expect(page.getByTestId('rollcall-cancel-summary')).toHaveCount(0);
-    await expect(page.getByTestId(`rollcall-cancel-btn-${signup.id}`)).toBeVisible();
+    await expect(
+      page.getByTestId(`rollcall-cancel-btn-${signup.id}`),
+    ).toBeVisible();
+  });
+
+  test('approved players join the roster only after confirming when the flag is on', async ({
+    context,
+    page,
+  }) => {
+    const playerPk = 5001;
+
+    async function rosterPks(): Promise<number[]> {
+      const eventResp = await context.request.get(
+        `${API_URL}/events/${eventInfo.pk}/`,
+      );
+      const tournamentPk = (await eventResp.json()).tournament as number | null;
+      if (tournamentPk == null) return [];
+      const tournResp = await context.request.get(
+        `${API_URL}/tournaments/${tournamentPk}/`,
+      );
+      expect(tournResp.ok()).toBeTruthy();
+      return (
+        (await tournResp.json()).users as Array<number | { pk: number }>
+      ).map((u) => (typeof u === 'number' ? u : u.pk));
+    }
+
+    try {
+      // Step 1: Admin turns the roster rule on in Edit Event.
+      await loginEventAdmin(context);
+      await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
+      await page.getByTestId('event-edit-btn').click();
+      const modal = page.getByTestId('edit-event-modal');
+      await modal.getByRole('tab', { name: /approval/i }).click();
+      await modal.getByTestId('signup-rules-roll_call_enabled').check();
+      await modal.getByTestId('form-dialog-submit').click();
+      await expect(modal).not.toBeVisible({ timeout: 10000 });
+      await expect(page.getByText('Confirm to join roster')).toBeVisible();
+
+      // Step 2: Player signs up and is approved.
+      await loginEventPlayer(context);
+      const rsvpResp = await postWithCsrf(
+        context,
+        `${API_URL}/events/${eventInfo.pk}/signup/`,
+        {
+          intent: 'rsvp',
+        },
+      );
+      expect(rsvpResp.ok()).toBeTruthy();
+      await loginEventAdmin(context);
+      const signups = await (
+        await context.request.get(
+          `${API_URL}/events/signups/?event=${eventInfo.pk}`,
+        )
+      ).json();
+      const signup = signups.find((s: { user: number }) => s.user === playerPk);
+      if (signup.status === 'rsvp' || signup.status === 'pending_approval') {
+        const approveResp = await postWithCsrf(
+          context,
+          `${API_URL}/events/signups/${signup.id}/approve/`,
+        );
+        expect(approveResp.ok()).toBeTruthy();
+      }
+
+      // Step 3: Approved but unconfirmed, so not on the roster.
+      expect(await rosterPks()).not.toContain(playerPk);
+
+      // Step 4: Start roll call and confirm; now on the roster.
+      const startResp = await postWithCsrf(
+        context,
+        `${API_URL}/events/${eventInfo.pk}/start_roll_call/`,
+      );
+      expect(startResp.ok()).toBeTruthy();
+      const confirmResp = await postWithCsrf(
+        context,
+        `${API_URL}/events/signups/${signup.id}/confirm/`,
+      );
+      expect(confirmResp.ok()).toBeTruthy();
+      expect(await rosterPks()).toContain(playerPk);
+    } finally {
+      // The events reset does not restore signup rules; later specs expect the seeded off.
+      await loginEventAdmin(context);
+      await patchWithCsrf(context, `${API_URL}/events/${eventInfo.pk}/`, {
+        roll_call_enabled: false,
+      });
+    }
   });
 
   test('roll call page shows correct state for non-roll-call events', async ({
@@ -145,7 +252,10 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     await loginEventAdmin(context);
 
     // Transition to roll call via API
-    const resp = await postWithCsrf(context, `${API_URL}/events/${eventInfo.pk}/start_roll_call/`);
+    const resp = await postWithCsrf(
+      context,
+      `${API_URL}/events/${eventInfo.pk}/start_roll_call/`,
+    );
     expect(resp.ok()).toBeTruthy();
 
     // Visit event page
@@ -161,7 +271,10 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     await page.waitForURL(/\/rollcall\//);
   });
 
-  test('staff can reopen signups from roll_call (@cicd)', async ({ page, context }) => {
+  test('staff can reopen signups from roll_call (@cicd)', async ({
+    page,
+    context,
+  }) => {
     await loginEventAdmin(context);
 
     // Force the event into ROLL_CALL via the existing test API.
@@ -176,7 +289,9 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
 
     // Route is /events/:eventId/:tab? — plural (see frontend/app/routes.tsx)
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
-    await expect(page.getByTestId('event-state-badge')).toHaveText(/Roll Call/i);
+    await expect(page.getByTestId('event-state-badge')).toHaveText(
+      /Roll Call/i,
+    );
 
     // Click Reopen Signups (desktop; mobile dropdown unreachable at 1280×720)
     await page.getByTestId('event-reopen-signups-btn').click();
@@ -188,25 +303,37 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
           r.url().includes(`/events/${eventInfo.pk}/reopen_signups/`) &&
           r.request().method() === 'POST',
       ),
-      page.getByRole('button', { name: /^Reopen Signups$/ }).last().click(),
+      page
+        .getByRole('button', { name: /^Reopen Signups$/ })
+        .last()
+        .click(),
     ]);
     expect(response.status()).toBe(200);
 
     // Positive: state flipped, button is gone
-    await expect(page.getByTestId('event-state-badge')).toHaveText(/Signups Open/i);
+    await expect(page.getByTestId('event-state-badge')).toHaveText(
+      /Signups Open/i,
+    );
     await expect(page.getByTestId('event-reopen-signups-btn')).toHaveCount(0);
 
     // Negative: no Discord re-announcement was posted.
     const afterDiscord = await verifyDiscordMessages(context, eventInfo.pk);
-    expect(afterDiscord.announcement?.id ?? null).toBe(beforeDiscord.announcement?.id ?? null);
+    expect(afterDiscord.announcement?.id ?? null).toBe(
+      beforeDiscord.announcement?.id ?? null,
+    );
   });
 
-  test('Reopen Signups button is hidden outside roll_call (@cicd)', async ({ page, context }) => {
+  test('Reopen Signups button is hidden outside roll_call (@cicd)', async ({
+    page,
+    context,
+  }) => {
     await loginEventAdmin(context);
 
     // The events test data leaves `eventInfo.pk` in SIGNUPS_OPEN by default after resetEventsData.
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
-    await expect(page.getByTestId('event-state-badge')).toHaveText(/Signups Open/i);
+    await expect(page.getByTestId('event-state-badge')).toHaveText(
+      /Signups Open/i,
+    );
     await expect(page.getByTestId('event-reopen-signups-btn')).toHaveCount(0);
   });
 });

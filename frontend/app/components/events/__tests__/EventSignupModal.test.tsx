@@ -1,15 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   buildSignupModalBanner,
   buildSignupModalTitle,
 } from '../EventSignupModal';
 
-// The modal's content lives inside a Radix Dialog portal, so
-// renderToStaticMarkup can't see it in a node test environment (no
-// document.body). These pure-helper smoke tests cover the intent→copy
-// interpolation that the modal exposes; full DOM rendering (Dialog open
-// state, form interaction) is exercised by Playwright in
-// frontend/tests/playwright/e2e/16-events/12-event-signup-form.spec.ts.
+// Pure-helper tests for the intent→copy interpolation. Form interaction is
+// in the 12-event-signup-form Playwright spec.
 
 describe('buildSignupModalTitle', () => {
   it('uses the "Sign Up" copy for rsvp intent', () => {
@@ -17,7 +13,9 @@ describe('buildSignupModalTitle', () => {
   });
 
   it('uses the "Mark Tentative" copy for tentative intent', () => {
-    expect(buildSignupModalTitle('tentative', 'Evt')).toBe('Mark Tentative for Evt');
+    expect(buildSignupModalTitle('tentative', 'Evt')).toBe(
+      'Mark Tentative for Evt',
+    );
   });
 
   it('interpolates the event name verbatim', () => {
@@ -33,6 +31,8 @@ describe('buildSignupModalBanner', () => {
   });
 
   it('tentative banner mentions interested but not committed', () => {
-    expect(buildSignupModalBanner('tentative')).toContain('interested but not committed');
+    expect(buildSignupModalBanner('tentative')).toContain(
+      'interested but not committed',
+    );
   });
 });

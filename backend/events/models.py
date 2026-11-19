@@ -1,5 +1,6 @@
 import copy
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 import nh3
 from django.core.exceptions import ValidationError
@@ -17,20 +18,18 @@ from app.models import (
     GameType,
     TimeoutAction,
 )
-from lobby import passwords as lobby_passwords
-
-discord_id_validator = RegexValidator(
-    r"^(\d{17,20})?$",
-    "Must be a valid Discord snowflake ID",
-)
-
-
 from events.constants import (  # noqa: F401 — re-exported for backward compat
     EVENT_STATE_TRANSITIONS,
     EventState,
     RepeatFrequency,
     SignupStatus,
     SignupType,
+)
+from lobby import passwords as lobby_passwords
+
+discord_id_validator = RegexValidator(
+    r"^(\d{17,20})?$",
+    "Must be a valid Discord snowflake ID",
 )
 
 
@@ -104,7 +103,9 @@ class EventConfigMixin(models.Model):
     timezone = models.CharField(max_length=50, default="America/New_York")
     min_players = models.IntegerField(null=True, blank=True)
     max_players = models.IntegerField(null=True, blank=True)
+    # Inert until #504.
     signup_deadline_hours = models.IntegerField(null=True, blank=True)
+    # Inert until #547.
     allow_team_signups = models.BooleanField(default=False)
     allow_user_signups = models.BooleanField(default=True)
     auto_approve = models.BooleanField(default=False)
@@ -334,10 +335,10 @@ class EventRepeater(
     class Meta:
         ordering = ["-created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.frequency})"
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if self.description:
             self.description = nh3.clean(self.description)
         super().save(*args, **kwargs)
@@ -422,7 +423,7 @@ class Event(
         ]
         indexes = [models.Index(fields=["state", "scheduled_at"])]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.scheduled_at:%Y-%m-%d})"
 
     def clean(self) -> None:
@@ -434,7 +435,7 @@ class Event(
         ):
             raise ValidationError({"ends_at": "End time must be after the start time."})
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if self.description:
             self.description = nh3.clean(self.description)
         if (
@@ -499,7 +500,7 @@ class EventTeam(models.Model):
     class Meta:
         ordering = ["created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.event.name})"
 
 
@@ -524,6 +525,8 @@ class EventSignup(models.Model):
         max_length=20, choices=SignupStatus.choices, default=SignupStatus.RSVP
     )
     waitlist_position = models.IntegerField(null=True, blank=True)
+    # events.eligibility.Unmet codes from the last requirements check.
+    unmet_requirements = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -535,7 +538,7 @@ class EventSignup(models.Model):
             ),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.user} - {self.event.name} ({self.status})"
 
 
@@ -563,7 +566,7 @@ class RepeaterSubscription(models.Model):
         ]
         ordering = ["created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.user} → {self.event_repeater.name}"
 
 
@@ -590,5 +593,5 @@ class OrgEventDefaults(
     class Meta:
         verbose_name_plural = "Org event defaults"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Event defaults for {self.organization.name}"

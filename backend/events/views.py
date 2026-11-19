@@ -20,6 +20,7 @@ from django.db.models.functions import Abs, Coalesce, Now
 from django.http import QueryDict
 from django.utils import timezone
 from django.utils import timezone as tz
+from pydantic import ValidationError as PydanticValidationError
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import (
@@ -40,8 +41,11 @@ from app.permissions_org import (
     has_org_admin_access,
     has_org_staff_access,
 )
+from events.admission import ensure_self_serve
+from events.capacity import with_signup_counts
 from events.completion import close_event
-from events.constants import EventState, SignupStatus
+from events.constants import EventState
+from events.discord import notify_create_discord_event, notify_signup_changed
 from events.models import (
     Event,
     EventRepeater,
@@ -51,6 +55,8 @@ from events.models import (
     RepeaterSubscription,
 )
 from events.reopen import ReopenNotPermitted
+from events.roster import RosterSyncResult
+from events.schemas import SignupInputPatch
 from events.serializers import (
     EventRepeaterSerializer,
     EventRepeaterSlimSerializer,
@@ -62,10 +68,12 @@ from events.serializers import (
     RepeaterSubscriptionSerializer,
 )
 from events.services import (
+    apply_signup_input,
     approve_signup,
     cancel_signup,
     changed_draft_option_fields,
     confirm_signup,
+    create_tentative_signup,
     create_tournament_for_event,
     demote_to_waitlist,
     ensure_discord_event,
@@ -74,12 +82,14 @@ from events.services import (
     finalize_event_tournament,
     is_registered_for_event,
     log_lobby_password_changed,
+    process_rsvp,
     regenerate_event_lobby_password,
     reinstate_signup,
     reject_signup,
     resolve_or_create_org_user,
     restart_event_tournament,
     staff_add_signup,
+    sync_event_roster,
     sync_future_events,
     sync_tournament_from_event,
     teardown_event,
@@ -103,25 +113,6 @@ class IsOrgStaff(permissions.BasePermission):
         if org is None and hasattr(obj, "event"):
             org = obj.event.organization
         return org and has_org_staff_access(request.user, org)
-
-
-def _annotate_event_qs(qs: QuerySet[Event]) -> QuerySet[Event]:
-    """Add signup_count and confirmed_count annotations."""
-    return qs.annotate(
-        signup_count=Count(
-            "signups",
-            filter=~Q(
-                signups__status__in=[
-                    SignupStatus.CANCELLED,
-                    SignupStatus.REJECTED,
-                ]
-            ),
-        ),
-        confirmed_count=Count(
-            "signups",
-            filter=Q(signups__status=SignupStatus.CONFIRMED),
-        ),
-    )
 
 
 def with_event_staff(qs: QuerySet[Event]) -> QuerySet[Event]:
@@ -168,9 +159,17 @@ def _attach_user_can_manage(
 
 
 def _event_payload(event_pk: int, user: CustomUser) -> dict[str, Any]:
-    qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event_pk)))
+    qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event_pk)))
     data = EventSerializer(qs.first()).data
     _attach_user_can_manage(data, user)
+    return data
+
+
+def _roster_sync_payload(
+    event: Event, synced: RosterSyncResult, user: CustomUser
+) -> dict[str, Any]:
+    data = _event_payload(event.pk, user)
+    data["roster_kept_on_team"] = [member.pk for member in synced.kept_on_team]
     return data
 
 
@@ -338,8 +337,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         return Response(get_data())
 
     def perform_create(self, serializer: EventRepeaterSerializer) -> None:
-        from app.cache_utils import invalidate_after_commit
-
         org = serializer.validated_data.get("organization")
         if not has_org_staff_access(self.request.user, org):
             raise PermissionDenied("You do not have staff access to this organization.")
@@ -347,8 +344,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         invalidate_after_commit(repeater)
 
     def perform_update(self, serializer: EventRepeaterSerializer) -> None:
-        from app.cache_utils import invalidate_after_commit
-
         # Snapshot schedule fields before save so we can detect a change
         # and tell sync_future_events to realign occurrences. Without this,
         # editing day_of_week leaves stale UPCOMING rows on the old day
@@ -422,7 +417,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     )
     def create_event(self, request: Request, pk: str | None = None) -> Response:
         """Create a single off-schedule ("one-off") event from this series."""
-        from app.cache_utils import invalidate_after_commit
         from events.serializers import OneOffEventCreateSerializer
         from events.services import OccurrenceCollision, create_off_schedule_event
 
@@ -498,8 +492,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     )
     def reactivate(self, request: Request, pk: str | None = None) -> Response:
         """Reactivate a paused series and realign its upcoming events."""
-        from app.cache_utils import invalidate_after_commit
-
         repeater = self.get_object()
         if not has_org_staff_access(request.user, repeater.organization):
             return Response(
@@ -569,7 +561,7 @@ class EventViewSet(viewsets.ModelViewSet):
         return EventSerializer
 
     def get_queryset(self) -> QuerySet[Event]:
-        qs = _annotate_event_qs(
+        qs = with_signup_counts(
             Event.objects.select_related(
                 "organization", "tournament_league", "created_by", "tournament"
             )
@@ -691,8 +683,6 @@ class EventViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(
                 "You do not have permission to create events for this organization."
             )
-        from app.cache_utils import invalidate_after_commit
-
         event = serializer.save(created_by=self.request.user)
         create_tournament_for_event(event)
         # Auto-create DiscordEvent if org has Discord configured
@@ -704,15 +694,14 @@ class EventViewSet(viewsets.ModelViewSet):
             except ValueError:
                 pass  # Event already in a non-upcoming state
         invalidate_after_commit(event)
-        from events.discord import notify_create_discord_event
 
         notify_create_discord_event(event)
 
     def perform_update(self, serializer: EventSerializer) -> None:
-        from app.cache_utils import invalidate_after_commit
-
         previous_password = serializer.instance.dota_lobby_password
         previous_draft_options = event_draft_option_values(serializer.instance)
+        previous_allow_user_signups = serializer.instance.allow_user_signups
+        previous_roll_call_enabled = serializer.instance.roll_call_enabled
         previous_ledger_fields = (
             serializer.instance.scheduled_at,
             serializer.instance.ends_at,
@@ -731,6 +720,13 @@ class EventViewSet(viewsets.ModelViewSet):
             ) != previous_ledger_fields and should_sync_staff(event):
                 sync_event_staff_entries(event)
         invalidate_after_commit(event)
+        if event.allow_user_signups != previous_allow_user_signups:
+            transaction.on_commit(lambda: notify_signup_changed(event))
+        if (
+            event.roll_call_enabled != previous_roll_call_enabled
+            and event.state == EventState.SIGNUPS_OPEN
+        ):
+            transaction.on_commit(lambda: sync_event_roster(event))
         if event.dota_lobby_password != previous_password:
             log_lobby_password_changed(event, "event_update")
         result = sync_tournament_from_event(
@@ -766,8 +762,6 @@ class EventViewSet(viewsets.ModelViewSet):
                 ).exists()
 
             if not has_announcement:
-                from events.discord import notify_create_discord_event
-
                 notify_create_discord_event(event)
 
     def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -851,23 +845,11 @@ class EventViewSet(viewsets.ModelViewSet):
         Body: {"intent": "rsvp" | "tentative", "profile": {...}}
         Replaces the older /rsvp/ and /tentative/ actions (deleted in Task 29).
         """
-        from django.db import transaction
-        from pydantic import ValidationError as PydanticValidationError
-
-        from events.schemas import SignupInputPatch
-        from events.services import (
-            apply_signup_input,
-            create_tentative_signup,
-            process_rsvp,
-            resolve_or_create_org_user,
-        )
-
         event = self.get_object()
-        if event.state != EventState.SIGNUPS_OPEN:
-            return Response(
-                {"error": "Event is not accepting signups"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        try:
+            ensure_self_serve(event, request.user)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         body = request.data or {}
         intent = body.get("intent")
@@ -909,8 +891,6 @@ class EventViewSet(viewsets.ModelViewSet):
         """Admin adds a user to the event signup list.
         POST /api/events/<pk>/admin-signup/ {"user_id": <pk>}
         """
-        from app.models import CustomUser
-
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -941,7 +921,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             event.transition_state(EventState.SIGNUPS_OPEN)
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
+            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -954,11 +934,10 @@ class EventViewSet(viewsets.ModelViewSet):
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            event.transition_state(EventState.ROLL_CALL)
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
-            data = EventSerializer(qs.first()).data
-            _attach_user_can_manage(data, request.user)
-            return Response(data)
+            with transaction.atomic():
+                event.transition_state(EventState.ROLL_CALL)
+                synced = sync_event_roster(event)
+            return Response(_roster_sync_payload(event, synced, request.user))
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -966,22 +945,18 @@ class EventViewSet(viewsets.ModelViewSet):
     def reopen_signups(self, request: Request, pk: str | None = None) -> Response:
         """Corrective transition from ROLL_CALL back to SIGNUPS_OPEN.
 
-        Quiet: no Discord re-announcement, no signup-changed notify. Existing
-        confirmations and tournament additions are preserved.
+        Quiet: no Discord re-announcement, no signup-changed notify. The
+        roster is resynced to the signup-phase rule, so approved players come
+        back when roll_call_enabled is off.
         """
-        from app.cache_utils import invalidate_after_commit
-
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             with transaction.atomic():
                 event.transition_state(EventState.SIGNUPS_OPEN)
-                invalidate_after_commit(event)
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
-            data = EventSerializer(qs.first()).data
-            _attach_user_can_manage(data, request.user)
-            return Response(data)
+                synced = sync_event_roster(event)
+            return Response(_roster_sync_payload(event, synced, request.user))
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1004,7 +979,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 ensure_tournament_with_signups(event)
                 event.transition_state(EventState.IN_PROGRESS)
                 finalize_event_tournament(event)
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
+            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -1051,7 +1026,7 @@ class EventViewSet(viewsets.ModelViewSet):
                         event_id=event.pk,
                         guild_id=discord_event.guild_id,
                     )
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
+            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -1143,8 +1118,6 @@ class EventViewSet(viewsets.ModelViewSet):
         except DiscordEvent.DoesNotExist:
             return Response({"detail": "No Discord state for this event"}, status=404)
 
-        from cacheops import cached_as
-
         from discordbot.models import DiscordEventDM, DiscordEventLog, DiscordMessageLog
         from discordbot.serializers_discord_event import DiscordEventDetailSerializer
 
@@ -1177,7 +1150,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 can_reopen=has_org_admin_access(request.user, event.organization),
             )
             event.refresh_from_db()
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
+            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -1238,8 +1211,6 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Audit log for MMR override
         if mmr_override is not None:
-            from app.models import OrgLog
-
             OrgLog.objects.create(
                 organization=signup.event.organization,
                 actor=request.user,
@@ -1328,13 +1299,17 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"])
     def reinstate(self, request: Request, pk: str | None = None) -> Response:
-        """Reinstate a cancelled signup (user can reinstate their own)."""
+        """Reinstate a cancelled signup.
+
+        Staff may always reinstate; the owner only when self-serve is open.
+        """
         signup = self.get_object()
-        if signup.user != request.user and not has_event_staff_access(
-            request.user, signup.event
-        ):
+        is_staff = has_event_staff_access(request.user, signup.event)
+        if signup.user != request.user and not is_staff:
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
+            if not is_staff:
+                ensure_self_serve(signup.event, request.user)
             return Response(
                 EventSignupSerializer(
                     reinstate_signup(signup), context={"request": request}

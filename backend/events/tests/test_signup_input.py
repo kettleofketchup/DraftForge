@@ -1,16 +1,20 @@
 from datetime import timedelta
 from unittest.mock import patch as mock_patch
 
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from app.models import CustomUser, GameType, Organization
 from events.models import Event, EventState
 from events.schemas import SignupInputPatch
 from events.services import apply_signup_input, resolve_or_create_org_user
-from org.models_profiles import PlayerDotaProfile
+from events.tests.base import EventTestCase
+from org.models import OrgUser
+from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
 
 class ApplySignupInputTests(TestCase):
@@ -82,7 +86,7 @@ class ApplySignupInputTests(TestCase):
         self.user.refresh_from_db()
         positions = self.user.positions
         self.assertEqual(positions.offlane, 1)  # 1st pick → Favorite
-        self.assertEqual(positions.carry, 2)    # 2nd pick → Can play
+        self.assertEqual(positions.carry, 2)  # 2nd pick → Can play
         self.assertEqual(positions.hard_support, 3)  # 3rd pick → If team needs
         self.assertEqual(positions.mid, 0)
         self.assertEqual(positions.soft_support, 0)
@@ -138,19 +142,20 @@ class ApplySignupInputTests(TestCase):
 
     def test_rank_status_active_writes(self):
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_status="active"),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.rank_status, "active")
-
 
     def test_rank_status_disallowed_raises(self):
         self.event.allow_active_mmr = False
         self.event.save()
         with self.assertRaises(DjangoValidationError) as ctx:
             apply_signup_input(
-                org_user=self.org_user, event=self.event,
+                org_user=self.org_user,
+                event=self.event,
                 patch=SignupInputPatch(rank_status="active"),
             )
         self.assertEqual(ctx.exception.code, "rank_status_disallowed")
@@ -158,16 +163,17 @@ class ApplySignupInputTests(TestCase):
 
     def test_rank_medal_writes(self):
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_medal="Crusader 3"),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.rank_medal, "Crusader 3")
 
-
     def test_battle_cup_tier_writes(self):
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(battle_cup_tier=5),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
@@ -175,33 +181,34 @@ class ApplySignupInputTests(TestCase):
 
     def test_rank_screenshot_writes(self):
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_screenshot="https://i.imgur.com/abc.png"),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.rank_screenshot, "https://i.imgur.com/abc.png")
 
-
     def test_screenshot_bad_shape_raises(self):
         with self.assertRaises(DjangoValidationError) as ctx:
             apply_signup_input(
-                org_user=self.org_user, event=self.event,
+                org_user=self.org_user,
+                event=self.event,
                 patch=SignupInputPatch(rank_screenshot="ftp://example.com/x.png"),
             )
         self.assertEqual(ctx.exception.code, "screenshot_bad_url")
 
-
     def test_screenshot_bad_extension_raises(self):
         with self.assertRaises(DjangoValidationError):
             apply_signup_input(
-                org_user=self.org_user, event=self.event,
+                org_user=self.org_user,
+                event=self.event,
                 patch=SignupInputPatch(rank_screenshot="https://i.imgur.com/abc.gif"),
             )
 
-
     def test_battlecup_screenshot_writes(self):
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(battlecup_screenshot="https://i.imgur.com/bc.jpg"),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
@@ -212,33 +219,40 @@ class ApplySignupInputTests(TestCase):
         other_org = Organization.objects.create(name="Other Org")
         bob = CustomUser.objects.create(username="bob")
         bob_org_user = resolve_or_create_org_user(bob, other_org)
-        PlayerDotaProfile.objects.create(org_user=bob_org_user, unverified_friend_id="9999")
+        PlayerDotaProfile.objects.create(
+            org_user=bob_org_user, unverified_friend_id="9999"
+        )
         with self.assertRaises(DjangoValidationError) as ctx:
             apply_signup_input(
-                org_user=self.org_user, event=self.event,
+                org_user=self.org_user,
+                event=self.event,
                 patch=SignupInputPatch(unverified_friend_id="9999"),
             )
         self.assertEqual(ctx.exception.code, "duplicate_friend_id")
         self.assertIn("9999", str(ctx.exception))
-        self.assertIn("dota.kettle.sh", str(ctx.exception))
+        self.assertIn(settings.SITE_URL, str(ctx.exception))
 
     def test_multi_call_partial_patch_accumulates(self):
         # Mirror Discord's 4-turn flow: rank_status, then positions, then medal,
         # then screenshot. Each call commits independently; final state has all writes.
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_status="active"),
         )
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(positions=[1, 2]),
         )
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_medal="Legend 4"),
         )
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_screenshot="https://i.imgur.com/x.png"),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
@@ -247,7 +261,6 @@ class ApplySignupInputTests(TestCase):
         self.assertFalse(profile.pos_3)
         self.assertEqual(profile.rank_medal, "Legend 4")
         self.assertEqual(profile.rank_screenshot, "https://i.imgur.com/x.png")
-
 
     def test_idempotent_re_application(self):
         patch = SignupInputPatch(rank_status="active", positions=[3])
@@ -294,3 +307,115 @@ class ApplySignupInputTests(TestCase):
             except RuntimeError:
                 pass
         spy.assert_not_called()
+
+
+class FriendIdInputTests(EventTestCase):
+    def _org_user(self, user: CustomUser) -> OrgUser:
+        return OrgUser.objects.get(user=user, organization=self.org)
+
+    def test_collides_with_other_users_steam_account_id(self) -> None:
+        ev = self.make_event()
+        u = self.make_user()
+        other = self.make_user()
+        other.steam_account_id = 4242
+        other.save()
+        with self.assertRaises(DjangoValidationError) as cm:
+            apply_signup_input(
+                org_user=self._org_user(u),
+                event=ev,
+                patch=SignupInputPatch(unverified_friend_id="4242"),
+            )
+        self.assertEqual(cm.exception.code, "duplicate_friend_id")
+        self.assertFalse(
+            PlayerDotaProfile.objects.filter(org_user=self._org_user(u)).exists()
+        )
+
+    def test_collides_with_deadlock_profile_of_other_user(self) -> None:
+        ev = self.make_event()
+        other = self._org_user(self.make_user())
+        PlayerDeadlockProfile.objects.create(
+            org_user=other, unverified_friend_id="373737"
+        )
+        with self.assertRaises(DjangoValidationError) as cm:
+            apply_signup_input(
+                org_user=self._org_user(self.make_user()),
+                event=ev,
+                patch=SignupInputPatch(unverified_friend_id="373737"),
+            )
+        self.assertEqual(cm.exception.code, "duplicate_friend_id")
+
+    def test_own_id_from_other_org_is_accepted(self) -> None:
+        ev = self.make_event()
+        u = self.make_user()
+        other_org = Organization.objects.create(name="Other Signup Org")
+        other_ou = OrgUser.objects.create(user=u, organization=other_org)
+        PlayerDotaProfile.objects.create(
+            org_user=other_ou, unverified_friend_id="383838"
+        )
+        apply_signup_input(
+            org_user=self._org_user(u),
+            event=ev,
+            patch=SignupInputPatch(unverified_friend_id="383838"),
+        )
+        self.assertEqual(
+            PlayerDotaProfile.objects.get(
+                org_user=self._org_user(u)
+            ).unverified_friend_id,
+            "383838",
+        )
+
+    def test_schema_strips_friend_id(self) -> None:
+        patch = SignupInputPatch(unverified_friend_id=" 123 ")
+        self.assertEqual(patch.unverified_friend_id, "123")
+
+    def test_malformed_friend_id_rejected_by_validator(self) -> None:
+        ev = self.make_event()
+        ou = self._org_user(self.make_user())
+        for fid in ("abc", "\u0661\u0662\u0663", "9" * 21):
+            with self.subTest(fid=fid):
+                with self.assertRaises(DjangoValidationError) as cm:
+                    apply_signup_input(
+                        org_user=ou,
+                        event=ev,
+                        patch=SignupInputPatch(unverified_friend_id=fid),
+                    )
+                self.assertEqual(cm.exception.code, "invalid_friend_id")
+        self.assertFalse(PlayerDotaProfile.objects.filter(org_user=ou).exists())
+
+    def test_empty_string_still_clears(self) -> None:
+        ev = self.make_event()
+        ou = self._org_user(self.make_user())
+        PlayerDotaProfile.objects.create(org_user=ou, unverified_friend_id="191919")
+        apply_signup_input(
+            org_user=ou, event=ev, patch=SignupInputPatch(unverified_friend_id="")
+        )
+        self.assertEqual(
+            PlayerDotaProfile.objects.get(org_user=ou).unverified_friend_id, ""
+        )
+
+
+class SignupViewFriendIdTests(EventTestCase):
+    def _post(self, user: CustomUser, event: Event, fid: str) -> object:
+        client = APIClient()
+        client.force_authenticate(user)
+        return client.post(
+            f"/api/events/{event.pk}/signup/",
+            {"intent": "rsvp", "profile": {"unverified_friend_id": fid}},
+            format="json",
+        )
+
+    def test_padded_friend_id_is_stored_stripped(self) -> None:
+        ev = self.make_event()
+        u = self.make_user()
+        resp = self._post(u, ev, " 0777123 ")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        ou = OrgUser.objects.get(user=u, organization=self.org)
+        self.assertEqual(
+            PlayerDotaProfile.objects.get(org_user=ou).unverified_friend_id, "777123"
+        )
+
+    def test_non_numeric_friend_id_gets_friendly_error(self) -> None:
+        ev = self.make_event()
+        resp = self._post(self.make_user(), ev, "abc")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["error"], "Friend ID must be digits only (max 20).")

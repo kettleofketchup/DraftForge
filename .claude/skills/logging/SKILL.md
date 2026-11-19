@@ -40,7 +40,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `herodraft` | `view` | — | `app/functions/herodraft_views.py` | HeroDraft HTTP actions: create, roll, choice/pick submit, abandon, reset |
 | `celery` | `task` | — | `telemetry/celery.py` | Generic Celery task lifecycle bookends (started/completed/failed) |
 | `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
-| `events` | `scheduling` | — | `events/tasks.py` | Event generation, signup opening, repeaters |
+| `events` | `scheduling` | — | `events/tasks.py`, `events/management/` | Event generation, signup opening, repeaters |
 | `tournament` | `discord` | — | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
 | `avatars` | `endpoint` | — | `user/internal/avatar.py` | Internal endpoints: list-linked-users, list-guild-ids, bulk-update + invalidate |
 | `avatars` | `refresh` | — | `app/tasks/avatar_refresh.py::refresh_avatars_batched` | Daily Celery beat: read guild-member cache, diff against DB, POST bulk-update |
@@ -66,6 +66,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `bracket` | `generate`, `model` | — | `bracket/**` | Bracket generation + model-level cache logging |
 | `org` | `views` | — | `org/views.py` | Org admin actions (user delete/merge) |
 | `org` | `features` | — | `org/features.py` | Locked feature switch writes (`org_feature_set`, after commit) |
+| `org` | `settings` | — | `org/settings_service.py` | OrgSettings lazy create and admin updates |
 | `org` | `promoters` | — | `org/views_features.py` | Promoter add/remove (`org_promoter_added`, `org_promoter_removed`) |
 | `org` | `contributions` | — | `org/contributions/services.py`, `org/contributions/periods.py` | Ledger writes: awards, host/helper sync, manual award edit/delete, point values and rescores, merge reassign/dedupe, user-delete cleanup; invalid org timezone fallback (`org_timezone_invalid`) |
 | `org` | `promotion` | — | `org/promotion/services.py`, `org/promotion/views.py`, `org/promotion/starter.py` | Promo send record/undo, merge demotions, template create/update/delete, starter template seeding. Never message text |
