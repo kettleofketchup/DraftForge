@@ -12,7 +12,7 @@ from typing import Any
 
 import requests
 
-from app import internal_client as ic
+from app.internal_client import transport
 
 BASE = "/lobbies"
 
@@ -37,7 +37,7 @@ def claim(
     game_lobby_id: int | None = None,
 ) -> tuple[int | None, Any]:
     """(status, body) of the claim; status is None when the call failed."""
-    resp = ic._post(
+    resp = transport.post(
         f"{BASE}/games/{game_id}/claim/",
         {
             "trigger": trigger,
@@ -53,7 +53,7 @@ def claim(
 
 def accepted(pk: int, lobby: dict[str, Any], *, replayed: bool) -> Any:
     return _json(
-        ic._post(f"{BASE}/{pk}/accepted/", {"lobby": lobby, "replayed": replayed})
+        transport.post(f"{BASE}/{pk}/accepted/", {"lobby": lobby, "replayed": replayed})
     )
 
 
@@ -61,7 +61,7 @@ def rejected(
     pk: int, *, code: str, detail: str, retryable: bool, retry_in: int = 0
 ) -> Any:
     return _json(
-        ic._post(
+        transport.post(
             f"{BASE}/{pk}/rejected/",
             {
                 "code": code,
@@ -74,23 +74,23 @@ def rejected(
 
 
 def conflict(pk: int, lobby: dict[str, Any]) -> Any:
-    return _json(ic._post(f"{BASE}/{pk}/conflict/", {"lobby": lobby}))
+    return _json(transport.post(f"{BASE}/{pk}/conflict/", {"lobby": lobby}))
 
 
 def active() -> list[dict[str, Any]] | None:
-    return _json(ic._get(f"{BASE}/active/"))
+    return _json(transport.get(f"{BASE}/active/"))
 
 
 def close_pending() -> list[dict[str, Any]] | None:
-    return _json(ic._get(f"{BASE}/close-pending/"))
+    return _json(transport.get(f"{BASE}/close-pending/"))
 
 
 def close_done(pk: int, *, found: int) -> Any:
-    return _json(ic._post(f"{BASE}/{pk}/close-done/", {"found": found}))
+    return _json(transport.post(f"{BASE}/{pk}/close-done/", {"found": found}))
 
 
 def detail(pk: int) -> dict[str, Any] | None:
-    return _json(ic._get(f"{BASE}/{pk}/"))
+    return _json(transport.get(f"{BASE}/{pk}/"))
 
 
 def sync(
@@ -101,7 +101,7 @@ def sync(
     missing: bool = False,
 ) -> Any:
     return _json(
-        ic._post(
+        transport.post(
             f"{BASE}/{pk}/sync/",
             {"lobby": lobby, "events": events or [], "missing": missing},
         )
@@ -109,8 +109,8 @@ def sync(
 
 
 def eligible_games() -> list[dict[str, Any]] | None:
-    return _json(ic._get(f"{BASE}/eligible-games/"))
+    return _json(transport.get(f"{BASE}/eligible-games/"))
 
 
 def notify_info(pk: int) -> dict[str, Any] | None:
-    return _json(ic._get(f"{BASE}/{pk}/notify/"))
+    return _json(transport.get(f"{BASE}/{pk}/notify/"))

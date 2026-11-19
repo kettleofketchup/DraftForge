@@ -155,10 +155,10 @@ runs:
           exec -T celery-worker python - <<'EOF'
         import sys
         import time
-        from app.internal_client import _get
+        from app.internal_client.transport import get
         # The readiness probe above goes through nginx, so daphne may still be starting.
         for _ in range(30):
-            resp = _get("/steam/tracked-leagues/")
+            resp = get("/steam/tracked-leagues/")
             if resp is not None:
                 break
             time.sleep(2)
