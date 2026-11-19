@@ -21,6 +21,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
+from structlog.testing import capture_logs
 
 from app.draft_state import build_draft_state
 from app.exception_handler import exception_handler
@@ -53,10 +54,11 @@ from app.serializers import (
 )
 from app.services import team_management
 from app.services.team_audit import log_snapshot_fields
-from app.services.team_references import team_usage
+from app.services.team_references import team_references, team_usage
 from app.services.team_signals import TeamRosterChange, team_roster_changed
 from app.tests.test_draft_state_queries import make_fixture
 from app.tests.test_team_management import TeamManagementFixture
+from app.views_main import TeamView
 from events.models import EventTeam
 from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
 from user.tests.test_cacheops_integration import _redis_reachable
@@ -1141,3 +1143,48 @@ class LegacyDeleteTests(TeamApiFixture, TestCase):
     def test_unknown_team_404(self) -> None:
         resp = self.client_for(self.site_staff).delete("/api/teams/999999/")
         self.assertEqual(resp.status_code, 404)
+
+    def stale_get_object(self) -> Any:
+        stale = Team.objects.nocache().get(pk=self.team.pk)
+        return patch.object(TeamView, "get_object", return_value=stale)
+
+    def test_team_gone_before_lock_404(self) -> None:
+        with self.stale_get_object():
+            Team.objects.nocache().filter(pk=self.team.pk).delete()
+            resp = self.delete()
+        self.assertEqual(resp.status_code, 404, resp.content)
+        self.assertFalse(self.deleted_rows().exists())
+
+    def test_permission_rechecked_under_lock(self) -> None:
+        with self.stale_get_object():
+            Team.objects.nocache().filter(pk=self.team.pk).update(
+                tournament=self.other_org_tournament()
+            )
+            resp = self.delete(self.org_staff)
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.assertTrue(Team.objects.nocache().filter(pk=self.team.pk).exists())
+        self.assertFalse(self.deleted_rows().exists())
+
+    def test_delete_logged(self) -> None:
+        pk = self.team.pk
+        with capture_logs() as logs:
+            self.assertEqual(self.delete().status_code, 204)
+        events = [e for e in logs if e["event"] == "team_deleted"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["system"], "tournament")
+        self.assertEqual(events[0]["subsystem"], "teams")
+        self.assertEqual(events[0]["team_id"], pk)
+        self.assertEqual(events[0]["tournament_id"], self.tournament.pk)
+        self.assertEqual(events[0]["actor_id"], self.site_staff.pk)
+
+    def test_refusal_logged(self) -> None:
+        Game.objects.create(tournament=self.tournament, radiant_team=self.team)
+        with capture_logs() as logs:
+            self.assertEqual(self.delete().status_code, 409)
+        events = [e for e in logs if e["event"] == "team_delete_refused"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["log_level"], "warning")
+        self.assertEqual(events[0]["system"], "tournament")
+        self.assertEqual(events[0]["subsystem"], "teams")
+        self.assertEqual(events[0]["team_id"], self.team.pk)
+        self.assertEqual(events[0]["references"], team_references([self.team]))

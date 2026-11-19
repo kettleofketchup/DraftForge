@@ -955,14 +955,21 @@ class TeamView(viewsets.ModelViewSet):
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Legacy DELETE: refuses teams other rows still use, audits the rest."""
         instance = self.get_object()
+        teams = Team.objects.nocache().select_related("tournament__league")
         with transaction.atomic(), owning_team_audit():
-            team = (
-                Team.objects.nocache()
-                .select_for_update()
-                .select_related("tournament__league")
-                .get(pk=instance.pk)
-            )
-            if team_references([team]):
+            team = get_object_or_404(teams.select_for_update(), pk=instance.pk)
+            self.check_object_permissions(request, team)
+            references = team_references([team])
+            if references:
+                log.warning(
+                    "team_delete_refused",
+                    system="tournament",
+                    subsystem="teams",
+                    team_id=team.pk,
+                    tournament_id=team.tournament_id,
+                    actor_id=request.user.pk,
+                    references=references,
+                )
                 usage = team_usage([team])
                 return Response(
                     {
@@ -999,6 +1006,14 @@ class TeamView(viewsets.ModelViewSet):
             invalidate_after_commit(*to_invalidate)
             send_roster_changed_on_commit(change_from_log(row))
             team.delete()
+        log.info(
+            "team_deleted",
+            system="tournament",
+            subsystem="teams",
+            team_id=instance.pk,
+            tournament_id=team.tournament_id,
+            actor_id=request.user.pk,
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     # Serializer source name -> roster_snapshot key, for rows on a deleted team.
