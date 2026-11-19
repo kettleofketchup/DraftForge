@@ -399,10 +399,8 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     if (await settingsBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
       await settingsBtn.click();
 
-      // Click Discord Activity tab
-      const discordTab = page.locator(
-        '[data-testid="tournament-settings-discord-tab"]',
-      );
+      // Discord Activity section in the settings sidebar
+      const discordTab = page.getByTestId('tournament-form-tab-activity');
       if (await discordTab.isVisible({ timeout: 3000 }).catch(() => false)) {
         await discordTab.click();
 
