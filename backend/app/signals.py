@@ -3,13 +3,15 @@ Django signals for Team and Tournament member management.
 
 Handles:
 - Captain/deputy succession when members are removed
-- Team deletion when last member is removed
+- Empty teams: kept when referenced, deleted otherwise, both audited
 - Cascade removal from tournament.users to team.members
 - Auto-add tournament users to organization and league
 - Purge stale HeroDraft when a Game's teams change (issue #235)
 - Mark a tournament past when its bracket final is decided (issue #419)
 - Blank an org's Discord server nicknames when its discord_server_id changes
 """
+
+from typing import Any
 
 from asgiref.sync import async_to_sync
 from channels import layers
@@ -27,8 +29,14 @@ from app.models import (
     HeroDraftState,
     Organization,
     Team,
+    TeamLogAction,
+    TeamLogVia,
     Tournament,
 )
+from app.services.team_audit import log_snapshot_fields, roster_snapshot, write_team_log
+from app.services.team_leadership import successor_after_removal
+from app.services.team_references import team_references
+from app.services.team_signals import team_audit_owner
 from app.services.team_signals import team_roster_changed as team_roster_changed
 from app.services.tournament_completion import sync_tournament_completion
 from league.models import LeagueUser
@@ -41,73 +49,142 @@ log = get_logger(__name__)
 
 @receiver(m2m_changed, sender="app.Team_members")
 def handle_team_member_removal(
-    sender: type, instance: Team, action: str, pk_set: set[int] | None, **kwargs: object
+    sender: type,
+    instance: Team | CustomUser,
+    action: str,
+    pk_set: set[int] | None,
+    reverse: bool = False,
+    **kwargs: object,
 ) -> None:
-    """Handle captain/deputy succession when members are removed."""
+    """Captain/deputy succession and empty-team handling when members leave."""
+    if reverse:
+        _handle_reverse_member_change(instance, action, pk_set)
+        return
+
     team = instance
-
-    # Handle post_clear - delete team if empty
+    if action == "pre_clear":
+        team._members_before_clear = set(  # type: ignore[union-attr]
+            team.members.nocache().values_list("pk", flat=True)
+        )
+        return
     if action == "post_clear":
-        if team.members.count() == 0:
-            team.delete()
+        removed = getattr(team, "_members_before_clear", set())
+        team._members_before_clear = set()  # type: ignore[union-attr]
+        _after_members_removed(team, removed)
         return
+    if action == "post_remove":
+        _after_members_removed(team, set(pk_set or ()))
 
-    # Only handle post_remove for removal logic
-    if action != "post_remove":
-        return
 
-    removed_pks = pk_set
-
-    # Guard: Team is now empty → delete it
-    if team.members.count() == 0:
-        team.delete()
-        return
-
-    # Guard: Captain wasn't removed
-    captain_removed = team.captain and team.captain.pk in removed_pks
-    deputy_removed = team.deputy_captain and team.deputy_captain.pk in removed_pks
-
-    if not captain_removed and not deputy_removed:
-        return
-
-    # Handle deputy removal (simple case)
-    if not captain_removed and deputy_removed:
-        team.deputy_captain = None
-        team.save(update_fields=["deputy_captain"])
-        return
-
-    # Captain was removed - need succession
-    # Try deputy first if they weren't also removed
-    if (
-        team.deputy_captain
-        and not deputy_removed
-        and team.members.filter(pk=team.deputy_captain.pk).exists()
-    ):
-        team.captain = team.deputy_captain
-        team.deputy_captain = None
-        team.save(update_fields=["captain", "deputy_captain"])
-        return
-
-    # Fallback: promote remaining member (by OrgUser MMR if available, else by pk)
-    remaining = team.members.all()
-    highest_mmr_member = remaining.order_by("pk").first()
-    if (
-        team.tournament
-        and hasattr(team.tournament, "league")
-        and team.tournament.league
-    ):
-        org = team.tournament.league.organization
-        if org:
-            best = (
-                OrgUser.objects.filter(user__in=remaining, organization=org)
-                .order_by("-mmr")
-                .first()
+def _handle_reverse_member_change(
+    user: CustomUser, action: str, pk_set: set[int] | None
+) -> None:
+    if action == "pre_clear":
+        user._teams_before_clear = set(  # type: ignore[attr-defined]
+            Team.members.through.objects.filter(customuser=user).values_list(
+                "team_id", flat=True
             )
-            if best:
-                highest_mmr_member = best.user
-    team.captain = highest_mmr_member
-    team.deputy_captain = None
+        )
+        return
+    if action == "post_clear":
+        team_pks = getattr(user, "_teams_before_clear", set())
+        user._teams_before_clear = set()  # type: ignore[attr-defined]
+    elif action == "post_remove":
+        team_pks = set(pk_set or ())
+    else:
+        return
+    for team in Team.objects.nocache().filter(pk__in=team_pks).order_by("pk"):
+        _after_members_removed(team, {user.pk})
+
+
+def _before_removal(team: Team, removed_pks: set[int]) -> dict[str, Any]:
+    before = roster_snapshot(team)
+    before["member_ids"] = sorted(set(before["member_ids"]) | removed_pks)
+    return before
+
+
+def _after_members_removed(team: Team, removed_pks: set[int]) -> None:
+    if not team.members.nocache().exists():
+        _handle_empty_team(team, removed_pks)
+        return
+
+    captain, deputy, how = successor_after_removal(team, removed_pks)
+    if how == "unchanged":
+        return
+
+    owned = team_audit_owner.get()
+    before = None if owned else _before_removal(team, removed_pks)
+    team.captain = captain
+    team.deputy_captain = deputy
     team.save(update_fields=["captain", "deputy_captain"])
+    log.info(
+        "team_succession_applied",
+        system="tournament",
+        subsystem="teams",
+        team_id=team.pk,
+        succession=how,
+        owned=owned,
+    )
+    if before is None:
+        return
+    write_team_log(
+        team,
+        snapshot=log_snapshot_fields(team),
+        action=TeamLogAction.SYSTEM_SUCCESSION,
+        via=TeamLogVia.SYSTEM,
+        target_user=captain,
+        details={
+            "before": before,
+            "after": roster_snapshot(team),
+            "succession": how,
+        },
+    )
+
+
+def _handle_empty_team(team: Team, removed_pks: set[int]) -> None:
+    """Keep an emptied team that other rows still point at; delete it otherwise."""
+    owned = team_audit_owner.get()
+    references = team_references([team])
+    if references:
+        log.warning(
+            "empty_team_kept",
+            system="tournament",
+            subsystem="teams",
+            team_id=team.pk,
+            tournament_id=team.tournament_id,
+            references=references,
+        )
+        if not owned:
+            write_team_log(
+                team,
+                snapshot=log_snapshot_fields(team),
+                action=TeamLogAction.EMPTY_TEAM_KEPT,
+                via=TeamLogVia.SYSTEM,
+                details={
+                    "before": _before_removal(team, removed_pks),
+                    "after": roster_snapshot(team),
+                    "references": references,
+                },
+            )
+        return
+
+    if not owned:
+        write_team_log(
+            team,
+            snapshot=log_snapshot_fields(team),
+            action=TeamLogAction.TEAM_DELETED,
+            via=TeamLogVia.SYSTEM,
+            details={"before": _before_removal(team, removed_pks)},
+        )
+    log.info(
+        "empty_team_deleted",
+        system="tournament",
+        subsystem="teams",
+        team_id=team.pk,
+        tournament_id=team.tournament_id,
+        owned=owned,
+    )
+    team.delete()
 
 
 @receiver(m2m_changed, sender="app.Tournament_users")

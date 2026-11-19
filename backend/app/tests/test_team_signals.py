@@ -11,7 +11,19 @@ Verifies:
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel, Team, Tournament
+from app.models import (
+    CustomUser,
+    Game,
+    League,
+    Organization,
+    PositionsModel,
+    Team,
+    TeamLog,
+    Tournament,
+)
+from app.services.team_leadership import successor_after_removal
+from app.services.team_signals import owning_team_audit
+from org.models import OrgUser
 
 
 class TeamMemberRemovalTests(TestCase):
@@ -316,3 +328,257 @@ class TeamValidationTests(TestCase):
 
         # Should not raise
         team.full_clean()
+
+
+def _make_user(name: str) -> CustomUser:
+    return CustomUser.objects.create(
+        username=name,
+        discordId=f"discord_{name}",
+        positions=PositionsModel.objects.create(),
+    )
+
+
+class EmptyTeamAuditTests(TestCase):
+    def setUp(self) -> None:
+        self.tournament = Tournament.objects.create(
+            name="Audit Tournament",
+            tournament_type="single_elimination",
+            date_played=timezone.now(),
+        )
+        self.user = _make_user("solo")
+        self.tournament.users.add(self.user)
+        self.team = Team.objects.create(tournament=self.tournament, name="Solo Team")
+        self.team.members.add(self.user)
+        self.team.captain = self.user
+        self.team.save()
+
+    def test_referenced_empty_team_kept(self) -> None:
+        Game.objects.create(tournament=self.tournament, radiant_team=self.team)
+
+        self.team.members.remove(self.user)
+
+        self.assertTrue(Team.objects.filter(pk=self.team.pk).exists())
+        rows = TeamLog.objects.filter(team_snapshot_id=self.team.pk)
+        self.assertEqual([row.action for row in rows], ["empty_team_kept"])
+        row = rows.get()
+        self.assertEqual(row.via, "system")
+        self.assertEqual(row.team_id, self.team.pk)
+        self.assertTrue(row.details["references"])
+        self.assertEqual(row.details["before"]["member_ids"], [self.user.pk])
+
+    def test_unreferenced_empty_team_deleted_with_row(self) -> None:
+        old_pk = self.team.pk
+
+        self.team.members.remove(self.user)
+
+        self.assertFalse(Team.objects.filter(pk=old_pk).exists())
+        row = TeamLog.objects.get(team_snapshot_id=old_pk)
+        self.assertEqual(row.action, "team_deleted")
+        self.assertEqual(row.via, "system")
+        self.assertIsNone(row.team)
+        self.assertEqual(row.team_name, "Solo Team")
+        self.assertEqual(row.tournament_id, self.tournament.pk)
+        self.assertEqual(row.details["before"]["member_ids"], [self.user.pk])
+
+    def test_post_clear_referenced_team_kept(self) -> None:
+        Game.objects.create(tournament=self.tournament, dire_team=self.team)
+
+        self.team.members.clear()
+
+        self.assertTrue(Team.objects.filter(pk=self.team.pk).exists())
+        row = TeamLog.objects.get(team_snapshot_id=self.team.pk)
+        self.assertEqual(row.action, "empty_team_kept")
+        self.assertTrue(row.details["references"])
+        self.assertEqual(row.details["before"]["member_ids"], [self.user.pk])
+
+    def test_post_clear_unreferenced_team_deleted_with_row(self) -> None:
+        old_pk = self.team.pk
+
+        self.team.members.clear()
+
+        self.assertFalse(Team.objects.filter(pk=old_pk).exists())
+        row = TeamLog.objects.get(team_snapshot_id=old_pk)
+        self.assertEqual(row.action, "team_deleted")
+        self.assertEqual(row.details["before"]["member_ids"], [self.user.pk])
+
+    def test_tournament_user_removal_keeps_referenced_team(self) -> None:
+        Game.objects.create(tournament=self.tournament, radiant_team=self.team)
+
+        self.tournament.users.remove(self.user)
+
+        self.assertTrue(Team.objects.filter(pk=self.team.pk).exists())
+
+    def test_no_rows_while_owned_but_referenced_team_still_kept(self) -> None:
+        Game.objects.create(tournament=self.tournament, radiant_team=self.team)
+
+        with owning_team_audit():
+            self.team.members.remove(self.user)
+
+        self.assertTrue(Team.objects.filter(pk=self.team.pk).exists())
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_no_rows_while_owned_unreferenced_team_deleted(self) -> None:
+        old_pk = self.team.pk
+
+        with owning_team_audit():
+            self.team.members.remove(self.user)
+
+        self.assertFalse(Team.objects.filter(pk=old_pk).exists())
+        self.assertFalse(TeamLog.objects.exists())
+
+
+class SuccessionAuditTests(TestCase):
+    def setUp(self) -> None:
+        self.tournament = Tournament.objects.create(
+            name="Succession Tournament",
+            tournament_type="single_elimination",
+            date_played=timezone.now(),
+        )
+        self.users = [_make_user(f"succ_{i}") for i in range(4)]
+        self.tournament.users.set(self.users)
+        self.team = Team.objects.create(tournament=self.tournament, name="Succ Team")
+        self.team.members.set(self.users)
+        self.team.captain = self.users[0]
+        self.team.deputy_captain = self.users[1]
+        self.team.save()
+
+    def test_tournament_user_removal_writes_system_succession(self) -> None:
+        captain, deputy = self.users[0], self.users[1]
+
+        self.tournament.users.remove(captain)
+
+        self.team.refresh_from_db()
+        self.assertEqual(self.team.captain, deputy)
+        self.assertIsNone(self.team.deputy_captain)
+        row = TeamLog.objects.get(team=self.team)
+        self.assertEqual(row.action, "system_succession")
+        self.assertEqual(row.via, "system")
+        self.assertIsNone(row.actor)
+        self.assertEqual(row.details["succession"], "deputy")
+        self.assertEqual(row.details["before"]["captain_id"], captain.pk)
+        self.assertIn(captain.pk, row.details["before"]["member_ids"])
+        self.assertEqual(row.details["after"]["captain_id"], deputy.pk)
+        self.assertIsNone(row.details["after"]["deputy_captain_id"])
+        self.assertNotIn(captain.pk, row.details["after"]["member_ids"])
+
+    def test_deputy_removal_writes_deputy_cleared_row(self) -> None:
+        self.team.members.remove(self.users[1])
+
+        row = TeamLog.objects.get(team=self.team)
+        self.assertEqual(row.action, "system_succession")
+        self.assertEqual(row.details["succession"], "deputy_cleared")
+
+    def test_regular_member_removal_writes_no_row(self) -> None:
+        self.team.members.remove(self.users[3])
+
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_reverse_remove_runs_succession(self) -> None:
+        self.users[0].teams_as_member.remove(self.team)
+
+        self.team.refresh_from_db()
+        self.assertEqual(self.team.captain, self.users[1])
+        row = TeamLog.objects.get(team=self.team)
+        self.assertEqual(row.details["succession"], "deputy")
+
+    def test_reverse_clear_keeps_referenced_empty_team(self) -> None:
+        solo = Team.objects.create(tournament=self.tournament, name="Reverse Solo")
+        solo.members.add(self.users[3])
+        Game.objects.create(tournament=self.tournament, radiant_team=solo)
+
+        self.users[3].teams_as_member.clear()
+
+        self.assertTrue(Team.objects.filter(pk=solo.pk).exists())
+        self.assertEqual(TeamLog.objects.get(team=solo).action, "empty_team_kept")
+        self.assertNotIn(self.users[3], self.team.members.all())
+        self.assertFalse(TeamLog.objects.filter(team=self.team).exists())
+
+    def test_no_system_rows_while_owned(self) -> None:
+        with owning_team_audit():
+            self.team.members.remove(self.users[0])
+
+        self.team.refresh_from_db()
+        self.assertEqual(self.team.captain, self.users[1])
+        self.assertFalse(TeamLog.objects.exists())
+
+
+class SuccessorAfterRemovalTests(TestCase):
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="Succession Org")
+        self.league = League.objects.create(
+            name="Succession League", organization=self.org
+        )
+        self.tournament = Tournament.objects.create(
+            name="Order Tournament",
+            tournament_type="single_elimination",
+            date_played=timezone.now(),
+            league=self.league,
+        )
+        self.users = [_make_user(f"order_{i}") for i in range(4)]
+        self.team = Team.objects.create(tournament=self.tournament, name="Order Team")
+        self.team.members.set(self.users)
+        Team.objects.filter(pk=self.team.pk).update(
+            captain=self.users[0], deputy_captain=self.users[1]
+        )
+        self.team.refresh_from_db()
+
+    def _remove_rows(self, *users: CustomUser) -> None:
+        # Bypass the m2m signal so the helper sees the post-remove state.
+        Team.members.through.objects.filter(
+            team=self.team, customuser__in=users
+        ).delete()
+
+    def test_deputy_first(self) -> None:
+        self._remove_rows(self.users[0])
+
+        self.assertEqual(
+            successor_after_removal(self.team, {self.users[0].pk}),
+            (self.users[1], None, "deputy"),
+        )
+
+    def test_org_mmr_when_no_deputy(self) -> None:
+        OrgUser.objects.create(user=self.users[2], organization=self.org, mmr=1000)
+        OrgUser.objects.create(user=self.users[3], organization=self.org, mmr=5000)
+        removed = {self.users[0].pk, self.users[1].pk}
+        self._remove_rows(self.users[0], self.users[1])
+
+        self.assertEqual(
+            successor_after_removal(self.team, removed),
+            (self.users[3], None, "org_mmr"),
+        )
+
+    def test_lowest_pk_without_org_users(self) -> None:
+        removed = {self.users[0].pk, self.users[1].pk}
+        self._remove_rows(self.users[0], self.users[1])
+
+        self.assertEqual(
+            successor_after_removal(self.team, removed),
+            (self.users[2], None, "lowest_pk"),
+        )
+
+    def test_unchanged_when_leadership_kept(self) -> None:
+        self._remove_rows(self.users[3])
+
+        self.assertEqual(
+            successor_after_removal(self.team, {self.users[3].pk}),
+            (self.users[0], self.users[1], "unchanged"),
+        )
+
+    def test_deputy_cleared(self) -> None:
+        self._remove_rows(self.users[1])
+
+        self.assertEqual(
+            successor_after_removal(self.team, {self.users[1].pk}),
+            (self.users[0], None, "deputy_cleared"),
+        )
+
+    def test_ghost_deputy_not_promoted(self) -> None:
+        outsider = _make_user("order_ghost")
+        Team.objects.filter(pk=self.team.pk).update(deputy_captain=outsider)
+        self.team.refresh_from_db()
+        self._remove_rows(self.users[0])
+
+        self.assertEqual(
+            successor_after_removal(self.team, {self.users[0].pk}),
+            (self.users[1], None, "lowest_pk"),
+        )
