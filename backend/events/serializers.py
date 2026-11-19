@@ -793,6 +793,11 @@ class EventTeamSerializer(serializers.ModelSerializer):
             nick = self._captain_nicknames(obj).get(obj.captain_id)
         return user_display_name(obj.captain, guild_nickname=nick)
 
+    def validate_event(self, value: Event) -> Event:
+        if self.instance is not None and value.pk != self.instance.event_id:
+            raise serializers.ValidationError("Event cannot be changed.")
+        return value
+
 
 class EventSignupSerializer(serializers.ModelSerializer):
     username = serializers.SerializerMethodField()

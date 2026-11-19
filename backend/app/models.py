@@ -6,12 +6,13 @@ from typing import TYPE_CHECKING, Any, Self
 import requests
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import QuerySet
 from django.db.utils import IntegrityError
 from django.utils import timezone
 
-from app.cache_utils import invalidate_obj
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
 
@@ -862,6 +863,26 @@ class Tournament(models.Model):
             return []
         return self.users.filter(teams_as_captain__tournament=self).distinct()
 
+    def draft_eligible_teams(self) -> "QuerySet[Team]":
+        """Teams whose captain is in the tournament's player pool.
+
+        Not cached: cacheops does not invalidate on subquery tables.
+        """
+        return self.teams.nocache().filter(captain_id__in=self.users.values("pk"))
+
+    def draft_ineligible_teams(self) -> "QuerySet[Team]":
+        return self.teams.nocache().exclude(
+            pk__in=self.draft_eligible_teams().values("pk")
+        )
+
+    def draft_locked_user_ids(self) -> "QuerySet[CustomUser]":
+        """Members of teams outside the draft; they are not draftable."""
+        return (
+            CustomUser.objects.nocache()
+            .filter(teams_as_member__in=self.draft_ineligible_teams())
+            .values("pk")
+        )
+
     @property
     def linked_steam_league_id(self) -> int | None:
         """Steam league id resolved via the parent League FK.
@@ -880,6 +901,23 @@ class Tournament(models.Model):
         manager = DraftOptions.objects.nocache() if fresh else DraftOptions.objects
         options, _ = manager.get_or_create(tournament=self)
         return options
+
+
+class LeadershipProblem(StrEnum):
+    CAPTAIN_NOT_MEMBER = "captain_not_member"
+    DEPUTY_NOT_MEMBER = "deputy_not_member"
+    DEPUTY_IS_CAPTAIN = "deputy_is_captain"
+
+    @property
+    def message(self) -> str:
+        return _LEADERSHIP_MESSAGES[self]
+
+
+_LEADERSHIP_MESSAGES: dict[LeadershipProblem, str] = {
+    LeadershipProblem.CAPTAIN_NOT_MEMBER: "Captain must be a member of the team.",
+    LeadershipProblem.DEPUTY_NOT_MEMBER: "Deputy captain must be a member of the team.",
+    LeadershipProblem.DEPUTY_IS_CAPTAIN: "Deputy captain cannot be the same as captain.",
+}
 
 
 class Team(models.Model):
@@ -948,33 +986,127 @@ class Team(models.Model):
             models.Index(fields=["deputy_captain"]),
         ]
 
-    def clean(self) -> None:
-        from django.core.exceptions import ValidationError
+    @staticmethod
+    def leadership_errors(
+        member_pks: set[int],
+        captain_pk: int | None,
+        deputy_pk: int | None,
+        *,
+        check_captain: bool = True,
+        check_deputy: bool = True,
+    ) -> dict[str, str]:
+        problems = Team.leadership_problems(
+            member_pks,
+            captain_pk,
+            deputy_pk,
+            check_captain=check_captain,
+            check_deputy=check_deputy,
+        )
+        return {field: problem.message for field, problem in problems.items()}
 
+    @staticmethod
+    def leadership_problems(
+        member_pks: set[int],
+        captain_pk: int | None,
+        deputy_pk: int | None,
+        *,
+        check_captain: bool = True,
+        check_deputy: bool = True,
+    ) -> dict[str, "LeadershipProblem"]:
+        problems: dict[str, LeadershipProblem] = {}
+        if check_captain and captain_pk is not None and captain_pk not in member_pks:
+            problems["captain"] = LeadershipProblem.CAPTAIN_NOT_MEMBER
+        if check_deputy and deputy_pk is not None and deputy_pk not in member_pks:
+            problems["deputy_captain"] = LeadershipProblem.DEPUTY_NOT_MEMBER
+        elif deputy_pk is not None and deputy_pk == captain_pk:
+            problems["deputy_captain"] = LeadershipProblem.DEPUTY_IS_CAPTAIN
+        return problems
+
+    def replace_member(self, old: CustomUser, new: CustomUser) -> None:
+        was_member = self.members.filter(pk=old.pk).exists()
+        if was_member:
+            self.members.add(new)
+        update_fields: list[str] = []
+        if self.captain_id == old.pk:
+            self.captain = new
+            update_fields.append("captain")
+        if self.deputy_captain_id == old.pk:
+            self.deputy_captain = new
+            update_fields.append("deputy_captain")
+        if (
+            self.deputy_captain_id is not None
+            and self.deputy_captain_id == self.captain_id
+        ):
+            self.deputy_captain = None
+            update_fields.append("deputy_captain")
+        if update_fields:
+            self.save(update_fields=sorted(set(update_fields)))
+        if was_member:
+            self.members.remove(old)
+        invalidate_after_commit(self, old, new)
+
+    def reduce_members_to_captain(self) -> list[CustomUser]:
+        """Leave only the captain as a member; returns the removed members.
+
+        Add before remove: removing first can empty a team whose captain is
+        not a member, and the removal signal then deletes it with its games.
+        """
+        if self.captain_id is None:
+            raise ValueError(f"Team {self.pk} has no captain to reset to.")
+        self.members.add(self.captain_id)
+        removed = list(self.members.exclude(pk=self.captain_id))
+        if removed:
+            self.members.remove(*removed)
+        return removed
+
+    def reset_to_captain(self) -> list[CustomUser]:
+        """Reset the team in place for a fresh draft; returns the removed members."""
+        removed = self.reduce_members_to_captain()
+        self.dropin_members.clear()
+        self.left_members.clear()
+        league = self.tournament.league if self.tournament_id else None
+        self.league_users.set(
+            self.league_users.model.objects.filter(
+                user_id=self.captain_id, league=league
+            )
+            if league
+            else []
+        )
+        self.deputy_captain = None
+        self.draft_reserve_ms = None
+        self.draft_is_ready = False
+        self.draft_is_connected = False
+        self.draft_has_connected = False
+        self.current_points = self._meta.get_field("current_points").get_default()
+        self.placement = self._meta.get_field("placement").get_default()
+        self.save(
+            update_fields=[
+                "deputy_captain",
+                "draft_reserve_ms",
+                "draft_is_ready",
+                "draft_is_connected",
+                "draft_has_connected",
+                "current_points",
+                "placement",
+            ]
+        )
+        invalidate_after_commit(self, *removed, self.captain)
+        return removed
+
+    def clean(self) -> None:
         super().clean()
 
         # Skip ManyToMany validation if team has no pk yet (being created)
         if not self.pk:
             return
 
-        # Captain must be a member
-        if self.captain and not self.members.filter(pk=self.captain.pk).exists():
-            raise ValidationError({"captain": "Captain must be a member of the team."})
-
-        # Deputy must be a member
-        if (
-            self.deputy_captain
-            and not self.members.filter(pk=self.deputy_captain.pk).exists()
-        ):
-            raise ValidationError(
-                {"deputy_captain": "Deputy captain must be a member of the team."}
-            )
-
-        # Deputy cannot be the same as captain
-        if self.captain and self.deputy_captain and self.captain == self.deputy_captain:
-            raise ValidationError(
-                {"deputy_captain": "Deputy captain cannot be the same as captain."}
-            )
+        errors = Team.leadership_errors(
+            set(self.members.values_list("pk", flat=True)),
+            self.captain_id,
+            self.deputy_captain_id,
+        )
+        if errors:
+            raise ValidationError(errors)
 
     def __str__(self) -> str:
         return self.name
@@ -1211,14 +1343,16 @@ class Draft(models.Model):
         active = self.active_round
         return active is not None and active.started_at is not None
 
-    def reset_timer_state(self, options: "DraftOptions") -> None:
+    def reset_timer_state(
+        self, options: "DraftOptions", teams: "Iterable[Team] | None" = None
+    ) -> None:
         self.state = (
             TeamDraftState.PENDING if options.timer_enabled else TeamDraftState.DRAFTING
         )
         self.paused_at = None
         self.resuming_until = None
         self.is_manual_pause = False
-        for team in self.tournament.teams.all():
+        for team in self.teams if teams is None else teams:
             team.draft_reserve_ms = options.reserve_time_ms
             team.draft_is_ready = False
             team.draft_is_connected = False
@@ -1242,7 +1376,8 @@ class Draft(models.Model):
         return TeamDraftState.DRAFTING
 
     def _emit_lobby_opened(self, options: "DraftOptions") -> None:
-        from app.broadcast import broadcast_event
+        # Cycle: app.broadcast imports app.models.
+        from app.broadcast import broadcast_event_after_commit
 
         event = DraftEvent.objects.create(
             draft=self,
@@ -1253,7 +1388,7 @@ class Draft(models.Model):
                 "reserve_time_ms": options.reserve_time_ms,
             },
         )
-        broadcast_event(event)
+        broadcast_event_after_commit(event)
 
     def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
@@ -1274,7 +1409,7 @@ class Draft(models.Model):
         def get_simulation_data(
             draft_style: str = draft_style,
         ) -> dict[int, list[tuple[int, int]]]:
-            teams = list(self.tournament.teams.order_by("draft_order"))
+            teams = list(self.teams.order_by("draft_order"))
             log.debug(
                 "simulation_teams_loaded",
                 system="tournament",
@@ -1302,9 +1437,10 @@ class Draft(models.Model):
 
             # Get all available players (excluding captains) sorted by MMR desc
             all_player_ids = list(
-                self.tournament.users.exclude(
-                    teams_as_captain__tournament=self.tournament
-                ).values_list("id", flat=True)
+                self.tournament.users.nocache()
+                .exclude(teams_as_captain__tournament=self.tournament)
+                .exclude(pk__in=self.tournament.draft_locked_user_ids())
+                .values_list("id", flat=True)
             )
             available_players = sorted(
                 [(pid, mmr_map.get(pid, 0)) for pid in all_player_ids],
@@ -1377,7 +1513,7 @@ class Draft(models.Model):
             return 0
 
         # First team in draft order
-        first_team = self.tournament.teams.order_by("draft_order").first()
+        first_team = self.teams.order_by("draft_order").first()
         if not first_team or first_team.id not in simulation:
             return 0
         return sum(mmr for _, mmr in simulation[first_team.id])
@@ -1390,7 +1526,7 @@ class Draft(models.Model):
             return 0
 
         # Last team in draft order
-        last_team = self.tournament.teams.order_by("draft_order").last()
+        last_team = self.teams.order_by("draft_order").last()
         if not last_team or last_team.id not in simulation:
             return 0
 
@@ -1404,7 +1540,7 @@ class Draft(models.Model):
             return 0
 
         # First team in draft order
-        first_team = self.tournament.teams.order_by("draft_order").first()
+        first_team = self.teams.order_by("draft_order").first()
         if not first_team or first_team.id not in simulation:
             return 0
 
@@ -1418,7 +1554,7 @@ class Draft(models.Model):
             return 0
 
         # Last team in draft order
-        last_team = self.tournament.teams.order_by("draft_order").last()
+        last_team = self.teams.order_by("draft_order").last()
         if not last_team or last_team.id not in simulation:
             return 0
 
@@ -1431,7 +1567,7 @@ class Draft(models.Model):
         if not simulation:
             return 0
 
-        first_team = self.tournament.teams.order_by("draft_order").first()
+        first_team = self.teams.order_by("draft_order").first()
         if not first_team or first_team.id not in simulation:
             return 0
 
@@ -1444,18 +1580,16 @@ class Draft(models.Model):
         if not simulation:
             return 0
 
-        last_team = self.tournament.teams.order_by("draft_order").last()
+        last_team = self.teams.order_by("draft_order").last()
         if not last_team or last_team.id not in simulation:
             return 0
 
         return sum(mmr for _, mmr in simulation[last_team.id])
 
     @property
-    def teams(self) -> list[Team] | QuerySet[Team]:
-        if not self.tournament.teams.exists():
-            return []
-
-        return self.tournament.teams.all()
+    def teams(self) -> QuerySet[Team]:
+        """The teams taking part in this draft."""
+        return self.tournament.draft_eligible_teams()
 
     @property
     def users(self) -> list[CustomUser] | QuerySet[CustomUser]:
@@ -1501,7 +1635,12 @@ class Draft(models.Model):
             subsystem="draft",
             excluded_count=len(excluded_ids),
         )
-        return self.tournament.users.exclude(id__in=excluded_ids).distinct()
+        return (
+            self.tournament.users.nocache()
+            .exclude(id__in=excluded_ids)
+            .exclude(id__in=self.tournament.draft_locked_user_ids())
+            .distinct()
+        )
 
     @property
     def captains(self) -> QuerySet[CustomUser]:
@@ -1563,7 +1702,7 @@ class Draft(models.Model):
             subsystem="draft",
             tournament_name=self.tournament.name,
         )
-        for team in self.tournament.teams.all():
+        for team in self.teams:
             log.debug(
                 "rebuild_team",
                 system="tournament",
@@ -1571,13 +1710,11 @@ class Draft(models.Model):
                 team_name=team.name,
                 tournament_name=self.tournament.name,
             )
-            # Remove all members except captain to avoid triggering empty team deletion
-            # (using remove() instead of clear() keeps captain as member during operation)
-            members_to_remove = list(team.members.exclude(pk=team.captain.pk))
-            if members_to_remove:
-                team.members.remove(*members_to_remove)
-            # Ensure captain is a member (in case they weren't already)
-            team.members.add(team.captain)
+            if clear_only:
+                team.reset_to_captain()
+            else:
+                team.reduce_members_to_captain()
+                invalidate_after_commit(team)
 
         # Skip re-adding draft choices if we're just clearing for a restart
         if clear_only:
@@ -1610,7 +1747,11 @@ class Draft(models.Model):
                 team.members.add(draft_round.choice)
                 team.save()
 
-    def build_rounds(self) -> None:
+    def build_rounds(self, teams: "QuerySet[Team] | None" = None) -> None:
+        """Rebuild the draft rounds for ``teams`` (default: ``Draft.teams``)."""
+        if teams is None:
+            teams = self.teams
+        teams = teams.order_by("draft_order")
         log.debug(
             "build_rounds_started",
             system="tournament",
@@ -1631,18 +1772,18 @@ class Draft(models.Model):
             round.delete()
 
         options = self.tournament.get_draft_options(fresh=True)
-        self.reset_timer_state(options)
+        self.reset_timer_state(options, teams)
 
         # Delegate to shuffle module for shuffle style
         if self.draft_style == "shuffle":
             from app.functions.shuffle_draft import build_shuffle_rounds
 
-            build_shuffle_rounds(self)
+            build_shuffle_rounds(self, teams)
             if self.state == TeamDraftState.PENDING:
                 self._emit_lobby_opened(options)
             return
 
-        teams = list(self.tournament.teams.order_by("draft_order"))
+        teams = list(teams)
         if not teams:
             log.error(
                 "no_teams_found",
@@ -1779,7 +1920,7 @@ class Draft(models.Model):
             - team_mmr: The MMR of the team that will pick
             - tie_resolution: Dict with tie info if a tie occurred, else None
         """
-        teams = list(self.tournament.teams.all())
+        teams = list(self.teams)
 
         if not teams:
             raise ValueError("No teams in tournament")

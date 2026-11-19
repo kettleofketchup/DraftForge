@@ -2,7 +2,9 @@
 
 import random
 
-from app.broadcast import broadcast_event, broadcast_event_after_commit
+from django.db.models import QuerySet
+
+from app.broadcast import broadcast_event_after_commit
 from app.models import CustomUser, Draft, DraftEvent, DraftRound, Organization, Team
 from org.models import OrgUser
 
@@ -116,14 +118,9 @@ def get_lowest_mmr_team(teams: list) -> tuple:
     return tied[0], None
 
 
-def build_shuffle_rounds(draft: Draft) -> None:
-    """
-    Create all rounds for shuffle draft, assign first captain.
-
-    Args:
-        draft: Draft model instance
-    """
-    teams = list(draft.tournament.teams.all())
+def build_shuffle_rounds(draft: Draft, teams: QuerySet[Team] | None = None) -> None:
+    """Create all rounds for a shuffle draft over ``teams`` and assign the first captain."""
+    teams = list(draft.teams if teams is None else teams)
     num_teams = len(teams)
     total_picks = num_teams * 4
 
@@ -158,7 +155,7 @@ def build_shuffle_rounds(draft: Draft) -> None:
             "team_count": num_teams,
         },
     )
-    broadcast_event(event)
+    broadcast_event_after_commit(event)
 
 
 def reassign_round_captain(
@@ -171,7 +168,7 @@ def reassign_round_captain(
     """Assign the lowest-MMR eligible team's captain to `round`; None if no team is eligible."""
     eligible_teams = [
         t
-        for t in draft.tournament.teams.all()
+        for t in draft.teams
         if t.members.count() < MAX_TEAM_SIZE and t.pk not in exclude_team_ids
     ]
     if not eligible_teams:

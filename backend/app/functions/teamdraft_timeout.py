@@ -115,7 +115,7 @@ def skip_turn(draft: Draft, round: DraftRound) -> DraftRound | None:
     if target is None:
         _unavailable(draft, round, team)
         return None
-    num_teams = draft.tournament.teams.count()
+    num_teams = draft.teams.count()
     round.pick_number, target.pick_number = target.pick_number, round.pick_number
     round.pick_phase = recompute_pick_phase(round.pick_number, num_teams)
     target.pick_phase = recompute_pick_phase(target.pick_number, num_teams)
@@ -149,6 +149,4 @@ def skip_turn(draft: Draft, round: DraftRound) -> DraftRound | None:
     return target
 
 
-TIMEOUT_ACTIONS: dict[str, TimeoutActionFn] = {
-    TimeoutAction.SKIP_TURN.value: skip_turn
-}
+TIMEOUT_ACTIONS: dict[str, TimeoutActionFn] = {TimeoutAction.SKIP_TURN.value: skip_turn}

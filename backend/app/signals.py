@@ -77,7 +77,11 @@ def handle_team_member_removal(
 
     # Captain was removed - need succession
     # Try deputy first if they weren't also removed
-    if team.deputy_captain and not deputy_removed:
+    if (
+        team.deputy_captain
+        and not deputy_removed
+        and team.members.filter(pk=team.deputy_captain.pk).exists()
+    ):
         team.captain = team.deputy_captain
         team.deputy_captain = None
         team.save(update_fields=["captain", "deputy_captain"])

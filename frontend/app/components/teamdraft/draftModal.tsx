@@ -72,6 +72,7 @@ import { initDraftHook } from './hooks/initDraftHook';
 import { refreshDraftHook } from './hooks/refreshDraftHook';
 import { refreshTournamentHook } from './hooks/refreshTournamentHook';
 import { useAutoRefreshDraft } from './hooks/useAutoRefreshDraft';
+import { useConfirmForceReset } from './hooks/useConfirmForceReset';
 import { useDraftLive } from './hooks/useDraftLive';
 import { isCaptainOf } from './isCaptainOf';
 import { DraftRoundIndicator, LiveAutoButtons } from './liveView';
@@ -111,6 +112,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     'snake' | 'normal' | 'shuffle'
   >('snake');
   const [isStarting, setIsStarting] = useState(false);
+  const { confirmForce, confirmForceDialog } = useConfirmForceReset();
   const [tieResolution, setTieResolution] = useState<TieResolution | null>(
     null,
   );
@@ -133,9 +135,8 @@ export const DraftModal: React.FC<DraftModalParams> = ({
         curDraftRound,
         setCurDraftRound,
         draftStyle: selectedStyle,
+        confirmForce,
       });
-    } catch {
-      // Error already displayed by toast.promise in initDraftHook
     } finally {
       setIsStarting(false);
     }
@@ -884,6 +885,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
           onExternalOpenChange={setDraftStyleOpen}
           showTrigger={false}
         />
+        {confirmForceDialog}
       </DialogContent>
     </Dialog>
   );

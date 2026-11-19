@@ -12,6 +12,7 @@ from app.models import (
     Team,
     Tournament,
 )
+from app.services.team_leadership import teams_with_leadership_problems
 from league.models import LeagueUser
 from org.models import OrgUser
 
@@ -92,13 +93,13 @@ class TournamentCSVImportTest(TestCase):
         """Multiple rows with same team_name go to the same team."""
         pos1 = PositionsModel.objects.create()
         pos2 = PositionsModel.objects.create()
-        u1 = CustomUser.objects.create_user(
+        CustomUser.objects.create_user(
             username="p1",
             password="pass",
             positions=pos1,
             steamid=76561198011111111,
         )
-        u2 = CustomUser.objects.create_user(
+        CustomUser.objects.create_user(
             username="p2",
             password="pass",
             positions=pos2,
@@ -153,7 +154,7 @@ class TournamentCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198012345678,
         )
-        org_user = OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
         self.tournament.users.add(user)
 
         resp = self.client.post(
@@ -209,3 +210,27 @@ class TournamentCSVImportTest(TestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, 403)
+
+    def test_import_with_captains_leaves_leadership_audit_clean(self):
+        """Captains imported by CSV are members of their team (#571)."""
+        for i in range(4):
+            CustomUser.objects.create_user(
+                username=f"audit_p{i}",
+                password="pass",
+                positions=PositionsModel.objects.create(),
+                steamid=76561198030000000 + i,
+            )
+        rows = [
+            {
+                "steam_friend_id": str(76561198030000000 + i),
+                "team_name": "Audit A" if i < 2 else "Audit B",
+                "team_captain": i in (1, 2),
+            }
+            for i in range(4)
+        ]
+        resp = self.client.post(self.url, {"rows": rows}, format="json")
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        teams = Team.objects.filter(tournament=self.tournament)
+        self.assertEqual(teams.exclude(captain=None).count(), 2)
+        self.assertEqual(teams_with_leadership_problems(teams), [])

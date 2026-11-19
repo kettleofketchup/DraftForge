@@ -4,13 +4,11 @@
  * API functions for draft and draft round operations.
  */
 
-import type {
-  DraftRoundType,
-  DraftType,
-  TournamentType,
-} from '~/index';
+import type { DraftRoundType, DraftType, TournamentType } from '~/index';
+import axios from './axios';
 import type {
   CreateTeamFromCaptainAPI,
+  DraftResetReport,
   DraftStyleMMRsAPIReturn,
   GetDraftStyleMMRsAPI,
   InitDraftRoundsAPI,
@@ -18,7 +16,6 @@ import type {
   RebuildDraftRoundsAPI,
   UndoPickAPI,
 } from './types';
-import axios from './axios';
 
 // Draft CRUD
 export async function fetchDraft(pk: number): Promise<DraftType> {
@@ -89,11 +86,15 @@ export async function createTeamFromCaptain(
   return response.data as TournamentType;
 }
 
+export type InitDraftRoundsResponse = TournamentType & {
+  draft_reset?: DraftResetReport;
+};
+
 export async function initDraftRounds(
   data: InitDraftRoundsAPI,
-): Promise<TournamentType> {
+): Promise<InitDraftRoundsResponse> {
   const response = await axios.post(`/tournaments/init-draft`, data);
-  return response.data as TournamentType;
+  return response.data as InitDraftRoundsResponse;
 }
 
 export async function DraftRebuild(
@@ -110,9 +111,7 @@ export async function PickPlayerForRound(
   return response.data as TournamentType;
 }
 
-export async function undoLastPick(
-  data: UndoPickAPI,
-): Promise<TournamentType> {
+export async function undoLastPick(data: UndoPickAPI): Promise<TournamentType> {
   const response = await axios.post(`/tournaments/undo-pick`, data);
   return response.data as TournamentType;
 }
@@ -129,7 +128,10 @@ export async function setDraftReady(
   draftPk: number,
   ready: boolean,
 ): Promise<TournamentType> {
-  const response = await axios.post<TournamentType>(`/draft/${draftPk}/ready/`, { ready });
+  const response = await axios.post<TournamentType>(
+    `/draft/${draftPk}/ready/`,
+    { ready },
+  );
   return response.data;
 }
 
@@ -143,7 +145,11 @@ export async function pauseTeamDraft(draftPk: number): Promise<TournamentType> {
   return response.data;
 }
 
-export async function resumeTeamDraft(draftPk: number): Promise<TournamentType> {
-  const response = await axios.post<TournamentType>(`/draft/${draftPk}/resume/`);
+export async function resumeTeamDraft(
+  draftPk: number,
+): Promise<TournamentType> {
+  const response = await axios.post<TournamentType>(
+    `/draft/${draftPk}/resume/`,
+  );
   return response.data;
 }

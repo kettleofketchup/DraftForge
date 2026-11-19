@@ -947,8 +947,62 @@ Real-time bidding via Daphne WebSocket (same pattern as HeroDraft).
 | GET | `/api/drafts/` | List drafts |
 | GET | `/api/drafts/{id}/` | Get draft details |
 | PUT | `/api/drafts/{id}/` | Update draft (e.g., change style) |
-| POST | `/api/tournaments/init-draft` | Initialize draft for tournament |
+| POST | `/api/tournaments/init-draft` | Start or restart the draft for a tournament |
+| POST | `/api/tournaments/draft-rebuild` | Rebuild team rosters from the draft rounds |
 | POST | `/api/tournaments/pick_player` | Pick player for draft round |
+
+### Start or Restart Draft
+
+`POST /api/tournaments/init-draft` resets the tournament's teams in place and
+rebuilds the draft rounds in one transaction. Team pks never change.
+
+**Request Body:**
+```json
+{
+  "tournament_pk": 12,
+  "draft_style": "shuffle",
+  "force": false
+}
+```
+
+`draft_style` (`snake`, `normal` or `shuffle`) and `force` are optional.
+
+Teams whose captain is in the tournament's player pool are reset to their
+captain: other members, drop-ins, left members and the deputy are cleared, and
+draft state, points and placement return to their defaults. Teams with no
+captain, or a captain outside the pool, take no part in the draft. They are
+deleted when nothing references them and kept untouched otherwise. Members of
+a kept team cannot be drafted, even when they are in the player pool. The
+same rule applies to `draft-rebuild`, the timer and the MMR predictions: only
+teams whose captain is in the pool count as draft teams.
+
+**Responses:**
+
+- `201`: the tournament (same shape as before) plus a `draft_reset` report:
+  ```json
+  {
+    "draft_reset": {
+      "reset_teams": [4, 5],
+      "dropped_teams": [{"pk": 7, "name": "Old Team", "reason": "captain_not_in_pool"}],
+      "kept_teams": [{"pk": 8, "name": "Seeded", "reason": "no_captain"}],
+      "cleared_deputies": [{"team": 4, "user": 31}]
+    }
+  }
+  ```
+- `400`: no team has a captain in the player pool. Nothing is changed.
+- `409`: games, hero drafts, bracket slots or lobbies use the teams and
+  `force` is not `true`. Nothing is changed. Resend with `"force": true` to
+  reset anyway; the referencing records keep their team links.
+  ```json
+  {
+    "error": "Teams are used by games or other records.",
+    "code": "draft_reset_has_references",
+    "references": {"app.Game.radiant_team": 2, "bracket.BracketSlot.participant": 4}
+  }
+  ```
+
+The Discord draft-link DMs and the draft WebSocket events are sent only after
+the transaction commits.
 
 ### Draft Pick (Shuffle Draft)
 

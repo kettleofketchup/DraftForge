@@ -9,24 +9,25 @@
  *   5. Verify DiscordTournamentLog has draft_link entry (DMs sent)
  *   6. Save bracket -> create herodraft for first match
  *   7. Verify DiscordTournamentLog has herodraft_link entry (DMs sent)
+ *   8. Restart the draft from the UI: the games now use the teams, so a
+ *      second confirm re-sends init-draft with force and the teams survive
  *
  * Uses Events Test Org (pk=7) with event players (pk=5001-5010).
  * kettleofketchup (pk=1001) is included as a participant and team captain.
  */
 
-import { API_URL, BASE_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
   getEventsTestData,
-  resetEventsData,
   loginEventAdmin,
+  resetEventsData,
+  test,
   triggerEventGeneration,
   type EventInfo,
 } from '../../fixtures';
+import { API_URL, BASE_URL } from '../../fixtures/base-url';
 
-import { postWithCsrf, patchWithCsrf } from '../../fixtures/events';
-
+import { postWithCsrf } from '../../fixtures/events';
 
 let eventInfo: EventInfo;
 
@@ -45,40 +46,48 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
   test('event -> tournament -> draft DM -> bracket -> herodraft DM', async ({
     context,
     page,
+    loginAdmin,
   }) => {
     test.setTimeout(120_000);
 
     // =========================================================================
     // 1. Create EventRepeater with Discord tournament config enabled
     // =========================================================================
-    const repeaterResp = await postWithCsrf(context, `${API_URL}/events/repeaters/`, {
-      organization: eventInfo.orgPk,
-      name: 'Discord Tournament Lifecycle',
-      description: 'Tests tournament Discord DM notifications',
-      frequency: 'daily',
-      time_of_day: '20:00',
-      starts_at: new Date().toISOString().split('T')[0],
-      generate_days_ahead: 7,
-      is_active: true,
-      tournament_name: 'Discord Config Tournament',
-      tournament_league: eventInfo.leaguePk,
-      tournament_type: 'single_elimination',
-      game_type: 1,
-      draft_type: 'snake',
-      people_per_team: 5,
-      number_of_teams: 2,
-      max_players: 10,
-      auto_approve: false,
-      timezone: 'America/New_York',
-      // Discord tournament config — both enabled
-      discord_send_draft_link: true,
-      discord_send_herodraft_link: true,
-      auto_create_hero_drafts: false, // We'll create manually to test the DM
-      // Event Discord (minimal — no announcement needed for this test)
-      discord_announcement: false,
-      discord_post_signups: false,
-    });
-    expect(repeaterResp.ok(), `Create repeater failed: ${await repeaterResp.text()}`).toBeTruthy();
+    const repeaterResp = await postWithCsrf(
+      context,
+      `${API_URL}/events/repeaters/`,
+      {
+        organization: eventInfo.orgPk,
+        name: 'Discord Tournament Lifecycle',
+        description: 'Tests tournament Discord DM notifications',
+        frequency: 'daily',
+        time_of_day: '20:00',
+        starts_at: new Date().toISOString().split('T')[0],
+        generate_days_ahead: 7,
+        is_active: true,
+        tournament_name: 'Discord Config Tournament',
+        tournament_league: eventInfo.leaguePk,
+        tournament_type: 'single_elimination',
+        game_type: 1,
+        draft_type: 'snake',
+        people_per_team: 5,
+        number_of_teams: 2,
+        max_players: 10,
+        auto_approve: false,
+        timezone: 'America/New_York',
+        // Discord tournament config — both enabled
+        discord_send_draft_link: true,
+        discord_send_herodraft_link: true,
+        auto_create_hero_drafts: false, // We'll create manually to test the DM
+        // Event Discord (minimal — no announcement needed for this test)
+        discord_announcement: false,
+        discord_post_signups: false,
+      },
+    );
+    expect(
+      repeaterResp.ok(),
+      `Create repeater failed: ${await repeaterResp.text()}`,
+    ).toBeTruthy();
 
     // =========================================================================
     // 2. Generate event from repeater
@@ -92,7 +101,8 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     const events = await eventsResp.json();
     const generatedEvent = events.find(
       (e: { name: string; state: string }) =>
-        e.name.includes('Discord Tournament Lifecycle') && e.state === 'upcoming',
+        e.name.includes('Discord Tournament Lifecycle') &&
+        e.state === 'upcoming',
     );
     expect(generatedEvent, 'Generated event not found').toBeTruthy();
     const eventId = generatedEvent.id;
@@ -104,12 +114,17 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
       context,
       `${API_URL}/events/${eventId}/open_signups/`,
     );
-    expect(openResp.ok(), `Open signups failed: ${await openResp.text()}`).toBeTruthy();
+    expect(
+      openResp.ok(),
+      `Open signups failed: ${await openResp.text()}`,
+    ).toBeTruthy();
 
     // =========================================================================
     // 4. Bulk RSVP 9 event players + kettleofketchup (pk=1001)
     // =========================================================================
-    const playerPks = [1001, 5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009];
+    const playerPks = [
+      1001, 5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009,
+    ];
     const bulkResp = await context.request.post(
       `${API_URL}/tests/events/${eventId}/bulk-rsvp/`,
       {
@@ -117,7 +132,10 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
         headers: { 'Content-Type': 'application/json' },
       },
     );
-    expect(bulkResp.ok(), `Bulk RSVP failed: ${await bulkResp.text()}`).toBeTruthy();
+    expect(
+      bulkResp.ok(),
+      `Bulk RSVP failed: ${await bulkResp.text()}`,
+    ).toBeTruthy();
 
     // =========================================================================
     // 5. Approve all 10 with MMR
@@ -127,7 +145,8 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     );
     const signups = await signupsResp.json();
     const active = signups.filter(
-      (s: { status: string }) => !['waitlisted', 'cancelled', 'rejected'].includes(s.status),
+      (s: { status: string }) =>
+        !['waitlisted', 'cancelled', 'rejected'].includes(s.status),
     );
     expect(active.length).toBe(10);
 
@@ -137,7 +156,10 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
         `${API_URL}/events/signups/${active[i].id}/approve/`,
         { mmr: 3000 + i * 200 },
       );
-      expect(approveResp.ok(), `Approve signup ${active[i].id} failed`).toBeTruthy();
+      expect(
+        approveResp.ok(),
+        `Approve signup ${active[i].id} failed`,
+      ).toBeTruthy();
     }
 
     // =========================================================================
@@ -162,7 +184,10 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
         context,
         `${API_URL}/events/signups/${signup.id}/confirm/`,
       );
-      expect(confirmResp.ok(), `Confirm signup ${signup.id} failed`).toBeTruthy();
+      expect(
+        confirmResp.ok(),
+        `Confirm signup ${signup.id} failed`,
+      ).toBeTruthy();
     }
 
     // =========================================================================
@@ -172,14 +197,19 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
       context,
       `${API_URL}/events/${eventId}/start_tournament/`,
     );
-    expect(startResp.ok(), `Start tournament failed: ${await startResp.text()}`).toBeTruthy();
+    expect(
+      startResp.ok(),
+      `Start tournament failed: ${await startResp.text()}`,
+    ).toBeTruthy();
     const startedEvent = await startResp.json();
     expect(startedEvent.state).toBe('in_progress');
     expect(startedEvent.tournament).not.toBeNull();
     const tournamentPk = startedEvent.tournament;
 
     // Verify tournament has discord config
-    const tournResp = await context.request.get(`${API_URL}/tournaments/${tournamentPk}/`);
+    const tournResp = await context.request.get(
+      `${API_URL}/tournaments/${tournamentPk}/`,
+    );
     const tournament = await tournResp.json();
     expect(tournament.discord_send_draft_link).toBe(true);
     expect(tournament.discord_send_herodraft_link).toBe(true);
@@ -188,7 +218,9 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     // 8. Get tournament teams, set captains
     //    kettleofketchup (pk=1001) as captain of first team
     // =========================================================================
-    const teamsResp = await context.request.get(`${API_URL}/tournaments/${tournamentPk}/`);
+    const teamsResp = await context.request.get(
+      `${API_URL}/tournaments/${tournamentPk}/`,
+    );
     const tournData = await teamsResp.json();
     const teams = tournData.teams || [];
 
@@ -200,7 +232,10 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
       `${API_URL}/tournaments/create-team-from-captain`,
       { tournament_pk: tournamentPk, user_pk: 1001 },
     );
-    expect(createTeam1.ok(), `Create team 1 failed: ${await createTeam1.text()}`).toBeTruthy();
+    expect(
+      createTeam1.ok(),
+      `Create team 1 failed: ${await createTeam1.text()}`,
+    ).toBeTruthy();
 
     // Create team 2 with event_player_1 (pk=5001) as captain
     const createTeam2 = await postWithCsrf(
@@ -208,7 +243,10 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
       `${API_URL}/tournaments/create-team-from-captain`,
       { tournament_pk: tournamentPk, user_pk: 5001 },
     );
-    expect(createTeam2.ok(), `Create team 2 failed: ${await createTeam2.text()}`).toBeTruthy();
+    expect(
+      createTeam2.ok(),
+      `Create team 2 failed: ${await createTeam2.text()}`,
+    ).toBeTruthy();
 
     // =========================================================================
     // 9. Init draft (starts team draft -> triggers discord_send_draft_link DMs)
@@ -218,7 +256,10 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
       `${API_URL}/tournaments/init-draft`,
       { tournament_pk: tournamentPk, draft_style: 'snake' },
     );
-    expect(initDraftResp.ok(), `Init draft failed: ${await initDraftResp.text()}`).toBeTruthy();
+    expect(
+      initDraftResp.ok(),
+      `Init draft failed: ${await initDraftResp.text()}`,
+    ).toBeTruthy();
 
     // =========================================================================
     // 10. Verify DiscordTournamentLog has draft_link entry
@@ -252,7 +293,9 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     }
 
     if (!draftLogFound) {
-      console.warn('Draft link DM log not found — Celery worker may not be running');
+      console.warn(
+        'Draft link DM log not found — Celery worker may not be running',
+      );
     }
 
     // =========================================================================
@@ -325,7 +368,8 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
       if (logsResp.ok()) {
         const logs = await logsResp.json();
         const hdLog = logs.find(
-          (l: { notification_type: string }) => l.notification_type === 'herodraft_link',
+          (l: { notification_type: string }) =>
+            l.notification_type === 'herodraft_link',
         );
         if (hdLog) {
           herodraftLogFound = true;
@@ -338,7 +382,9 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     }
 
     if (!herodraftLogFound) {
-      console.warn('Herodraft link DM log not found — Celery worker may not be running');
+      console.warn(
+        'Herodraft link DM log not found — Celery worker may not be running',
+      );
     }
 
     // =========================================================================
@@ -354,7 +400,9 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
       await settingsBtn.click();
 
       // Click Discord Activity tab
-      const discordTab = page.locator('[data-testid="tournament-settings-discord-tab"]');
+      const discordTab = page.locator(
+        '[data-testid="tournament-settings-discord-tab"]',
+      );
       if (await discordTab.isVisible({ timeout: 3000 }).catch(() => false)) {
         await discordTab.click();
 
@@ -378,17 +426,69 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
       await settingsBtn.click();
 
       // Config values should be correct
-      const draftLinkCheckbox = page.getByTestId('discord-discord_send_draft_link');
-      if (await draftLinkCheckbox.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const draftLinkCheckbox = page.getByTestId(
+        'discord-discord_send_draft_link',
+      );
+      if (
+        await draftLinkCheckbox.isVisible({ timeout: 3000 }).catch(() => false)
+      ) {
         await expect(draftLinkCheckbox).toBeChecked();
       }
 
-      const herodraftLinkCheckbox = page.getByTestId('discord-discord_send_herodraft_link');
-      if (await herodraftLinkCheckbox.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const herodraftLinkCheckbox = page.getByTestId(
+        'discord-discord_send_herodraft_link',
+      );
+      if (
+        await herodraftLinkCheckbox
+          .isVisible({ timeout: 3000 })
+          .catch(() => false)
+      ) {
         await expect(herodraftLinkCheckbox).toBeChecked();
       }
 
       await page.keyboard.press('Escape');
     }
+
+    // =========================================================================
+    // 16. Restart the draft: games use the teams, so a second confirm sends force
+    // =========================================================================
+    await loginAdmin();
+    await page.goto(`${BASE_URL}/tournament/${tournamentPk}/teams/draft`, {
+      waitUntil: 'networkidle',
+    });
+    const draftDialog = page.locator('[role="dialog"]').first();
+    await draftDialog
+      .getByRole('button', { name: 'Moderation' })
+      .filter({ visible: true })
+      .click();
+    await page.getByTestId('restart-draft-option').click();
+
+    const isInitDraft = (url: string) =>
+      url.includes('/tournaments/init-draft');
+    const refusal = page.waitForResponse(
+      (r) => isInitDraft(r.url()) && r.status() === 409,
+    );
+    await page.getByTestId('restart-draft-confirm').click();
+    await refusal;
+
+    await expect(page.getByTestId('draft-force-reset-dialog')).toContainText(
+      'games and other records use these teams',
+    );
+    const forced = page.waitForRequest(
+      (r) => isInitDraft(r.url()) && r.postDataJSON()?.force === true,
+    );
+    await page.getByTestId('draft-force-reset-confirm').click();
+    const forcedRequest = await forced;
+    expect(forcedRequest.postDataJSON()).toMatchObject({
+      tournament_pk: tournamentPk,
+      force: true,
+    });
+    expect((await forcedRequest.response())?.status()).toBe(201);
+
+    const afterRestart = await (
+      await context.request.get(`${API_URL}/tournaments/${tournamentPk}/`)
+    ).json();
+    const keptPks = (afterRestart.teams || []).map((t: { pk: number }) => t.pk);
+    expect(keptPks).toEqual(expect.arrayContaining([team1Pk, team2Pk]));
   });
 });

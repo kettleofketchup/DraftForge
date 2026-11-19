@@ -233,6 +233,7 @@ class BuildShuffleRoundsTest(TestCase):
                 name=f"Team {i}", captain=captain, tournament=self.tournament
             )
             team.members.add(captain)
+            self.tournament.users.add(captain)
             self.teams.append(team)
 
         # Create draft
@@ -323,7 +324,7 @@ class AssignNextShuffleCaptainTest(TestCase):
         self.team2.members.add(self.captain2)
 
         # Add player to tournament users (needed for users_remaining property)
-        self.tournament.users.add(self.player)
+        self.tournament.users.add(self.captain1, self.captain2, self.player)
 
         # Create draft and build rounds
         DraftOptions.ensure_for(self.tournament, timer_enabled=False)
@@ -394,6 +395,7 @@ class DraftBuildRoundsIntegrationTest(TestCase):
                 name=f"Team {i}", captain=captain, tournament=self.tournament
             )
             team.members.add(captain)
+            self.tournament.users.add(captain)
 
         DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
@@ -462,7 +464,9 @@ class PickPlayerForRoundShuffleTest(TestCase):
         self.team2.members.add(self.captain2)
 
         # Add players to tournament
-        self.tournament.users.add(self.player1, self.player2)
+        self.tournament.users.add(
+            self.captain1, self.captain2, self.player1, self.player2
+        )
 
         # Create draft
         DraftOptions.ensure_for(self.tournament, timer_enabled=False)
@@ -536,8 +540,7 @@ class PickAuthorizationTest(TestCase):
         )
         self.team2.members.add(self.captain2)
 
-        # Add player to tournament
-        self.tournament.users.add(self.player1)
+        self.tournament.users.add(self.captain1, self.captain2, self.player1)
 
         # Create draft
         DraftOptions.ensure_for(self.tournament, timer_enabled=False)
@@ -648,6 +651,7 @@ class FullTeamNotAssignedTest(TestCase):
             )
             OrgUser.objects.create(user=member, organization=self.org, mmr=1000)
             self.team2.members.add(member)
+        self.tournament.users.add(self.captain1, self.captain2)
 
         # Create draft
         DraftOptions.ensure_for(self.tournament, timer_enabled=False)
@@ -740,7 +744,9 @@ class UndoClearsNextCaptainTest(TestCase):
         self.team2.members.add(self.captain2)
 
         # Add players to tournament
-        self.tournament.users.add(self.player1, self.player2)
+        self.tournament.users.add(
+            self.captain1, self.captain2, self.player1, self.player2
+        )
 
         # Create draft with shuffle style
         DraftOptions.ensure_for(self.tournament, timer_enabled=False)

@@ -1,11 +1,12 @@
 from cacheops import cached_as
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.cache_utils import invalidate_obj
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.display_names import user_display_name
 from app.draft_state import tournament_state_queryset
 from app.models import CustomUser, Draft, Team, Tournament
@@ -16,6 +17,12 @@ from app.serializers import (
     _build_users_dict,
     _tournament_organization,
 )
+from app.services.draft_reset import (
+    NoEligibleCaptains,
+    TeamsReferenced,
+    reset_draft_teams,
+)
+from events.discord.tournament_dispatch import notify_draft_started
 from org.display_names import guild_nicknames, org_nicknames_public
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile, DotaUserProfile
@@ -127,37 +134,12 @@ class CreateDraftRounds(serializers.Serializer):
         required=False,
         default=None,
     )
+    force = serializers.BooleanField(required=False, default=False)
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def generate_draft_rounds(request: Request) -> Response:
-    """Generate draft rounds for a tournament. Requires tournament staff access."""
-    serializer = CreateDraftRounds(data=request.data)
-
-    if serializer.is_valid():
-        tournament_pk = serializer.validated_data["tournament_pk"]
-
-    else:
-        return Response(serializer.errors, status=400)
-
+def _get_or_create_draft(tournament: Tournament) -> Draft:
     try:
-        tournament = Tournament.objects.select_related(
-            "league", "league__organization"
-        ).get(pk=tournament_pk)
-
-    except Tournament.DoesNotExist:
-        return Response({"error": "Tournament not found"}, status=404)
-
-    # Check tournament staff permission
-    if not can_edit_tournament(request.user, tournament):
-        return Response(
-            {"error": "You do not have permission to generate draft rounds"},
-            status=403,
-        )
-
-    try:
-        draft = tournament.draft
+        return Draft.objects.get(tournament=tournament)
     except Draft.DoesNotExist:
         log.debug(
             "draft_created",
@@ -165,8 +147,39 @@ def generate_draft_rounds(request: Request) -> Response:
             subsystem="draft",
             tournament_id=tournament.pk,
         )
-        draft = Draft.objects.create(tournament=tournament)
+        return Draft.objects.create(tournament=tournament)
 
+
+def _notify_draft_started_after_commit(tournament: Tournament, draft: Draft) -> None:
+    if tournament.discord_send_draft_link:
+        transaction.on_commit(lambda: notify_draft_started(tournament, draft))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def generate_draft_rounds(request: Request) -> Response:
+    """Start or restart a team draft. Requires tournament staff access."""
+    serializer = CreateDraftRounds(data=request.data)
+
+    if serializer.is_valid():
+        tournament_pk = serializer.validated_data["tournament_pk"]
+    else:
+        return Response(serializer.errors, status=400)
+
+    try:
+        tournament = Tournament.objects.select_related(
+            "league", "league__organization"
+        ).get(pk=tournament_pk)
+    except Tournament.DoesNotExist:
+        return Response({"error": "Tournament not found"}, status=404)
+
+    if not can_edit_tournament(request.user, tournament):
+        return Response(
+            {"error": "You do not have permission to generate draft rounds"},
+            status=403,
+        )
+
+    force = serializer.validated_data["force"]
     log.debug(
         "draft_initializing",
         system="tournament",
@@ -174,56 +187,53 @@ def generate_draft_rounds(request: Request) -> Response:
         tournament_id=tournament.pk,
     )
 
-    # Remove all existing teams — draft init starts fresh.
-    # Save captain info so we can recreate valid teams.
-    valid_user_pks = set(tournament.users.values_list("pk", flat=True))
-    captain_info = list(
-        tournament.teams.filter(captain_id__in=valid_user_pks).values(
-            "captain_id", "draft_order", "name"
+    with transaction.atomic():
+        tournament = (
+            Tournament.objects.select_for_update().nocache().get(pk=tournament_pk)
         )
+        try:
+            report = reset_draft_teams(tournament, force=force)
+        except NoEligibleCaptains:
+            return Response(
+                {
+                    "error": "Cannot initialize draft: no captains assigned. Assign captains to teams first."
+                },
+                status=400,
+            )
+        except TeamsReferenced as refused:
+            return Response(
+                {
+                    "error": str(refused),
+                    "code": "draft_reset_has_references",
+                    "references": refused.references,
+                },
+                status=409,
+            )
+
+        draft = _get_or_create_draft(tournament)
+        draft_style = serializer.validated_data.get("draft_style")
+        if draft_style:
+            draft.draft_style = draft_style
+
+        invalidate_after_commit(tournament, draft, *report.reset_teams)
+        draft.build_rounds()
+        draft.save()
+        _notify_draft_started_after_commit(tournament, draft)
+
+    log.info(
+        "draft_reset_completed",
+        system="tournament",
+        subsystem="draft",
+        tournament_id=tournament.pk,
+        reset_count=len(report.reset_teams),
+        removed_count=len(report.removed_users),
+        dropped_count=len(report.dropped_teams),
+        kept_count=len(report.kept_teams),
+        forced=force,
     )
-    tournament.teams.all().delete()
-
-    # Recreate teams from captains who are in the tournament's user pool
-    for info in captain_info:
-        team = Team.objects.create(
-            tournament=tournament,
-            captain_id=info["captain_id"],
-            name=info["name"],
-            draft_order=info["draft_order"],
-        )
-        team.members.add(info["captain_id"])
-
-    if not captain_info:
-        return Response(
-            {
-                "error": "Cannot initialize draft: no captains assigned. Assign captains to teams first."
-            },
-            status=400,
-        )
-
-    # Set draft style if provided
-    draft_style = serializer.validated_data.get("draft_style")
-    if draft_style:
-        draft.draft_style = draft_style
-
-    # Build draft rounds from the fresh teams
-    draft.build_rounds()
-    draft.save()
-    tournament.draft = draft
-    tournament.save()
-
-    # Invalidate specific objects
-    invalidate_obj(draft)
-    invalidate_obj(tournament)
-
-    # Dispatch Discord notification if configured
-    if tournament.discord_send_draft_link:
-        from events.discord.tournament_dispatch import notify_draft_started
-
-        notify_draft_started(tournament, draft)
-
-    return Response(_serialize_tournament(tournament), status=201)
+    data = _serialize_tournament(tournament)
+    data["draft_reset"] = report.as_dict()
+    return Response(data, status=201)
 
 
 @api_view(["POST"])
@@ -234,7 +244,6 @@ def rebuild_team(request: Request) -> Response:
 
     if serializer.is_valid():
         tournament_pk = serializer.validated_data["tournament_pk"]
-
     else:
         return Response(serializer.errors, status=400)
 
@@ -242,93 +251,60 @@ def rebuild_team(request: Request) -> Response:
         tournament = Tournament.objects.select_related(
             "league", "league__organization"
         ).get(pk=tournament_pk)
-
     except Tournament.DoesNotExist:
         return Response({"error": "Tournament not found"}, status=404)
 
-    # Check tournament staff permission
     if not can_edit_tournament(request.user, tournament):
         return Response(
             {"error": "You do not have permission to rebuild teams"},
             status=403,
         )
 
-    # Ensure draft exists
-    try:
-        draft = tournament.draft
-        if not draft:
+    with transaction.atomic():
+        tournament = (
+            Tournament.objects.select_for_update().nocache().get(pk=tournament_pk)
+        )
+        if not tournament.captains:
+            return Response(
+                {
+                    "error": "Cannot rebuild teams: no captains assigned. Assign captains to teams first."
+                },
+                status=400,
+            )
+        draft = _get_or_create_draft(tournament)
+        invalidate_after_commit(tournament, draft)
+
+        # rebuild_teams runs before build_rounds so team MMR counts captains only.
+        will_build_rounds = not draft.draft_rounds.exists()
+        draft.rebuild_teams(clear_only=will_build_rounds)
+
+        if will_build_rounds:
             log.debug(
-                "draft_created",
+                "draft_rounds_building",
                 system="tournament",
                 subsystem="draft",
                 tournament_id=tournament.pk,
+                draft_id=draft.pk,
             )
-            draft = Draft.objects.create(tournament=tournament)
-    except Draft.DoesNotExist:
-        log.debug(
-            "draft_created",
-            system="tournament",
-            subsystem="draft",
-            tournament_id=tournament.pk,
-        )
-        draft = Draft.objects.create(tournament=tournament)
+            draft.build_rounds()
+            _notify_draft_started_after_commit(tournament, draft)
+        else:
+            log.debug(
+                "draft_rounds_exist",
+                system="tournament",
+                subsystem="draft",
+                tournament_id=tournament.pk,
+                draft_id=draft.pk,
+            )
+        draft.save()
 
-    # Validate: tournament must have captains assigned to teams
-    if not tournament.captains:
-        return Response(
-            {
-                "error": "Cannot rebuild teams: no captains assigned. Assign captains to teams first."
-            },
-            status=400,
-        )
-
-    # IMPORTANT: rebuild_teams MUST be called BEFORE build_rounds
-    # so that team MMR calculations use only captains, not old picks
-    # Use clear_only=True when building new rounds to avoid re-adding old picks
-    will_build_rounds = not draft.draft_rounds.exists()
-    draft.rebuild_teams(clear_only=will_build_rounds)
-
-    # Build rounds if they don't exist
-    if will_build_rounds:
-        log.debug(
-            "draft_rounds_building",
-            system="tournament",
-            subsystem="draft",
-            tournament_id=tournament.pk,
-            draft_id=draft.pk,
-        )
-        draft.build_rounds()
-    else:
-        log.debug(
-            "draft_rounds_exist",
-            system="tournament",
-            subsystem="draft",
-            tournament_id=tournament.pk,
-            draft_id=draft.pk,
-        )
-
-    draft.save()
-    tournament.draft = draft
-    tournament = Tournament.objects.get(pk=tournament_pk)
-    data = _serialize_tournament(tournament)
     log.debug(
         "tournament_rebuilt",
         system="tournament",
         subsystem="draft",
         tournament_id=tournament.pk,
     )
-
-    # Invalidate specific objects after rebuilding teams
-    invalidate_obj(draft)
-    invalidate_obj(tournament)
-
-    # Dispatch Discord notification if new rounds were built
-    if will_build_rounds and tournament.discord_send_draft_link:
-        from events.discord.tournament_dispatch import notify_draft_started
-
-        notify_draft_started(tournament, draft)
-
-    return Response(data, status=201)
+    return Response(_serialize_tournament(tournament), status=201)
 
 
 class DraftPredictMMRSerializer(serializers.Serializer):
