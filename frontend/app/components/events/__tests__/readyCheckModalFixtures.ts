@@ -244,6 +244,8 @@ export const baseOrgDefaults: OrgEventDefaultsType = {
   discord_announcement: false,
   discord_announcement_channel_id: '',
   discord_announcement_hours: 24,
+  discord_announcement_role_ids: [],
+  discord_signup_role_ids: [],
   discord_require_rank_screenshot: false,
   discord_require_battlecup_screenshot: false,
   min_mmr: null,

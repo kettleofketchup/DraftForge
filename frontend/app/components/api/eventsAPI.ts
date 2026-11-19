@@ -401,6 +401,8 @@ export interface OrgEventDefaultsType extends ReadyCheckSettings {
   discord_announcement: boolean;
   discord_announcement_channel_id: string;
   discord_announcement_hours: number;
+  discord_announcement_role_ids: string[];
+  discord_signup_role_ids: string[];
   discord_start_mention: boolean;
   discord_start_mention_minutes: number;
   discord_start_mention_scope: StartMentionScope;
