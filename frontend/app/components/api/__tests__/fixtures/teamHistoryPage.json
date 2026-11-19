@@ -1,0 +1,136 @@
+{
+  "count": 2,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 2,
+      "action": "add_standin",
+      "via": "web",
+      "actor": {
+        "pk": 8,
+        "username": "api_site_staff",
+        "nickname": null,
+        "avatar": null,
+        "discordId": null,
+        "discordNickname": null,
+        "positions": {
+          "pk": 8,
+          "carry": 0,
+          "mid": 0,
+          "offlane": 0,
+          "soft_support": 0,
+          "hard_support": 0
+        },
+        "steam_account_id": null,
+        "avatarUrl": null
+      },
+      "target": {
+        "pk": 12,
+        "username": "roster_standin",
+        "nickname": null,
+        "avatar": null,
+        "discordId": null,
+        "discordNickname": null,
+        "positions": {
+          "pk": 12,
+          "carry": 0,
+          "mid": 0,
+          "offlane": 0,
+          "soft_support": 0,
+          "hard_support": 0
+        },
+        "steam_account_id": null,
+        "avatarUrl": null
+      },
+      "reason": "cover",
+      "override_rules": [],
+      "details": {
+        "before": {
+          "name": "Rostered",
+          "captain_id": 2,
+          "deputy_captain_id": 3,
+          "member_ids": [2, 3, 4],
+          "dropin_ids": [],
+          "left_ids": [5]
+        },
+        "after": {
+          "name": "Rostered",
+          "captain_id": 2,
+          "deputy_captain_id": 3,
+          "member_ids": [2, 3, 4],
+          "dropin_ids": [12],
+          "left_ids": [5]
+        }
+      },
+      "team_name": "Rostered",
+      "team_id": 1,
+      "created_at": "2026-11-19T22:55:33.228529Z"
+    },
+    {
+      "id": 1,
+      "action": "mark_dropout",
+      "via": "web",
+      "actor": {
+        "pk": 8,
+        "username": "api_site_staff",
+        "nickname": null,
+        "avatar": null,
+        "discordId": null,
+        "discordNickname": null,
+        "positions": {
+          "pk": 8,
+          "carry": 0,
+          "mid": 0,
+          "offlane": 0,
+          "soft_support": 0,
+          "hard_support": 0
+        },
+        "steam_account_id": null,
+        "avatarUrl": null
+      },
+      "target": {
+        "pk": 5,
+        "username": "roster_m2",
+        "nickname": null,
+        "avatar": null,
+        "discordId": null,
+        "discordNickname": null,
+        "positions": {
+          "pk": 5,
+          "carry": 0,
+          "mid": 0,
+          "offlane": 0,
+          "soft_support": 0,
+          "hard_support": 0
+        },
+        "steam_account_id": null,
+        "avatarUrl": null
+      },
+      "reason": "left early",
+      "override_rules": [],
+      "details": {
+        "before": {
+          "name": "Rostered",
+          "captain_id": 2,
+          "deputy_captain_id": 3,
+          "member_ids": [2, 3, 4, 5],
+          "dropin_ids": [],
+          "left_ids": []
+        },
+        "after": {
+          "name": "Rostered",
+          "captain_id": 2,
+          "deputy_captain_id": 3,
+          "member_ids": [2, 3, 4],
+          "dropin_ids": [],
+          "left_ids": [5]
+        },
+        "succession": "unchanged"
+      },
+      "team_name": "Rostered",
+      "team_id": 1,
+      "created_at": "2026-11-19T22:55:33.192903Z"
+    }
+  ]
+}
