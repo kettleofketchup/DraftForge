@@ -46,10 +46,15 @@ from app.services.team_audit import (
 )
 from app.services.team_management import (
     TeamChange,
+    add_standin,
     follow_captain,
+    mark_dropout,
+    remove_standin,
     rename,
+    restore_member,
     set_captain,
     set_deputy,
+    sub_in,
 )
 from app.services.team_signals import (
     change_from_log,
@@ -145,6 +150,7 @@ from .serializers import (
     TeamLogSerializer,
     TeamRenameRequestSerializer,
     TeamSerializer,
+    TeamSubInRequestSerializer,
     TeamUserActionRequestSerializer,
     TournamentListSerializer,
     TournamentSerializer,
@@ -786,6 +792,53 @@ class TeamView(viewsets.ModelViewSet):
             request,
             TeamRenameRequestSerializer,
             lambda team, data, **kw: rename(team, data["name"], **kw),
+        )
+
+    @action(detail=True, methods=["post"])
+    def dropout(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamUserActionRequestSerializer,
+            lambda team, data, **kw: mark_dropout(team, data["user_id"], **kw),
+        )
+
+    @action(detail=True, methods=["post"])
+    def restore(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamUserActionRequestSerializer,
+            lambda team, data, **kw: restore_member(team, data["user_id"], **kw),
+        )
+
+    @action(detail=True, methods=["post"])
+    def standins(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamUserActionRequestSerializer,
+            lambda team, data, **kw: add_standin(team, data["user_id"], **kw),
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="standins/remove",
+        url_name="standins-remove",
+    )
+    def standins_remove(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamUserActionRequestSerializer,
+            lambda team, data, **kw: remove_standin(team, data["user_id"], **kw),
+        )
+
+    @action(detail=True, methods=["post"], url_path="sub-in")
+    def sub_in(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamSubInRequestSerializer,
+            lambda team, data, **kw: sub_in(
+                team, data["standin_id"], data["replacing_id"], **kw
+            ),
         )
 
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:

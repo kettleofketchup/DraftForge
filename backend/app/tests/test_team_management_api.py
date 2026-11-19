@@ -340,10 +340,42 @@ class ActionCase:
     prepare: Callable[[Any], dict[str, Any]]
 
 
+def prepare_restore(t: Any) -> dict[str, Any]:
+    team_management.mark_dropout(
+        t.team, t.m1, actor=t.actor, via=TeamLogVia.WEB, reason="prep"
+    )
+    return {"user_id": t.m1.pk, "reason": "matrix check"}
+
+
+def prepare_standins_remove(t: Any) -> dict[str, Any]:
+    team_management.add_standin(
+        t.team, t.outsider, actor=t.actor, via=TeamLogVia.WEB, reason="prep"
+    )
+    return {"user_id": t.outsider.pk, "reason": "matrix check"}
+
+
+def prepare_sub_in(t: Any) -> dict[str, Any]:
+    team_management.add_standin(
+        t.team, t.outsider, actor=t.actor, via=TeamLogVia.WEB, reason="prep"
+    )
+    return {
+        "standin_id": t.outsider.pk,
+        "replacing_id": t.m2.pk,
+        "reason": "matrix check",
+    }
+
+
 ACTION_CASES: list[ActionCase] = [
     ActionCase("set-captain", lambda t: {"user_id": t.m1.pk, "reason": "matrix check"}),
     ActionCase("set-deputy", lambda t: {"user_id": t.m1.pk, "reason": "matrix check"}),
     ActionCase("rename", lambda t: {"name": "Matrix Name", "reason": "matrix check"}),
+    ActionCase("dropout", lambda t: {"user_id": t.m1.pk, "reason": "matrix check"}),
+    ActionCase("restore", prepare_restore),
+    ActionCase(
+        "standins", lambda t: {"user_id": t.outsider.pk, "reason": "matrix check"}
+    ),
+    ActionCase("standins/remove", prepare_standins_remove),
+    ActionCase("sub-in", prepare_sub_in),
 ]
 
 
@@ -538,6 +570,180 @@ class LeadershipActionTests(TeamApiFixture, TestCase):
         resp = self.post("set-captain", {"user_id": self.site_staff.pk, "reason": "me"})
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual(resp.json()["captain"]["pk"], self.site_staff.pk)
+
+
+class RosterActionTests(TeamApiFixture, TestCase):
+    def user_ids(self, rows: list[dict[str, Any]]) -> list[int]:
+        return [row["pk"] for row in rows]
+
+    def logs(self) -> list[TeamLog]:
+        return list(
+            TeamLog.objects.filter(team_snapshot_id=self.team.pk).order_by("pk")
+        )
+
+    def assert_logged(self, resp: Any, reason: str) -> TeamLog:
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertIs(resp.json()["can_manage_team"], True)
+        log = self.logs()[-1]
+        self.assertEqual(log.via, "web")
+        self.assertEqual(log.actor_id, self.site_staff.pk)
+        self.assertEqual(log.reason, reason)
+        return log
+
+    def test_url_names_reverse(self) -> None:
+        for name, path in (
+            ("teams-dropout", "dropout"),
+            ("teams-restore", "restore"),
+            ("teams-standins", "standins"),
+            ("teams-standins-remove", "standins/remove"),
+            ("teams-sub-in", "sub-in"),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    reverse(name, args=[self.team.pk]), action_url(self.team.pk, path)
+                )
+
+    def test_dropout_and_restore(self) -> None:
+        resp = self.post("dropout", {"user_id": self.m1.pk, "reason": "no show"})
+        self.assert_logged(resp, "no show")
+        data = resp.json()
+        self.assertIn(self.m1.pk, self.user_ids(data["left_members"]))
+        self.assertIn("username", data["left_members"][0])
+        self.assertNotIn(self.m1.pk, self.user_ids(data["members"]))
+
+        resp = self.post("restore", {"user_id": self.m1.pk, "reason": "back"})
+        self.assert_logged(resp, "back")
+        data = resp.json()
+        self.assertEqual(data["left_members"], [])
+        self.assertIn(self.m1.pk, self.user_ids(data["members"]))
+        self.assertEqual(self.log_count(), 2)
+
+    def test_standins_add_and_remove(self) -> None:
+        resp = self.post("standins", {"user_id": self.outsider.pk, "reason": "cover"})
+        self.assert_logged(resp, "cover")
+        self.assertIn(self.outsider.pk, self.user_ids(resp.json()["dropin_members"]))
+
+        resp = self.post(
+            "standins/remove", {"user_id": self.outsider.pk, "reason": "not needed"}
+        )
+        self.assert_logged(resp, "not needed")
+        self.assertEqual(resp.json()["dropin_members"], [])
+        self.assertEqual(self.log_count(), 2)
+
+    def test_sub_in_swaps(self) -> None:
+        self.post("standins", {"user_id": self.outsider.pk, "reason": "cover"})
+        resp = self.post(
+            "sub-in",
+            {
+                "standin_id": self.outsider.pk,
+                "replacing_id": self.m2.pk,
+                "reason": "swap",
+            },
+        )
+        self.assert_logged(resp, "swap")
+        data = resp.json()
+        self.assertIn(self.outsider.pk, self.user_ids(data["members"]))
+        self.assertNotIn(self.m2.pk, self.user_ids(data["members"]))
+        self.assertIn(self.m2.pk, self.user_ids(data["left_members"]))
+        self.assertEqual(data["dropin_members"], [])
+
+    def test_dropout_last_member_refused(self) -> None:
+        before = TeamLog.objects.count()
+        resp = self.post(
+            "dropout", {"user_id": self.o1.pk, "reason": "gone"}, team_pk=self.other.pk
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(resp.json()["code"], "last_member")
+        self.assertEqual(TeamLog.objects.count(), before)
+        self.assertTrue(Team.objects.filter(pk=self.other.pk).exists())
+
+    def fill_two_standins(self) -> None:
+        for name in ("api_s0", "api_s1"):
+            user = self.make_user(name)
+            resp = self.post("standins", {"user_id": user.pk, "reason": "fill"})
+            self.assertEqual(resp.status_code, 200, resp.content)
+
+    def test_standin_cap_override_sequence(self) -> None:
+        self.fill_two_standins()
+        body = {"user_id": self.outsider.pk, "reason": "third stand-in"}
+
+        resp = self.post("standins", {**body, "acknowledged_codes": []})
+        self.assertEqual(resp.status_code, 409, resp.content)
+        data = resp.json()
+        self.assertEqual(data["code"], "override_required")
+        self.assertEqual(data["violations"][0]["code"], "team_standin_cap")
+        self.assertEqual(data["violations"][0]["rule"], "override-warning")
+        self.assertEqual(self.log_count(), 2)
+
+        resp = self.post(
+            "standins", {**body, "acknowledged_codes": ["team_standin_cap"]}
+        )
+        log = self.assert_logged(resp, "third stand-in")
+        self.assertIn("team_standin_cap", log.override_rules)
+        self.assertEqual(self.log_count(), 3)
+
+    def test_override_retry_blank_reason(self) -> None:
+        self.fill_two_standins()
+        resp = self.post(
+            "standins",
+            {
+                "user_id": self.outsider.pk,
+                "reason": " ",
+                "acknowledged_codes": ["team_standin_cap"],
+            },
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(resp.json()["code"], "override_reason_required")
+        self.assertEqual(self.log_count(), 2)
+
+    def test_unraised_ack_codes_ignored(self) -> None:
+        resp = self.post(
+            "standins",
+            {
+                "user_id": self.outsider.pk,
+                "reason": "cover",
+                "acknowledged_codes": ["something_else"],
+            },
+        )
+        log = self.assert_logged(resp, "cover")
+        self.assertEqual(log.override_rules, [])
+
+    def test_malformed_acknowledged_codes(self) -> None:
+        resp = self.post(
+            "standins",
+            {
+                "user_id": self.outsider.pk,
+                "reason": "cover",
+                "acknowledged_codes": "team_standin_cap",
+            },
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("acknowledged_codes", resp.json())
+        self.assertEqual(self.log_count(), 0)
+
+    def test_eligibility_409(self) -> None:
+        user = self.gate_event()
+        resp = self.post("standins", {"user_id": user.pk, "reason": "gated"})
+        self.assertEqual(resp.status_code, 409, resp.content)
+        data = resp.json()
+        self.assertEqual(data["code"], "override_required")
+        codes = [v["code"] for v in data["violations"]]
+        self.assertIn("below_min_mmr", codes)
+        self.assertIn("steam_id_missing", codes)
+        self.assertEqual(self.log_count(), 0)
+
+    def test_double_submit(self) -> None:
+        body = {"user_id": self.outsider.pk, "reason": "cover"}
+        self.assertEqual(self.post("standins", body).status_code, 200)
+        resp = self.post("standins", body)
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(resp.json()["code"], "already_on_team")
+        self.assertEqual(
+            TeamLog.objects.filter(
+                team_snapshot_id=self.team.pk, target_user=self.outsider
+            ).count(),
+            1,
+        )
 
 
 class CachedPermissionTests(TeamApiFixture, TransactionTestCase):
