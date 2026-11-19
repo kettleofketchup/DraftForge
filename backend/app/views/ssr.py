@@ -7,7 +7,7 @@ for server-side rendering of meta tags and above-the-fold content.
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import AllowAny
 
-from app.models import CustomUser, HeroDraft, League, Organization, Tournament
+from app.models import CustomUser, League, Organization, Tournament
 from app.serializers_ssr import (
     EventSerializerSSR,
     LeagueSerializerSSR,
@@ -15,7 +15,6 @@ from app.serializers_ssr import (
     TournamentSerializerSSR,
     UserSerializerSSR,
 )
-from draft.serializers.hero_ssr import HeroDraftSerializerSSR
 from events.models import Event
 
 
@@ -41,14 +40,6 @@ class EventSSRView(RetrieveAPIView):
     serializer_class = EventSerializerSSR
     permission_classes = [AllowAny]
     queryset = Event.objects.select_related("organization", "tournament_league")
-
-
-class HeroDraftSSRView(RetrieveAPIView):
-    serializer_class = HeroDraftSerializerSSR
-    permission_classes = [AllowAny]
-    queryset = HeroDraft.objects.select_related(
-        "game__tournament__league__organization"
-    ).prefetch_related("draft_teams__tournament_team")
 
 
 class UserSSRView(RetrieveAPIView):

@@ -6,6 +6,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -19,8 +20,9 @@ from app.models import (
     HeroDraft,
     HeroDraftEvent,
     HeroDraftState,
+    Team,
 )
-from app.permissions_org import IsTournamentStaff
+from app.permissions_org import IsTournamentStaff, can_edit_tournament
 from draft.serializers.hero import HeroDraftEventSerializer, HeroDraftSerializer
 from draft.services.hero import (
     get_available_heroes,
@@ -30,6 +32,8 @@ from draft.services.hero import (
     trigger_roll,
 )
 from draft.services.hero_broadcast import broadcast_herodraft_event
+from draft.tasks import hero_tick
+from events.discord.tournament_dispatch import notify_herodraft_created
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -88,8 +92,6 @@ def create_herodraft(request: Request, game_pk: int) -> Response:
 
     if not game.radiant_team and radiant_team_id:
         try:
-            from app.models import Team
-
             game.radiant_team = Team.objects.get(pk=radiant_team_id)
         except Team.DoesNotExist:
             return Response(
@@ -99,8 +101,6 @@ def create_herodraft(request: Request, game_pk: int) -> Response:
 
     if not game.dire_team and dire_team_id:
         try:
-            from app.models import Team
-
             game.dire_team = Team.objects.get(pk=dire_team_id)
         except Team.DoesNotExist:
             return Response(
@@ -148,8 +148,6 @@ def create_herodraft(request: Request, game_pk: int) -> Response:
 
     # Notify Discord if tournament has discord_send_herodraft_link enabled
     if game.tournament:
-        from events.discord.tournament_dispatch import notify_herodraft_created
-
         notify_herodraft_created(game.tournament, draft, game)
 
     # Refetch with prefetch for proper serialization
@@ -399,9 +397,7 @@ def do_submit_choice(request: Request, draft_pk: int) -> Response:
 
     # Start tick broadcaster if draft just entered drafting state
     if draft.state == HeroDraftState.DRAFTING:
-        from draft.tasks.hero_tick import start_tick_broadcaster
-
-        start_tick_broadcaster(draft.id)
+        hero_tick.start_tick_broadcaster(draft.id)
 
     return Response(HeroDraftSerializer(draft).data)
 
@@ -423,8 +419,6 @@ def do_submit_pick(request: Request, draft_pk: int) -> Response:
         404: Draft not found
         400: Invalid state, hero already picked, or invalid hero
     """
-    from django.utils.dateparse import parse_datetime
-
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
     if draft.state != HeroDraftState.DRAFTING:
@@ -552,8 +546,6 @@ def abandon_draft(request: Request, draft_pk: int) -> Response:
         404: Draft not found
         400: Draft already completed or abandoned
     """
-    from app.permissions_org import can_edit_tournament
-
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
     # Check if draft is already in a terminal state
@@ -675,8 +667,6 @@ def pause_draft(request: Request, draft_pk: int) -> Response:
         404: Draft not found
         400: Invalid state for this operation
     """
-    from app.permissions_org import can_edit_tournament
-
     # Authorize against an unlocked read first so we can return 403/404 without
     # holding a row lock. State mutation runs under select_for_update below.
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
@@ -754,8 +744,6 @@ def resume_draft(request: Request, draft_pk: int) -> Response:
         404: Draft not found
         400: Invalid state for this operation
     """
-    from app.permissions_org import can_edit_tournament
-
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
     is_captain = _user_is_captain_in_draft(draft, request.user)
     is_staff = False
@@ -845,9 +833,7 @@ def resume_draft(request: Request, draft_pk: int) -> Response:
     broadcast_herodraft_event(draft, "resume_countdown", draft_team)
 
     # Start tick broadcaster to handle RESUMING → DRAFTING transition
-    from draft.tasks.hero_tick import start_tick_broadcaster
-
-    start_tick_broadcaster(draft.pk)
+    hero_tick.start_tick_broadcaster(draft.pk)
 
     draft = _get_draft_with_prefetch(draft.pk)
     return Response(HeroDraftSerializer(draft).data)

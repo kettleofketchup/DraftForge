@@ -13,7 +13,6 @@ from django.test import SimpleTestCase, TransactionTestCase
 from django.urls import re_path
 from django.utils import timezone
 
-from app.consumers import HeroDraftConsumer
 from app.models import (
     DraftTeam,
     Game,
@@ -23,6 +22,7 @@ from app.models import (
     Team,
     Tournament,
 )
+from draft.consumers.hero import HeroDraftConsumer
 from draft.tasks import hero_tick
 from draft.tasks.hero_tick import HERO_TICK_DRIVER
 

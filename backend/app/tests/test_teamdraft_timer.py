@@ -15,7 +15,7 @@ from channels.testing import WebsocketCommunicator
 from django.db import connection, transaction
 from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
-from django.urls import re_path, resolve
+from django.urls import re_path, resolve, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory
 
@@ -266,9 +266,7 @@ class RouteResolutionTests(TestCase):
             "/api/herodraft/1/pause/",
             "/api/herodraft/1/resume/",
         ):
-            self.assertEqual(
-                resolve(path).func.__module__, "app.functions.herodraft_views", path
-            )
+            self.assertEqual(resolve(path).func.__module__, "draft.views.hero", path)
         for path, name in (
             ("ready", "teamdraft_set_ready"),
             ("start", "teamdraft_start"),
@@ -281,6 +279,23 @@ class RouteResolutionTests(TestCase):
                 ("app.functions.teamdraft_views", name),
                 path,
             )
+
+    def test_moved_and_interleaved_routes_resolve(self) -> None:
+        self.assertEqual(
+            resolve("/api/games/1/lobby/").func.__module__.split(".")[0], "lobby"
+        )
+        for path, module in (
+            (
+                "/api/internal/tournaments/auto-herodraft-games/",
+                "draft.views.hero_internal",
+            ),
+            ("/api/internal/games/1/create-herodraft/", "draft.views.hero_internal"),
+            ("/api/herodraft/1/ssr/", "draft.views.hero_ssr"),
+            ("/api/games/1/create-herodraft/", "draft.views.hero"),
+        ):
+            self.assertEqual(resolve(path).func.__module__, module, path)
+        self.assertEqual(reverse("herodraft_ssr", args=[1]), "/api/herodraft/1/ssr/")
+        self.assertEqual(reverse("get_herodraft", args=[1]), "/api/herodraft/1/")
 
 
 class ReadyEndpointTests(EndpointTestBase):

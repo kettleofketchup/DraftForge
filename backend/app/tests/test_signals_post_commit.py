@@ -44,7 +44,7 @@ class GameTeamChangeHookTests(TransactionTestCase):
 
     def failing_broadcast(self) -> object:
         return patch(
-            "app.signals._broadcast_draft_event", side_effect=RuntimeError("down")
+            "draft.signals._broadcast_draft_event", side_effect=RuntimeError("down")
         )
 
     def test_reset_saves_when_the_broadcast_hook_raises(self) -> None:

@@ -354,6 +354,7 @@ class HeroDraftPickTest(TestCase):
     def test_submit_pick(self):
         """First pick team can submit a ban."""
         draft_id, first_pick_captain, _ = self._setup_draft_to_picking()
+        self.tick_start.assert_called()
 
         # First pick captain submits a ban (round 1 is a ban)
         self.client.force_authenticate(user=first_pick_captain)

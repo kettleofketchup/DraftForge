@@ -16,9 +16,9 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 )
 
 from app import consumers_base
-from app.consumers import HeroDraftConsumer
 from app.consumers_base import BaseDraftConsumer
 from app.tasks.draft_tick import TickDriver, heartbeat_key
+from draft.consumers.hero import HeroDraftConsumer
 from draft.tasks.hero_tick import HERO_TICK_DRIVER, HeroDraftTickDriver
 
 
