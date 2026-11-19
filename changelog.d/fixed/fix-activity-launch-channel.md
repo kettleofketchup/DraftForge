@@ -1,1 +1,0 @@
-- Launching a draft from Discord no longer moves anyone else's Activity: everyone in an Activity can switch between the tournament's team draft, live and recently finished hero drafts and the bracket, or open the page in their browser, and the team draft Activity follows the latest pick.

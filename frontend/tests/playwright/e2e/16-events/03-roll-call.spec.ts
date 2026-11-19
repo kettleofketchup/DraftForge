@@ -235,6 +235,8 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
 
     // S opens Start Tournament (this event has no minimum).
     await page.keyboard.press('1');
+    // Enter only confirms once the dialog is open and focused.
+    await expect(page.getByTestId('rollcall-confirm-summary')).toBeVisible();
     await page.keyboard.press('Enter');
     await expect(
       page.getByTestId(`rollcall-cancel-btn-${secondId}`),
@@ -248,6 +250,63 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     await expect(page.getByTestId('rollcall-start-dialog-confirm')).toHaveCount(
       0,
     );
+  });
+
+  test('confirmed rows move before the server answers', async ({
+    context,
+    page,
+  }) => {
+    // Hold every confirm request until the UI has already moved both rows.
+    const held: (() => Promise<void>)[] = [];
+    await page.route('**/api/events/signups/*/confirm/', (route) => {
+      held.push(() => route.continue());
+    });
+
+    await openRollCallWithTwoApproved(context, page);
+    const awaiting = page
+      .getByTestId('rollcall-awaiting-section')
+      .locator('xpath=..')
+      .locator('[data-rollcall-row]');
+    await expect(awaiting).toHaveCount(2);
+    const firstId = await awaiting.nth(0).getAttribute('data-rollcall-row');
+    const secondId = await awaiting.nth(1).getAttribute('data-rollcall-row');
+
+    await page.keyboard.press('1');
+    await expect(page.getByTestId('rollcall-confirm-summary')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(
+      page.getByTestId(`rollcall-cancel-btn-${firstId}`),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByTestId(`rollcall-row-${firstId}`)
+        .getByTestId('rollcall-row-pending'),
+    ).toBeVisible();
+
+    // The next confirm is not blocked by the one still in flight.
+    await expect(page.getByTestId(`rollcall-row-${secondId}`)).toHaveAttribute(
+      'data-focused',
+      'true',
+    );
+    await page.keyboard.press('1');
+    await expect(
+      page.getByTestId('rollcall-confirm-dialog-confirm'),
+    ).toBeEnabled();
+    await page.keyboard.press('Enter');
+    await expect(
+      page.getByTestId(`rollcall-cancel-btn-${secondId}`),
+    ).toBeVisible();
+    await expect(page.getByTestId('rollcall-awaiting-section')).toHaveCount(0);
+    await expect.poll(() => held.length).toBe(2);
+
+    await Promise.all(held.map((release) => release()));
+    await expect(page.getByTestId('rollcall-row-pending')).toHaveCount(0);
+    await expect(
+      page.getByTestId(`rollcall-cancel-btn-${firstId}`),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId(`rollcall-cancel-btn-${secondId}`),
+    ).toBeVisible();
   });
 
   test('approved players join the roster only after confirming when the flag is on', async ({

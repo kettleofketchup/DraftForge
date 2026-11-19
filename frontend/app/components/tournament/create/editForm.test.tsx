@@ -7,7 +7,6 @@ import { MemoryRouter } from 'react-router';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { updateTournament } from '~/components/api/api';
-import { Dialog } from '~/components/ui/dialog';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance } from '~/i18n/config';
 import { useUserStore } from '~/store/userStore';
@@ -41,6 +40,7 @@ class ResizeObserverStub {
 }
 globalThis.ResizeObserver ??=
   ResizeObserverStub as unknown as typeof ResizeObserver;
+Element.prototype.scrollIntoView ??= vi.fn();
 
 function Wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -48,9 +48,7 @@ function Wrapper({ children }: { children: ReactNode }) {
     <I18nextProvider i18n={createI18nInstance('en')}>
       <QueryClientProvider client={qc}>
         <TooltipProvider>
-          <MemoryRouter>
-            <Dialog>{children}</Dialog>
-          </MemoryRouter>
+          <MemoryRouter>{children}</MemoryRouter>
         </TooltipProvider>
       </QueryClientProvider>
     </I18nextProvider>
@@ -120,9 +118,18 @@ describe('TournamentEditForm', () => {
       },
     ]);
     vi.mocked(updateTournament).mockResolvedValue({} as never);
-    render(<TournamentEditForm tourn={tournament()} canEdit />, {
-      wrapper: Wrapper,
-    });
+    render(
+      <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
+        tourn={tournament()}
+        canEdit
+      />,
+      {
+        wrapper: Wrapper,
+      },
+    );
 
     const trigger = screen.getByTestId('tournament-league-select');
     expect(trigger).toHaveTextContent('L9');
@@ -145,6 +152,9 @@ describe('TournamentEditForm', () => {
     vi.mocked(updateTournament).mockResolvedValue({} as never);
     render(
       <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
         tourn={tournament({ captains_draft_time: 0 })}
         canEdit
       />,
@@ -167,6 +177,9 @@ describe('TournamentEditForm', () => {
     vi.mocked(updateTournament).mockResolvedValue({} as never);
     render(
       <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
         tourn={tournament({
           game_mode: 'captains_mode',
           captains_draft_time: 25,
@@ -190,6 +203,9 @@ describe('TournamentEditForm', () => {
     vi.mocked(updateTournament).mockResolvedValue({} as never);
     render(
       <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
         tourn={tournament({
           draft: { draft_style: 'snake' },
           draft_options: {
@@ -227,9 +243,18 @@ describe('TournamentEditForm', () => {
   it('defaults draft settings for a tournament without draft_options', async () => {
     setUser(siteStaff);
     vi.mocked(updateTournament).mockResolvedValue({} as never);
-    render(<TournamentEditForm tourn={tournament()} canEdit />, {
-      wrapper: Wrapper,
-    });
+    render(
+      <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
+        tourn={tournament()}
+        canEdit
+      />,
+      {
+        wrapper: Wrapper,
+      },
+    );
 
     submit();
     await waitFor(() => expect(updateTournament).toHaveBeenCalled());
@@ -254,6 +279,9 @@ describe('TournamentEditForm', () => {
     });
     render(
       <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
         tourn={tournament({ game_mode: 'captains_mode' })}
         canEdit
       />,
@@ -273,9 +301,18 @@ describe('TournamentEditForm', () => {
     vi.mocked(updateTournament).mockRejectedValue({
       response: { data: { captains_draft_time: ['bad'] } },
     });
-    render(<TournamentEditForm tourn={tournament()} canEdit />, {
-      wrapper: Wrapper,
-    });
+    render(
+      <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
+        tourn={tournament()}
+        canEdit
+      />,
+      {
+        wrapper: Wrapper,
+      },
+    );
 
     submit();
     await waitFor(() => expect(tabState('config')).toBe('active'));
@@ -289,6 +326,9 @@ describe('TournamentEditForm', () => {
     setUser(siteStaff);
     render(
       <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
         tourn={tournament({
           game_mode: 'captains_mode',
           captains_draft_time: 0,
@@ -304,27 +344,102 @@ describe('TournamentEditForm', () => {
     expect(updateTournament).not.toHaveBeenCalled();
   });
 
+  it('lists its sections in the settings sidebar and searches across them', async () => {
+    setUser(siteStaff);
+    render(
+      <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
+        tourn={tournament()}
+        canEdit
+      />,
+      { wrapper: Wrapper },
+    );
+    expect(screen.getByTestId('tournament-form-sidebar')).toBeInTheDocument();
+    expect(tabState('general')).toBe('active');
+    fireEvent.change(screen.getByTestId('tournament-form-search'), {
+      target: { value: 'draft link' },
+    });
+    const hit = screen.getAllByTestId('tournament-form-search-hit')[0];
+    expect(hit).toHaveTextContent('Discord');
+    fireEvent.click(hit);
+    await waitFor(() => expect(tabState('discord')).toBe('active'));
+  });
+
+  it('appends extra sections after the form, lazily mounted', () => {
+    setUser(siteStaff);
+    render(
+      <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
+        tourn={tournament()}
+        canEdit
+        extraSections={[
+          {
+            value: 'activity',
+            label: 'Discord Activity',
+            lazy: true,
+            content: <p data-testid="activity-log">log</p>,
+          },
+        ]}
+      />,
+      { wrapper: Wrapper },
+    );
+    expect(screen.queryByTestId('activity-log')).toBeNull();
+    fireEvent.mouseDown(screen.getByTestId('tournament-form-tab-activity'), {
+      button: 0,
+    });
+    expect(screen.getByTestId('activity-log')).toBeInTheDocument();
+  });
+
   it('blocks editing without permission', () => {
     setUser(siteStaff);
-    render(<TournamentEditForm tourn={tournament()} canEdit={false} />, {
-      wrapper: Wrapper,
-    });
+    render(
+      <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
+        tourn={tournament()}
+        canEdit={false}
+      />,
+      {
+        wrapper: Wrapper,
+      },
+    );
     expect(screen.getByText(/You do not have permission/)).toBeInTheDocument();
   });
 
   it('blocks create for a superuser who is not staff', () => {
     setUser({ pk: 3, is_staff: false, is_superuser: true });
-    render(<TournamentEditForm tourn={{} as TournamentClassType} />, {
-      wrapper: Wrapper,
-    });
+    render(
+      <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
+        tourn={{} as TournamentClassType}
+      />,
+      {
+        wrapper: Wrapper,
+      },
+    );
     expect(screen.getByText(/You do not have permission/)).toBeInTheDocument();
   });
 
   it('allows create for site staff', () => {
     setUser(siteStaff);
-    render(<TournamentEditForm tourn={{} as TournamentClassType} />, {
-      wrapper: Wrapper,
-    });
+    render(
+      <TournamentEditForm
+        open
+        onOpenChange={() => {}}
+        title="Tournament"
+        tourn={{} as TournamentClassType}
+      />,
+      {
+        wrapper: Wrapper,
+      },
+    );
     expect(screen.getByTestId('tournament-form')).toBeInTheDocument();
   });
 });

@@ -1,1 +1,0 @@
-Optionally, after deploying, run `python manage.py audit_team_leadership` from `/app/backend` in the backend container. It lists existing teams whose captain or deputy is not on the team, or whose deputy is also the captain. It is read-only.

@@ -27,6 +27,13 @@ import { Tabs, TabsContent } from '~/components/ui/tabs';
 import { useMediaQuery } from '~/hooks/useMediaQuery';
 import { cn } from '~/lib/utils';
 
+export interface SettingsFieldInfo {
+  label: string;
+  description?: string;
+  /** Search terms that appear in neither the label nor the description. */
+  keywords?: readonly string[];
+}
+
 export interface SettingsSection<
   V extends string = string,
 > extends FormTabItem {
@@ -36,10 +43,18 @@ export interface SettingsSection<
   keywords?: string[];
   /** Mount on first visit, then stay mounted. */
   lazy?: boolean;
+  /**
+   * Form fields this section renders, by field name. Search finds them before
+   * a lazy section is visited and inside collapsed blocks that declare them
+   * with `data-fields="a b"`; rendered rows are found by `data-field`.
+   */
+  fields?: Readonly<Record<string, SettingsFieldInfo>>;
 }
 
 export interface SettingsDialogHandle<V extends string = string> {
   selectSection: (value: V) => void;
+  /** The section that renders `field` (or a collapsed block holding it), else its registered section. */
+  sectionOfField: (field: string) => V | undefined;
 }
 
 export interface SettingsDialogProps<V extends string = string> extends Omit<
@@ -59,7 +74,9 @@ interface SearchHit<V extends string> {
   key: string;
   section: V;
   label: string;
-  el: HTMLElement;
+  /** A rendered label/heading, or the collapsed block that holds `field`. */
+  el?: HTMLElement;
+  field?: string;
 }
 
 const SEARCHABLE = 'label, h3, h4';
@@ -76,6 +93,10 @@ function matches(text: string, q: string[]): boolean {
   return q.every((term) => t.includes(term));
 }
 
+const attr = (value: string) => value.replace(/["\\]/g, '\\$&');
+const fieldRow = (field: string) => `[data-field="${attr(field)}"]`;
+const fieldBlock = (field: string) => `[data-fields~="${attr(field)}"]`;
+
 function isTypingTarget(t: HTMLElement): boolean {
   return (
     t.isContentEditable ||
@@ -90,22 +111,32 @@ function isTypingTarget(t: HTMLElement): boolean {
  * phones) beside the active category's fields. Search matches category names,
  * keywords and the labels and headings rendered in each mounted category.
  */
-export function SettingsDialog<V extends string>({
+interface SettingsLayoutOptions<V extends string> {
+  /** Resets to the first section each time this turns true. */
+  open: boolean;
+  sections: SettingsSection<V>[];
+  testIdPrefix: string;
+  sectionRef?: React.Ref<SettingsDialogHandle<V>>;
+  searchPlaceholder?: string;
+  variant: 'dialog' | 'page';
+}
+
+/** Sidebar, search and section panels shared by SettingsDialog and SettingsPage. */
+function useSettingsLayout<V extends string>({
   open,
   sections,
   testIdPrefix,
-  loading,
   sectionRef,
   searchPlaceholder = 'Search settings',
-  ...dialogProps
-}: SettingsDialogProps<V>) {
+  variant,
+}: SettingsLayoutOptions<V>) {
   const isMobile = useMediaQuery('(max-width: 767px)');
-  const isLoading = loading != null && loading !== false;
   const first = sections[0].value;
   const [active, setActive] = React.useState<V>(first);
   const [visited, setVisited] = React.useState<Set<V>>(() => new Set([first]));
   const [query, setQuery] = React.useState('');
   const [hits, setHits] = React.useState<SearchHit<V>[]>([]);
+  const [cursor, setCursor] = React.useState(0);
   const [domVersion, setDomVersion] = React.useState(0);
   const [wasOpen, setWasOpen] = React.useState(open);
   if (open !== wasOpen) {
@@ -117,21 +148,35 @@ export function SettingsDialog<V extends string>({
     }
   }
 
-  const panels = React.useRef(new Map<V, HTMLElement>());
+  const panelEls = React.useRef(new Map<V, HTMLElement>());
   const searchRef = React.useRef<HTMLInputElement>(null);
   const rafRef = React.useRef(0);
   const highlightRef = React.useRef<{ el: HTMLElement; timer: number } | null>(
     null,
   );
   const statusId = React.useId();
+  const hitIdPrefix = React.useId();
 
   const selectSection = React.useCallback((value: V) => {
     setActive(value);
     setVisited((prev) => (prev.has(value) ? prev : new Set(prev).add(value)));
   }, []);
-  React.useImperativeHandle(sectionRef, () => ({ selectSection }), [
-    selectSection,
-  ]);
+  const sectionsRef = React.useRef(sections);
+  sectionsRef.current = sections;
+  const sectionOfField = React.useCallback((field: string): V | undefined => {
+    for (const selector of [fieldRow(field), fieldBlock(field)]) {
+      for (const [value, panel] of panelEls.current) {
+        if (panel.querySelector(selector)) return value;
+      }
+    }
+    return sectionsRef.current.find((s) => s.fields && field in s.fields)
+      ?.value;
+  }, []);
+  React.useImperativeHandle(
+    sectionRef,
+    () => ({ selectSection, sectionOfField }),
+    [selectSection, sectionOfField],
+  );
 
   const q = React.useMemo(() => terms(query), [query]);
   const searching = q.length > 0;
@@ -141,7 +186,7 @@ export function SettingsDialog<V extends string>({
   React.useEffect(() => {
     if (!searching) return;
     const observer = new MutationObserver(() => setDomVersion((v) => v + 1));
-    for (const panel of panels.current.values()) {
+    for (const panel of panelEls.current.values()) {
       observer.observe(panel, {
         childList: true,
         subtree: true,
@@ -157,16 +202,76 @@ export function SettingsDialog<V extends string>({
       return;
     }
     const found: SearchHit<V>[] = [];
+    const seen = new Set<string>();
+    const registry = new Map<string, SettingsFieldInfo>();
     for (const s of sections) {
-      const panel = panels.current.get(s.value);
+      for (const [field, info] of Object.entries(s.fields ?? {})) {
+        if (!registry.has(field)) registry.set(field, info);
+      }
+    }
+    // Every term must appear in the label, description or keywords.
+    const add = (hit: SearchHit<V>, rest: string) => {
+      if (matches(`${hit.label} ${rest}`, q)) found.push(hit);
+    };
+
+    // Rendered labels and headings, enriched by the registry when they sit in a field row.
+    for (const s of sections) {
+      const panel = panelEls.current.get(s.value);
       if (!panel) continue;
       panel.querySelectorAll<HTMLElement>(SEARCHABLE).forEach((el, i) => {
         const label = el.textContent?.trim();
-        if (!label || !matches(label, q)) return;
-        found.push({ key: `${s.value}:${i}`, section: s.value, label, el });
+        if (!label) return;
+        // Only a row's first label names the field; option labels inside it stay plain hits.
+        const row = el.closest<HTMLElement>('[data-field]');
+        const field =
+          row && row.querySelector('label') === el
+            ? row.dataset.field
+            : undefined;
+        if (field) {
+          if (seen.has(field)) return;
+          seen.add(field);
+        }
+        const info = field ? registry.get(field) : undefined;
+        const description = field
+          ? row
+              ?.querySelector('[id$="-form-item-description"]')
+              ?.textContent?.trim()
+          : undefined;
+        add(
+          { key: `${s.value}:${i}`, section: s.value, label, el, field },
+          [
+            description ?? info?.description ?? '',
+            ...(info?.keywords ?? []),
+          ].join(' '),
+        );
       });
     }
+
+    // Registered fields not rendered: inside a collapsed block, or in a lazy section not visited yet.
+    for (const s of sections) {
+      for (const [field, info] of Object.entries(s.fields ?? {})) {
+        if (seen.has(field)) continue;
+        let section: V | undefined;
+        let el: HTMLElement | undefined;
+        for (const [value, panel] of panelEls.current) {
+          const block = panel.querySelector<HTMLElement>(fieldBlock(field));
+          if (block) {
+            section = value;
+            el = block;
+            break;
+          }
+        }
+        if (!section && s.lazy && !visited.has(s.value)) section = s.value;
+        if (!section) continue;
+        seen.add(field);
+        add(
+          { key: `${section}:${field}`, section, label: info.label, el, field },
+          [info.description ?? '', ...(info.keywords ?? [])].join(' '),
+        );
+      }
+    }
     setHits(found);
+    setCursor(0);
     // `sections` is a fresh array each render; sectionKey tracks its identity.
   }, [q, visited, sectionKey, domVersion]);
 
@@ -203,48 +308,105 @@ export function SettingsDialog<V extends string>({
     [clearHighlight],
   );
 
+  const highlight = React.useCallback(
+    (target: HTMLElement, focusable: HTMLElement | null) => {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (focusable) {
+        focusable.focus({ preventScroll: true });
+      } else {
+        target.tabIndex = -1;
+        target.focus({ preventScroll: true });
+      }
+      clearHighlight();
+      target.dataset.searchHit = '';
+      highlightRef.current = {
+        el: target,
+        timer: window.setTimeout(clearHighlight, HIGHLIGHT_MS),
+      };
+    },
+    [clearHighlight],
+  );
+
+  const revealLabel = React.useCallback(
+    (label: HTMLElement) => {
+      const asLabel = label instanceof HTMLLabelElement ? label : null;
+      const row = label.closest<HTMLElement>('[data-field]');
+      const target =
+        row ?? (asLabel ? (asLabel.parentElement ?? asLabel) : label);
+      const focusable =
+        asLabel?.control ??
+        (asLabel?.htmlFor ? document.getElementById(asLabel.htmlFor) : null) ??
+        (asLabel || row ? target.querySelector<HTMLElement>(FOCUSABLE) : null);
+      highlight(target, focusable);
+    },
+    [highlight],
+  );
+
   const jumpTo = React.useCallback(
     (hit: SearchHit<V>) => {
-      if (!hit.el.isConnected) return;
+      if (hit.el && !hit.el.isConnected) return;
       selectSection(hit.section);
       cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
-        const label = hit.el instanceof HTMLLabelElement ? hit.el : null;
-        const target = label ? (label.parentElement ?? label) : hit.el;
-        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
-
-        const focusable =
-          label?.control ??
-          (label?.htmlFor ? document.getElementById(label.htmlFor) : null) ??
-          (label ? target.querySelector<HTMLElement>(FOCUSABLE) : null);
-        if (focusable) {
-          focusable.focus({ preventScroll: true });
-        } else {
-          target.tabIndex = -1;
-          target.focus({ preventScroll: true });
+        const panel = panelEls.current.get(hit.section);
+        const row = hit.field
+          ? panel?.querySelector<HTMLElement>(fieldRow(hit.field))
+          : null;
+        if (row) {
+          revealLabel(row.querySelector<HTMLElement>('label') ?? row);
+          return;
         }
-
-        clearHighlight();
-        target.dataset.searchHit = '';
-        highlightRef.current = {
-          el: target,
-          timer: window.setTimeout(clearHighlight, HIGHLIGHT_MS),
-        };
+        const block =
+          hit.el?.matches('[data-fields]') === true
+            ? hit.el
+            : hit.field
+              ? panel?.querySelector<HTMLElement>(fieldBlock(hit.field))
+              : null;
+        if (block && hit.field) {
+          const trigger = block.querySelector<HTMLElement>(
+            '[aria-expanded="false"]:not(:disabled)',
+          );
+          if (!trigger) {
+            highlight(block, block.querySelector<HTMLElement>(FOCUSABLE));
+            return;
+          }
+          trigger.click();
+          const field = hit.field;
+          rafRef.current = requestAnimationFrame(() => {
+            const opened = block.querySelector<HTMLElement>(fieldRow(field));
+            if (opened)
+              revealLabel(opened.querySelector<HTMLElement>('label') ?? opened);
+            else highlight(block, trigger);
+          });
+          return;
+        }
+        if (hit.el) revealLabel(hit.el);
       });
     },
-    [selectSection, clearHighlight],
+    [selectSection, highlight, revealLabel],
   );
 
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.defaultPrevented) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.defaultPrevented || e.altKey) return;
       const t = e.target as HTMLElement | null;
-      const dialog = searchRef.current?.closest('[role="dialog"]');
-      if (!t || !dialog?.contains(t) || isTypingTarget(t)) return;
+      const root = searchRef.current?.closest(
+        variant === 'dialog' ? '[role="dialog"]' : '[data-settings-root]',
+      );
+      // A page has no focus trap: a key pressed with nothing focused counts too.
+      const inScope =
+        !!t &&
+        (!!root?.contains(t) || (variant === 'page' && t === document.body));
+      if (!t || !inScope) return;
+      const commandK =
+        e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey) && !e.shiftKey;
+      const slash =
+        e.key === '/' && !e.metaKey && !e.ctrlKey && !isTypingTarget(t);
+      if (!commandK && !slash) return;
       e.preventDefault();
       searchRef.current?.focus();
+      searchRef.current?.select();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -255,12 +417,30 @@ export function SettingsDialog<V extends string>({
       setQuery('');
       return;
     }
+    if (hits.length > 0) {
+      const last = hits.length - 1;
+      const next: Record<string, number> = {
+        ArrowDown: cursor >= last ? 0 : cursor + 1,
+        ArrowUp: cursor <= 0 ? last : cursor - 1,
+        Home: 0,
+        End: last,
+      };
+      if (e.key in next) {
+        e.preventDefault();
+        setCursor(next[e.key]);
+        document
+          .getElementById(`${hitIdPrefix}-${next[e.key]}`)
+          ?.scrollIntoView({ block: 'nearest' });
+        return;
+      }
+    }
     if (e.key !== 'Enter') return;
     // Keep FormDialog's Enter-to-submit away from the search box.
     e.preventDefault();
     e.stopPropagation();
     const firstMatch = visible.find((s) => matchedSections.has(s.value));
-    if (hits[0]) jumpTo(hits[0]);
+    const picked = hits[cursor] ?? hits[0];
+    if (picked) jumpTo(picked);
     else if (firstMatch) selectSection(firstMatch.value);
   };
 
@@ -285,7 +465,11 @@ export function SettingsDialog<V extends string>({
         placeholder={searchPlaceholder}
         aria-label={searchPlaceholder}
         aria-describedby={statusId}
-        aria-keyshortcuts="/"
+        aria-keyshortcuts="/ Control+K Meta+K"
+        aria-controls={hits.length > 0 ? `${hitIdPrefix}-list` : undefined}
+        aria-activedescendant={
+          hits.length > 0 ? `${hitIdPrefix}-${cursor}` : undefined
+        }
         data-escape-clears=""
         data-testid={`${testIdPrefix}-search`}
         className="h-9 pr-8 pl-8"
@@ -311,16 +495,26 @@ export function SettingsDialog<V extends string>({
   );
 
   const hitList = hits.length > 0 && (
-    <ul aria-label="Matching settings" className="flex flex-col gap-0.5">
-      {hits.map((hit) => (
-        <li key={hit.key}>
+    <ul
+      id={`${hitIdPrefix}-list`}
+      role="listbox"
+      aria-label="Matching settings"
+      className="flex flex-col gap-0.5"
+    >
+      {hits.map((hit, i) => (
+        <li key={hit.key} role="none">
           <Button
             type="button"
             variant="ghost"
+            role="option"
+            id={`${hitIdPrefix}-${i}`}
+            aria-selected={i === cursor}
             onClick={() => jumpTo(hit)}
+            onMouseMove={() => setCursor(i)}
             data-testid={`${testIdPrefix}-search-hit`}
+            data-active={i === cursor || undefined}
             className={cn(
-              'h-auto w-full justify-start gap-1.5 px-2 py-1.5 text-left font-normal',
+              'h-auto w-full justify-start gap-1.5 px-2 py-1.5 text-left font-normal data-[active]:bg-accent data-[active]:text-accent-foreground',
               isMobile ? 'min-h-11' : 'min-h-8',
             )}
           >
@@ -418,15 +612,71 @@ export function SettingsDialog<V extends string>({
       value={active}
       onValueChange={(v) => selectSection(v as V)}
       orientation={isMobile ? 'horizontal' : 'vertical'}
+      data-settings-root=""
       className={cn(
         'min-h-0 flex-1',
         isMobile ? 'flex-col gap-3' : 'flex-row gap-6',
       )}
     >
-      {isMobile ? mobileNav : desktopNav}
+      {isMobile ? (
+        mobileNav
+      ) : variant === 'page' ? (
+        <div className="sticky top-4 flex max-h-[calc(100svh-2rem)] self-start">
+          {desktopNav}
+        </div>
+      ) : (
+        desktopNav
+      )}
       {body}
     </Tabs>
   );
+
+  const panels = sections.map((s) => (
+    <TabsContent
+      key={s.value}
+      value={s.value}
+      ref={(el: HTMLDivElement | null) => {
+        if (el) panelEls.current.set(s.value, el);
+        else panelEls.current.delete(s.value);
+      }}
+      forceMount={!s.lazy || visited.has(s.value) ? true : undefined}
+      // Radix leaves force-mounted panels visible; hide inactive ones.
+      hidden={active !== s.value}
+      data-section={s.value}
+      className={cn(
+        'mx-auto flex w-full max-w-4xl flex-col gap-4',
+        '[&_[data-search-hit]]:rounded-md [&_[data-search-hit]]:ring-2 [&_[data-search-hit]]:ring-ring [&_[data-search-hit]]:ring-offset-2 [&_[data-search-hit]]:ring-offset-background',
+      )}
+    >
+      {s.content}
+    </TabsContent>
+  ));
+
+  return { frame, panels, isMobile };
+}
+
+/**
+ * Full-screen settings form: a searchable category sidebar (a tab strip on
+ * phones) beside the active category's fields.
+ */
+export function SettingsDialog<V extends string>({
+  open,
+  sections,
+  testIdPrefix,
+  loading,
+  sectionRef,
+  searchPlaceholder,
+  ...dialogProps
+}: SettingsDialogProps<V>) {
+  const isLoading = loading != null && loading !== false;
+  const { frame, panels, isMobile } = useSettingsLayout({
+    open,
+    sections,
+    testIdPrefix,
+    sectionRef,
+    searchPlaceholder,
+    variant: 'dialog',
+  });
 
   return (
     <FormDialog
@@ -442,27 +692,49 @@ export function SettingsDialog<V extends string>({
             : 'min-h-0 flex-1 overflow-hidden -mr-6 pr-6'
       }
     >
-      {isLoading
-        ? loading
-        : sections.map((s) => (
-            <TabsContent
-              key={s.value}
-              value={s.value}
-              ref={(el: HTMLDivElement | null) => {
-                if (el) panels.current.set(s.value, el);
-                else panels.current.delete(s.value);
-              }}
-              forceMount={!s.lazy || visited.has(s.value) ? true : undefined}
-              // Radix leaves force-mounted panels visible; hide inactive ones.
-              hidden={active !== s.value}
-              className={cn(
-                'mx-auto flex w-full max-w-4xl flex-col gap-4',
-                '[&_[data-search-hit]]:rounded-md [&_[data-search-hit]]:ring-2 [&_[data-search-hit]]:ring-ring [&_[data-search-hit]]:ring-offset-2 [&_[data-search-hit]]:ring-offset-background',
-              )}
-            >
-              {s.content}
-            </TabsContent>
-          ))}
+      {isLoading ? loading : panels}
     </FormDialog>
+  );
+}
+
+export interface SettingsPageProps<V extends string = string> {
+  sections: SettingsSection<V>[];
+  /** Nav items get `${testIdPrefix}-tab-${value}`. */
+  testIdPrefix: string;
+  sectionRef?: React.Ref<SettingsDialogHandle<V>>;
+  searchPlaceholder?: string;
+  /** Rendered under the active section, e.g. a save bar. */
+  footer?: React.ReactNode;
+  className?: string;
+  'data-testid'?: string;
+}
+
+/** SettingsDialog's sidebar and search laid out on a page instead of in a dialog. */
+export function SettingsPage<V extends string>({
+  sections,
+  testIdPrefix,
+  sectionRef,
+  searchPlaceholder,
+  footer,
+  className,
+  'data-testid': dataTestId,
+}: SettingsPageProps<V>) {
+  const { frame, panels } = useSettingsLayout({
+    open: true,
+    sections,
+    testIdPrefix,
+    sectionRef,
+    searchPlaceholder,
+    variant: 'page',
+  });
+  return (
+    <div className={cn('flex flex-col', className)} data-testid={dataTestId}>
+      {frame(
+        <div className="min-w-0 flex-1">
+          {panels}
+          {footer}
+        </div>,
+      )}
+    </div>
   );
 }

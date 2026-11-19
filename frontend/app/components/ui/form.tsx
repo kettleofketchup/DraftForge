@@ -78,11 +78,14 @@ const FormItem = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
   const id = React.useId();
+  const { name } = React.useContext(FormFieldContext);
 
   return (
     <FormItemContext.Provider value={{ id }}>
       <div
         ref={ref}
+        // Lets form-level UI (settings search, error routing) find a field's row.
+        data-field={name}
         className={cn(
           'space-y-2',
           // Radix Select appends a hidden native <select>; drop the margin it would leave under the trigger.

@@ -24,6 +24,14 @@ vi.mock('sonner', () => ({
 
 import { EditRepeaterModal } from '../EditRepeaterModal';
 
+const searchHits = (prefix: string) =>
+  screen.queryAllByTestId(`${prefix}-search-hit`).map((el) => {
+    const [label, section] = [...el.querySelectorAll('span')].map(
+      (s) => s.textContent,
+    );
+    return { el, label, section };
+  });
+
 // FormDialog renders a Radix ScrollArea, which jsdom cannot satisfy.
 class ResizeObserverStub {
   observe() {}
@@ -143,6 +151,35 @@ describe('EditRepeaterModal tabs', () => {
     }
     expect(screen.queryByTestId('edit-series-tab-approval')).toBeNull();
     expect(screen.getByTestId('edit-series-modal')).toBeInTheDocument();
+  });
+
+  it('finds ready check settings that sit in a collapsed block', () => {
+    render(
+      <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    fireEvent.change(screen.getByTestId('edit-series-search'), {
+      target: { value: 'closes' },
+    });
+    expect(searchHits('edit-series')).toContainEqual(
+      expect.objectContaining({
+        label: 'Closes (minutes)',
+        section: 'Ready check',
+      }),
+    );
+  });
+
+  it('finds the signup rule under the Event section, where this form renders it', () => {
+    render(
+      <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    fireEvent.change(screen.getByTestId('edit-series-search'), {
+      target: { value: 'sign themselves' },
+    });
+    const sections = searchHits('edit-series').map((h) => h.section);
+    expect(sections).toContain('Event');
+    expect(sections).not.toContain('Approval');
   });
 });
 

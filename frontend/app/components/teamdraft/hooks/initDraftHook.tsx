@@ -3,18 +3,24 @@ import { initDraftRounds } from '~/components/api/api';
 import type { InitDraftRoundsResponse } from '~/components/api/draftAPI';
 import type {
   DraftReferenceCounts,
+  DraftResetConflict,
   DraftResetReport,
+  DraftTeamUsage,
   InitDraftRoundsAPI,
 } from '~/components/api/types';
 import type { DraftRoundType, DraftType, TournamentType } from '~/index';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
+import {
+  muteDraftStartToasts,
+  useDraftWebSocketStore,
+} from '~/store/draftWebSocketStore';
 const log = getLogger('InitDraft');
 
 export const DRAFT_RESET_HAS_REFERENCES = 'draft_reset_has_references';
 
 export type ConfirmForceReset = (
-  references: DraftReferenceCounts,
+  conflict: DraftResetConflict,
 ) => Promise<boolean>;
 
 type hookParams = {
@@ -25,6 +31,8 @@ type hookParams = {
   setCurDraftRound: (draftRound: DraftRoundType) => void;
   draftStyle?: 'snake' | 'normal' | 'shuffle';
   confirmForce: ConfirmForceReset;
+  /** Called when the reset dropped or kept teams, so they can be named. */
+  onReport?: (report: DraftResetReport) => void;
 };
 
 type InitDraftError = {
@@ -35,18 +43,13 @@ type InitDraftError = {
       error?: string;
       code?: string;
       references?: DraftReferenceCounts;
+      usage?: DraftTeamUsage[];
     };
   };
 };
 
 const plural = (count: number, word: string) =>
   `${count} ${word}${count === 1 ? '' : 's'}`;
-
-export const referenceTotal = (references: DraftReferenceCounts) =>
-  Object.values(references).reduce((sum, count) => sum + count, 0);
-
-export const forceResetMessage = (references: DraftReferenceCounts) =>
-  `${referenceTotal(references)} games and other records use these teams. Resetting keeps them but rosters will change.`;
 
 export const draftResetSummary = (report: DraftResetReport | undefined) => {
   if (!report) return 'Draft initialized.';
@@ -67,11 +70,19 @@ export const draftResetSummary = (report: DraftResetReport | undefined) => {
     : 'Draft initialized.';
 };
 
-const referencesOf = (err: unknown): DraftReferenceCounts | null => {
+export const hasNamedOutcomes = (report: DraftResetReport | undefined) =>
+  !!report && report.dropped_teams.length + report.kept_teams.length > 0;
+
+const START_TOAST_MUTE_MS = 5000;
+
+const conflictOf = (err: unknown): DraftResetConflict | null => {
   const response = (err as InitDraftError)?.response;
   if (response?.status !== 409) return null;
   if (response.data?.code !== DRAFT_RESET_HAS_REFERENCES) return null;
-  return response.data.references ?? {};
+  return {
+    references: response.data.references ?? {},
+    usage: response.data.usage ?? [],
+  };
 };
 
 const errorText = (err: unknown) => {
@@ -91,6 +102,7 @@ export const initDraftHook = async ({
   setCurDraftRound,
   draftStyle,
   confirmForce,
+  onReport,
 }: hookParams): Promise<TournamentType | undefined> => {
   log.debug('Initialization draft', { tournament });
 
@@ -113,17 +125,21 @@ export const initDraftHook = async ({
   let rawData: InitDraftRoundsResponse;
   try {
     try {
+      muteDraftStartToasts(START_TOAST_MUTE_MS);
       rawData = await initDraftRounds(data);
     } catch (err) {
-      const references = referencesOf(err);
-      if (!references) throw err;
+      const conflict = conflictOf(err);
+      if (!conflict) throw err;
       toast.dismiss(toastId);
-      log.info('Draft reset needs force confirmation', { references });
-      if (!(await confirmForce(references))) {
+      log.info('Draft reset needs force confirmation', {
+        usage: conflict.usage.map((u) => `${u.model}:${u.count}`),
+      });
+      if (!(await confirmForce(conflict))) {
         log.info('Draft reset force declined');
         return;
       }
       toastId = toast.loading('Initializing draft rounds...');
+      muteDraftStartToasts(START_TOAST_MUTE_MS);
       rawData = await initDraftRounds({ ...data, force: true });
     }
   } catch (err) {
@@ -140,6 +156,7 @@ export const initDraftHook = async ({
   ) as TournamentType;
   setTournament(hydrated);
   if (hydrated.draft) {
+    useDraftWebSocketStore.getState().dropStaleDraftState(hydrated.draft);
     setDraft(hydrated.draft);
     if (hydrated.draft.draft_rounds?.[0]) {
       setCurDraftRound(hydrated.draft.draft_rounds[0]);
@@ -148,5 +165,8 @@ export const initDraftHook = async ({
     log.error('No draft in response');
   }
   toast.success(draftResetSummary(rawData.draft_reset), { id: toastId });
+  if (rawData.draft_reset && hasNamedOutcomes(rawData.draft_reset)) {
+    onReport?.(rawData.draft_reset);
+  }
   return hydrated;
 };

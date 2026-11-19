@@ -1,5 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import {
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
 
 import type {
   EventRepeaterType,
@@ -38,6 +43,16 @@ import {
   updateOrgEventDefaults,
 } from '~/components/api/api';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
+import type {
+  PendingSignupAction,
+  SignupAction,
+} from '~/components/events/signupOptimistic';
+import {
+  isSignupAction,
+  overlayPendingSignups,
+  replaceSignup,
+  signupIdOf,
+} from '~/components/events/signupOptimistic';
 import type { UserType } from '~/components/user/types';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
@@ -244,47 +259,116 @@ export function useUpdateEventMutation(eventId: number) {
 }
 
 /** Signup management mutations (approve, reject, confirm, cancel). */
+export const signupActionKey = (eventId: number) =>
+  ['signup-action', eventId] as const;
+
+/**
+ * Staff actions on individual signups. Rows update straight away: pending
+ * actions are drawn over the list by `useOptimisticEventSignups`, each
+ * success writes the server's row into the cache, and the list, event and
+ * lobby password refetch once the last in-flight action settles. A failed
+ * action simply stops being drawn, which rolls the row back.
+ */
 export function useSignupActionMutations(eventId: number) {
   const queryClient = useQueryClient();
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-    queryClient.invalidateQueries({ queryKey: ['event', eventId] });
-    queryClient.invalidateQueries({
-      queryKey: ['event-lobby-password', eventId],
-    });
-  };
+  const signupsKey = ['event-signups', eventId];
+
+  const options = <TVars>(
+    action: SignupAction,
+    mutationFn: (vars: TVars) => Promise<EventSignupType>,
+  ) => ({
+    mutationKey: [...signupActionKey(eventId), action],
+    mutationFn,
+    onMutate: () => queryClient.cancelQueries({ queryKey: signupsKey }),
+    onSuccess: (updated: EventSignupType) => {
+      queryClient.setQueryData<EventSignupType[]>(signupsKey, (old) =>
+        old ? replaceSignup(old, updated) : old,
+      );
+    },
+    onSettled: () => {
+      // This mutation still counts itself, so 1 means it is the last one.
+      if (queryClient.isMutating({ mutationKey: signupActionKey(eventId) }) > 1)
+        return;
+      queryClient.invalidateQueries({ queryKey: signupsKey });
+      queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+      queryClient.invalidateQueries({
+        queryKey: ['event-lobby-password', eventId],
+      });
+    },
+  });
+
   return {
-    approve: useMutation({
-      mutationFn: ({ id, mmr }: { id: number; mmr?: number }) =>
+    approve: useMutation(
+      options('approve', ({ id, mmr }: { id: number; mmr?: number }) =>
         approveSignupAPI(id, mmr),
-      onSuccess: invalidate,
-    }),
-    reject: useMutation({
-      mutationFn: (id: number) => rejectSignupAPI(id),
-      onSuccess: invalidate,
-    }),
-    confirm: useMutation({
-      mutationFn: (id: number) => confirmSignupAPI(id),
-      onSuccess: invalidate,
-    }),
-    cancel: useMutation({
-      mutationFn: (id: number) => cancelSignupAPI(id),
-      onSuccess: invalidate,
-    }),
-    unconfirm: useMutation({
-      mutationFn: (id: number) => unconfirmSignupAPI(id),
-      onSuccess: invalidate,
-    }),
-    demote: useMutation({
-      mutationFn: (id: number) => demoteSignupAPI(id),
-      onSuccess: invalidate,
-    }),
-    reinstate: useMutation({
-      mutationFn: (id: number) => reinstateSignupAPI(id),
-      onSuccess: invalidate,
-    }),
+      ),
+    ),
+    reject: useMutation(options('reject', (id: number) => rejectSignupAPI(id))),
+    confirm: useMutation(
+      options('confirm', (id: number) => confirmSignupAPI(id)),
+    ),
+    cancel: useMutation(options('cancel', (id: number) => cancelSignupAPI(id))),
+    unconfirm: useMutation(
+      options('unconfirm', (id: number) => unconfirmSignupAPI(id)),
+    ),
+    demote: useMutation(options('demote', (id: number) => demoteSignupAPI(id))),
+    reinstate: useMutation(
+      options('reinstate', (id: number) => reinstateSignupAPI(id)),
+    ),
   };
 }
+
+/** In-flight signup actions for an event, oldest first. */
+export function usePendingSignupActions(
+  eventId: number | null,
+): PendingSignupAction[] {
+  const entries = useMutationState({
+    filters: {
+      mutationKey: signupActionKey(eventId ?? 0),
+      status: 'pending',
+    },
+    select: (mutation) => ({
+      action: mutation.options.mutationKey?.[2],
+      id: signupIdOf(mutation.state.variables),
+      submittedAt: mutation.state.submittedAt,
+    }),
+  });
+  return useMemo(
+    () =>
+      entries
+        .filter(
+          (e): e is { action: SignupAction; id: number; submittedAt: number } =>
+            isSignupAction(e.action) && e.id !== null,
+        )
+        .sort((a, b) => a.submittedAt - b.submittedAt)
+        .map(({ action, id }) => ({ action, id })),
+    [entries],
+  );
+}
+
+/**
+ * Signups with in-flight staff actions already applied, plus the ids of
+ * rows that still have a request outstanding.
+ */
+export function useOptimisticEventSignups(
+  eventId: number | null,
+  eventState: string | undefined,
+) {
+  const query = useEventSignups(eventId);
+  const pending = usePendingSignupActions(eventId);
+  const server = query.data;
+  const signups = useMemo(
+    () => overlayPendingSignups(server ?? EMPTY_SIGNUPS, pending, eventState),
+    [server, pending, eventState],
+  );
+  const pendingIds = useMemo(
+    () => new Set(pending.map((p) => p.id)),
+    [pending],
+  );
+  return { ...query, signups, pendingIds };
+}
+
+const EMPTY_SIGNUPS: EventSignupType[] = [];
 
 export function useRepeaterSubscriptionMutation() {
   const queryClient = useQueryClient();

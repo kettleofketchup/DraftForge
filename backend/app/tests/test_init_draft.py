@@ -11,6 +11,7 @@ from app.draft_state import tournament_state_queryset
 from app.models import (
     CustomUser,
     Draft,
+    DraftEvent,
     DraftOptions,
     DraftTeam,
     Game,
@@ -25,7 +26,11 @@ from app.models import (
 )
 from app.serializers import _users_remaining_pks
 from app.services.draft_reset import reset_draft_teams
-from app.services.team_references import all_reference_keys, team_references
+from app.services.team_references import (
+    all_reference_keys,
+    team_references,
+    team_usage,
+)
 from bracket.models import BracketSlot, TournamentBracket
 from league.models import LeagueUser
 from org.models import OrgUser
@@ -391,12 +396,12 @@ class InitDraftEndpointTests(TestCase):
         self.assertTrue(Team.objects.filter(pk=kept.pk).exists())
         self.assertFalse(Team.objects.filter(pk=dropped.pk).exists())
         self.assertEqual(
-            report["kept_teams"],
-            [{"pk": kept.pk, "name": "Kept", "reason": "no_captain"}],
+            [(t["pk"], t["name"], t["reason"]) for t in report["kept_teams"]],
+            [(kept.pk, "Kept", "no_captain")],
         )
         self.assertEqual(
-            report["dropped_teams"],
-            [{"pk": dropped.pk, "name": "Dropped", "reason": "captain_not_in_pool"}],
+            [(t["pk"], t["name"], t["reason"]) for t in report["dropped_teams"]],
+            [(dropped.pk, "Dropped", "captain_not_in_pool")],
         )
         self.assertEqual(
             sorted(Team.objects.get(pk=kept.pk).members.values_list("pk", flat=True)),
@@ -623,3 +628,140 @@ class InitDraftEndpointTests(TestCase):
             ),
             [self.cap_a.pk],
         )
+
+    def test_409_usage_counts_each_game_once(self) -> None:
+        for _ in range(2):
+            Game.objects.create(
+                tournament=self.tournament,
+                radiant_team=self.team_a,
+                dire_team=self.team_b,
+                winning_team=self.team_a,
+            )
+
+        resp = self.post()
+
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(
+            resp.data["usage"],
+            [
+                {
+                    "model": "app.Game",
+                    "label": "game",
+                    "label_plural": "games",
+                    "count": 2,
+                    "teams": [
+                        {"pk": self.team_a.pk, "name": "Team A"},
+                        {"pk": self.team_b.pk, "name": "Team B"},
+                    ],
+                }
+            ],
+        )
+        self.assertEqual(resp.data["references"]["app.Game.radiant_team"], 2)
+
+    def test_409_usage_counts_herodraft_not_draft_teams(self) -> None:
+        game = Game.objects.create(tournament=self.tournament)
+        herodraft = HeroDraft.objects.create(game=game)
+        DraftTeam.objects.create(draft=herodraft, tournament_team=self.team_a)
+        DraftTeam.objects.create(draft=herodraft, tournament_team=self.team_b)
+
+        resp = self.post()
+
+        self.assertEqual(resp.status_code, 409)
+        usage = {u["model"]: u for u in resp.data["usage"]}
+        self.assertEqual(set(usage), {"app.HeroDraft"})
+        self.assertEqual(usage["app.HeroDraft"]["count"], 1)
+        self.assertEqual(usage["app.HeroDraft"]["label"], "HeroDraft")
+        self.assertEqual(
+            [t["name"] for t in usage["app.HeroDraft"]["teams"]], ["Team A", "Team B"]
+        )
+
+    def test_report_names_captain_and_kept_usage(self) -> None:
+        outsider = self.make_user("init_named_outsider", 1000)
+        kept = self.make_team("Kept", outsider, [], order=3)
+        dropped = self.make_team("Dropped", None, [], order=4)
+        Game.objects.create(tournament=self.tournament, radiant_team=kept)
+
+        resp = self.post(force=True)
+
+        self.assertEqual(resp.status_code, 201)
+        report = resp.data["draft_reset"]
+        [kept_entry] = report["kept_teams"]
+        self.assertEqual(kept_entry["reason"], "captain_not_in_pool")
+        self.assertEqual(kept_entry["captain"]["pk"], outsider.pk)
+        self.assertEqual(kept_entry["captain"]["username"], "init_named_outsider")
+        self.assertEqual(
+            [(u["model"], u["count"]) for u in kept_entry["usage"]],
+            [("app.Game", 1)],
+        )
+        [dropped_entry] = report["dropped_teams"]
+        self.assertEqual(dropped_entry["pk"], dropped.pk)
+        self.assertEqual(dropped_entry["reason"], "no_captain")
+        self.assertIsNone(dropped_entry["captain"])
+        self.assertEqual(
+            report["reset_team_names"],
+            [
+                {"pk": self.team_a.pk, "name": "Team A"},
+                {"pk": self.team_b.pk, "name": "Team B"},
+            ],
+        )
+
+    def test_restart_without_timer_broadcasts_draft_started(self) -> None:
+        self.assertEqual(self.post().status_code, 201)
+        draft = Draft.objects.get(tournament=self.tournament)
+        DraftEvent.objects.filter(draft=draft).delete()
+
+        with patch("app.broadcast.broadcast_event") as broadcast:
+            with self.captureOnCommitCallbacks(execute=True):
+                resp = self.post()
+
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(
+            list(
+                DraftEvent.objects.filter(draft=draft).values_list(
+                    "event_type", flat=True
+                )
+            ),
+            ["draft_started"],
+        )
+        self.assertEqual(
+            [c.args[0].event_type for c in broadcast.call_args_list],
+            ["draft_started"],
+        )
+
+
+class TeamUsageTests(TeamResetFixture, TestCase):
+    def test_distinct_rows_per_model(self) -> None:
+        other = Team.objects.create(tournament=self.tournament, name="Other")
+        game = Game.objects.create(
+            tournament=self.tournament,
+            radiant_team=self.team,
+            dire_team=other,
+            winning_team=self.team,
+        )
+        bracket = TournamentBracket.objects.create(tournament=self.tournament)
+        BracketSlot.objects.create(
+            bracket=bracket, max_rounds=1, game=game, participant=other
+        )
+
+        usage = team_usage(Team.objects.filter(pk__in=[self.team.pk, other.pk]))
+
+        self.assertEqual(
+            [(u["model"], u["count"]) for u in usage],
+            [("app.Game", 1), ("bracket.BracketSlot", 1)],
+        )
+        self.assertEqual([t["name"] for t in usage[0]["teams"]], ["Resetters", "Other"])
+        self.assertEqual([t["name"] for t in usage[1]["teams"]], ["Other"])
+
+    def test_empty(self) -> None:
+        self.assertEqual(team_usage(Team.objects.none()), [])
+        self.assertEqual(team_usage([self.team]), [])
+
+    def test_teamlog_rows_are_not_usage(self) -> None:
+        TeamLog.objects.create(
+            team=self.team,
+            team_snapshot_id=self.team.pk,
+            team_name=self.team.name,
+            via=TeamLogVia.WEB,
+            action=TeamLogAction.RENAME,
+        )
+        self.assertEqual(team_usage([self.team]), [])

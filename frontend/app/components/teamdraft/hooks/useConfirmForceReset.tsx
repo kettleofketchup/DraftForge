@@ -1,39 +1,60 @@
 import { useCallback, useRef, useState } from 'react';
-import type { DraftReferenceCounts } from '~/components/api/types';
+import type { DraftResetConflict } from '~/components/api/types';
 import { ConfirmDialog } from '~/components/ui/dialogs';
-import { type ConfirmForceReset, forceResetMessage } from './initDraftHook';
+import { forceResetMessage, usageCount } from '../draftResetText';
+import type { ConfirmForceReset } from './initDraftHook';
 
 /** Promise-backed second confirm for a draft reset whose teams are referenced. */
 export function useConfirmForceReset() {
-  const [references, setReferences] = useState<DraftReferenceCounts | null>(
-    null,
-  );
+  const [conflict, setConflict] = useState<DraftResetConflict | null>(null);
   const resolveRef = useRef<((confirmed: boolean) => void) | null>(null);
 
   const settle = useCallback((confirmed: boolean) => {
     resolveRef.current?.(confirmed);
     resolveRef.current = null;
-    setReferences(null);
+    setConflict(null);
   }, []);
 
   const confirmForce = useCallback<ConfirmForceReset>(
-    (refs) =>
+    (next) =>
       new Promise<boolean>((resolve) => {
         resolveRef.current?.(false);
         resolveRef.current = resolve;
-        setReferences(refs);
+        setConflict(next);
       }),
     [],
   );
 
+  const usage = conflict?.usage ?? [];
   const confirmForceDialog = (
     <ConfirmDialog
-      open={references !== null}
+      open={conflict !== null}
       onOpenChange={(open) => {
         if (!open) settle(false);
       }}
       title="Teams are in use"
-      description={references ? forceResetMessage(references) : ''}
+      description={conflict ? forceResetMessage(conflict) : ''}
+      bodyContent={
+        usage.length ? (
+          <ul
+            className="flex flex-col gap-1 text-sm"
+            data-testid="draft-force-reset-usage"
+          >
+            {usage.map((kind) => (
+              <li
+                key={kind.model}
+                className="flex flex-wrap gap-x-2"
+                data-testid="draft-force-reset-usage-row"
+              >
+                <span className="font-semibold">{usageCount(kind)}</span>
+                <span className="text-muted-foreground">
+                  {kind.teams.map((team) => team.name).join(', ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : undefined
+      }
       confirmLabel="Reset anyway"
       variant="destructive"
       onConfirm={() => settle(true)}

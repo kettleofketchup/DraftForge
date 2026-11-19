@@ -1008,12 +1008,23 @@ teams whose captain is in the pool count as draft teams.
   {
     "draft_reset": {
       "reset_teams": [4, 5],
-      "dropped_teams": [{"pk": 7, "name": "Old Team", "reason": "captain_not_in_pool"}],
-      "kept_teams": [{"pk": 8, "name": "Seeded", "reason": "no_captain"}],
+      "reset_team_names": [{"pk": 4, "name": "Team A"}, {"pk": 5, "name": "Team B"}],
+      "dropped_teams": [
+        {"pk": 7, "name": "Old Team", "reason": "captain_not_in_pool", "captain": {"pk": 52, "username": "old_cap", "...": "..."}}
+      ],
+      "kept_teams": [
+        {
+          "pk": 8, "name": "Seeded", "reason": "no_captain", "captain": null,
+          "usage": [{"model": "app.Game", "label": "game", "label_plural": "games", "count": 1, "teams": [{"pk": 8, "name": "Seeded"}]}]
+        }
+      ],
       "cleared_deputies": [{"team": 4, "user": 31}]
     }
   }
   ```
+  `reason` is `no_captain` or `captain_not_in_pool`. `captain` is the team's
+  captain in the tournament user shape, or `null`. A kept team's `usage` lists
+  the records that kept it (same shape as the 409 `usage` below).
 - `400`: no team has a captain in the player pool. Nothing is changed.
 - `409`: games, hero drafts, bracket slots or lobbies use the teams and
   `force` is not `true`. Nothing is changed. Resend with `"force": true` to
@@ -1022,12 +1033,22 @@ teams whose captain is in the pool count as draft teams.
   {
     "error": "Teams are used by games or other records.",
     "code": "draft_reset_has_references",
-    "references": {"app.Game.radiant_team": 2, "bracket.BracketSlot.participant": 4}
+    "references": {"app.Game.radiant_team": 2, "app.Game.dire_team": 2, "bracket.BracketSlot.participant": 4},
+    "usage": [
+      {"model": "app.Game", "label": "game", "label_plural": "games", "count": 2, "teams": [{"pk": 4, "name": "Team A"}, {"pk": 5, "name": "Team B"}]},
+      {"model": "bracket.BracketSlot", "label": "bracket slot", "label_plural": "bracket slots", "count": 4, "teams": [{"pk": 4, "name": "Team A"}, {"pk": 5, "name": "Team B"}]}
+    ]
   }
   ```
+  `usage` counts distinct records per kind: a game that names a team as
+  radiant, dire and winner counts once, and a hero draft counts once for both
+  of its sides. `references` is the older per-foreign-key count; a record
+  appears in it once per column that points at a team, so do not add it up.
 
 The Discord draft-link DMs and the draft WebSocket events are sent only after
-the transaction commits.
+the transaction commits. Every rebuild broadcasts a draft event carrying the
+new draft state: `draft_lobby_opened` when the timer is on, `draft_started`
+otherwise. Shuffle drafts always send `draft_started` as well.
 
 ### Draft Pick (Shuffle Draft)
 

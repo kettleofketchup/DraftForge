@@ -37,7 +37,7 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { EventStateBadge, MmrApprovalModal } from '~/components/events';
 import {
@@ -68,8 +68,8 @@ import { DisplayName } from '~/components/user/avatar';
 import {
   useEvent,
   useEventActionMutation,
-  useEventSignups,
   useEventSignupUsers,
+  useOptimisticEventSignups,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
@@ -81,8 +81,12 @@ export default function RollCallPage() {
   const id = eventId ? parseInt(eventId, 10) : null;
 
   const { data: event, isLoading } = useEvent(id);
-  const { data: signups = [] } = useEventSignups(id);
-  useEventSignupUsers(signups, event?.organization ?? null);
+  const {
+    data: serverSignups,
+    signups,
+    pendingIds,
+  } = useOptimisticEventSignups(id, event?.state);
+  useEventSignupUsers(serverSignups, event?.organization ?? null);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
 
@@ -118,24 +122,27 @@ export default function RollCallPage() {
   const activeId = resolveRollCallFocus(rows, focusedId);
   const scrollOnFocus = useRef(false);
 
-  const advanceFrom = useCallback(
-    (signup: EventSignupType) => {
-      setFocusedId(rollCallFocusAfterAction(rows, signup.id));
-    },
-    [rows],
-  );
+  // Read through a ref so row callbacks keep one identity and memoised
+  // rows only re-render when their own signup changes.
+  const rowsRef = useRef(rows);
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
+  const advanceFrom = useCallback((signup: EventSignupType) => {
+    setFocusedId(rollCallFocusAfterAction(rowsRef.current, signup.id));
+  }, []);
 
+  const { mutate: reinstate } = signupActions.reinstate;
   // Restore is non-destructive — fire the mutation directly. The backend
   // moves REJECTED/CANCELLED back to APPROVED during ROLL_CALL.
   const handleRestore = useCallback(
     (signup: EventSignupType) => {
       advanceFrom(signup);
-      signupActions.reinstate.mutate(signup.id, {
-        onSuccess: () => toast.success(`Restored ${DisplayName(signup)}`),
-        onError: () => toast.error('Failed to restore signup'),
+      reinstate(signup.id, {
+        onError: () => toast.error(`Failed to restore ${DisplayName(signup)}`),
       });
     },
-    [signupActions.reinstate, advanceFrom],
+    [reinstate, advanceFrom],
   );
 
   const minPlayers = event?.min_players;
@@ -194,7 +201,7 @@ export default function RollCallPage() {
           return;
       }
 
-      if (!active) return;
+      if (!active || pendingIds.has(active.id)) return;
       const { primary, remove } = rollCallRowActions(active.status);
       if (e.key === '1' && primary) {
         e.preventDefault();
@@ -214,6 +221,7 @@ export default function RollCallPage() {
     rows,
     activeId,
     canStart,
+    pendingIds,
     handleRestore,
     approvalSignup,
     confirmSignup,
@@ -277,7 +285,7 @@ export default function RollCallPage() {
       userMap={userMap}
       isAdmin={isAdmin}
       leaguePk={event.tournament_league ?? null}
-      signupActions={signupActions}
+      pending={pendingIds.has(signup.id)}
       focused={isAdmin && signup.id === activeId}
       onSelect={setFocusedId}
       onRequestApproval={setApprovalSignup}
@@ -440,15 +448,19 @@ export default function RollCallPage() {
           if (!open) setApprovalSignup(null);
         }}
         onApprove={(signupId, mmr) => {
-          if (approvalSignup) advanceFrom(approvalSignup);
+          const target = approvalSignup;
+          if (target) advanceFrom(target);
+          setApprovalSignup(null);
           signupActions.approve.mutate(
             { id: signupId, mmr },
             {
-              onSuccess: () => setApprovalSignup(null),
+              onError: () =>
+                toast.error(
+                  `Failed to approve ${target ? DisplayName(target) : 'signup'}`,
+                ),
             },
           );
         }}
-        isApproving={signupActions.approve.isPending}
       />
 
       {/* Per-row Confirm (approved → confirmed) */}
@@ -487,12 +499,13 @@ export default function RollCallPage() {
         }
         confirmLabel="Confirm"
         cancelLabel="Cancel"
-        isLoading={signupActions.confirm.isPending}
         onConfirm={() => {
-          if (!confirmSignup) return;
-          advanceFrom(confirmSignup);
-          signupActions.confirm.mutate(confirmSignup.id, {
-            onSuccess: () => setConfirmSignup(null),
+          const target = confirmSignup;
+          if (!target) return;
+          advanceFrom(target);
+          signupActions.confirm.mutate(target.id, {
+            onError: () =>
+              toast.error(`Failed to confirm ${DisplayName(target)}`),
           });
         }}
         confirmTestId="rollcall-confirm-dialog-confirm"
@@ -534,13 +547,13 @@ export default function RollCallPage() {
         confirmLabel="Reject"
         cancelLabel="Cancel"
         variant="destructive"
-        isLoading={signupActions.reject.isPending}
         onConfirm={() => {
-          if (!rejectSignup) return;
-          advanceFrom(rejectSignup);
-          signupActions.reject.mutate(rejectSignup.id, {
-            onSuccess: () => setRejectSignup(null),
-            onError: () => toast.error('Failed to reject signup'),
+          const target = rejectSignup;
+          if (!target) return;
+          advanceFrom(target);
+          signupActions.reject.mutate(target.id, {
+            onError: () =>
+              toast.error(`Failed to remove ${DisplayName(target)}`),
           });
         }}
         confirmTestId="rollcall-reject-dialog-confirm"
@@ -581,13 +594,13 @@ export default function RollCallPage() {
         confirmLabel="Remove"
         cancelLabel="Cancel"
         variant="destructive"
-        isLoading={signupActions.cancel.isPending}
         onConfirm={() => {
-          if (!cancelSignup) return;
-          advanceFrom(cancelSignup);
-          signupActions.cancel.mutate(cancelSignup.id, {
-            onSuccess: () => setCancelSignup(null),
-            onError: () => toast.error('Failed to remove player'),
+          const target = cancelSignup;
+          if (!target) return;
+          advanceFrom(target);
+          signupActions.cancel.mutate(target.id, {
+            onError: () =>
+              toast.error(`Failed to remove ${DisplayName(target)}`),
           });
         }}
         confirmTestId="rollcall-cancel-dialog-confirm"
@@ -626,12 +639,12 @@ export default function RollCallPage() {
 }
 
 /** Individual signup strip with confirm/reject actions */
-function SignupStrip({
+const SignupStrip = memo(function SignupStrip({
   signup,
   userMap,
   isAdmin,
   leaguePk,
-  signupActions,
+  pending,
   focused,
   onSelect,
   onRequestApproval,
@@ -644,7 +657,7 @@ function SignupStrip({
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
   leaguePk: number | null;
-  signupActions: ReturnType<typeof useSignupActionMutations>;
+  pending: boolean;
   focused: boolean;
   onSelect: (id: number) => void;
   onRequestApproval: (signup: EventSignupType) => void;
@@ -659,6 +672,19 @@ function SignupStrip({
   const primaryKey = focused ? '1' : undefined;
   const removeKey = focused ? '2' : undefined;
 
+  const statusBadge = (
+    <span className="inline-flex items-center gap-1">
+      {pending && (
+        <Loader2
+          className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+          data-testid="rollcall-row-pending"
+          aria-label="Saving"
+        />
+      )}
+      <EventStateBadge state={signup.status} />
+    </span>
+  );
+
   const actionSlot = isAdmin ? (
     <div className="flex gap-1">
       {signup.status === SignupStatus.APPROVED && (
@@ -669,7 +695,7 @@ function SignupStrip({
             data-testid="rollcall-confirm-btn"
             hotkey={primaryKey}
             onClick={() => onRequestConfirm(signup)}
-            disabled={signupActions.confirm.isPending}
+            disabled={pending}
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
             <span className="hidden sm:inline ml-1">Confirm</span>
@@ -679,7 +705,7 @@ function SignupStrip({
             data-testid="rollcall-reject-btn"
             hotkey={removeKey}
             onClick={() => onRequestReject(signup)}
-            disabled={signupActions.reject.isPending}
+            disabled={pending}
           >
             <XCircle className="h-3.5 w-3.5" />
             <span className="hidden sm:inline ml-1">Remove</span>
@@ -692,7 +718,7 @@ function SignupStrip({
           data-testid={`rollcall-cancel-btn-${signup.id}`}
           hotkey={removeKey}
           onClick={() => onRequestCancel(signup)}
-          disabled={signupActions.cancel.isPending}
+          disabled={pending}
         >
           <XCircle className="h-3.5 w-3.5" />
           <span className="hidden sm:inline ml-1">Remove</span>
@@ -707,7 +733,7 @@ function SignupStrip({
             data-testid="rollcall-approve-btn"
             hotkey={primaryKey}
             onClick={() => onRequestApproval(signup)}
-            disabled={signupActions.approve.isPending}
+            disabled={pending}
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
             <span className="hidden sm:inline ml-1">Approve</span>
@@ -717,7 +743,7 @@ function SignupStrip({
             data-testid="rollcall-reject-btn"
             hotkey={removeKey}
             onClick={() => onRequestReject(signup)}
-            disabled={signupActions.reject.isPending}
+            disabled={pending}
           >
             <XCircle className="h-3.5 w-3.5" />
             <span className="hidden sm:inline ml-1">Remove</span>
@@ -730,7 +756,7 @@ function SignupStrip({
           data-testid="rollcall-restore-btn"
           hotkey={primaryKey}
           onClick={() => onRequestRestore(signup)}
-          disabled={signupActions.reinstate.isPending}
+          disabled={pending}
         >
           <Undo2 className="h-3.5 w-3.5" />
           <span className="hidden sm:inline ml-1">Restore</span>
@@ -759,7 +785,7 @@ function SignupStrip({
           organizationId={signup.organization ?? undefined}
           statsLeagueId={leaguePk}
           statsBreakpoint="wide"
-          contextSlot={<EventStateBadge state={signup.status} />}
+          contextSlot={statusBadge}
           actionSlot={actionSlot}
         />
       ) : (
@@ -773,10 +799,10 @@ function SignupStrip({
               {DisplayName(signup)}
             </p>
           </div>
-          <EventStateBadge state={signup.status} />
+          {statusBadge}
           {actionSlot}
         </div>
       )}
     </div>
   );
-}
+});

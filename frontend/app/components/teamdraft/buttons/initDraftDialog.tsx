@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { initDraftHook } from '~/components/teamdraft/hooks/initDraftHook';
 import { useConfirmForceReset } from '~/components/teamdraft/hooks/useConfirmForceReset';
+import { useDraftResetSummary } from '~/components/teamdraft/hooks/useDraftResetSummary';
 import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import {
@@ -34,6 +35,7 @@ export const InitDraftButton: React.FC = () => {
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
   const isStaff = useUserStore((state) => state.isStaff);
   const { confirmForce, confirmForceDialog } = useConfirmForceReset();
+  const { showResetSummary, resetSummaryDialog } = useDraftResetSummary();
 
   const handleChange = async () => {
     log.debug('handleChange');
@@ -54,6 +56,7 @@ export const InitDraftButton: React.FC = () => {
       curDraftRound,
       setCurDraftRound,
       confirmForce,
+      onReport: showResetSummary,
     });
     setOpen(false);
   };
@@ -103,6 +106,7 @@ export const InitDraftButton: React.FC = () => {
         onConfirm={handleChange}
       />
       {confirmForceDialog}
+      {resetSummaryDialog}
     </>
   );
 };
