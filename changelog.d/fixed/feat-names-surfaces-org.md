@@ -1,0 +1,1 @@
+- Event staff, roll call and signup rows, repeater subscribers, task schedules, league match captains, the contributions ledger and manual awards, promotion candidates, the admin team transfer prompt and the locked-features panel now show members by their org server nickname, then site nickname, Discord name and username, like the rest of the site.

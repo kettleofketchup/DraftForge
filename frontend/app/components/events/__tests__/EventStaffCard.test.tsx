@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getPointValues } from '~/features/contributions/api';
 import type { OrgFeatureAccess } from '~/features/org-features';
+import { setDisplayOrgQueryClient } from '~/lib/displayOrg';
 import type { EventType } from '../schemas';
 
 const mutateAsync = vi.hoisted(() => vi.fn());
@@ -330,6 +331,38 @@ describe('EventStaffCard drafts', () => {
     expect(screen.getByTestId('event-staff-card').textContent).not.toContain(
       'User #9',
     );
+  });
+});
+
+describe('EventStaffCard names', () => {
+  it("shows a staff member's server nickname for the event's org", () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(['event', 11], { organization: 1 });
+    setDisplayOrgQueryClient(client);
+    window.history.pushState({}, '', '/events/11');
+    try {
+      render(
+        <QueryClientProvider client={client}>
+          <EventStaffCard
+            event={
+              {
+                ...event,
+                host: { ...carol, discordNickname: 'Caz', guildNickname: 'C4' },
+                helpers: [],
+              } as unknown as EventType
+            }
+            canEdit={false}
+            showPoints={false}
+          />
+        </QueryClientProvider>,
+      );
+      expect(screen.getByTestId('event-staff-card')).toHaveTextContent('C4');
+    } finally {
+      setDisplayOrgQueryClient(null);
+      window.history.pushState({}, '', '/');
+    }
   });
 });
 

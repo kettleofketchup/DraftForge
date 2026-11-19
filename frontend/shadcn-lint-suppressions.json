@@ -1,8 +1,5 @@
 {
   "app/components/admin-team/AdminTeamSection.tsx": {
-    "draftforge/use-display-name": {
-      "count": 3
-    },
     "shadcn/no-raw-colors": {
       "count": 11
     }
@@ -63,22 +60,6 @@
       "count": 10
     }
   },
-  "app/components/events/SubscriberList.tsx": {
-    "draftforge/no-user-reshape": {
-      "count": 1
-    },
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
-  "app/components/events/TaskScheduleSection.tsx": {
-    "draftforge/no-user-reshape": {
-      "count": 1
-    },
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
   "app/components/events/games/dota2/Dota2RankSignalsCard.tsx": {
     "shadcn/no-raw-colors": {
       "count": 7
@@ -125,9 +106,6 @@
     }
   },
   "app/components/league/LeagueMatchCard.tsx": {
-    "draftforge/use-display-name": {
-      "count": 4
-    },
     "shadcn/no-raw-colors": {
       "count": 6
     }
@@ -463,16 +441,6 @@
       "count": 3
     }
   },
-  "app/features/contributions/admin/LedgerTable.tsx": {
-    "draftforge/use-display-name": {
-      "count": 3
-    }
-  },
-  "app/features/contributions/admin/ManualAwardForm.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
   "app/features/leaderboard/LeaderboardPage.tsx": {
     "shadcn/no-raw-colors": {
       "count": 5
@@ -481,16 +449,6 @@
   "app/features/leaderboard/LeaderboardTable.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
-    }
-  },
-  "app/features/org-features/LockedFeaturesPanel.tsx": {
-    "draftforge/use-display-name": {
-      "count": 1
-    }
-  },
-  "app/features/promotion/CandidateList.tsx": {
-    "draftforge/use-display-name": {
-      "count": 1
     }
   },
   "app/pages/about/sections/MaintainerSection.tsx": {
@@ -538,18 +496,8 @@
       "count": 1
     }
   },
-  "app/routes/event.tsx": {
-    "draftforge/use-display-name": {
-      "count": 1
-    }
-  },
   "app/routes/organization.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/routes/rollcall.tsx": {
-    "draftforge/use-display-name": {
       "count": 2
     }
   }
