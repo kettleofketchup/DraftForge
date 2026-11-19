@@ -1,6 +1,7 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { Search } from 'lucide-react';
 import * as React from 'react';
+import { useSearchParams } from 'react-router';
 import {
   FormTabsList,
   InvalidDot,
@@ -119,6 +120,9 @@ interface SettingsLayoutOptions<V extends string> {
   sectionRef?: React.Ref<SettingsDialogHandle<V>>;
   searchPlaceholder?: string;
   variant: 'dialog' | 'page';
+  /** Requested section, e.g. from the URL; falls back to the first when unknown or hidden. */
+  value?: string | null;
+  onValueChange?: (value: V) => void;
 }
 
 /** Sidebar, search and section panels shared by SettingsDialog and SettingsPage. */
@@ -129,11 +133,16 @@ function useSettingsLayout<V extends string>({
   sectionRef,
   searchPlaceholder = 'Search settings',
   variant,
+  value,
+  onValueChange,
 }: SettingsLayoutOptions<V>) {
   const isMobile = useMediaQuery('(max-width: 767px)');
   const first = sections[0].value;
-  const [active, setActive] = React.useState<V>(first);
-  const [visited, setVisited] = React.useState<Set<V>>(() => new Set([first]));
+  const [localActive, setActive] = React.useState<V>(first);
+  const requested = value === undefined ? localActive : value;
+  const active = sections.find((s) => s.value === requested)?.value ?? first;
+  const [visited, setVisited] = React.useState<Set<V>>(() => new Set([active]));
+  if (!visited.has(active)) setVisited(new Set(visited).add(active));
   const [query, setQuery] = React.useState('');
   const [hits, setHits] = React.useState<SearchHit<V>[]>([]);
   const [cursor, setCursor] = React.useState(0);
@@ -157,9 +166,12 @@ function useSettingsLayout<V extends string>({
   const statusId = React.useId();
   const hitIdPrefix = React.useId();
 
-  const selectSection = React.useCallback((value: V) => {
-    setActive(value);
-    setVisited((prev) => (prev.has(value) ? prev : new Set(prev).add(value)));
+  const onValueChangeRef = React.useRef(onValueChange);
+  onValueChangeRef.current = onValueChange;
+  const selectSection = React.useCallback((next: V) => {
+    setActive(next);
+    setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
+    onValueChangeRef.current?.(next);
   }, []);
   const sectionsRef = React.useRef(sections);
   sectionsRef.current = sections;
@@ -701,6 +713,8 @@ export interface SettingsPageProps<V extends string = string> {
   sections: SettingsSection<V>[];
   /** Nav items get `${testIdPrefix}-tab-${value}`. */
   testIdPrefix: string;
+  /** Search param holding the selected section, so a link can open one. */
+  sectionParam?: string;
   sectionRef?: React.Ref<SettingsDialogHandle<V>>;
   searchPlaceholder?: string;
   /** Rendered under the active section, e.g. a save bar. */
@@ -713,12 +727,28 @@ export interface SettingsPageProps<V extends string = string> {
 export function SettingsPage<V extends string>({
   sections,
   testIdPrefix,
+  sectionParam = 'section',
   sectionRef,
   searchPlaceholder,
   footer,
   className,
   'data-testid': dataTestId,
 }: SettingsPageProps<V>) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const first = sections[0].value;
+  const onValueChange = React.useCallback(
+    (next: V) =>
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next === first) params.delete(sectionParam);
+          else params.set(sectionParam, next);
+          return params;
+        },
+        { replace: true, preventScrollReset: true },
+      ),
+    [setSearchParams, sectionParam, first],
+  );
   const { frame, panels } = useSettingsLayout({
     open: true,
     sections,
@@ -726,6 +756,8 @@ export function SettingsPage<V extends string>({
     sectionRef,
     searchPlaceholder,
     variant: 'page',
+    value: searchParams.get(sectionParam),
+    onValueChange,
   });
   return (
     <div className={cn('flex flex-col', className)} data-testid={dataTestId}>

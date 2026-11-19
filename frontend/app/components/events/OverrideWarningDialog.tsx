@@ -42,7 +42,7 @@ export interface OverrideWarningDialogProps {
 }
 
 export function orgStaffPlacementPath(organizationId: number): string {
-  return `/organizations/${organizationId}?tab=settings`;
+  return `/organizations/${organizationId}?tab=settings&section=staff-placement`;
 }
 
 export function OverrideWarningDialog({
