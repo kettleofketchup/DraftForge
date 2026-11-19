@@ -220,6 +220,17 @@ The status is `409`. `usage` has one entry per kind of record, and `count` is an
 integer. A team nothing uses is deleted (`204`), and the deletion writes a
 `team_deleted` row to the team audit log with the roster before it.
 
+`GET /api/teams/{id}/usage/` (tournament staff) answers what a DELETE would refuse on,
+without deleting or logging anything:
+
+```json
+{"in_use": true, "detail": "Radiant Five is still used by 2 games and cannot be deleted.", "usage": [...]}
+```
+
+`detail` and `usage` match the `409` body; a team nothing uses gets
+`{"in_use": false, "detail": null, "usage": []}`. Regenerating a tournament's teams
+checks every team this way first and deletes nothing if any is in use.
+
 ### Team management
 
 Staff endpoints for changing one team. Each takes a `reason`, writes one row to the
@@ -238,6 +249,7 @@ organization's owner, admins and staff. A team without a tournament can't be man
 | POST | `/api/teams/{id}/sub-in/` | `{standin_id, replacing_id?, reason, acknowledged_codes?}`; `replacing_id` is an int or `null` |
 | POST | `/api/teams/{id}/rename/` | `{name, reason, acknowledged_codes?}` |
 | GET | `/api/teams/{id}/history/?page=&page_size=` | none |
+| GET | `/api/teams/{id}/usage/` | none |
 
 `reason` is trimmed and at most 500 characters. `acknowledged_codes` is the
 [staff override](../development/staff-overrides.md) field; every action accepts it, but
@@ -252,6 +264,11 @@ eligibility rules).
 | Team not found | 404 | `{detail}` |
 | Invalid field, unknown user, or a missing `reason` with no `acknowledged_codes` | 400 | Field errors, e.g. `{"reason": ["This field is required."]}` |
 | Missing `reason` on an override retry (`acknowledged_codes` not empty) | 400 | `{"code": "override_reason_required", ...}` |
+
+A missing `reason` therefore has two shapes. The field error is for a first attempt;
+`override_reason_required` is for a retry that echoes `acknowledged_codes`, which the
+override dialog (`useOverrideRetry`) shows on its reason field. Clients that send
+`acknowledged_codes` must handle both.
 | Refused by the team service | 400 | `{code, detail}`, e.g. `{"code": "not_member", "detail": "..."}` |
 | Override needed | 409 | The staff override body |
 
@@ -306,7 +323,8 @@ The audit row records the code in `override_rules`, and the violation in
 tournament and organization the team had when they were written; staff see the rows for
 the tournaments they can edit. Once the tournament is gone, the organization's staff
 can read them, and site staff can read rows with no organization. A viewer who can read
-none of the rows gets `403`, and an unknown team with no rows gets `404`.
+none of the rows gets `403`. An unknown team with no rows gets `404` for site staff and
+`403` for everyone else, so the status does not reveal which team ids exist.
 
 ```json
 {
@@ -342,7 +360,9 @@ system rows or deleted users.
 #### Team fields
 
 - `GET /api/teams/{id}/` and the action responses list `left_members` (dropouts) as user
-  objects and add `leadership_problems`.
+  objects and add `leadership_problems`. Team detail is public, so anyone can read both;
+  neither reveals anything new, since the bracket payload already lists dropouts and
+  `leadership_problems` follows from the public captain, deputy and member ids.
 - `GET /api/teams/{id}/` adds `can_manage_team`: true when the viewer could use the
   management endpoints on this team. It is `false` for anonymous viewers and for a team
   without a tournament.
