@@ -41,6 +41,19 @@ The brand primary is a gradient — use `<PrimaryButton>` or import `brandGradie
 
 See [`THEMING-GUIDE.md` §"Background Scale (Slate)"](../../../THEMING-GUIDE.md#background-scale-slate).
 
+### Raw palette classes for a fixed meaning
+
+```tsx
+// WRONG
+<span className={team === 'radiant' ? 'text-green-400' : 'text-red-400'}>
+// RIGHT
+<span className={team === 'radiant' ? 'text-radiant' : 'text-dire'}>
+```
+
+Team sides, pick/ban, the acting turn, draft styles, positions, roles, rank status,
+placings, presence, GPM/XPM and Discord each have a domain token. Choose by meaning, not
+by the lint's nearest-shade hint. See [`THEMING-GUIDE.md` §"Domain Colors"](../../../THEMING-GUIDE.md#domain-colors).
+
 ### Hand-rolled gradients
 
 ```tsx
