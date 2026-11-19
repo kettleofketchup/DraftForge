@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   Gamepad2,
+  ListChecks,
   ShieldCheck,
   Trophy,
   type LucideIcon,
@@ -13,6 +14,7 @@ export type EventFormTabValue =
   | 'tournament'
   | 'lobby'
   | 'approval'
+  | 'ready'
   | 'discord';
 
 export const EVENT_TAB_META: Record<
@@ -23,8 +25,13 @@ export const EVENT_TAB_META: Record<
   tournament: { label: 'Tournament', icon: Trophy },
   lobby: { label: 'Lobby', icon: Gamepad2 },
   approval: { label: 'Approval', icon: ShieldCheck },
+  ready: { label: 'Ready check', icon: ListChecks },
   discord: { label: 'Discord', icon: DiscordIcon },
 };
+
+export const READY_CHECK_FIELDS = new Set<string>(
+  Object.keys(EVENT_SECTION_FIELDS.ready),
+);
 
 /** The event-form tab that renders `field` by default. */
 export function eventTabForField(field: string): EventFormTabValue {

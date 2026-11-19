@@ -18,6 +18,7 @@ _CONFIRMED_ONLY: frozenset[SignupStatus] = frozenset({SignupStatus.CONFIRMED})
 _APPROVED_AND_CONFIRMED: frozenset[SignupStatus] = frozenset(
     {SignupStatus.APPROVED, SignupStatus.CONFIRMED}
 )
+_DROPPED: frozenset[SignupStatus] = frozenset({SignupStatus.DROPPED})
 
 
 @dataclass(frozen=True)
@@ -56,8 +57,8 @@ def roster_statuses(
 def leaving_statuses(
     event: Event, phase: RosterPhase | None = None
 ) -> frozenset[SignupStatus]:
-    """Roster-eligible statuses that do not belong on the roster in a phase."""
-    return _APPROVED_AND_CONFIRMED - roster_statuses(event, phase)
+    """Statuses that do not belong on the roster in a phase; DROPPED never does."""
+    return (_APPROVED_AND_CONFIRMED - roster_statuses(event, phase)) | _DROPPED
 
 
 def joins_roster(event: Event, status: str, phase: RosterPhase | None = None) -> bool:

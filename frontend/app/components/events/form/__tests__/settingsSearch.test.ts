@@ -27,6 +27,7 @@ const meta: SectionFieldMeta = {
     min_mmr: { label: 'Minimum MMR', description: 'Lowest MMR allowed' },
     roll_call_enabled: { label: 'Roll call' },
   },
+  ready: {},
   discord: {
     discord_announcement: {
       label: 'Pre-day announcement',
@@ -188,7 +189,14 @@ describe('searchSettings', () => {
         a: { section: 'event', label: 'Max players' },
         b: { section: 'event', label: 'Players per team' },
       }),
-      meta: { event: {}, tournament: {}, lobby: {}, approval: {}, discord: {} },
+      meta: {
+        event: {},
+        tournament: {},
+        lobby: {},
+        approval: {},
+        ready: {},
+        discord: {},
+      },
     });
     expect(
       searchSettings(local, ['event'], 'play')[0].entries.map((e) => e.field),

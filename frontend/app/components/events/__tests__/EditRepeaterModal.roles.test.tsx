@@ -87,7 +87,21 @@ const repeater = {
   require_steam_id: false,
   require_profile_complete: false,
   roll_call_enabled: false,
-  roll_call_mode: 'none',
+  roll_call_mode: 'manual',
+  ready_check_scope: 'main_only',
+  ready_check_open_minutes: 120,
+  ready_check_escalation_minutes: 30,
+  ready_check_close_minutes: 10,
+  ready_check_chase_minutes: 30,
+  ready_check_min_completion_pct: 70,
+  ready_check_low_completion_action: 'non_binding',
+  ready_check_notify_on_signup: true,
+  ready_check_drop_notice: true,
+  start_cull_enabled: false,
+  start_cull_minutes_after: 1,
+  post_cull_fill_mode: 'line_order',
+  event_voice_channel_id: '',
+  voice_presence_confirms: false,
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,
@@ -135,17 +149,17 @@ describe('EditRepeaterModal tabs', () => {
     expect(screen.getByTestId('edit-series-modal')).toBeInTheDocument();
   });
 
-  it('finds signup rules under the Event section, where this form renders them', () => {
+  it('finds the signup rule under the Event section, where this form renders it', () => {
     render(
       <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
       { wrapper: Wrapper },
     );
     fireEvent.change(screen.getByTestId('edit-series-settings-search'), {
-      target: { value: 'roll call' },
+      target: { value: 'sign themselves' },
     });
     expect(
       within(screen.getByTestId('edit-series-search-group-event')).getByTestId(
-        'edit-series-search-result-roll_call_enabled',
+        'edit-series-search-result-allow_user_signups',
       ),
     ).toBeInTheDocument();
     expect(

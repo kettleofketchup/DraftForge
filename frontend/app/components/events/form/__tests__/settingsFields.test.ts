@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DraftSettingsFormSchema } from '~/components/teamdraft/schemas';
-import { dotaLobbyConfigSchema } from '../../schemas';
+import { dotaLobbyConfigSchema, readyCheckConfigSchema } from '../../schemas';
 import { EVENT_SECTION_FIELDS } from '../settingsFields';
 import { EVENT_TAB_META } from '../tabs';
 
@@ -26,5 +26,11 @@ describe('EVENT_SECTION_FIELDS', () => {
     for (const key of Object.keys(dotaLobbyConfigSchema.shape)) {
       expect(EVENT_SECTION_FIELDS.lobby).toHaveProperty(key);
     }
+  });
+
+  it('covers every ready check field under Ready check', () => {
+    expect(Object.keys(EVENT_SECTION_FIELDS.ready).sort()).toEqual(
+      Object.keys(readyCheckConfigSchema.shape).sort(),
+    );
   });
 });

@@ -49,6 +49,10 @@ from events.models import (
     EventTeam,
     TournamentTemplateMixin,
 )
+from events.ready_check_constants import (
+    DROPPED_SIGNUP_MESSAGE,
+    REMOVED_SIGNUP_STATUSES,
+)
 from events.reopen import ReopenNotPermitted, reopen_event
 from events.roster import (
     RosterPhase,
@@ -247,6 +251,8 @@ def _create_signup(
                 user_id=user.pk,
                 event_id=event.pk,
             )
+        elif existing.status == SignupStatus.DROPPED:
+            raise ValueError(DROPPED_SIGNUP_MESSAGE)
         else:
             raise ValueError("User has already signed up for this event.")
 
@@ -345,6 +351,7 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
     Behavior:
       - Self-serve admission applies (events.admission).
       - If existing TENTATIVE signup -> raise ValueError (already tentative).
+      - If existing DROPPED signup -> raise ValueError; the row is kept.
       - If existing active signup (RSVP/APPROVED/CONFIRMED/PENDING/WAITLISTED)
         -> cancel it, delete the row, then create a fresh TENTATIVE.
       - If existing CANCELLED/REJECTED row -> delete it, create fresh TENTATIVE.
@@ -360,6 +367,8 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
     if existing:
         if existing.status == SignupStatus.TENTATIVE:
             raise ValueError("Already marked as tentative")
+        if existing.status == SignupStatus.DROPPED:
+            raise ValueError(DROPPED_SIGNUP_MESSAGE)
         if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
             cancel_signup(existing)
             notify_scheduled_by_cancel = True
@@ -386,7 +395,7 @@ def decline_signup(event: Event, user: CustomUser) -> EventSignup:
     """
     existing = EventSignup.objects.filter(event=event, user=user).first()
     if existing:
-        if existing.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+        if existing.status in REMOVED_SIGNUP_STATUSES:
             raise ValueError("Already declined")
         return cancel_signup(existing)
 
@@ -607,7 +616,7 @@ def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> Even
 @transaction.atomic
 def reject_signup(signup: EventSignup) -> EventSignup:
     """Reject a signup."""
-    if signup.status in [SignupStatus.REJECTED, SignupStatus.CANCELLED]:
+    if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
     prior_status = signup.status
     signup.status = SignupStatus.REJECTED
@@ -636,7 +645,7 @@ def confirm_signup(signup: EventSignup) -> EventSignup:
 @transaction.atomic
 def cancel_signup(signup: EventSignup) -> EventSignup:
     """Cancel a signup."""
-    if signup.status in [SignupStatus.CANCELLED, SignupStatus.REJECTED]:
+    if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
@@ -723,11 +732,7 @@ def unconfirm_signup(signup: EventSignup) -> EventSignup:
 @transaction.atomic
 def demote_to_waitlist(signup: EventSignup) -> EventSignup:
     """Move an active signup to the end of the waitlist."""
-    if signup.status in [
-        SignupStatus.CANCELLED,
-        SignupStatus.REJECTED,
-        SignupStatus.WAITLISTED,
-    ]:
+    if signup.status in (*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED):
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
     max_pos = (
         EventSignup.objects.filter(
@@ -1038,7 +1043,8 @@ def sync_event_roster(
     Creates the tournament if missing (#200). Adds every signup whose status
     joins the roster; removes signed-up users whose status left it, except
     members, captains and deputies of a team in the tournament, who are kept
-    and reported. Users on the roster without a signup are left alone.
+    and reported. DROPPED players always leave. Users on the roster without a
+    signup are left alone.
     Idempotent. M2M writes are not tracked by cacheops, so the tournament,
     the event and every touched user are invalidated on commit.
     """
@@ -1153,6 +1159,7 @@ def teardown_event(event: Event) -> None:
 
 # Signup statuses that put a player in the event's tournament
 # (approve_signup / confirm_signup call add_user_to_tournament).
+# An allow-list, so DROPPED is excluded on purpose.
 REGISTERED_SIGNUP_STATUSES = (SignupStatus.APPROVED, SignupStatus.CONFIRMED)
 
 

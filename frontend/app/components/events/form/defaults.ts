@@ -2,8 +2,10 @@ import type { z } from 'zod';
 import {
   DISCORD_CONFIG_DEFAULTS,
   DOTA_LOBBY_CONFIG_DEFAULTS,
+  READY_CHECK_CONFIG_DEFAULTS,
   type discordConfigSchema,
   type dotaLobbyConfigSchema,
+  type ReadyCheckFields,
 } from '../schemas';
 
 /** Template field defaults shared by the event, series and create dialogs. */
@@ -67,5 +69,45 @@ export function dotaLobbyResetValues(
     dota_lobby_password_mode: mode,
     dota_lobby_password: '',
     dota_lobby_password_saved: savedFromMode && mode === 'fixed',
+  };
+}
+
+/** Every readyCheckConfigSchema key, from `src` or its default; a null chase stays null. */
+export function readyCheckResetValues(
+  src: Partial<ReadyCheckFields> | null | undefined,
+): ReadyCheckFields {
+  const D = READY_CHECK_CONFIG_DEFAULTS;
+  return {
+    roll_call_enabled: src?.roll_call_enabled ?? D.roll_call_enabled,
+    roll_call_mode: src?.roll_call_mode ?? D.roll_call_mode,
+    auto_confirm: src?.auto_confirm ?? D.auto_confirm,
+    ready_check_scope: src?.ready_check_scope ?? D.ready_check_scope,
+    ready_check_open_minutes:
+      src?.ready_check_open_minutes ?? D.ready_check_open_minutes,
+    ready_check_escalation_minutes:
+      src?.ready_check_escalation_minutes ?? D.ready_check_escalation_minutes,
+    ready_check_close_minutes:
+      src?.ready_check_close_minutes ?? D.ready_check_close_minutes,
+    ready_check_chase_minutes:
+      src?.ready_check_chase_minutes === undefined
+        ? D.ready_check_chase_minutes
+        : src.ready_check_chase_minutes,
+    ready_check_min_completion_pct:
+      src?.ready_check_min_completion_pct ?? D.ready_check_min_completion_pct,
+    ready_check_low_completion_action:
+      src?.ready_check_low_completion_action ??
+      D.ready_check_low_completion_action,
+    ready_check_notify_on_signup:
+      src?.ready_check_notify_on_signup ?? D.ready_check_notify_on_signup,
+    ready_check_drop_notice:
+      src?.ready_check_drop_notice ?? D.ready_check_drop_notice,
+    start_cull_enabled: src?.start_cull_enabled ?? D.start_cull_enabled,
+    start_cull_minutes_after:
+      src?.start_cull_minutes_after ?? D.start_cull_minutes_after,
+    post_cull_fill_mode: src?.post_cull_fill_mode ?? D.post_cull_fill_mode,
+    event_voice_channel_id:
+      src?.event_voice_channel_id ?? D.event_voice_channel_id,
+    voice_presence_confirms:
+      src?.voice_presence_confirms ?? D.voice_presence_confirms,
   };
 }

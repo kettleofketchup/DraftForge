@@ -8,7 +8,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
 
-import draftforge from './eslint-rules/user-display.js';
+import draftforge from './eslint-rules/index.js';
 
 export default defineConfig([
   {
@@ -21,6 +21,7 @@ export default defineConfig([
   },
   {
     files: ['app/**/*.{js,jsx,ts,tsx}'],
+    processor: draftforge.processors['dedupe-raw-colors'],
     linterOptions: { reportUnusedDisableDirectives: 'off' },
     languageOptions: {
       parser: tsParser,
@@ -60,6 +61,9 @@ export default defineConfig([
       'draftforge/no-user-reshape': 'error',
       'draftforge/no-direct-name-resolver': 'error',
       'draftforge/no-avatar-fallback': 'error',
+      // Raw palette classes in strings shadcn/no-raw-colors cannot trace to a
+      // className (maps, arrays, returns); the processor drops its duplicates.
+      'draftforge/no-raw-color-strings': 'error',
 
       // Off: conflicts with the brand guide or is a design decision, not a lint one.
       'shadcn/no-restyle': 'off',
@@ -92,6 +96,7 @@ export default defineConfig([
     rules: {
       'draftforge/no-display-org-arg': 'off',
       'draftforge/no-direct-name-resolver': 'off',
+      'draftforge/no-raw-color-strings': 'off',
     },
   },
 ]);

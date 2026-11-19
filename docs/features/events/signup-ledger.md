@@ -9,7 +9,7 @@ Each signup gets a place in its event's line when it is created:
 - **`line_seq`** is the signup's number in the event's line. The next signup gets the current highest number plus one.
 - **`signed_up_at`** is the time the signup took that place.
 
-Signups are listed in line order (`line_seq`, then id). The signup API also returns **`line_rank`**: the signup's 1-based position among the event's signups that are still in line. Cancelled and rejected signups are not in line, so their `line_rank` is empty.
+Signups are listed in line order (`line_seq`, then id). The signup API also returns **`line_rank`**: the signup's 1-based position among the event's signups that are still in line. Cancelled, rejected and dropped signups are not in line, so their `line_rank` is empty; they keep their `line_seq`.
 
 Moving a signup to another event gives it a new place at the end of that event's line.
 

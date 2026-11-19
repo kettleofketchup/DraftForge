@@ -14,8 +14,8 @@ def first_name(*candidates: str | None) -> str | None:
 
 
 def user_display_name(user: CustomUser, *, guild_nickname: str | None = None) -> str:
-    """Server nickname, site nickname (interim), Discord name, username."""
+    """Server nickname, Discord global name, site nickname, username."""
     return (
-        first_name(guild_nickname, user.nickname, user.discordNickname, user.username)
+        first_name(guild_nickname, user.discordNickname, user.nickname, user.username)
         or f"User {user.pk}"
     )

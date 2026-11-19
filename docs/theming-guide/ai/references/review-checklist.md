@@ -30,6 +30,7 @@ Walk this list against any diff that touches an [in-scope source tree](scope.md)
 - [ ] No `bg-slate-*` for surfaces — use `bg-base-*`.
 - [ ] No `text-slate-100` / `text-gray-*` — use `text-foreground`, `text-text-secondary`, `text-muted-foreground`.
 - [ ] Status colors use semantic tokens: `text-success` / `text-warning` / `text-error` / `text-info`.
+- [ ] Fixed meanings (Radiant/Dire, pick/ban, turn, positions, roles, medals, presence) use their domain token, chosen by meaning. → [Domain Colors](../../../THEMING-GUIDE.md#domain-colors)
 - [ ] No hand-rolled gradients matching the brand — import the constant from `~/components/ui/buttons/styles`.
 - [ ] No hex / oklch literals in `className` (`bg-[#...]`, `text-[#...]`). Exception: `[background-image:var(--brand-bg)]` arbitrary property on dialog surfaces.
 

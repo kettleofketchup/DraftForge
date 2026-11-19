@@ -60,7 +60,6 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     max_players: { label: 'Max Players', keywords: ['limit', 'capacity'] },
     auto_approve: { label: 'Auto-approve signups' },
-    auto_confirm: { label: 'Auto-confirm signups' },
   },
   tournament: {
     tournament_name: { label: 'Tournament Name' },
@@ -197,17 +196,82 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       label: 'Require complete profile',
       description: 'Player must have nickname, Steam ID, and Discord linked',
     },
-    roll_call_enabled: {
-      label: 'Players join the roster only after confirming',
-      description:
-        'Approved players wait for roll-call confirmation before they are added to the tournament.',
-      keywords: ['roll call', 'check in'],
-    },
-    roll_call_mode: { label: 'Roll-call mode', keywords: ['check in'] },
     allow_user_signups: {
       label: 'Members can sign themselves up',
       description: 'When off, only organizers can add players.',
       keywords: ['self signup'],
+    },
+  },
+  ready: {
+    roll_call_enabled: {
+      label: 'Mandatory RSVP Confirmation',
+      description: 'Every rostered member must confirm before teams are made.',
+      keywords: ['roll call', 'ready check', 'rsvp', 'check in'],
+    },
+    auto_confirm: {
+      label: 'Auto-confirm signups',
+      description: 'Signups are marked as confirmed without asking the member',
+    },
+    roll_call_mode: {
+      label: 'Mode',
+      keywords: ['roll-call mode', 'staff-verified', 'automatic'],
+    },
+    ready_check_scope: {
+      label: 'Who is asked',
+      keywords: ['main roster', 'fill list'],
+    },
+    ready_check_open_minutes: {
+      label: 'Opens (minutes)',
+      description: 'Minutes before start',
+      keywords: ['ready check opens'],
+    },
+    ready_check_escalation_minutes: {
+      label: 'Escalation nudge (minutes)',
+      description: 'Minutes before start (0 = off)',
+      keywords: ['reminder'],
+    },
+    ready_check_close_minutes: {
+      label: 'Closes (minutes)',
+      description: 'Minutes before start',
+      keywords: ['ready check closes'],
+    },
+    ready_check_chase_minutes: {
+      label: 'Ops chase (minutes)',
+      description: 'Minutes before close',
+      keywords: ['no ops chase'],
+    },
+    ready_check_min_completion_pct: {
+      label: 'Minimum confirmed (%)',
+      keywords: ['completion', 'percent'],
+    },
+    ready_check_low_completion_action: {
+      label: 'If too few confirm',
+      keywords: ['non-binding', 'hold drops', 'drop unconfirmed'],
+    },
+    ready_check_notify_on_signup: {
+      label: 'Tell members when they sign up that confirmation is mandatory',
+    },
+    ready_check_drop_notice: {
+      label: 'Tell dropped members they were dropped',
+    },
+    event_voice_channel_id: {
+      label: 'Event voice channel',
+      keywords: ['discord voice', 'call'],
+    },
+    voice_presence_confirms: {
+      label: 'Count presence in the voice channel as ready',
+    },
+    start_cull_enabled: {
+      label: 'Remove members absent from the voice channel after start',
+      keywords: ['start cull', 'no-show'],
+    },
+    start_cull_minutes_after: {
+      label: 'Cull after (minutes)',
+      description: 'Minutes after start',
+    },
+    post_cull_fill_mode: {
+      label: 'After the cull, fill open seats by',
+      keywords: ['line order', 'arrival'],
     },
   },
   discord: {

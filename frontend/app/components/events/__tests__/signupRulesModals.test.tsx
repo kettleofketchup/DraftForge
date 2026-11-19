@@ -9,7 +9,7 @@ import type {
 } from '~/components/api/api';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance } from '~/i18n/config';
-import type { EventType } from '../schemas';
+import { READY_CHECK_CONFIG_DEFAULTS, type EventType } from '../schemas';
 
 // Every write seam the five modals use; the body is the assertion target.
 const api = vi.hoisted(() => ({
@@ -103,10 +103,11 @@ function Wrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-const ROSTER_LABEL = 'Players join the roster only after confirming';
+const ROSTER_LABEL = 'Mandatory RSVP Confirmation';
 const SELF_SERVE_LABEL = 'Members can sign themselves up';
 
 const config = {
+  ...READY_CHECK_CONFIG_DEFAULTS,
   organization: 1,
   tournament_name: 'Night Cup',
   tournament_league: null,
@@ -132,7 +133,7 @@ const config = {
   require_steam_id: false,
   require_profile_complete: false,
   roll_call_enabled: false,
-  roll_call_mode: 'manual',
+  roll_call_mode: 'manual' as const,
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,
@@ -225,9 +226,21 @@ function openTab(name: RegExp) {
   });
 }
 
-async function toggleRules() {
+async function toggleRules(selfServeTab: RegExp = /approval/i) {
+  openTab(/ready check/i);
   fireEvent.click(await screen.findByLabelText(ROSTER_LABEL));
-  fireEvent.click(screen.getByLabelText(SELF_SERVE_LABEL));
+  openTab(selfServeTab);
+  fireEvent.click(await screen.findByLabelText(SELF_SERVE_LABEL));
+}
+
+async function expectRules(roster: boolean, selfServe: boolean) {
+  openTab(/ready check/i);
+  const rosterSwitch = await screen.findByLabelText(ROSTER_LABEL);
+  expect(rosterSwitch.getAttribute('aria-checked')).toBe(String(roster));
+  openTab(/approval/i);
+  const selfServeBox = await screen.findByLabelText(SELF_SERVE_LABEL);
+  if (selfServe) expect(selfServeBox).toBeChecked();
+  else expect(selfServeBox).not.toBeChecked();
 }
 
 const TOGGLED = { roll_call_enabled: true, allow_user_signups: false };
@@ -263,14 +276,11 @@ describe('CreateEventModal signup rules', () => {
       allow_user_signups: false,
     });
     await renderReady();
-    openTab(/approval/i);
-    expect(await screen.findByLabelText(ROSTER_LABEL)).toBeChecked();
-    expect(screen.getByLabelText(SELF_SERVE_LABEL)).not.toBeChecked();
+    await expectRules(true, false);
   });
 
   it('sends both flags for a single event', async () => {
     await renderReady();
-    openTab(/approval/i);
     await toggleRules();
     submit();
     await waitFor(() => expect(api.createEvent).toHaveBeenCalled());
@@ -280,7 +290,6 @@ describe('CreateEventModal signup rules', () => {
   it('sends both flags for a recurring series', async () => {
     await renderReady();
     fireEvent.click(screen.getByTestId('event-recurring-checkbox'));
-    openTab(/approval/i);
     await toggleRules();
     submit();
     await waitFor(() => expect(api.createEventRepeater).toHaveBeenCalled());
@@ -301,9 +310,9 @@ describe('CreateSeriesEventModal signup rules', () => {
     fireEvent.change(screen.getByTestId('one-off-scheduled-input'), {
       target: { value: '2026-09-30T20:00' },
     });
-    openTab(/approval/i);
-    expect(await screen.findByLabelText(SELF_SERVE_LABEL)).not.toBeChecked();
-    fireEvent.click(screen.getByLabelText(ROSTER_LABEL));
+    await expectRules(false, false);
+    openTab(/ready check/i);
+    fireEvent.click(await screen.findByLabelText(ROSTER_LABEL));
     submit();
     await waitFor(() => expect(api.createSeriesOneOffEvent).toHaveBeenCalled());
     expect(api.createSeriesOneOffEvent.mock.calls[0][1]).toMatchObject(TOGGLED);
@@ -320,16 +329,13 @@ describe('EditEventModal signup rules', () => {
       />,
       { wrapper: Wrapper },
     );
-    openTab(/approval/i);
-    expect(await screen.findByLabelText(ROSTER_LABEL)).toBeChecked();
-    expect(screen.getByLabelText(SELF_SERVE_LABEL)).toBeChecked();
+    await expectRules(true, true);
   });
 
   it('sends the toggled flags', async () => {
     render(<EditEventModal event={event} open onOpenChange={() => {}} />, {
       wrapper: Wrapper,
     });
-    openTab(/approval/i);
     await toggleRules();
     submit();
     await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
@@ -343,7 +349,7 @@ describe('EditRepeaterModal signup rules', () => {
       <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
       { wrapper: Wrapper },
     );
-    await toggleRules();
+    await toggleRules(/^event$/i);
     submit();
     await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
     expect(api.mutateAsync.mock.calls[0][0]).toMatchObject(TOGGLED);
@@ -358,7 +364,7 @@ describe('EditOrgDefaultsModal signup rules', () => {
     );
     await waitFor(() => expect(api.getOrgEventDefaults).toHaveBeenCalled());
     await screen.findByDisplayValue('Night Cup');
-    await toggleRules();
+    await toggleRules(/^event$/i);
     submit();
     await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
     expect(api.mutateAsync.mock.calls[0][0]).toMatchObject({

@@ -55,7 +55,9 @@ class SignupLedgerFoundationsTests(SimpleTestCase):
 
     def test_line_excluded_statuses(self) -> None:
         self.assertIsInstance(LINE_EXCLUDED_STATUSES, frozenset)
-        self.assertEqual(LINE_EXCLUDED_STATUSES, frozenset({"cancelled", "rejected"}))
+        self.assertEqual(
+            LINE_EXCLUDED_STATUSES, frozenset({"cancelled", "rejected", "dropped"})
+        )
 
     def test_exceptions_hierarchy(self) -> None:
         self.assertTrue(issubclass(ImmutableFieldError, ValueError))

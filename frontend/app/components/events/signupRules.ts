@@ -1,36 +1,18 @@
-import {
-  EventState,
-  ROLL_CALL_MODES,
-  SIGNUP_RULES_DEFAULTS,
-  type RollCallMode,
-} from './schemas';
+import { EventState, SIGNUP_RULES_DEFAULTS } from './schemas';
 
 interface SignupRulesSource {
-  roll_call_enabled?: boolean | null;
   allow_user_signups?: boolean | null;
-  roll_call_mode?: string | null;
 }
 
 export interface SignupRulesValues {
-  roll_call_enabled: boolean;
   allow_user_signups: boolean;
-  roll_call_mode: RollCallMode | undefined;
-}
-
-function isRollCallMode(mode: string | null | undefined): mode is RollCallMode {
-  return (ROLL_CALL_MODES as readonly string[]).includes(mode ?? '');
 }
 
 /** Form values for SignupRulesSection from a loaded event, series or org defaults. */
 export function signupRulesFrom(source: SignupRulesSource): SignupRulesValues {
   return {
-    roll_call_enabled:
-      source.roll_call_enabled ?? SIGNUP_RULES_DEFAULTS.roll_call_enabled,
     allow_user_signups:
       source.allow_user_signups ?? SIGNUP_RULES_DEFAULTS.allow_user_signups,
-    roll_call_mode: isRollCallMode(source.roll_call_mode)
-      ? source.roll_call_mode
-      : undefined,
   };
 }
 
