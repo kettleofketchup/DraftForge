@@ -79,6 +79,10 @@ T = TypeVar("T")
 SIGNUP_POST_LAG_WARN_MS = 10_000
 
 
+class SignupPostEditFailed(Exception):
+    """Discord rejected or dropped a signup post PATCH."""
+
+
 def _bind_celery_context(
     task_name: str, event_id: int, interaction_id: str | None
 ) -> None:
@@ -755,8 +759,10 @@ def send_signup_update(
     """Edit the original announcement embed with updated signup lists.
 
     One run per event at a time: a run that finds the edit lock held
-    reschedules itself. Tries DiscordEvent.signup_message first, falls back to
-    DiscordMessageLog for pre-migration events.
+    reschedules itself. A failed read or PATCH retries up to
+    SIGNUP_POST_READ_RETRIES times, then drops the change's dirty time. Tries
+    DiscordEvent.signup_message first, falls back to DiscordMessageLog for
+    pre-migration events.
     """
     return _run_with_bookends(
         "send_signup_update",
@@ -798,27 +804,43 @@ def _serialised_signup_update(
     dirty_since_ms = clear_pending(event_id)
     try:
         return _send_signup_update_impl(event_id, interaction_id, dirty_since_ms)
-    except InternalAPIUnavailable as exc:
+    except (InternalAPIUnavailable, SignupPostEditFailed) as exc:
+        attempt = task.request.retries
+        exhausted = attempt >= config.read_retries
+        if isinstance(exc, InternalAPIUnavailable):
+            outcome = _skip_signup_list_unavailable(
+                "send_signup_update",
+                event_id,
+                exc,
+                attempt=attempt,
+                retries_exhausted=exhausted,
+            )
+        else:
+            outcome = f"Failed: could not edit announcement for event {event_id}"
+        if exhausted:
+            log.warning(
+                "signup_post_edit_dropped",
+                reason=type(exc).__name__,
+                attempts=attempt + 1,
+                dirty_since_ms=dirty_since_ms,
+                **fields,
+            )
+            return outcome
         # Restore under the lock, or a run taking it in the gap gets a stale lag.
         if dirty_since_ms is not None:
             mark_dirty(event_id, dirty_since_ms)
+        queued = mark_pending(event_id)
         release_lock(event_id, token)
         token = None
-        attempt = task.request.retries
-        exhausted = attempt >= config.read_retries
-        skipped = _skip_signup_list_unavailable(
-            "send_signup_update",
-            event_id,
-            exc,
-            attempt=attempt,
-            retries_exhausted=exhausted,
-        )
-        if exhausted:
-            return skipped
-        mark_pending(event_id)
+        if not queued:
+            return f"Skipped: a newer edit is queued for event {event_id}"
         raise task.retry(
             countdown=config.retry_seconds, max_retries=config.read_retries
         ) from exc
+    except Exception:
+        if dirty_since_ms is not None:
+            mark_dirty(event_id, dirty_since_ms)
+        raise
     finally:
         if token is not None:
             release_lock(event_id, token)
@@ -954,9 +976,7 @@ def _send_signup_update_impl(
         return f"Recovered: cleared dedup for event {event.pk} (orphaned message)"
 
     if edited is None:
-        if dirty_since_ms is not None:
-            mark_dirty(event_id, dirty_since_ms)
-        return f"Failed: could not edit announcement for event {event.pk}"
+        raise SignupPostEditFailed(f"edit failed for event {event.pk}")
     _log_signup_post_edit_applied(fields, message_id, dirty_since_ms)
     return f"Updated announcement for event {event.pk}"
 

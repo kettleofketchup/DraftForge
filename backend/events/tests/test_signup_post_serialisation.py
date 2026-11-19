@@ -412,15 +412,93 @@ class SignupPostSerialisationTest(DiscordTestMixin, EventTestCase):
 
         self.assertEqual(self.redis.data[signup_post_lock.dirty_key(self.pk)], "1000")
 
-    def test_failed_edit_keeps_dirty_time_and_logs_nothing_applied(self) -> None:
+    def test_failed_edit_retries_and_keeps_dirty_time(self) -> None:
         with patch.object(signup_post_lock, "now_ms", return_value=1_000):
             notify_signup_changed(self.post_event)
         self.edit.return_value = None
 
-        with capture_logs() as logs:
+        with (
+            patch.object(send_signup_update, "retry", side_effect=Retry()) as retry,
+            capture_logs() as logs,
+            self.assertRaises(Retry),
+        ):
             send_signup_update(self.pk)
 
+        retry.assert_called_once_with(
+            countdown=settings.SIGNUP_POST.retry_seconds,
+            max_retries=settings.SIGNUP_POST.read_retries,
+        )
         self.assertEqual(self._applied(logs), [])
+        self.assertEqual(self.redis.data[signup_post_lock.dirty_key(self.pk)], "1000")
+        self.assertIn(signup_post_lock.pending_key(self.pk), self.redis.data)
+        self.assertNotIn(signup_post_lock.lock_key(self.pk), self.redis.data)
+
+    def _exhaust_retries(self) -> None:
+        send_signup_update.push_request(retries=settings.SIGNUP_POST.read_retries)
+        self.addCleanup(send_signup_update.pop_request)
+
+    def _assert_dropped(self, logs: list[dict], reason: str) -> None:
+        [dropped] = [e for e in logs if e["event"] == "signup_post_edit_dropped"]
+        self.assertEqual(dropped["log_level"], "warning")
+        self.assertEqual(dropped["system"], "discord")
+        self.assertEqual(dropped["subsystem"], "celery")
+        self.assertEqual(dropped["reason"], reason)
+        self.assertEqual(dropped["attempts"], settings.SIGNUP_POST.read_retries + 1)
+        self.assertEqual(dropped["dirty_since_ms"], 1_000)
+        self.assertNotIn(signup_post_lock.dirty_key(self.pk), self.redis.data)
+        self.assertNotIn(signup_post_lock.pending_key(self.pk), self.redis.data)
+        self.assertNotIn(signup_post_lock.lock_key(self.pk), self.redis.data)
+
+    def test_failed_edit_gives_up_after_configured_retries(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        self.edit.return_value = None
+        self._exhaust_retries()
+
+        with capture_logs() as logs:
+            result = send_signup_update.run(self.pk)
+
+        self.assertTrue(result.startswith("Failed: could not edit announcement"))
+        self._assert_dropped(logs, "SignupPostEditFailed")
+
+    def test_exhausted_read_drops_dirty_time(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        self._exhaust_retries()
+
+        with (
+            patch(
+                "events.discord.embeds.get_event_signups",
+                side_effect=InternalAPIUnavailable("signups"),
+            ),
+            capture_logs() as logs,
+        ):
+            send_signup_update.run(self.pk)
+
+        self._assert_dropped(logs, "InternalAPIUnavailable")
+
+    def test_retry_skipped_when_a_newer_edit_is_queued(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        self.apply_async.reset_mock()
+
+        def change_then_fail(event_id: int) -> list:
+            with patch.object(signup_post_lock, "now_ms", return_value=2_000):
+                notify_signup_changed(self.post_event)
+            raise InternalAPIUnavailable("signups")
+
+        with (
+            patch(
+                "events.discord.embeds.get_event_signups",
+                side_effect=change_then_fail,
+            ),
+            patch.object(send_signup_update, "retry") as retry,
+        ):
+            result = send_signup_update(self.pk)
+
+        retry.assert_not_called()
+        self.apply_async.assert_called_once()
+        self.assertTrue(result.startswith("Skipped: a newer edit is queued"))
         self.assertEqual(self.redis.data[signup_post_lock.dirty_key(self.pk)], "1000")
 
     def _dirty_at_release(self) -> list[str | None]:
@@ -453,27 +531,35 @@ class SignupPostSerialisationTest(DiscordTestMixin, EventTestCase):
 
         self.assertEqual(seen, ["1000"])
 
-    def test_exhausted_read_restores_dirty_time_before_releasing_lock(self) -> None:
-        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
-            notify_signup_changed(self.post_event)
-        seen = self._dirty_at_release()
-        send_signup_update.push_request(retries=settings.SIGNUP_POST.read_retries)
-        self.addCleanup(send_signup_update.pop_request)
-
-        with patch(
-            "events.discord.embeds.get_event_signups",
-            side_effect=InternalAPIUnavailable("signups"),
-        ):
-            send_signup_update.run(self.pk)
-
-        self.assertEqual(seen, ["1000"])
-
     def test_failed_edit_restores_dirty_time_before_releasing_lock(self) -> None:
         with patch.object(signup_post_lock, "now_ms", return_value=1_000):
             notify_signup_changed(self.post_event)
         self.edit.return_value = None
         seen = self._dirty_at_release()
 
-        send_signup_update(self.pk)
+        with (
+            patch.object(send_signup_update, "retry", side_effect=Retry()),
+            self.assertRaises(Retry),
+        ):
+            send_signup_update(self.pk)
 
         self.assertEqual(seen, ["1000"])
+
+    def test_unexpected_error_restores_dirty_time_before_releasing_lock(
+        self,
+    ) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        seen = self._dirty_at_release()
+
+        with (
+            patch(
+                "events.discord.embeds.get_event_signups",
+                side_effect=RuntimeError("boom"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            send_signup_update(self.pk)
+
+        self.assertEqual(seen, ["1000"])
+        self.edit.assert_not_called()
