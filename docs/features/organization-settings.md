@@ -47,6 +47,8 @@ commitment rule. The **Staff placement** section sets what happens then.
 !!! info "No effect yet"
     These settings are stored and editable, but nothing reads them until staff
     placement checks ship. Until then every policy behaves like **Silent**.
+    The check they will use is described in
+    [Staff Overrides](../development/staff-overrides.md).
 
 | Policy | Meaning |
 |---|---|
