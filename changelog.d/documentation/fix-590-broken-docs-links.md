@@ -1,1 +1,0 @@
-- Fixed the broken links and anchors in the theming guide, its AI review references, the auth roles page and the Playwright guide. The theming guide now links to the AI reference pages instead of inlining them, and `scripts/test_docs_links.py` fails on any broken link or anchor in the docs build (#590).

@@ -1,2 +1,0 @@
-- Draft settings section in the Tournament, Event and Series dialogs: turn the team draft turn timer on or off and set its grace and reserve time in seconds. Event and series settings flow to the event's tournament.
-- Hero drafts have a configurable turn timer: set the grace time per pick and the reserve time per team, or turn the timer off so captains pick and ban with no time limit. A running draft keeps the settings it started with.
