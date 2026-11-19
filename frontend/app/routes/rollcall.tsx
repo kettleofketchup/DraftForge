@@ -54,6 +54,7 @@ import {
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
 import { UserStrip } from '~/components/user';
+import { DisplayName } from '~/components/user/avatar';
 import {
   useEvent,
   useEventActionMutation,
@@ -106,10 +107,7 @@ export default function RollCallPage() {
   const handleRestore = useCallback(
     (signup: EventSignupType) => {
       signupActions.reinstate.mutate(signup.id, {
-        onSuccess: () =>
-          toast.success(
-            `Restored ${signup.username ?? `User #${signup.user}`}`,
-          ),
+        onSuccess: () => toast.success(`Restored ${DisplayName(signup)}`),
         onError: () => toast.error('Failed to restore signup'),
       });
     },
@@ -718,9 +716,7 @@ function SignupStrip({
         {(signup.username ?? '?')[0]?.toUpperCase()}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium truncate">
-          {signup.username ?? `User #${signup.user}`}
-        </p>
+        <p className="text-sm font-medium truncate">{DisplayName(signup)}</p>
       </div>
       <EventStateBadge state={signup.status} />
       {actionSlot}

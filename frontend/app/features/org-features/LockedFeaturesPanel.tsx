@@ -14,6 +14,7 @@ import {
 } from '~/components/ui/form';
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
+import { DisplayName } from '~/components/user/avatar';
 import { useIsSuperuser } from '~/hooks/usePermissions';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
@@ -149,7 +150,7 @@ function LockedFeatureRow({ orgId, row }: LockedFeatureRowProps) {
         />
         {row.enabled_by && (
           <p className="text-xs text-muted-foreground">
-            Last unlocked by {row.enabled_by.username}
+            Last unlocked by {DisplayName(row.enabled_by)}
             {row.enabled_at &&
               ` on ${new Date(row.enabled_at).toLocaleString()}`}
           </p>

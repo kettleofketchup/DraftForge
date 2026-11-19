@@ -146,12 +146,7 @@ export function Leaderboard({
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <UserAvatar
-                        user={{
-                          pk: row.user_pk,
-                          username: row.username,
-                          nickname: row.nickname,
-                          avatarUrl: row.avatarUrl,
-                        }}
+                        user={{ ...row, pk: row.user_pk }}
                         size="sm"
                       />
                       <span className="font-medium">{DisplayName(row)}</span>
