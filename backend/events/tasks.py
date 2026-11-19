@@ -551,7 +551,6 @@ def _send_event_announcement_impl(event_id: int) -> str:
     thread_name = event.discord_event_title or event.name
     guild_id = event.organization.discord_server_id
 
-    # Get or create DiscordEvent via internal API
     de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id or "")
     if not de_resp or not de_resp.ok:
         logger.error(
@@ -1054,7 +1053,6 @@ def _create_discord_scheduled_event_impl(event_id: int) -> str:
     }
     url = f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events"
 
-    # Get or create DiscordEvent via internal API
     de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
     if not de_resp or not de_resp.ok:
         logger.error(
@@ -1092,11 +1090,9 @@ def _create_discord_scheduled_event_impl(event_id: int) -> str:
             success=success,
         )
 
-        # Store scheduled event ID via internal API
         if success and isinstance(data, dict) and data.get("id"):
             update_discord_event(discord_event_pk, scheduled_event_id=data["id"])
 
-        # Audit log via internal API
         create_event_log(
             discord_event_id=discord_event_pk,
             action="create_scheduled_event",
@@ -1476,7 +1472,6 @@ def send_subscriber_notifications(event_id: int) -> str:
 
     try:
         for sub in subscribers:
-            # Skip subscribers who already signed up
             if sub.user_pk in signed_up_user_pks:
                 skipped += 1
                 continue
@@ -1500,7 +1495,6 @@ def send_subscriber_notifications(event_id: int) -> str:
 
             result = sync_send_dm(sub.discord_id, embed=embed, components=components)
 
-            # Update delivery status via internal API
             if result:
                 if dm_pk:
                     update_event_dm(

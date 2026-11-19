@@ -245,8 +245,7 @@ class LeagueStaffEventActionsTest(TestCase):
         assert resp.status_code == 200, resp.content
 
     def test_league_staff_can_admin_signup(self):
-        """League staff can admin-add during SIGNUPS_OPEN. Roll-call coverage lands in Task 5."""
-        # Flip the event to SIGNUPS_OPEN since Task 5 (admin_signup → staff_add_signup) hasn't landed yet.
+        """League staff can admin-add during SIGNUPS_OPEN."""
         self.event.state = EventState.SIGNUPS_OPEN
         self.event.save(update_fields=["state"])
         player = CustomUser.objects.create_user(username="ls_player", password="x")
@@ -260,11 +259,10 @@ class LeagueStaffEventActionsTest(TestCase):
         assert resp.status_code == 201, resp.content
 
     def test_league_staff_can_act_on_event_signups(self):
-        """Verify the EventSignup-level action permission widening (Task 4 step 4)."""
+        """Verify the EventSignup-level action permission widening."""
         from events.constants import SignupStatus
         from events.models import EventSignup
 
-        # Create a signup to act on
         player = CustomUser.objects.create_user(username="ls_target", password="x")
         player.positions = PositionsModel.objects.create()
         player.save()
@@ -274,15 +272,12 @@ class LeagueStaffEventActionsTest(TestCase):
             status=SignupStatus.RSVP,
         )
 
-        # League staff approves
         resp = self.client.post(f"/api/events/signups/{signup.pk}/approve/")
         assert resp.status_code == 200, resp.content
 
     def test_league_staff_can_restart_tournament(self):
         """League staff should be able to restart_tournament on a league event."""
-        # restart_tournament typically requires the event to be in a state where a tournament exists.
-        # If your test event doesn't have a tournament, the action may return 400 — acceptable;
-        # we only care about the permission check (200 or 400, NOT 403).
+        # Only the permission check matters: 400 without a tournament is fine, 403 is not.
         resp = self.client.post(f"/api/events/{self.event.pk}/restart_tournament/")
         assert resp.status_code != 403, resp.content
 
