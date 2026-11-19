@@ -145,11 +145,6 @@
       "count": 1
     }
   },
-  "app/components/navbar/login.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
   "app/components/navbar/navbar.tsx": {
     "shadcn/no-raw-colors": {
       "count": 3
@@ -179,16 +174,6 @@
   "app/components/player/PlayerUnderConstruction.tsx": {
     "shadcn/no-raw-colors": {
       "count": 5
-    }
-  },
-  "app/components/reusable/addButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/reusable/adminButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
     }
   },
   "app/components/team/TeamModal.tsx": {
@@ -342,11 +327,6 @@
       "count": 2
     }
   },
-  "app/components/ui/base-handle.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
   "app/components/ui/brand-dropdown-menu.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 13
@@ -355,11 +335,6 @@
   "app/components/ui/brand-select.tsx": {
     "shadcn/no-raw-colors": {
       "count": 18
-    }
-  },
-  "app/components/ui/button-handle.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
     }
   },
   "app/components/ui/buttons/AddDiscordBotButton.tsx": {
@@ -430,21 +405,6 @@
   "app/components/ui/dialogs/ConfirmDialog.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 5
-    }
-  },
-  "app/components/ui/labeled-group-node.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/ui/node-status-indicator.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 5
-    }
-  },
-  "app/components/ui/placeholder-node.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
     }
   },
   "app/components/ui/sonner.tsx": {
@@ -582,11 +542,6 @@
   "app/pages/users/users.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
-    }
-  },
-  "app/routes/organization.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
     }
   }
 }
