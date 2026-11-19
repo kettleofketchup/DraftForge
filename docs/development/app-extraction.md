@@ -217,6 +217,12 @@ python manage.py migrate draft zero
 
 Use the slice's own migration names.
 
+These commands run with the new code, so each `migrate` fires `post_migrate`, which re-creates `(<new_app>, <model>)` ContentTypes and their permissions next to the relabelled `(<source_app>, <model>)` rows. The new rows hold no grants and no admin log entries. Delete them once the old code is running, before any later forward migrate. If you skip this, the next deploy's relabel finds the destination rows already there and skips them (`contenttype_relabel_skipped`), and every existing grant stays on the stale `<source_app>` rows:
+
+```bash
+python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='<new_app>').delete()"
+```
+
 **Code-only rollback** (redeploy the old image without unmigrating) also works. The old code ignores migrations it does not know, and the schema is identical. But its `post_migrate` recreates `(<source_app>, <model>)` ContentTypes next to the relabelled `(<new_app>, <model>)` rows, and permission grants stay on the new rows. To get back to one row per model, reconcile by hand. Repoint `auth_permission` (and through it `auth_user_user_permissions` and `auth_group_permissions`) and `django_admin_log` from the duplicate ContentType to the surviving one, then delete the duplicate.
 
 ## Notes for the team-draft slice
