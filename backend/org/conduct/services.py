@@ -1,11 +1,12 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
 from django.db import transaction
 from django.utils import timezone
 
-from app.models import CustomUser, OrgLog
+from app.cache_utils import invalidate_after_commit
+from app.models import CustomUser, Organization, OrgLog
 from events.capacity import lock_event
 from events.constants import EventState, SignupStatus
 from events.eligibility import refresh_unmet_requirements
@@ -19,12 +20,30 @@ from org.conduct.constants import (
     OutcomeSource,
     expected_statuses,
 )
-from org.conduct.gate import ConductGate, conduct_gate
+from org.conduct.gate import ConductGate, conduct_gate, get_conduct_settings
 from org.models import OrgUser
-from org.models_conduct import AttendanceOutcome
+from org.models_conduct import AttendanceOutcome, OrgConductSettings
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
+
+EDITABLE_SETTINGS_FIELDS: tuple[str, ...] = (
+    "late_cancel_hours",
+    "late_cancel_weight",
+    "half_life_days",
+    "max_age_days",
+    "prior_show_rate",
+    "prior_strength",
+    "min_events",
+    "leaderboard_public",
+    "back_of_line_enabled",
+    "back_of_line_below",
+    "require_approval_enabled",
+    "require_approval_below",
+    "block_enabled",
+    "block_below",
+    "enforce_on_new_members",
+)
 
 
 @dataclass(frozen=True)
@@ -273,3 +292,52 @@ def reassign_member(drop: OrgUser, keep: OrgUser) -> int:
         discarded=len(discard_drop) + len(discard_keep),
     )
     return moved
+
+
+def update_conduct_settings(
+    org: Organization,
+    *,
+    actor: CustomUser,
+    changes: Mapping[str, object],
+) -> OrgConductSettings:
+    unknown = set(changes) - set(EDITABLE_SETTINGS_FIELDS)
+    if unknown:
+        raise ValueError(f"Unknown setting(s): {', '.join(sorted(unknown))}")
+    with transaction.atomic():
+        existing = get_conduct_settings(org, create=True)
+        row = (
+            OrgConductSettings.objects.nocache().select_for_update().get(pk=existing.pk)
+        )
+        changed_fields = [
+            field
+            for field in EDITABLE_SETTINGS_FIELDS
+            if field in changes and getattr(row, field) != changes[field]
+        ]
+        if not changed_fields:
+            return row
+        for field in changed_fields:
+            setattr(row, field, changes[field])
+        if row.max_age_days < row.half_life_days:
+            raise ValueError("Max age must be at least the half-life.")
+        row.updated_by = actor
+        row.save(update_fields=[*changed_fields, "updated_by", "updated_at"])
+        invalidate_after_commit(row)
+        OrgLog.objects.create(
+            organization=org,
+            actor=actor,
+            action="update",
+            details={"area": "conduct_settings", "changed_fields": changed_fields},
+        )
+        org_id = org.pk
+        actor_id = actor.pk
+        transaction.on_commit(
+            lambda: log.info(
+                "conduct_settings_updated",
+                system="org",
+                subsystem="conduct",
+                org_id=org_id,
+                actor_id=actor_id,
+                changed_fields=changed_fields,
+            )
+        )
+    return row
