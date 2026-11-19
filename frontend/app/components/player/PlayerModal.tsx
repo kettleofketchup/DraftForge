@@ -208,10 +208,10 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
             <h2 className="text-xl font-semibold">{playerName}</h2>
             <div className="flex gap-2 mt-1">
               {displayPlayer.is_staff && (
-                <Badge className="bg-blue-700 text-white">Staff</Badge>
+                <Badge className="bg-role-staff text-white">Staff</Badge>
               )}
               {displayPlayer.is_superuser && (
-                <Badge className="bg-red-700 text-white">Admin</Badge>
+                <Badge className="bg-role-admin text-white">Admin</Badge>
               )}
             </div>
           </div>
