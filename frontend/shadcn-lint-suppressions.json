@@ -94,40 +94,19 @@
       "count": 7
     }
   },
-  "app/components/herodraft/DraftPanel.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 35
-    }
-  },
-  "app/components/herodraft/DraftToasts.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
   "app/components/herodraft/DraftTopBar.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
-      "count": 11
-    }
-  },
-  "app/components/herodraft/HeroDraftHistoryModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 6
+      "count": 1
     }
   },
   "app/components/herodraft/HeroDraftModal.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 23
+      "count": 1
     }
   },
   "app/components/herodraft/HeroGrid.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 4
-    },
     "shadcn/no-raw-colors": {
-      "count": 13
+      "count": 2
     }
   },
   "app/components/league/LeagueMatchCard.tsx": {
@@ -539,11 +518,6 @@
   "app/pages/about/sections/TechnologyStack.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 2
-    }
-  },
-  "app/pages/herodraft/HeroDraftPage.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
     }
   },
   "app/pages/profile/forms/position.tsx": {
