@@ -20,25 +20,52 @@ function Harness() {
 }
 
 const references = {
-  'app.Game.radiant_team': 2,
-  'app.BracketSlot.participant': 1,
+  references: {
+    'app.Game.radiant_team': 2,
+    'app.Game.dire_team': 2,
+    'app.Game.winning_team': 2,
+  },
+  usage: [
+    {
+      model: 'app.Game',
+      label: 'game',
+      label_plural: 'games',
+      count: 2,
+      teams: [
+        { pk: 1, name: 'Team A' },
+        { pk: 2, name: 'Team B' },
+      ],
+    },
+    {
+      model: 'app.HeroDraft',
+      label: 'HeroDraft',
+      label_plural: 'HeroDrafts',
+      count: 1,
+      teams: [{ pk: 2, name: 'Team B' }],
+    },
+  ],
 };
 
 describe('useConfirmForceReset', () => {
   afterEach(cleanup);
 
-  it('shows the reference total and resolves true on confirm', async () => {
+  it('shows the per-type breakdown and resolves true on confirm', async () => {
     render(<Harness />);
     let answer!: Promise<boolean>;
     act(() => {
       answer = confirm(references);
     });
 
-    expect(
-      screen.getByTestId('draft-force-reset-dialog').textContent,
-    ).toContain(
-      '3 games and other records use these teams. Resetting keeps them but rosters will change.',
+    const dialog = screen.getByTestId('draft-force-reset-dialog');
+    expect(dialog.textContent).toContain(
+      '2 games and 1 HeroDraft use Team A and Team B.',
     );
+    expect(dialog.textContent).not.toContain('6 games');
+    const rows = screen.getAllByTestId('draft-force-reset-usage-row');
+    expect(rows.map((r) => r.textContent)).toEqual([
+      '2 gamesTeam A, Team B',
+      '1 HeroDraftTeam B',
+    ]);
     await act(async () => {
       fireEvent.click(screen.getByTestId('draft-force-reset-confirm'));
     });

@@ -127,6 +127,9 @@ class EventTaskSchema(BaseModel):
     discord_announcement_hours: int = 24
     discord_announcement_role_ids: list = []
     discord_signup_role_ids: list = []
+    discord_start_mention: bool = False
+    discord_start_mention_minutes: int = 15
+    discord_start_mention_scope: str = "all_active"
 
     # Config
     timezone: str = "America/New_York"

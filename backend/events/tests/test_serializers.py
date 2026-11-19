@@ -20,6 +20,8 @@ REMINDER_FIELDS_REQUIRED_BY_FIRE_PATH = [
     "discord_confirm_attendance_hours",
     "discord_profile_reminder",
     "discord_profile_reminder_hours",
+    "discord_start_mention",
+    "discord_start_mention_minutes",
 ]
 
 

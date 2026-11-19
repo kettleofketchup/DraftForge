@@ -458,6 +458,32 @@ Sizes: `size="default"` (h-9, matches `PrimaryButton`), `size="sm"` (h-8, for ti
 
 When to use the bare shadcn primitive: only when the surrounding surface already paints its own treatment that the brand select would clash with (rare — and document the exception inline next to the call site).
 
+### Radio Buttons
+
+Single-choice options use the shared `RadioGroup` / `RadioGroupItem` from `~/components/ui/radio-group`. The item carries the brand treatment, so call sites pass layout classes only:
+
+| State | Treatment |
+|-------|-----------|
+| Unchecked | `border-primary/60` ring on a faint `bg-input/30` fill |
+| Hover | Full `border-primary`, a faint `bg-primary/10` fill and a soft `--glow-violet` halo |
+| Checked | `border-primary`, `bg-primary/15` tint, a `from-primary to-interactive` gradient dot and a `--glow-violet` glow |
+| Focus (keyboard) | `ring-2 ring-ring` with a `ring-offset-background` gap, matching `<Switch>` |
+| Disabled | `opacity-50`, no glow, `cursor-not-allowed` |
+
+```tsx
+import { RadioGroup, RadioGroupItem } from '~/components/ui/radio-group';
+import { Label } from '~/components/ui/label';
+
+<RadioGroup value={scope} onValueChange={setScope} className="flex flex-col gap-2">
+  <div className="flex items-center gap-2">
+    <RadioGroupItem value="future" id="scope-future" />
+    <Label htmlFor="scope-future">Future entries only</Label>
+  </div>
+</RadioGroup>
+```
+
+The item stays 16px; the `<Label>` is the touch target. It also resets the leftover base-layer `button` rules in `app.css` (padding, hover border, focus outline), so don't re-add `p-0` or colour overrides per call site. For a prominent choice where each option needs a title and description, use option cards that hide the item with `sr-only` and show a check icon, as `RankStatusRadioGroup` does.
+
 ### Links & Tabs
 
 ```tsx

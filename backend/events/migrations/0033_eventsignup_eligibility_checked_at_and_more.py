@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events', '0031_backfill_signup_open_policy'),
+        ('events', '0032_event_discord_start_mention_and_more'),
     ]
 
     operations = [

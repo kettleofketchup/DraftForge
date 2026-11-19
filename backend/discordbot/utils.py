@@ -416,6 +416,7 @@ def sync_send_embed_with_components_no_log(
     forum_thread_name: str | None = None,
     content: str | None = None,
     allowed_mentions: JSONDict | None = None,
+    message_reference: JSONDict | None = None,
 ) -> tuple[JSONDict, int]:
     """Discord HTTP send only — no logging side effect.
 
@@ -431,6 +432,8 @@ def sync_send_embed_with_components_no_log(
         message_content["content"] = content
     if allowed_mentions:
         message_content["allowed_mentions"] = allowed_mentions
+    if message_reference:
+        message_content["message_reference"] = message_reference
 
     # Build payload — forum thread wraps message in a "message" key
     if forum_thread_name:
@@ -459,6 +462,7 @@ def sync_send_embed_with_components(
     content: str | None = None,
     allowed_mentions: JSONDict | None = None,
     fired_by_user_id: int | None = None,
+    message_reference: JSONDict | None = None,
 ) -> JSONDict | None:
     """Lease-wrapped Discord embed send.
 
@@ -493,6 +497,7 @@ def sync_send_embed_with_components(
             content,
             allowed_mentions,
             fired_by_user_id,
+            message_reference,
         )
 
     log_pk = internal_client.claim_discord_message_log(
@@ -520,6 +525,7 @@ def sync_send_embed_with_components(
             forum_thread_name=forum_thread_name,
             content=content,
             allowed_mentions=allowed_mentions,
+            message_reference=message_reference,
         )
         if forum_thread_name and response_data.get("message"):
             msg_id = response_data["message"].get("id")
@@ -591,6 +597,7 @@ def _send_with_post_log(
     content: str | None,
     allowed_mentions: JSONDict | None,
     fired_by_user_id: int | None,
+    message_reference: JSONDict | None = None,
 ) -> JSONDict | None:
     """Send + post-log path for callers without a meaningful source_id.
 
@@ -608,6 +615,7 @@ def _send_with_post_log(
             forum_thread_name=forum_thread_name,
             content=content,
             allowed_mentions=allowed_mentions,
+            message_reference=message_reference,
         )
         if forum_thread_name and response_data.get("message"):
             msg_id = response_data["message"].get("id")
