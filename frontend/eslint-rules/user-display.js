@@ -9,7 +9,6 @@ const NAME_FIELDS = new Set([
   'discordUsername',
   'global_name',
 ]);
-const AVATAR_FIELDS = new Set(['avatar', 'avatarUrl']);
 // Attributes a person reads; ids, keys, test ids and links keep the raw username.
 const NAME_ATTRIBUTES = new Set([
   'title',
@@ -65,26 +64,6 @@ function renderedMembers(node, out = []) {
     renderedMembers(n.right, out);
   }
   return out;
-}
-
-// Any member read inside an expression (for avatar src, which is often a template URL).
-function readsField(node, fields) {
-  let found = false;
-  const visit = (n) => {
-    if (!n || found || typeof n.type !== 'string') return;
-    if (fields.has(propertyName(n))) {
-      found = true;
-      return;
-    }
-    for (const key of Object.keys(n)) {
-      if (key === 'parent') continue;
-      const v = n[key];
-      if (Array.isArray(v)) v.forEach(visit);
-      else if (v && typeof v.type === 'string') visit(v);
-    }
-  };
-  visit(node);
-  return found;
 }
 
 function jsxName(node) {
@@ -223,7 +202,7 @@ const useUserAvatar = {
         const value = src?.value;
         if (
           value?.type === 'JSXExpressionContainer' &&
-          readsField(value.expression, AVATAR_FIELDS)
+          readsMatching(value.expression, PERSON_AVATAR, /^(avatar|avatarUrl)$/)
         ) {
           context.report({ node, messageId: 'raw' });
         }
@@ -326,6 +305,109 @@ const noDirectNameResolver = {
   },
 };
 
+const PERSON_NAME =
+  /(^|_)(username|nickname|discordnickname|guildnickname|global_name)$/i;
+const PERSON_NAME_VAR = /^(displayName|username|nickname)$/;
+const PERSON_AVATAR = /(^|_)avatar(url)?$/i;
+
+// Reads a member whose name matches `pattern`, or a bare identifier matching `bareIdentifiers`.
+function readsMatching(node, pattern, bareIdentifiers) {
+  let found = false;
+  const visit = (n) => {
+    if (!n || found || typeof n.type !== 'string') return;
+    const prop = propertyName(n);
+    if (prop && pattern.test(prop)) {
+      found = true;
+      return;
+    }
+    if (n.type === 'Identifier' && bareIdentifiers.test(n.name)) {
+      const parent = n.parent;
+      const isProperty =
+        parent?.type === 'MemberExpression' &&
+        parent.property === n &&
+        !parent.computed;
+      if (!isProperty) {
+        found = true;
+        return;
+      }
+    }
+    for (const key of Object.keys(n)) {
+      if (key === 'parent') continue;
+      const v = n[key];
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v.type === 'string') visit(v);
+    }
+  };
+  visit(node);
+  return found;
+}
+
+function elementName(node) {
+  return node?.type === 'JSXElement' ? jsxName(node.openingElement) : null;
+}
+
+function callsDisplayName(node) {
+  let found = false;
+  const visit = (n) => {
+    if (!n || found || typeof n.type !== 'string') return;
+    if (
+      n.type === 'CallExpression' &&
+      unwrap(n.callee)?.type === 'Identifier' &&
+      unwrap(n.callee).name === 'DisplayName'
+    ) {
+      found = true;
+      return;
+    }
+    for (const key of Object.keys(n)) {
+      if (key === 'parent') continue;
+      const v = n[key];
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v.type === 'string') visit(v);
+    }
+  };
+  visit(node);
+  return found;
+}
+
+const noAvatarFallback = {
+  meta: {
+    type: 'problem',
+    docs: { description: 'Let UserAvatar render the no-user fallback' },
+    messages: {
+      branch:
+        'UserAvatar renders the fallback when there is no user; use one <UserAvatar user={...} fallbackName={...} /> instead of a raw <Avatar> branch.',
+      initials:
+        'Person initials in <AvatarFallback>; use <UserAvatar user={...} />, which derives them from the display name.',
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      ConditionalExpression(node) {
+        const a = unwrap(node.consequent);
+        const b = unwrap(node.alternate);
+        for (const [mine, other] of [
+          [a, b],
+          [b, a],
+        ]) {
+          if (
+            elementName(mine) === 'Avatar' &&
+            elementName(other) === 'UserAvatar'
+          )
+            context.report({ node: mine, messageId: 'branch' });
+        }
+      },
+      JSXElement(node) {
+        if (elementName(node) !== 'AvatarFallback') return;
+        const personal = (n) =>
+          readsMatching(n, PERSON_NAME, PERSON_NAME_VAR) || callsDisplayName(n);
+        if (node.children.some(personal))
+          context.report({ node, messageId: 'initials' });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: 'draftforge' },
   rules: {
@@ -334,5 +416,6 @@ export default {
     'no-display-org-arg': noDisplayOrgArg,
     'no-user-reshape': noUserReshape,
     'no-direct-name-resolver': noDirectNameResolver,
+    'no-avatar-fallback': noAvatarFallback,
   },
 };

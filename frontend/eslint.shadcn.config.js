@@ -59,6 +59,7 @@ export default defineConfig([
       'draftforge/no-display-org-arg': 'error',
       'draftforge/no-user-reshape': 'error',
       'draftforge/no-direct-name-resolver': 'error',
+      'draftforge/no-avatar-fallback': 'error',
 
       // Off: conflicts with the brand guide or is a design decision, not a lint one.
       'shadcn/no-restyle': 'off',
@@ -82,6 +83,7 @@ export default defineConfig([
       'draftforge/no-display-org-arg': 'off',
       'draftforge/no-user-reshape': 'off',
       'draftforge/no-direct-name-resolver': 'off',
+      'draftforge/no-avatar-fallback': 'off',
     },
   },
   {
