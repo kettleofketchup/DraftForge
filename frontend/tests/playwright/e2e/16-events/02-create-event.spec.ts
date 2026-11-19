@@ -20,10 +20,18 @@ import {
 } from '../../fixtures';
 import { API_URL } from '../../fixtures/base-url';
 
-/** Fields are split across tabs; inactive tab panels are hidden. */
+/**
+ * Fields are split across sections; inactive panels are hidden. Wide screens
+ * show a sidebar of sections, narrow ones a section picker.
+ */
 async function openTab(page: Page, tab: 'event' | 'tournament' | 'lobby') {
   const trigger = page.getByTestId(`event-modal-tab-${tab}`);
-  await trigger.click();
+  if (await trigger.isVisible()) {
+    await trigger.click();
+  } else {
+    await page.getByTestId('event-modal-section-picker').click();
+    await page.getByTestId(`event-modal-section-option-${tab}`).click();
+  }
   await expect(trigger).toHaveAttribute('data-state', 'active');
 }
 
@@ -94,6 +102,39 @@ test.describe('Events - Create Event (@cicd)', () => {
     // Recurring-only fields should NOT be visible
     await expect(page.getByTestId('event-frequency-select')).not.toBeVisible();
     await expect(page.getByTestId('event-day-select')).not.toBeVisible();
+  });
+
+  test('settings search jumps to a field in another section', async ({
+    page,
+  }) => {
+    await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
+    await page.getByTestId('org-tab-events').click();
+    await page.getByTestId('create-event-btn').click();
+    await expect(page.getByTestId('event-modal-tab-event')).toHaveAttribute(
+      'data-state',
+      'active',
+    );
+
+    await page.getByTestId('event-modal-tab-event').focus();
+    await page.keyboard.press('/');
+    const search = page.getByTestId('event-modal-settings-search');
+    await expect(search).toBeFocused();
+    await search.fill('people per team');
+    await expect(
+      page.getByTestId('event-modal-search-group-tournament'),
+    ).not.toHaveAttribute('data-empty');
+    await expect(
+      page.getByTestId('event-modal-search-group-discord'),
+    ).toHaveAttribute('data-empty', '');
+    await page.keyboard.press('Enter');
+
+    await expect(
+      page.getByTestId('event-modal-tab-tournament'),
+    ).toHaveAttribute('data-state', 'active');
+    await expect(page.getByTestId('event-people-per-team-input')).toBeFocused();
+    await expect(search).toHaveValue('');
+    // Enter picked the result; it must not have submitted the form.
+    await expect(page.getByTestId('create-event-modal')).toBeVisible();
   });
 
   test('toggling recurring shows repeater fields', async ({ page }) => {

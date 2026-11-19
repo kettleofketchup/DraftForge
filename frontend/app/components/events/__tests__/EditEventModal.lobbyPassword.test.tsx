@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 process.env.TZ = 'Europe/Berlin';
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
@@ -360,6 +366,21 @@ describe('EditEventModal tabs and payload parity', () => {
       expect(screen.getByTestId(`edit-event-tab-${tab}`)).toBeInTheDocument();
     }
     expect(screen.getByTestId('edit-event-tab-event')).toHaveAttribute(
+      'data-state',
+      'active',
+    );
+  });
+
+  it('finds signup rules under the Approval section and jumps to them', () => {
+    renderModal(event);
+    fireEvent.change(screen.getByTestId('edit-event-settings-search'), {
+      target: { value: 'sign themselves' },
+    });
+    const result = within(
+      screen.getByTestId('edit-event-search-group-approval'),
+    ).getByTestId('edit-event-search-result-allow_user_signups');
+    fireEvent.click(result);
+    expect(screen.getByTestId('edit-event-tab-approval')).toHaveAttribute(
       'data-state',
       'active',
     );

@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventRepeaterType } from '~/components/api/api';
@@ -127,6 +133,24 @@ describe('EditRepeaterModal tabs', () => {
     }
     expect(screen.queryByTestId('edit-series-tab-approval')).toBeNull();
     expect(screen.getByTestId('edit-series-modal')).toBeInTheDocument();
+  });
+
+  it('finds signup rules under the Event section, where this form renders them', () => {
+    render(
+      <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    fireEvent.change(screen.getByTestId('edit-series-settings-search'), {
+      target: { value: 'roll call' },
+    });
+    expect(
+      within(screen.getByTestId('edit-series-search-group-event')).getByTestId(
+        'edit-series-search-result-roll_call_enabled',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('edit-series-search-group-approval'),
+    ).toBeNull();
   });
 });
 
