@@ -1,4 +1,5 @@
 from datetime import timedelta
+from typing import Any
 
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import Count, Q
@@ -12,12 +13,19 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.models import CustomUser, Organization
-from app.permissions_org import can_view_org_members, has_org_staff_access
+from app.permissions_org import (
+    can_view_org_members,
+    has_event_staff_access,
+    has_org_staff_access,
+)
+from events.models import Event
+from org.conduct.attendance import event_attendance
 from org.conduct.constants import Outcome
 from org.conduct.gate import get_conduct_settings
 from org.conduct.queries import member_scores
 from org.conduct.scoring import MemberScore, ScoreParams, prior_score
 from org.conduct.serializers import (
+    AttendancePutSerializer,
     ConductSettingsUpdateSerializer,
     HistoryQuerySerializer,
     history_item,
@@ -27,7 +35,7 @@ from org.conduct.serializers import (
     rate,
     settings_data,
 )
-from org.conduct.services import update_conduct_settings
+from org.conduct.services import set_outcomes, update_conduct_settings
 from org.contributions.serializers import member_summary
 from org.feature_errors import not_permitted, require_feature, require_org_admin
 from org.features import FeatureKey
@@ -232,3 +240,61 @@ def conduct_member(request: Request, org_id: int, org_user_pk: int) -> Response:
             ],
         }
     )
+
+
+def _staff_event(request: Request, org_id: int, event_id: int) -> Event:
+    org = _org(org_id)
+    event = get_object_or_404(
+        Event.objects.nocache().select_related("organization", "tournament_league"),
+        pk=event_id,
+        organization=org,
+    )
+    user = request.user
+    if not has_event_staff_access(user, event):
+        if not user.is_authenticated:
+            raise NotAuthenticated()
+        raise not_permitted()
+    return event
+
+
+def _resolve_changes(
+    event: Event, changes: list[dict[str, Any]]
+) -> list[tuple[OrgUser, Outcome]]:
+    members = OrgUser.objects.nocache().filter(organization_id=event.organization_id)
+    org_user_pks = {c["org_user_pk"] for c in changes if "org_user_pk" in c}
+    user_pks = {c["user_pk"] for c in changes if "user_pk" in c}
+    by_pk = members.filter(pk__in=org_user_pks).in_bulk()
+    by_user = {ou.user_id: ou for ou in members.filter(user_id__in=user_pks)}
+    resolved: list[tuple[OrgUser, Outcome]] = []
+    for change in changes:
+        org_user = (
+            by_pk.get(change["org_user_pk"])
+            if "org_user_pk" in change
+            else by_user.get(change["user_pk"])
+        )
+        if org_user is None:
+            raise ValidationError({"changes": "member not found in this organization"})
+        resolved.append((org_user, Outcome(change["outcome"])))
+    return resolved
+
+
+@api_view(["GET", "PUT"])
+@parser_classes([JSONParser])
+@permission_classes([AllowAny])
+def conduct_event_attendance(request: Request, org_id: int, event_id: int) -> Response:
+    event = _staff_event(request, org_id, event_id)
+    if request.method == "PUT":
+        body = AttendancePutSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        changes = _resolve_changes(event, body.validated_data["changes"])
+        try:
+            set_outcomes(
+                event,
+                actor=request.user,
+                changes=changes,
+                reason=body.validated_data["reason"],
+            )
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        event = Event.objects.nocache().get(pk=event.pk)
+    return Response(event_attendance(event, now=timezone.now()))

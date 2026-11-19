@@ -5,7 +5,14 @@ from typing import Any, Final, Literal, NotRequired, TypedDict, cast
 
 from rest_framework import serializers
 
-from org.conduct.constants import COUNTED, SETTINGS_RANGES
+from org.conduct.constants import (
+    COUNTED,
+    REASON_MAX_LENGTH,
+    REASON_MIN_LENGTH,
+    SETTINGS_RANGES,
+    STAFF_SETTABLE,
+    Outcome,
+)
 from org.conduct.scoring import MemberScore, recency_weight
 from org.conduct.services import EDITABLE_SETTINGS_FIELDS
 from org.contributions.serializers import MemberSummary, member_summary
@@ -242,3 +249,31 @@ class HistoryQuerySerializer(serializers.Serializer):
         max_value=MAX_HISTORY_LIMIT,
     )
     offset = serializers.IntegerField(required=False, default=0, min_value=0)
+
+
+class AttendanceChangeSerializer(serializers.Serializer):
+    org_user_pk = serializers.IntegerField(required=False)
+    user_pk = serializers.IntegerField(required=False)
+    outcome = serializers.ChoiceField(choices=[o.value for o in STAFF_SETTABLE])
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        has_org_user = "org_user_pk" in attrs
+        has_user = "user_pk" in attrs
+        if has_org_user == has_user:
+            raise serializers.ValidationError(
+                "Give exactly one of org_user_pk or user_pk."
+            )
+        if has_user and attrs["outcome"] != Outcome.ATTENDED:
+            raise serializers.ValidationError(
+                {"outcome": "A walk-in can only be marked attended."}
+            )
+        return attrs
+
+
+class AttendancePutSerializer(serializers.Serializer):
+    changes = serializers.ListField(
+        child=AttendanceChangeSerializer(), allow_empty=False
+    )
+    reason = serializers.CharField(
+        min_length=REASON_MIN_LENGTH, max_length=REASON_MAX_LENGTH
+    )

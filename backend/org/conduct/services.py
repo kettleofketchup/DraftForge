@@ -101,17 +101,22 @@ def _validate_request(
     return cleaned
 
 
+def edit_block_reason(event: Event) -> str | None:
+    if event.state == EventState.CANCELLED:
+        return "This event was cancelled. Reopen and complete it to record attendance."
+    if event.state == EventState.COMPLETED:
+        if event.conduct_finalized_at is None:
+            return "Attendance was not tracked for this event."
+        return None
+    if event.state not in EDITABLE_STATES:
+        return "Attendance can only be recorded from roll call onwards."
+    return None
+
+
 def _validate_state(locked: Event) -> None:
-    if locked.state == EventState.CANCELLED:
-        raise ValueError(
-            "This event was cancelled. Reopen and complete it to record attendance."
-        )
-    if locked.state == EventState.COMPLETED:
-        if locked.conduct_finalized_at is None:
-            raise ValueError("Attendance was not tracked for this event.")
-        return
-    if locked.state not in EDITABLE_STATES:
-        raise ValueError("Attendance can only be recorded from roll call onwards.")
+    reason = edit_block_reason(locked)
+    if reason is not None:
+        raise ValueError(reason)
 
 
 def _plan(locked: Event, changes: list[tuple[OrgUser, Outcome]]) -> list[_Planned]:

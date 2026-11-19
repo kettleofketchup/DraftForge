@@ -8,7 +8,9 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser, League, Organization, OrgLog
+from events.constants import EventState, SignupStatus
+from events.models import Event, EventSignup
 from org.conduct.constants import Outcome, OutcomeSource
 from org.features import FeatureKey, set_org_feature
 from org.models import OrgUser
@@ -527,3 +529,333 @@ class ConductMemberApiTest(ConductReadApiBase):
         self.assertEqual(response.status_code, 404, response.content)
         response = self.request("member", "get", self.url(foreign))
         self.assertEqual(response.status_code, 404, response.content)
+
+
+class ConductAttendanceApiTest(ConductReadApiBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.league_staff = CustomUser.objects.create_user(
+            username="conapi_league_staff", password="x"
+        )
+        self.league = League.objects.create(
+            name="Conduct API League", organization=self.org, steam_league_id=99871
+        )
+        self.league.staff.add(self.league_staff)
+        self.users["league_staff"] = self.league_staff
+
+    def make_event(self, org: Organization | None = None, **kw: Any) -> Event:
+        fields: dict[str, Any] = {
+            "organization": org or self.org,
+            "name": "Conduct API Event",
+            "scheduled_at": timezone.now() - timedelta(hours=1),
+            "state": EventState.IN_PROGRESS,
+            "created_by": self.users["owner"],
+            "auto_approve": True,
+            "require_steam_id": False,
+            "require_mmr_verified": False,
+            "require_profile_complete": False,
+        }
+        fields.update(kw)
+        return Event.objects.create(**fields)
+
+    def signup(self, event: Event, org_user: OrgUser, status: str) -> EventSignup:
+        return EventSignup.objects.create(
+            event=event, user=org_user.user, status=status
+        )
+
+    def url(self, event: Event, org: Organization | None = None) -> str:
+        return f"{base((org or self.org).pk)}events/{event.pk}/attendance/"
+
+    def put(self, event: Event, data: Any, role: str = "staff") -> Response:
+        return self.request(role, "put", self.url(event), data)
+
+    def rows_by_user(self, body: dict[str, Any]) -> dict[int, dict[str, Any]]:
+        return {row["member"]["user_pk"]: row for row in body["rows"]}
+
+    def test_attendance_role_matrix(self) -> None:
+        event = self.make_event(tournament_league=self.league)
+        for role in (*ROLES, "league_staff"):
+            with self.subTest(role=role):
+                response = self.request(role, "get", self.url(event))
+                if role in STAFF_TIER or role == "league_staff":
+                    self.assertEqual(response.status_code, 200, response.content)
+                else:
+                    self.assertDenied(response, role)
+
+    def test_attendance_virtual_rows_before_finalize(self) -> None:
+        event = self.make_event()
+        member = self.org_users["member"]
+        self.signup(event, member, SignupStatus.APPROVED)
+        self.signup(event, self.org_users["promoter"], SignupStatus.WAITLISTED)
+        response = self.request("staff", "get", self.url(event))
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body["event_id"], event.pk)
+        self.assertEqual(body["state"], EventState.IN_PROGRESS)
+        self.assertIsNone(body["finalized_at"])
+        self.assertIs(body["editable"], True)
+        self.assertIsNone(body["editable_reason"])
+        self.assertEqual(len(body["rows"]), 1)
+        row = body["rows"][0]
+        self.assertEqual(row["org_user_pk"], member.pk)
+        self.assertEqual(row["signup_status"], SignupStatus.APPROVED)
+        self.assertEqual(row["outcome"], Outcome.PENDING)
+        self.assertEqual(row["source"], OutcomeSource.DEFAULT)
+        self.assertIs(row["virtual"], True)
+        self.assertIs(row["committed"], True)
+        self.assertIs(row["finalized"], False)
+        self.assertIs(row["voided"], False)
+        self.assertIsNone(row["flag"])
+        self.assertIsNone(row["set_by"])
+        self.assertEqual(row["reason"], "")
+        self.assertEqual(row["show_rate"], 0.85)
+        self.assertEqual(row["status"], "new")
+        self.assertEqual(AttendanceOutcome.objects.nocache().count(), 0)
+
+    def test_attendance_flags(self) -> None:
+        event = self.make_event(roll_call_enabled=True, state=EventState.ROLL_CALL)
+        confirmed = self.make_member("conapi_confirmed")
+        unconfirmed = self.make_member("conapi_unconfirmed")
+        dropped = self.make_member("conapi_dropped")
+        self.signup(event, confirmed, SignupStatus.CONFIRMED)
+        self.signup(event, unconfirmed, SignupStatus.APPROVED)
+        self.signup(event, dropped, SignupStatus.DROPPED)
+        body = self.request("staff", "get", self.url(event)).json()
+        rows = self.rows_by_user(body)
+        self.assertIsNone(rows[confirmed.user_id]["flag"])
+        self.assertEqual(rows[unconfirmed.user_id]["flag"], "roll_call_unconfirmed")
+        self.assertEqual(rows[dropped.user_id]["flag"], "dropped_unattributed")
+        self.assertEqual(AttendanceOutcome.objects.nocache().count(), 0)
+
+    def test_attendance_existing_rows_after_finalize(self) -> None:
+        event = self.make_event(
+            state=EventState.COMPLETED, conduct_finalized_at=timezone.now()
+        )
+        member = self.org_users["member"]
+        signup = self.signup(event, member, SignupStatus.APPROVED)
+        self.signup(event, self.org_users["promoter"], SignupStatus.APPROVED)
+        AttendanceOutcome.objects.create(
+            organization=self.org,
+            org_user=member,
+            event=event,
+            event_name=event.name,
+            event_starts_at=event.scheduled_at,
+            signup=signup,
+            outcome=Outcome.NO_SHOW,
+            source=OutcomeSource.STAFF,
+            set_by=self.users["staff"],
+            reason="Never joined",
+            finalized_at=timezone.now(),
+        )
+        body = self.request("staff", "get", self.url(event)).json()
+        self.assertIs(body["editable"], True)
+        self.assertIsNotNone(body["finalized_at"])
+        self.assertEqual(len(body["rows"]), 1)
+        row = body["rows"][0]
+        self.assertIs(row["virtual"], False)
+        self.assertIs(row["finalized"], True)
+        self.assertEqual(row["outcome"], Outcome.NO_SHOW)
+        self.assertEqual(row["reason"], "Never joined")
+        self.assertEqual(
+            row["set_by"],
+            {
+                "user_pk": self.users["staff"].pk,
+                "username": self.users["staff"].username,
+            },
+        )
+
+    def test_put_batch_one_orglog_per_changed_row(self) -> None:
+        event = self.make_event()
+        member = self.org_users["member"]
+        promoter = self.org_users["promoter"]
+        self.signup(event, member, SignupStatus.APPROVED)
+        self.signup(event, promoter, SignupStatus.APPROVED)
+        response = self.put(
+            event,
+            {
+                "changes": [
+                    {"org_user_pk": member.pk, "outcome": "no_show"},
+                    {"org_user_pk": promoter.pk, "outcome": "attended"},
+                ],
+                "reason": "Checked voice",
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        logs = OrgLog.objects.filter(organization=self.org, action="set_attendance")
+        self.assertEqual(logs.count(), 2)
+        rows = self.rows_by_user(response.json())
+        self.assertEqual(rows[member.user_id]["outcome"], "no_show")
+        self.assertEqual(rows[member.user_id]["source"], "staff")
+        self.assertIs(rows[member.user_id]["virtual"], False)
+        response = self.put(
+            event,
+            {
+                "changes": [
+                    {"org_user_pk": member.pk, "outcome": "no_show"},
+                    {"org_user_pk": promoter.pk, "outcome": "excused"},
+                ],
+                "reason": "Second pass",
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(logs.count(), 3)
+
+    def test_put_bad_inputs_400(self) -> None:
+        event = self.make_event()
+        member = self.org_users["member"]
+        self.signup(event, member, SignupStatus.APPROVED)
+        other = Organization.objects.create(
+            name="Other Attendance Org", owner=self.users["outsider"]
+        )
+        foreign = OrgUser.objects.create(
+            user=self.users["outsider"], organization=other
+        )
+        walkin = self.org_users["promoter"]
+        good = {"org_user_pk": member.pk, "outcome": "attended"}
+        cases: dict[str, dict[str, Any]] = {
+            "duplicate_pk": {"changes": [good, good], "reason": "dup"},
+            "duplicate_after_resolution": {
+                "changes": [good, {"user_pk": member.user_id, "outcome": "attended"}],
+                "reason": "dup",
+            },
+            "other_org_pk": {
+                "changes": [{"org_user_pk": foreign.pk, "outcome": "attended"}],
+                "reason": "nope",
+            },
+            "unknown_pk": {
+                "changes": [{"org_user_pk": 987654, "outcome": "attended"}],
+                "reason": "nope",
+            },
+            "empty_changes": {"changes": [], "reason": "empty"},
+            "missing_changes": {"reason": "empty"},
+            "pending_outcome": {
+                "changes": [{"org_user_pk": member.pk, "outcome": "pending"}],
+                "reason": "pending",
+            },
+            "unknown_outcome": {
+                "changes": [{"org_user_pk": member.pk, "outcome": "vanished"}],
+                "reason": "unknown",
+            },
+            "short_reason": {"changes": [good], "reason": "ab"},
+            "blank_reason": {"changes": [good], "reason": "   ab  "},
+            "missing_reason": {"changes": [good]},
+            "both_keys": {
+                "changes": [
+                    {
+                        "org_user_pk": member.pk,
+                        "user_pk": member.user_id,
+                        "outcome": "attended",
+                    }
+                ],
+                "reason": "both",
+            },
+            "neither_key": {"changes": [{"outcome": "attended"}], "reason": "none"},
+            "user_pk_no_show": {
+                "changes": [{"user_pk": walkin.user_id, "outcome": "no_show"}],
+                "reason": "walk-in no-show",
+            },
+            "user_pk_not_member": {
+                "changes": [{"user_pk": self.users["owner"].pk, "outcome": "attended"}],
+                "reason": "not a member",
+            },
+        }
+        for name, body in cases.items():
+            with self.subTest(case=name):
+                response = self.put(event, body)
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertEqual(AttendanceOutcome.objects.nocache().count(), 0)
+        self.assertFalse(OrgLog.objects.filter(action="set_attendance").exists())
+
+    def test_put_walkin_by_user_pk(self) -> None:
+        event = self.make_event()
+        walkin = self.org_users["promoter"]
+        response = self.put(
+            event,
+            {
+                "changes": [{"user_pk": walkin.user_id, "outcome": "attended"}],
+                "reason": "walked in",
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        row = AttendanceOutcome.objects.nocache().get(event=event, org_user=walkin)
+        self.assertIs(row.committed, False)
+        self.assertEqual(row.source, OutcomeSource.STAFF)
+        self.assertIsNone(row.signup_id)
+        body = self.request("staff", "get", self.url(event)).json()
+        rows = self.rows_by_user(body)
+        self.assertEqual(rows[walkin.user_id]["outcome"], "attended")
+        self.assertIs(rows[walkin.user_id]["committed"], False)
+        self.assertIsNone(rows[walkin.user_id]["signup_status"])
+
+    def test_put_cancelled_event_400_and_get_editable_false(self) -> None:
+        event = self.make_event(
+            state=EventState.CANCELLED, conduct_finalized_at=timezone.now()
+        )
+        member = self.org_users["member"]
+        self.signup(event, member, SignupStatus.APPROVED)
+        response = self.put(
+            event,
+            {
+                "changes": [{"org_user_pk": member.pk, "outcome": "attended"}],
+                "reason": "was there",
+            },
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn("reopen", response.json()["detail"].lower())
+        self.assertEqual(AttendanceOutcome.objects.nocache().count(), 0)
+        body = self.request("staff", "get", self.url(event)).json()
+        self.assertIs(body["editable"], False)
+        self.assertIn("reopen", body["editable_reason"].lower())
+        self.assertEqual(body["rows"], [])
+
+    def test_untracked_completed_event_not_editable(self) -> None:
+        event = self.make_event(state=EventState.COMPLETED)
+        self.signup(event, self.org_users["member"], SignupStatus.APPROVED)
+        body = self.request("staff", "get", self.url(event)).json()
+        self.assertIs(body["editable"], False)
+        self.assertEqual(
+            body["editable_reason"], "Attendance was not tracked for this event."
+        )
+        self.assertEqual(body["rows"], [])
+
+    def test_event_from_other_org_404(self) -> None:
+        other = Organization.objects.create(
+            name="Other Event Org", owner=self.users["outsider"]
+        )
+        self.unlock(other)
+        event = self.make_event(org=other)
+        response = self.request("staff", "get", self.url(event))
+        self.assertEqual(response.status_code, 404, response.content)
+        response = self.put(
+            event,
+            {
+                "changes": [
+                    {"org_user_pk": self.org_users["member"].pk, "outcome": "attended"}
+                ],
+                "reason": "cross org",
+            },
+        )
+        self.assertEqual(response.status_code, 404, response.content)
+
+    def test_feature_locked(self) -> None:
+        set_org_feature(
+            self.org, FeatureKey.CONDUCT, enabled=False, actor=self.site_admin
+        )
+        event = self.make_event()
+        self.assertCode(self.request("owner", "get", self.url(event)), "feature_locked")
+        self.assertCode(
+            self.put(
+                event,
+                {
+                    "changes": [
+                        {
+                            "org_user_pk": self.org_users["member"].pk,
+                            "outcome": "attended",
+                        }
+                    ],
+                    "reason": "locked",
+                },
+                role="owner",
+            ),
+            "feature_locked",
+        )
