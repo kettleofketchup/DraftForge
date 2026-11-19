@@ -167,7 +167,7 @@ class SignupAndCaptainNameTest(TestCase):
         for names in self._names(self.owner):
             self.assertEqual(names[self.dragon.pk], "DragonClaw")
             self.assertEqual(names[self.plain.pk], "scn_plain")
-            self.assertEqual(names[self.sited.pk], "SiteName")
+            self.assertEqual(names[self.sited.pk], "Windlord")
             self.assertEqual(names[self.both.pk], "Guildy")
             self.assertEqual(names[self.steam.pk], f"User {self.steam.pk}")
 
@@ -175,8 +175,8 @@ class SignupAndCaptainNameTest(TestCase):
         for names in self._names(None):
             self.assertEqual(names[self.dragon.pk], "Gwaihir")
             self.assertEqual(names[self.plain.pk], "scn_plain")
-            self.assertEqual(names[self.sited.pk], "SiteName")
-            self.assertEqual(names[self.both.pk], "SiteBoth")
+            self.assertEqual(names[self.sited.pk], "Windlord")
+            self.assertEqual(names[self.both.pk], "Landroval")
             self.assertEqual(names[self.steam.pk], f"User {self.steam.pk}")
 
     @override_settings(INTERNAL_SERVICE_TOKEN="snf-internal-token")
@@ -195,7 +195,7 @@ class SignupAndCaptainNameTest(TestCase):
         }
         self.assertEqual(names[self.dragon.pk], "DragonClaw")
         self.assertEqual(names[self.plain.pk], "scn_plain")
-        self.assertEqual(names[self.sited.pk], "SiteName")
+        self.assertEqual(names[self.sited.pk], "Windlord")
         self.assertEqual(names[self.both.pk], "Guildy")
         self.assertEqual(names[self.steam.pk], f"User {self.steam.pk}")
 
