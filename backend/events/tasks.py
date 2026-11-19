@@ -799,10 +799,11 @@ def _serialised_signup_update(
     try:
         return _send_signup_update_impl(event_id, interaction_id, dirty_since_ms)
     except InternalAPIUnavailable as exc:
-        release_lock(event_id, token)
-        token = None
+        # Restore under the lock, or a run taking it in the gap gets a stale lag.
         if dirty_since_ms is not None:
             mark_dirty(event_id, dirty_since_ms)
+        release_lock(event_id, token)
+        token = None
         attempt = task.request.retries
         exhausted = attempt >= config.read_retries
         skipped = _skip_signup_list_unavailable(

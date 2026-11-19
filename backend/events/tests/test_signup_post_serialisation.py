@@ -422,3 +422,58 @@ class SignupPostSerialisationTest(DiscordTestMixin, EventTestCase):
 
         self.assertEqual(self._applied(logs), [])
         self.assertEqual(self.redis.data[signup_post_lock.dirty_key(self.pk)], "1000")
+
+    def _dirty_at_release(self) -> list[str | None]:
+        seen: list[str | None] = []
+        real_release = signup_post_lock.release_lock
+
+        def spy(event_id: int, token: str) -> None:
+            seen.append(self.redis.data.get(signup_post_lock.dirty_key(event_id)))
+            real_release(event_id, token)
+
+        patcher = patch("events.tasks.release_lock", side_effect=spy)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return seen
+
+    def test_read_retry_restores_dirty_time_before_releasing_lock(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        seen = self._dirty_at_release()
+
+        with (
+            patch(
+                "events.discord.embeds.get_event_signups",
+                side_effect=InternalAPIUnavailable("signups"),
+            ),
+            patch.object(send_signup_update, "retry", side_effect=Retry()),
+            self.assertRaises(Retry),
+        ):
+            send_signup_update(self.pk)
+
+        self.assertEqual(seen, ["1000"])
+
+    def test_exhausted_read_restores_dirty_time_before_releasing_lock(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        seen = self._dirty_at_release()
+        send_signup_update.push_request(retries=settings.SIGNUP_POST.read_retries)
+        self.addCleanup(send_signup_update.pop_request)
+
+        with patch(
+            "events.discord.embeds.get_event_signups",
+            side_effect=InternalAPIUnavailable("signups"),
+        ):
+            send_signup_update.run(self.pk)
+
+        self.assertEqual(seen, ["1000"])
+
+    def test_failed_edit_restores_dirty_time_before_releasing_lock(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        self.edit.return_value = None
+        seen = self._dirty_at_release()
+
+        send_signup_update(self.pk)
+
+        self.assertEqual(seen, ["1000"])
