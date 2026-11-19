@@ -6,13 +6,14 @@ from typing import Any
 
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import connection, reset_queries
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.draft_state import build_draft_state
+from app.exception_handler import exception_handler
 from app.functions.tournament import _serialize_tournament
 from app.models import (
     DraftTeam,
@@ -304,3 +305,14 @@ class TournamentLeadershipQueryTests(TeamManagementFixture, TestCase):
         self.assertEqual(serialize_counts[0], serialize_counts[1])
         payload = _serialize_tournament(large)
         self.assertTrue(all("leadership_problems" in t for t in payload["teams"]))
+
+
+class ExceptionHandlerTests(SimpleTestCase):
+    def test_team_management_error_rendered(self) -> None:
+        exc = team_management.TeamManagementError("not_member", "X is not on the team.")
+        response = exception_handler(exc, {})
+        self.assertIsNotNone(response)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data, {"code": "not_member", "detail": "X is not on the team."}
+        )
