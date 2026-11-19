@@ -27,6 +27,10 @@ just frontend::lint-shadcn-prune   # after fixing baselined violations
 | `draftforge/no-direct-name-resolver` | Calling `resolveDisplayName` or `AvatarUrl` outside the helpers. Use `DisplayName(user)` / `<UserAvatar user={…} />`. Off in tests. |
 | `draftforge/no-avatar-fallback` | A raw `<Avatar>` branch beside a `<UserAvatar>` (`captain ? <UserAvatar …/> : <Avatar>…</Avatar>`), and `<AvatarFallback>` built from a person's name (`…username`, `…nickname`, a `displayName`/`username`/`nickname` variable, or `DisplayName(…)`). `UserAvatar` renders the no-user fallback itself: pass `fallbackName` for the initials when there is no user. Team initials (`team.name`) are not flagged. |
 
+How to render people correctly, and the fix for each `draftforge/*` error, is in
+[`frontend-development/resources/users.md`](../frontend-development/resources/users.md);
+every error message links to its section there.
+
 The `draftforge/*` rules are local (`frontend/eslint-rules/user-display.js`, tests in
 `frontend/tests/unit/eslint-user-display.test.ts`) and are off in the helpers that implement
 them (`UserAvatar.tsx`, `avatar.tsx`, `lib/userDisplayName.ts`, `lib/displayOrg.ts`, `ui/**`). When a screen deliberately shows one specific

@@ -88,7 +88,9 @@ def consumer_db[**P, R](func: Callable[P, R]) -> Callable[P, Awaitable[R]]:
     )
 
 
-_draft_write_locks: "weakref.WeakValueDictionary[tuple[str, int], asyncio.Lock]" = (
+# Keyed by loop too: an asyncio.Lock binds to the first loop it waits on (#588).
+type _DraftLockKey = tuple[asyncio.AbstractEventLoop, str, int]
+_draft_write_locks: "weakref.WeakValueDictionary[_DraftLockKey, asyncio.Lock]" = (
     weakref.WeakValueDictionary()
 )
 
@@ -193,7 +195,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         still land before its reconnect's. The lock is held until the thread
         finishes, even if the caller is cancelled.
         """
-        key = (self.get_redis_prefix(), self.draft_id)
+        key = (asyncio.get_running_loop(), self.get_redis_prefix(), self.draft_id)
         lock = _draft_write_locks.get(key)
         if lock is None:
             lock = _draft_write_locks[key] = asyncio.Lock()
