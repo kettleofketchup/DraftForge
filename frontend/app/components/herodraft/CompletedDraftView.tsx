@@ -1,7 +1,6 @@
 // frontend/app/components/herodraft/CompletedDraftView.tsx
 import { History } from 'lucide-react';
 import { useMemo } from 'react';
-import { Avatar, AvatarFallback } from '~/components/ui/avatar';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { FastTooltip } from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
@@ -24,7 +23,6 @@ interface TeamPicksProps {
 function TeamPicks({ team, picks, side }: TeamPicksProps) {
   const captain = team.captain;
   const displayName = captain ? DisplayName(captain) : team.team_name;
-  const initials = displayName.substring(0, 2).toUpperCase();
 
   const sideColors = {
     radiant: {
@@ -62,19 +60,12 @@ function TeamPicks({ team, picks, side }: TeamPicksProps) {
               side === 'radiant' ? 'rgb(34 197 94)' : 'rgb(239 68 68)',
           }}
         >
-          {captain ? (
-            <UserAvatar
-              user={captain}
-              size="xl"
-              className="h-16 w-16 md:h-20 md:w-20"
-            />
-          ) : (
-            <Avatar className="h-16 w-16 md:h-20 md:w-20">
-              <AvatarFallback className="text-lg md:text-xl font-bold">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-          )}
+          <UserAvatar
+            user={captain ?? undefined}
+            fallbackName={team.team_name}
+            size="xl"
+            className="h-16 w-16 md:h-20 md:w-20"
+          />
         </div>
         <h3 className="text-lg md:text-xl font-bold text-white">
           {displayName}
