@@ -11,6 +11,7 @@ on:
       - 'backend/app/management/commands/populate_*.py'
       - 'backend/**/migrations/*.py'
       - 'backend/**/models.py'
+      - 'backend/**/models/*.py'
   workflow_dispatch:
 
 env:
