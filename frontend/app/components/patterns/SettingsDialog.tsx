@@ -168,7 +168,6 @@ export function SettingsDialog<V extends string>({
     [selectSection],
   );
 
-  // "/" jumps to search from anywhere that isn't a text field.
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
