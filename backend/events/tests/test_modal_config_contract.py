@@ -7,6 +7,7 @@ test_signup_schema.py are not collected by manage.py test.
 
 from django.test import SimpleTestCase
 
+from events.discord.providers.dota import DotaHandler
 from events.schemas import (
     DeadlockModalConfig,
     DotaModalConfig,
@@ -14,6 +15,7 @@ from events.schemas import (
     SignupModalConfig,
     dota_require_screenshot,
 )
+from events.tests.base import EventTestCase
 
 
 class ModalConfigKindTest(SimpleTestCase):
@@ -82,3 +84,29 @@ class SignupActionResponseContractTest(SimpleTestCase):
         resp = SignupActionResponse(action="needs_screenshot", screenshot_type="rank")
         rt = SignupActionResponse.model_validate(resp.model_dump())
         self.assertEqual(rt.screenshot_type, "rank")
+
+
+class DotaModalConfigFromEventTest(EventTestCase):
+    def test_from_event_matches_handler(self) -> None:
+        combos: list[dict[str, object]] = [
+            {},
+            {"require_steam_id": True, "min_mmr": 2500},
+            {
+                "discord_require_rank_screenshot": True,
+                "discord_require_battlecup_screenshot": True,
+                "allow_active_mmr": False,
+            },
+            {"allow_previous_rank": False, "allow_battlecup_rating": False},
+        ]
+        for gates in combos:
+            with self.subTest(gates=gates):
+                ev = self.make_event(**gates)
+                self.assertEqual(
+                    DotaModalConfig.from_event(ev).model_dump(),
+                    DotaHandler().modal_config(ev).model_dump(),
+                )
+                for name, value in gates.items():
+                    field = name.removeprefix("discord_")
+                    self.assertEqual(
+                        getattr(DotaModalConfig.from_event(ev), field), value
+                    )

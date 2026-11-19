@@ -1,39 +1,52 @@
 'use client';
-import { useMemo } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMediaQuery } from '@uidotdev/usehooks';
+import { useMemo } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 
-import { Dialog, DialogContent, DialogTitle, DialogHeader } from '~/components/ui/dialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
-import { Form } from '~/components/ui/form';
 import { Badge } from '~/components/ui/badge';
+import { CancelButton, SubmitButton } from '~/components/ui/buttons';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog';
+import { Form } from '~/components/ui/form';
 import { ScrollArea } from '~/components/ui/scroll-area';
-import { SubmitButton, CancelButton } from '~/components/ui/buttons';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '~/components/ui/sheet';
 import { extractApiError } from '~/lib/apiError';
 import { cn } from '~/lib/utils';
 
-import { buildSignupPatchSchema, type SignupInputPatch } from './EventSignupModal/schema';
-import { toPatch } from './EventSignupModal/toPatch';
-import { isRankSectionComplete } from './EventSignupModal/evaluateSignupGap';
-import { FriendIdField } from './EventSignupModal/FriendIdField';
-import { RankStatusRadioGroup } from './EventSignupModal/RankStatusRadioGroup';
-import { RankDetailFields } from './EventSignupModal/RankDetailFields';
-import { ScreenshotUrlField } from './EventSignupModal/ScreenshotUrlField';
-import { PrefilledSummaryChip } from './EventSignupModal/PrefilledSummaryChip';
-import { useSignupMutation } from '~/hooks/useEvent';
-import { PositionFormFields } from '~/pages/profile/forms/position';
 import {
   POSITION_LABELS as DOTA_POSITION_LABELS,
   positionKeys,
 } from '~/components/user/positions/positionEdit';
-import { useUserStore } from '~/store/userStore';
-import { useUserCacheStore } from '~/store/userCacheStore';
+import { useSignupMutation } from '~/hooks/useEvent';
+import { PositionFormFields } from '~/pages/profile/forms/position';
 import { selectPositions } from '~/store/selectPositions';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { useUserStore } from '~/store/userStore';
+import { isRankSectionComplete } from './EventSignupModal/evaluateSignupGap';
+import { FriendIdField } from './EventSignupModal/FriendIdField';
+import { PrefilledSummaryChip } from './EventSignupModal/PrefilledSummaryChip';
+import { RankDetailFields } from './EventSignupModal/RankDetailFields';
+import { RankStatusRadioGroup } from './EventSignupModal/RankStatusRadioGroup';
+import {
+  buildSignupPatchSchema,
+  type SignupInputPatch,
+} from './EventSignupModal/schema';
+import { ScreenshotUrlField } from './EventSignupModal/ScreenshotUrlField';
+import { toPatch } from './EventSignupModal/toPatch';
 
-import { type EventType } from './schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 import type { DotaProfileData } from '~/components/user';
+import { type EventType } from './schemas';
 
 type PositionPriorities = {
   carry: number;
@@ -43,7 +56,9 @@ type PositionPriorities = {
   hard_support: number;
 };
 
-function positionsSummary(positions: PositionPriorities | undefined | null): string {
+function positionsSummary(
+  positions: PositionPriorities | undefined | null,
+): string {
   if (!positions) return '';
   // Sort by priority asc (1=Favorite first) then show label · "(rating: N)" for non-zero.
   const picked = positionKeys
@@ -75,6 +90,7 @@ export type EventSignupModalProps = {
   event: EventType;
   intent: 'rsvp' | 'tentative';
   profile: DotaProfileData | null | undefined;
+  steamAccountId?: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
@@ -83,6 +99,7 @@ export function EventSignupModal({
   event,
   intent,
   profile,
+  steamAccountId,
   open,
   onOpenChange,
 }: EventSignupModalProps) {
@@ -110,7 +127,11 @@ export function EventSignupModal({
     Object.values(currentUserPositions).some((v) => (v ?? 0) > 0);
 
   const schema = useMemo(
-    () => buildSignupPatchSchema(event, profile, currentUserPositions),
+    () =>
+      buildSignupPatchSchema(event, profile, {
+        userPositions: currentUserPositions,
+        steamAccountId,
+      }),
     // Specific deps that drive section visibility:
     [
       event.id,
@@ -121,10 +142,13 @@ export function EventSignupModal({
       event.discord_require_rank_screenshot,
       event.discord_require_battlecup_screenshot,
       profile?.unverified_friend_id != null,
+      steamAccountId != null,
       profile?.rank_status,
       profile?.rank_medal != null,
       profile?.battle_cup_tier != null,
-      profile?.positions ? Object.values(profile.positions).some(Boolean) : false,
+      profile?.positions
+        ? Object.values(profile.positions).some(Boolean)
+        : false,
       profile?.rank_screenshot != null,
       profile?.battlecup_screenshot != null,
       userHasPos,
@@ -142,6 +166,10 @@ export function EventSignupModal({
     hard_support: currentUserPositions?.hard_support ?? 0,
   };
 
+  const knownFriendId =
+    profile?.unverified_friend_id?.trim() ||
+    (steamAccountId ? String(steamAccountId) : '');
+
   const splitMedal = useMemo(() => {
     const m = profile?.rank_medal ?? '';
     if (!m) return { medal: '', star: '' };
@@ -157,9 +185,13 @@ export function EventSignupModal({
     mode: 'onChange',
     shouldUnregister: true,
     defaultValues: {
-      unverified_friend_id: profile?.unverified_friend_id ?? '',
+      unverified_friend_id: knownFriendId,
       positions: defaultPositions,
-      rank_status: profile?.rank_status as 'active' | 'previous' | 'never' | undefined,
+      rank_status: profile?.rank_status as
+        | 'active'
+        | 'previous'
+        | 'never'
+        | undefined,
       rank_medal_medal: splitMedal.medal,
       rank_medal_star: splitMedal.star,
       rank_medal: profile?.rank_medal ?? '',
@@ -169,7 +201,10 @@ export function EventSignupModal({
     } as never,
   });
 
-  const watchedRankStatus = useWatch({ control: form.control, name: 'rank_status' });
+  const watchedRankStatus = useWatch({
+    control: form.control,
+    name: 'rank_status',
+  });
   const mutation = useSignupMutation(event.id);
 
   const onSubmit = form.handleSubmit(async (values) => {
@@ -197,7 +232,7 @@ export function EventSignupModal({
 
   const isDota = event.game_type === GAME_TYPE.DOTA2;
   const showFriendId = event.require_steam_id;
-  const friendIdPrefilled = !!profile?.unverified_friend_id;
+  const friendIdPrefilled = !!knownFriendId;
   const showRankStatus = isDota;
   // Same check evaluateSignupGap uses — default `rank_status="never"` from
   // get_or_create doesn't count as a real user pick.
@@ -276,107 +311,113 @@ export function EventSignupModal({
       data-testid="event-signup-modal-body"
     >
       <div className="flex flex-col gap-4 pb-4">
-      <div className="flex items-center gap-2">
-        <Badge variant={intent === 'rsvp' ? 'default' : 'secondary'} className="shrink-0">
-          {intent === 'rsvp' ? 'Committed' : 'Tentative'}
-        </Badge>
-        <span
-          role="status"
-          aria-live="polite"
-          className="text-sm text-muted-foreground"
-        >
-          {banner}
-        </span>
-      </div>
-
-      {showFriendId && (
-        <section className="flex flex-col gap-2">
-          {heading('Steam Friend ID')}
-          {withPrefill(
-            friendIdPrefilled,
-            profile?.unverified_friend_id ?? '',
-            'signup-prefilled-summary-friend-id',
-            <FriendIdField control={form.control as never} />,
-          )}
-        </section>
-      )}
-      {showRankStatus && (
-        <section className="flex flex-col gap-2">
-          {heading('Rank Status')}
-          {withPrefill(
-            rankStatusPrefilled,
-            profile?.rank_status ?? '',
-            'signup-prefilled-summary-rank-status',
-            <RankStatusRadioGroup control={form.control as never} event={event} />,
-          )}
-        </section>
-      )}
-      {showPositions && (
-        <section className="flex flex-col gap-2">
-          {heading('Preferred Positions')}
-          {withPrefill(
-            positionsPrefilled,
-            positionsSummary(defaultPositions),
-            'signup-prefilled-summary-positions',
-            <PositionFormFields
-              form={form as never}
-              gridClassName="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full"
-            />,
-          )}
-        </section>
-      )}
-      {showRankDetail && (
-        <section className="flex flex-col gap-2">
-          {heading('Rank Detail')}
-          {withPrefill(
-            rankDetailPrefilled,
-            profile?.rank_medal ||
-              (profile?.battle_cup_tier
-                ? `Battle Cup Tier ${profile.battle_cup_tier}`
-                : ''),
-            'signup-prefilled-summary-rank-detail',
-            <RankDetailFields control={form.control as never} />,
-          )}
-        </section>
-      )}
-      {screenshotForActive && (
-        <section className="flex flex-col gap-2">
-          {heading('MMR Screenshot')}
-          {withPrefill(
-            screenshotForActivePrefilled,
-            'On file',
-            'signup-prefilled-summary-screenshot',
-            <ScreenshotUrlField
-              control={form.control as never}
-              name="rank_screenshot"
-            />,
-          )}
-        </section>
-      )}
-      {screenshotForBC && (
-        <section className="flex flex-col gap-2">
-          {heading('Battle Cup Screenshot')}
-          {withPrefill(
-            screenshotForBCPrefilled,
-            'On file',
-            'signup-prefilled-summary-screenshot',
-            <ScreenshotUrlField
-              control={form.control as never}
-              name="battlecup_screenshot"
-              label="Battle Cup Screenshot URL"
-            />,
-          )}
-        </section>
-      )}
-      {errorMessage && (
-        <div
-          data-testid="event-signup-error"
-          role="alert"
-          className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
-        >
-          {errorMessage}
+        <div className="flex items-center gap-2">
+          <Badge
+            variant={intent === 'rsvp' ? 'default' : 'secondary'}
+            className="shrink-0"
+          >
+            {intent === 'rsvp' ? 'Committed' : 'Tentative'}
+          </Badge>
+          <span
+            role="status"
+            aria-live="polite"
+            className="text-sm text-muted-foreground"
+          >
+            {banner}
+          </span>
         </div>
-      )}
+
+        {showFriendId && (
+          <section className="flex flex-col gap-2">
+            {heading('Steam Friend ID')}
+            {withPrefill(
+              friendIdPrefilled,
+              knownFriendId,
+              'signup-prefilled-summary-friend-id',
+              <FriendIdField control={form.control as never} />,
+            )}
+          </section>
+        )}
+        {showRankStatus && (
+          <section className="flex flex-col gap-2">
+            {heading('Rank Status')}
+            {withPrefill(
+              rankStatusPrefilled,
+              profile?.rank_status ?? '',
+              'signup-prefilled-summary-rank-status',
+              <RankStatusRadioGroup
+                control={form.control as never}
+                event={event}
+              />,
+            )}
+          </section>
+        )}
+        {showPositions && (
+          <section className="flex flex-col gap-2">
+            {heading('Preferred Positions')}
+            {withPrefill(
+              positionsPrefilled,
+              positionsSummary(defaultPositions),
+              'signup-prefilled-summary-positions',
+              <PositionFormFields
+                form={form as never}
+                gridClassName="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full"
+              />,
+            )}
+          </section>
+        )}
+        {showRankDetail && (
+          <section className="flex flex-col gap-2">
+            {heading('Rank Detail')}
+            {withPrefill(
+              rankDetailPrefilled,
+              profile?.rank_medal ||
+                (profile?.battle_cup_tier
+                  ? `Battle Cup Tier ${profile.battle_cup_tier}`
+                  : ''),
+              'signup-prefilled-summary-rank-detail',
+              <RankDetailFields control={form.control as never} />,
+            )}
+          </section>
+        )}
+        {screenshotForActive && (
+          <section className="flex flex-col gap-2">
+            {heading('MMR Screenshot')}
+            {withPrefill(
+              screenshotForActivePrefilled,
+              'On file',
+              'signup-prefilled-summary-screenshot',
+              <ScreenshotUrlField
+                control={form.control as never}
+                name="rank_screenshot"
+              />,
+            )}
+          </section>
+        )}
+        {screenshotForBC && (
+          <section className="flex flex-col gap-2">
+            {heading('Battle Cup Screenshot')}
+            {withPrefill(
+              screenshotForBCPrefilled,
+              'On file',
+              'signup-prefilled-summary-screenshot',
+              <ScreenshotUrlField
+                control={form.control as never}
+                name="battlecup_screenshot"
+                label="Battle Cup Screenshot URL"
+              />,
+            )}
+          </section>
+        )}
+        {errorMessage && (
+          <div
+            data-testid="event-signup-error"
+            role="alert"
+            className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            {errorMessage}
+          </div>
+        )}
       </div>
     </ScrollArea>
   );

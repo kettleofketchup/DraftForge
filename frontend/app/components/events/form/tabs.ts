@@ -56,6 +56,9 @@ const APPROVAL_FIELDS = new Set<string>([
   'require_steam_id',
   'require_mmr_verified',
   'require_profile_complete',
+  'roll_call_enabled',
+  'allow_user_signups',
+  'roll_call_mode',
 ]);
 
 /** The event-form tab that renders `field`. */

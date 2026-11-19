@@ -14,7 +14,7 @@ from events.tests.test_discord_tasks import _DiscordTaskTestCase
 
 
 class EventEditInvalidatesCacheTest(_DiscordTaskTestCase):
-    @patch("app.cache_utils.invalidate_after_commit")
+    @patch("events.views.invalidate_after_commit")
     def test_perform_update_invalidates_event(self, mock_invalidate):
         client = APIClient()
         client.force_authenticate(user=self.admin)  # admin has org-staff access

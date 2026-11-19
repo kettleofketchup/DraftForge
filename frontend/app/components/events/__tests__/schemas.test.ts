@@ -47,6 +47,8 @@ const baseDiscordConfig = {
   require_steam_id: false,
   require_mmr_verified: false,
   require_profile_complete: false,
+  roll_call_enabled: false,
+  allow_user_signups: true,
 };
 
 describe('discord_subscriber_dm tolerance', () => {
@@ -221,6 +223,9 @@ const DISCORD_KEYS = [
   'require_steam_id',
   'require_mmr_verified',
   'require_profile_complete',
+  'roll_call_enabled',
+  'allow_user_signups',
+  'roll_call_mode',
 ];
 const LOBBY_KEYS = [
   'dota_lobby_mode',

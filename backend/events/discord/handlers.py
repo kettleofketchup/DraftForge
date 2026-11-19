@@ -20,9 +20,9 @@ from typing import Any
 
 from structlog.contextvars import bind_contextvars
 
-from events.constants import EventState
 from events.discord._shared import (
     _direct_signup,
+    _discord_self_serve_refusal,
     _existing_active_signup,
     _get_org_user,
     _load_event,
@@ -75,8 +75,9 @@ def handle_signup_button(
     if event is None:
         return {"action": "error", "message": "Event not found."}
 
-    if event.state != EventState.SIGNUPS_OPEN:
-        return {"action": "error", "message": "Event is not accepting signups."}
+    refusal = _discord_self_serve_refusal(event, discord_user_id)
+    if refusal is not None:
+        return {"action": "error", "message": refusal}
 
     org_user, user = _get_org_user(
         event, discord_user_id, discord_username=discord_username
@@ -167,6 +168,10 @@ def handle_signup_modal_submit(
     if event is None:
         return {"action": "error", "message": "Event not found."}
 
+    refusal = _discord_self_serve_refusal(event, discord_user_id)
+    if refusal is not None:
+        return {"action": "error", "message": refusal}
+
     org_user, user = _get_org_user(event, discord_user_id)
     if org_user is not None:
         bind_contextvars(org_user_id=org_user.pk)
@@ -213,6 +218,8 @@ def handle_rank_status_select(
     handler = _dota_handler(event, event_id, "rank_status_select")
     if handler is None:
         return None
+    if _discord_self_serve_refusal(event, discord_user_id) is not None:
+        return None
     return handler.rank_status_select(event, discord_user_id, rank_status)
 
 
@@ -234,6 +241,9 @@ def handle_rank_medal_select(
     handler = _dota_handler(event, event_id, "rank_medal_select")
     if handler is None:
         return {"action": "error", "message": "Not applicable."}
+    refusal = _discord_self_serve_refusal(event, discord_user_id)
+    if refusal is not None:
+        return {"action": "error", "message": refusal}
     return handler.rank_medal_select(event, discord_user_id, medal)
 
 
@@ -256,6 +266,9 @@ def handle_previous_rank_submit(
     handler = _dota_handler(event, event_id, "previous_rank_submit")
     if handler is None:
         return {"action": "error", "message": "Not applicable."}
+    refusal = _discord_self_serve_refusal(event, discord_user_id)
+    if refusal is not None:
+        return {"action": "error", "message": refusal}
     return handler.previous_rank_submit(event, discord_user_id, medal, date_text)
 
 
@@ -277,6 +290,9 @@ def handle_battle_cup_submit(
     handler = _dota_handler(event, event_id, "battle_cup_submit")
     if handler is None:
         return {"action": "error", "message": "Not applicable."}
+    refusal = _discord_self_serve_refusal(event, discord_user_id)
+    if refusal is not None:
+        return {"action": "error", "message": refusal}
     return handler.battle_cup_submit(event, discord_user_id, tier)
 
 
@@ -299,6 +315,9 @@ def handle_screenshot_upload(
     handler = _dota_handler(event, event_id, "screenshot_upload")
     if handler is None:
         return {"success": False, "message": "Not applicable."}
+    refusal = _discord_self_serve_refusal(event, discord_user_id)
+    if refusal is not None:
+        return {"success": False, "message": refusal}
     return handler.screenshot_upload(
         event, discord_user_id, screenshot_type, attachment_url
     )
@@ -401,6 +420,10 @@ def handle_tentative_button(
     event = _load_event(event_id)
     if event is None:
         return {"action": "error", "message": "Event not found."}
+
+    refusal = _discord_self_serve_refusal(event, discord_user_id)
+    if refusal is not None:
+        return {"action": "error", "message": refusal}
 
     org_user, user = _get_org_user(
         event, discord_user_id, discord_username=discord_username

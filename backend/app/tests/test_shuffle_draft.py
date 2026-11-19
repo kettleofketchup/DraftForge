@@ -4,6 +4,7 @@ from datetime import date
 from unittest.mock import patch
 
 from django.test import TestCase
+from rest_framework.test import APIClient
 
 from app.models import (
     CustomUser,
@@ -416,9 +417,6 @@ class DraftBuildRoundsIntegrationTest(TestCase):
             self.assertIsNone(draft_round.captain)
 
 
-from rest_framework.test import APIClient
-
-
 class PickPlayerForRoundShuffleTest(TestCase):
     """Test pick_player_for_round view with shuffle draft."""
 
@@ -514,10 +512,12 @@ class PickAuthorizationTest(TestCase):
 
         # Create two captains with different MMRs
         self.captain1 = CustomUser.objects.create_user(
-            username="cap1", password="test"  # Lower MMR - picks first
+            username="cap1",
+            password="test",  # Lower MMR - picks first
         )
         self.captain2 = CustomUser.objects.create_user(
-            username="cap2", password="test"  # Higher MMR
+            username="cap2",
+            password="test",  # Higher MMR
         )
         self.player1 = CustomUser.objects.create_user(
             username="player1", password="test"

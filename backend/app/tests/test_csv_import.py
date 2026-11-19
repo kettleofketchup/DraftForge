@@ -1,6 +1,6 @@
 """Tests for CSV import endpoints."""
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization, PositionsModel
