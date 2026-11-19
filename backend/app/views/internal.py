@@ -24,7 +24,7 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
-from app.functions.herodraft import new_herodraft_for_game
+from draft.services.hero import new_herodraft_for_game
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import EventState

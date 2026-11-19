@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from app.models import CustomUser, HeroDraft, League, Organization, Tournament
+from app.models import CustomUser, League, Organization, Tournament
 from events.models import Event
 
 
@@ -15,12 +15,12 @@ class TournamentSerializerSSR(serializers.ModelSerializer):
         model = Tournament
         fields = ["pk", "name", "org_name", "org_logo", "league_name"]
 
-    def get_org_name(self, obj):
+    def get_org_name(self, obj: Tournament) -> str | None:
         if obj.league and obj.league.organization:
             return obj.league.organization.name
         return None
 
-    def get_org_logo(self, obj):
+    def get_org_logo(self, obj: Tournament) -> str | None:
         if obj.league and obj.league.organization and obj.league.organization.logo:
             return obj.league.organization.logo
         return None
@@ -40,7 +40,7 @@ class LeagueSerializerSSR(serializers.ModelSerializer):
         model = League
         fields = ["pk", "name", "description", "org_name", "org_logo"]
 
-    def get_org_logo(self, obj):
+    def get_org_logo(self, obj: League) -> str | None:
         if obj.organization and obj.organization.logo:
             return obj.organization.logo
         return None
@@ -54,36 +54,10 @@ class EventSerializerSSR(serializers.ModelSerializer):
         model = Event
         fields = ["id", "name", "description", "org_name", "league_name"]
 
-    def get_league_name(self, obj):
+    def get_league_name(self, obj: Event) -> str | None:
         if obj.tournament_league:
             return obj.tournament_league.name
         return None
-
-
-class HeroDraftSerializerSSR(serializers.ModelSerializer):
-    tournament_name = serializers.SerializerMethodField()
-    org_name = serializers.SerializerMethodField()
-    team_names = serializers.SerializerMethodField()
-
-    class Meta:
-        model = HeroDraft
-        fields = ["pk", "tournament_name", "org_name", "team_names"]
-
-    def get_tournament_name(self, obj):
-        if obj.game and obj.game.tournament:
-            return obj.game.tournament.name
-        return None
-
-    def get_org_name(self, obj):
-        if obj.game and obj.game.tournament and obj.game.tournament.league:
-            org = obj.game.tournament.league.organization
-            return org.name if org else None
-        return None
-
-    def get_team_names(self, obj):
-        # Uses prefetched draft_teams + tournament_team from the view's queryset.
-        # Don't call .select_related() or [:2] here — both bypass the prefetch cache.
-        return [dt.tournament_team.name for dt in obj.draft_teams.all()]
 
 
 class UserSerializerSSR(serializers.ModelSerializer):
@@ -102,5 +76,5 @@ class UserSerializerSSR(serializers.ModelSerializer):
         model = CustomUser
         fields = ["pk", "username", "nickname", "avatar_url"]
 
-    def get_avatar_url(self, obj):
+    def get_avatar_url(self, obj: CustomUser) -> str | None:
         return obj.avatarUrl

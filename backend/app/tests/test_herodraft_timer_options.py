@@ -8,11 +8,6 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.functions.herodraft import (
-    build_draft_rounds,
-    new_herodraft_for_game,
-    submit_pick,
-)
 from app.models import (
     CustomUser,
     DraftOptions,
@@ -23,9 +18,14 @@ from app.models import (
     Team,
     Tournament,
 )
-from app.serializers import HeroDraftSerializer
-from app.tasks.herodraft_tick import broadcast_tick, check_timeout
 from app.tests.teamdraft_fixtures import TimedDraftFixture
+from draft.serializers.hero import HeroDraftSerializer
+from draft.services.hero import (
+    build_draft_rounds,
+    new_herodraft_for_game,
+    submit_pick,
+)
+from draft.tasks.hero_tick import broadcast_tick, check_timeout
 
 
 def make_game(prefix: str) -> Game:
@@ -227,7 +227,7 @@ class HeroDraftUntimedTickTests(TransactionTestCase):
         rnd.refresh_from_db()
         self.assertEqual(rnd.state, "completed")
 
-    @patch("app.tasks.herodraft_tick.get_channel_layer")
+    @patch("draft.tasks.hero_tick.get_channel_layer")
     def test_tick_carries_timer_enabled(
         self, mock_get_channel_layer: MagicMock
     ) -> None:

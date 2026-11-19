@@ -23,15 +23,15 @@ import backend.settings
 from app.consumers import DraftConsumer, HeroDraftConsumer
 from app.redis_keys import namespaced_key
 from app.tasks import draft_tick, teamdraft_tick
-from app.tasks.herodraft_tick import (
-    captain_heartbeat_key,
-    conn_count_key,
-    tick_lock_key,
-)
 from app.tests.test_consumers_base import ConcreteDraftConsumer
 from config.celery import app as celery_app
 from discordbot.activity_intent import intent_key
 from discordbot.utils import _acquire_rate_limit_token, rate_limit_key
+from draft.tasks.hero_tick import (
+    captain_heartbeat_key,
+    conn_count_key,
+    tick_lock_key,
+)
 from tests.cache import flush_run_cache
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]

@@ -19,7 +19,7 @@ from app import consumers_base
 from app.consumers import HeroDraftConsumer
 from app.consumers_base import BaseDraftConsumer
 from app.tasks.draft_tick import TickDriver, heartbeat_key
-from app.tasks.herodraft_tick import HERO_TICK_DRIVER, HeroDraftTickDriver
+from draft.tasks.hero_tick import HERO_TICK_DRIVER, HeroDraftTickDriver
 
 
 class ConcreteDraftConsumer(BaseDraftConsumer):
@@ -411,7 +411,7 @@ class TestNoDriverStartsNoBroadcaster(SimpleTestCase):
         consumer = ConcreteDraftConsumer()
         consumer.draft_id = 7
         with (
-            mock.patch("app.tasks.herodraft_tick.start_tick_broadcaster") as hero,
+            mock.patch("draft.tasks.hero_tick.start_tick_broadcaster") as hero,
             mock.patch("app.tasks.draft_tick.start_tick_broadcaster") as shared,
         ):
             consumer._start_tick_broadcaster()

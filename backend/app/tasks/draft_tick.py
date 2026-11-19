@@ -1,6 +1,6 @@
 """Shared draft tick runner, parameterised by a Redis key/span prefix.
 
-herodraft_tick.py binds this module to "herodraft". Drivers supply the
+draft/tasks/hero_tick.py binds this module to "herodraft". Drivers supply the
 draft-specific steps via TickDriver.
 
 Diagnostic events when ticks misbehave:

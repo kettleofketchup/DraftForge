@@ -8,13 +8,21 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import redis
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
+from django.db import transaction
 from django.utils import timezone
 
+from app.models import (
+    DraftTeam,
+    HeroDraft,
+    HeroDraftEvent,
+    HeroDraftRound,
+    HeroDraftState,
+)
 from app.tasks import draft_tick
 from app.tasks.draft_tick import (
     HEARTBEAT_STALE_SECONDS,
@@ -24,10 +32,9 @@ from app.tasks.draft_tick import (
     TICK_STEP_SLOW_THRESHOLD_S,
     TaskInfo,
 )
+from draft.services.hero import auto_random_pick
+from draft.services.hero_broadcast import broadcast_herodraft_state
 from telemetry.logging import get_logger
-
-if TYPE_CHECKING:
-    from app.models import HeroDraftRound
 
 log = get_logger(__name__)
 
@@ -105,8 +112,6 @@ async def broadcast_tick(draft_id: int) -> None:
     from broadcast cadence and eliminates the "everyone freezes for a
     few seconds" bug class.
     """
-    from app.models import HeroDraft, HeroDraftState
-
     channel_layer = get_channel_layer()
     if channel_layer is None:
         return
@@ -252,11 +257,6 @@ async def broadcast_tick(draft_id: int) -> None:
 
 async def check_timeout(draft_id: int) -> HeroDraftRound | None:
     """Check if current round has timed out and auto-pick if needed."""
-    from django.db import transaction
-
-    from app.broadcast import broadcast_herodraft_state
-    from app.functions.herodraft import auto_random_pick
-    from app.models import DraftTeam, HeroDraft, HeroDraftState
 
     @database_sync_to_async
     def check_and_auto_pick() -> HeroDraftRound | None:
@@ -337,10 +337,6 @@ async def check_timeout(draft_id: int) -> HeroDraftRound | None:
 
 async def check_resume_countdown(draft_id: int) -> bool:
     """Check if RESUMING countdown is complete and transition to DRAFTING."""
-    from django.db import transaction
-
-    from app.broadcast import broadcast_herodraft_state
-    from app.models import HeroDraft, HeroDraftEvent, HeroDraftState
 
     @database_sync_to_async
     def check_and_resume() -> bool:
@@ -407,10 +403,6 @@ async def check_resume_countdown(draft_id: int) -> bool:
 
 async def check_captain_heartbeats(draft_id: int) -> str | None:
     """Check if any captain's heartbeat is stale and trigger disconnect if so."""
-    from django.db import transaction
-
-    from app.broadcast import broadcast_herodraft_state
-    from app.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 
     @database_sync_to_async
     def check_and_handle_stale() -> str | None:
@@ -543,8 +535,6 @@ def should_continue_ticking(draft_id: int, r: redis.Redis) -> tuple[bool, str]:
     Returns:
         tuple: (should_continue, reason_if_stopping)
     """
-    from app.models import HeroDraft, HeroDraftState
-
     # Check draft state first - allow DRAFTING and RESUMING (countdown before resume)
     try:
         draft = HeroDraft.objects.get(id=draft_id)

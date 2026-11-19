@@ -10,12 +10,12 @@ from rest_framework.permissions import AllowAny
 from app.models import CustomUser, HeroDraft, League, Organization, Tournament
 from app.serializers_ssr import (
     EventSerializerSSR,
-    HeroDraftSerializerSSR,
     LeagueSerializerSSR,
     OrganizationSerializerSSR,
     TournamentSerializerSSR,
     UserSerializerSSR,
 )
+from draft.serializers.hero_ssr import HeroDraftSerializerSSR
 from events.models import Event
 
 

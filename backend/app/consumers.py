@@ -11,10 +11,9 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from django.db import transaction
 from django.utils import timezone
 
-from app.broadcast import broadcast_herodraft_state
 from app.cache_utils import invalidate_obj
 from app.consumers_base import BaseDraftConsumer, consumer_db
-from app.draft_state import build_draft_state, herodraft_state_queryset
+from app.draft_state import build_draft_state
 from app.functions.teamdraft import emit_event, team_payload
 from app.models import (
     Draft,
@@ -26,14 +25,17 @@ from app.models import (
     Team,
     Tournament,
 )
-from app.serializers import DraftEventSerializer, HeroDraftSerializer
+from app.serializers import DraftEventSerializer
 from app.tasks.draft_tick import CAPTAIN_CHANNEL_TTL, TickDriver
-from app.tasks.herodraft_tick import HERO_TICK_DRIVER
 from app.tasks.teamdraft_tick import (
     TEAM_TICK_DRIVER,
     captain_conn_key,
     captain_is_fresh,
 )
+from draft.serializers.hero import HeroDraftSerializer
+from draft.services.hero_broadcast import broadcast_herodraft_state
+from draft.services.hero_state import herodraft_state_queryset
+from draft.tasks.hero_tick import HERO_TICK_DRIVER
 from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 
@@ -722,7 +724,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
         Anchor fields (server_time + round_started_at + round_grace_time_ms
         + raw team reserves + resuming_until) drive the client-side rAF
-        countdown. See `backend/app/tasks/herodraft_tick.py::broadcast_tick`
+        countdown. See `backend/draft/tasks/hero_tick.py::broadcast_tick`
         for the producer side.
         """
         self._follow_tick_state(event.get("draft_state"))

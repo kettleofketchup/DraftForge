@@ -18,7 +18,6 @@ from app.models import (
     Draft,
     DraftOptions,
     DraftRound,
-    DraftTeam,
     Game,
     HeroDraft,
     League,
@@ -27,7 +26,6 @@ from app.models import (
     Tournament,
 )
 from app.serializers import DraftSerializerSlim, build_users_dict_with_org
-from user.querysets import with_user_profiles
 
 _TEAM_USER_RELATIONS: tuple[str, ...] = ("members", "dropin_members", "left_members")
 _GAME_TEAM_RELATIONS: tuple[str, ...] = ("radiant_team", "dire_team", "winning_team")
@@ -91,21 +89,6 @@ def tournament_state_queryset(*, fresh: bool) -> QuerySet[Tournament]:
         Prefetch("draft", queryset=_qs(Draft, fresh)),
         _draft_round_prefetch("draft__", fresh),
         *game_prefetches,
-    )
-
-
-def herodraft_state_queryset() -> QuerySet[HeroDraft]:
-    """HeroDraft loader whose HeroDraftSerializer cost is fixed per draft."""
-    users = with_user_profiles(CustomUser.objects.all(), dota=True)
-    return HeroDraft.objects.select_related(
-        "game__tournament__league__organization"
-    ).prefetch_related(
-        Prefetch(
-            "draft_teams", queryset=DraftTeam.objects.select_related("tournament_team")
-        ),
-        Prefetch("draft_teams__tournament_team__captain", queryset=users),
-        Prefetch("draft_teams__tournament_team__members", queryset=users),
-        "rounds",
     )
 
 

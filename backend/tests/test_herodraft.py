@@ -19,10 +19,12 @@ from rest_framework.response import Response
 
 from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent
 from app.redis_keys import namespaced_key
-from app.serializers import HeroDraftSerializer
 from app.tasks.draft_tick import get_redis_client
-from app.tasks.herodraft_tick import captain_heartbeat_key
 from common.utils import isTestEnvironment
+from draft.serializers.hero import HeroDraftSerializer
+from draft.services.hero import auto_random_pick, build_draft_rounds, trigger_roll
+from draft.services.hero_broadcast import broadcast_herodraft_state
+from draft.tasks.hero_tick import captain_heartbeat_key
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -121,9 +123,6 @@ def force_herodraft_timeout(request, draft_pk):
         )
 
     # Import and call the timeout handler
-    from app.broadcast import broadcast_herodraft_state
-    from app.functions.herodraft import auto_random_pick
-
     try:
         auto_random_pick(draft, current_round.draft_team)
     except Exception as e:
@@ -425,8 +424,6 @@ def _setup_draft_state(draft: HeroDraft, target_state: str) -> None:
 
     This resets the draft and configures it to the specified state.
     """
-    from app.functions.herodraft import build_draft_rounds, trigger_roll
-
     # Reset to clean state first
     draft.rounds.all().delete()
     draft.events.all().delete()

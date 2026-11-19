@@ -2,25 +2,34 @@
 
 from datetime import timedelta
 
+from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.broadcast import broadcast_herodraft_event
-from app.functions.herodraft import (
+from app.models import (
+    CustomUser,
+    DraftTeam,
+    Game,
+    HeroDraft,
+    HeroDraftEvent,
+    HeroDraftState,
+)
+from app.permissions_org import IsTournamentStaff
+from draft.serializers.hero import HeroDraftEventSerializer, HeroDraftSerializer
+from draft.services.hero import (
     get_available_heroes,
     new_herodraft_for_game,
     submit_choice,
     submit_pick,
     trigger_roll,
 )
-from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent, HeroDraftState
-from app.permissions_org import IsTournamentStaff
-from app.serializers import HeroDraftEventSerializer, HeroDraftSerializer
+from draft.services.hero_broadcast import broadcast_herodraft_event
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -35,7 +44,9 @@ def _get_draft_with_prefetch(draft_pk: int) -> HeroDraft:
     ).get(pk=draft_pk)
 
 
-def _get_draft_team_for_user(draft: HeroDraft, user) -> DraftTeam | None:
+def _get_draft_team_for_user(
+    draft: HeroDraft, user: CustomUser | AnonymousUser
+) -> DraftTeam | None:
     """Get the DraftTeam for a user in this draft, if they are a captain."""
     for draft_team in draft.draft_teams.all():
         if draft_team.captain and draft_team.captain.pk == user.pk:
@@ -43,14 +54,16 @@ def _get_draft_team_for_user(draft: HeroDraft, user) -> DraftTeam | None:
     return None
 
 
-def _user_is_captain_in_draft(draft: HeroDraft, user) -> bool:
+def _user_is_captain_in_draft(
+    draft: HeroDraft, user: CustomUser | AnonymousUser
+) -> bool:
     """Check if the user is a captain in this draft."""
     return _get_draft_team_for_user(draft, user) is not None
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def create_herodraft(request, game_pk):
+def create_herodraft(request: Request, game_pk: int) -> Response:
     """
     Create a new hero draft for a game.
 
@@ -146,7 +159,7 @@ def create_herodraft(request, game_pk):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def get_herodraft(request, draft_pk):
+def get_herodraft(request: Request, draft_pk: int) -> Response:
     """
     Get the current state of a hero draft.
 
@@ -165,7 +178,7 @@ def get_herodraft(request, draft_pk):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def set_ready(request, draft_pk):
+def set_ready(request: Request, draft_pk: int) -> Response:
     """
     Mark a captain as ready.
 
@@ -224,7 +237,7 @@ def set_ready(request, draft_pk):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def do_trigger_roll(request, draft_pk):
+def do_trigger_roll(request: Request, draft_pk: int) -> Response:
     """
     Trigger the coin flip to determine who chooses first.
 
@@ -273,7 +286,7 @@ def do_trigger_roll(request, draft_pk):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def do_submit_choice(request, draft_pk):
+def do_submit_choice(request: Request, draft_pk: int) -> Response:
     """
     Submit a choice for pick order or side.
 
@@ -386,7 +399,7 @@ def do_submit_choice(request, draft_pk):
 
     # Start tick broadcaster if draft just entered drafting state
     if draft.state == HeroDraftState.DRAFTING:
-        from app.tasks.herodraft_tick import start_tick_broadcaster
+        from draft.tasks.hero_tick import start_tick_broadcaster
 
         start_tick_broadcaster(draft.id)
 
@@ -395,7 +408,7 @@ def do_submit_choice(request, draft_pk):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def do_submit_pick(request, draft_pk):
+def do_submit_pick(request: Request, draft_pk: int) -> Response:
     """
     Submit a hero pick or ban for the current round.
 
@@ -496,7 +509,7 @@ def do_submit_pick(request, draft_pk):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def list_events(request, draft_pk):
+def list_events(request: Request, draft_pk: int) -> Response:
     """
     List all events for a hero draft.
 
@@ -511,7 +524,7 @@ def list_events(request, draft_pk):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def list_available_heroes(request, draft_pk):
+def list_available_heroes(request: Request, draft_pk: int) -> Response:
     """
     List all heroes that are still available (not picked or banned).
 
@@ -526,7 +539,7 @@ def list_available_heroes(request, draft_pk):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def abandon_draft(request, draft_pk):
+def abandon_draft(request: Request, draft_pk: int) -> Response:
     """
     Abandon a hero draft.
 
@@ -590,7 +603,7 @@ def abandon_draft(request, draft_pk):
 
 @api_view(["POST"])
 @permission_classes([IsTournamentStaff])
-def reset_draft(request, draft_pk):
+def reset_draft(request: Request, draft_pk: int) -> Response:
     """
     Reset a hero draft back to waiting_for_captains state.
 
@@ -649,7 +662,7 @@ def reset_draft(request, draft_pk):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def pause_draft(request, draft_pk):
+def pause_draft(request: Request, draft_pk: int) -> Response:
     """
     Manually pause a hero draft.
 
@@ -728,7 +741,7 @@ def pause_draft(request, draft_pk):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def resume_draft(request, draft_pk):
+def resume_draft(request: Request, draft_pk: int) -> Response:
     """
     Resume a manually paused hero draft.
 
@@ -832,7 +845,7 @@ def resume_draft(request, draft_pk):
     broadcast_herodraft_event(draft, "resume_countdown", draft_team)
 
     # Start tick broadcaster to handle RESUMING → DRAFTING transition
-    from app.tasks.herodraft_tick import start_tick_broadcaster
+    from draft.tasks.hero_tick import start_tick_broadcaster
 
     start_tick_broadcaster(draft.pk)
 

@@ -5,7 +5,6 @@ These endpoints are only available when TEST_ENDPOINTS=true in settings.
 Used by `just demo::*` tasks to reset demo data before recording videos.
 """
 
-from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import (
     api_view,
@@ -48,7 +47,7 @@ def reset_demo_tournament(request, key: str):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from app.models import Draft, DraftTeam, Game, HeroDraft, Team, Tournament
+    from app.models import Tournament
 
     tournament_name = DEMO_TOURNAMENTS.get(key)
     if not tournament_name:
@@ -139,8 +138,6 @@ def _reset_demo_csv_import():
 
 def _reset_demo_herodraft(tournament):
     """Reset HeroDraft tournament to initial state."""
-    from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent, HeroDraftRound
-
     # Find the game and herodraft
     game = tournament.games.first()
     if not game:
@@ -193,7 +190,7 @@ def _reset_demo_herodraft(tournament):
 
 def _reset_demo_captaindraft(tournament):
     """Reset Captain Draft tournament to initial state."""
-    from app.models import Draft, Team
+    from app.models import Draft
 
     # Delete all teams (captain draft creates them)
     tournament.teams.all().delete()
@@ -341,8 +338,9 @@ def get_demo_tournament(request, key: str):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from app.models import Draft, Game, HeroDraft, Tournament
-    from app.serializers import HeroDraftSerializer, TournamentSerializer
+    from app.models import Draft, Tournament
+    from app.serializers import TournamentSerializer
+    from draft.serializers.hero import HeroDraftSerializer
 
     tournament_name = DEMO_TOURNAMENTS.get(key)
     if not tournament_name:

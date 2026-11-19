@@ -23,8 +23,8 @@ from app.models import (
     Team,
     Tournament,
 )
-from app.tasks import herodraft_tick
-from app.tasks.herodraft_tick import HERO_TICK_DRIVER
+from draft.tasks import hero_tick
+from draft.tasks.hero_tick import HERO_TICK_DRIVER
 
 User = get_user_model()
 
@@ -34,7 +34,7 @@ class HeroTickWiringTests(SimpleTestCase):
         self.assertIs(HeroDraftConsumer().get_tick_driver(), HERO_TICK_DRIVER)
 
     def test_hero_tick_does_not_reexport_redis_client(self) -> None:
-        self.assertFalse(hasattr(herodraft_tick, "get_redis_client"))
+        self.assertFalse(hasattr(hero_tick, "get_redis_client"))
 
 
 class HeroDraftConsumerTestCase(TransactionTestCase):
