@@ -132,6 +132,75 @@ class OrgCSVImportTest(TestCase):
         self.assertIn("different Discord account", result["reason"])
         self.assertIn("conflict_users", result)
 
+    def _conflict_reason(self, row: dict) -> str:
+        resp = self.client.post(self.url, {"rows": [row]}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        result = resp.data["results"][0]
+        self.assertEqual(result["status"], "error")
+        return result["reason"]
+
+    def test_conflict_names_use_discord_global_name(self) -> None:
+        pos = PositionsModel.objects.create()
+        CustomUser.objects.create_user(
+            username="steamside",
+            password="pass",
+            positions=pos,
+            steamid=76561198033333333,
+            discordNickname="Gwaihir",
+        )
+        CustomUser.objects.create_user(
+            username="discordside",
+            password="pass",
+            positions=PositionsModel.objects.create(),
+            discordId="222222222222222222",
+            discordNickname="Windlord",
+        )
+        reason = self._conflict_reason(
+            {
+                "steam_friend_id": "76561198033333333",
+                "discord_id": "222222222222222222",
+            }
+        )
+        self.assertEqual(
+            reason,
+            "Steam ID and Discord ID belong to different users: "
+            "Gwaihir (Steam) vs Windlord (Discord)",
+        )
+
+    def test_linked_conflict_names_use_discord_global_name(self) -> None:
+        CustomUser.objects.create_user(
+            username="linked",
+            password="pass",
+            positions=PositionsModel.objects.create(),
+            steamid=76561198044444444,
+            discordId="333333333333333333",
+            discordNickname="Landroval",
+        )
+        reason = self._conflict_reason(
+            {
+                "steam_friend_id": "76561198044444444",
+                "discord_id": "444444444444444444",
+            }
+        )
+        self.assertEqual(
+            reason, "Landroval is already linked to a different Discord account"
+        )
+
+    def test_conflict_name_falls_back_to_user_pk(self) -> None:
+        nameless = CustomUser.objects.create(
+            username=None, steamid=76561198055555555, discordId="555555555555555555"
+        )
+        reason = self._conflict_reason(
+            {
+                "steam_friend_id": "76561198055555555",
+                "discord_id": "666666666666666666",
+            }
+        )
+        self.assertEqual(
+            reason,
+            f"User {nameless.pk} is already linked to a different Discord account",
+        )
+
     def test_import_update_mmr_for_existing_member(self):
         """update_mmr=True updates MMR for existing org members."""
         pos = PositionsModel.objects.create()
