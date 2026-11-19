@@ -73,7 +73,6 @@ function formatRelativeTime(dateStr: string): string {
   return `${prefix}${days}d ${hours % 24}h${suffix}`;
 }
 
-// signup_post + announcement can be re-fired after firing as a "Repost".
 const isRepostTask = (task: TaskEntry) =>
   task.status === 'fired' &&
   (task.task === 'signup_post' || task.task === 'announcement');
