@@ -50,6 +50,7 @@ class SignupStatus(models.TextChoices):
     TENTATIVE = "tentative", "Tentative"
     REJECTED = "rejected", "Rejected"
     CANCELLED = "cancelled", "Cancelled"
+    DROPPED = "dropped", "Dropped"
 
 
 SEAT_HOLDING_STATUSES: frozenset[str] = frozenset(
@@ -106,7 +107,7 @@ class SignupMeans(models.TextChoices):
 
 
 LINE_EXCLUDED_STATUSES: frozenset[str] = frozenset(
-    {SignupStatus.CANCELLED, SignupStatus.REJECTED}
+    {SignupStatus.CANCELLED, SignupStatus.REJECTED, SignupStatus.DROPPED}
 )
 
 

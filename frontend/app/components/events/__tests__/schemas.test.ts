@@ -11,6 +11,7 @@ import {
   eventSchema,
   eventSignupSchema,
   localToUTC,
+  READY_CHECK_CONFIG_DEFAULTS,
   refineEventEnd,
   utcToLocalInput,
 } from '~/components/events/schemas';
@@ -225,9 +226,7 @@ const DISCORD_KEYS = [
   'require_steam_id',
   'require_mmr_verified',
   'require_profile_complete',
-  'roll_call_enabled',
   'allow_user_signups',
-  'roll_call_mode',
 ];
 const LOBBY_KEYS = [
   'dota_lobby_mode',
@@ -238,6 +237,7 @@ const LOBBY_KEYS = [
   'dota_lobby_password',
   'dota_lobby_password_saved',
 ];
+const READY_CHECK_KEYS = Object.keys(READY_CHECK_CONFIG_DEFAULTS);
 
 describe('event form schema key sets', () => {
   const keys = (shape: object) => Object.keys(shape).sort();
@@ -248,6 +248,7 @@ describe('event form schema key sets', () => {
         ...TEMPLATE_KEYS,
         ...DISCORD_KEYS,
         ...LOBBY_KEYS,
+        ...READY_CHECK_KEYS,
         ...[
           'scheduled_at',
           'organization',
@@ -274,6 +275,7 @@ describe('event form schema key sets', () => {
         ...TEMPLATE_KEYS,
         ...DISCORD_KEYS,
         ...LOBBY_KEYS,
+        ...READY_CHECK_KEYS,
         ...['scheduled_at', 'tournament_league', 'open_signups'],
       ].sort(),
     );
@@ -285,6 +287,7 @@ describe('event form schema key sets', () => {
         ...TEMPLATE_KEYS,
         ...DISCORD_KEYS,
         ...LOBBY_KEYS,
+        ...READY_CHECK_KEYS,
         ...[
           'scheduled_at',
           'event_ends_at',

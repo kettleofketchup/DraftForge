@@ -19,6 +19,12 @@ from events.models import (
     EventSignup,
     OrgEventDefaults,
     RepeaterSubscription,
+    RollCallMode,
+)
+from events.ready_check_constants import (
+    PostCullFillMode,
+    ReadyCheckLowCompletionAction,
+    ReadyCheckScope,
 )
 from org.models_profiles import PlayerDotaProfile
 from tests.data import (
@@ -366,6 +372,7 @@ def populate_events_data(force=False):
             "number_of_teams": 2,
             "timezone": EVENTS_ORG.timezone,
             "roll_call_enabled": True,
+            "roll_call_mode": RollCallMode.MANUAL,
             "max_players": 10,
             "discord_announcement": True,
             "discord_announcement_channel_id": "1482767177063858216",
@@ -381,6 +388,45 @@ def populate_events_data(force=False):
         status = SignupStatus.CONFIRMED if i < 6 else SignupStatus.APPROVED
         EventSignup.objects.update_or_create(
             event=demo_rollcall_event,
+            user=user,
+            defaults={"status": status},
+        )
+
+    demo_ready_check_event, _ = Event.objects.update_or_create(
+        organization=org,
+        name="Demo Ready Check Event",
+        defaults={
+            "description": "Event with mandatory RSVP confirmation and a dropped member.",
+            "scheduled_at": tz.now() + timedelta(hours=5),
+            "state": EventState.SIGNUPS_OPEN,
+            "created_by": event_admin or site_admin,
+            "tournament_name": "Demo Ready Check Tournament",
+            "tournament_league": league,
+            "tournament_type": "single_elimination",
+            "game_type": GameType.DOTA2,
+            "draft_type": "shuffle",
+            "people_per_team": 5,
+            "number_of_teams": 2,
+            "timezone": EVENTS_ORG.timezone,
+            "max_players": 10,
+            "roll_call_enabled": True,
+            "roll_call_mode": RollCallMode.AUTOMATIC,
+            "auto_confirm": False,
+            "ready_check_scope": ReadyCheckScope.MAIN_AND_FILL,
+            "ready_check_min_completion_pct": 70,
+            "ready_check_low_completion_action": ReadyCheckLowCompletionAction.NON_BINDING,
+            "ready_check_chase_minutes": 20,
+            "start_cull_enabled": True,
+            "start_cull_minutes_after": 1,
+            "post_cull_fill_mode": PostCullFillMode.LINE_ORDER,
+            "event_voice_channel_id": "100000000000000528",
+        },
+    )
+    for i, user_data in enumerate(EVENTS_USERS[:7]):
+        user = CustomUser.objects.get(pk=user_data.pk)
+        status = SignupStatus.DROPPED if i == 6 else SignupStatus.APPROVED
+        EventSignup.objects.update_or_create(
+            event=demo_ready_check_event,
             user=user,
             defaults={"status": status},
         )
@@ -417,7 +463,7 @@ def populate_events_data(force=False):
             defaults={"status": SignupStatus.CONFIRMED},
         )
 
-    print("    Created 4 demo events with signups (incl. Demo MMR Approval Event)")
+    print("    Created 5 demo events with signups (incl. Demo MMR Approval Event)")
 
     # 5b-i. Deadlock event with require_steam_id=True (Friend ID universal across game types)
     Event.objects.update_or_create(

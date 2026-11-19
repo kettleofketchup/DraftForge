@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import type { z } from 'zod';
@@ -31,12 +31,15 @@ import {
   EventLobbyFields,
   EventTournamentFields,
   OneOffScheduleFields,
+  readyCheckResetValues,
   TimezoneField,
   type EventFormDialogHandle,
 } from './form';
+import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import {
   createSeriesEventInputSchema,
   localToUTC,
+  refineReadyCheck,
   type CreateSeriesEventInput,
 } from './schemas';
 import { signupRulesFrom } from './signupRules';
@@ -66,6 +69,15 @@ export function CreateSeriesEventModal({
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const tabs = useRef<EventFormDialogHandle>(null);
+  const schema = useMemo(
+    () =>
+      createSeriesEventFormSchema.superRefine((values, ctx) =>
+        refineReadyCheck(values, ctx, {
+          baseline: readyCheckResetValues(repeater),
+        }),
+      ),
+    [repeater],
+  );
 
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
@@ -74,7 +86,7 @@ export function CreateSeriesEventModal({
     unknown,
     CreateSeriesEventInput
   >({
-    resolver: zodResolver(createSeriesEventFormSchema),
+    resolver: zodResolver(schema),
   });
   const { data: seriesPassword } = useRepeaterLobbyPassword(repeater.id, open);
 
@@ -104,6 +116,7 @@ export function CreateSeriesEventModal({
       ...discordResetValues(repeater),
       ...signupRulesFrom(repeater),
       ...dotaLobbyResetValues(repeater, { savedFromMode: false }),
+      ...readyCheckResetValues(repeater),
     });
   }, [repeater, open]);
 
@@ -270,6 +283,16 @@ export function CreateSeriesEventModal({
               watch={form.watch}
               isRepeater
               showNotifyNewEvents={false}
+              organizationId={repeater.organization}
+            />
+          ),
+        },
+        {
+          value: 'ready',
+          content: (
+            <ReadyCheckConfigSection
+              control={form.control}
+              setValue={form.setValue}
               organizationId={repeater.organization}
             />
           ),

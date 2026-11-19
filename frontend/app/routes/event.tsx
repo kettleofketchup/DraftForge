@@ -47,7 +47,6 @@ import {
   Building2,
   CheckCircle2,
   Clock,
-  HelpCircle,
   Loader2,
   Repeat,
   Undo2,
@@ -55,7 +54,6 @@ import {
   UserPlus,
   Users,
   UserX,
-  XCircle,
 } from 'lucide-react';
 import {
   useCallback,
@@ -82,15 +80,19 @@ import { EventSignupModal } from '~/components/events/EventSignupModal';
 import { evaluateSignupGap } from '~/components/events/EventSignupModal/evaluateSignupGap';
 import { EventStaffSection } from '~/components/events/EventStaffCard';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
+import { MySignupActions } from '~/components/events/MySignupActions';
 import { OpsNoticesCard } from '~/components/events/OpsNoticesCard';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
-import { EventState } from '~/components/events/schemas';
-import { partitionSignups } from '~/components/events/signupPartition';
+import { EventState, rollCallLabel } from '~/components/events/schemas';
+import {
+  canRestoreSignup,
+  isRemovedSignup,
+  partitionSignups,
+} from '~/components/events/signupPartitions';
 import { rollCallSummary } from '~/components/events/signupRules';
 import {
-  describeUnmet,
   signupHoldReason,
   signupSuccessMessage,
 } from '~/components/events/unmetRequirements';
@@ -352,14 +354,8 @@ export default function EventPage() {
     active: activeSignups,
     tentative: tentativeSignups,
     waitlisted: waitlistedSignups,
+    removed: removedSignups,
   } = useMemo(() => partitionSignups(signups ?? []), [signups]);
-  const removedSignups = useMemo(
-    () =>
-      (signups ?? []).filter(
-        (s) => s.status === 'cancelled' || s.status === 'rejected',
-      ),
-    [signups],
-  );
 
   const handleTabChange = useCallback(
     (newTab: string) => {
@@ -598,117 +594,17 @@ export default function EventPage() {
                     Subscribe
                   </PrimaryButton>
                 ))}
-              {currentUser &&
-                event.state === EventState.SIGNUPS_OPEN &&
-                signups &&
-                !mySignup &&
-                !event.allow_user_signups && (
-                  <span
-                    className="text-sm text-muted-foreground"
-                    data-testid="event-signups-managed"
-                  >
-                    Sign-ups are managed by organizers.
-                  </span>
-                )}
-              {/* Not signed up — show Sign Up + Tentative */}
-              {currentUser &&
-                event.state === EventState.SIGNUPS_OPEN &&
-                signups &&
-                !mySignup &&
-                event.allow_user_signups && (
-                  <>
-                    <PrimaryButton
-                      size="sm"
-                      onClick={() => trySignup('rsvp')}
-                      disabled={
-                        !event ||
-                        !signups ||
-                        !profileLoaded ||
-                        signupMutation.isPending
-                      }
-                      data-testid="event-signup-btn"
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                      Sign Up
-                    </PrimaryButton>
-                    <SecondaryButton
-                      size="sm"
-                      onClick={() => trySignup('tentative')}
-                      disabled={
-                        !event ||
-                        !signups ||
-                        !profileLoaded ||
-                        signupMutation.isPending
-                      }
-                      data-testid="event-tentative-btn"
-                    >
-                      <HelpCircle className="h-4 w-4 mr-1.5" />
-                      <span className="hidden sm:inline">Tentative</span>
-                    </SecondaryButton>
-                  </>
-                )}
-              {currentUser && mySignup?.status === 'pending_approval' && (
-                <span
-                  className="text-sm text-muted-foreground"
-                  data-testid="event-my-signup-pending"
-                >
-                  {mySignup.unmet_requirements?.length
-                    ? `Pending approval: ${describeUnmet(mySignup.unmet_requirements)}`
-                    : 'Pending approval'}
-                </span>
+              {currentUser && signups && (
+                <MySignupActions
+                  mySignup={mySignup}
+                  signupsOpen={event.state === EventState.SIGNUPS_OPEN}
+                  allowUserSignups={event.allow_user_signups}
+                  signupDisabled={!profileLoaded || signupMutation.isPending}
+                  cancelPending={signupActions.cancel.isPending}
+                  onSignup={trySignup}
+                  onCancel={() => setShowCancelRsvpConfirm(true)}
+                />
               )}
-              {/* Signed up (active) — show status + cancel */}
-              {currentUser &&
-                event.state === EventState.SIGNUPS_OPEN &&
-                signups &&
-                mySignup &&
-                mySignup.status !== 'tentative' && (
-                  <DestructiveButton
-                    size="sm"
-                    onClick={() => setShowCancelRsvpConfirm(true)}
-                    loading={signupActions.cancel.isPending}
-                    depth={false}
-                    data-testid="event-cancel-rsvp-btn"
-                  >
-                    <XCircle className="h-4 w-4 mr-1.5" />
-                    Cancel RSVP
-                  </DestructiveButton>
-                )}
-              {/* Tentative — can upgrade to full signup or cancel */}
-              {currentUser &&
-                event.state === EventState.SIGNUPS_OPEN &&
-                signups &&
-                mySignup &&
-                mySignup.status === 'tentative' && (
-                  <>
-                    {event.allow_user_signups && (
-                      <PrimaryButton
-                        size="sm"
-                        onClick={() => trySignup('rsvp')}
-                        disabled={
-                          !event ||
-                          !signups ||
-                          !profileLoaded ||
-                          signupMutation.isPending
-                        }
-                        data-testid="event-upgrade-rsvp-btn"
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                        Sign Up
-                      </PrimaryButton>
-                    )}
-                    <DestructiveButton
-                      size="sm"
-                      onClick={() => setShowCancelRsvpConfirm(true)}
-                      loading={signupActions.cancel.isPending}
-                      depth={false}
-                      data-testid="event-cancel-tentative-btn"
-                    >
-                      <XCircle className="h-4 w-4 mr-1.5" />
-                      Cancel
-                    </DestructiveButton>
-                  </>
-                )}
             </div>
           </div>
         )}
@@ -970,7 +866,14 @@ function DetailsTab({
             label="Auto Confirm"
             value={event.auto_confirm ? 'Yes' : 'No'}
           />
-          <Stat label="Roll call" value={rollCallSummary(event)} />
+          <Stat
+            label="Roll call"
+            value={
+              event.roll_call_enabled && event.state !== EventState.ROLL_CALL
+                ? `${rollCallSummary(event)} (${rollCallLabel(true, event.roll_call_mode)})`
+                : rollCallSummary(event)
+            }
+          />
         </CardContent>
       </Card>
 
@@ -1223,8 +1126,7 @@ function SignupsTab({
                   <TooltipContent className="lg:hidden">Approve</TooltipContent>
                 </Tooltip>
               )}
-              {(signup.status === 'cancelled' ||
-                signup.status === 'rejected') && (
+              {canRestoreSignup(signup.status) && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SecondaryButton
@@ -1242,27 +1144,26 @@ function SignupsTab({
                   </TooltipContent>
                 </Tooltip>
               )}
-              {signup.status !== 'cancelled' &&
-                signup.status !== 'rejected' && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <DestructiveButton
-                        size="sm"
-                        depth={false}
-                        onClick={() => {
-                          const name = DisplayName(user ?? signup);
-                          setRemoveSignup({ signup, name });
-                        }}
-                      >
-                        <UserX className="h-3.5 w-3.5" />
-                        <span className="hidden lg:inline ml-1">Remove</span>
-                      </DestructiveButton>
-                    </TooltipTrigger>
-                    <TooltipContent className="lg:hidden">
-                      Remove user
-                    </TooltipContent>
-                  </Tooltip>
-                )}
+              {!isRemovedSignup(signup.status) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DestructiveButton
+                      size="sm"
+                      depth={false}
+                      onClick={() => {
+                        const name = DisplayName(user ?? signup);
+                        setRemoveSignup({ signup, name });
+                      }}
+                    >
+                      <UserX className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Remove</span>
+                    </DestructiveButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">
+                    Remove user
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
           ) : undefined;
 

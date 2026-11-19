@@ -93,7 +93,7 @@ const event: EventType = {
   require_steam_id: false,
   require_profile_complete: false,
   roll_call_enabled: false,
-  roll_call_mode: 'none',
+  roll_call_mode: 'manual',
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,

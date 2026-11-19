@@ -177,8 +177,8 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
       await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
       await page.getByTestId('event-edit-btn').click();
       const modal = page.getByTestId('edit-event-modal');
-      await modal.getByRole('tab', { name: /approval/i }).click();
-      await modal.getByTestId('signup-rules-roll_call_enabled').check();
+      await modal.getByRole('tab', { name: /ready check/i }).click();
+      await modal.getByTestId('ready-check-toggle').click();
       await modal.getByTestId('form-dialog-submit').click();
       await expect(modal).not.toBeVisible({ timeout: 10000 });
       await expect(page.getByText('Confirm to join roster')).toBeVisible();
