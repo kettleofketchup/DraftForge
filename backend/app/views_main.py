@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Protocol, cast
 
 from cacheops import cached_as
 from django.contrib.auth import login
@@ -44,7 +44,13 @@ from app.services.team_audit import (
     roster_snapshot,
     write_team_log,
 )
-from app.services.team_management import follow_captain
+from app.services.team_management import (
+    TeamChange,
+    follow_captain,
+    rename,
+    set_captain,
+    set_deputy,
+)
 from app.services.team_signals import (
     change_from_log,
     owning_team_audit,
@@ -72,6 +78,7 @@ from events.signup_window import user_signups_open_tournament_ids
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
 from org.contributions.services import delete_user_entries
+from org.feature_errors import not_permitted
 from org.features import FeatureKey, active_features
 from org.membership import member_organization_ids, viewer_member_organization_ids
 from org.models import OrgUser
@@ -130,9 +137,15 @@ from .serializers import (
     LeagueMatchSerializer,
     LeagueSerializer,
     LeaguesSerializer,
+    ManagedTeamSerializer,
     OrganizationSerializer,
     OrganizationsSerializer,
+    TeamActionRequestSerializer,
+    TeamDeputyRequestSerializer,
+    TeamLogSerializer,
+    TeamRenameRequestSerializer,
     TeamSerializer,
+    TeamUserActionRequestSerializer,
     TournamentListSerializer,
     TournamentSerializer,
     TournamentsSerializer,
@@ -599,6 +612,34 @@ class TournamentView(viewsets.ModelViewSet):
                 apply_draft_options(serializer.instance, opts, actor=self.request.user)
 
 
+TEAM_MANAGE_ACTIONS: frozenset[str] = frozenset(
+    {
+        "set_captain",
+        "set_deputy",
+        "dropout",
+        "restore",
+        "standins",
+        "standins_remove",
+        "sub_in",
+        "rename",
+        "history",
+    }
+)
+
+
+class TeamServiceCall(Protocol):
+    def __call__(
+        self,
+        team: Team,
+        data: dict[str, Any],
+        *,
+        actor: CustomUser,
+        via: TeamLogVia,
+        reason: str,
+        acknowledged_codes: list[str],
+    ) -> TeamChange: ...
+
+
 @permission_classes((IsStaff,))
 class TeamView(viewsets.ModelViewSet):
     serializer_class = TeamSerializer
@@ -666,15 +707,86 @@ class TeamView(viewsets.ModelViewSet):
         return Response(data)
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.action == "discord_logs":
-            self.permission_classes = [CanEditTournament]
+        if self.action in TEAM_MANAGE_ACTIONS | {
+            "update",
+            "partial_update",
+            "destroy",
+        }:
+            self.permission_classes = [CanEditTeam]
         elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
-        elif self.action in ["update", "partial_update", "destroy"]:
-            self.permission_classes = [CanEditTeam]
         else:
             self.permission_classes = [IsAuthenticated]
         return super(TeamView, self).get_permissions()
+
+    def get_serializer_class(self) -> type[BaseSerializer]:
+        if self.action == "history":
+            return TeamLogSerializer
+        if self.action == "retrieve" or self.action in TEAM_MANAGE_ACTIONS:
+            return ManagedTeamSerializer
+        return TeamSerializer
+
+    def permission_denied(
+        self, request: Request, message: str | None = None, code: str | None = None
+    ) -> None:
+        if request.user.is_authenticated and self.action in TEAM_MANAGE_ACTIONS:
+            raise not_permitted()
+        super().permission_denied(request, message=message, code=code)
+
+    def get_authenticate_header(self, request: Request) -> str | None:
+        if self.action in TEAM_MANAGE_ACTIONS:
+            return 'Session realm="api"'
+        return super().get_authenticate_header(request)
+
+    def _manage(
+        self,
+        request: Request,
+        serializer_class: type[TeamActionRequestSerializer],
+        call: TeamServiceCall,
+    ) -> Response:
+        teams = Team.objects.nocache().select_related("tournament__league")
+        team = get_object_or_404(teams, pk=self.kwargs["pk"])
+        self.check_object_permissions(request, team)
+        body = serializer_class(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        with transaction.atomic():
+            team = get_object_or_404(teams.select_for_update(), pk=team.pk)
+            self.check_object_permissions(request, team)
+            change = call(
+                team,
+                data,
+                actor=request.user,
+                via=TeamLogVia.WEB,
+                reason=data["reason"],
+                acknowledged_codes=data["acknowledged_codes"],
+            )
+        team = teams.get(pk=change.team.pk)
+        return Response({**self.get_serializer(team).data, "can_manage_team": True})
+
+    @action(detail=True, methods=["post"], url_path="set-captain")
+    def set_captain(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamUserActionRequestSerializer,
+            lambda team, data, **kw: set_captain(team, data["user_id"], **kw),
+        )
+
+    @action(detail=True, methods=["post"], url_path="set-deputy")
+    def set_deputy(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamDeputyRequestSerializer,
+            lambda team, data, **kw: set_deputy(team, data["user_id"], **kw),
+        )
+
+    @action(detail=True, methods=["post"])
+    def rename(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamRenameRequestSerializer,
+            lambda team, data, **kw: rename(team, data["name"], **kw),
+        )
 
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
