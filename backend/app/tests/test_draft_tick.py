@@ -357,7 +357,7 @@ class HeroDriverAliasTests(SimpleTestCase):
             herodraft_tick.CAPTAIN_HEARTBEAT_KEY.format(draft_id=3, user_id=4),
             heartbeat_key("herodraft", 3, 4),
         )
-        self.assertIs(herodraft_tick.get_redis_client, get_redis_client)
+        self.assertFalse(hasattr(herodraft_tick, "get_redis_client"))
 
     @patch(
         "app.tasks.herodraft_tick.should_continue_ticking",

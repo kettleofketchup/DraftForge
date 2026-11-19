@@ -20,7 +20,8 @@ from rest_framework.response import Response
 from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent
 from app.redis_keys import namespaced_key
 from app.serializers import HeroDraftSerializer
-from app.tasks.herodraft_tick import captain_heartbeat_key, get_redis_client
+from app.tasks.draft_tick import get_redis_client
+from app.tasks.herodraft_tick import captain_heartbeat_key
 from common.utils import isTestEnvironment
 from telemetry.logging import get_logger
 
@@ -124,7 +125,7 @@ def force_herodraft_timeout(request, draft_pk):
     from app.functions.herodraft import auto_random_pick
 
     try:
-        completed_round = auto_random_pick(draft, current_round.draft_team)
+        auto_random_pick(draft, current_round.draft_team)
     except Exception as e:
         return Response(
             {"error": f"Timeout handling failed: {str(e)}"},

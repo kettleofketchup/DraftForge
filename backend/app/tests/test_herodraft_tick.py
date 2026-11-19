@@ -3,20 +3,20 @@
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
-from django.test import TestCase, TransactionTestCase
+from django.test import TransactionTestCase
 from django.utils import timezone
 
 from app.functions.herodraft import build_draft_rounds, get_available_heroes
-from app.models import DraftTeam, Game, HeroDraft, HeroDraftRound, Team, Tournament
+from app.models import DraftTeam, Game, HeroDraft, Team, Tournament
+from app.tasks.draft_tick import get_redis_client
 from app.tasks.herodraft_tick import (
     _active_tick_tasks,
     _lock,
     broadcast_tick,
     check_timeout,
     conn_count_key,
-    get_redis_client,
     should_continue_ticking,
     start_tick_broadcaster,
     stop_tick_broadcaster,
@@ -159,7 +159,6 @@ class TimeoutTestCase(TransactionTestCase):
         """Test reserve time is deducted correctly when grace period exceeded."""
         active_round = self.draft.rounds.filter(state="active").first()
         team = DraftTeam.objects.get(id=active_round.draft_team_id)
-        original_reserve = team.reserve_time_remaining
 
         # Set time past grace period but within reserve
         # Grace is 30000ms (30s), set to 35s ago

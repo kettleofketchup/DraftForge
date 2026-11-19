@@ -28,6 +28,7 @@ from app.models import (
 )
 from app.serializers import DraftEventSerializer, HeroDraftSerializer
 from app.tasks.draft_tick import CAPTAIN_CHANNEL_TTL, TickDriver
+from app.tasks.herodraft_tick import HERO_TICK_DRIVER
 from app.tasks.teamdraft_tick import (
     TEAM_TICK_DRIVER,
     captain_conn_key,
@@ -433,6 +434,9 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     def get_room_group_prefix(self) -> str:
         return "herodraft"
+
+    def get_tick_driver(self) -> TickDriver | None:
+        return HERO_TICK_DRIVER
 
     @consumer_db
     def draft_exists(self, draft_id: int) -> bool:

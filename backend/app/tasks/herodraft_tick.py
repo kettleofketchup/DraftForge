@@ -23,7 +23,6 @@ from app.tasks.draft_tick import (
     TICK_ITERATION_SLOW_THRESHOLD_S,
     TICK_STEP_SLOW_THRESHOLD_S,
     TaskInfo,
-    get_redis_client,
 )
 from telemetry.logging import get_logger
 
@@ -52,7 +51,6 @@ __all__ = [
     "conn_count_key",
     "decrement_connection_count",
     "get_connection_count",
-    "get_redis_client",
     "increment_connection_count",
     "run_tick_loop",
     "should_continue_ticking",
@@ -416,7 +414,7 @@ async def check_captain_heartbeats(draft_id: int) -> str | None:
 
     @database_sync_to_async
     def check_and_handle_stale() -> str | None:
-        r = get_redis_client()
+        r = draft_tick.get_redis_client()
         now = time.time()
         stale_captain = None
 
@@ -585,7 +583,7 @@ class HeroDraftTickDriver:
         await check_timeout(draft_id)
 
     def should_continue(self, draft_id: int) -> tuple[bool, str]:
-        return should_continue_ticking(draft_id, get_redis_client())
+        return should_continue_ticking(draft_id, draft_tick.get_redis_client())
 
 
 HERO_TICK_DRIVER: HeroDraftTickDriver = HeroDraftTickDriver()
