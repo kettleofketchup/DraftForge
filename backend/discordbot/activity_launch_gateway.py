@@ -5,13 +5,13 @@ from typing import Any
 import discord
 from asgiref.sync import sync_to_async
 
-from app.internal_client import _post
+from app.internal_client import transport
 
 
 def prepare_launch_payload(
     discord_user_id: str, kind: str, draft_id: int
 ) -> dict[str, Any]:
-    response = _post(
+    response = transport.post(
         "/discord/activity-launch/",
         {
             "discord_user_id": str(discord_user_id),

@@ -465,6 +465,17 @@ import { DisplayName } from '~/components/user/avatar';
 
 **DO NOT** render `{user.username}` / `{log.discord_username}` directly — it bypasses the nickname preference and drifts from the rest of the UI.
 
+### Data Tables
+
+**Lists of records render through `<DataTable>`** (`~/components/ui/data-table`, TanStack Table on the shadcn `Table` primitives). Each record type has one column factory (`makeOpsNoticeColumns`) and one reusable `<Domain>Table` (`OpsNoticeTable`); pages pick columns by id instead of re-declaring them.
+
+- The table fits its container (`table-fixed`): secondary columns get fixed widths and hide on small screens (`hidden md:table-cell`), one main column takes the rest and wraps. Sideways scrolling (`scrollX`) is opt-in.
+- Data hidden on phones is stacked under the main cell in `text-xs text-muted-foreground`.
+- Severity/state/category cells are `Badge`s; row actions are brand buttons (`SecondaryButton size="sm"`); numbers are right-aligned `tabular-nums`.
+- Filtering uses the built-in toolbar (`enableToolbar`, columns opt in with `meta.filterLabel` / `meta.columnLabel`), not a hand-built filter row above the table.
+
+**DO NOT** build record lists from flex rows: on mobile the text column collapses to one character per line. Build guide: the `table` skill.
+
 ---
 
 ## Navbar Styling

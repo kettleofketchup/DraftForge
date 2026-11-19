@@ -12,10 +12,12 @@ from steam.tasks import (
 
 class SyncLeagueMatchesTaskTest(TestCase):
     @patch("steam.tasks.SteamAPI")
-    @patch("app.internal_client.requests.post")
-    @patch("app.internal_client.requests.patch")
-    @patch("app.internal_client.requests.get")
-    def test_sync_skips_when_already_syncing(self, mock_get, mock_patch, mock_post, mock_api):
+    @patch("app.internal_client.transport.requests.post")
+    @patch("app.internal_client.transport.requests.patch")
+    @patch("app.internal_client.transport.requests.get")
+    def test_sync_skips_when_already_syncing(
+        self, mock_get, mock_patch, mock_post, mock_api
+    ):
         mock_resp = MagicMock()
         mock_resp.ok = True
         mock_resp.json.return_value = {
@@ -32,10 +34,12 @@ class SyncLeagueMatchesTaskTest(TestCase):
 
     @patch("steam.tasks.update_league_stats_task")
     @patch("steam.tasks.SteamAPI")
-    @patch("app.internal_client.requests.post")
-    @patch("app.internal_client.requests.patch")
-    @patch("app.internal_client.requests.get")
-    def test_sync_stores_matches_via_api(self, mock_get, mock_patch, mock_post, mock_api, mock_stats_task):
+    @patch("app.internal_client.transport.requests.post")
+    @patch("app.internal_client.transport.requests.patch")
+    @patch("app.internal_client.transport.requests.get")
+    def test_sync_stores_matches_via_api(
+        self, mock_get, mock_patch, mock_post, mock_api, mock_stats_task
+    ):
         # GET sync-state returns not syncing
         get_resp = MagicMock()
         get_resp.ok = True
@@ -57,7 +61,10 @@ class SyncLeagueMatchesTaskTest(TestCase):
         post_resp.ok = True
         post_resp.status_code = 201
         post_resp.json.return_value = {
-            "match_id": 123, "created": True, "players_stored": 10, "players_linked": 7
+            "match_id": 123,
+            "created": True,
+            "players_stored": 10,
+            "players_linked": 7,
         }
         mock_post.return_value = post_resp
 
@@ -68,8 +75,19 @@ class SyncLeagueMatchesTaskTest(TestCase):
             {"result": {"matches": []}},
         ]
         api_instance.get_match_history_by_seq_num.return_value = {
-            "result": {"matches": [{"match_id": 123, "radiant_win": True, "duration": 2000,
-                       "start_time": 0, "game_mode": 2, "lobby_type": 1, "players": []}]}
+            "result": {
+                "matches": [
+                    {
+                        "match_id": 123,
+                        "radiant_win": True,
+                        "duration": 2000,
+                        "start_time": 0,
+                        "game_mode": 2,
+                        "lobby_type": 1,
+                        "players": [],
+                    }
+                ]
+            }
         }
 
         result = sync_league_matches_task(17929)
@@ -77,7 +95,7 @@ class SyncLeagueMatchesTaskTest(TestCase):
 
 
 class UpdateLeagueStatsTaskTest(TestCase):
-    @patch("app.internal_client.requests.post")
+    @patch("app.internal_client.transport.requests.post")
     def test_calls_internal_api(self, mock_post):
         mock_resp = MagicMock()
         mock_resp.ok = True
@@ -89,7 +107,7 @@ class UpdateLeagueStatsTaskTest(TestCase):
 
 
 class RecalculateMmrTaskTest(TestCase):
-    @patch("app.internal_client.requests.post")
+    @patch("app.internal_client.transport.requests.post")
     def test_calls_internal_api(self, mock_post):
         mock_resp = MagicMock()
         mock_resp.ok = True
@@ -99,7 +117,7 @@ class RecalculateMmrTaskTest(TestCase):
         result = recalculate_user_league_mmr_task(1)
         self.assertEqual(result["user_id"], 1)
 
-    @patch("app.internal_client.requests.post")
+    @patch("app.internal_client.transport.requests.post")
     def test_returns_none_on_failure(self, mock_post):
         mock_resp = MagicMock()
         mock_resp.ok = False
@@ -113,7 +131,7 @@ class RecalculateMmrTaskTest(TestCase):
 
 class SyncAllSteamLeaguesTaskTest(TestCase):
     @patch("steam.tasks.sync_league_matches_task")
-    @patch("app.internal_client.requests.get")
+    @patch("app.internal_client.transport.requests.get")
     def test_dispatches_one_subtask_per_tracked_league(self, mock_get, mock_subtask):
         mock_resp = MagicMock()
         mock_resp.ok = True
@@ -122,16 +140,19 @@ class SyncAllSteamLeaguesTaskTest(TestCase):
 
         result = sync_all_steam_leagues_task()
 
-        self.assertEqual(result, {
-            "dispatched": 2,
-            "league_ids": [19571, 12345],
-        })
+        self.assertEqual(
+            result,
+            {
+                "dispatched": 2,
+                "league_ids": [19571, 12345],
+            },
+        )
         self.assertEqual(mock_subtask.delay.call_count, 2)
         mock_subtask.delay.assert_any_call(19571)
         mock_subtask.delay.assert_any_call(12345)
 
     @patch("steam.tasks.sync_league_matches_task")
-    @patch("app.internal_client.requests.get")
+    @patch("app.internal_client.transport.requests.get")
     def test_no_dispatch_when_no_leagues_configured(self, mock_get, mock_subtask):
         mock_resp = MagicMock()
         mock_resp.ok = True
@@ -144,7 +165,7 @@ class SyncAllSteamLeaguesTaskTest(TestCase):
         mock_subtask.delay.assert_not_called()
 
     @patch("steam.tasks.sync_league_matches_task")
-    @patch("app.internal_client.requests.get")
+    @patch("app.internal_client.transport.requests.get")
     def test_retries_on_internal_api_failure(self, mock_get, mock_subtask):
         mock_resp = MagicMock()
         mock_resp.ok = False

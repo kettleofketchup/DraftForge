@@ -15,6 +15,11 @@ from django.test import SimpleTestCase, TransactionTestCase
 from django.urls import re_path
 
 from app import consumers
+from app.channel_layers import (
+    CancelSafeChannelLock,
+    LoopSafeRedisChannelLayer,
+    PerLoopChannelLock,
+)
 from app.consumers import DraftConsumer, HeroDraftConsumer
 from app.consumers_base import consumer_db
 from app.models import Draft, DraftTeam, Game, HeroDraft, Team, Tournament
@@ -264,3 +269,97 @@ class ConsumerDbConnectionCleanupTests(SimpleTestCase):
         self.assertEqual([e for e, _ in events], ["close", "work", "close"])
         self.assertEqual(len({t for _, t in events}), 1)
         self.assertTrue(events[0][1].startswith("ws-db"), events)
+
+
+class DraftOrderLoopTests(SimpleTestCase):
+    """Each async test runs on its own loop; a lock must not outlive it (#588)."""
+
+    def test_same_draft_contends_on_a_second_event_loop(self) -> None:
+        created: list[asyncio.Lock] = []
+
+        class KeptLock(asyncio.Lock):
+            def __init__(self) -> None:
+                super().__init__()
+                created.append(self)
+
+        consumer = DraftConsumer()
+        consumer.draft_id = 588_000
+
+        async def contended_writes() -> list[str]:
+            order: list[str] = []
+            release = asyncio.Event()
+
+            async def first() -> None:
+                await release.wait()
+                order.append("first")
+
+            async def second() -> None:
+                order.append("second")
+
+            a = asyncio.ensure_future(consumer.in_draft_order(first))
+            await asyncio.sleep(0)
+            b = asyncio.ensure_future(consumer.in_draft_order(second))
+            await asyncio.sleep(0)
+            release.set()
+            await asyncio.gather(a, b)
+            return order
+
+        with patch.object(asyncio, "Lock", KeptLock):
+            self.assertEqual(asyncio.run(contended_writes()), ["first", "second"])
+            self.assertEqual(asyncio.run(contended_writes()), ["first", "second"])
+
+
+class ChannelLayerCleanLockLoopTests(SimpleTestCase):
+    """A cancelled receive must not pin the layer's clean lock to its loop (#588)."""
+
+    def test_cancelled_waiter_does_not_bind_lock_to_its_loop(self) -> None:
+        locks = CancelSafeChannelLock()
+
+        async def cancel_a_waiter() -> None:
+            await locks.acquire("k")
+            waiter = asyncio.ensure_future(locks.acquire("k"))
+            await asyncio.sleep(0)
+            waiter.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await waiter
+            locks.release("k")
+
+        async def contend() -> None:
+            await locks.acquire("k")
+            waiter = asyncio.ensure_future(locks.acquire("k"))
+            await asyncio.sleep(0)
+            locks.release("k")
+            await waiter
+            locks.release("k")
+
+        asyncio.run(cancel_a_waiter())
+        self.assertEqual(dict(locks.wait_counts), {})
+        asyncio.run(contend())
+        self.assertEqual(dict(locks.locks), {})
+
+    def test_lock_held_on_a_closed_loop_does_not_block_the_next_loop(self) -> None:
+        locks = PerLoopChannelLock()
+
+        async def hold_and_wait() -> None:
+            await locks.acquire("k")
+            waiter = asyncio.ensure_future(locks.acquire("k"))
+            await asyncio.sleep(0)
+            waiter.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await waiter
+
+        async def contend() -> None:
+            await locks.acquire("k")
+            waiter = asyncio.ensure_future(locks.acquire("k"))
+            await asyncio.sleep(0)
+            locks.release("k")
+            await waiter
+            locks.release("k")
+            self.assertFalse(locks.locked("k"))
+
+        asyncio.run(hold_and_wait())
+        asyncio.run(contend())
+
+    def test_configured_layer_uses_per_loop_clean_locks(self) -> None:
+        layer = LoopSafeRedisChannelLayer(hosts=[("localhost", 6379)])
+        self.assertIsInstance(layer.receive_clean_locks, PerLoopChannelLock)

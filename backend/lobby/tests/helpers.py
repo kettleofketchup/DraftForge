@@ -199,8 +199,8 @@ def internal_api_bridge():
         )
 
     with (
-        mock.patch("app.internal_client._post", side_effect=_post) as post,
-        mock.patch("app.internal_client._get", side_effect=_get),
-        mock.patch("app.internal_client._patch", side_effect=_patch),
+        mock.patch("app.internal_client.transport.post", side_effect=_post) as post,
+        mock.patch("app.internal_client.transport.get", side_effect=_get),
+        mock.patch("app.internal_client.transport.patch", side_effect=_patch),
     ):
         yield post

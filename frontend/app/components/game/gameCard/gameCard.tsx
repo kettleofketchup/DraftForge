@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router';
 import { DotaMatchStatsModal } from '~/components/bracket/modals';
 import { refreshTournamentHook } from '~/components/teamdraft/hooks/refreshTournamentHook';
 import { Input } from '~/components/ui/input';
+import { DisplayName } from '~/components/user/avatar';
 import { useUserStore } from '~/store/userStore';
 import { Button } from '../../ui/button';
 import { EditButton, SubmitButton } from '../../ui/buttons';
@@ -133,13 +134,17 @@ export const GameCard: React.FC<Props> = ({
         {game.radiant_team && (
           <div>
             <span className="font-semibold">Radiant:</span>{' '}
-            {game.radiant_team?.captain?.username}'s Team
+            {game.radiant_team.captain
+              ? `${DisplayName(game.radiant_team.captain)}'s Team`
+              : game.radiant_team.name}
           </div>
         )}
         {game.dire_team && (
           <div>
             <span className="font-semibold">Dire:</span>{' '}
-            {game.dire_team?.captain?.username}'s Team
+            {game.dire_team.captain
+              ? `${DisplayName(game.dire_team.captain)}'s Team`
+              : game.dire_team.name}
           </div>
         )}
       </>

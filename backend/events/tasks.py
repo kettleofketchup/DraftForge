@@ -9,7 +9,6 @@ from celery import shared_task
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from app.internal_client import (
-    _api_get,
     auto_close_event,
     check_message_log_exists,
     claim_discord_message_log,
@@ -32,6 +31,7 @@ from app.internal_client import (
     get_sync_discord_state,
     search_message_logs,
     transition_event_state,
+    transport,
     update_discord_event,
     update_event_dm,
 )
@@ -1159,7 +1159,7 @@ def _mark_interested_discord_event_impl(event_id: int, user_id: int) -> str:
     if not event.discord_mark_interested:
         return "Skipped: mark_interested disabled"
 
-    user_resp = _api_get(f"/users/{user_id}/")
+    user_resp = transport.api_get(f"/users/{user_id}/")
     if not user_resp or not user_resp.ok:
         return f"Skipped: user {user_id} not found"
     user_data = user_resp.json()

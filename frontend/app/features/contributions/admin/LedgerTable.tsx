@@ -22,6 +22,7 @@ import {
 } from '~/components/ui/dialog';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
@@ -188,16 +189,11 @@ export function LedgerTable({
               <div className="min-w-0">
                 <div className="flex items-center gap-2 font-medium">
                   <UserAvatar
-                    user={{
-                      pk: entry.member.user_pk,
-                      username: entry.member.username,
-                      nickname: entry.member.nickname,
-                      avatarUrl: entry.member.avatarUrl,
-                    }}
+                    user={{ ...entry.member, pk: entry.member.user_pk }}
                     size="sm"
                   />
                   <span className="min-w-0 truncate">
-                    {entry.member.nickname || entry.member.username}
+                    {DisplayName(entry.member)}
                     <span className="text-muted-foreground">
                       {' '}
                       · {KIND_LABELS[entry.kind]}
@@ -219,7 +215,7 @@ export function LedgerTable({
                   ) : entry.event_name ? (
                     ` · ${entry.event_name}`
                   ) : null}
-                  {entry.awarded_by && ` · by ${entry.awarded_by.username}`}
+                  {entry.awarded_by && ` · by ${DisplayName(entry.awarded_by)}`}
                 </div>
                 {entry.reason && (
                   <div className="text-sm text-muted-foreground">
@@ -327,7 +323,7 @@ export function LedgerTable({
         title="Delete this award?"
         description={
           deleting
-            ? `${deleting.points} points for ${deleting.member.nickname || deleting.member.username} will be removed.`
+            ? `${deleting.points} points for ${DisplayName(deleting.member)} will be removed.`
             : ''
         }
         confirmLabel="Delete"

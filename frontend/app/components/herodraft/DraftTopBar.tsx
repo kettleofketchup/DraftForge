@@ -1,5 +1,9 @@
 import { useMemo } from 'react';
-import type { HeroDraft, HeroDraftTick } from '~/components/herodraft/types';
+import type {
+  DraftTeam,
+  HeroDraft,
+  HeroDraftTick,
+} from '~/components/herodraft/types';
 import {
   isTimerEnabled,
   useDraftCountdown,
@@ -36,7 +40,7 @@ const GRACE_URGENT_MS = 10_000;
 const RESERVE_CRITICAL_MS = 30_000;
 
 /**
- * Convert draft captain data to UserType for PlayerPopover/AvatarUrl compatibility
+ * Convert draft captain data to UserType for PlayerPopover compatibility
  */
 function captainToUser(captain: {
   pk: number;
@@ -153,14 +157,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
 
   // Helper to render a player avatar with name underneath
   const renderPlayer = (
-    player: {
-      pk: number;
-      username: string | null;
-      nickname: string | null;
-      avatar: string | null;
-      avatarUrl?: string | null;
-      discordId?: string | null;
-    },
+    player: NonNullable<DraftTeam['captain']>,
     isCaptain: boolean,
     testIdPrefix: string,
   ) => (
@@ -170,7 +167,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
         data-testid={`${testIdPrefix}-button`}
       >
         <UserAvatar
-          user={captainToUser(player)}
+          user={player}
           size="sm"
           border={isCaptain ? 'captain' : 'none'}
           className={cn(
@@ -189,7 +186,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           )}
           data-testid={`${testIdPrefix}-name`}
         >
-          {DisplayName(captainToUser(player))}
+          {DisplayName(player)}
         </span>
       </button>
     </PlayerPopover>

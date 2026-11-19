@@ -10,14 +10,14 @@ export type { EditIconButtonProps } from './EditIconButton';
 export { PlusIconButton } from './PlusIconButton';
 export type { PlusIconButtonProps } from './PlusIconButton';
 
+export { RemoveIconButton } from './RemoveIconButton';
+export type { RemoveIconButtonProps } from './RemoveIconButton';
+
 export { SendIconButton } from './SendIconButton';
 export type { SendIconButtonProps } from './SendIconButton';
 
 export { TrashIconButton } from './TrashIconButton';
-export type {
-  IconButtonSize,
-  TrashIconButtonProps,
-} from './TrashIconButton';
+export type { IconButtonSize, TrashIconButtonProps } from './TrashIconButton';
 
 export { ViewIconButton } from './ViewIconButton';
 export type { ViewIconButtonProps } from './ViewIconButton';
