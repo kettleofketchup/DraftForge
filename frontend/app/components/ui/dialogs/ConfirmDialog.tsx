@@ -7,6 +7,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '~/components/ui/alert-dialog';
+import type {
+  CancelButtonVariant,
+  ConfirmButtonVariant,
+} from '~/components/ui/buttons';
 import {
   CancelButton,
   ConfirmButton,
@@ -15,7 +19,6 @@ import {
   brandReadableWarning,
   brandSuccessBg,
 } from '~/components/ui/buttons';
-import type { CancelButtonVariant, ConfirmButtonVariant } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
 export interface ConfirmDialogProps {
@@ -97,7 +100,10 @@ const confirmButtonVariantMap: Record<string, ConfirmButtonVariant> = {
  *   onConfirm={handleDelete}
  * />
  */
-export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps>(
+export const ConfirmDialog = React.forwardRef<
+  HTMLDivElement,
+  ConfirmDialogProps
+>(
   (
     {
       open,
@@ -118,8 +124,39 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
       bodyContent,
       confirmDisabled = false,
     },
-    ref
+    ref,
   ) => {
+    const contentRef = React.useRef<HTMLDivElement | null>(null);
+    const setContentRef = React.useCallback(
+      (node: HTMLDivElement | null) => {
+        contentRef.current = node;
+        if (typeof ref === 'function') ref(node);
+        else if (ref) ref.current = node;
+      },
+      [ref],
+    );
+
+    // Opening one dialog while another is still animating closed leaves focus
+    // in the closing one, so Enter/Backspace would never reach this one. Take
+    // focus as soon as the content exists, before the next key event.
+    React.useLayoutEffect(() => {
+      const el = contentRef.current;
+      if (open && el && !el.contains(document.activeElement)) {
+        el.focus({ preventScroll: true });
+      }
+    }, [open]);
+
+    // Don't hand focus back to the page if another dialog is already open.
+    const handleCloseAutoFocus = (event: Event) => {
+      if (
+        document.querySelector(
+          '[role="alertdialog"][data-state="open"], [role="dialog"][data-state="open"]',
+        )
+      ) {
+        event.preventDefault();
+      }
+    };
+
     const handleConfirm = async () => {
       if (isLoading || confirmDisabled) return;
       try {
@@ -138,7 +175,8 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
     // We skip the keys when an editable element has focus so users can still
     // type in inputs nested inside `description`.
     const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.defaultPrevented || isLoading) return;
+      // A closing dialog keeps focus during its exit animation; ignore its keys.
+      if (!open || event.defaultPrevented || isLoading) return;
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
       const isEditable =
@@ -160,16 +198,19 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
     return (
       <AlertDialog open={open} onOpenChange={onOpenChange}>
         <AlertDialogContent
-          ref={ref}
+          ref={setContentRef}
           onKeyDown={handleKeyDown}
+          onCloseAutoFocus={handleCloseAutoFocus}
           data-testid={contentTestId}
           className={cn(
             'max-w-[calc(100%-2rem)] sm:max-w-md',
-            contentVariantStyles[variant]
+            contentVariantStyles[variant],
           )}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle data-testid={titleTestId}>{title}</AlertDialogTitle>
+            <AlertDialogTitle data-testid={titleTestId}>
+              {title}
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div
                 data-testid={descriptionTestId}
@@ -179,12 +220,16 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {bodyContent ? <div data-testid="confirm-dialog-body-slot">{bodyContent}</div> : null}
+          {bodyContent ? (
+            <div data-testid="confirm-dialog-body-slot">{bodyContent}</div>
+          ) : null}
           <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-3">
             <CancelButton
               onClick={handleCancel}
               disabled={isLoading}
-              variant={cancelVariant ?? (variant === 'warning' ? 'success' : 'default')}
+              variant={
+                cancelVariant ?? (variant === 'warning' ? 'success' : 'default')
+              }
               hotkey="⌫"
               data-testid={cancelTestId}
             >
@@ -204,7 +249,7 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
         </AlertDialogContent>
       </AlertDialog>
     );
-  }
+  },
 );
 
 ConfirmDialog.displayName = 'ConfirmDialog';

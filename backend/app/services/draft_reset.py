@@ -4,7 +4,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from app.models import CustomUser, Team, Tournament
-from app.services.team_references import team_references
+from app.serializers import TournamentUserSerializer
+from app.services.team_references import TeamUsage, team_references, team_usage
 
 
 class IneligibleReason(StrEnum):
@@ -21,9 +22,10 @@ class NoEligibleCaptains(DraftResetError):
 
 
 class TeamsReferenced(DraftResetError):
-    def __init__(self, references: dict[str, int]) -> None:
+    def __init__(self, references: dict[str, int], usage: list[TeamUsage]) -> None:
         super().__init__("Teams are used by games or other records.")
         self.references = references
+        self.usage = usage
 
 
 @dataclass
@@ -37,10 +39,19 @@ class DraftResetReport:
     def as_dict(self) -> dict[str, list]:
         return {
             "reset_teams": [team.pk for team in self.reset_teams],
+            "reset_team_names": [
+                {"pk": team.pk, "name": team.name} for team in self.reset_teams
+            ],
             "dropped_teams": self.dropped_teams,
             "kept_teams": self.kept_teams,
             "cleared_deputies": self.cleared_deputies,
         }
+
+
+def _captain(team: Team) -> dict[str, object] | None:
+    if team.captain is None:
+        return None
+    return dict(TournamentUserSerializer(team.captain).data)
 
 
 def _ineligible_reason(team: Team) -> IneligibleReason:
@@ -55,7 +66,7 @@ def reset_draft_teams(tournament: Tournament, *, force: bool) -> DraftResetRepor
     Raises before any write: ``NoEligibleCaptains`` when no team can be drafted,
     ``TeamsReferenced`` when other records use the teams and ``force`` is False.
     """
-    teams = tournament.teams.nocache().order_by("pk")
+    teams = tournament.teams.nocache().select_related("captain").order_by("pk")
     eligible_pks = set(
         tournament.draft_eligible_teams().nocache().values_list("pk", flat=True)
     )
@@ -63,17 +74,20 @@ def reset_draft_teams(tournament: Tournament, *, force: bool) -> DraftResetRepor
         raise NoEligibleCaptains
     references = team_references(teams)
     if references and not force:
-        raise TeamsReferenced(references)
+        raise TeamsReferenced(references, team_usage(teams))
 
     report = DraftResetReport()
     for team in teams:
         if team.pk not in eligible_pks:
-            entry = {
+            entry: dict[str, object] = {
                 "pk": team.pk,
                 "name": team.name,
                 "reason": _ineligible_reason(team),
+                "captain": _captain(team),
             }
-            if team_references([team]):
+            usage = team_usage([team])
+            if usage:
+                entry["usage"] = usage
                 report.kept_teams.append(entry)
             else:
                 team.delete()

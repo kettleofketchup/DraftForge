@@ -118,6 +118,16 @@ Variants on `BrandDropdownAction`:
 
 `SelectValue`, `SelectGroup`, `SelectLabel`, `SelectScrollUpButton`, `SelectScrollDownButton`, and `SelectSeparator` are re-exported from `brand-select.tsx` unchanged — they don't need a brand layer.
 
+## Radios
+
+Why: [`THEMING-GUIDE.md` §"Radio Buttons"](../../../THEMING-GUIDE.md#radio-buttons).
+
+| Anti-pattern | Replace with | Notes |
+|---|---|---|
+| `<input type="radio">` or a hand-rolled round `<button>` | `<RadioGroup>` + `<RadioGroupItem>` from `~/components/ui/radio-group` | Ships the brand ring, gradient dot, glow, focus ring and disabled state, plus Radix keyboard navigation. |
+| `<RadioGroupItem className="border-violet-… p-0 …">` restyled per call site | Bare `<RadioGroupItem>`; pass layout classes only | The shared item owns colour and the `button` base-rule reset. Change the brand there, once. |
+| Prominent choice with a title + description per option | Option cards over an `sr-only` `<RadioGroupItem>`, as in `RankStatusRadioGroup` | Keeps the radio semantics; the card shows a check icon for the selected state. |
+
 ## Tables
 
 | Anti-pattern | Replace with | Notes |

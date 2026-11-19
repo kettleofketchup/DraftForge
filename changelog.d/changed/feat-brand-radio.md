@@ -1,0 +1,1 @@
+- Radio buttons now use the brand look: a violet ring, a violet-to-cyan dot with a soft glow when selected, and the same keyboard focus ring as switches. They no longer stretch into pills or pick up a stray hover border.

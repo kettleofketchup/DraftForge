@@ -32,7 +32,8 @@ test.describe('Org features: locked org @cicd', () => {
     await expect(page.getByTestId('org-tab-promotion')).toHaveCount(0);
 
     await page.getByTestId('edit-organization-button').click();
-    await expect(page.getByTestId('edit-organization-modal')).toBeVisible();
+    await expect(page.getByTestId('org-settings-tab')).toBeVisible();
+    await page.getByTestId('org-settings-tab-admins').click();
     const addAdmin = page.getByTestId('add-admin-btn');
     await addAdmin.scrollIntoViewIfNeeded();
     await expect(addAdmin).toBeVisible();
