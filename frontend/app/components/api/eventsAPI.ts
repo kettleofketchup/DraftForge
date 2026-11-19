@@ -5,6 +5,7 @@ import type {
   ReadyCheckFields,
   RollCallMode,
   SignupOpenMode,
+  StartMentionScope,
 } from '~/components/events/schemas';
 import axios from './axios';
 
@@ -283,6 +284,9 @@ export interface EventRepeaterType extends ReadyCheckSettings {
   discord_confirm_attendance_hours: number;
   discord_announcement_role_ids: string[];
   discord_signup_role_ids: string[];
+  discord_start_mention: boolean;
+  discord_start_mention_minutes: number;
+  discord_start_mention_scope: StartMentionScope;
   auto_create_hero_drafts: boolean;
   discord_send_draft_link: boolean;
   discord_send_herodraft_link: boolean;
@@ -397,6 +401,9 @@ export interface OrgEventDefaultsType extends ReadyCheckSettings {
   discord_announcement: boolean;
   discord_announcement_channel_id: string;
   discord_announcement_hours: number;
+  discord_start_mention: boolean;
+  discord_start_mention_minutes: number;
+  discord_start_mention_scope: StartMentionScope;
   discord_subscriber_dm?: boolean;
   discord_subscriber_dm_hours?: number;
   discord_require_rank_screenshot: boolean;
