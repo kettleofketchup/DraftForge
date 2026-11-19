@@ -206,7 +206,8 @@ Rules:
 - A change never adds a leadership problem, so a team with an existing problem can
   still be repaired one step at a time.
 - A reason is required when the change affects a player other than the actor (except
-  system changes). A rename affects no player, so it needs no reason. Reasons are at
+  system changes). A rename affects no player, so the service needs no reason for it;
+  the web API still requires a reason for every action, renames included. Reasons are at
   most 500 characters (`reason_too_long`). The API maps `reason_required` and the other
   refusal codes to 400 (#545).
 - A dropout that would empty the team is refused; sub in a stand-in instead. Dropouts
