@@ -424,7 +424,6 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     const i = draftIndex;
     log.debug('Next Round');
     log.debug('Current Index', draftIndex, draft.draft_rounds.length);
-    // Fix: Check if next index is within bounds
     if (i < draft.draft_rounds.length - 1) {
       log.debug('Setting new round', i + 1, draft.draft_rounds.length);
       setCurDraftRound(draft?.draft_rounds?.[i + 1] || ({} as DraftRoundType));

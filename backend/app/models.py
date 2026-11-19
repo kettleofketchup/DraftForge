@@ -78,7 +78,7 @@ class PositionEnum(IntEnum):
     HardSupport = 5
 
 
-# Enum for Dota2 positions
+# Team draft pick-order styles
 class DraftStyles(StrEnum):
     snake = "snake"
     normal = "normal"
@@ -160,8 +160,7 @@ class CustomUser(AbstractUser):
     def nickname(self) -> str | None:
         """Transitional proxy — reads nickname from base_profile.
 
-        Removed in a follow-up cleanup ticket once all writers migrate to
-        PATCH /api/users/me/profile/base/.
+        Remove once all writers migrate to PATCH /api/users/me/profile/base/.
         """
         bp = getattr(self, "base_profile", None)
         if bp is None:
@@ -223,8 +222,7 @@ class CustomUser(AbstractUser):
     @property
     def positions(self) -> PositionsModel | None:
         """Transitional proxy — reads positions from dota_user_profile.
-        Removed in a cleanup ticket once writers migrate to
-        PATCH /api/users/me/profile/game/dota/."""
+        Remove once writers migrate to PATCH /api/users/me/profile/game/dota/."""
         bp = getattr(self, "base_profile", None)
         dp = getattr(bp, "dota_user_profile", None) if bp else None
         return dp.positions if dp else None
@@ -429,10 +427,8 @@ class CustomUser(AbstractUser):
         cacheops, and flush pending nickname/avatar/positions/mmr values
         buffered by the transitional property setters before the user had a pk.
 
-        This single save() merges what used to be two separately-defined
-        save() overrides on CustomUser. Python MRO meant the second-defined
-        one always won, so the steam id sync was silently dead until this
-        merge resurrected it.
+        Keep this the only save() on CustomUser: a second definition in the
+        class body silently replaces this one, dropping the steam id sync.
         """
         # 1. Steam id 32-bit / 64-bit sync.
         if self.steam_account_id is not None:
@@ -447,13 +443,13 @@ class CustomUser(AbstractUser):
         # Cacheops auto-fires invalidation for `self` via post_save signal
         # (model is registered with ops="all"). No explicit call needed.
 
-        # 4. BaseUserProfile auto-create. Idempotent via get_or_create.
+        # 2. BaseUserProfile auto-create. Idempotent via get_or_create.
         # Local import avoids the circular: user.models -> app.CustomUser.
         from user.models import BaseUserProfile
 
         bp, _ = BaseUserProfile.objects.get_or_create(user=self)
 
-        # 5. Flush pending nickname/avatar values buffered by the property
+        # 3. Flush pending nickname/avatar values buffered by the property
         #    setters before the user had a pk (and therefore a base_profile).
         #    Hold the `del` until bp.save() succeeds so a retry after a
         #    transient DB error still has the buffered value to flush.
@@ -476,7 +472,7 @@ class CustomUser(AbstractUser):
             if pending_avatar is not None:
                 del self._pending_avatar
 
-        # 6. Flush pending positions/mmr buffered by the shims pre-pk.
+        # 4. Flush pending positions/mmr buffered by the shims pre-pk.
         dp = bp.dota_user_profile
         dota_fields = []
         if hasattr(self, "_pending_positions"):
@@ -737,7 +733,7 @@ class Tournament(models.Model):
         help_text="Tournament timezone (e.g., 'America/New_York', 'Europe/London')",
     )
     users = models.ManyToManyField(User, related_name="tournaments")
-    # Removed teams field; handled by ForeignKey in Team
+    # teams: reverse accessor of Team.tournament
     winning_team = models.OneToOneField(
         "Team",
         null=True,
@@ -887,8 +883,7 @@ class Tournament(models.Model):
     def linked_steam_league_id(self) -> int | None:
         """Steam league id resolved via the parent League FK.
 
-        The legacy `Tournament.steam_league_id` field is ignored — see the
-        separate rename-plan PR for the wider cleanup. Callers doing
+        The legacy `Tournament.steam_league_id` field is ignored. Callers doing
         Steam match lookups should use this property so behavior follows
         the linked League and edits to League.steam_league_id take effect
         without per-tournament duplication.
@@ -1124,7 +1119,7 @@ class Game(models.Model):
         related_name="games",
         on_delete=models.CASCADE,
         null=True,
-        blank=True,  # Now optional
+        blank=True,
     )
     league = models.ForeignKey(
         "League",
