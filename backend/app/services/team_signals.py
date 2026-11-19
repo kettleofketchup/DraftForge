@@ -21,7 +21,7 @@ log = get_logger(__name__)
 
 team_roster_changed: Signal = Signal()
 
-# True while a caller (service or serializer) writes its own TeamLog rows,
+# True while a caller (service or team PATCH view) writes its own TeamLog rows,
 # so the m2m signal handler skips its via=system rows.
 team_audit_owner: ContextVar[bool] = ContextVar("team_audit_owner", default=False)
 
