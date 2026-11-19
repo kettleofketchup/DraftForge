@@ -19,6 +19,7 @@ from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
+    REGISTERED_SIGNUP_STATUSES,
     Commitment,
     EventState,
     RepeatFrequency,
@@ -1158,11 +1159,6 @@ def teardown_event(event: Event) -> None:
 # password; each event stores its effective password and copies it onto its
 # tournament. A lobby keeps the password it was created with, so a change
 # only affects lobbies created afterwards.
-
-# Signup statuses that put a player in the event's tournament
-# (approve_signup / confirm_signup call add_user_to_tournament).
-# An allow-list, so DROPPED is excluded on purpose.
-REGISTERED_SIGNUP_STATUSES = (SignupStatus.APPROVED, SignupStatus.CONFIRMED)
 
 
 def is_registered_for_event(
