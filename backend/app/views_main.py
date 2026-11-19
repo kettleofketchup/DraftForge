@@ -753,7 +753,21 @@ class TeamView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
-        return Response(data)
+        return Response(
+            {**data, "can_manage_team": self._can_manage_team(request.user, pk)}
+        )
+
+    def _can_manage_team(self, user: CustomUser | AnonymousUser, pk: str) -> bool:
+        if not user.is_authenticated:
+            return False
+        team = (
+            Team.objects.nocache().select_related("tournament__league").filter(pk=pk)
+        ).first()
+        return (
+            team is not None
+            and team.tournament_id is not None
+            and can_edit_tournament(user, team.tournament)
+        )
 
     def get_permissions(self) -> list[BasePermission]:
         if self.action in TEAM_MANAGE_ACTIONS | {

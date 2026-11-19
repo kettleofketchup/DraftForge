@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+from unittest.mock import patch
 
 from cacheops import invalidate_model
 from cacheops.conf import settings as cacheops_settings
@@ -785,6 +786,64 @@ class CachedPermissionTests(TeamApiFixture, TransactionTestCase):
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(resp.json()["code"], "not_permitted")
         self.assertEqual(self.log_count(), before)
+
+
+class CanManageTeamTests(TeamApiFixture, TestCase):
+    def detail(self, user: CustomUser | None, team: Team | None = None) -> Any:
+        pk = (self.team if team is None else team).pk
+        resp = self.client_for(user).get(f"/api/teams/{pk}/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        return resp.json()
+
+    def test_staff_true_random_false(self) -> None:
+        self.assertIs(self.detail(self.league_admin)["can_manage_team"], True)
+        self.assertIs(self.detail(self.site_staff)["can_manage_team"], True)
+        self.assertIs(self.detail(self.outsider)["can_manage_team"], False)
+        self.assertIs(self.detail(self.c)["can_manage_team"], False)
+        self.assertIs(self.detail(None)["can_manage_team"], False)
+
+    def test_tournamentless_team(self) -> None:
+        loose = Team.objects.create(name="Loose", captain=self.o1)
+        loose.members.add(self.o1)
+        self.assertIs(self.detail(self.outsider, loose)["can_manage_team"], False)
+        self.assertIs(self.detail(self.site_staff, loose)["can_manage_team"], False)
+
+    def test_retrieve_has_managed_fields(self) -> None:
+        self.team.left_members.add(self.m2)
+        data = self.detail(self.outsider)
+        self.assertEqual(data["leadership_problems"], [])
+        self.assertEqual(data["left_members"][0]["pk"], self.m2.pk)
+
+
+class CanManageTeamCacheTests(TeamApiFixture, TransactionTestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._redis_ok = _redis_reachable()
+
+    def setUp(self) -> None:
+        if not cacheops_settings.CACHEOPS_ENABLED:
+            self.skipTest("cacheops disabled")
+        if not self._redis_ok:
+            self.skipTest("Cacheops Redis not reachable")
+        super().setUp()
+        invalidate_model(Team)
+        self.addCleanup(invalidate_model, Team)
+
+    def test_flag_is_per_viewer_on_cache_hit(self) -> None:
+        url = f"/api/teams/{self.team.pk}/"
+        with patch.object(
+            ManagedTeamSerializer,
+            "to_representation",
+            autospec=True,
+            side_effect=ManagedTeamSerializer.to_representation,
+        ) as spy:
+            flags = [
+                self.client_for(user).get(url).json()["can_manage_team"]
+                for user in (self.site_staff, self.outsider, None)
+            ]
+        self.assertEqual(flags, [True, False, False])
+        self.assertEqual(spy.call_count, 1)
 
 
 class TeamHistoryTests(TeamApiFixture, TestCase):
