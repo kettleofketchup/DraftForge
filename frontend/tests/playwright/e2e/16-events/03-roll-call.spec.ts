@@ -9,6 +9,7 @@
  * Uses the E2E Signup Event (signups_open state after reset).
  */
 
+import type { BrowserContext, Page } from '@playwright/test';
 import {
   expect,
   getEventsTestData,
@@ -31,6 +32,47 @@ let eventInfo: EventInfo;
 // (signups_open → roll_call → finished). With CI's `fullyParallel: true`
 // + `--workers=2`, parallel tests would race on the same event PK and
 // flake the "Start Roll Call" button visibility. Force serial execution.
+/** Two players RSVP, both end up approved, and the admin lands on roll call. */
+async function openRollCallWithTwoApproved(
+  context: BrowserContext,
+  page: Page,
+): Promise<{ id: number; status: string }[]> {
+  for (const login of [loginEventPlayer, loginEventPlayer4]) {
+    await login(context);
+    const resp = await postWithCsrf(
+      context,
+      `${API_URL}/events/${eventInfo.pk}/signup/`,
+      { intent: 'rsvp' },
+    );
+    expect(resp.ok()).toBeTruthy();
+  }
+
+  await loginEventAdmin(context);
+  const signupsResp = await context.request.get(
+    `${API_URL}/events/signups/?event=${eventInfo.pk}`,
+  );
+  const signups: { id: number; status: string }[] = await signupsResp.json();
+  expect(signups.length).toBeGreaterThanOrEqual(2);
+  for (const s of signups) {
+    if (s.status === 'rsvp' || s.status === 'pending_approval') {
+      const resp = await postWithCsrf(
+        context,
+        `${API_URL}/events/signups/${s.id}/approve/`,
+      );
+      expect(resp.ok()).toBeTruthy();
+    }
+  }
+
+  await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
+  await page.getByTestId('event-start-rollcall-btn').click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: /start roll call/i })
+    .click();
+  await page.waitForURL(/\/rollcall\//);
+  return signups;
+}
+
 test.describe.serial('Roll Call Flow (@cicd)', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
@@ -155,39 +197,7 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     context,
     page,
   }) => {
-    for (const login of [loginEventPlayer, loginEventPlayer4]) {
-      await login(context);
-      const resp = await postWithCsrf(
-        context,
-        `${API_URL}/events/${eventInfo.pk}/signup/`,
-        { intent: 'rsvp' },
-      );
-      expect(resp.ok()).toBeTruthy();
-    }
-
-    await loginEventAdmin(context);
-    const signupsResp = await context.request.get(
-      `${API_URL}/events/signups/?event=${eventInfo.pk}`,
-    );
-    const signups: { id: number; status: string }[] = await signupsResp.json();
-    expect(signups.length).toBeGreaterThanOrEqual(2);
-    for (const s of signups) {
-      if (s.status === 'rsvp' || s.status === 'pending_approval') {
-        const resp = await postWithCsrf(
-          context,
-          `${API_URL}/events/signups/${s.id}/approve/`,
-        );
-        expect(resp.ok()).toBeTruthy();
-      }
-    }
-
-    await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
-    await page.getByTestId('event-start-rollcall-btn').click();
-    await page
-      .getByRole('alertdialog')
-      .getByRole('button', { name: /start roll call/i })
-      .click();
-    await page.waitForURL(/\/rollcall\//);
+    const signups = await openRollCallWithTwoApproved(context, page);
     await expect(page.getByTestId('rollcall-keyboard-legend')).toBeVisible();
 
     const awaiting = page
