@@ -33,6 +33,7 @@ test.describe('Org features: locked org @cicd', () => {
 
     await page.getByTestId('edit-organization-button').click();
     await expect(page.getByTestId('edit-organization-modal')).toBeVisible();
+    await page.getByTestId('edit-org-tab-admins').click();
     const addAdmin = page.getByTestId('add-admin-btn');
     await addAdmin.scrollIntoViewIfNeeded();
     await expect(addAdmin).toBeVisible();
