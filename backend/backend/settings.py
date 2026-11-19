@@ -458,7 +458,7 @@ if env_bool("DISABLE_CACHE"):
 else:
     CHANNEL_LAYERS = {
         "default": {
-            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "BACKEND": "app.channel_layers.LoopSafeRedisChannelLayer",
             "CONFIG": {
                 "hosts": [(REDIS_HOST, 6379)],
             },
