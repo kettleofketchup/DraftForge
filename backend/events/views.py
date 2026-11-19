@@ -942,7 +942,6 @@ class EventViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 event.transition_state(EventState.ROLL_CALL)
                 synced = sync_event_roster(event)
-                transaction.on_commit(lambda: notify_signup_changed(event))
             return Response(_roster_sync_payload(event, synced, request.user))
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -962,7 +961,6 @@ class EventViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 event.transition_state(EventState.SIGNUPS_OPEN)
                 synced = sync_event_roster(event)
-                transaction.on_commit(lambda: notify_signup_changed(event))
             return Response(_roster_sync_payload(event, synced, request.user))
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -986,7 +984,6 @@ class EventViewSet(viewsets.ModelViewSet):
                 ensure_tournament_with_signups(event)
                 event.transition_state(EventState.IN_PROGRESS)
                 finalize_event_tournament(event)
-                transaction.on_commit(lambda: notify_signup_changed(event))
             qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
@@ -1016,7 +1013,6 @@ class EventViewSet(viewsets.ModelViewSet):
                     event.save(update_fields=["tournament", "updated_at"])
                     tournament.delete()
                 event.transition_state(EventState.CANCELLED)
-                transaction.on_commit(lambda: notify_signup_changed(event))
                 try:
                     discord_event = event.discord_event
                 except DiscordEvent.DoesNotExist:
@@ -1059,7 +1055,6 @@ class EventViewSet(viewsets.ModelViewSet):
                 {"error": f"Cannot complete an event in '{result.state}' state."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        transaction.on_commit(lambda: notify_signup_changed(event))
         return Response(_event_payload(event.pk, request.user))
 
     @action(detail=True, methods=["put"], url_path="staff")

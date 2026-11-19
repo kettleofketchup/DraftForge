@@ -601,6 +601,14 @@ class Event(
         self.state = new_state
         self.updated_at = now
         invalidate_after_commit(stale, self)
+        self.refresh_signup_post_on_commit()
+
+    def refresh_signup_post_on_commit(self) -> None:
+        """Re-render the Discord signup post once the state change commits."""
+        # Function-local: events.discord imports events.models.
+        from events.discord.dispatch import notify_signup_changed
+
+        transaction.on_commit(lambda: notify_signup_changed(self))
 
 
 class EventTeam(models.Model):
