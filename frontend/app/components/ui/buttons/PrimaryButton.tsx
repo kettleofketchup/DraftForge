@@ -23,9 +23,9 @@ export interface PrimaryButtonProps extends Omit<
 }
 
 const colorClasses: Record<PrimaryButtonColor, string> = {
-  green: 'bg-green-700 hover:bg-green-600 text-white shadow-green-900/50',
-  blue: 'bg-blue-700 hover:bg-blue-600 text-white shadow-blue-900/50',
-  yellow: 'bg-yellow-600 hover:bg-yellow-500 text-black shadow-yellow-900/50',
+  green: 'bg-success/60 hover:bg-success/80 text-white shadow-success/20',
+  blue: 'bg-accent hover:brightness-110 text-white shadow-accent/30',
+  yellow: 'bg-warning/80 hover:bg-warning/95 text-black shadow-warning/20',
 };
 
 // Two-layer dark text-shadow under every PrimaryButton label: a hard 1px
