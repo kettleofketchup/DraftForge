@@ -1,6 +1,9 @@
 // DraftForge design-system rules for people: avatars go through UserAvatar, names
 // through DisplayName (which picks org server nickname, Discord name or username).
 
+const GUIDE = '.claude/skills/frontend-development/resources/users.md';
+const see = (rule) => ` See ${GUIDE}#${rule}`;
+
 const NAME_FIELDS = new Set([
   'username',
   'nickname',
@@ -9,7 +12,6 @@ const NAME_FIELDS = new Set([
   'discordUsername',
   'global_name',
 ]);
-const AVATAR_FIELDS = new Set(['avatar', 'avatarUrl']);
 // Attributes a person reads; ids, keys, test ids and links keep the raw username.
 const NAME_ATTRIBUTES = new Set([
   'title',
@@ -65,26 +67,6 @@ function renderedMembers(node, out = []) {
     renderedMembers(n.right, out);
   }
   return out;
-}
-
-// Any member read inside an expression (for avatar src, which is often a template URL).
-function readsField(node, fields) {
-  let found = false;
-  const visit = (n) => {
-    if (!n || found || typeof n.type !== 'string') return;
-    if (fields.has(propertyName(n))) {
-      found = true;
-      return;
-    }
-    for (const key of Object.keys(n)) {
-      if (key === 'parent') continue;
-      const v = n[key];
-      if (Array.isArray(v)) v.forEach(visit);
-      else if (v && typeof v.type === 'string') visit(v);
-    }
-  };
-  visit(node);
-  return found;
 }
 
 function jsxName(node) {
@@ -156,9 +138,14 @@ function isQuietContext(node) {
 const useDisplayName = {
   meta: {
     type: 'problem',
-    docs: { description: 'Render person names through DisplayName' },
+    docs: {
+      description: 'Render person names through DisplayName',
+      url: `${GUIDE}#use-display-name`,
+    },
     messages: {
-      raw: 'Person name `.{{field}}` rendered directly; use DisplayName(user) so org server nicknames and Discord names apply.',
+      raw:
+        'Person name `.{{field}}` rendered directly; use DisplayName(user) so org server nicknames and Discord names apply.' +
+        see('use-display-name'),
     },
     schema: [],
   },
@@ -207,9 +194,14 @@ const useDisplayName = {
 const useUserAvatar = {
   meta: {
     type: 'problem',
-    docs: { description: 'Render user avatars through UserAvatar' },
+    docs: {
+      description: 'Render user avatars through UserAvatar',
+      url: `${GUIDE}#use-user-avatar`,
+    },
     messages: {
-      raw: 'User avatar rendered with raw <AvatarImage>; use <UserAvatar user={...} /> for the shared fallback, sizes and Discord URL handling.',
+      raw:
+        'User avatar rendered with raw <AvatarImage>; use <UserAvatar user={...} /> for the shared fallback, sizes and Discord URL handling.' +
+        see('use-user-avatar'),
     },
     schema: [],
   },
@@ -223,7 +215,7 @@ const useUserAvatar = {
         const value = src?.value;
         if (
           value?.type === 'JSXExpressionContainer' &&
-          readsField(value.expression, AVATAR_FIELDS)
+          readsMatching(value.expression, PERSON_AVATAR, /^(avatar|avatarUrl)$/)
         ) {
           context.report({ node, messageId: 'raw' });
         }
@@ -235,10 +227,14 @@ const useUserAvatar = {
 const noDisplayOrgArg = {
   meta: {
     type: 'suggestion',
-    docs: { description: 'Let DisplayName derive the org from the route' },
+    docs: {
+      description: 'Let DisplayName derive the org from the route',
+      url: `${GUIDE}#no-display-org-arg`,
+    },
     messages: {
       explicit:
-        'DisplayName derives the org from the current page; drop the org argument. For a deliberate override, disable this line with a reason.',
+        'DisplayName derives the org from the current page; drop the org argument. For a deliberate override, disable this line with a reason.' +
+        see('no-display-org-arg'),
     },
     schema: [],
   },
@@ -260,10 +256,14 @@ const noDisplayOrgArg = {
 const noUserReshape = {
   meta: {
     type: 'suggestion',
-    docs: { description: 'Pass the user payload to UserAvatar as-is' },
+    docs: {
+      description: 'Pass the user payload to UserAvatar as-is',
+      url: `${GUIDE}#no-user-reshape`,
+    },
     messages: {
       reshape:
-        'UserAvatar resolves {{root}} by pk / user_id and fills the rest from the user cache; pass user={{{root}}} instead of copying its fields.',
+        'UserAvatar resolves {{root}} by pk / user_id and fills the rest from the user cache; pass user={{{root}}} instead of copying its fields.' +
+        see('no-user-reshape'),
     },
     schema: [],
   },
@@ -304,10 +304,14 @@ const noUserReshape = {
 const noDirectNameResolver = {
   meta: {
     type: 'suggestion',
-    docs: { description: 'Use DisplayName / UserAvatar, not the resolvers' },
+    docs: {
+      description: 'Use DisplayName / UserAvatar, not the resolvers',
+      url: `${GUIDE}#no-direct-name-resolver`,
+    },
     messages: {
       direct:
-        '{{name}} is internal to the name and avatar helpers; use DisplayName(user) or <UserAvatar user={...} />.',
+        '{{name}} is internal to the name and avatar helpers; use DisplayName(user) or <UserAvatar user={...} />.' +
+        see('no-direct-name-resolver'),
     },
     schema: [],
   },
@@ -326,6 +330,114 @@ const noDirectNameResolver = {
   },
 };
 
+const PERSON_NAME =
+  /(^|_)(username|nickname|discordnickname|guildnickname|global_name)$/i;
+const PERSON_NAME_VAR = /^(displayName|username|nickname)$/;
+const PERSON_AVATAR = /(^|_)avatar(url)?$/i;
+
+// Reads a member whose name matches `pattern`, or a bare identifier matching `bareIdentifiers`.
+function readsMatching(node, pattern, bareIdentifiers) {
+  let found = false;
+  const visit = (n) => {
+    if (!n || found || typeof n.type !== 'string') return;
+    const prop = propertyName(n);
+    if (prop && pattern.test(prop)) {
+      found = true;
+      return;
+    }
+    if (n.type === 'Identifier' && bareIdentifiers.test(n.name)) {
+      const parent = n.parent;
+      const isProperty =
+        parent?.type === 'MemberExpression' &&
+        parent.property === n &&
+        !parent.computed;
+      if (!isProperty) {
+        found = true;
+        return;
+      }
+    }
+    for (const key of Object.keys(n)) {
+      if (key === 'parent') continue;
+      const v = n[key];
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v.type === 'string') visit(v);
+    }
+  };
+  visit(node);
+  return found;
+}
+
+function elementName(node) {
+  return node?.type === 'JSXElement' ? jsxName(node.openingElement) : null;
+}
+
+function callsDisplayName(node) {
+  let found = false;
+  const visit = (n) => {
+    if (!n || found || typeof n.type !== 'string') return;
+    if (
+      n.type === 'CallExpression' &&
+      unwrap(n.callee)?.type === 'Identifier' &&
+      unwrap(n.callee).name === 'DisplayName'
+    ) {
+      found = true;
+      return;
+    }
+    for (const key of Object.keys(n)) {
+      if (key === 'parent') continue;
+      const v = n[key];
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v.type === 'string') visit(v);
+    }
+  };
+  visit(node);
+  return found;
+}
+
+const noAvatarFallback = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description: 'Let UserAvatar render the no-user fallback',
+      url: `${GUIDE}#no-avatar-fallback`,
+    },
+    messages: {
+      branch:
+        'UserAvatar renders the fallback when there is no user; use one <UserAvatar user={...} fallbackName={...} /> instead of a raw <Avatar> branch.' +
+        see('no-avatar-fallback'),
+      initials:
+        'Person initials in <AvatarFallback>; use <UserAvatar user={...} />, which derives them from the display name.' +
+        see('no-avatar-fallback'),
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      ConditionalExpression(node) {
+        const a = unwrap(node.consequent);
+        const b = unwrap(node.alternate);
+        for (const [mine, other] of [
+          [a, b],
+          [b, a],
+        ]) {
+          if (
+            elementName(mine) === 'Avatar' &&
+            elementName(other) === 'UserAvatar'
+          )
+            context.report({ node: mine, messageId: 'branch' });
+        }
+      },
+      JSXElement(node) {
+        if (elementName(node) !== 'AvatarFallback') return;
+        const personal = (n) =>
+          readsMatching(n, PERSON_NAME, PERSON_NAME_VAR) || callsDisplayName(n);
+        if (node.children.some(personal))
+          context.report({ node, messageId: 'initials' });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: 'draftforge' },
   rules: {
@@ -334,5 +446,6 @@ export default {
     'no-display-org-arg': noDisplayOrgArg,
     'no-user-reshape': noUserReshape,
     'no-direct-name-resolver': noDirectNameResolver,
+    'no-avatar-fallback': noAvatarFallback,
   },
 };

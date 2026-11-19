@@ -86,6 +86,8 @@ export const eventStaffUserSchema = z.object({
   pk: z.number(),
   username: z.string(),
   nickname: z.string().nullable(),
+  discordNickname: z.string().nullish(),
+  guildNickname: z.string().nullish(),
   avatarUrl: z.string().nullable(),
 });
 

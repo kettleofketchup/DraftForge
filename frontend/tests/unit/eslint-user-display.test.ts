@@ -141,8 +141,53 @@ tester.run('use-user-avatar', rule('use-user-avatar'), {
       errors: [{ messageId: 'raw' }],
     },
     {
+      code: 'const a = <AvatarImage src={claim.claimer_avatar} />;',
+      errors: [{ messageId: 'raw' }],
+    },
+    {
+      code: 'const a = <AvatarImage src={avatarUrl ?? undefined} />;',
+      errors: [{ messageId: 'raw' }],
+    },
+    {
       code: 'const a = <AvatarImage src={`https://cdn/x/${u.discordId}/${u.avatar}.png`} />;',
       errors: [{ messageId: 'raw' }],
+    },
+  ],
+});
+
+tester.run('no-avatar-fallback', rule('no-avatar-fallback'), {
+  valid: [
+    'const a = <UserAvatar user={team.captain} fallbackName={team.name} />;',
+    'const a = <Avatar><AvatarFallback>{team.name.slice(0, 2)}</AvatarFallback></Avatar>;',
+    'const a = <AvatarFallback>{team.team_name.charAt(0)}</AvatarFallback>;',
+    'const a = <Avatar><AvatarFallback>{initials}</AvatarFallback></Avatar>;',
+    'const a = ok ? <UserAvatar user={u} /> : <Spinner />;',
+    'const a = org.logo ? <Avatar><AvatarImage src={org.logo} /></Avatar> : <Avatar />;',
+  ],
+  invalid: [
+    {
+      code: 'const a = team.captain ? <UserAvatar user={team.captain} /> : <Avatar><AvatarFallback>{initials}</AvatarFallback></Avatar>;',
+      errors: [{ messageId: 'branch' }],
+    },
+    {
+      code: 'const a = !u ? <Avatar /> : <UserAvatar user={u} />;',
+      errors: [{ messageId: 'branch' }],
+    },
+    {
+      code: 'const a = <Avatar><AvatarFallback>{p.username.slice(0, 2)}</AvatarFallback></Avatar>;',
+      errors: [{ messageId: 'initials' }],
+    },
+    {
+      code: 'const a = <AvatarFallback>{DisplayName(p).charAt(0)}</AvatarFallback>;',
+      errors: [{ messageId: 'initials' }],
+    },
+    {
+      code: 'const a = <AvatarFallback>{claim.claimer_username.charAt(0)}</AvatarFallback>;',
+      errors: [{ messageId: 'initials' }],
+    },
+    {
+      code: 'const a = <AvatarFallback>{displayName.substring(0, 2)}</AvatarFallback>;',
+      errors: [{ messageId: 'initials' }],
     },
   ],
 });

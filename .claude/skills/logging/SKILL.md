@@ -59,7 +59,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `api` | `serializer`, `routing`, `main`, `csv_import`, `joke` | — | `app/serializers.py`, `app/views*.py`, `app/views/csv_import.py`, `backend/urls.py` | DRF serializer mutations, view cache-miss, CSV import, env/routing |
 | `user` | `functions` | — | `app/functions/user.py` | Profile-update request/validate/apply |
 | `app` | `signals` | — | `app/signals.py` | Model signal handlers (org/league user create, herodraft cleanup) |
-| `internal_client` | `http` | — | `app/internal_client/__init__.py` | Internal HTTP client JSON-parse failures |
+| `internal_client` | `http` | — | `app/internal_client/` (`transport.py` and per-domain modules) | Internal HTTP client errors and JSON-parse failures |
 | `discord` | `bot`, `utils`, `views`, `channels`, `roles`, `users` | — | `discordbot/**` | Bot lifecycle, message utils, slash views, channel/role/user services |
 | `events` | `tasks`, `services`, `views`, `dispatch` | — | `events/**` | Event task lifecycle, signup services, manual fire, tournament-link dispatch |
 | `steam` | `api`, `game_linking`, `match`, `mmr`, `stats`, `model`, `league_sync`, `retry`, `ingest` | — | `steam/**` | Steam API, account/game linking, match fetch/store, MMR/stats, league sync, retry, internal store_match ingest |

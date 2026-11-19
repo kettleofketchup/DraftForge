@@ -7,7 +7,7 @@ import { LobbyPanel } from '~/components/lobby/LobbyPanel';
 import { provisionalWinnerSlot } from '~/components/lobby/provisional';
 import { useOrganization } from '~/components/organization';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
+import type { TeamType } from '~/components/tournament/types';
 import { Badge } from '~/components/ui/badge';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import {
@@ -19,6 +19,7 @@ import {
 } from '~/components/ui/dialog';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { usePersistMatchResult } from '~/hooks/useBracket';
 import { useGameLobby } from '~/hooks/useGameLobby';
 import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
@@ -499,7 +500,7 @@ export function MatchStatsModal({
 }
 
 interface TeamCardProps {
-  team?: { name: string; captain?: { avatarUrl?: string; username?: string } };
+  team?: Pick<TeamType, 'name' | 'captain'>;
   score?: number;
   isWinner: boolean;
   label: string;
@@ -516,7 +517,6 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
   }
 
   const displayName = team.captain ? DisplayName(team.captain) : team.name;
-  const initials = displayName.substring(0, 2).toUpperCase();
 
   return (
     <div
@@ -525,10 +525,12 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
         isWinner ? 'bg-green-500/10 ring-2 ring-green-500' : 'bg-muted/50',
       )}
     >
-      <Avatar className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-2">
-        <AvatarImage src={team.captain?.avatarUrl} />
-        <AvatarFallback>{initials}</AvatarFallback>
-      </Avatar>
+      <UserAvatar
+        user={team.captain}
+        fallbackName={team.name}
+        size="lg"
+        className="sm:h-12 sm:w-12 mb-2"
+      />
       <p
         className={cn(
           'font-medium text-sm sm:text-base truncate',
