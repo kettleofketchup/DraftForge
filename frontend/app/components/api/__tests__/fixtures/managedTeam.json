@@ -1,0 +1,253 @@
+{
+  "managedTeam": {
+    "pk": 1,
+    "name": "Rostered",
+    "left_members": [
+      {
+        "orgUserPk": 5,
+        "pk": 5,
+        "username": "roster_m2",
+        "nickname": null,
+        "guildNickname": null,
+        "discordNickname": null,
+        "avatar": null,
+        "discordId": null,
+        "positions": {
+          "pk": 5,
+          "carry": 0,
+          "mid": 0,
+          "offlane": 0,
+          "soft_support": 0,
+          "hard_support": 0
+        },
+        "steam_account_id": null,
+        "avatarUrl": null,
+        "mmr": 3000,
+        "league_mmr": 3000
+      }
+    ],
+    "captain": {
+      "orgUserPk": 2,
+      "pk": 2,
+      "username": "roster_c",
+      "nickname": null,
+      "guildNickname": null,
+      "discordNickname": null,
+      "avatar": null,
+      "discordId": null,
+      "positions": {
+        "pk": 2,
+        "carry": 0,
+        "mid": 0,
+        "offlane": 0,
+        "soft_support": 0,
+        "hard_support": 0
+      },
+      "steam_account_id": null,
+      "avatarUrl": null,
+      "mmr": 3000,
+      "league_mmr": 3000
+    },
+    "deputy_captain": {
+      "orgUserPk": 3,
+      "pk": 3,
+      "username": "roster_d",
+      "nickname": null,
+      "guildNickname": null,
+      "discordNickname": null,
+      "avatar": null,
+      "discordId": null,
+      "positions": {
+        "pk": 3,
+        "carry": 0,
+        "mid": 0,
+        "offlane": 0,
+        "soft_support": 0,
+        "hard_support": 0
+      },
+      "steam_account_id": null,
+      "avatarUrl": null,
+      "mmr": 3000,
+      "league_mmr": 3000
+    },
+    "members": [
+      {
+        "orgUserPk": 2,
+        "pk": 2,
+        "username": "roster_c",
+        "nickname": null,
+        "guildNickname": null,
+        "discordNickname": null,
+        "avatar": null,
+        "discordId": null,
+        "positions": {
+          "pk": 2,
+          "carry": 0,
+          "mid": 0,
+          "offlane": 0,
+          "soft_support": 0,
+          "hard_support": 0
+        },
+        "steam_account_id": null,
+        "avatarUrl": null,
+        "mmr": 3000,
+        "league_mmr": 3000
+      },
+      {
+        "orgUserPk": 3,
+        "pk": 3,
+        "username": "roster_d",
+        "nickname": null,
+        "guildNickname": null,
+        "discordNickname": null,
+        "avatar": null,
+        "discordId": null,
+        "positions": {
+          "pk": 3,
+          "carry": 0,
+          "mid": 0,
+          "offlane": 0,
+          "soft_support": 0,
+          "hard_support": 0
+        },
+        "steam_account_id": null,
+        "avatarUrl": null,
+        "mmr": 3000,
+        "league_mmr": 3000
+      },
+      {
+        "orgUserPk": 4,
+        "pk": 4,
+        "username": "roster_m1",
+        "nickname": null,
+        "guildNickname": null,
+        "discordNickname": null,
+        "avatar": null,
+        "discordId": null,
+        "positions": {
+          "pk": 4,
+          "carry": 0,
+          "mid": 0,
+          "offlane": 0,
+          "soft_support": 0,
+          "hard_support": 0
+        },
+        "steam_account_id": null,
+        "avatarUrl": null,
+        "mmr": 3000,
+        "league_mmr": 3000
+      }
+    ],
+    "dropin_members": [
+      {
+        "orgUserPk": 12,
+        "pk": 12,
+        "username": "roster_standin",
+        "nickname": null,
+        "guildNickname": null,
+        "discordNickname": null,
+        "avatar": null,
+        "discordId": null,
+        "positions": {
+          "pk": 12,
+          "carry": 0,
+          "mid": 0,
+          "offlane": 0,
+          "soft_support": 0,
+          "hard_support": 0
+        },
+        "steam_account_id": null,
+        "avatarUrl": null,
+        "mmr": 3000,
+        "league_mmr": 3000
+      }
+    ],
+    "draft_order": 0,
+    "current_points": 0,
+    "tournament": {
+      "pk": 1,
+      "name": "Roster Cup",
+      "date_played": "2026-11-19T22:55:33.128624Z",
+      "users": [2, 3, 4, 5, 6, 12],
+      "captains": [2, 6],
+      "tournament_type": "double_elimination"
+    },
+    "total_mmr": 9000,
+    "placement": null,
+    "leadership_problems": [],
+    "can_manage_team": true
+  },
+  "ghostCaptainTeam": {
+    "pk": 2,
+    "name": "Others",
+    "left_members": [],
+    "captain": {
+      "orgUserPk": 7,
+      "pk": 7,
+      "username": "roster_outsider",
+      "nickname": null,
+      "guildNickname": null,
+      "discordNickname": null,
+      "avatar": null,
+      "discordId": null,
+      "positions": {
+        "pk": 7,
+        "carry": 0,
+        "mid": 0,
+        "offlane": 0,
+        "soft_support": 0,
+        "hard_support": 0
+      },
+      "steam_account_id": null,
+      "avatarUrl": null,
+      "mmr": 3000,
+      "league_mmr": null
+    },
+    "deputy_captain": null,
+    "members": [
+      {
+        "orgUserPk": 6,
+        "pk": 6,
+        "username": "roster_o1",
+        "nickname": null,
+        "guildNickname": null,
+        "discordNickname": null,
+        "avatar": null,
+        "discordId": null,
+        "positions": {
+          "pk": 6,
+          "carry": 0,
+          "mid": 0,
+          "offlane": 0,
+          "soft_support": 0,
+          "hard_support": 0
+        },
+        "steam_account_id": null,
+        "avatarUrl": null,
+        "mmr": 3000,
+        "league_mmr": 3000
+      }
+    ],
+    "dropin_members": [],
+    "draft_order": 0,
+    "current_points": 0,
+    "tournament": {
+      "pk": 1,
+      "name": "Roster Cup",
+      "date_played": "2026-11-19T22:55:33.128624Z",
+      "users": [2, 3, 4, 5, 6, 12],
+      "captains": [2],
+      "tournament_type": "double_elimination"
+    },
+    "total_mmr": 6000,
+    "placement": null,
+    "leadership_problems": [
+      {
+        "field": "captain",
+        "code": "captain_not_member",
+        "message": "Captain must be a member of the team."
+      }
+    ],
+    "can_manage_team": true
+  }
+}
