@@ -166,6 +166,26 @@ class HistoryItem(TypedDict):
     set_by: NotRequired[SetBy | None]
 
 
+class ForecastMember(TypedDict):
+    show_rate: float
+    status: Literal["new", "scored"]
+    tier: str
+    deferred: bool
+
+
+class ForecastData(TypedDict):
+    seat_holders: int
+    expected: float
+    low: int
+    high: int
+    waitlisted: int
+    pending_approval: int
+    capacity: int | None
+    expected_open_seats: float | None
+    new_members: int
+    members: dict[str, ForecastMember]
+
+
 def rate(value: float) -> float:
     return round(value, RATE_DIGITS)
 

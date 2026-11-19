@@ -4,6 +4,7 @@ from typing import Literal, TypedDict
 from rest_framework import serializers
 
 from app.models import CustomUser
+from events.capacity import seat_holding_statuses
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from org.conduct.constants import (
@@ -11,12 +12,15 @@ from org.conduct.constants import (
     FLAG_ROLL_CALL_UNCONFIRMED,
     Outcome,
     OutcomeSource,
+    Tier,
     expected_statuses,
 )
+from org.conduct.enforcement import tier_for_score
 from org.conduct.finalize import roll_call_pending_user_ids
 from org.conduct.gate import get_conduct_settings
 from org.conduct.queries import user_scores
-from org.conduct.serializers import SetBy, rate
+from org.conduct.scoring import forecast
+from org.conduct.serializers import ForecastData, ForecastMember, SetBy, rate
 from org.conduct.services import edit_block_reason
 from org.conduct.sources import qualifying_ready_check
 from org.contributions.serializers import MemberSummary, member_summary
@@ -50,6 +54,10 @@ class AttendanceData(TypedDict):
     editable_reason: str | None
     rows: list[AttendanceRow]
 
+
+_FORECAST_EXTRA_STATUSES: frozenset[str] = frozenset(
+    {SignupStatus.WAITLISTED, SignupStatus.TENTATIVE}
+)
 
 _NO_VIRTUAL_STATES: frozenset[str] = frozenset(
     {EventState.COMPLETED, EventState.CANCELLED}
@@ -185,4 +193,53 @@ def event_attendance(event: Event, *, now: datetime) -> AttendanceData:
         editable=block_reason is None,
         editable_reason=block_reason,
         rows=result,
+    )
+
+
+def event_forecast(event: Event, *, now: datetime) -> ForecastData:
+    seat_statuses = seat_holding_statuses(event)
+    signups = list(
+        EventSignup.objects.nocache()
+        .filter(event_id=event.pk, status__in=seat_statuses | _FORECAST_EXTRA_STATUSES)
+        .values_list("user_id", "status")
+    )
+    settings = get_conduct_settings(event.organization_id)
+    scores = user_scores(
+        event.organization_id,
+        {user_id for user_id, _ in signups},
+        now=now,
+        settings=settings,
+    )
+
+    seat_holders = [user_id for user_id, status in signups if status in seat_statuses]
+    result = forecast([scores[user_id].show_rate for user_id in seat_holders])
+    members: dict[str, ForecastMember] = {}
+    for user_id, status in signups:
+        score = scores[user_id]
+        tier = tier_for_score(score, settings)
+        members[str(user_id)] = ForecastMember(
+            show_rate=rate(score.show_rate),
+            status=score.status,
+            tier=tier.value,
+            deferred=settings.back_of_line_enabled
+            and status == SignupStatus.WAITLISTED
+            and tier != Tier.OK,
+        )
+
+    capacity = event.max_players or None
+    return ForecastData(
+        seat_holders=result.seat_holders,
+        expected=rate(result.expected),
+        low=result.low,
+        high=result.high,
+        waitlisted=sum(1 for _, s in signups if s == SignupStatus.WAITLISTED),
+        pending_approval=sum(
+            1 for _, s in signups if s == SignupStatus.PENDING_APPROVAL
+        ),
+        capacity=capacity,
+        expected_open_seats=(
+            rate(max(0.0, capacity - result.expected)) if capacity else None
+        ),
+        new_members=sum(1 for u in seat_holders if scores[u].status == "new"),
+        members=members,
     )

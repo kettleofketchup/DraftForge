@@ -2,6 +2,7 @@ from django.urls import path
 
 from org.conduct.views import (
     conduct_event_attendance,
+    conduct_event_forecast,
     conduct_leaderboard,
     conduct_member,
     conduct_settings,
@@ -15,5 +16,10 @@ urlpatterns = [
         "events/<int:event_id>/attendance/",
         conduct_event_attendance,
         name="org-conduct-event-attendance",
+    ),
+    path(
+        "events/<int:event_id>/forecast/",
+        conduct_event_forecast,
+        name="org-conduct-event-forecast",
     ),
 ]

@@ -11,6 +11,7 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, League, Organization, OrgLog
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
+from events.serializers import EventSignupSerializer
 from org.conduct.constants import Outcome, OutcomeSource
 from org.features import FeatureKey, set_org_feature
 from org.models import OrgUser
@@ -531,7 +532,7 @@ class ConductMemberApiTest(ConductReadApiBase):
         self.assertEqual(response.status_code, 404, response.content)
 
 
-class ConductAttendanceApiTest(ConductReadApiBase):
+class ConductEventApiBase(ConductReadApiBase):
     def setUp(self) -> None:
         super().setUp()
         self.league_staff = CustomUser.objects.create_user(
@@ -563,6 +564,8 @@ class ConductAttendanceApiTest(ConductReadApiBase):
             event=event, user=org_user.user, status=status
         )
 
+
+class ConductAttendanceApiTest(ConductEventApiBase):
     def url(self, event: Event, org: Organization | None = None) -> str:
         return f"{base((org or self.org).pk)}events/{event.pk}/attendance/"
 
@@ -858,4 +861,120 @@ class ConductAttendanceApiTest(ConductReadApiBase):
                 role="owner",
             ),
             "feature_locked",
+        )
+
+
+class ConductForecastApiTest(ConductEventApiBase):
+    def forecast_url(self, event: Event) -> str:
+        return f"{base(self.org.pk)}events/{event.pk}/forecast/"
+
+    def forecast(self, event: Event, role: str = "staff") -> dict[str, Any]:
+        response = self.request(role, "get", self.forecast_url(event))
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def test_forecast_manual_approval_event(self) -> None:
+        event = self.make_event(
+            auto_approve=False, state=EventState.SIGNUPS_OPEN, max_players=None
+        )
+        members = [self.make_member(f"confc_rsvp_{i}") for i in range(3)]
+        for org_user in members:
+            self.signup(event, org_user, SignupStatus.RSVP)
+        waiting = self.make_member("confc_wait")
+        self.signup(event, waiting, SignupStatus.WAITLISTED)
+        self.signup(event, self.make_member("confc_gone"), SignupStatus.CANCELLED)
+
+        body = self.forecast(event)
+        self.assertEqual(body["seat_holders"], 3)
+        self.assertEqual(body["pending_approval"], 0)
+        self.assertEqual(body["waitlisted"], 1)
+        self.assertEqual(body["new_members"], 3)
+        self.assertEqual(body["expected"], round(3 * 0.85, 3))
+        self.assertLessEqual(body["low"], body["expected"])
+        self.assertGreaterEqual(body["high"], body["expected"])
+        self.assertLessEqual(body["high"], 3)
+        self.assertIsNone(body["capacity"])
+        self.assertIsNone(body["expected_open_seats"])
+        expected_keys = {str(m.user_id) for m in (*members, waiting)}
+        self.assertEqual(set(body["members"]), expected_keys)
+        self.assertEqual(
+            body["members"][str(waiting.user_id)],
+            {"show_rate": 0.85, "status": "new", "tier": "ok", "deferred": False},
+        )
+        self.assertEqual(AttendanceOutcome.objects.nocache().count(), 0)
+
+    def test_forecast_pending_approval_counted(self) -> None:
+        event = self.make_event(state=EventState.SIGNUPS_OPEN, max_players=4)
+        approved = self.make_member("confc_approved")
+        pending = self.make_member("confc_pending")
+        confirmed = self.make_member("confc_confirmed")
+        self.signup(event, approved, SignupStatus.APPROVED)
+        self.signup(event, pending, SignupStatus.PENDING_APPROVAL)
+        self.signup(event, confirmed, SignupStatus.CONFIRMED)
+        self.add_outcomes(confirmed, [Outcome.ATTENDED] * 4)
+
+        body = self.forecast(event)
+        self.assertEqual(body["seat_holders"], 3)
+        self.assertEqual(body["pending_approval"], 1)
+        self.assertEqual(body["waitlisted"], 0)
+        self.assertEqual(body["new_members"], 2)
+        confirmed_rate = body["members"][str(confirmed.user_id)]["show_rate"]
+        self.assertEqual(body["members"][str(confirmed.user_id)]["status"], "scored")
+        self.assertGreater(confirmed_rate, 0.85)
+        self.assertAlmostEqual(body["expected"], 0.85 * 2 + confirmed_rate, places=2)
+        self.assertEqual(body["capacity"], 4)
+        self.assertEqual(
+            body["expected_open_seats"], round(max(0.0, 4 - body["expected"]), 3)
+        )
+
+    def test_forecast_deferred_flag_staff_only(self) -> None:
+        OrgConductSettings.objects.nocache().update_or_create(
+            organization=self.org, defaults={"back_of_line_enabled": True}
+        )
+        event = self.make_event(state=EventState.SIGNUPS_OPEN, max_players=1)
+        seated = self.make_member("confc_seated")
+        flagged = self.make_member("confc_flagged")
+        clean = self.make_member("confc_clean")
+        self.signup(event, seated, SignupStatus.APPROVED)
+        flagged_signup = self.signup(event, flagged, SignupStatus.WAITLISTED)
+        self.signup(event, clean, SignupStatus.WAITLISTED)
+        self.add_outcomes(flagged, [Outcome.NO_SHOW] * 5)
+        self.add_outcomes(seated, [Outcome.NO_SHOW] * 5)
+
+        members = self.forecast(event)["members"]
+        self.assertEqual(members[str(flagged.user_id)]["tier"], "back_of_line")
+        self.assertIs(members[str(flagged.user_id)]["deferred"], True)
+        self.assertIs(members[str(clean.user_id)]["deferred"], False)
+        self.assertEqual(members[str(seated.user_id)]["tier"], "back_of_line")
+        self.assertIs(members[str(seated.user_id)]["deferred"], False)
+
+        public = EventSignupSerializer(flagged_signup).data
+        self.assertFalse(
+            [key for key in public if "deferred" in key],
+            sorted(public),
+        )
+
+    def test_forecast_permissions(self) -> None:
+        event = self.make_event(tournament_league=self.league)
+        for role in (*ROLES, "league_staff"):
+            with self.subTest(role=role):
+                response = self.request(role, "get", self.forecast_url(event))
+                if role in STAFF_TIER or role == "league_staff":
+                    self.assertEqual(response.status_code, 200, response.content)
+                else:
+                    self.assertDenied(response, role)
+
+        other = Organization.objects.create(
+            name="Other Forecast Org", owner=self.users["outsider"]
+        )
+        self.unlock(other)
+        foreign = self.make_event(org=other)
+        response = self.request("staff", "get", self.forecast_url(foreign))
+        self.assertEqual(response.status_code, 404, response.content)
+
+        set_org_feature(
+            self.org, FeatureKey.CONDUCT, enabled=False, actor=self.site_admin
+        )
+        self.assertCode(
+            self.request("owner", "get", self.forecast_url(event)), "feature_locked"
         )

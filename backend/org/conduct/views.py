@@ -19,7 +19,7 @@ from app.permissions_org import (
     has_org_staff_access,
 )
 from events.models import Event
-from org.conduct.attendance import event_attendance
+from org.conduct.attendance import event_attendance, event_forecast
 from org.conduct.constants import Outcome
 from org.conduct.gate import get_conduct_settings
 from org.conduct.queries import member_scores
@@ -298,3 +298,10 @@ def conduct_event_attendance(request: Request, org_id: int, event_id: int) -> Re
             raise ValidationError({"detail": str(exc)}) from exc
         event = Event.objects.nocache().get(pk=event.pk)
     return Response(event_attendance(event, now=timezone.now()))
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def conduct_event_forecast(request: Request, org_id: int, event_id: int) -> Response:
+    event = _staff_event(request, org_id, event_id)
+    return Response(event_forecast(event, now=timezone.now()))
