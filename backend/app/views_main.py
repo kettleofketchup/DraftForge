@@ -59,6 +59,7 @@ from events.models import Event
 from events.signup_window import user_signups_open_tournament_ids
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
+from org.conduct.gate import get_conduct_settings
 from org.contributions.services import delete_user_entries
 from org.features import FeatureKey, active_features
 from org.membership import member_organization_ids, viewer_member_organization_ids
@@ -1227,7 +1228,18 @@ def _feature_access(
     features = active_features(data["pk"])
     promotion = FeatureKey.PROMOTION.value in features
     contributions = FeatureKey.CONTRIBUTIONS.value in features
+    conduct = FeatureKey.CONDUCT.value in features
     is_admin, is_staff = org_admin_staff_from_payload(user, data)
+    leaderboard_public = False
+    is_member = False
+    if conduct:
+        leaderboard_public = get_conduct_settings(data["pk"]).leaderboard_public
+        is_member = (
+            user.is_authenticated
+            and OrgUser.objects.filter(
+                organization_id=data["pk"], user_id=user.pk
+            ).exists()
+        )
     return {
         "features": features,
         # Must match has_org_promoter_access (the require_promoter gate).
@@ -1238,6 +1250,10 @@ def _feature_access(
         "can_view_contributions": contributions,
         "can_view_contributors": contributions and can_view,
         "can_manage_contributions": contributions and is_admin,
+        "can_view_conduct": conduct and (leaderboard_public or is_staff),
+        "can_view_own_conduct": conduct and is_member,
+        "can_view_conduct_details": conduct and is_staff,
+        "can_manage_conduct": conduct and is_admin,
     }
 
 
