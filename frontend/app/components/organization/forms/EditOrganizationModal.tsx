@@ -1,12 +1,25 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import {
+  Building2,
+  ScrollText,
+  ShieldCheck,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useForm, type FieldErrors } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { AdminTeamSection } from '~/components/admin-team';
 import { updateOrganization } from '~/components/api/api';
-import { FormDialog } from '~/components/ui/dialogs';
+import { DiscordIcon } from '~/components/events/DiscordConfigSection';
+import {
+  SettingsDialog,
+  type SettingsDialogHandle,
+  type SettingsSection,
+} from '~/components/patterns/SettingsDialog';
+import { COMMON_TIMEZONES } from '~/components/tournament/schemas';
 import {
   Form,
   FormControl,
@@ -26,13 +39,41 @@ import {
 } from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
-import { COMMON_TIMEZONES } from '~/components/tournament/schemas';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import {
   EditOrganizationSchema,
   type EditOrganizationInput,
   type OrganizationType,
 } from '../schemas';
+
+type OrgSection = 'general' | 'discord' | 'members' | 'rules' | 'admins';
+
+const SECTION_META: Record<
+  OrgSection,
+  { label: string; icon: LucideIcon; keywords: string[] }
+> = {
+  general: {
+    label: 'General',
+    icon: Building2,
+    keywords: ['name', 'logo', 'description', 'timezone'],
+  },
+  discord: {
+    label: 'Discord',
+    icon: DiscordIcon as LucideIcon,
+    keywords: ['server', 'guild', 'invite'],
+  },
+  members: {
+    label: 'Members',
+    icon: Users,
+    keywords: ['privacy', 'private', 'member list'],
+  },
+  rules: { label: 'Rules', icon: ScrollText, keywords: ['template', 'league'] },
+  admins: {
+    label: 'Admin Team',
+    icon: ShieldCheck,
+    keywords: ['owner', 'admin', 'staff', 'promoter', 'roles'],
+  },
+};
 
 interface EditOrganizationModalProps {
   open: boolean;
@@ -49,11 +90,16 @@ export function EditOrganizationModal({
 }: EditOrganizationModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
+  const sections = useRef<SettingsDialogHandle<OrgSection>>(null);
 
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
   // See https://github.com/react-hook-form/resolvers/issues/792.
-  const form = useForm<z.input<typeof EditOrganizationSchema>, unknown, EditOrganizationInput>({
+  const form = useForm<
+    z.input<typeof EditOrganizationSchema>,
+    unknown,
+    EditOrganizationInput
+  >({
     resolver: zodResolver(EditOrganizationSchema),
     defaultValues: {
       name: organization.name || '',
@@ -93,26 +139,34 @@ export function EditOrganizationModal({
       onOpenChange(false);
       onSuccess?.();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to update organization';
+      const message =
+        err instanceof Error ? err.message : 'Failed to update organization';
       toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  return (
-    <FormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Edit Organization"
-      description="Update organization information and settings."
-      submitLabel="Save Changes"
-      isSubmitting={isSubmitting}
-      onSubmit={form.handleSubmit(onSubmit)}
-      size="xl"
-      data-testid="edit-organization-modal"
-    >
-      <Form {...form}>
+  const errorKeys = Object.keys(form.formState.errors).filter(
+    (k) => k !== 'root',
+  );
+  const sectionFor = (field: string): OrgSection =>
+    (sections.current?.sectionOfField(field) as OrgSection | undefined) ??
+    'general';
+
+  function onInvalid(errors: FieldErrors<EditOrganizationInput>) {
+    const [key, error] = Object.entries(errors)[0] ?? [];
+    if (!key) return;
+    sections.current?.selectSection(sectionFor(key));
+    toast.error('Please fix the highlighted fields', {
+      description:
+        typeof error?.message === 'string' ? error.message : undefined,
+    });
+  }
+
+  const content: Record<Exclude<OrgSection, 'admins'>, React.ReactNode> = {
+    general: (
+      <>
         <FormField
           control={form.control}
           name="name"
@@ -152,6 +206,59 @@ export function EditOrganizationModal({
           )}
         />
 
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Describe your organization..."
+                  rows={4}
+                  data-testid="org-description-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="timezone"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Default Timezone</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger
+                    className="w-full"
+                    data-testid="org-timezone-select"
+                  >
+                    <SelectValue placeholder="Select timezone" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {COMMON_TIMEZONES.map((tz) => (
+                    <SelectItem key={tz} value={tz}>
+                      {tz}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Default timezone for events and tournaments
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </>
+    ),
+    discord: (
+      <>
         <FormField
           control={form.control}
           name="discord_link"
@@ -194,33 +301,10 @@ export function EditOrganizationModal({
             </FormItem>
           )}
         />
-
-        <FormField
-          control={form.control}
-          name="timezone"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Default Timezone</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger className="w-full" data-testid="org-timezone-select">
-                    <SelectValue placeholder="Select timezone" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {COMMON_TIMEZONES.map((tz) => (
-                    <SelectItem key={tz} value={tz}>{tz}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormDescription>
-                Default timezone for events and tournaments
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
+      </>
+    ),
+    members: (
+      <>
         <FormField
           control={form.control}
           name="members_private"
@@ -229,7 +313,8 @@ export function EditOrganizationModal({
               <div className="space-y-0.5">
                 <FormLabel>Private members list</FormLabel>
                 <FormDescription>
-                  When on, only staff and admins can see the member list. When off, every member can.
+                  When on, only staff and admins can see the member list. When
+                  off, every member can.
                 </FormDescription>
               </div>
               <FormControl>
@@ -242,26 +327,10 @@ export function EditOrganizationModal({
             </FormItem>
           )}
         />
-
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Describe your organization..."
-                  rows={4}
-                  data-testid="org-description-input"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
+      </>
+    ),
+    rules: (
+      <>
         <FormField
           control={form.control}
           name="rules_template"
@@ -283,16 +352,53 @@ export function EditOrganizationModal({
             </FormItem>
           )}
         />
+      </>
+    ),
+  };
 
-      </Form>
+  const formSections: SettingsSection<OrgSection>[] = (
+    Object.keys(content) as Exclude<OrgSection, 'admins'>[]
+  ).map((value) => ({
+    value,
+    ...SECTION_META[value],
+    content: content[value],
+    invalid: errorKeys.some((k) => sectionFor(k) === value),
+  }));
 
-      {/* Admin Team Section - outside Form to prevent button clicks from submitting the org edit form */}
-      {isOrgAdmin && (
-        <AdminTeamSection
-          organization={organization}
-          onUpdate={onSuccess}
-        />
-      )}
-    </FormDialog>
+  return (
+    <Form {...form}>
+      <SettingsDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Edit Organization"
+        description="Update organization information and settings."
+        submitLabel="Save Changes"
+        isSubmitting={isSubmitting}
+        onSubmit={form.handleSubmit(onSubmit, onInvalid)}
+        // Opening should not pop the search keyboard on phones; / and Ctrl/Cmd+K reach it.
+        autoFocus={false}
+        sectionRef={sections}
+        testIdPrefix="edit-org"
+        data-testid="edit-organization-modal"
+        sections={[
+          ...formSections,
+          ...(isOrgAdmin
+            ? [
+                {
+                  value: 'admins' as const,
+                  ...SECTION_META.admins,
+                  lazy: true,
+                  content: (
+                    <AdminTeamSection
+                      organization={organization}
+                      onUpdate={onSuccess}
+                    />
+                  ),
+                },
+              ]
+            : []),
+        ]}
+      />
+    </Form>
   );
 }
