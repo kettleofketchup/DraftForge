@@ -1,0 +1,206 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
+import { Badge } from '~/components/ui/badge';
+import { SecondaryButton } from '~/components/ui/buttons';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
+import { formatOrgDate } from '~/features/contributions/timezone';
+import type { OrgFeatureAccess } from '~/features/org-features';
+import { extractApiError } from '~/lib/apiError';
+import { getLogger } from '~/lib/logger';
+import { OutcomeChip } from './OutcomeChip';
+import { useMemberConduct } from './queries';
+import {
+  HISTORY_PAGE_SIZE,
+  OUTCOME_LABELS,
+  WALK_IN_LABEL,
+  type ConductHistoryItem,
+} from './schemas';
+import { scoreLabel } from './scoring';
+
+const log = getLogger('MemberConductHistory');
+
+const TOTAL_KEYS = ['attended', 'no_show', 'late_cancel', 'excused'] as const;
+
+export interface MemberConductHistoryProps {
+  orgId: number;
+  access: OrgFeatureAccess;
+  orgUserPk: number;
+  timeZone: string | undefined;
+}
+
+function HistoryRow({
+  item,
+  index,
+  timeZone,
+  showDetails,
+}: {
+  item: ConductHistoryItem;
+  index: number;
+  timeZone: string | undefined;
+  showDetails: boolean;
+}) {
+  const removed = item.event_id === null;
+  return (
+    <li
+      className="flex items-start justify-between gap-3 py-2"
+      data-testid={`conduct-history-row-${removed ? `removed-${index}` : item.event_id}`}
+    >
+      <div className="flex min-w-0 flex-col gap-1">
+        <div className="wrap-anywhere font-medium">
+          {item.event_id !== null ? (
+            <Link to={`/events/${item.event_id}`} className="hover:underline">
+              {item.event_name}
+            </Link>
+          ) : (
+            item.event_name
+          )}
+        </div>
+        <div className="text-sm text-muted-foreground">
+          {formatOrgDate(item.event_starts_at, timeZone)}
+          {showDetails && ` · Weight ${item.weight.toFixed(2)}`}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {!item.committed && <Badge variant="outline">{WALK_IN_LABEL}</Badge>}
+          {removed && <Badge variant="outline">Removed</Badge>}
+          {item.voided && <Badge variant="outline">Voided</Badge>}
+        </div>
+        {showDetails && item.reason && (
+          <div className="text-sm text-muted-foreground">{item.reason}</div>
+        )}
+      </div>
+      <OutcomeChip outcome={item.outcome} className="shrink-0" />
+    </li>
+  );
+}
+
+export function MemberConductHistory({
+  orgId,
+  access,
+  orgUserPk,
+  timeZone,
+}: MemberConductHistoryProps) {
+  const [offset, setOffset] = useState(0);
+  const { data, isLoading, isError, error } = useMemberConduct(
+    orgId,
+    access,
+    orgUserPk,
+    { limit: HISTORY_PAGE_SIZE, offset },
+  );
+  const showDetails = access.canViewConductDetails;
+
+  useEffect(() => {
+    if (isError)
+      log.error('member conduct failed to load', { orgId, orgUserPk, error });
+  }, [isError, error, orgId, orgUserPk]);
+
+  return (
+    <section
+      className="flex flex-col gap-4 rounded-lg border border-border bg-base-300/40 p-4"
+      data-testid="conduct-history"
+    >
+      {data ? (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <UserAvatar
+              user={{ ...data.member, pk: data.member.user_pk }}
+              size="md"
+            />
+            <h3 className="wrap-anywhere text-lg font-semibold">
+              {DisplayName(data.member)}
+            </h3>
+          </div>
+          <div className="text-right">
+            <div
+              className="text-2xl font-bold tabular-nums"
+              data-testid="conduct-member-score"
+            >
+              {scoreLabel(data)}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {data.counted_events}{' '}
+              {data.counted_events === 1 ? 'event' : 'events'}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <h3 className="text-lg font-semibold">Attendance</h3>
+      )}
+
+      {isLoading && (
+        <div className="text-muted-foreground">Loading attendance...</div>
+      )}
+      {isError && (
+        <div className="text-destructive" data-testid="conduct-history-error">
+          {extractApiError(error) ?? 'Could not load attendance history.'}
+        </div>
+      )}
+
+      {data && (
+        <>
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {TOTAL_KEYS.map((key) => (
+              <div key={key}>
+                <dt className="text-sm text-muted-foreground">
+                  {OUTCOME_LABELS[key]}
+                </dt>
+                <dd
+                  className="text-xl font-semibold tabular-nums"
+                  data-testid={`conduct-total-${key}`}
+                >
+                  {data.totals[key]}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          {data.history.length === 0 && offset === 0 ? (
+            <div
+              className="text-sm text-muted-foreground"
+              data-testid="conduct-history-empty"
+            >
+              No attendance recorded yet.
+            </div>
+          ) : (
+            <ul className="flex flex-col divide-y divide-border">
+              {data.history.map((item, index) => (
+                <HistoryRow
+                  key={`${item.event_id ?? 'removed'}-${offset + index}`}
+                  item={item}
+                  index={offset + index}
+                  timeZone={timeZone}
+                  showDetails={showDetails}
+                />
+              ))}
+            </ul>
+          )}
+
+          {(offset > 0 || data.history.length === HISTORY_PAGE_SIZE) && (
+            <div className="flex items-center justify-end gap-2">
+              <SecondaryButton
+                size="sm"
+                className="min-h-11 sm:min-h-8"
+                disabled={offset === 0}
+                onClick={() =>
+                  setOffset((o) => Math.max(0, o - HISTORY_PAGE_SIZE))
+                }
+                data-testid="conduct-history-prev"
+              >
+                Newer
+              </SecondaryButton>
+              <SecondaryButton
+                size="sm"
+                className="min-h-11 sm:min-h-8"
+                disabled={data.history.length < HISTORY_PAGE_SIZE}
+                onClick={() => setOffset((o) => o + HISTORY_PAGE_SIZE)}
+                data-testid="conduct-history-next"
+              >
+                Older
+              </SecondaryButton>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}

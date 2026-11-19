@@ -3,6 +3,7 @@ import {
   Award,
   Building2,
   Calendar,
+  CalendarCheck,
   CalendarDays,
   ClipboardList,
   ExternalLink,
@@ -77,6 +78,7 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
+import { ConductTab } from '~/features/conduct';
 import { ContributionsTab } from '~/features/contributions';
 import {
   LockedFeaturesPanel,
@@ -433,6 +435,13 @@ export default function OrganizationDetailPage() {
       setActiveTab('leagues');
     }
   }, [featureAccess.settled, canViewContributions, activeTab, setActiveTab]);
+  const canViewConduct =
+    featureAccess.canViewConduct || featureAccess.canViewOwnConduct;
+  useEffect(() => {
+    if (featureAccess.settled && !canViewConduct && activeTab === 'conduct') {
+      setActiveTab('leagues');
+    }
+  }, [featureAccess.settled, canViewConduct, activeTab, setActiveTab]);
   const canUsePromotion = featureAccess.canUsePromotion;
   useEffect(() => {
     if (
@@ -504,7 +513,7 @@ export default function OrganizationDetailPage() {
         userCountDisplay,
         canViewMembers,
         canViewContributions,
-        canViewConduct: false,
+        canViewConduct,
         canUsePromotion,
         canViewClaims,
         canViewSettings,
@@ -515,6 +524,7 @@ export default function OrganizationDetailPage() {
       userCountDisplay,
       canViewMembers,
       canViewContributions,
+      canViewConduct,
       canUsePromotion,
       canViewClaims,
       canViewSettings,
@@ -642,6 +652,12 @@ export default function OrganizationDetailPage() {
               >
                 <Award className="w-4 h-4 mr-2" />
                 Contributions
+              </TabsTrigger>
+            )}
+            {canViewConduct && (
+              <TabsTrigger value="conduct" data-testid="org-tab-conduct">
+                <CalendarCheck className="w-4 h-4 mr-2" />
+                Conduct
               </TabsTrigger>
             )}
             {canUsePromotion && (
@@ -835,6 +851,18 @@ export default function OrganizationDetailPage() {
           {canViewContributions && pk && (
             <TabsContent value="contributions">
               <ContributionsTab
+                key={pk}
+                orgId={pk}
+                timeZone={organization.timezone}
+                membersPrivate={organization.members_private ?? false}
+                access={featureAccess}
+              />
+            </TabsContent>
+          )}
+
+          {canViewConduct && pk && (
+            <TabsContent value="conduct">
+              <ConductTab
                 key={pk}
                 orgId={pk}
                 timeZone={organization.timezone}

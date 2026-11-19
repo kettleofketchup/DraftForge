@@ -19,19 +19,21 @@ export interface LeaderboardProps {
   onSelectMember: (orgUserPk: number) => void;
 }
 
-function HiddenRowsNote({
+export function HiddenRowsNote({
   membersPrivate,
   signedIn,
   hasOwnRow,
+  testIdPrefix = 'contributions',
 }: {
   membersPrivate: boolean;
   signedIn: boolean;
   hasOwnRow: boolean;
+  testIdPrefix?: string;
 }) {
   const className = 'flex items-center gap-2 text-sm text-muted-foreground';
   if (membersPrivate) {
     return (
-      <p className={className} data-testid="contributions-members-private">
+      <p className={className} data-testid={`${testIdPrefix}-members-private`}>
         <Lock className="h-4 w-4" />
         {hasOwnRow
           ? 'Members are private in this organization, so only your own standing is shown.'
@@ -41,14 +43,14 @@ function HiddenRowsNote({
   }
   if (!signedIn) {
     return (
-      <p className={className} data-testid="contributions-members-signin">
+      <p className={className} data-testid={`${testIdPrefix}-members-signin`}>
         <Lock className="h-4 w-4" />
         Sign in as a member to see the leaderboard.
       </p>
     );
   }
   return (
-    <p className={className} data-testid="contributions-members-only">
+    <p className={className} data-testid={`${testIdPrefix}-members-only`}>
       <Lock className="h-4 w-4" />
       Only members of this organization can see the leaderboard.
     </p>
