@@ -1,22 +1,47 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
 from typing import Literal
+from unittest.mock import patch
 
+from django.db import connection, transaction
 from django.test import SimpleTestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
+from rest_framework.test import APIClient
 
-from org.conduct.constants import Outcome, Tier
+from app.models import CustomUser, GameType
+from discordbot.models import DiscordMessageLog
+from events.admission import ensure_self_serve
+from events.constants import EventState, SignupStatus
+from events.discord.handlers import handle_signup_button
+from events.discord.reactions import handle_reaction_signup
+from events.eligibility import Unmet, refresh_unmet_requirements
+from events.models import Event, EventSignup
+from events.services import (
+    _promote_from_waitlist,
+    create_tentative_signup,
+    process_rsvp,
+    staff_add_signup,
+)
+from org.conduct.constants import CONDUCT_BLOCK_MESSAGE, Outcome, Tier
 from org.conduct.enforcement import (
     defer_back_of_line,
     tier_for,
     tier_for_score,
     tiers_for,
 )
+from org.conduct.finalize import finalize_event_outcomes
 from org.conduct.gate import GATE_OFF, ConductGate
 from org.conduct.scoring import MemberScore
+from org.conduct.services import set_outcomes
 from org.models_conduct import OrgConductSettings
+from org.models_profiles import PlayerDeadlockProfile
 from org.tests.conduct_base import ConductTestCase
+
+DISCORD_ID = "300000000000000077"
+CODE = Unmet.CONDUCT_BELOW_THRESHOLD.value
 
 
 def _score(rate: float, status: Literal["new", "scored"] = "scored") -> MemberScore:
@@ -147,3 +172,313 @@ class DeferTest(SimpleTestCase):
 
     def test_defer_empty(self) -> None:
         self.assertEqual(defer_back_of_line([], {}), [])
+
+
+class EnforcementHooksTest(ConductTestCase):
+    def setUp(self) -> None:
+        self.unlock()
+
+    def enable(self, **toggles: bool) -> OrgConductSettings:
+        return OrgConductSettings.objects.create(organization=self.org, **toggles)
+
+    def no_shows(self, user: CustomUser, count: int) -> None:
+        now = tz.now()
+        for days in range(1, count + 1):
+            self.outcome(
+                user, outcome=Outcome.NO_SHOW, starts_at=now - timedelta(days=days)
+            )
+
+    def blocked_member(self) -> CustomUser:
+        self.enable(block_enabled=True)
+        user = self.make_user()
+        self.no_shows(user, 4)
+        return user
+
+    def test_block_web_signup_400(self) -> None:
+        user = self.blocked_member()
+        event = self.make_event()
+        client = APIClient()
+        client.force_authenticate(user)
+
+        resp = client.post(
+            f"/api/events/{event.pk}/signup/", {"intent": "rsvp"}, format="json"
+        )
+
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(resp.json(), {"error": CONDUCT_BLOCK_MESSAGE})
+        self.assertFalse(EventSignup.objects.filter(event=event).exists())
+
+    def test_block_discord_button(self) -> None:
+        user = self.blocked_member()
+        user.discordId = DISCORD_ID
+        user.save()
+        PlayerDeadlockProfile.objects.create(
+            org_user=self.org_user(user), rank="Ascendant"
+        )
+        event = self.make_event(game_type=GameType.DEADLOCK)
+
+        result = handle_signup_button(event.pk, DISCORD_ID, user.username)
+
+        self.assertEqual(result, {"action": "error", "message": CONDUCT_BLOCK_MESSAGE})
+        self.assertFalse(EventSignup.objects.filter(event=event).exists())
+
+    def test_block_reaction_add(self) -> None:
+        user = self.blocked_member()
+        user.discordId = DISCORD_ID
+        user.save()
+        event = self.make_event()
+        DiscordMessageLog.objects.create(
+            channel_id="1",
+            embed_data={"title": "Test"},
+            source="event_announcement",
+            source_id=event.pk,
+            discord_message_id="555000777",
+            success=True,
+        )
+
+        success, detail = handle_reaction_signup("555000777", DISCORD_ID)
+
+        self.assertFalse(success)
+        self.assertEqual(detail, CONDUCT_BLOCK_MESSAGE)
+        self.assertFalse(EventSignup.objects.filter(event=event).exists())
+
+    def test_block_tentative(self) -> None:
+        user = self.blocked_member()
+        event = self.make_event()
+
+        with self.assertRaisesMessage(ValueError, CONDUCT_BLOCK_MESSAGE):
+            create_tentative_signup(event, user)
+
+        self.assertFalse(EventSignup.objects.filter(event=event).exists())
+
+    def test_block_spares_clean_member(self) -> None:
+        self.enable(block_enabled=True)
+        event = self.make_event()
+
+        signup = process_rsvp(event, self.make_user())
+
+        self.assertEqual(signup.status, SignupStatus.APPROVED)
+        self.assertEqual(signup.unmet_requirements, [])
+
+    def test_staff_add_bypasses_block(self) -> None:
+        user = self.blocked_member()
+        event = self.make_event()
+
+        signup = staff_add_signup(event, user)
+
+        self.assertEqual(signup.unmet_requirements, [CODE])
+        self.assertEqual(signup.status, SignupStatus.PENDING_APPROVAL)
+
+    def test_require_approval_pending_on_auto_approve(self) -> None:
+        self.enable(require_approval_enabled=True)
+        flagged = self.make_user()
+        self.no_shows(flagged, 4)
+        event = self.make_event(auto_approve=True)
+
+        held = process_rsvp(event, flagged)
+        clean = process_rsvp(event, self.make_user())
+
+        held = EventSignup.objects.nocache().get(pk=held.pk)
+        self.assertEqual(held.status, SignupStatus.PENDING_APPROVAL)
+        self.assertEqual(held.unmet_requirements, [CODE])
+        self.assertEqual(clean.status, SignupStatus.APPROVED)
+
+    def _open_waitlisted(self, user: CustomUser) -> EventSignup:
+        other = self.make_event(max_players=0)
+        return EventSignup.objects.create(
+            event=other,
+            user=user,
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
+
+    def test_refresh_after_finalize(self) -> None:
+        self.enable(require_approval_enabled=True)
+        member = self.make_user()
+        self.no_shows(member, 2)
+        open_signup = self._open_waitlisted(member)
+        done = self.make_event(
+            state=EventState.COMPLETED, scheduled_at=tz.now() - timedelta(hours=3)
+        )
+        self.signup(done, member, SignupStatus.APPROVED)
+        self.outcome(
+            member,
+            event=done,
+            outcome=Outcome.NO_SHOW,
+            source="staff",
+            finalized=False,
+            set_by=self.admin,
+            reason="did not show",
+        )
+        self.assertEqual(refresh_unmet_requirements(self.org_user(member)), 0)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            with transaction.atomic():
+                finalize_event_outcomes(done, now=tz.now(), actor=None)
+
+        open_signup.refresh_from_db()
+        self.assertEqual(open_signup.unmet_requirements, [CODE])
+
+    def test_refresh_after_staff_edit(self) -> None:
+        self.enable(require_approval_enabled=True)
+        member = self.make_user()
+        self.no_shows(member, 2)
+        open_signup = self._open_waitlisted(member)
+        done = self.make_event(
+            state=EventState.COMPLETED,
+            scheduled_at=tz.now() - timedelta(hours=3),
+            conduct_finalized_at=tz.now(),
+        )
+        self.signup(done, member, SignupStatus.APPROVED)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            set_outcomes(
+                done,
+                actor=self.admin,
+                changes=[(self.org_user(member), Outcome.NO_SHOW)],
+                reason="did not show",
+            )
+
+        open_signup.refresh_from_db()
+        self.assertEqual(open_signup.unmet_requirements, [CODE])
+
+    def test_no_refresh_without_hold_modes(self) -> None:
+        self.enable(back_of_line_enabled=True)
+        member = self.make_user()
+        self.no_shows(member, 2)
+        done = self.make_event(
+            state=EventState.COMPLETED,
+            scheduled_at=tz.now() - timedelta(hours=3),
+            conduct_finalized_at=tz.now(),
+        )
+        self.signup(done, member, SignupStatus.APPROVED)
+
+        with (
+            patch("org.conduct.services.refresh_unmet_requirements") as refresh,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            set_outcomes(
+                done,
+                actor=self.admin,
+                changes=[(self.org_user(member), Outcome.NO_SHOW)],
+                reason="did not show",
+            )
+
+        refresh.assert_not_called()
+
+
+_GATE_PATCHES = (
+    "events.admission.conduct_gate",
+    "events.eligibility.conduct_gate",
+    "events.services.conduct_gate",
+)
+
+
+def _gate_off(*_a: object, **_k: object) -> ConductGate:
+    return GATE_OFF
+
+
+@override_settings(CACHEOPS_ENABLED=False)
+class QueryBudgetTest(ConductTestCase):
+    def _run(
+        self,
+        action: Callable[[], object],
+        snapshot: Callable[[], object],
+        *,
+        mode: Literal["baseline", "locked", "unlocked"],
+    ) -> tuple[int, object]:
+        with transaction.atomic():
+            if mode == "unlocked":
+                self.unlock()
+            if mode == "baseline":
+                patches = [patch(target, _gate_off) for target in _GATE_PATCHES]
+                for p in patches:
+                    p.start()
+                try:
+                    with CaptureQueriesContext(connection) as ctx:
+                        action()
+                finally:
+                    for p in patches:
+                        p.stop()
+            else:
+                with CaptureQueriesContext(connection) as ctx:
+                    action()
+            result = snapshot()
+            transaction.set_rollback(True)
+        return len(ctx.captured_queries), result
+
+    def assert_budget(
+        self,
+        action: Callable[[], object],
+        snapshot: Callable[[], object],
+        *,
+        gates_built: int,
+    ) -> None:
+        baseline, base_result = self._run(action, snapshot, mode="baseline")
+        locked, locked_result = self._run(action, snapshot, mode="locked")
+        unlocked, unlocked_result = self._run(action, snapshot, mode="unlocked")
+
+        self.assertEqual(locked, baseline + gates_built)
+        self.assertEqual(unlocked, baseline + 2 * gates_built)
+        self.assertEqual(locked_result, base_result)
+        self.assertEqual(unlocked_result, base_result)
+
+    def _signups(self, event: Event) -> list[tuple[int, str, int | None, list[str]]]:
+        return [
+            (s.user_id, s.status, s.waitlist_position, s.unmet_requirements)
+            for s in EventSignup.objects.nocache().filter(event=event).order_by("pk")
+        ]
+
+    def test_ensure_self_serve(self) -> None:
+        event = self.make_event()
+        user = self.make_user()
+
+        self.assert_budget(
+            lambda: ensure_self_serve(event, user), lambda: None, gates_built=1
+        )
+
+    def test_process_rsvp(self) -> None:
+        event = self.make_event(max_players=10)
+        user = self.make_user()
+
+        self.assert_budget(
+            lambda: process_rsvp(event, user),
+            lambda: self._signups(event),
+            gates_built=2,
+        )
+
+    def test_promote_from_waitlist(self) -> None:
+        event = self.make_event(max_players=2)
+        for position in (1, 2, 3):
+            EventSignup.objects.create(
+                event=event,
+                user=self.make_user(),
+                status=SignupStatus.WAITLISTED,
+                waitlist_position=position,
+            )
+
+        self.assert_budget(
+            lambda: _promote_from_waitlist(event),
+            lambda: self._signups(event),
+            gates_built=1,
+        )
+
+    def test_refresh_unmet_requirements(self) -> None:
+        user = self.make_user()
+        events = [
+            self.make_event(max_players=0, require_steam_id=True) for _ in range(2)
+        ]
+        for event in events:
+            EventSignup.objects.create(
+                event=event,
+                user=user,
+                status=SignupStatus.WAITLISTED,
+                waitlist_position=1,
+            )
+        org_user = self.org_user(user)
+
+        self.assert_budget(
+            lambda: refresh_unmet_requirements(org_user),
+            lambda: [self._signups(event) for event in events],
+            gates_built=1,
+        )

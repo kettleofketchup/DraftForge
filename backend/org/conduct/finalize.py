@@ -12,10 +12,9 @@ from events.constants import SignupStatus
 from events.models import Event, EventSignup, ReadyCheck
 from events.services import resolve_or_create_org_user
 from org.conduct.constants import Outcome, OutcomeSource, expected_statuses
-from org.conduct.gate import get_conduct_settings
+from org.conduct.gate import conduct_gate, get_conduct_settings
+from org.conduct.services import refresh_unmet_on_commit
 from org.conduct.sources import automatic_outcomes, qualifying_ready_check
-from org.feature_keys import FeatureKey
-from org.features import org_has_feature
 from org.models import OrgUser
 from org.models_conduct import AttendanceOutcome
 from telemetry.logging import get_logger
@@ -195,7 +194,8 @@ def finalize_event_outcomes(
         .select_related("org_user")
     }
     automatic = materialized = 0
-    if org_has_feature(org_id, FeatureKey.CONDUCT):
+    gate = conduct_gate(org_id)
+    if gate.feature_on:
         automatic, materialized = _materialize(locked, signups, rows)
     final_rows = list(
         AttendanceOutcome.objects.nocache()
@@ -229,6 +229,7 @@ def finalize_event_outcomes(
             },
         )
     invalidate_after_commit(locked)
+    refresh_unmet_on_commit(gate, (row.org_user for row in final_rows))
     log.info(
         "conduct_event_finalized",
         system="org",

@@ -20,6 +20,9 @@ from app.models import CustomUser, GameType, Organization
 from events.constants import UNMET_TRACKED_STATUSES
 from events.models import Event, EventSignup
 from events.schemas import DotaModalConfig, dota_require_screenshot
+from org.conduct.constants import Tier
+from org.conduct.enforcement import tier_for
+from org.conduct.gate import ConductGate, conduct_gate
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 from telemetry.logging import get_logger
@@ -42,6 +45,7 @@ class Unmet(StrEnum):
     RANK_SCREENSHOT_MISSING = "rank_screenshot_missing"
     BATTLECUP_SCREENSHOT_MISSING = "battlecup_screenshot_missing"
     BELOW_MIN_MMR = "below_min_mmr"
+    CONDUCT_BELOW_THRESHOLD = "conduct_below_threshold"
 
 
 UNMET_LABELS: dict[Unmet, str] = {
@@ -53,6 +57,7 @@ UNMET_LABELS: dict[Unmet, str] = {
     Unmet.RANK_SCREENSHOT_MISSING: "Rank screenshot missing",
     Unmet.BATTLECUP_SCREENSHOT_MISSING: "Battle Cup screenshot missing",
     Unmet.BELOW_MIN_MMR: "Below minimum MMR",
+    Unmet.CONDUCT_BELOW_THRESHOLD: "Attendance record below org threshold",
 }
 
 _PROFILE_ATTRS = ("dota_profile", "deadlock_profile")
@@ -282,7 +287,16 @@ def _org_user_for(event: Event, user: CustomUser) -> OrgUser | None:
     ).first()
 
 
-def unmet_requirements(event: Event, user: CustomUser) -> list[Unmet]:
+_CONDUCT_HOLD_TIERS = frozenset({Tier.REQUIRE_APPROVAL, Tier.BLOCK})
+
+
+def unmet_requirements(
+    event: Event,
+    user: CustomUser,
+    *,
+    gate: ConductGate | None = None,
+    tier: Tier | None = None,
+) -> list[Unmet]:
     """Codes for every requirement ``user`` misses; empty means eligible."""
     org_user = _org_user_for(event, user)
     game = REQUIREMENT_CHECKS[GameType(event.game_type)]
@@ -301,20 +315,34 @@ def unmet_requirements(event: Event, user: CustomUser) -> list[Unmet]:
     ):
         codes.append(Unmet.PROFILE_INCOMPLETE)
     codes.extend(game.unmet(event, user, org_user))
+    if tier is None:
+        tier = tier_for(gate or conduct_gate(event.organization_id), user)
+    if tier in _CONDUCT_HOLD_TIERS:
+        codes.append(Unmet.CONDUCT_BELOW_THRESHOLD)
     return list(dict.fromkeys(codes))
 
 
-def unmet_codes(event: Event, user: CustomUser) -> list[str]:
+def unmet_codes(
+    event: Event,
+    user: CustomUser,
+    *,
+    gate: ConductGate | None = None,
+    tier: Tier | None = None,
+) -> list[str]:
     """``unmet_requirements`` as the string codes stored on a signup."""
-    return [code.value for code in unmet_requirements(event, user)]
+    return [
+        code.value for code in unmet_requirements(event, user, gate=gate, tier=tier)
+    ]
 
 
-def refresh_unmet_requirements(org_user: OrgUser) -> int:
+def refresh_unmet_requirements(
+    org_user: OrgUser, *, gate: ConductGate | None = None
+) -> int:
     """Recompute stored ``unmet_requirements`` on the user's open signups in
     the org; the status is not re-decided. Every writer of a requirement
     input (game profiles, MMR verification) calls this after saving.
     Returns the number of rows changed."""
-    signups = (
+    signups = list(
         EventSignup.objects.nocache()
         .filter(
             user_id=org_user.user_id,
@@ -323,9 +351,14 @@ def refresh_unmet_requirements(org_user: OrgUser) -> int:
         )
         .select_related("event", "user")
     )
+    if not signups:
+        return 0
+    if gate is None:
+        gate = conduct_gate(org_user.organization_id)
+    tier = tier_for(gate, signups[0].user)
     changed: list[EventSignup] = []
     for signup in signups:
-        codes = unmet_codes(signup.event, signup.user)
+        codes = unmet_codes(signup.event, signup.user, tier=tier)
         if codes == signup.unmet_requirements:
             continue
         signup.unmet_requirements = codes

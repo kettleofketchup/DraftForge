@@ -7,6 +7,9 @@ from django.db.models import Q
 from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
+from org.conduct.constants import CONDUCT_BLOCK_MESSAGE, Tier
+from org.conduct.enforcement import tier_for
+from org.conduct.gate import ConductGate, conduct_gate
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -39,10 +42,13 @@ def self_serve_refusal(event: SupportsAdmission) -> str | None:
     return None
 
 
-def ensure_self_serve(event: Event, user: CustomUser) -> None:
+def ensure_self_serve(
+    event: Event, user: CustomUser, *, gate: ConductGate | None = None
+) -> None:
     """Raise ValueError when ``user`` may not add themselves to ``event``."""
     reason = self_serve_refusal(event)
     if reason is None:
+        _ensure_conduct_allows(event, user, gate)
         return
     log.info(
         "signup_self_serve_refused",
@@ -55,3 +61,23 @@ def ensure_self_serve(event: Event, user: CustomUser) -> None:
         reason=reason,
     )
     raise ValueError(reason)
+
+
+def _ensure_conduct_allows(
+    event: Event, user: CustomUser, gate: ConductGate | None
+) -> None:
+    if gate is None:
+        gate = conduct_gate(event.organization_id)
+    tier = tier_for(gate, user)
+    if tier != Tier.BLOCK:
+        return
+    log.info(
+        "conduct_signup_refused",
+        system="org",
+        subsystem="conduct",
+        org_id=event.organization_id,
+        event_id=event.pk,
+        user_id=user.pk,
+        tier=tier.value,
+    )
+    raise ValueError(CONDUCT_BLOCK_MESSAGE)

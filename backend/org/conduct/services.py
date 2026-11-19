@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -7,6 +8,7 @@ from django.utils import timezone
 from app.models import CustomUser, OrgLog
 from events.capacity import lock_event
 from events.constants import EventState, SignupStatus
+from events.eligibility import refresh_unmet_requirements
 from events.models import Event, EventSignup
 from org.conduct.constants import (
     EDITABLE_STATES,
@@ -17,8 +19,7 @@ from org.conduct.constants import (
     OutcomeSource,
     expected_statuses,
 )
-from org.feature_keys import FeatureKey
-from org.features import org_has_feature
+from org.conduct.gate import ConductGate, conduct_gate
 from org.models import OrgUser
 from org.models_conduct import AttendanceOutcome
 from telemetry.logging import get_logger
@@ -40,10 +41,27 @@ class _Planned:
     signup: EventSignup | None
 
 
+def refresh_unmet_on_commit(gate: ConductGate, org_users: Iterable[OrgUser]) -> None:
+    settings = gate.settings
+    if settings is None or not (
+        settings.require_approval_enabled or settings.block_enabled
+    ):
+        return
+    targets = list({org_user.pk: org_user for org_user in org_users}.values())
+    if not targets:
+        return
+
+    def refresh() -> None:
+        for org_user in targets:
+            refresh_unmet_requirements(org_user, gate=gate)
+
+    transaction.on_commit(refresh)
+
+
 def _validate_request(
-    event: Event, changes: list[tuple[OrgUser, Outcome]], reason: str
+    gate: ConductGate, changes: list[tuple[OrgUser, Outcome]], reason: str
 ) -> str:
-    if not org_has_feature(event.organization_id, FeatureKey.CONDUCT):
+    if not gate.feature_on:
         raise ValueError("Conduct is not enabled for this organization.")
     cleaned = reason.strip()
     if len(cleaned) < REASON_MIN_LENGTH:
@@ -57,7 +75,7 @@ def _validate_request(
         if org_user.pk in seen:
             raise ValueError("A member appears more than once in the changes.")
         seen.add(org_user.pk)
-        if org_user.organization_id != event.organization_id:
+        if org_user.organization_id != gate.org_id:
             raise ValueError("A member is not part of this organization.")
         if outcome not in STAFF_SETTABLE:
             raise ValueError(f"Outcome {outcome!r} cannot be set by staff.")
@@ -163,12 +181,14 @@ def set_outcomes(
     changes: list[tuple[OrgUser, Outcome]],
     reason: str,
 ) -> SetResult:
-    cleaned = _validate_request(event, changes, reason)
+    gate = conduct_gate(event.organization_id)
+    cleaned = _validate_request(gate, changes, reason)
     locked = lock_event(event)
     _validate_state(locked)
     planned = _plan(locked, changes)
     now = timezone.now()
     changed = 0
+    changed_members: list[OrgUser] = []
     for item in planned:
         old = (
             {"outcome": item.row.outcome, "source": item.row.source}
@@ -182,6 +202,7 @@ def set_outcomes(
         if row is None:
             continue
         changed += 1
+        changed_members.append(item.org_user)
         OrgLog.objects.create(
             organization_id=locked.organization_id,
             actor=actor,
@@ -196,6 +217,8 @@ def set_outcomes(
             },
         )
     result = SetResult(changed=changed, unchanged=len(planned) - changed)
+    if locked.conduct_finalized_at is not None:
+        refresh_unmet_on_commit(gate, changed_members)
     log.info(
         "conduct_outcomes_set",
         system="org",

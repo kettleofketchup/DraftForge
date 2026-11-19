@@ -279,7 +279,7 @@ class SignupSteamSyncOrderingTest(EventTestCase):
         return [e for e in logs if e["event"] == "signup_steam_writethrough_skipped"]
 
     def _recording_check(self, seen: list[int | None]) -> Callable[..., list]:
-        def record(event: Event, user: CustomUser) -> list:
+        def record(event: Event, user: CustomUser, **_kwargs: object) -> list:
             seen.append(user.steam_account_id)
             return []
 
