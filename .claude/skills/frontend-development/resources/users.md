@@ -20,8 +20,8 @@ error links to the section below that explains the fix.
 `DisplayName(user)` returns the first of:
 
 1. the org server nickname, on a page that belongs to an org
-2. the site nickname (interim: it leaves the chain when the site nickname is removed)
-3. the Discord global name (`discordNickname`)
+2. the Discord global name (`discordNickname`)
+3. the site nickname (for users without a Discord name)
 4. the username
 5. `User <pk>`, or `?` with no pk
 

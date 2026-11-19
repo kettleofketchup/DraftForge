@@ -52,14 +52,17 @@ describe('resolveDisplayName', () => {
     );
   });
 
-  it('keeps the site nickname above Discord names until its removal', () => {
+  it('ranks the site nickname below Discord names, above the username', () => {
     expect(
       resolveDisplayName({
         username: 'u',
         nickname: 'Site',
         discordNickname: 'Global',
       }),
-    ).toBe('Site');
+    ).toBe('Global');
+    expect(resolveDisplayName({ username: 'u', nickname: 'Site' })).toBe(
+      'Site',
+    );
     expect(
       resolveDisplayName(
         { username: 'u', nickname: 'Site', guildNickname: 'Server' },

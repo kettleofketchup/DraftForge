@@ -1,0 +1,1 @@
+- Names now prefer Discord: the org server nickname, then the Discord global name, then the site nickname, then the username.
