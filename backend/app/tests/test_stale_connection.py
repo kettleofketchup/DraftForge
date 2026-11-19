@@ -16,8 +16,9 @@ from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 from django.urls import re_path
 
-from app.models import DraftTeam, Game, HeroDraft, HeroDraftState, Team, Tournament
+from app.models import Game, Team, Tournament
 from draft.consumers.hero import HeroDraftConsumer
+from draft.models import DraftTeam, HeroDraft, HeroDraftState
 
 User = get_user_model()
 

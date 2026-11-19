@@ -13,16 +13,9 @@ from django.test import SimpleTestCase, TransactionTestCase
 from django.urls import re_path
 from django.utils import timezone
 
-from app.models import (
-    DraftTeam,
-    Game,
-    HeroDraft,
-    HeroDraftRound,
-    HeroDraftState,
-    Team,
-    Tournament,
-)
+from app.models import Game, Team, Tournament
 from draft.consumers.hero import HeroDraftConsumer
+from draft.models import DraftTeam, HeroDraft, HeroDraftRound, HeroDraftState
 from draft.tasks import hero_tick
 from draft.tasks.hero_tick import HERO_TICK_DRIVER
 
@@ -692,7 +685,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         def check_paused_state():
             from django.db import transaction
 
-            from app.models import HeroDraftEvent
+            from draft.models import HeroDraftEvent
 
             with transaction.atomic():
                 draft = HeroDraft.objects.select_for_update().get(pk=self.draft.pk)

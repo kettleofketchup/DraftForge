@@ -1,6 +1,7 @@
 from django.db.models import Prefetch, QuerySet
 
-from app.models import CustomUser, DraftTeam, HeroDraft
+from app.models import CustomUser
+from draft.models import DraftTeam, HeroDraft
 from user.querysets import with_user_profiles
 
 

@@ -2,16 +2,8 @@ from datetime import date
 
 from django.test import TestCase
 
-from app.models import (
-    CustomUser,
-    DraftTeam,
-    Game,
-    HeroDraft,
-    HeroDraftEvent,
-    HeroDraftRound,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, Game, Team, Tournament
+from draft.models import DraftTeam, HeroDraft, HeroDraftRound
 
 
 class HeroDraftModelTest(TestCase):
@@ -135,19 +127,19 @@ class HeroDraftRoundModelTest(TestCase):
 
     def test_rounds_ordered_by_number(self):
         """Rounds are ordered by round_number."""
-        r3 = HeroDraftRound.objects.create(
+        HeroDraftRound.objects.create(
             draft=self.draft,
             draft_team=self.draft_team,
             round_number=3,
             action_type="pick",
         )
-        r1 = HeroDraftRound.objects.create(
+        HeroDraftRound.objects.create(
             draft=self.draft,
             draft_team=self.draft_team,
             round_number=1,
             action_type="ban",
         )
-        r2 = HeroDraftRound.objects.create(
+        HeroDraftRound.objects.create(
             draft=self.draft,
             draft_team=self.draft_team,
             round_number=2,

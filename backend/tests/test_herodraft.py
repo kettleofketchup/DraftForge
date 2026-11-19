@@ -17,10 +17,11 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent
+from app.models import Game
 from app.redis_keys import namespaced_key
 from app.tasks.draft_tick import get_redis_client
 from common.utils import isTestEnvironment
+from draft.models import DraftTeam, HeroDraft, HeroDraftEvent
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero import auto_random_pick, build_draft_rounds, trigger_roll
 from draft.services.hero_broadcast import broadcast_herodraft_state

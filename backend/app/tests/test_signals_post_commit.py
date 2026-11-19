@@ -6,15 +6,8 @@ from django.db.models.signals import pre_save
 from django.test import SimpleTestCase, TransactionTestCase
 from django.utils import timezone
 
-from app.models import (
-    CustomUser,
-    DraftTeam,
-    Game,
-    HeroDraft,
-    HeroDraftState,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, Game, Team, Tournament
+from draft.models import DraftTeam, HeroDraft, HeroDraftState
 
 
 class GameTeamChangeHookTests(TransactionTestCase):

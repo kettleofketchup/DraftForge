@@ -7,15 +7,15 @@ from django.db import transaction
 from django.utils import timezone
 from opentelemetry import trace
 
-from app.models import (
+from app.models import Game
+from app.tasks.draft_tick import evaluate_client_pick_time
+from draft.models import (
     DraftTeam,
-    Game,
     HeroDraft,
     HeroDraftEvent,
     HeroDraftRound,
     HeroDraftState,
 )
-from app.tasks.draft_tick import evaluate_client_pick_time
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

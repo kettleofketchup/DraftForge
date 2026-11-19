@@ -5,7 +5,8 @@ from django.db.models.signals import pre_save
 from django.dispatch import receiver
 
 from app.cache_utils import invalidate_after_commit
-from app.models import DraftTeam, Game, HeroDraft, HeroDraftRound, HeroDraftState
+from app.models import Game
+from draft.models import DraftTeam, HeroDraft, HeroDraftRound, HeroDraftState
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

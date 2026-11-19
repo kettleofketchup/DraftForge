@@ -2,8 +2,9 @@ from typing import Any
 
 from rest_framework import serializers
 
-from app.models import CustomUser, DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftRound
+from app.models import CustomUser
 from app.serializers import TournamentUserSerializer, _tournament_organization
+from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftRound
 from org.models import OrgUser
 
 

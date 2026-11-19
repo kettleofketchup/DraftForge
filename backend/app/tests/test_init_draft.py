@@ -12,9 +12,7 @@ from app.models import (
     CustomUser,
     Draft,
     DraftOptions,
-    DraftTeam,
     Game,
-    HeroDraft,
     League,
     Organization,
     Team,
@@ -23,6 +21,7 @@ from app.models import (
 from app.serializers import _users_remaining_pks
 from app.services.team_references import all_reference_keys, team_references
 from bracket.models import BracketSlot, TournamentBracket
+from draft.models import DraftTeam, HeroDraft
 from league.models import LeagueUser
 from org.models import OrgUser
 from user.tests.test_cacheops_integration import _redis_reachable
@@ -135,7 +134,7 @@ class TeamResetTests(TeamResetFixture, TestCase):
             "app.Game.radiant_team",
             "app.Game.dire_team",
             "app.Game.winning_team",
-            "app.DraftTeam.tournament_team",
+            "draft.DraftTeam.tournament_team",
             "app.Tournament.winning_team",
             "bracket.BracketSlot.participant",
             "lobby.GameLobby.radiant_team",
@@ -345,7 +344,9 @@ class InitDraftEndpointTests(TestCase):
         resp = self.post()
 
         self.assertEqual(resp.status_code, 409)
-        self.assertEqual(resp.data["references"], {"app.DraftTeam.tournament_team": 1})
+        self.assertEqual(
+            resp.data["references"], {"draft.DraftTeam.tournament_team": 1}
+        )
 
     def test_ineligible_referenced_team_kept_unreferenced_deleted(self) -> None:
         outsider = self.make_user("init_outsider", 1000)

@@ -22,17 +22,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import (
-    CustomUser,
+from app.models import CustomUser, Game, PositionsModel, Team, Tournament
+from draft.models import (
     DraftTeam,
-    Game,
     HeroDraft,
     HeroDraftEvent,
     HeroDraftRound,
     HeroDraftState,
-    PositionsModel,
-    Team,
-    Tournament,
 )
 
 
@@ -202,7 +198,9 @@ class HeroDraftResetOnGameTeamChangeTest(TestCase):
         of the wrong setup ever happening. Clearing them would hide that."""
         draft_pk = self.draft.pk
         events_before = list(
-            HeroDraftEvent.objects.filter(draft_id=draft_pk).values_list("pk", flat=True)
+            HeroDraftEvent.objects.filter(draft_id=draft_pk).values_list(
+                "pk", flat=True
+            )
         )
         self.assertTrue(events_before)
 
@@ -210,7 +208,9 @@ class HeroDraftResetOnGameTeamChangeTest(TestCase):
         self.game.save()
 
         events_after = list(
-            HeroDraftEvent.objects.filter(draft_id=draft_pk).values_list("pk", flat=True)
+            HeroDraftEvent.objects.filter(draft_id=draft_pk).values_list(
+                "pk", flat=True
+            )
         )
         self.assertEqual(set(events_before), set(events_after))
 
@@ -289,9 +289,10 @@ class HeroDraftResetOnGameTeamChangeTest(TestCase):
 
         mock_layer = MagicMock()
         mock_layer.group_send = AsyncMock()
-        with patch(
-            "channels.layers.get_channel_layer", return_value=mock_layer
-        ), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("channels.layers.get_channel_layer", return_value=mock_layer),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.game.dire_team = self.team_dire_corrected
             self.game.save()
 
@@ -314,9 +315,10 @@ class HeroDraftResetOnGameTeamChangeTest(TestCase):
         be scheduled on commit, not run synchronously inside the signal."""
         mock_layer = MagicMock()
         mock_layer.group_send = AsyncMock()
-        with patch(
-            "channels.layers.get_channel_layer", return_value=mock_layer
-        ), self.captureOnCommitCallbacks(execute=False) as callbacks:
+        with (
+            patch("channels.layers.get_channel_layer", return_value=mock_layer),
+            self.captureOnCommitCallbacks(execute=False) as callbacks,
+        ):
             self.game.dire_team = self.team_dire_corrected
             self.game.save()
             # Inside the block: the signal has run and the rows are
@@ -341,9 +343,10 @@ class HeroDraftResetOnGameTeamChangeTest(TestCase):
 
         mock_layer = MagicMock()
         mock_layer.group_send = AsyncMock()
-        with patch(
-            "channels.layers.get_channel_layer", return_value=mock_layer
-        ), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("channels.layers.get_channel_layer", return_value=mock_layer),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.game.dire_team = None
             self.game.save()
 
@@ -361,9 +364,10 @@ class HeroDraftResetOnGameTeamChangeTest(TestCase):
 
         failing_layer = MagicMock()
         failing_layer.group_send.side_effect = RuntimeError("channel down")
-        with patch(
-            "channels.layers.get_channel_layer", return_value=failing_layer
-        ), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("channels.layers.get_channel_layer", return_value=failing_layer),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.game.dire_team = self.team_dire_corrected
             self.game.save()  # must not raise
 

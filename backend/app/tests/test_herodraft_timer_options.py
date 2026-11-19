@@ -8,17 +8,9 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import (
-    CustomUser,
-    DraftOptions,
-    DraftTeam,
-    Game,
-    HeroDraft,
-    HeroDraftRound,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, DraftOptions, Game, Team, Tournament
 from app.tests.teamdraft_fixtures import TimedDraftFixture
+from draft.models import DraftTeam, HeroDraft, HeroDraftRound
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero import (
     build_draft_rounds,

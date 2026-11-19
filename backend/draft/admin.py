@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.http import HttpRequest
 
-from app.models import HeroDraft, HeroDraftEvent
+from draft.models import HeroDraft, HeroDraftEvent
 
 
 class HeroDraftEventInline(admin.TabularInline):

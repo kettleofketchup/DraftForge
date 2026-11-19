@@ -5,8 +5,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.consumers_base import BaseDraftConsumer, consumer_db
-from app.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 from app.tasks.draft_tick import TickDriver
+from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero_broadcast import broadcast_herodraft_state
 from draft.services.hero_state import herodraft_state_queryset

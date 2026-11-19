@@ -1,7 +1,7 @@
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import AllowAny
 
-from app.models import HeroDraft
+from draft.models import HeroDraft
 from draft.serializers.hero_ssr import HeroDraftSerializerSSR
 
 

@@ -19,13 +19,13 @@ from app.models import (
     DraftOptions,
     DraftRound,
     Game,
-    HeroDraft,
     League,
     Organization,
     Team,
     Tournament,
 )
 from app.serializers import DraftSerializerSlim, build_users_dict_with_org
+from draft.models import HeroDraft
 
 _TEAM_USER_RELATIONS: tuple[str, ...] = ("members", "dropin_members", "left_members")
 _GAME_TEAM_RELATIONS: tuple[str, ...] = ("radiant_team", "dire_team", "winning_team")

@@ -16,13 +16,6 @@ from channels.layers import get_channel_layer
 from django.db import transaction
 from django.utils import timezone
 
-from app.models import (
-    DraftTeam,
-    HeroDraft,
-    HeroDraftEvent,
-    HeroDraftRound,
-    HeroDraftState,
-)
 from app.tasks import draft_tick
 from app.tasks.draft_tick import (
     HEARTBEAT_STALE_SECONDS,
@@ -31,6 +24,13 @@ from app.tasks.draft_tick import (
     TICK_ITERATION_SLOW_THRESHOLD_S,
     TICK_STEP_SLOW_THRESHOLD_S,
     TaskInfo,
+)
+from draft.models import (
+    DraftTeam,
+    HeroDraft,
+    HeroDraftEvent,
+    HeroDraftRound,
+    HeroDraftState,
 )
 from draft.services.hero import auto_random_pick
 from draft.services.hero_broadcast import broadcast_herodraft_state

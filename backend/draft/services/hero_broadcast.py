@@ -3,7 +3,7 @@
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
-from app.models import DraftTeam, HeroDraft, HeroDraftEvent
+from draft.models import DraftTeam, HeroDraft, HeroDraftEvent
 from draft.serializers.hero import DraftTeamSerializerFull, HeroDraftSerializer
 from draft.services.hero_state import herodraft_state_queryset
 from telemetry.logging import get_logger

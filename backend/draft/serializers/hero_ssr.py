@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from app.models import HeroDraft
+from draft.models import HeroDraft
 
 
 class HeroDraftSerializerSSR(serializers.ModelSerializer):
