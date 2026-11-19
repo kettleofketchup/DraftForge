@@ -6,21 +6,21 @@ import {
   InvalidDot,
   type FormTabItem,
 } from '~/components/patterns/FormTabsList';
+import { Button } from '~/components/ui/button';
 import { FormDialog, type FormDialogProps } from '~/components/ui/dialogs';
 import { Input } from '~/components/ui/input';
 import { Kbd } from '~/components/ui/kbd';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarProvider,
 } from '~/components/ui/sidebar';
 import { Tabs, TabsContent } from '~/components/ui/tabs';
@@ -56,12 +56,15 @@ export interface SettingsDialogProps<V extends string = string> extends Omit<
 }
 
 interface SearchHit<V extends string> {
+  key: string;
   section: V;
   label: string;
   el: HTMLElement;
 }
 
 const SEARCHABLE = 'label, h3, h4';
+const FOCUSABLE =
+  'input:not([type=hidden]), select, textarea, button, [tabindex]:not([tabindex="-1"])';
 const HIGHLIGHT_MS = 1600;
 
 function terms(query: string): string[] {
@@ -71,6 +74,15 @@ function terms(query: string): string[] {
 function matches(text: string, q: string[]): boolean {
   const t = text.toLowerCase();
   return q.every((term) => t.includes(term));
+}
+
+function isTypingTarget(t: HTMLElement): boolean {
+  return (
+    t.isContentEditable ||
+    !!t.closest(
+      'input, textarea, select, [role="combobox"], [role="listbox"], [role="menu"]',
+    )
+  );
 }
 
 /**
@@ -88,11 +100,13 @@ export function SettingsDialog<V extends string>({
   ...dialogProps
 }: SettingsDialogProps<V>) {
   const isMobile = useMediaQuery('(max-width: 767px)');
+  const isLoading = loading != null && loading !== false;
   const first = sections[0].value;
   const [active, setActive] = React.useState<V>(first);
   const [visited, setVisited] = React.useState<Set<V>>(() => new Set([first]));
   const [query, setQuery] = React.useState('');
   const [hits, setHits] = React.useState<SearchHit<V>[]>([]);
+  const [domVersion, setDomVersion] = React.useState(0);
   const [wasOpen, setWasOpen] = React.useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
@@ -105,6 +119,11 @@ export function SettingsDialog<V extends string>({
 
   const panels = React.useRef(new Map<V, HTMLElement>());
   const searchRef = React.useRef<HTMLInputElement>(null);
+  const rafRef = React.useRef(0);
+  const highlightRef = React.useRef<{ el: HTMLElement; timer: number } | null>(
+    null,
+  );
+  const statusId = React.useId();
 
   const selectSection = React.useCallback((value: V) => {
     setActive(value);
@@ -115,71 +134,115 @@ export function SettingsDialog<V extends string>({
   ]);
 
   const q = React.useMemo(() => terms(query), [query]);
+  const searching = q.length > 0;
   const sectionKey = sections.map((s) => s.value).join('|');
+
+  // Fields come and go with form state (conditional sections, lazy data).
+  React.useEffect(() => {
+    if (!searching) return;
+    const observer = new MutationObserver(() => setDomVersion((v) => v + 1));
+    for (const panel of panels.current.values()) {
+      observer.observe(panel, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+    }
+    return () => observer.disconnect();
+  }, [searching, visited, sectionKey]);
+
   React.useLayoutEffect(() => {
-    if (q.length === 0) {
+    if (!searching) {
       setHits([]);
       return;
     }
     const found: SearchHit<V>[] = [];
-    for (const [section, panel] of panels.current) {
-      const seen = new Set<string>();
-      panel.querySelectorAll<HTMLElement>(SEARCHABLE).forEach((el) => {
+    for (const s of sections) {
+      const panel = panels.current.get(s.value);
+      if (!panel) continue;
+      panel.querySelectorAll<HTMLElement>(SEARCHABLE).forEach((el, i) => {
         const label = el.textContent?.trim();
-        if (!label || seen.has(label) || !matches(label, q)) return;
-        seen.add(label);
-        found.push({ section, label, el });
+        if (!label || !matches(label, q)) return;
+        found.push({ key: `${s.value}:${i}`, section: s.value, label, el });
       });
     }
     setHits(found);
-  }, [q, visited, sectionKey]);
+    // `sections` is a fresh array each render; sectionKey tracks its identity.
+  }, [q, visited, sectionKey, domVersion]);
 
-  const hitsBySection = React.useMemo(() => {
-    const by = new Map<V, SearchHit<V>[]>();
-    for (const hit of hits) {
-      by.set(hit.section, [...(by.get(hit.section) ?? []), hit]);
+  const matchedSections = new Set<V>(hits.map((h) => h.section));
+  for (const s of sections) {
+    if (matches([s.label, ...(s.keywords ?? [])].join(' '), q)) {
+      matchedSections.add(s.value);
     }
-    return by;
-  }, [hits]);
+  }
+  // The active category stays listed so focus never lands on a missing tab.
+  const visible = searching
+    ? sections.filter((s) => matchedSections.has(s.value) || s.value === active)
+    : sections;
+  const noMatches = searching && matchedSections.size === 0;
 
-  const visible =
-    q.length === 0
-      ? sections
-      : sections.filter(
-          (s) =>
-            hitsBySection.has(s.value) ||
-            matches([s.label, ...(s.keywords ?? [])].join(' '), q),
-        );
+  const clearHighlight = React.useCallback(() => {
+    const h = highlightRef.current;
+    if (!h) return;
+    window.clearTimeout(h.timer);
+    delete h.el.dataset.searchHit;
+    highlightRef.current = null;
+  }, []);
+
+  React.useEffect(() => {
+    if (open) return;
+    cancelAnimationFrame(rafRef.current);
+    clearHighlight();
+  }, [open, clearHighlight]);
+  React.useEffect(
+    () => () => {
+      cancelAnimationFrame(rafRef.current);
+      clearHighlight();
+    },
+    [clearHighlight],
+  );
 
   const jumpTo = React.useCallback(
     (hit: SearchHit<V>) => {
+      if (!hit.el.isConnected) return;
       selectSection(hit.section);
-      requestAnimationFrame(() => {
-        const target = hit.el.parentElement ?? hit.el;
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        const label = hit.el instanceof HTMLLabelElement ? hit.el : null;
+        const target = label ? (label.parentElement ?? label) : hit.el;
         target.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        const forId =
-          hit.el instanceof HTMLLabelElement ? hit.el.htmlFor : undefined;
-        const control = forId ? document.getElementById(forId) : null;
-        control?.focus({ preventScroll: true });
+
+        const focusable =
+          label?.control ??
+          (label?.htmlFor ? document.getElementById(label.htmlFor) : null) ??
+          (label ? target.querySelector<HTMLElement>(FOCUSABLE) : null);
+        if (focusable) {
+          focusable.focus({ preventScroll: true });
+        } else {
+          target.tabIndex = -1;
+          target.focus({ preventScroll: true });
+        }
+
+        clearHighlight();
         target.dataset.searchHit = '';
-        window.setTimeout(() => delete target.dataset.searchHit, HIGHLIGHT_MS);
+        highlightRef.current = {
+          el: target,
+          timer: window.setTimeout(clearHighlight, HIGHLIGHT_MS),
+        };
       });
     },
-    [selectSection],
+    [selectSection, clearHighlight],
   );
 
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key !== '/' || e.defaultPrevented) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
-      if (
-        t &&
-        (t.isContentEditable ||
-          ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))
-      ) {
-        return;
-      }
+      const dialog = searchRef.current?.closest('[role="dialog"]');
+      if (!t || !dialog?.contains(t) || isTypingTarget(t)) return;
       e.preventDefault();
       searchRef.current?.focus();
     };
@@ -196,9 +259,19 @@ export function SettingsDialog<V extends string>({
     // Keep FormDialog's Enter-to-submit away from the search box.
     e.preventDefault();
     e.stopPropagation();
+    const firstMatch = visible.find((s) => matchedSections.has(s.value));
     if (hits[0]) jumpTo(hits[0]);
-    else if (visible[0]) selectSection(visible[0].value);
+    else if (firstMatch) selectSection(firstMatch.value);
   };
+
+  const sectionLabel = (value: V) =>
+    sections.find((s) => s.value === value)?.label;
+
+  const status = !searching
+    ? ''
+    : noMatches
+      ? `No settings match “${query.trim()}”`
+      : `${hits.length} matching ${hits.length === 1 ? 'setting' : 'settings'}`;
 
   const search = (
     <div className="relative">
@@ -211,6 +284,8 @@ export function SettingsDialog<V extends string>({
         onKeyDown={onSearchKeyDown}
         placeholder={searchPlaceholder}
         aria-label={searchPlaceholder}
+        aria-describedby={statusId}
+        aria-keyshortcuts="/"
         data-escape-clears=""
         data-testid={`${testIdPrefix}-search`}
         className="h-9 pr-8 pl-8"
@@ -220,125 +295,136 @@ export function SettingsDialog<V extends string>({
           /
         </Kbd>
       )}
+      <p id={statusId} role="status" className="sr-only">
+        {status}
+      </p>
     </div>
   );
 
-  const noMatches = q.length > 0 && visible.length === 0 && (
+  const emptyState = noMatches && (
     <p
       className="px-2 py-3 text-sm text-muted-foreground"
       data-testid={`${testIdPrefix}-search-empty`}
     >
-      No settings match “{query.trim()}”
+      {status}
     </p>
   );
 
-  const hitButton = (hit: SearchHit<V>, withSection: boolean) => (
-    <button
-      type="button"
-      onClick={() => jumpTo(hit)}
-      data-testid={`${testIdPrefix}-search-hit`}
-      className={cn(
-        'w-full truncate text-left',
-        withSection && 'min-h-11 px-3 py-2 hover:bg-accent',
-      )}
-    >
-      {hit.label}
-      {withSection && (
-        <span className="text-muted-foreground">
-          {' · '}
-          {sections.find((s) => s.value === hit.section)?.label}
-        </span>
-      )}
-    </button>
+  const hitList = hits.length > 0 && (
+    <ul aria-label="Matching settings" className="flex flex-col gap-0.5">
+      {hits.map((hit) => (
+        <li key={hit.key}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => jumpTo(hit)}
+            data-testid={`${testIdPrefix}-search-hit`}
+            className={cn(
+              'h-auto w-full justify-start gap-1.5 px-2 py-1.5 text-left font-normal',
+              isMobile ? 'min-h-11' : 'min-h-8',
+            )}
+          >
+            <span className="min-w-0 truncate">{hit.label}</span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {sectionLabel(hit.section)}
+            </span>
+          </Button>
+        </li>
+      ))}
+    </ul>
   );
 
+  const desktopNav = (
+    <SidebarProvider
+      keyboardShortcut={false}
+      className="min-h-0 w-auto flex-none"
+      style={{ '--sidebar-width': '15rem' } as React.CSSProperties}
+    >
+      <Sidebar
+        collapsible="none"
+        className="h-full rounded-lg border border-sidebar-border"
+        data-testid={`${testIdPrefix}-sidebar`}
+      >
+        <SidebarHeader>{search}</SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            {searching && <SidebarGroupLabel>Categories</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              {emptyState}
+              <TabsPrimitive.List asChild>
+                <SidebarMenu>
+                  {visible.map((s) => {
+                    const Icon = s.icon;
+                    return (
+                      <SidebarMenuItem key={s.value} role="none">
+                        <TabsPrimitive.Trigger value={s.value} asChild>
+                          <SidebarMenuButton
+                            isActive={active === s.value}
+                            data-testid={`${testIdPrefix}-tab-${s.value}`}
+                            data-invalid={s.invalid || undefined}
+                            className={cn(
+                              'cursor-pointer',
+                              searching &&
+                                !matchedSections.has(s.value) &&
+                                'opacity-60',
+                            )}
+                          >
+                            {Icon && <Icon />}
+                            <span className="min-w-0 flex-1 truncate">
+                              {s.label}
+                            </span>
+                            {s.invalid && <InvalidDot />}
+                          </SidebarMenuButton>
+                        </TabsPrimitive.Trigger>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </TabsPrimitive.List>
+            </SidebarGroupContent>
+          </SidebarGroup>
+          {hitList && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Matching settings</SidebarGroupLabel>
+              <SidebarGroupContent>{hitList}</SidebarGroupContent>
+            </SidebarGroup>
+          )}
+        </SidebarContent>
+      </Sidebar>
+    </SidebarProvider>
+  );
+
+  const mobileNav = (
+    <div className="flex flex-col gap-3">
+      {search}
+      {emptyState || (
+        <FormTabsList tabs={visible} testIdPrefix={testIdPrefix} />
+      )}
+      {hitList && (
+        <ScrollArea
+          className="rounded-md border border-border"
+          viewportProps={{ className: 'max-h-40 p-1' }}
+        >
+          {hitList}
+        </ScrollArea>
+      )}
+    </div>
+  );
+
+  // `body` keeps its tree position across layouts so crossing the breakpoint
+  // swaps only the navigation, never remounting the form.
   const frame = (body: React.ReactNode) => (
     <Tabs
       value={active}
       onValueChange={(v) => selectSection(v as V)}
       orientation={isMobile ? 'horizontal' : 'vertical'}
-      className="min-h-0 flex-1 gap-3"
-    >
-      {isMobile ? (
-        <>
-          {search}
-          {noMatches || (
-            <FormTabsList tabs={visible} testIdPrefix={testIdPrefix} />
-          )}
-          {hits.length > 0 && (
-            <ul className="max-h-40 overflow-y-auto rounded-md border border-border text-sm">
-              {hits.map((hit) => (
-                <li
-                  key={`${hit.section}:${hit.label}`}
-                  className="border-b border-border last:border-b-0"
-                >
-                  {hitButton(hit, true)}
-                </li>
-              ))}
-            </ul>
-          )}
-          {body}
-        </>
-      ) : (
-        <SidebarProvider
-          className="min-h-0 flex-1 items-stretch gap-6"
-          style={{ '--sidebar-width': '15rem' } as React.CSSProperties}
-        >
-          <Sidebar
-            collapsible="none"
-            className="rounded-lg border border-sidebar-border"
-            data-testid={`${testIdPrefix}-sidebar`}
-          >
-            <SidebarHeader>{search}</SidebarHeader>
-            <SidebarContent>
-              <SidebarGroup>
-                <SidebarGroupContent>
-                  {noMatches}
-                  <TabsPrimitive.List asChild>
-                    <SidebarMenu>
-                      {visible.map((s) => {
-                        const sectionHits = hitsBySection.get(s.value) ?? [];
-                        const Icon = s.icon;
-                        return (
-                          <SidebarMenuItem key={s.value} role="none">
-                            <TabsPrimitive.Trigger value={s.value} asChild>
-                              <SidebarMenuButton
-                                isActive={active === s.value}
-                                data-testid={`${testIdPrefix}-tab-${s.value}`}
-                                data-invalid={s.invalid || undefined}
-                                className="cursor-pointer"
-                              >
-                                {Icon && <Icon />}
-                                <span className="flex-1">{s.label}</span>
-                                {s.invalid && <InvalidDot />}
-                              </SidebarMenuButton>
-                            </TabsPrimitive.Trigger>
-                            {sectionHits.length > 0 && (
-                              <SidebarMenuSub role="none">
-                                {sectionHits.map((hit) => (
-                                  <SidebarMenuSubItem
-                                    key={hit.label}
-                                    role="none"
-                                  >
-                                    <SidebarMenuSubButton asChild>
-                                      {hitButton(hit, false)}
-                                    </SidebarMenuSubButton>
-                                  </SidebarMenuSubItem>
-                                ))}
-                              </SidebarMenuSub>
-                            )}
-                          </SidebarMenuItem>
-                        );
-                      })}
-                    </SidebarMenu>
-                  </TabsPrimitive.List>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            </SidebarContent>
-          </Sidebar>
-          {body}
-        </SidebarProvider>
+      className={cn(
+        'min-h-0 flex-1',
+        isMobile ? 'flex-col gap-3' : 'flex-row gap-6',
       )}
+    >
+      {isMobile ? mobileNav : desktopNav}
+      {body}
     </Tabs>
   );
 
@@ -347,35 +433,36 @@ export function SettingsDialog<V extends string>({
       open={open}
       size="screen"
       {...dialogProps}
-      frame={loading ? undefined : frame}
+      frame={isLoading ? undefined : frame}
       scrollClassName={
-        loading
+        isLoading
           ? undefined
           : isMobile
             ? 'min-h-0 flex-1 overflow-hidden -mx-6 px-6'
             : 'min-h-0 flex-1 overflow-hidden -mr-6 pr-6'
       }
     >
-      {loading ??
-        sections.map((s) => (
-          <TabsContent
-            key={s.value}
-            value={s.value}
-            ref={(el: HTMLDivElement | null) => {
-              if (el) panels.current.set(s.value, el);
-              else panels.current.delete(s.value);
-            }}
-            forceMount={!s.lazy || visited.has(s.value) ? true : undefined}
-            // Radix leaves force-mounted panels visible; hide inactive ones.
-            hidden={active !== s.value}
-            className={cn(
-              'mx-auto flex w-full max-w-4xl flex-col gap-4',
-              '[&_[data-search-hit]]:rounded-md [&_[data-search-hit]]:ring-2 [&_[data-search-hit]]:ring-ring [&_[data-search-hit]]:ring-offset-4 [&_[data-search-hit]]:ring-offset-background',
-            )}
-          >
-            {s.content}
-          </TabsContent>
-        ))}
+      {isLoading
+        ? loading
+        : sections.map((s) => (
+            <TabsContent
+              key={s.value}
+              value={s.value}
+              ref={(el: HTMLDivElement | null) => {
+                if (el) panels.current.set(s.value, el);
+                else panels.current.delete(s.value);
+              }}
+              forceMount={!s.lazy || visited.has(s.value) ? true : undefined}
+              // Radix leaves force-mounted panels visible; hide inactive ones.
+              hidden={active !== s.value}
+              className={cn(
+                'mx-auto flex w-full max-w-4xl flex-col gap-4',
+                '[&_[data-search-hit]]:rounded-md [&_[data-search-hit]]:ring-2 [&_[data-search-hit]]:ring-ring [&_[data-search-hit]]:ring-offset-2 [&_[data-search-hit]]:ring-offset-background',
+              )}
+            >
+              {s.content}
+            </TabsContent>
+          ))}
     </FormDialog>
   );
 }

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { SettingsDialog, type SettingsSection } from '../SettingsDialog';
 
@@ -12,6 +13,23 @@ class ResizeObserverStub {
 globalThis.ResizeObserver ??=
   ResizeObserverStub as unknown as typeof ResizeObserver;
 Element.prototype.scrollIntoView ??= vi.fn();
+
+function Toggled() {
+  const [on, setOn] = useState(false);
+  return (
+    <div>
+      <button type="button" onClick={() => setOn(true)}>
+        enable password
+      </button>
+      {on && (
+        <>
+          <label htmlFor="password-input">Lobby password</label>
+          <input id="password-input" />
+        </>
+      )}
+    </div>
+  );
+}
 
 const sections: SettingsSection[] = [
   {
@@ -27,12 +45,12 @@ const sections: SettingsSection[] = [
   {
     value: 'lobby',
     label: 'Lobby',
-    keywords: ['password'],
     content: (
       <div>
         <h3>Dota Lobbies</h3>
         <label htmlFor="region-input">Lobby region</label>
         <input id="region-input" />
+        <Toggled />
       </div>
     ),
   },
@@ -66,9 +84,35 @@ const search = () => screen.getByTestId('s-search');
 const type = (value: string) =>
   fireEvent.change(search(), { target: { value } });
 const navItem = (value: string) => screen.queryByTestId(`s-tab-${value}`);
+const hitLabels = () =>
+  screen
+    .queryAllByTestId('s-search-hit')
+    .map((h) => h.querySelector('span')?.textContent);
+const frame = () => new Promise((r) => requestAnimationFrame(r));
+
+function mockViewport(initialMobile: boolean) {
+  let mobile = initialMobile;
+  const listeners = new Set<() => void>();
+  window.matchMedia = ((query: string) => ({
+    get matches() {
+      return query.includes('max-width') ? mobile : false;
+    },
+    media: query,
+    addEventListener: (_: string, cb: () => void) => listeners.add(cb),
+    removeEventListener: (_: string, cb: () => void) => listeners.delete(cb),
+  })) as unknown as typeof window.matchMedia;
+  return (next: boolean) => {
+    mobile = next;
+    act(() => listeners.forEach((cb) => cb()));
+  };
+}
 
 describe('SettingsDialog', () => {
+  const originalMatchMedia = window.matchMedia;
   beforeEach(() => onSubmit.mockClear());
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+  });
 
   it('renders the categories as vertical tabs in a sidebar', () => {
     render(<Harness />);
@@ -81,42 +125,69 @@ describe('SettingsDialog', () => {
     expect(navItem('lobby')).toHaveAttribute('role', 'tab');
   });
 
-  it('filters categories by name and keywords', () => {
+  it('filters categories by name and keywords, keeping the active one', () => {
     render(<Harness />);
     type('channel');
     expect(navItem('discord')).toBeInTheDocument();
-    expect(navItem('general')).toBeNull();
     expect(navItem('lobby')).toBeNull();
+    // Active category stays reachable even when it doesn't match.
+    expect(navItem('general')).toBeInTheDocument();
   });
 
-  it('lists matching field labels and headings under their category', () => {
+  it('lists matching labels and headings outside the tablist', () => {
     render(<Harness />);
     type('lobb');
-    const hits = screen
-      .getAllByTestId('s-search-hit')
-      .map((h) => h.textContent);
-    expect(hits).toEqual(['Dota Lobbies', 'Lobby region']);
-    expect(navItem('lobby')).toBeInTheDocument();
-    expect(navItem('general')).toBeNull();
+    expect(hitLabels()).toEqual(['Dota Lobbies', 'Lobby region']);
+    expect(screen.getAllByTestId('s-search-hit')[0]).toHaveTextContent('Lobby');
+    const tablist = screen.getByRole('tablist');
+    for (const hit of screen.getAllByTestId('s-search-hit')) {
+      expect(tablist.contains(hit)).toBe(false);
+    }
+  });
+
+  it('announces the match count', () => {
+    render(<Harness />);
+    type('lobb');
+    expect(screen.getByRole('status')).toHaveTextContent('2 matching settings');
+    type('zzz');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'No settings match “zzz”',
+    );
   });
 
   it('matches every search term, in any order', () => {
     render(<Harness />);
     type('region lobby');
-    expect(
-      screen.getAllByTestId('s-search-hit').map((h) => h.textContent),
-    ).toEqual(['Lobby region']);
+    expect(hitLabels()).toEqual(['Lobby region']);
   });
 
-  it('jumps to a hit: selects its category and focuses its control', async () => {
+  it('jumps to a field hit: selects its category and focuses its control', async () => {
     render(<Harness />);
     type('region');
     fireEvent.click(screen.getByTestId('s-search-hit'));
     expect(navItem('lobby')).toHaveAttribute('data-state', 'active');
-    await new Promise((r) => requestAnimationFrame(r));
+    await frame();
     expect(document.activeElement).toBe(
       document.getElementById('region-input'),
     );
+  });
+
+  it('jumps to a heading hit and focuses the heading', async () => {
+    render(<Harness />);
+    type('dota lobbies');
+    fireEvent.click(screen.getByTestId('s-search-hit'));
+    await frame();
+    const heading = screen.getByRole('heading', { name: 'Dota Lobbies' });
+    expect(document.activeElement).toBe(heading);
+    expect(heading).toHaveAttribute('data-search-hit');
+  });
+
+  it('re-indexes when fields appear while searching', async () => {
+    render(<Harness />);
+    type('password');
+    expect(hitLabels()).toEqual([]);
+    fireEvent.click(screen.getByText('enable password'));
+    await vi.waitFor(() => expect(hitLabels()).toEqual(['Lobby password']));
   });
 
   it('Enter in search jumps to the first hit instead of submitting', () => {
@@ -132,7 +203,7 @@ describe('SettingsDialog', () => {
     type('region');
     fireEvent.keyDown(search(), { key: 'Escape' });
     expect(search()).toHaveValue('');
-    expect(navItem('general')).toBeInTheDocument();
+    expect(navItem('discord')).toBeInTheDocument();
   });
 
   it('says so when nothing matches', () => {
@@ -148,9 +219,7 @@ describe('SettingsDialog', () => {
     type('');
     fireEvent.mouseDown(navItem('discord')!, { button: 0 });
     type('announcement');
-    expect(screen.getByTestId('s-search-hit')).toHaveTextContent(
-      'Announcement channel',
-    );
+    expect(hitLabels()).toEqual(['Announcement channel']);
   });
 
   it('marks categories holding invalid fields', () => {
@@ -165,9 +234,58 @@ describe('SettingsDialog', () => {
     expect(navItem('general')).not.toHaveAttribute('data-invalid');
   });
 
-  it('"/" focuses the search box', () => {
+  it('"/" focuses the search box, but not from a text field', () => {
     render(<Harness />);
-    fireEvent.keyDown(document.body, { key: '/' });
+    const name = document.getElementById('name-input')!;
+    name.focus();
+    fireEvent.keyDown(name, { key: '/' });
+    expect(document.activeElement).toBe(name);
+    const dialog = screen.getByRole('dialog');
+    dialog.focus();
+    fireEvent.keyDown(dialog, { key: '/' });
     expect(document.activeElement).toBe(search());
+  });
+
+  it('leaves Ctrl/Cmd+B to the browser', () => {
+    render(<Harness />);
+    const event = new KeyboardEvent('keydown', {
+      key: 'b',
+      ctrlKey: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('keeps the form mounted when crossing the mobile breakpoint', () => {
+    const setMobile = mockViewport(false);
+    render(<Harness />);
+    const input = document.getElementById('name-input');
+    expect(screen.getByTestId('s-sidebar')).toBeInTheDocument();
+
+    setMobile(true);
+    expect(screen.queryByTestId('s-sidebar')).toBeNull();
+    expect(screen.getByRole('tablist')).toHaveAttribute(
+      'aria-orientation',
+      'horizontal',
+    );
+    expect(document.getElementById('name-input')).toBe(input);
+  });
+
+  it('treats loading={false} as not loading', () => {
+    render(
+      <TooltipProvider>
+        <SettingsDialog
+          open
+          onOpenChange={() => {}}
+          title="Settings"
+          onSubmit={onSubmit}
+          sections={sections}
+          testIdPrefix="s"
+          loading={false}
+        />
+      </TooltipProvider>,
+    );
+    expect(document.getElementById('name-input')).toBeInTheDocument();
   });
 });
