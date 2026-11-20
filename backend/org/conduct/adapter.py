@@ -19,9 +19,8 @@ from org.conduct.lifecycle import (
     teardown_event_outcomes,
     void_event_outcomes,
 )
-from org.conduct.params import conduct_params
 from org.conduct.queries import member_scores
-from org.conduct.scoring import MemberScore, prior_score
+from org.conduct.scoring import MemberScore
 from org.conduct.serializers import rate
 from org.conduct.services import reassign_member, refresh_org_unmet_on_commit
 from org.contributions.serializers import member_summary
@@ -208,9 +207,9 @@ class ConductTrack(TrackBase):
         ):
             return None
         settings = get_conduct_settings(org_id)
-        score = member_scores(org_id, [org_user.pk], now=now, settings=settings).get(
+        score = member_scores(org_id, [org_user.pk], now=now, settings=settings)[
             org_user.pk
-        ) or prior_score(conduct_params(settings))
+        ]
         return {
             "show_rate": rate(score.show_rate),
             "status": score.status,

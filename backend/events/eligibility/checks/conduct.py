@@ -13,7 +13,7 @@ from org.conduct.eligibility import (
     CONDUCT_BLOCK_MESSAGE,
     Tier,
     conduct_tier,
-    standings,
+    prime,
 )
 from org.standing.cache import StandingCache
 
@@ -66,4 +66,4 @@ def prime_conduct(
     now: datetime.datetime,
     cache: StandingCache,
 ) -> None:
-    standings(org_id, user_ids, now=now, cache=cache)
+    prime(cache, org_id, list(user_ids), now=now)

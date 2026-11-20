@@ -1,20 +1,14 @@
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Final, Literal
 
 from org.conduct.constants import Outcome
-from org.conduct.params import ConductParams
-from org.standing.scoring import Observation, RateScore, prior_rate, weighted_rate
+from org.conduct.params import rate_params
+from org.models_conduct import OrgConductSettings
+from org.standing.scoring import RateScore, prior_rate
 
 Z_80: Final[float] = 1.2816
-
-
-@dataclass(frozen=True)
-class OutcomePoint:
-    outcome: str
-    event_starts_at: datetime
 
 
 @dataclass(frozen=True)
@@ -52,26 +46,8 @@ def member_score(score: RateScore) -> MemberScore:
     )
 
 
-def observations(
-    points: Iterable[OutcomePoint], late_cancel_weight: float
-) -> list[Observation]:
-    found: list[Observation] = []
-    for point in points:
-        value = show_value(point.outcome, late_cancel_weight)
-        if value is not None:
-            found.append(Observation(value=value, at=point.event_starts_at))
-    return found
-
-
-def score_member(
-    points: Iterable[OutcomePoint], *, now: datetime, params: ConductParams
-) -> MemberScore:
-    obs = observations(points, params.late_cancel_weight)
-    return member_score(weighted_rate(obs, now=now, params=params.rate))
-
-
-def prior_score(params: ConductParams) -> MemberScore:
-    return member_score(prior_rate(params.rate))
+def prior_member_score(settings: OrgConductSettings) -> MemberScore:
+    return member_score(prior_rate(rate_params(settings)))
 
 
 def forecast(probabilities: Sequence[float]) -> Forecast:

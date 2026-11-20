@@ -1,13 +1,5 @@
-from dataclasses import dataclass
-
 from org.models_conduct import OrgConductSettings
 from org.standing.scoring import RateParams
-
-
-@dataclass(frozen=True, slots=True)
-class ConductParams:
-    rate: RateParams
-    late_cancel_weight: float
 
 
 def rate_params(settings: OrgConductSettings) -> RateParams:
@@ -20,8 +12,5 @@ def rate_params(settings: OrgConductSettings) -> RateParams:
     )
 
 
-def conduct_params(settings: OrgConductSettings) -> ConductParams:
-    return ConductParams(
-        rate=rate_params(settings),
-        late_cancel_weight=float(settings.late_cancel_weight),
-    )
+def late_cancel_weight(settings: OrgConductSettings) -> float:
+    return float(settings.late_cancel_weight)

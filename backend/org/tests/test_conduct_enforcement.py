@@ -31,9 +31,8 @@ from org.conduct.constants import CONDUCT_BLOCK_MESSAGE, Outcome, Tier
 from org.conduct.enforcement import (
     defer_back_of_line,
     is_deferred,
-    tier_for,
+    standings_for,
     tier_for_score,
-    tiers_for,
 )
 from org.conduct.finalize import finalize_event_outcomes
 from org.conduct.gate import GATE_OFF, ConductGate
@@ -51,6 +50,11 @@ def _score(rate: float, status: Literal["new", "scored"] = "scored") -> MemberSc
     return MemberScore(
         show_rate=rate, status=status, counted_events=5, weighted_events=5.0
     )
+
+
+def _tiers(gate: ConductGate, user_ids: list[int]) -> dict[int, Tier]:
+    found = standings_for(gate, user_ids, now=tz.now())
+    return {user_id: standing.tier for user_id, standing in found.items()}
 
 
 @override_settings(CACHEOPS_ENABLED=False)
@@ -78,9 +82,8 @@ class TierTest(ConductTestCase):
 
     def test_off_gate_zero_queries(self) -> None:
         with self.assertNumQueries(0):
-            self.assertEqual(tier_for(GATE_OFF, self.user), Tier.OK)
             self.assertEqual(
-                tiers_for(GATE_OFF, [self.user, self.admin]),
+                _tiers(GATE_OFF, [self.user.pk, self.admin.pk]),
                 {self.user.pk: Tier.OK, self.admin.pk: Tier.OK},
             )
 
@@ -92,7 +95,7 @@ class TierTest(ConductTestCase):
             enforcement_active=False,
         )
         with self.assertNumQueries(0):
-            self.assertEqual(tier_for(gate, self.user), Tier.OK)
+            self.assertEqual(_tiers(gate, [self.user.pk]), {self.user.pk: Tier.OK})
 
     def test_strictest_tier_wins(self) -> None:
         settings = self.all_modes()
@@ -133,7 +136,7 @@ class TierTest(ConductTestCase):
             is_deferred(_score(0.45), self.all_modes(back_of_line_enabled=False))
         )
 
-    def test_tier_for_scores_member(self) -> None:
+    def test_standings_for_scores_member(self) -> None:
         now = tz.now()
         for days in (1, 2, 3, 4):
             self.outcome(
@@ -144,9 +147,9 @@ class TierTest(ConductTestCase):
         gate = self.active_gate(self.all_modes())
 
         with self.assertNumQueries(1):
-            self.assertEqual(tier_for(gate, self.user), Tier.BLOCK)
+            self.assertEqual(_tiers(gate, [self.user.pk]), {self.user.pk: Tier.BLOCK})
 
-    def test_tiers_for_single_query(self) -> None:
+    def test_standings_for_single_query(self) -> None:
         now = tz.now()
         for days in (1, 2, 3, 4):
             self.outcome(
@@ -158,7 +161,7 @@ class TierTest(ConductTestCase):
         gate = self.active_gate(self.all_modes())
 
         with self.assertNumQueries(1):
-            tiers = tiers_for(gate, [self.user, self.admin, self.league_staff])
+            tiers = _tiers(gate, [self.user.pk, self.admin.pk, self.league_staff.pk])
 
         self.assertEqual(
             tiers,

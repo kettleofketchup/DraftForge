@@ -25,9 +25,9 @@ from org.conduct.attendance import event_attendance, event_forecast
 from org.conduct.constants import Outcome, expected_statuses
 from org.conduct.gate import get_conduct_settings
 from org.conduct.leaderboard import conduct_board
-from org.conduct.params import conduct_params
+from org.conduct.params import rate_params
 from org.conduct.queries import member_scores
-from org.conduct.scoring import prior_score
+from org.conduct.scoring import prior_member_score
 from org.conduct.serializers import (
     AttendancePutSerializer,
     ConductSettingsUpdateSerializer,
@@ -120,7 +120,7 @@ def conduct_leaderboard(request: Request, org_id: int) -> Response:
     scores = board.scores
     own_data = None
     if own is not None:
-        own_score = scores.get(own.pk) or prior_score(conduct_params(settings))
+        own_score = scores.get(own.pk) or prior_member_score(settings)
         own_data = own_row(own, own_score, ranks.get(own.pk))
     return Response(
         {
@@ -157,12 +157,12 @@ def conduct_member(request: Request, org_id: int, org_user_pk: int) -> Response:
     limit: int = query.validated_data["limit"]
 
     settings = get_conduct_settings(org)
-    params = conduct_params(settings)
+    params = rate_params(settings)
     now = timezone.now()
-    cutoff = now - timedelta(days=params.rate.max_age_days)
-    score = member_scores(org.pk, [org_user.pk], now=now, settings=settings).get(
+    cutoff = now - timedelta(days=params.max_age_days)
+    score = member_scores(org.pk, [org_user.pk], now=now, settings=settings)[
         org_user.pk
-    ) or prior_score(params)
+    ]
     rows = AttendanceOutcome.objects.nocache().filter(org_user=org_user)
     totals = rows.filter(
         finalized_at__isnull=False,
@@ -191,7 +191,7 @@ def conduct_member(request: Request, org_id: int, org_user_pk: int) -> Response:
                     row,
                     now=now,
                     cutoff=cutoff,
-                    half_life_days=params.rate.half_life_days,
+                    half_life_days=params.half_life_days,
                     with_reason=is_staff,
                 )
                 for row in history

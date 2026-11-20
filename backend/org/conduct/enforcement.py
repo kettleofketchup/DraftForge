@@ -1,10 +1,7 @@
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from django.utils import timezone
-
-from app.models import CustomUser
 from org.conduct.constants import Tier
 from org.conduct.gate import ConductGate
 from org.conduct.queries import user_scores
@@ -59,7 +56,7 @@ def standing_for_score(
 
 
 def standings_for(
-    gate: ConductGate, user_ids: Iterable[int], *, now: datetime
+    gate: ConductGate, user_ids: Collection[int], *, now: datetime
 ) -> dict[int, ConductStanding]:
     ids = list(dict.fromkeys(user_ids))
     settings = gate.settings
@@ -78,14 +75,3 @@ def defer_back_of_line[T: HasUserId](
     ahead = [c for c in candidates if c.user_id not in deferred]
     behind = [c for c in candidates if c.user_id in deferred]
     return ahead + behind
-
-
-def tiers_for(
-    gate: ConductGate, users: Iterable[CustomUser], *, now: datetime | None = None
-) -> dict[int, Tier]:
-    found = standings_for(gate, (u.pk for u in users), now=now or timezone.now())
-    return {user_id: standing.tier for user_id, standing in found.items()}
-
-
-def tier_for(gate: ConductGate, user: CustomUser) -> Tier:
-    return tiers_for(gate, [user])[user.pk]
