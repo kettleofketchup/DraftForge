@@ -20,12 +20,13 @@ from django.urls import ResolverMatch, re_path, resolve, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory
 
-from app.models import Draft, DraftEvent, DraftOptions, Team, TeamDraftState
+from app.models import Team
 from app.tests.teamdraft_fixtures import TimedDraftFixture
 from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 from backend import asgi
 from discordbot.activity_auth import ActivitySocketMiddleware
 from draft.consumers.team import DraftConsumer
+from draft.models import Draft, DraftEvent, DraftOptions, TeamDraftState
 from draft.services import team as teamdraft
 from draft.tasks import draft_tick
 from draft.tasks import team_tick as teamdraft_tick

@@ -4,7 +4,8 @@ from collections.abc import Callable
 
 from django.utils import timezone
 
-from app.models import Draft, DraftRound, Team, TimeoutAction
+from app.models import Team
+from draft.models import Draft, DraftRound, TimeoutAction
 from draft.services.shuffle import reassign_round_captain
 from draft.services.team import (
     activate_round,

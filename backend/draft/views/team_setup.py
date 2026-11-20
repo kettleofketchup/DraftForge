@@ -10,8 +10,9 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
 from app.functions.tournament import _serialize_tournament
-from app.models import CustomUser, Draft, Team, TeamLog, TeamLogVia, Tournament
+from app.models import CustomUser, Team, TeamLog, TeamLogVia, Tournament
 from app.permissions_org import can_edit_tournament
+from draft.models import Draft
 from draft.serializers.team import DraftPredictMMRSerializer, DraftSerializerMMRs
 from draft.services.team_reset import (
     NoEligibleCaptains,

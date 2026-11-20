@@ -10,8 +10,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from app.models import Draft, DraftRound, Team, TeamDraftState
+from app.models import Team
 from app.redis_keys import namespaced_key
+from draft.models import Draft, DraftRound, TeamDraftState
 from draft.services.team import emit_event, team_for_round, team_payload
 from draft.services.team_timeout import TIMEOUT_ACTIONS
 from draft.tasks import draft_tick

@@ -15,9 +15,10 @@ from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 from django.urls import re_path
 
-from app.models import Draft, Team, Tournament
+from app.models import Team, Tournament
 from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 from draft.consumers.team import DraftConsumer
+from draft.models import Draft
 from draft.tasks import team_tick as teamdraft_tick
 from draft.tasks.draft_tick import (
     captain_channel_key,

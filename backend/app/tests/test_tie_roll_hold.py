@@ -8,8 +8,8 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from app.models import DraftRound
 from app.tests.teamdraft_fixtures import TimedDraftFixture
+from draft.models import DraftRound
 from draft.services.shuffle import TIE_ROLL_HOLD_MS
 from draft.services.team_timeout import skip_turn
 from draft.tasks import team_tick as teamdraft_tick

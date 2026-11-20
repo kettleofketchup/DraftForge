@@ -16,7 +16,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser, Draft
+from app.models import CustomUser
 from app.serializers import UserSerializer
 from discordbot.activity_auth import (
     ActivityIdentity,
@@ -30,7 +30,7 @@ from discordbot.activity_roles import draft_role
 from discordbot.activity_targets import draft_tournament_id
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 from discordbot.utils import DISCORD_API_BASE, _get_headers, _rate_limited_request
-from draft.models import HeroDraft
+from draft.models import Draft, HeroDraft
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

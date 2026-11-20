@@ -24,16 +24,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.functions.tournament import _serialize_tournament
-from app.models import (
-    CustomUser,
-    Draft,
-    DraftEvent,
-    DraftRound,
-    Organization,
-    Team,
-    TeamDraftState,
-    Tournament,
-)
+from app.models import CustomUser, Organization, Team, Tournament
 from app.serializers import (
     DraftSerializerSlim,
     TournamentSerializer,
@@ -45,6 +36,7 @@ from app.tests.teamdraft_fixtures import TimedDraftFixture
 from app.tournament_state import tournament_state_queryset
 from app.user_cache import serialize_user_core
 from draft.consumers.team import DraftConsumer
+from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
 from draft.services import team_broadcast as broadcast
 from draft.services import team_state as team_state_module
 from draft.services.team_broadcast import atomic_sharing_draft_state, broadcast_event

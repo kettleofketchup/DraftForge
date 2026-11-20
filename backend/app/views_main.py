@@ -72,7 +72,7 @@ from app.tournament_list import (
     resolve_organizations,
     tournaments_list_cache_key,
 )
-from draft.models import DraftTeam
+from draft.models import Draft, DraftRound, DraftTeam
 from draft.services.team import apply_draft_options
 from events.models import Event
 from events.signup_window import user_signups_open_tournament_ids
@@ -98,8 +98,6 @@ from user.querysets import with_user_profiles
 from .decorators import render_to
 from .models import (
     CustomUser,
-    Draft,
-    DraftRound,
     Game,
     League,
     Organization,

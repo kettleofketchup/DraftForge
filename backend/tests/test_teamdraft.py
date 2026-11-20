@@ -13,8 +13,8 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from app.models import Draft
 from common.utils import isTestEnvironment
+from draft.models import Draft
 from draft.tasks.draft_tick import (
     HEARTBEAT_STALE_SECONDS,
     captain_channel_key,

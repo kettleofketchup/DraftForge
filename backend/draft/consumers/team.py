@@ -9,8 +9,9 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
 from app.consumer_db import consumer_db
-from app.models import Draft, DraftEvent, Team
+from app.models import Team
 from draft.consumers.base import BaseDraftConsumer
+from draft.models import Draft, DraftEvent
 from draft.serializers.team import DraftEventSerializer
 from draft.services.team import emit_event, team_payload
 from draft.services.team_state import build_draft_state

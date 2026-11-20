@@ -20,12 +20,12 @@ from rest_framework.authentication import BaseAuthentication, get_authorization_
 from rest_framework.request import Request
 from structlog.contextvars import bind_contextvars
 
-from app.models import CustomUser, Draft, DraftRound
+from app.models import CustomUser
 from discordbot.activity_errors import ActivityAuthFailed
 from discordbot.activity_roles import Role, draft_role
 from discordbot.activity_targets import draft_tournament_id
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
-from draft.models import HeroDraft
+from draft.models import Draft, DraftRound, HeroDraft
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

@@ -469,7 +469,7 @@ class DraftActivityChannel(models.Model):
         "draft.HeroDraft", on_delete=models.CASCADE, null=True, blank=True
     )
     team_draft = models.ForeignKey(
-        "app.Draft", on_delete=models.CASCADE, null=True, blank=True
+        "draft.Draft", on_delete=models.CASCADE, null=True, blank=True
     )
 
     class Meta:
@@ -494,7 +494,7 @@ class DraftActivityInstance(models.Model):
         "draft.HeroDraft", on_delete=models.CASCADE, null=True, blank=True
     )
     team_draft = models.ForeignKey(
-        "app.Draft", on_delete=models.CASCADE, null=True, blank=True
+        "draft.Draft", on_delete=models.CASCADE, null=True, blank=True
     )
 
     class Meta:

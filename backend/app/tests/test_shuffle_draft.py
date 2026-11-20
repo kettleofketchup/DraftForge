@@ -6,16 +6,8 @@ from unittest.mock import patch
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import (
-    CustomUser,
-    Draft,
-    DraftOptions,
-    DraftRound,
-    League,
-    Organization,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, League, Organization, Team, Tournament
+from draft.models import Draft, DraftOptions, DraftRound
 from draft.serializers.team import DraftSerializer
 from org.models import OrgUser
 

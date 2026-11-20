@@ -5,16 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory
 
-from app.models import (
-    CustomUser,
-    Draft,
-    DraftEvent,
-    DraftOptions,
-    DraftRound,
-    PositionsModel,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, PositionsModel, Team, Tournament
+from draft.models import Draft, DraftEvent, DraftOptions, DraftRound
 from draft.serializers.team import DraftEventSerializer
 from draft.services.shuffle import assign_next_shuffle_captain, build_shuffle_rounds
 from draft.services.team_broadcast import broadcast_event

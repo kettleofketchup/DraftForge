@@ -8,8 +8,9 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import Draft, DraftRound, Team, TeamDraftState
+from app.models import Team
 from app.tests.teamdraft_fixtures import TimedDraftFixture
+from draft.models import Draft, DraftRound, TeamDraftState
 from draft.services import shuffle as shuffle_draft
 from draft.services import team as teamdraft
 from draft.services.team_timeout import (

@@ -96,13 +96,10 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"delete_team_chat"}),
             "tournament team reset wipes the reset teams' live hero draft chat",
         ),
-        "app/tournament_state.py": BackEdge(
-            frozenset({"HeroDraft"}),
-            "tournament prefetch plan prefetches games__herodraft",
-        ),
-        "app/permissions_org.py": BackEdge(
-            frozenset({"HeroDraft"}),
-            "org permission check resolves a hero draft's tournament",
+        "app/models.py": BackEdge(
+            frozenset({"DraftOptions"}),
+            "TYPE_CHECKING-only return annotation for Tournament.get_draft_options",
+            type_only=frozenset({"DraftOptions"}),
         ),
         "app/services/team_management.py": BackEdge(
             frozenset(
@@ -121,28 +118,38 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"DraftTeam", "HeroDraft"}),
             "Team-domain reference counts include hero drafts",
         ),
-        "app/views/bracket.py": BackEdge(
-            frozenset({"HeroDraft"}),
-            "bracket view prefetches each game's hero draft",
+        "app/serializers.py": BackEdge(
+            frozenset({"Draft", "DraftOptions", "DraftRound"}),
+            "draft serializers embedded in TournamentSerializer",
+        ),
+        "app/tournament_state.py": BackEdge(
+            frozenset({"Draft", "DraftOptions", "DraftRound", "HeroDraft"}),
+            "tournament prefetch plan prefetches the team draft and games__herodraft",
         ),
         "app/views_main.py": BackEdge(
-            frozenset({"DraftTeam", "apply_draft_options"}),
-            "current_user lists active hero drafts the user captains; "
-            "tournament create/update applies draft options",
+            frozenset({"Draft", "DraftRound", "DraftTeam", "apply_draft_options"}),
+            "tournament/team @cached_as deps; current_user lists active hero drafts "
+            "the user captains; tournament create/update applies draft options",
         ),
         "app/consumers.py": BackEdge(
             frozenset({"recent_draft_events"}),
             "TournamentConsumer replays a tournament's recent team-draft events",
         ),
-        "app/models.py": BackEdge(
-            frozenset(
-                {
-                    "broadcast_event_after_commit",
-                    "build_shuffle_rounds",
-                    "get_team_total_mmr",
-                }
-            ),
-            "TEMP slice2: Draft's lazy service imports leave with Draft in Task 6",
+        "app/permissions_org.py": BackEdge(
+            frozenset({"HeroDraft"}),
+            "org permission check resolves a hero draft's tournament",
+        ),
+        "app/views/bracket.py": BackEdge(
+            frozenset({"HeroDraft"}),
+            "bracket view prefetches each game's hero draft",
+        ),
+        "app/management/commands/import_prod_tournament.py": BackEdge(
+            frozenset({"Draft", "DraftOptions", "DraftRound"}),
+            "tournament import tooling copies a tournament's team draft",
+        ),
+        "app/management/commands/sync_prod_tournaments.py": BackEdge(
+            frozenset({"Draft", "DraftOptions", "DraftRound"}),
+            "tournament sync tooling copies a tournament's team draft",
         ),
     },
 }

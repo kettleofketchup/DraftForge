@@ -13,8 +13,9 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
 from app.functions.tournament import _serialize_tournament
-from app.models import Draft, DraftOptions, DraftRound, Team, TeamDraftState
+from app.models import Team
 from app.permissions_org import can_edit_tournament
+from draft.models import Draft, DraftOptions, DraftRound, TeamDraftState
 from draft.services.team import (
     RESUME_COUNTDOWN_SECONDS,
     activate_round,

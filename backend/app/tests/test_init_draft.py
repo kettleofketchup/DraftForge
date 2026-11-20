@@ -9,9 +9,6 @@ from rest_framework.test import APIClient
 
 from app.models import (
     CustomUser,
-    Draft,
-    DraftEvent,
-    DraftOptions,
     Game,
     League,
     Organization,
@@ -22,7 +19,6 @@ from app.models import (
     Tournament,
 )
 from app.serializers import _users_remaining_pks
-from app.services.draft_reset import reset_draft_teams
 from app.services.team_references import (
     all_reference_keys,
     team_references,
@@ -30,7 +26,8 @@ from app.services.team_references import (
 )
 from app.tournament_state import tournament_state_queryset
 from bracket.models import BracketSlot, TournamentBracket
-from draft.models import DraftTeam, HeroDraft
+from draft.models import Draft, DraftEvent, DraftOptions, DraftTeam, HeroDraft
+from draft.services.team_reset import reset_draft_teams
 from league.models import LeagueUser
 from org.models import OrgUser
 from user.tests.test_cacheops_integration import _redis_reachable

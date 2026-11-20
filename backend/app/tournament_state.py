@@ -6,18 +6,8 @@ after a write never depends on the ordering of post-commit invalidations.
 
 from django.db.models import BooleanField, Model, Prefetch, QuerySet, Value
 
-from app.models import (
-    CustomUser,
-    Draft,
-    DraftOptions,
-    DraftRound,
-    Game,
-    League,
-    Organization,
-    Team,
-    Tournament,
-)
-from draft.models import HeroDraft
+from app.models import CustomUser, Game, League, Organization, Team, Tournament
+from draft.models import Draft, DraftOptions, DraftRound, HeroDraft
 
 _TEAM_USER_RELATIONS: tuple[str, ...] = ("members", "dropin_members", "left_members")
 _GAME_TEAM_RELATIONS: tuple[str, ...] = ("radiant_team", "dire_team", "winning_team")

@@ -14,6 +14,7 @@ from rest_framework.validators import UniqueValidator
 from app.cache_utils import invalidate_after_commit
 from app.permissions_org import check_lobby_steam_league_id, request_user
 from app.services.team_references import team_references
+from draft.models import Draft, DraftOptions, DraftRound
 from events.overrides import (
     REASON_MAX_LENGTH,
     OverrideReasonRequired,
@@ -26,9 +27,6 @@ from user.querysets import with_user_profiles
 
 from .models import (
     CustomUser,
-    Draft,
-    DraftOptions,
-    DraftRound,
     Game,
     GameMode,
     GameType,

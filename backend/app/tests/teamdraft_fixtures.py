@@ -10,17 +10,8 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from app.models import (
-    CustomUser,
-    Draft,
-    DraftEvent,
-    DraftOptions,
-    DraftRound,
-    League,
-    Organization,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, League, Organization, Team, Tournament
+from draft.models import Draft, DraftEvent, DraftOptions, DraftRound
 from draft.services import team as teamdraft
 from draft.services.team_timeout import skip_turn
 from draft.views.team import teamdraft_pause
