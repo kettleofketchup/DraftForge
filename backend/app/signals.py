@@ -20,6 +20,10 @@ from django.db.models.signals import m2m_changed, post_save, pre_save
 from django.dispatch import receiver
 
 from app.cache_utils import invalidate_after_commit
+from app.functions.herodraft_chat import (
+    repoint_draft_memberships,
+    schedule_roster_tenure,
+)
 from app.models import (
     CustomUser,
     DraftTeam,
@@ -61,7 +65,8 @@ def handle_team_member_removal(
     reverse: bool = False,
     **kwargs: object,
 ) -> None:
-    """Captain/deputy succession and empty-team handling when members leave."""
+    """Captain/deputy succession, empty-team handling and chat tenure on roster edits."""
+    _schedule_chat_tenure(instance, action, pk_set, reverse)
     if reverse:
         _handle_reverse_member_change(instance, action, pk_set)
         return
@@ -79,6 +84,22 @@ def handle_team_member_removal(
         return
     if action == "post_remove":
         _after_members_removed(team, set(pk_set or ()))
+
+
+def _schedule_chat_tenure(
+    instance: Team | CustomUser, action: str, pk_set: set[int] | None, reverse: bool
+) -> None:
+    if action not in ("post_add", "post_remove", "post_clear"):
+        return
+    if action == "post_clear":
+        attr = "_teams_before_clear" if reverse else "_members_before_clear"
+        changed: set[int] = set(getattr(instance, attr, set()))
+    else:
+        changed = set(pk_set or ())
+    if reverse:
+        schedule_roster_tenure(changed, [instance.pk])
+    else:
+        schedule_roster_tenure([instance.pk], changed)
 
 
 def _handle_reverse_member_change(
@@ -440,6 +461,12 @@ def reset_herodraft_on_team_change(
         dt.reserve_time_remaining = reserve_ms
         dt.save()
         updated_draft_teams.append(dt)
+
+    repoint_draft_memberships(
+        draft.pk,
+        [prior.radiant_team_id, prior.dire_team_id],
+        [instance.radiant_team_id, instance.dire_team_id],
+    )
 
     # Wipe picks/bans — they belong to the wrong captain. `app.herodraftround`
     # is NOT in CACHEOPS so the bulk delete doesn't need cache invalidation

@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 from opentelemetry import trace
 
+from app.functions.herodraft_chat import seed_draft_memberships
 from app.functions.heroes import ALL_HERO_IDS, get_available_heroes  # noqa: F401
 from app.models import (
     DraftTeam,
@@ -72,6 +73,7 @@ def new_herodraft_for_game(game: Game) -> HeroDraft:
         DraftTeam.objects.create(
             draft=draft, tournament_team=team, reserve_time_remaining=reserve
         )
+    seed_draft_memberships(draft)
     return draft
 
 

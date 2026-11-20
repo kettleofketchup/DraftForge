@@ -109,6 +109,7 @@ class HeroDraftChatModelTest(TestCase):
 
     def test_open_membership_unique(self) -> None:
         now = timezone.now()
+        HeroDraftChatMembership.objects.filter(draft=self.draft).delete()
         HeroDraftChatMembership.objects.create(
             draft=self.draft, team=self.team1, user=self.cap1, joined_at=now
         )

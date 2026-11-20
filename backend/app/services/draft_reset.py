@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from app.functions.herodraft_chat import delete_team_chat
 from app.models import CustomUser, Team, Tournament
 from app.serializers import TournamentUserSerializer
 from app.services.team_references import TeamUsage, team_references, team_usage
@@ -99,4 +100,5 @@ def reset_draft_teams(tournament: Tournament, *, force: bool) -> DraftResetRepor
             )
         report.removed_users.extend(team.reset_to_captain())
         report.reset_teams.append(team)
+    delete_team_chat(team.pk for team in report.reset_teams)
     return report

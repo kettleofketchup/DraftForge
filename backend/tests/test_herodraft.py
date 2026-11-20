@@ -17,6 +17,8 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from app.functions.herodraft import build_draft_rounds, trigger_roll
+from app.functions.herodraft_chat import reset_draft_chat
 from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent
 from app.redis_keys import namespaced_key
 from app.serializers import HeroDraftSerializer
@@ -124,7 +126,7 @@ def force_herodraft_timeout(request, draft_pk):
     from app.functions.herodraft import auto_random_pick
 
     try:
-        completed_round = auto_random_pick(draft, current_round.draft_team)
+        auto_random_pick(draft, current_round.draft_team)
     except Exception as e:
         return Response(
             {"error": f"Timeout handling failed: {str(e)}"},
@@ -162,6 +164,7 @@ def reset_herodraft(request, draft_pk):
 
     # Delete all events
     draft.events.all().delete()
+    reset_draft_chat(draft)
 
     # Reset draft state
     draft.state = "waiting_for_captains"
@@ -424,11 +427,10 @@ def _setup_draft_state(draft: HeroDraft, target_state: str) -> None:
 
     This resets the draft and configures it to the specified state.
     """
-    from app.functions.herodraft import build_draft_rounds, trigger_roll
-
     # Reset to clean state first
     draft.rounds.all().delete()
     draft.events.all().delete()
+    reset_draft_chat(draft)
     draft.roll_winner = None
 
     # Reset draft teams

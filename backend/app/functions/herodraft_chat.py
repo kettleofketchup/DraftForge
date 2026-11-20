@@ -1,11 +1,14 @@
 """HeroDraft chat rules: viewer resolution, tenure, parsing, posting and visibility."""
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 import redis
+from asgiref.sync import async_to_sync
+from channels import layers
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -161,6 +164,158 @@ def _member_team_ids(draft_id: int, user_id: int) -> list[int]:
         .values_list("pk", flat=True)
         .distinct()
     )
+
+
+def _active_draft_teams(team_ids: Iterable[int]) -> dict[int, list[int]]:
+    wanted = set(team_ids)
+    if not wanted:
+        return {}
+    by_draft: dict[int, list[int]] = {}
+    pairs = (
+        DraftTeam.objects.nocache()
+        .filter(tournament_team_id__in=wanted)
+        .exclude(draft__state__in=_CLOSED_STATES)
+        .order_by("draft_id", "tournament_team_id")
+        .values_list("draft_id", "tournament_team_id")
+    )
+    for draft_id, team_id in pairs:
+        teams = by_draft.setdefault(draft_id, [])
+        if team_id not in teams:
+            teams.append(team_id)
+    return by_draft
+
+
+def active_drafts_for_teams(team_ids: Iterable[int]) -> list[int]:
+    return list(_active_draft_teams(team_ids))
+
+
+def _team_rosters(team_ids: Iterable[int]) -> dict[int, set[int]]:
+    rosters: dict[int, set[int]] = {}
+    teams = Team.objects.nocache().filter(pk__in=list(team_ids))
+    for team_id, captain_id in teams.values_list("pk", "captain_id"):
+        rosters[team_id] = {captain_id} if captain_id is not None else set()
+    for team_id, user_id in Team.members.through.objects.filter(
+        team_id__in=list(rosters)
+    ).values_list("team_id", "customuser_id"):
+        rosters[team_id].add(user_id)
+    return rosters
+
+
+def _seed_teams(draft_id: int, team_ids: Iterable[int], joined_at: datetime) -> None:
+    seeded = set(team_ids)
+    if not seeded:
+        return
+    current = set(
+        DraftTeam.objects.nocache()
+        .filter(draft_id=draft_id)
+        .values_list("tournament_team_id", flat=True)
+    )
+    rosters = _team_rosters(current | seeded)
+    for team_id in sorted(seeded & set(rosters)):
+        others: set[int] = set()
+        for other_id, user_ids in rosters.items():
+            if other_id != team_id:
+                others |= user_ids
+        for user_id in sorted(rosters[team_id] - others):
+            open_membership(draft_id, team_id, user_id, joined_at)
+
+
+def seed_draft_memberships(draft: HeroDraft) -> None:
+    team_ids = (
+        DraftTeam.objects.nocache()
+        .filter(draft=draft)
+        .values_list("tournament_team_id", flat=True)
+    )
+    _seed_teams(draft.pk, list(team_ids), draft.created_at)
+
+
+def reset_draft_chat(draft: HeroDraft) -> None:
+    with transaction.atomic():
+        HeroDraftChatMessage.objects.filter(draft=draft).delete()
+        HeroDraftChatMembership.objects.filter(draft=draft).delete()
+        seed_draft_memberships(draft)
+
+
+def delete_team_chat(team_ids: Iterable[int]) -> None:
+    ids = list(team_ids)
+    if not ids:
+        return
+    HeroDraftChatMessage.objects.filter(team_id__in=ids).delete()
+    HeroDraftChatMembership.objects.filter(team_id__in=ids).delete()
+
+
+def repoint_draft_memberships(
+    draft_id: int, prior_team_ids: Iterable[int], new_team_ids: Iterable[int]
+) -> None:
+    prior = set(prior_team_ids)
+    new = set(new_team_ids)
+    now = timezone.now()
+    HeroDraftChatMembership.objects.filter(
+        draft_id=draft_id, team_id__in=prior - new, left_at__isnull=True
+    ).update(left_at=now)
+    _seed_teams(draft_id, new - prior, now)
+
+
+def _sync_user_tenure(draft_id: int, user_ids: Iterable[int], at: datetime) -> None:
+    for user_id in user_ids:
+        team_ids = _member_team_ids(draft_id, user_id)
+        if len(team_ids) == 1:
+            open_membership(draft_id, team_ids[0], user_id, at)
+        else:
+            close_membership(draft_id, user_id, at=at)
+
+
+def broadcast_chat_resync(
+    draft_id: int, team_ids: list[int], user_ids: list[int]
+) -> None:
+    try:
+        channel_layer = layers.get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            f"herodraft_{draft_id}",
+            {
+                "type": "herodraft.chat_resync",
+                "team_ids": team_ids,
+                "user_ids": user_ids,
+            },
+        )
+    except Exception:
+        log.warning(
+            "herodraft_chat_resync_broadcast_failed",
+            system="herodraft",
+            subsystem="chat",
+            draft_id=draft_id,
+            exc_info=True,
+        )
+
+
+def apply_roster_tenure(team_ids: list[int], user_ids: list[int]) -> None:
+    now = timezone.now()
+    for draft_id, draft_team_ids in _active_draft_teams(team_ids).items():
+        _sync_user_tenure(draft_id, user_ids, now)
+        broadcast_chat_resync(draft_id, draft_team_ids, user_ids)
+
+
+def schedule_roster_tenure(team_ids: Iterable[int], user_ids: Iterable[int]) -> None:
+    teams = sorted(set(team_ids))
+    users = sorted(set(user_ids))
+    if not teams or not users:
+        return
+    transaction.on_commit(lambda: apply_roster_tenure(teams, users), robust=True)
+
+
+def apply_captain_tenure(
+    team_id: int, draft_ids: list[int], old_id: int | None, new_id: int
+) -> None:
+    now = timezone.now()
+    user_ids = [uid for uid in (old_id, new_id) if uid is not None]
+    active = set(active_drafts_for_teams([team_id]))
+    for draft_id in draft_ids:
+        if draft_id not in active:
+            continue
+        _sync_user_tenure(draft_id, user_ids, now)
+        broadcast_chat_resync(draft_id, [team_id], user_ids)
 
 
 def resolve_chat_viewer(

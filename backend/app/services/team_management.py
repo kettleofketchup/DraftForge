@@ -13,6 +13,7 @@ from django.db.models import Q
 
 from app.broadcast import broadcast_herodraft_state
 from app.cache_utils import invalidate_after_commit
+from app.functions.herodraft_chat import apply_captain_tenure
 from app.functions.teamdraft import emit_event
 from app.models import (
     CustomUser,
@@ -237,6 +238,16 @@ def follow_captain(
         draft_teams = list(DraftTeam.objects.nocache().filter(draft__in=herodrafts))
         transaction.on_commit(
             partial(_refresh_herodrafts, team, herodrafts, draft_teams)
+        )
+        transaction.on_commit(
+            partial(
+                apply_captain_tenure,
+                team.pk,
+                [d.pk for d in herodrafts],
+                old.pk if old is not None else None,
+                new.pk,
+            ),
+            robust=True,
         )
 
     log.info(
