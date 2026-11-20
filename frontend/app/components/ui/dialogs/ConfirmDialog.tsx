@@ -14,10 +14,12 @@ import type {
 import {
   CancelButton,
   ConfirmButton,
+  brandDestructiveBg,
   brandReadableDestructive,
   brandReadableSuccess,
   brandReadableWarning,
   brandSuccessBg,
+  brandWarningBg,
 } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
@@ -63,8 +65,8 @@ export interface ConfirmDialogProps {
 // Content background styling per variant
 const contentVariantStyles = {
   default: `bg-success-surface ${brandSuccessBg}`,
-  destructive: 'bg-error-surface/95 border-error/40',
-  warning: 'bg-warning-surface/95 border-warning/40',
+  destructive: `bg-background ${brandDestructiveBg} border-destructive/50`,
+  warning: `bg-background ${brandWarningBg} border-warning/40`,
 };
 
 // Body text per variant — uses the tonal-harmony brand readables so the copy

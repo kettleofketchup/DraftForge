@@ -49,6 +49,8 @@ just test::pw::ui                    # Interactive UI mode
 # Full setup (down, update, build, populate, up)
 just test::setup
 
+# test::up/upd pull + extract the cached test DB first if backend/test.db.sqlite3 is missing or empty
+
 # Repopulate test data only
 just db::populate::all
 ```

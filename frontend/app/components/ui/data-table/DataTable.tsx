@@ -157,6 +157,10 @@ export interface DataTableProps<TData extends RowData> {
   initialColumnVisibility?: ColumnVisibilityState;
   /** Test-id namespace for the toolbar controls (default `table`). */
   toolbarTestIdPrefix?: string;
+  /** Left side of the action bar above the table, e.g. a count. */
+  toolbarStart?: ReactNode;
+  /** Right side of the action bar, e.g. an "Add" button. Independent of `enableToolbar`. */
+  toolbarActions?: ReactNode;
   /** Shown instead of `emptyMessage` when filters or search hide every row. */
   emptyFilteredMessage?: ReactNode;
   /** Rows per page; pagination hides itself when everything fits. */
@@ -192,6 +196,8 @@ export function DataTable<TData extends RowData>({
   initialColumnFilters = [],
   initialColumnVisibility = {},
   toolbarTestIdPrefix = 'table',
+  toolbarStart,
+  toolbarActions,
   emptyFilteredMessage = 'No results match these filters.',
   pageSize = 25,
   emptyMessage = 'No results.',
@@ -332,6 +338,17 @@ export function DataTable<TData extends RowData>({
 
   return (
     <div className={cn('flex flex-col gap-3', className)}>
+      {toolbarStart || toolbarActions ? (
+        <div
+          data-testid={`${toolbarTestIdPrefix}-actions`}
+          className="flex flex-wrap items-center justify-between gap-2"
+        >
+          <div className="min-w-0 text-sm text-muted-foreground">
+            {toolbarStart}
+          </div>
+          {toolbarActions}
+        </div>
+      ) : null}
       {enableToolbar && (
         <DataTableToolbar
           table={table}

@@ -1,0 +1,1 @@
+- Select fields no longer blank out and mark forms dirty when their stored value has no matching option.

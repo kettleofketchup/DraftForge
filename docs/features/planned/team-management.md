@@ -277,16 +277,23 @@ action.
 
 ### Roster tab
 
+The Captain and Deputy selects sit above a roster table with one row per player:
+members, then stand-ins, then dropouts. Each row shows the player, their role badges
+(Captain, Deputy, Stand-in, Dropout) and MMR (stacked under the name on phones), and
+an actions menu (⋮) with that player's actions. **Add stand-in** sits on the bar above
+the table, next to the member, stand-in and dropout counts.
+
 | Control | What it does |
 |---------|--------------|
 | Captain select | Makes another member captain. A captain who is not a member shows as "(not a member)". |
 | Deputy select | Makes another member deputy, or "No deputy" clears it. |
-| Make captain | On a member row; same as the captain select. |
-| Mark dropout | Moves a member to the dropouts. Disabled for the last member: sub in a stand-in instead. When the captain drops out, the deputy takes over. |
+| Make captain | In a member's actions menu; same as the captain select. |
+| Make deputy / Clear deputy | In a member's actions menu; same as the deputy select. |
+| Mark dropout | Moves a member to the dropouts. Disabled for the last member, with the reason shown in the menu: sub in a stand-in instead. When the captain drops out, the deputy takes over. |
 | Restore | Moves a dropout back to the members. |
 | Add stand-in | Searches users (at least 3 characters). Org staff see org and league members first, with anyone else under "Not in this organization". League staff who are not org staff search without membership labels. Players already on another team in the tournament are marked "On another team" and cannot be picked. |
 | Sub in | Moves a stand-in into the members. Pick the player they replace, who becomes a dropout, or "No one". The captain is labelled "(captain)" in that list. |
-| Remove | Removes a stand-in. |
+| Remove stand-in | Removes a stand-in. |
 
 Every action opens a confirm dialog that asks for a reason (3 to 500 characters). The
 reason is saved in the team's history and never written to logs. A captain change, a

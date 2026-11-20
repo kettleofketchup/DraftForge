@@ -14,6 +14,11 @@ export {
 export { type PendingTeamAction } from './pendingTeamAction';
 export { RosterStatusBadge, type RosterStatus } from './RosterStatusBadge';
 export {
+  RosterTable,
+  type RosterColumnId,
+  type RosterTableProps,
+} from './RosterTable';
+export {
   TeamActionReasonDialog,
   type TeamActionReasonDialogProps,
   type TeamActionReasonValues,

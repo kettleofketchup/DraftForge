@@ -304,6 +304,18 @@ describe('TeamManageDialog roster actions', () => {
   });
 });
 
+describe('TeamManageDialog layout', () => {
+  it('opens full-screen like the settings dialogs, the roster in a flexing scroll area', async () => {
+    renderDialog();
+    await screen.findByTestId('team-member-row-4');
+    const dialog = screen.getByTestId('team-manage-dialog');
+    expect(dialog).toHaveClass('min-w-full', 'xl:min-w-[98%]', 'h-full');
+    const scroll = within(dialog).getByTestId('team-manage-roster-scroll');
+    expect(scroll).toHaveClass('flex-1', 'min-h-0', '-mx-6', 'px-6');
+    expect(within(scroll).getByTestId('team-roster-table')).toBeTruthy();
+  });
+});
+
 describe('TeamManageDialog history tab', () => {
   const historyCalls = () =>
     axiosMock.get.mock.calls.filter(
@@ -322,6 +334,28 @@ describe('TeamManageDialog history tab', () => {
     expect(historyCalls()[0][1]).toEqual({
       params: { page: 1, page_size: 25 },
     });
+  });
+
+  it('keeps the history scroller inside the full-screen dialog column', async () => {
+    routeGets(axiosMock, { team: managedTeam, history: historyPage });
+    renderDialog();
+    const dialog = screen.getByTestId('team-manage-dialog');
+    expect(dialog).toHaveClass(
+      'h-full',
+      'flex',
+      'flex-col',
+      'overflow-hidden',
+      'min-w-full',
+      'sm:h-[95vh]',
+    );
+    openTab('team-manage-tab-history');
+    await screen.findAllByTestId('team-history-row');
+    expect(within(dialog).getByRole('tablist').parentElement).toHaveClass(
+      'min-w-0',
+    );
+    const scroll = within(dialog).getByTestId('team-history-scroll');
+    expect(scroll).toHaveAttribute('role', 'region');
+    expect(scroll).toHaveAttribute('aria-label', 'Team history');
   });
 
   it('requests the next server page from the pager', async () => {

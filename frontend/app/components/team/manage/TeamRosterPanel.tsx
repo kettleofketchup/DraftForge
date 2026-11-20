@@ -6,7 +6,6 @@ import type {
   RosterUser,
 } from '~/components/api/teamManagementAPI';
 import { Alert, AlertDescription } from '~/components/ui/alert';
-import { Badge } from '~/components/ui/badge';
 import {
   BrandSelect,
   BrandSelectContent,
@@ -14,26 +13,16 @@ import {
   BrandSelectTrigger,
   SelectValue,
 } from '~/components/ui/brand-select';
-import { DestructiveButton, SecondaryButton } from '~/components/ui/buttons';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { LeadershipProblemsBanner } from './LeadershipProblemsBanner';
 import type { PendingTeamAction } from './pendingTeamAction';
-import { RosterStatusBadge } from './RosterStatusBadge';
+import { RosterTable } from './RosterTable';
 import {
   clearDeputyRequest,
   isMember,
-  markDropoutRequest,
-  removeStandinRequest,
-  restoreMemberRequest,
   setCaptainRequest,
   setDeputyRequest,
-  subInRequest,
 } from './teamActionCopy';
 
 export type { PendingTeamAction } from './pendingTeamAction';
@@ -52,58 +41,51 @@ const NO_CAPTAIN = 'none';
 const byName = (a: RosterUser, b: RosterUser): number =>
   DisplayName(a).localeCompare(DisplayName(b));
 
-function GhostItem({ user, note }: { user: RosterUser; note: string }) {
+/** Avatar and truncating name on one row; the select trigger shows it too. */
+function LeaderOption({
+  user,
+  label = DisplayName(user),
+  icon,
+}: {
+  user: RosterUser;
+  label?: string;
+  icon?: ReactNode;
+}) {
   return (
-    <BrandSelectItem value={String(user.pk)} disabled>
-      <TriangleAlert className="text-destructive" aria-hidden />
-      {`${DisplayName(user)} (${note})`}
+    <span className="flex min-w-0 items-center gap-2">
+      {icon}
+      <span aria-hidden className="flex shrink-0">
+        <UserAvatar
+          user={user}
+          size="tiny"
+          data-testid="leader-option-avatar"
+        />
+      </span>
+      <span className="truncate" data-testid="leader-option-name">
+        {label}
+      </span>
+    </span>
+  );
+}
+
+function MemberItem({ user }: { user: RosterUser }) {
+  return (
+    <BrandSelectItem value={String(user.pk)} textValue={DisplayName(user)}>
+      <LeaderOption user={user} />
     </BrandSelectItem>
   );
 }
 
-function RosterRow({
-  user,
-  testId,
-  badges,
-  children,
-}: {
-  user: RosterUser;
-  testId: string;
-  badges?: ReactNode;
-  children: ReactNode;
-}) {
+function GhostItem({ user, note }: { user: RosterUser; note: string }) {
+  const label = `${DisplayName(user)} (${note})`;
   return (
-    <li
-      data-testid={testId}
-      className="flex flex-wrap items-center justify-between gap-2 py-1"
-    >
-      <span className="flex min-w-0 items-center gap-2">
-        <UserAvatar user={user} size="sm" />
-        <span className="truncate">{DisplayName(user)}</span>
-        {badges}
-      </span>
-      <span className="flex flex-wrap gap-2">{children}</span>
-    </li>
-  );
-}
-
-function Section({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-1">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {action}
-      </div>
-      {children}
-    </section>
+    <BrandSelectItem value={String(user.pk)} textValue={label} disabled>
+      <LeaderOption
+        user={user}
+        label={label}
+        icon={<TriangleAlert className="text-destructive" aria-hidden />}
+      />
+    </BrandSelectItem>
   );
 }
 
@@ -119,7 +101,6 @@ export function TeamRosterPanel({
   const { captain, deputy_captain: deputy } = team;
   const members = [...team.members].sort(byName);
   const findMember = (pk: string) => members.find((m) => String(m.pk) === pk);
-  const lastMember = team.members.length === 1;
 
   const captainGhost = captain && !isMember(team, captain) ? captain : null;
   const deputyOptions = members.filter((m) => m.pk !== captain?.pk);
@@ -160,6 +141,7 @@ export function TeamRosterPanel({
             <BrandSelectTrigger
               ref={captainRef}
               data-testid="team-manage-captain-select"
+              className="max-w-full sm:max-w-80"
             >
               <SelectValue />
             </BrandSelectTrigger>
@@ -173,9 +155,7 @@ export function TeamRosterPanel({
                 <GhostItem user={captainGhost} note="not a member" />
               ) : null}
               {members.map((m) => (
-                <BrandSelectItem key={m.pk} value={String(m.pk)}>
-                  {DisplayName(m)}
-                </BrandSelectItem>
+                <MemberItem key={m.pk} user={m} />
               ))}
             </BrandSelectContent>
           </BrandSelect>
@@ -198,6 +178,7 @@ export function TeamRosterPanel({
             <BrandSelectTrigger
               ref={deputyRef}
               data-testid="team-manage-deputy-select"
+              className="max-w-full sm:max-w-80"
             >
               <SelectValue />
             </BrandSelectTrigger>
@@ -207,123 +188,19 @@ export function TeamRosterPanel({
                 <GhostItem user={deputy} note={deputyMarker} />
               ) : null}
               {deputyOptions.map((m) => (
-                <BrandSelectItem key={m.pk} value={String(m.pk)}>
-                  {DisplayName(m)}
-                </BrandSelectItem>
+                <MemberItem key={m.pk} user={m} />
               ))}
             </BrandSelectContent>
           </BrandSelect>
         </label>
       </div>
 
-      <Section title={`Members (${members.length})`}>
-        <ul>
-          {members.map((m) => {
-            const isCaptain = m.pk === captain?.pk;
-            const dropout = (
-              <DestructiveButton
-                size="sm"
-                disabled={pending || lastMember}
-                onClick={() => onRequestAction(markDropoutRequest(team, m))}
-              >
-                Mark dropout
-              </DestructiveButton>
-            );
-            return (
-              <RosterRow
-                key={m.pk}
-                user={m}
-                testId={`team-member-row-${m.pk}`}
-                badges={
-                  <>
-                    {isCaptain ? (
-                      <Badge variant="outline">Captain</Badge>
-                    ) : null}
-                    {m.pk === deputy?.pk ? (
-                      <RosterStatusBadge status="deputy" />
-                    ) : null}
-                  </>
-                }
-              >
-                {isCaptain ? null : (
-                  <SecondaryButton
-                    size="sm"
-                    disabled={pending}
-                    onClick={() => onRequestAction(setCaptainRequest(team, m))}
-                  >
-                    Make captain
-                  </SecondaryButton>
-                )}
-                {lastMember ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      {/* A disabled button gets no pointer events; the span carries the tooltip. */}
-                      <span tabIndex={0}>{dropout}</span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      A team needs at least one member
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  dropout
-                )}
-              </RosterRow>
-            );
-          })}
-        </ul>
-      </Section>
-
-      <Section
-        title={`Stand-ins (${team.dropin_members.length})`}
-        action={addStandinSlot}
-      >
-        <ul>
-          {team.dropin_members.map((s) => (
-            <RosterRow
-              key={s.pk}
-              user={s}
-              testId={`team-standin-row-${s.pk}`}
-              badges={<RosterStatusBadge status="standin" />}
-            >
-              <SecondaryButton
-                size="sm"
-                disabled={pending}
-                onClick={() => onRequestAction(subInRequest(team, s))}
-              >
-                Sub in
-              </SecondaryButton>
-              <DestructiveButton
-                size="sm"
-                disabled={pending}
-                onClick={() => onRequestAction(removeStandinRequest(team, s))}
-              >
-                Remove
-              </DestructiveButton>
-            </RosterRow>
-          ))}
-        </ul>
-      </Section>
-
-      <Section title={`Dropouts (${team.left_members.length})`}>
-        <ul>
-          {team.left_members.map((d) => (
-            <RosterRow
-              key={d.pk}
-              user={d}
-              testId={`team-dropout-row-${d.pk}`}
-              badges={<RosterStatusBadge status="dropout" />}
-            >
-              <SecondaryButton
-                size="sm"
-                disabled={pending}
-                onClick={() => onRequestAction(restoreMemberRequest(team, d))}
-              >
-                Restore
-              </SecondaryButton>
-            </RosterRow>
-          ))}
-        </ul>
-      </Section>
+      <RosterTable
+        team={team}
+        pending={pending}
+        onRequestAction={onRequestAction}
+        toolbarActions={addStandinSlot}
+      />
     </div>
   );
 }

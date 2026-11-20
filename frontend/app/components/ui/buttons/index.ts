@@ -2,6 +2,7 @@
 export {
   brandBg,
   brandButtonVariants,
+  brandDestructiveBg,
   brandDialogPanel,
   brandErrorBg,
   brandErrorCard,
@@ -20,6 +21,7 @@ export {
   brandSecondaryOpaque,
   brandSecondaryOpaqueLift,
   brandSuccessBg,
+  brandWarningBg,
   buttonDisabled,
   buttonLift,
 } from './styles';

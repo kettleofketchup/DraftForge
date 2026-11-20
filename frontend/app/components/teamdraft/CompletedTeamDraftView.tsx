@@ -1,12 +1,13 @@
 // frontend/app/components/teamdraft/CompletedTeamDraftView.tsx
 import { Trophy, Users } from 'lucide-react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, type ReactNode } from 'react';
 import { LeadershipProblemBadge } from '~/components/team/manage/LeadershipProblemBadge';
 import {
   isUnresolvedLogUser,
   resolveLogUser,
 } from '~/components/team/manage/resolveLogUser';
 import {
+  ROSTER_BADGE_SIZE,
   RosterStatusBadge,
   type RosterStatus,
 } from '~/components/team/manage/RosterStatusBadge';
@@ -61,6 +62,10 @@ function resolveRosterUser(
     : { pk: user.pk, user: resolved as UserType };
 }
 
+function RosterBadges({ children }: { children: ReactNode }) {
+  return <div className="flex items-center justify-end gap-1">{children}</div>;
+}
+
 function RosterExtraRow({
   entry,
   status,
@@ -73,7 +78,11 @@ function RosterExtraRow({
   leaguePk: number | null;
 }) {
   const testId = `team-card-${status}-${entry.pk}`;
-  const badge = <RosterStatusBadge status={status} />;
+  const badge = (
+    <RosterBadges>
+      <RosterStatusBadge status={status} />
+    </RosterBadges>
+  );
   const muted = status === 'dropout' && 'opacity-60';
   if (!entry.user) {
     return (
@@ -158,20 +167,13 @@ function TeamMembersList({
             data-testid={`team-card-member-${member.pk}`}
             contextSlot={
               isCaptain || isDeputy || hasDuration || hasSkips ? (
-                <div className="flex items-center gap-1">
-                  {isCaptain && (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] px-1.5 py-0 text-primary border-primary"
-                    >
-                      Captain
-                    </Badge>
-                  )}
+                <RosterBadges>
+                  {isCaptain && <RosterStatusBadge status="captain" />}
                   {isDeputy && <RosterStatusBadge status="deputy" />}
                   {hasDuration && (
                     <Badge
                       variant="outline"
-                      className="text-[10px] px-1.5 py-0"
+                      className={ROSTER_BADGE_SIZE}
                       data-testid={`pick-duration-${member.pk}`}
                     >
                       {formatDuration(
@@ -182,13 +184,16 @@ function TeamMembersList({
                   {hasSkips && (
                     <Badge
                       variant="outline"
-                      className="text-[10px] px-1.5 py-0 text-warning border-warning"
+                      className={cn(
+                        ROSTER_BADGE_SIZE,
+                        'text-warning border-warning/30',
+                      )}
                       data-testid={`pick-skips-${member.pk}`}
                     >
                       skipped ×{round!.skip_count}
                     </Badge>
                   )}
-                </div>
+                </RosterBadges>
               ) : undefined
             }
           />

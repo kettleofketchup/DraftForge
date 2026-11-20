@@ -16,6 +16,11 @@ export {
   type DataTableColumnHeaderProps,
 } from './DataTableColumnHeader';
 export {
+  DataTableRowActions,
+  type DataTableRowAction,
+  type DataTableRowActionsProps,
+} from './DataTableRowActions';
+export {
   DataTableColumnsMenu,
   DataTableFacetedFilter,
   DataTableToolbar,
