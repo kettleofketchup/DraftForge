@@ -179,6 +179,7 @@ export const ChatErrorSchema = z.object({
   type: z.literal('chat_error'),
   code: ChatErrorCodeSchema,
   client_msg_id: z.string().optional(),
+  viewer: ChatViewerSchema.optional(),
 });
 
 // Discriminated union for all WebSocket message types

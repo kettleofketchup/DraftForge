@@ -100,7 +100,7 @@ Clients connect via WebSocket to `/api/herodraft/<draft_id>/`. The `HeroDraftCon
 | `chat_history` | Chat messages this viewer may see, sent right after `initial_state` and again on resync | `{viewer: {...}, messages: [ChatMessage]}` |
 | `chat_message` | One live chat message (team or all) | `{message: ChatMessage}` |
 | `chat_ack` | Sender only: the server stored a message | `{client_msg_id?, id}` |
-| `chat_error` | Sender only: a chat send was refused | `{code, client_msg_id?}` |
+| `chat_error` | A chat send was refused, or chat failed on the server for this socket | `{code, client_msg_id?, viewer?}` |
 
 ### Messages (Client → Server)
 
@@ -379,6 +379,8 @@ Messages are plain text. Newlines and Unicode line or paragraph separators becom
 
 If `unavailable` arrives before chat history, chat failed to start for that socket: the composer shows "Chat unavailable" and is disabled until the socket reconnects. Any later send or suggestion clears the inline error, and the error has a dismiss button.
 
+If a roster lookup fails later (for example the database is briefly locked), the server fails closed: it holds the socket as a spectator, delivers no team messages to it, and sends `unavailable` once with `viewer` set to the spectator role so the composer turns read-only. The next team message or send retries the lookup; when it succeeds the socket gets a fresh `chat_history` with its real role, which includes any team messages it missed.
+
 ### Chat message shape
 
 ```json
@@ -413,7 +415,7 @@ All chat logs use `system="herodraft"`, `subsystem="chat"`. Message text and her
 | `herodraft_chat_rate_limit_redis_unavailable` | warning | Redis failed; the send is refused |
 | `herodraft_chat_delivery_revoked` | info | A team frame was dropped because the user is no longer on that team |
 | `herodraft_chat_ambiguous_membership` | warning | User is on both rosters |
-| `herodraft_chat_bootstrap_failed` | error | Chat history failed at connect; the socket stays open |
+| `herodraft_chat_bootstrap_failed` | error | Chat history or a roster lookup failed; the socket stays open as a spectator until a later lookup succeeds |
 | `herodraft_chat_resync_broadcast_failed` / `herodraft_chat_roster_failed` / `herodraft_chat_resync_roster_failed` | warning | Roster change could not be pushed to open sockets |
 | `herodraft_chat_membership_open_race` | warning | Two connects opened the same membership row at once |
 

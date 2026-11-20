@@ -137,6 +137,22 @@ describe('heroDraftStore chat frames', () => {
     expect(chat().lastError).toEqual({ code: 'unavailable' });
     expect(chat().unavailable).toBe(false);
   });
+
+  it('chat_error with a viewer downgrades the composer to that viewer', () => {
+    emit({ type: 'chat_history', viewer: memberViewer, messages: [] });
+    emit({
+      type: 'chat_error',
+      code: 'unavailable',
+      viewer: {
+        role: 'spectator',
+        team_id: null,
+        can_post_team: false,
+        can_post_all: false,
+      },
+    });
+    expect(chat().viewer?.role).toBe('spectator');
+    expect(chat().lastError).toEqual({ code: 'unavailable' });
+  });
 });
 
 describe('heroDraftStore chat actions', () => {

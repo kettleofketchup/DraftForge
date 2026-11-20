@@ -103,6 +103,7 @@ export function applyChatError(
   s: ChatState,
   code: ChatErrorCode,
   clientMsgId?: string,
+  viewer?: ChatViewer,
 ): ChatState {
   if (clientMsgId === undefined && code === 'unavailable' && !s.viewer) {
     return { ...s, unavailable: true };
@@ -110,6 +111,7 @@ export function applyChatError(
   const failed = clientMsgId !== undefined ? s.pending[clientMsgId] : undefined;
   return {
     ...s,
+    viewer: viewer ?? s.viewer,
     pending:
       failed && clientMsgId !== undefined
         ? withoutPending(s.pending, clientMsgId)

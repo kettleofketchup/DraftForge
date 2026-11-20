@@ -16,7 +16,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.backends.base import SessionBase
 from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sessions.models import Session
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.test import TransactionTestCase, override_settings
 from django.urls import path, re_path
 from django.utils import timezone
@@ -359,10 +359,36 @@ class ChatHistoryOnConnectTest(ChatConsumerFixture):
                 first = await comm.receive_json_from()
                 self.assertEqual(first["type"], "initial_state")
                 error = await comm.receive_json_from()
-                self.assertEqual(error, {"type": "chat_error", "code": "unavailable"})
+                self.assertEqual(
+                    error,
+                    {
+                        "type": "chat_error",
+                        "code": "unavailable",
+                        "viewer": {
+                            "role": "spectator",
+                            "team_id": None,
+                            "can_post_team": False,
+                            "can_post_all": False,
+                        },
+                    },
+                )
                 await read_until_type(comm, "ping")
                 consumer = self.consumer_for(self.cap_a)
-                self.assertEqual(consumer._extra_groups, set())
+                self.assertEqual(consumer._chat_viewer.role, "spectator")
+                await get_channel_layer().group_send(
+                    team_group_name(self.draft.pk, self.team_a.pk),
+                    {
+                        "type": "herodraft.chat_team",
+                        "team_id": self.team_a.pk,
+                        "message": {
+                            "body": "boot-fail-6d",
+                            "created_at": timezone.now().isoformat(),
+                        },
+                    },
+                )
+                for frame in await drain(comm, 0.5):
+                    self.assertNotIn("boot-fail-6d", json.dumps(frame))
+                    self.assertNotIn(frame.get("type"), CHAT_FRAME_TYPES, frame)
                 self.assertEqual(consumer._chat_viewer.role, "spectator")
             finally:
                 await self.close_all()
@@ -1185,6 +1211,139 @@ class ChatDeliveryTest(ChatSendFixture):
             frame = await read_until_type(new_cap, "chat_message")
             self.assertEqual(frame["message"]["body"], post)
             await self.assert_no_chat_frame(old_cap, post)
+        finally:
+            await self.close_all()
+
+
+class ChatDegradedRecoveryTest(ChatSendFixture):
+    SPECTATOR_PAYLOAD = {
+        "role": "spectator",
+        "team_id": None,
+        "can_post_team": False,
+        "can_post_all": False,
+    }
+
+    def flaky_resolve_for(self, user: CustomUser, failures: int) -> Any:
+        left = [failures]
+
+        def resolve(draft_id: int, who: Any) -> Any:
+            if who is user and left[0] > 0:
+                left[0] -= 1
+                raise OperationalError("database is locked")
+            return resolve_chat_viewer(draft_id, who)
+
+        return mock.patch("draft.consumers.hero.resolve_chat_viewer", resolve)
+
+    def chat_frames(self, frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [f for f in frames if f.get("type") in CHAT_FRAME_TYPES]
+
+    async def test_failed_team_frame_check_tells_client_and_recovers(self) -> None:
+        dropped = "degraded-drop-5c21"
+        later = "degraded-later-5c21"
+        group = team_group_name(self.draft.pk, self.team_a.pk)
+        try:
+            cap_a = await self.connect_as(self.cap_a)
+            mem_a = await self.connect_as(self.mem_a)
+            consumer = self.consumer_for(self.mem_a)
+            with self.flaky_resolve_for(self.mem_a, 1):
+                self.assertEqual(
+                    (await self.send_chat(cap_a, dropped))["type"], "chat_ack"
+                )
+                error = await read_until_types(mem_a, CHAT_FRAME_TYPES)
+                self.assertEqual(
+                    error,
+                    {
+                        "type": "chat_error",
+                        "code": "unavailable",
+                        "viewer": self.SPECTATOR_PAYLOAD,
+                    },
+                )
+                self.assertEqual(consumer._chat_viewer.role, "spectator")
+                self.assertEqual(consumer._extra_groups, {group})
+                for frame in await drain(mem_a, 0.3):
+                    self.assertNotIn(dropped, json.dumps(frame))
+
+                self.assertEqual(
+                    (await self.send_chat(cap_a, later, "cid-2"))["type"], "chat_ack"
+                )
+                history = await read_history_with_role(mem_a, "member")
+            self.assertEqual(history["viewer"]["team_id"], self.team_a.pk)
+            self.assertEqual(self.bodies(history), [dropped, later])
+            self.assertEqual(
+                self.chat_frames(await drain(mem_a, 0.3)), [], "no duplicate frame"
+            )
+            self.assertEqual(
+                (await self.send_chat(mem_a, "back", "cid-3"))["type"], "chat_ack"
+            )
+        finally:
+            await self.close_all()
+
+    async def test_failed_check_never_delivers_to_removed_member(self) -> None:
+        sentinel = "degraded-removed-77b0"
+        try:
+            cap_a = await self.connect_as(self.cap_a)
+            mem_a = await self.connect_as(self.mem_a)
+            with self.flaky_resolve_for(self.mem_a, 1):
+                await self.send_chat(cap_a, "trip")
+                await read_until_types(mem_a, {"chat_error"})
+            await database_sync_to_async(
+                Team.members.through.objects.filter(
+                    team_id=self.team_a.pk, customuser_id=self.mem_a.pk
+                ).delete
+            )()
+            await self.send_chat(cap_a, sentinel, "cid-2")
+            history = await read_history_with_role(mem_a, "spectator")
+            self.assertNotIn(sentinel, json.dumps(history))
+            self.assertNotIn("trip", json.dumps(history))
+            await self.assert_no_chat_frame(mem_a, sentinel)
+            self.assertEqual(self.consumer_for(self.mem_a)._extra_groups, set())
+            reply = await self.send_chat(mem_a, "nope", "cid-3")
+            self.assertEqual(reply["code"], "not_participant")
+        finally:
+            await self.close_all()
+
+    async def test_degraded_member_send_re_resolves(self) -> None:
+        sentinel = "degraded-send-1f9a"
+        try:
+            mem_a = await self.connect_as(self.mem_a)
+            cap_a = await self.connect_as(self.cap_a)
+            consumer = self.consumer_for(self.mem_a)
+            await consumer._chat_bootstrap_failed(OperationalError("locked"))
+            error = await read_until_types(mem_a, {"chat_error"})
+            self.assertEqual(error["viewer"], self.SPECTATOR_PAYLOAD)
+            self.assertNotIn("client_msg_id", error)
+
+            await mem_a.send_json_to(
+                {"type": "chat_send", "body": sentinel, "client_msg_id": "dg"}
+            )
+            history = await read_until_types(mem_a, {"chat_history", "chat_error"})
+            self.assertEqual(history["type"], "chat_history")
+            self.assertEqual(history["viewer"]["role"], "member")
+            ack = await read_until_types(mem_a, {"chat_ack", "chat_error"})
+            self.assertEqual(ack["type"], "chat_ack")
+            frame = await read_until_type(cap_a, "chat_message")
+            self.assertEqual(frame["message"]["body"], sentinel)
+        finally:
+            await self.close_all()
+
+    async def test_degraded_send_while_still_failing_is_unavailable(self) -> None:
+        try:
+            mem_a = await self.connect_as(self.mem_a)
+            consumer = self.consumer_for(self.mem_a)
+            await consumer._chat_bootstrap_failed(OperationalError("locked"))
+            await read_until_types(mem_a, {"chat_error"})
+            with self.flaky_resolve_for(self.mem_a, 5):
+                reply = await self.send_chat(mem_a, "still-down", "sd")
+            self.assertEqual(
+                reply,
+                {"type": "chat_error", "code": "unavailable", "client_msg_id": "sd"},
+            )
+            self.assertEqual(self.chat_frames(await drain(mem_a, 0.3)), [])
+            self.assertFalse(
+                await database_sync_to_async(
+                    HeroDraftChatMessage.objects.filter(body="still-down").exists
+                )()
+            )
         finally:
             await self.close_all()
 

@@ -183,6 +183,28 @@ describe('pending, ack and error', () => {
     expect(s.lastError).toBeNull();
   });
 
+  it('takes the viewer the server fell back to after a failure', () => {
+    const spectator: ChatViewer = {
+      role: 'spectator',
+      team_id: null,
+      can_post_team: false,
+      can_post_all: false,
+    };
+    const live = applyChatHistory(initialChatState, member, [msg(1)]);
+    const s = applyChatError(live, 'unavailable', undefined, spectator);
+    expect(s.viewer).toEqual(spectator);
+    expect(s.lastError).toEqual({ code: 'unavailable' });
+    expect(ids(s)).toEqual([uuid(1)]);
+    const boot = applyChatError(
+      initialChatState,
+      'unavailable',
+      undefined,
+      spectator,
+    );
+    expect(boot.viewer).toBeNull();
+    expect(boot.unavailable).toBe(true);
+  });
+
   it('a later history clears the unavailable mark', () => {
     const s = applyChatError(initialChatState, 'unavailable');
     expect(applyChatHistory(s, member, []).unavailable).toBe(false);

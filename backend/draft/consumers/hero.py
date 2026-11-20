@@ -24,6 +24,7 @@ from draft.services.hero_chat import (
     ChatErrorCode,
     ChatViewer,
     PostResult,
+    authorize_post,
     check_rate_limit,
     draft_roster_user_ids,
     post_suggestion,
@@ -75,6 +76,8 @@ class HeroDraftConsumer(BaseDraftConsumer):
     kick_duplicate_captain_connections = True
     clear_heartbeat_on_disconnect = True
     _chat_viewer: ChatViewer = SPECTATOR
+    # Set when a viewer lookup failed; the socket is held as spectator until one succeeds.
+    _chat_degraded: bool = False
     _reject_window_start: float = 0.0
     _reject_count: int = 0
 
@@ -308,18 +311,33 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 {"type": "herodraft.chat_all", "message": result.message},
             )
 
+    async def _recover_chat_viewer(self) -> None:
+        try:
+            viewer = await self._resolve_chat_viewer()
+        except Exception as e:
+            await self._chat_bootstrap_failed(e)
+            return
+        await self._regroup(viewer)
+
     async def _authorize_and_post(
         self, msg_type: str, data: dict[str, Any]
     ) -> PostResult:
-        cached = self._chat_viewer
         user_id = self._chat_user_id()
-        if cached.role == "ambiguous":
-            raise ChatError("ambiguous_team")
-        if cached.role != "member" or user_id is None:
-            raise ChatError("not_participant")
-        await sync_to_async(check_rate_limit, thread_sensitive=False)(
-            self.draft_id, user_id
-        )
+        if user_id is not None and self._chat_degraded:
+            await sync_to_async(check_rate_limit, thread_sensitive=False)(
+                self.draft_id, user_id
+            )
+            await self._recover_chat_viewer()
+            if self._chat_degraded:
+                raise ChatError("unavailable")
+            authorize_post(self._chat_viewer)
+        else:
+            authorize_post(self._chat_viewer)
+            if user_id is None:
+                raise ChatError("not_participant")
+            await sync_to_async(check_rate_limit, thread_sensitive=False)(
+                self.draft_id, user_id
+            )
         viewer, outcome = await self._post_chat(msg_type, data)
         if self._viewer_changed(self._chat_viewer, viewer):
             await self._regroup(viewer)
@@ -356,6 +374,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 }
             )
         )
+        self._chat_degraded = False
 
     async def _chat_bootstrap_failed(self, error: Exception) -> None:
         user_id = self._chat_user_id()
@@ -368,13 +387,22 @@ class HeroDraftConsumer(BaseDraftConsumer):
             error_type=type(error).__name__,
             exc_info=True,
         )
+        # Fail closed but keep team groups: each team frame re-checks, so the next one can recover.
         self._chat_viewer = ChatViewer(
             user_id=user_id, team_id=None, role="spectator", joined_at=None
         )
+        if self._chat_degraded:
+            return
+        self._chat_degraded = True
         try:
-            await self._discard_extra_groups()
             await self.send(
-                text_data=json.dumps({"type": "chat_error", "code": "unavailable"})
+                text_data=json.dumps(
+                    {
+                        "type": "chat_error",
+                        "code": "unavailable",
+                        "viewer": self._chat_viewer.as_payload(),
+                    }
+                )
             )
         except Exception as e:
             log.error(
@@ -383,7 +411,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 subsystem="chat",
                 draft_id=self.draft_id,
                 user_id=user_id,
-                stage="cleanup",
+                stage="notify",
                 error_type=type(e).__name__,
                 exc_info=True,
             )
@@ -667,6 +695,10 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 team_id=team_id,
                 role=viewer.role,
             )
+            await self._regroup(viewer)
+            return
+        if self._viewer_changed(self._chat_viewer, viewer):
+            # Recovering from a failed lookup: the fresh history already holds this message.
             await self._regroup(viewer)
             return
         self._chat_viewer = viewer

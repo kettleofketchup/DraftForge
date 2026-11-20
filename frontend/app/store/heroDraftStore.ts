@@ -434,6 +434,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
               get().chat,
               message.code,
               message.client_msg_id,
+              message.viewer,
             ),
           });
           break;
