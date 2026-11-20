@@ -1,4 +1,4 @@
-"""skip_turn strategies, reassign_round_captain, check_timeout guards and pick-vs-timeout ordering (spec §2)."""
+"""skip_turn strategies, reassign_round_captain, check_timeout guards and pick-vs-timeout ordering."""
 
 from datetime import timedelta
 from unittest.mock import patch

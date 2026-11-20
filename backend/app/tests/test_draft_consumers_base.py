@@ -1,4 +1,4 @@
-"""DraftConsumer on BaseDraftConsumer: heartbeat, counts, prefix isolation, no kick/loop (spec §1)."""
+"""DraftConsumer on BaseDraftConsumer: heartbeat, counts, prefix isolation, no kick/loop."""
 
 import asyncio
 import threading

@@ -805,7 +805,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
     async def test_kicked_connection_receives_kicked_frame_then_close_4000(
         self, mock_start_tick
     ):
-        """Spec §1: first socket gets {"type": "herodraft_kicked"} then close code 4000."""
+        """First socket gets {"type": "herodraft_kicked"} then close code 4000."""
         mock_start_tick.return_value = True
 
         first_comm = WebsocketCommunicator(

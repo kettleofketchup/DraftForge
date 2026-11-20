@@ -121,11 +121,11 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         ),
         "app/consumers.py": BackEdge(
             frozenset({"BaseDraftConsumer", "CAPTAIN_CHANNEL_TTL", "TickDriver"}),
-            "TEMP slice2: DraftConsumer moves to draft in Task 5",
+            "temporary: DraftConsumer moves to draft with the team draft models",
         ),
         "app/functions/draft_picks.py": BackEdge(
             frozenset({"evaluate_client_pick_time"}),
-            "TEMP slice2: draft_picks moves to draft in Task 5",
+            "temporary: draft_picks moves to draft with the team draft models",
         ),
         "app/tasks/teamdraft_tick.py": BackEdge(
             frozenset(
@@ -138,7 +138,7 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "heartbeat_key",
                 }
             ),
-            "TEMP slice2: teamdraft_tick moves to draft in Task 4",
+            "temporary: teamdraft_tick moves to draft with the team draft models",
         ),
     },
 }
