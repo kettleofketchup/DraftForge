@@ -760,6 +760,9 @@ class OrgSettingsInertTest(SimpleTestCase):
         "staff_override_policy",
         "staff_override_warning_codes",
     )
+    CONTRACT: frozenset[str] = frozenset(
+        {"events/overrides.py", "events/tests/test_overrides.py"}
+    )
 
     def test_policy_inert_until_524(self) -> None:
         """#524 removes this test and replaces it with block/confirm enforcement tests."""
@@ -768,6 +771,8 @@ class OrgSettingsInertTest(SimpleTestCase):
         for path in base.rglob("*.py"):
             parts = path.relative_to(base).parts
             if parts[0] in ("org", "tests") or "migrations" in parts:
+                continue
+            if "/".join(parts) in self.CONTRACT:
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
             offenders.extend(

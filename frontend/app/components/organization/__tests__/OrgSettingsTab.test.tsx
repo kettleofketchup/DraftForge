@@ -9,6 +9,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
 import { toast } from 'sonner';
 import {
   afterEach,
@@ -285,9 +286,11 @@ describe('OrgSettingsTab', () => {
       defaultOptions: { queries: { retry: false } },
     });
     return render(
-      <QueryClientProvider client={qc}>
-        <OrgSettingsTab organization={organization} />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={qc}>
+          <OrgSettingsTab organization={organization} />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
   }
 
