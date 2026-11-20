@@ -1,0 +1,1 @@
+- Closing the organization settings modal now returns to the page's earlier history entry, so one Back leaves the page.
