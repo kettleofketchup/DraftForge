@@ -86,6 +86,34 @@ const ENFORCEMENT_TOGGLES: readonly ToggleField[] = [
   'block_enabled',
 ];
 
+const ENFORCEMENT_FIELDS: ReadonlySet<ConductSettingsField> = new Set([
+  ...ENFORCEMENT_TOGGLES,
+  'back_of_line_below',
+  'require_approval_below',
+  'block_below',
+  'enforce_on_new_members',
+]);
+
+function isSettingsField(key: string): key is ConductSettingsField {
+  return (FIELDS as readonly string[]).includes(key);
+}
+
+/** DRF `{field: [msg]}` entries that name a settings field. */
+function settingsFieldErrors(err: unknown): [ConductSettingsField, string][] {
+  const data: unknown =
+    typeof err === 'object' && err !== null && 'response' in err
+      ? (err as { response?: { data?: unknown } }).response?.data
+      : undefined;
+  if (typeof data !== 'object' || data === null) return [];
+  return Object.entries(data).flatMap(
+    ([key, value]): [ConductSettingsField, string][] => {
+      if (!isSettingsField(key)) return [];
+      const message = Array.isArray(value) ? value[0] : value;
+      return typeof message === 'string' ? [[key, message]] : [];
+    },
+  );
+}
+
 export function pickConductFormValues(
   s: ConductSettingsValues,
 ): ConductSettingsForm {
@@ -176,25 +204,46 @@ function ConductSettingsFormView({
 
   const mutation = usePatchConductSettings(organizationId, access);
 
-  const onSubmit = form.handleSubmit(async (values) => {
-    const dirty = form.formState.dirtyFields;
-    const changes: Partial<ConductSettingsForm> = {};
-    for (const field of FIELDS) {
-      if (dirty[field]) Object.assign(changes, { [field]: values[field] });
+  const revealEnforcement = (fields: Iterable<string>) => {
+    for (const field of fields) {
+      if (isSettingsField(field) && ENFORCEMENT_FIELDS.has(field)) {
+        setEnforcementOpen(true);
+        return;
+      }
     }
-    try {
-      const saved = await mutation.mutateAsync(changes);
-      queryClient.setQueryData(
-        conductKeys.settings(organizationId, access.viewerPk),
-        saved,
-      );
-      form.reset(pickConductFormValues(saved));
-      toast.success('Conduct settings saved');
-    } catch (err) {
-      log.error('Failed to save conduct settings', { organizationId, err });
-      toast.error(extractApiError(err) ?? 'Could not save conduct settings');
-    }
-  });
+  };
+
+  const onSubmit = form.handleSubmit(
+    async (values) => {
+      const dirty = form.formState.dirtyFields;
+      const changes: Partial<ConductSettingsForm> = {};
+      for (const field of FIELDS) {
+        if (dirty[field]) Object.assign(changes, { [field]: values[field] });
+      }
+      try {
+        const saved = await mutation.mutateAsync(changes);
+        queryClient.setQueryData(
+          conductKeys.settings(organizationId, access.viewerPk),
+          saved,
+        );
+        form.reset(pickConductFormValues(saved));
+        toast.success('Conduct settings saved');
+      } catch (err) {
+        log.error('Failed to save conduct settings', { organizationId, err });
+        const fieldErrors = settingsFieldErrors(err);
+        for (const [field, message] of fieldErrors) {
+          form.setError(field, { message });
+        }
+        revealEnforcement(fieldErrors.map(([field]) => field));
+        if (fieldErrors.length === 0) {
+          toast.error(
+            extractApiError(err) ?? 'Could not save conduct settings',
+          );
+        }
+      }
+    },
+    (errors) => revealEnforcement(Object.keys(errors)),
+  );
 
   const { isDirty, isSubmitting } = form.formState;
   const control = form.control;

@@ -236,16 +236,65 @@ describe('ConductSection', () => {
     await waitFor(() => expect(saveButton()).toBeDisabled());
   });
 
-  it('keeps edits and reports the error when save fails', async () => {
+  it('shows a server field error beside its input', async () => {
     vi.mocked(patchConductSettings).mockRejectedValue({
-      response: { data: { min_events: ['At most 20'] } },
+      response: { status: 400, data: { min_events: ['At most 20'] } },
     });
     await loaded();
     fireEvent.change(input('min_events'), { target: { value: '5' } });
     fireEvent.click(saveButton());
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('At most 20'));
+    expect(await screen.findByText('At most 20')).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
     expect(input('min_events').value).toBe('5');
     expect(saveButton()).toBeEnabled();
+  });
+
+  it('opens enforcement for a server error on a collapsed field', async () => {
+    vi.mocked(patchConductSettings).mockRejectedValue({
+      response: {
+        status: 400,
+        data: {
+          block_below: ['Ensure this value is less than or equal to 1.'],
+        },
+      },
+    });
+    await loaded();
+    fireEvent.change(input('min_events'), { target: { value: '5' } });
+    fireEvent.click(saveButton());
+    expect(
+      await screen.findByText('Ensure this value is less than or equal to 1.'),
+    ).toBeInTheDocument();
+    expect(input('block_below')).toBeInTheDocument();
+  });
+
+  it('toasts an error that names no field', async () => {
+    vi.mocked(patchConductSettings).mockRejectedValue({
+      response: { status: 403, data: { detail: 'Not allowed' } },
+    });
+    await loaded();
+    fireEvent.change(input('min_events'), { target: { value: '5' } });
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Not allowed'),
+    );
+  });
+
+  it('reopens enforcement when a hidden field is invalid', async () => {
+    await loaded();
+    fireEvent.click(screen.getByTestId('conduct-settings-enforcement-toggle'));
+    fireEvent.change(await screen.findByTestId('conduct-setting-block_below'), {
+      target: { value: '1.5' },
+    });
+    fireEvent.click(screen.getByTestId('conduct-settings-enforcement-toggle'));
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId('conduct-setting-block_below'),
+      ).not.toBeInTheDocument(),
+    );
+    fireEvent.click(saveButton());
+    expect(await screen.findByText('At most 1')).toBeInTheDocument();
+    expect(input('block_below')).toBeInTheDocument();
+    expect(patchConductSettings).not.toHaveBeenCalled();
   });
 
   it('does not load settings without manage access', async () => {
