@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   dedupeRawColors,
+  noArbitraryColorLiterals,
   noRawColorStrings,
 } from '../../eslint-rules/colors.js';
 
@@ -61,6 +62,74 @@ tester.run('no-raw-color-strings', noRawColorStrings as Rule.RuleModule, {
     },
   ],
 });
+
+const lit = (token: string, color: string) => ({
+  messageId: 'literal',
+  data: { token, color },
+});
+
+tester.run(
+  'no-arbitrary-color-literals',
+  noArbitraryColorLiterals as Rule.RuleModule,
+  {
+    valid: [
+      "const s = 'shadow-[inset_0_0_120px_color-mix(in_oklab,var(--color-error)_45%,transparent)]';",
+      "const s = '[text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5)]';",
+      "const s = 'shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] bg-[#000] text-[#ffffff]';",
+      "const s = 'bg-[conic-gradient(from_0deg,_var(--color-info)_0deg,_transparent_360deg)]';",
+      "const s = 'text-discord bg-radiant-surface/60';",
+      "const s = 'see #5865F2 in the docs';",
+      "const s = 'rgba(239,68,68,0.45)';",
+    ],
+    invalid: [
+      {
+        code: "const s = 'shadow-[inset_0_0_120px_rgba(239,68,68,0.45)]';",
+        errors: [
+          {
+            ...lit(
+              'shadow-[inset_0_0_120px_rgba(239,68,68,0.45)]',
+              'rgba(239,68,68,0.45)',
+            ),
+            line: 1,
+            column: 12,
+          },
+        ],
+      },
+      {
+        code: "const m = { a: 'text-[#5865F2]/50 hover:bg-[#5865F2]/20' };",
+        errors: [
+          lit('text-[#5865F2]/50', '#5865F2'),
+          lit('hover:bg-[#5865F2]/20', '#5865F2'),
+        ],
+      },
+      {
+        code: "const s = 'shadow-[0_8px_30px_-8px_var(--glow-violet,rgba(124,58,237,0.45))]';",
+        errors: [
+          lit(
+            'shadow-[0_8px_30px_-8px_var(--glow-violet,rgba(124,58,237,0.45))]',
+            'rgba(124,58,237,0.45)',
+          ),
+        ],
+      },
+      {
+        code: 'const t = `p-2 ${x} bg-[oklch(0.5_0.2_30)] drop-shadow-[0_0_6px_hsl(10_80%_50%)]`;',
+        errors: [
+          lit('bg-[oklch(0.5_0.2_30)]', 'oklch(0.5_0.2_30)'),
+          lit('drop-shadow-[0_0_6px_hsl(10_80%_50%)]', 'hsl(10_80%_50%)'),
+        ],
+      },
+      {
+        code: "const s = '[text-shadow:0_0_4px_rgba(0,0,0,0.8),0_0_8px_rgba(250,204,21,0.8)]';",
+        errors: [
+          lit(
+            '[text-shadow:0_0_4px_rgba(0,0,0,0.8),0_0_8px_rgba(250,204,21,0.8)]',
+            'rgba(250,204,21,0.8)',
+          ),
+        ],
+      },
+    ],
+  },
+);
 
 const msg = (
   ruleId: string,

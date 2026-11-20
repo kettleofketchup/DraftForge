@@ -37,7 +37,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { CreateEventModal } from '../CreateEventModal';
-import { EditOrgDefaultsModal } from '../EditOrgDefaultsModal';
+import { OrgEventDefaultsHarness } from './orgEventDefaultsHarness';
 
 const {
   signup_open_mode: _m,
@@ -151,17 +151,16 @@ describe('CreateEventModal signup open policy', () => {
   });
 });
 
-describe('EditOrgDefaultsModal signup open policy', () => {
+describe('org event defaults signup open policy', () => {
   it('round-trips the stored policy and sends edits', async () => {
     api.getOrgEventDefaults.mockResolvedValue({
       ...orgDefaults,
       signup_open_mode: 'scheduled',
       signups_open_hours_before: 72,
     });
-    render(
-      <EditOrgDefaultsModal organizationId={1} open onOpenChange={() => {}} />,
-      { wrapper: Wrapper },
-    );
+    render(<OrgEventDefaultsHarness organizationId={1} />, {
+      wrapper: Wrapper,
+    });
     await screen.findByDisplayValue('Night Cup');
     expect(screen.getByTestId('signup-open-days-input')).toHaveValue(3);
     fireEvent.change(screen.getByTestId('signup-open-days-input'), {

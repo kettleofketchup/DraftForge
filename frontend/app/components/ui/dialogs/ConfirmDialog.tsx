@@ -64,7 +64,7 @@ export interface ConfirmDialogProps {
 
 // Content background styling per variant
 const contentVariantStyles = {
-  default: `bg-green-900 ${brandSuccessBg}`,
+  default: `bg-success-surface ${brandSuccessBg}`,
   destructive: `bg-background ${brandDestructiveBg} border-destructive/50`,
   warning: `bg-background ${brandWarningBg} border-warning/40`,
 };

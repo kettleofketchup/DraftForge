@@ -2,8 +2,7 @@
  * Approval Requirements config section for event create/edit modals.
  * Controls which rank types are allowed, screenshot requirements, and min MMR.
  *
- * Shared across CreateEventModal, EditEventModal, EditOrgDefaultsModal, and
- * EditRepeaterModal — all four schemas `.merge(discordConfigSchema)`, so any
+ * Shared by the event forms; their schemas `.merge(discordConfigSchema)`, so any
  * generic T extending z.input<typeof discordConfigSchema> is accepted.
  *
  * One narrowing cast at the top (`as unknown as Control<ApprovalFields>`) lets

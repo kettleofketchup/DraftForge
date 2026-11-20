@@ -180,10 +180,10 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                       className={cn(
                         'transition-all',
                         isActive
-                          ? 'drop-shadow-[0_0_6px_rgba(250,204,21,0.8)]'
+                          ? 'drop-shadow-[0_0_6px_color-mix(in_oklab,var(--color-turn)_80%,transparent)]'
                           : isCompleted
-                            ? 'drop-shadow-[0_0_6px_rgba(239,68,68,0.6)]'
-                            : 'drop-shadow-[0_0_4px_rgba(239,68,68,0.3)]',
+                            ? 'drop-shadow-[0_0_6px_color-mix(in_oklab,var(--color-ban)_60%,transparent)]'
+                            : 'drop-shadow-[0_0_4px_color-mix(in_oklab,var(--color-ban)_30%,transparent)]',
                       )}
                     >
                       <div

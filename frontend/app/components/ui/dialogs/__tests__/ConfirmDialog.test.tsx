@@ -87,10 +87,14 @@ describe('ConfirmDialog additive props', () => {
 });
 
 describe('ConfirmDialog surface', () => {
-  const translucentBg = /(^|\s)bg-[a-z-]+-\d+\/\d+/;
+  const translucentBg = /(^|\s)bg-[a-z-]+(-\d+)?\/\d+/;
 
   it.each([
-    ['default', 'bg-green-900', '[background-image:var(--brand-success-bg)]'],
+    [
+      'default',
+      'bg-success-surface',
+      '[background-image:var(--brand-success-bg)]',
+    ],
     [
       'destructive',
       'bg-background',

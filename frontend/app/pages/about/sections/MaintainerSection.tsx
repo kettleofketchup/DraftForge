@@ -101,7 +101,7 @@ export function MaintainerSection() {
               <Badge variant="secondary">
                 <Gamepad2 /> Dota 2 Enthusiast
               </Badge>
-              <Badge className="bg-blue-800 text-white">
+              <Badge className="bg-info/80 text-info-foreground">
                 <HeartPlus />
                 Community Supporter
               </Badge>

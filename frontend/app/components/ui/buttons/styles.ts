@@ -68,29 +68,26 @@ export const brandDialogPanel = 'bg-black/40 ring-1 ring-white/10';
 // Body copy only — never use these for headlines, and never pair with a
 // text-shadow outline (use `text-outline-black` on display type instead).
 export const brandReadableSuccess =
-  '!text-emerald-50 font-medium tracking-[0.005em]';
+  '!text-success-tint font-medium tracking-[0.005em]';
 export const brandReadableWarning =
-  '!text-orange-50 font-medium tracking-[0.005em]';
+  '!text-warning-tint font-medium tracking-[0.005em]';
 export const brandReadableDestructive =
-  '!text-rose-50 font-medium tracking-[0.005em]';
+  '!text-error-tint font-medium tracking-[0.005em]';
 
-// Brand highlight - emerald-to-violet cyberpunk gradient for featured info (org links, stats, callouts).
+// Brand highlight - success-to-selection gradient for featured info (org links, stats, callouts).
 export const brandHighlight =
   'bg-gradient-to-r from-success/15 to-selection/20 border border-success/20 hover:from-success/20 hover:to-selection/30';
 export const brandHighlightText =
   'bg-gradient-to-r from-success to-primary bg-clip-text text-transparent';
 
-// Brand toxic - violet → deep-emerald cyberpunk gradient for edit
-// affordances. Same palette family as `brandHighlight` (emerald + violet)
-// but darker and smoothly blended through a deep-violet/emerald midpoint.
-// Reads as "toxic ooze" — saturated, dark, with no harsh hue line.
-// Used by <EditButton> / <EditIconButton> so every edit affordance pops
-// against the slate base without competing with the primary CTA gradient.
+// Brand toxic - selection-to-success gradient for edit affordances, from the
+// same tokens as `brandHighlight` but stronger. Used by <EditButton> /
+// <EditIconButton> so edits stand out without competing with the primary CTA.
 export const brandToxic =
   'bg-gradient-to-br from-selection/80 via-success/40 to-success/55 hover:from-selection/90 hover:via-success/55 hover:to-success/70 text-white';
 export const brandToxicGlowLift = 'shadow-success/5';
 
-// Brand error surfaces - muted deep wine/red tones for error containers.
+// Brand error surfaces - error-to-selection tints for error containers.
 export const brandErrorBg =
   'bg-gradient-to-r from-error/20 to-selection/20 border border-error/20';
 export const brandErrorCard = 'bg-error/30 border border-error/15';
@@ -124,7 +121,7 @@ const iconMuted =
 
 // Brand secondary opaque - for use on colored backgrounds (dialogs) where translucency bleeds
 export const brandSecondaryOpaque =
-  'bg-violet-950 border border-primary/30 text-foreground hover:bg-violet-900';
+  'bg-selection-surface border border-primary/30 text-foreground hover:brightness-125';
 
 // Brand secondary with soft-shadow lift
 export const brandSecondaryLift = `${buttonLift} ${buttonDisabled} ${brandSecondary}`;

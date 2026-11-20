@@ -17,7 +17,7 @@ export function DiscordTournamentConfigSection({ control }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-2">
-        <DiscordIcon className="h-5 w-5 text-[#5865F2]" />
+        <DiscordIcon className="h-5 w-5 text-discord" />
         <h3 className="text-sm font-semibold">Discord Notifications</h3>
       </div>
       <p className="text-muted-foreground text-xs mb-4">

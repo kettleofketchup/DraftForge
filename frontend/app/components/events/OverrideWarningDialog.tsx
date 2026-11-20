@@ -46,7 +46,7 @@ export interface OverrideWarningDialogProps {
 }
 
 export function orgStaffPlacementPath(organizationId: number): string {
-  return `/organizations/${organizationId}?tab=settings&section=staff-placement`;
+  return `/organizations/${organizationId}?settings=staff-placement`;
 }
 
 export const VIOLATION_CATEGORY_LABEL: Record<

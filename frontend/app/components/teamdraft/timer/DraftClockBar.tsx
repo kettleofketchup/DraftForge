@@ -114,7 +114,7 @@ export function DraftClockBar({
         <div
           data-testid="draft-reserve-tint"
           aria-hidden
-          className="pointer-events-none fixed inset-0 z-40 bg-error/15 shadow-[inset_0_0_120px_rgba(239,68,68,0.45)]"
+          className="pointer-events-none fixed inset-0 z-40 bg-error/15 shadow-[inset_0_0_120px_color-mix(in_oklab,var(--color-error)_45%,transparent)]"
         />
       )}
       <div
