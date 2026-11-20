@@ -75,12 +75,14 @@ READY_ENDPOINT_QUERIES: int = 41
 # auth, locks, the pick, timing, next-round activation and two event inserts
 # (+BEGIN/COMMIT), 17 for the one shared broadcast state behind both events,
 # 2 data_version stamps (build + reuse), BEGIN/COMMIT around the autocommit
-# build, 22 for the tournament response.
-PICK_QUERIES: int = 71
+# build, 22 for the tournament response, 1 for the hero draft chat tenure
+# lookup the roster change triggers on commit.
+PICK_QUERIES: int = 72
 # Upper bounds at the time of writing; the 4 == 8 team equality is the real pin.
 TOURNAMENT_RESPONSE_QUERIES: int = 23
 RESUME_ENDPOINT_QUERIES: int = 54
-UNDO_ENDPOINT_QUERIES: int = 65
+# +1 for the hero draft chat tenure lookup on the roster change.
+UNDO_ENDPOINT_QUERIES: int = 66
 
 
 def legacy_users_dict(tournament: Tournament) -> dict:
