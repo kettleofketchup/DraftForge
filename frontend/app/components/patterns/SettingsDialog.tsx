@@ -1,6 +1,7 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { Search } from 'lucide-react';
 import * as React from 'react';
+import { useSearchParams } from 'react-router';
 import {
   FormTabsList,
   InvalidDot,
@@ -111,20 +112,37 @@ function isTypingTarget(t: HTMLElement): boolean {
  * phones) beside the active category's fields. Search matches category names,
  * keywords and the labels and headings rendered in each mounted category.
  */
-export function SettingsDialog<V extends string>({
+interface SettingsLayoutOptions<V extends string> {
+  /** Resets to the first section each time this turns true. */
+  open: boolean;
+  sections: SettingsSection<V>[];
+  testIdPrefix: string;
+  sectionRef?: React.Ref<SettingsDialogHandle<V>>;
+  searchPlaceholder?: string;
+  variant: 'dialog' | 'page';
+  /** Requested section, e.g. from the URL; falls back to the first when unknown or hidden. */
+  value?: string | null;
+  onValueChange?: (value: V) => void;
+}
+
+/** Sidebar, search and section panels shared by SettingsDialog and SettingsPage. */
+function useSettingsLayout<V extends string>({
   open,
   sections,
   testIdPrefix,
-  loading,
   sectionRef,
   searchPlaceholder = 'Search settings',
-  ...dialogProps
-}: SettingsDialogProps<V>) {
+  variant,
+  value,
+  onValueChange,
+}: SettingsLayoutOptions<V>) {
   const isMobile = useMediaQuery('(max-width: 767px)');
-  const isLoading = loading != null && loading !== false;
   const first = sections[0].value;
-  const [active, setActive] = React.useState<V>(first);
-  const [visited, setVisited] = React.useState<Set<V>>(() => new Set([first]));
+  const [localActive, setActive] = React.useState<V>(first);
+  const requested = value === undefined ? localActive : value;
+  const active = sections.find((s) => s.value === requested)?.value ?? first;
+  const [visited, setVisited] = React.useState<Set<V>>(() => new Set([active]));
+  if (!visited.has(active)) setVisited(new Set(visited).add(active));
   const [query, setQuery] = React.useState('');
   const [hits, setHits] = React.useState<SearchHit<V>[]>([]);
   const [cursor, setCursor] = React.useState(0);
@@ -139,7 +157,7 @@ export function SettingsDialog<V extends string>({
     }
   }
 
-  const panels = React.useRef(new Map<V, HTMLElement>());
+  const panelEls = React.useRef(new Map<V, HTMLElement>());
   const searchRef = React.useRef<HTMLInputElement>(null);
   const rafRef = React.useRef(0);
   const highlightRef = React.useRef<{ el: HTMLElement; timer: number } | null>(
@@ -148,15 +166,18 @@ export function SettingsDialog<V extends string>({
   const statusId = React.useId();
   const hitIdPrefix = React.useId();
 
-  const selectSection = React.useCallback((value: V) => {
-    setActive(value);
-    setVisited((prev) => (prev.has(value) ? prev : new Set(prev).add(value)));
+  const onValueChangeRef = React.useRef(onValueChange);
+  onValueChangeRef.current = onValueChange;
+  const selectSection = React.useCallback((next: V) => {
+    setActive(next);
+    setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
+    onValueChangeRef.current?.(next);
   }, []);
   const sectionsRef = React.useRef(sections);
   sectionsRef.current = sections;
   const sectionOfField = React.useCallback((field: string): V | undefined => {
     for (const selector of [fieldRow(field), fieldBlock(field)]) {
-      for (const [value, panel] of panels.current) {
+      for (const [value, panel] of panelEls.current) {
         if (panel.querySelector(selector)) return value;
       }
     }
@@ -177,7 +198,7 @@ export function SettingsDialog<V extends string>({
   React.useEffect(() => {
     if (!searching) return;
     const observer = new MutationObserver(() => setDomVersion((v) => v + 1));
-    for (const panel of panels.current.values()) {
+    for (const panel of panelEls.current.values()) {
       observer.observe(panel, {
         childList: true,
         subtree: true,
@@ -207,7 +228,7 @@ export function SettingsDialog<V extends string>({
 
     // Rendered labels and headings, enriched by the registry when they sit in a field row.
     for (const s of sections) {
-      const panel = panels.current.get(s.value);
+      const panel = panelEls.current.get(s.value);
       if (!panel) continue;
       panel.querySelectorAll<HTMLElement>(SEARCHABLE).forEach((el, i) => {
         const label = el.textContent?.trim();
@@ -244,7 +265,7 @@ export function SettingsDialog<V extends string>({
         if (seen.has(field)) continue;
         let section: V | undefined;
         let el: HTMLElement | undefined;
-        for (const [value, panel] of panels.current) {
+        for (const [value, panel] of panelEls.current) {
           const block = panel.querySelector<HTMLElement>(fieldBlock(field));
           if (block) {
             section = value;
@@ -339,7 +360,7 @@ export function SettingsDialog<V extends string>({
       selectSection(hit.section);
       cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
-        const panel = panels.current.get(hit.section);
+        const panel = panelEls.current.get(hit.section);
         const row = hit.field
           ? panel?.querySelector<HTMLElement>(fieldRow(hit.field))
           : null;
@@ -382,8 +403,14 @@ export function SettingsDialog<V extends string>({
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.altKey) return;
       const t = e.target as HTMLElement | null;
-      const dialog = searchRef.current?.closest('[role="dialog"]');
-      if (!t || !dialog?.contains(t)) return;
+      const root = searchRef.current?.closest(
+        variant === 'dialog' ? '[role="dialog"]' : '[data-settings-root]',
+      );
+      // A page has no focus trap: a key pressed with nothing focused counts too.
+      const inScope =
+        !!t &&
+        (!!root?.contains(t) || (variant === 'page' && t === document.body));
+      if (!t || !inScope) return;
       const commandK =
         e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey) && !e.shiftKey;
       const slash =
@@ -499,12 +526,12 @@ export function SettingsDialog<V extends string>({
             data-testid={`${testIdPrefix}-search-hit`}
             data-active={i === cursor || undefined}
             className={cn(
-              'h-auto w-full justify-start gap-1.5 px-2 py-1.5 text-left font-normal data-[active]:bg-accent data-[active]:text-accent-foreground',
+              'group h-auto w-full flex-col items-start justify-center gap-0.5 px-2 py-1.5 text-left font-normal whitespace-normal data-[active]:bg-accent data-[active]:text-accent-foreground',
               isMobile ? 'min-h-11' : 'min-h-8',
             )}
           >
-            <span className="min-w-0 truncate">{hit.label}</span>
-            <span className="shrink-0 text-xs text-muted-foreground">
+            <span className="min-w-0 break-words">{hit.label}</span>
+            <span className="text-xs text-muted-foreground group-data-[active]:text-accent-foreground/85">
               {sectionLabel(hit.section)}
             </span>
           </Button>
@@ -597,15 +624,71 @@ export function SettingsDialog<V extends string>({
       value={active}
       onValueChange={(v) => selectSection(v as V)}
       orientation={isMobile ? 'horizontal' : 'vertical'}
+      data-settings-root=""
       className={cn(
         'min-h-0 flex-1',
         isMobile ? 'flex-col gap-3' : 'flex-row gap-6',
       )}
     >
-      {isMobile ? mobileNav : desktopNav}
+      {isMobile ? (
+        mobileNav
+      ) : variant === 'page' ? (
+        <div className="sticky top-4 flex max-h-[calc(100svh-2rem)] self-start">
+          {desktopNav}
+        </div>
+      ) : (
+        desktopNav
+      )}
       {body}
     </Tabs>
   );
+
+  const panels = sections.map((s) => (
+    <TabsContent
+      key={s.value}
+      value={s.value}
+      ref={(el: HTMLDivElement | null) => {
+        if (el) panelEls.current.set(s.value, el);
+        else panelEls.current.delete(s.value);
+      }}
+      forceMount={!s.lazy || visited.has(s.value) ? true : undefined}
+      // Radix leaves force-mounted panels visible; hide inactive ones.
+      hidden={active !== s.value}
+      data-section={s.value}
+      className={cn(
+        'mx-auto flex w-full max-w-4xl flex-col gap-4',
+        '[&_[data-search-hit]]:rounded-md [&_[data-search-hit]]:ring-2 [&_[data-search-hit]]:ring-ring [&_[data-search-hit]]:ring-offset-2 [&_[data-search-hit]]:ring-offset-background',
+      )}
+    >
+      {s.content}
+    </TabsContent>
+  ));
+
+  return { frame, panels, isMobile };
+}
+
+/**
+ * Full-screen settings form: a searchable category sidebar (a tab strip on
+ * phones) beside the active category's fields.
+ */
+export function SettingsDialog<V extends string>({
+  open,
+  sections,
+  testIdPrefix,
+  loading,
+  sectionRef,
+  searchPlaceholder,
+  ...dialogProps
+}: SettingsDialogProps<V>) {
+  const isLoading = loading != null && loading !== false;
+  const { frame, panels, isMobile } = useSettingsLayout({
+    open,
+    sections,
+    testIdPrefix,
+    sectionRef,
+    searchPlaceholder,
+    variant: 'dialog',
+  });
 
   return (
     <FormDialog
@@ -621,28 +704,69 @@ export function SettingsDialog<V extends string>({
             : 'min-h-0 flex-1 overflow-hidden -mr-6 pr-6'
       }
     >
-      {isLoading
-        ? loading
-        : sections.map((s) => (
-            <TabsContent
-              key={s.value}
-              value={s.value}
-              ref={(el: HTMLDivElement | null) => {
-                if (el) panels.current.set(s.value, el);
-                else panels.current.delete(s.value);
-              }}
-              forceMount={!s.lazy || visited.has(s.value) ? true : undefined}
-              // Radix leaves force-mounted panels visible; hide inactive ones.
-              hidden={active !== s.value}
-              data-section={s.value}
-              className={cn(
-                'mx-auto flex w-full max-w-4xl flex-col gap-4',
-                '[&_[data-search-hit]]:rounded-md [&_[data-search-hit]]:ring-2 [&_[data-search-hit]]:ring-ring [&_[data-search-hit]]:ring-offset-2 [&_[data-search-hit]]:ring-offset-background',
-              )}
-            >
-              {s.content}
-            </TabsContent>
-          ))}
+      {isLoading ? loading : panels}
     </FormDialog>
+  );
+}
+
+export interface SettingsPageProps<V extends string = string> {
+  sections: SettingsSection<V>[];
+  /** Nav items get `${testIdPrefix}-tab-${value}`. */
+  testIdPrefix: string;
+  /** Search param holding the selected section, so a link can open one. */
+  sectionParam?: string;
+  sectionRef?: React.Ref<SettingsDialogHandle<V>>;
+  searchPlaceholder?: string;
+  /** Rendered under the active section, e.g. a save bar. */
+  footer?: React.ReactNode;
+  className?: string;
+  'data-testid'?: string;
+}
+
+/** SettingsDialog's sidebar and search laid out on a page instead of in a dialog. */
+export function SettingsPage<V extends string>({
+  sections,
+  testIdPrefix,
+  sectionParam = 'section',
+  sectionRef,
+  searchPlaceholder,
+  footer,
+  className,
+  'data-testid': dataTestId,
+}: SettingsPageProps<V>) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const first = sections[0].value;
+  const onValueChange = React.useCallback(
+    (next: V) =>
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next === first) params.delete(sectionParam);
+          else params.set(sectionParam, next);
+          return params;
+        },
+        { replace: true, preventScrollReset: true },
+      ),
+    [setSearchParams, sectionParam, first],
+  );
+  const { frame, panels } = useSettingsLayout({
+    open: true,
+    sections,
+    testIdPrefix,
+    sectionRef,
+    searchPlaceholder,
+    variant: 'page',
+    value: searchParams.get(sectionParam),
+    onValueChange,
+  });
+  return (
+    <div className={cn('flex flex-col', className)} data-testid={dataTestId}>
+      {frame(
+        <div className="min-w-0 flex-1">
+          {panels}
+          {footer}
+        </div>,
+      )}
+    </div>
   );
 }

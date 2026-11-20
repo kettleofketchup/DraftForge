@@ -399,10 +399,8 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     if (await settingsBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
       await settingsBtn.click();
 
-      // Click Discord Activity tab
-      const discordTab = page.locator(
-        '[data-testid="tournament-settings-discord-tab"]',
-      );
+      // Discord Activity section in the settings sidebar
+      const discordTab = page.getByTestId('tournament-form-tab-activity');
       if (await discordTab.isVisible({ timeout: 3000 }).catch(() => false)) {
         await discordTab.click();
 
@@ -471,9 +469,15 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     await page.getByTestId('restart-draft-confirm').click();
     await refusal;
 
-    await expect(page.getByTestId('draft-force-reset-dialog')).toContainText(
-      'games and other records use these teams',
-    );
+    const forceDialog = page.getByTestId('draft-force-reset-dialog');
+    await expect(forceDialog).toContainText('Resetting keeps those records');
+    await expect(
+      forceDialog
+        .getByTestId('draft-force-reset-usage-row')
+        .first()
+        .locator('span')
+        .first(),
+    ).toHaveText('1 game');
     const forced = page.waitForRequest(
       (r) => isInitDraft(r.url()) && r.postDataJSON()?.force === true,
     );

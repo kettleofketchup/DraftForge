@@ -17,6 +17,11 @@ SELF_SERVE_DISABLED_MESSAGE = (
 )
 
 
+_PRE_START_STATES: frozenset[str] = frozenset(
+    {EventState.UPCOMING, EventState.SIGNUPS_OPEN, EventState.ROLL_CALL}
+)
+
+
 class SupportsAdmission(Protocol):
     state: str
     allow_user_signups: bool
@@ -27,8 +32,13 @@ def self_serve_open_q() -> Q:
 
 
 def self_serve_offered(event: SupportsAdmission) -> bool:
-    """Whether signup posts show the self-serve actions; state is checked on click."""
-    return event.allow_user_signups
+    """Whether signup posts show Sign Up and Tentative."""
+    return self_serve_refusal(event) is None
+
+
+def decline_offered(event: SupportsAdmission) -> bool:
+    """Whether signup posts show Decline: players may drop out until the start."""
+    return event.state in _PRE_START_STATES
 
 
 def self_serve_refusal(event: SupportsAdmission) -> str | None:

@@ -235,6 +235,8 @@ body {
   --color-ban-surface: var(--ban-surface);
   --color-turn: var(--turn);
   --color-turn-foreground: var(--turn-foreground);
+  --color-current-pick: var(--current-pick);
+  --color-current-pick-foreground: var(--current-pick-foreground);
   --color-draft-snake: var(--draft-snake);
   --color-draft-normal: var(--draft-normal);
   --color-draft-shuffle: var(--draft-shuffle);
@@ -503,6 +505,9 @@ body {
   --ban-surface: oklch(0.258 0.092 26);
   --turn: oklch(0.852 0.199 91.9);
   --turn-foreground: oklch(0.21 0.034 264.7);
+  /* Team draft: the pick or captain acting now (hero draft uses turn) */
+  --current-pick: oklch(0.627 0.194 149.2);
+  --current-pick-foreground: oklch(0.985 0.002 265);
 
   /* Draft styles */
   --draft-snake: oklch(0.723 0.219 149.6);
@@ -595,6 +600,26 @@ body {
       transparent,
       color-mix(in oklch, var(--color-accent) 10%, transparent)
     );
+  }
+}
+
+/* Fades a horizontal scroller's edge while more content sits past it.
+   Set data-fade-start / data-fade-end on the scroller. */
+@utility scroll-fade-x {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--fade-start),
+    black calc(100% - var(--fade-end)),
+    transparent
+  );
+  &[data-fade-start] {
+    --fade-start: 2.5rem;
+  }
+  &[data-fade-end] {
+    --fade-end: 2.5rem;
   }
 }
 

@@ -16,6 +16,7 @@ import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import { initDraftHook } from '../hooks/initDraftHook';
 import { useConfirmForceReset } from '../hooks/useConfirmForceReset';
+import { useDraftResetSummary } from '../hooks/useDraftResetSummary';
 
 const log = getLogger('DraftModerationDropdown');
 
@@ -35,6 +36,7 @@ export const DraftModerationDropdown: React.FC<
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
   const isStaff = useUserStore((state) => state.isStaff);
   const { confirmForce, confirmForceDialog } = useConfirmForceReset();
+  const { showResetSummary, resetSummaryDialog } = useDraftResetSummary();
 
   const handleRestartDraft = async () => {
     log.debug('handleRestartDraft');
@@ -56,6 +58,7 @@ export const DraftModerationDropdown: React.FC<
       curDraftRound,
       setCurDraftRound,
       confirmForce,
+      onReport: showResetSummary,
     });
   };
 
@@ -108,6 +111,7 @@ export const DraftModerationDropdown: React.FC<
         confirmTestId="restart-draft-confirm"
       />
       {confirmForceDialog}
+      {resetSummaryDialog}
     </>
   );
 };

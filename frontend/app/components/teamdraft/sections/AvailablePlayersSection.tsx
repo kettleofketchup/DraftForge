@@ -115,7 +115,7 @@ const ShuffleProjectionSlot: React.FC<{
     <div
       className={cn(
         projected.isDoublePick
-          ? 'text-green-400 font-medium'
+          ? 'text-pick font-medium'
           : 'text-muted-foreground',
       )}
     >
@@ -150,7 +150,7 @@ const AvailablePlayerStrip = memo(
       statsLeagueId={statsLeagueId}
       className={
         projected?.isDoublePick
-          ? 'bg-green-950/30 border-green-500/50'
+          ? 'bg-pick-surface/30 border-pick/50'
           : undefined
       }
       contextSlot={
@@ -370,7 +370,7 @@ export const AvailablePlayersSection = memo(() => {
     return (
       <div className="flex-1 min-h-[180px] md:min-h-[250px] flex flex-col">
         <Card className="h-full flex items-center justify-center">
-          <p className="text-lg font-semibold text-green-400">
+          <p className="text-lg font-semibold text-pick">
             Picked: {DisplayName(curDraftRoundChoice)}
           </p>
         </Card>
@@ -500,7 +500,7 @@ export const AvailablePlayersSection = memo(() => {
         >
           {filteredPlayers.length}/{availablePlayers.length} players
           {filteredPlayers.length < availablePlayers.length && (
-            <span className="text-yellow-500/80 ml-1">
+            <span className="text-warning/80 ml-1">
               ({availablePlayers.length - filteredPlayers.length} hidden)
             </span>
           )}
