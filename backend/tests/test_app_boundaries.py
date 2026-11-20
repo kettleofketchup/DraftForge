@@ -453,7 +453,7 @@ def find_migration_ancestry_violations(
         before_move: set[tuple[str, str]] | None = None
         for path, source in files:
             key = _migration_key(path)
-            if key[0] in {s.source_app, s.new_app}:
+            if key[0] == s.source_app:
                 continue
             lines = sorted(set(_references_moved_model(ast.parse(source, path), s)))
             if not lines:
@@ -665,7 +665,7 @@ class GuardSelfTests(SimpleTestCase):
                     [],
                 )
 
-    def test_migration_ancestry_ignores_unrelated_and_own_apps(self) -> None:
+    def test_migration_ancestry_ignores_unrelated_and_source_app(self) -> None:
         self.assertEqual(
             self.ancestry(
                 'apps.get_model("src", "Other")\n', set(), FIXTURE_MIGRATION_PATH
@@ -678,11 +678,20 @@ class GuardSelfTests(SimpleTestCase):
             ),
             [],
         )
-        for path in ("src/migrations/0003_x.py", "dst/migrations/0003_x.py"):
-            with self.subTest(path=path):
-                self.assertEqual(
-                    self.ancestry('apps.get_model("src", "Moved")\n', set(), path), []
-                )
+        self.assertEqual(
+            self.ancestry(
+                'apps.get_model("src", "Moved")\n', set(), "src/migrations/0003_x.py"
+            ),
+            [],
+        )
+
+    def test_migration_ancestry_checks_new_app_migrations(self) -> None:
+        path = "dst/migrations/0003_x.py"
+        source = 'apps.get_model("src", "Moved")\n'
+        violations = self.ancestry(source, set(), path)
+        self.assertEqual(len(violations), 1)
+        self.assertIn(path, violations[0])
+        self.assertEqual(self.ancestry(source, {("dst", "0003_x")}, path), [])
 
 
 class AppBoundaryTests(SimpleTestCase):
