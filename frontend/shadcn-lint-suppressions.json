@@ -27,22 +27,6 @@
       "count": 7
     }
   },
-  "app/components/herodraft/CompletedDraftView.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 6
-    },
-    "shadcn/no-raw-colors": {
-      "count": 7
-  "app/components/herodraft/DraftPanel.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 35
-    }
-  },
-  "app/components/herodraft/DraftToasts.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
   "app/components/herodraft/DraftTopBar.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
@@ -56,19 +40,6 @@
   "app/components/herodraft/HeroGrid.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
-    }
-  },
-  "app/components/navbar/login.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-  "app/components/lobby/LobbyPanel.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 4
-    }
-  },
-  "app/components/navbar/NavItem.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
     }
   },
   "app/components/navbar/navbar.tsx": {
@@ -112,96 +83,6 @@
       "count": 1
     }
   },
-  "app/components/teamdraft/CompletedTeamDraftView.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 6
-    },
-    "shadcn/no-raw-colors": {
-      "count": 12
-    }
-  },
-  "app/components/teamdraft/buttons/DraftModerationDropdown.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 4
-    }
-  },
-  "app/components/teamdraft/buttons/draftStyleModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 16
-    }
-  },
-  "app/components/teamdraft/buttons/initDraftDialog.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/teamdraft/draftBalanceDisplay.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 8
-    }
-  },
-  "app/components/teamdraft/draftModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 8
-    }
-  },
-  "app/components/tournament/captains/draftOrder.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-  "app/components/teamdraft/TeamPositionCoverage.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 15
-    },
-    "shadcn/no-raw-colors": {
-      "count": 11
-    }
-  },
-  "app/components/ui/brand-dropdown-menu.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 13
-    }
-  },
-  "app/components/ui/brand-select.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 18
-    }
-  },
-  "app/components/ui/buttons/AddDiscordBotButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 4
-    }
-  },
-  "app/components/ui/buttons/CancelButton.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 4
-    }
-  },
-  "app/components/ui/buttons/ConfirmButton.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 4
-    }
-  },
-  "app/components/ui/buttons/DestructiveButton.tsx": {
-  "app/components/ui/base-handle.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/ui/button-handle.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/ui/buttons/HighlightButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 9
-    }
-  },
-  "app/components/ui/buttons/PrimaryButton.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 9
-    }
-  },
   "app/components/ui/buttons/SecondaryButton.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 3
@@ -235,40 +116,6 @@
       "count": 6
     }
   },
-  "app/components/user/positions/icons/carry.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/user/positions/icons/hardSupportIcon.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
-  "app/components/user/positions/icons/mid.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/user/positions/icons/offlane.tsx": {
-  "app/components/user/searchUser.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 1
-    },
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/user/positions/icons/softSupport.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
-  "app/components/user/positions/index.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 28
-    }
-  },
   "app/components/user/userCard.tsx": {
     "shadcn/no-raw-colors": {
       "count": 6
@@ -289,25 +136,9 @@
       "count": 2
     }
   },
-  "app/pages/herodraft/HeroDraftPage.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
-  "app/pages/profile/forms/position.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
   "app/pages/user/UserProfilePage.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
-    }
-  },
-  "app/routes/organization.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-  "app/pages/users/users.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
     }
   }
 }
