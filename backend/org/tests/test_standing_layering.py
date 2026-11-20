@@ -35,6 +35,7 @@ LEAF_FORBIDDEN = (
     *DISPATCHERS,
     "org.contributions.services",
     "org.contributions.queries",
+    "org.conduct",
 )
 EVENT_FLOWS = (
     "events.services",

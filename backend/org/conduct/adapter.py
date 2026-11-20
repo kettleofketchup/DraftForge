@@ -18,9 +18,10 @@ from org.conduct.lifecycle import (
     teardown_event_outcomes,
     void_event_outcomes,
 )
+from org.conduct.params import rate_params
 from org.conduct.queries import member_scores
 from org.conduct.scoring import MemberScore
-from org.conduct.serializers import rate
+from org.conduct.serializers import DEFAULT_HISTORY_LIMIT, history_item, rate
 from org.conduct.services import reassign_member, refresh_org_unmet_on_commit
 from org.contributions.serializers import member_summary
 from org.feature_keys import FeatureKey
@@ -29,6 +30,7 @@ from org.models_conduct import AttendanceOutcome, OrgConductSettings
 from org.standing.base import TrackBase
 from org.standing.cache import StandingCache
 from org.standing.periods import Period
+from org.standing.scoring import cutoff
 from org.standing.types import (
     CloseSource,
     HasUserId,
@@ -41,6 +43,7 @@ from org.standing.types import (
     TrackOutput,
     ViewerRoles,
 )
+from user.querysets import with_user_profiles
 
 
 def _is_member(viewer: CustomUser | AnonymousUser | None, org_id: int) -> bool:
@@ -185,17 +188,34 @@ class ConductTrack(TrackBase):
     ) -> Mapping[str, object] | None:
         if viewer is None or not viewer.is_authenticated:
             return None
-        org_id = org_user.organization_id
         if org_user.user_id != viewer.pk and not roles.is_staff:
             return None
+        org_id = org_user.organization_id
         settings = get_conduct_settings(org_id)
+        params = rate_params(settings)
         score = member_scores(org_id, [org_user.pk], now=now, settings=settings)[
             org_user.pk
         ]
+        rows = (
+            AttendanceOutcome.objects.nocache()
+            .filter(org_user=org_user)
+            .select_related("set_by")
+            .order_by("-event_starts_at", "-pk")[:DEFAULT_HISTORY_LIMIT]
+        )
         return {
             "show_rate": rate(score.show_rate),
             "status": score.status,
             "counted_events": score.counted_events,
+            "history": [
+                history_item(
+                    row,
+                    now=now,
+                    cutoff=cutoff(now, params),
+                    half_life_days=params.half_life_days,
+                    with_reason=roles.is_staff,
+                )
+                for row in rows
+            ],
         }
 
     @override
@@ -209,23 +229,22 @@ class ConductTrack(TrackBase):
         now: datetime,
         access: TrackAccess,
     ) -> Leaderboard:
-        settings = get_conduct_settings(org)
-        board = conduct_board(org, settings=settings, now=now)
+        own = None
+        if access.can_view_own and viewer is not None and viewer.is_authenticated:
+            own = with_user_profiles(
+                OrgUser.objects.filter(organization=org, user_id=viewer.pk), "user"
+            ).first()
+        board = conduct_board(org, own=own, now=now, settings=get_conduct_settings(org))
         rows = [_row(m, s) for m, s, _ in board.ranked] + [
             _row(m, s) for m, s in board.new
         ]
-        own_row = None
-        if viewer is not None and viewer.is_authenticated:
-            own_row = next(
-                (row for row in rows if row.member.get("user_pk") == viewer.pk), None
-            )
         return Leaderboard(
             track=self.key,
             metric=metric,
             period="current",
             rows=rows if access.can_view_rows else [],
             total=None,
-            own_row=own_row,
+            own_row=_row(board.own[0], board.own[1]) if board.own else None,
             rows_visible=access.can_view_rows,
         )
 

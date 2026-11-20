@@ -3,7 +3,7 @@ from datetime import datetime
 
 from app.models import Organization
 from org.conduct.queries import member_scores
-from org.conduct.scoring import MemberScore
+from org.conduct.scoring import MemberScore, prior_member_score
 from org.conduct.serializers import rate
 from org.models import OrgUser
 from org.models_conduct import OrgConductSettings
@@ -12,13 +12,9 @@ from user.querysets import with_user_profiles
 
 @dataclass(frozen=True)
 class ConductBoard:
-    scores: dict[int, MemberScore]
     ranked: list[tuple[OrgUser, MemberScore, int]]
     new: list[tuple[OrgUser, MemberScore]]
-
-    @property
-    def ranks(self) -> dict[int, int]:
-        return {org_user.pk: rank for org_user, _, rank in self.ranked}
+    own: tuple[OrgUser, MemberScore, int | None] | None
 
 
 def _sort_name(org_user: OrgUser) -> str:
@@ -51,7 +47,11 @@ def _ranked(
 
 
 def conduct_board(
-    org: Organization, *, settings: OrgConductSettings, now: datetime
+    org: Organization,
+    *,
+    own: OrgUser | None,
+    now: datetime,
+    settings: OrgConductSettings,
 ) -> ConductBoard:
     scores = member_scores(org.pk, None, now=now, settings=settings)
     members = with_user_profiles(
@@ -72,4 +72,12 @@ def conduct_board(
         ),
         key=lambda pair: (-pair[1].counted_events, _sort_name(pair[0]), pair[0].pk),
     )
-    return ConductBoard(scores=scores, ranked=ranked, new=new)
+    own_entry: tuple[OrgUser, MemberScore, int | None] | None = None
+    if own is not None:
+        ranks = {org_user.pk: rank for org_user, _, rank in ranked}
+        own_entry = (
+            own,
+            scores.get(own.pk) or prior_member_score(settings),
+            ranks.get(own.pk),
+        )
+    return ConductBoard(ranked=ranked, new=new, own=own_entry)

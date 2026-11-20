@@ -27,7 +27,6 @@ from org.conduct.gate import get_conduct_settings
 from org.conduct.leaderboard import conduct_board
 from org.conduct.params import rate_params
 from org.conduct.queries import member_scores
-from org.conduct.scoring import prior_member_score
 from org.conduct.serializers import (
     AttendancePutSerializer,
     ConductSettingsUpdateSerializer,
@@ -113,15 +112,10 @@ def conduct_leaderboard(request: Request, org_id: int) -> Response:
             raise not_permitted()
         rows_visible = False
 
-    board = conduct_board(org, settings=settings, now=timezone.now())
+    board = conduct_board(org, own=own, now=timezone.now(), settings=settings)
     ranked = board.ranked
-    ranks = board.ranks
     new = board.new
-    scores = board.scores
-    own_data = None
-    if own is not None:
-        own_score = scores.get(own.pk) or prior_member_score(settings)
-        own_data = own_row(own, own_score, ranks.get(own.pk))
+    own_data = own_row(*board.own) if board.own is not None else None
     return Response(
         {
             "rows_visible": rows_visible,
