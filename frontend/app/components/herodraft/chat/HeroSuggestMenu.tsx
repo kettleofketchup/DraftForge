@@ -17,14 +17,21 @@ interface SuggestTarget {
 }
 
 export interface HeroSuggestMenuProps {
+  /** Off keeps the browser's own menu; the trigger stays mounted either way. */
+  enabled: boolean;
   onSuggest: (kind: HeroSuggestionKind, heroId: number) => void;
   children: ReactElement;
 }
 
-export function HeroSuggestMenu({ onSuggest, children }: HeroSuggestMenuProps) {
+export function HeroSuggestMenu({
+  enabled,
+  onSuggest,
+  children,
+}: HeroSuggestMenuProps) {
   const [target, setTarget] = useState<SuggestTarget | null>(null);
 
   const onContextMenu = (e: MouseEvent<HTMLElement>) => {
+    if (!enabled) return;
     const el = (e.target as Element).closest<HTMLElement>('[data-hero-id]');
     const heroId = Number(el?.dataset.heroId);
     if (!el || !Number.isInteger(heroId)) {
@@ -38,10 +45,14 @@ export function HeroSuggestMenu({ onSuggest, children }: HeroSuggestMenuProps) {
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild onContextMenu={onContextMenu}>
+      <ContextMenuTrigger
+        asChild
+        disabled={!enabled}
+        onContextMenu={onContextMenu}
+      >
         {children}
       </ContextMenuTrigger>
-      {target && (
+      {enabled && target && (
         <ContextMenuContent
           className="w-48"
           data-testid="herodraft-hero-suggest-menu"

@@ -377,6 +377,8 @@ Messages are plain text. Newlines become spaces, and markdown and links are not 
 | `bad_request` | Malformed message |
 | `unavailable` | Chat failed on the server; the draft socket stays open |
 
+If `unavailable` arrives before chat history, chat failed to start for that socket: the composer shows "Chat unavailable" and is disabled until the socket reconnects. Any later send or suggestion clears the inline error, and the error has a dismiss button.
+
 ### Chat message shape
 
 ```json
@@ -657,6 +659,7 @@ All components have `data-testid` attributes for Playwright testing:
 | `herodraft-chat-send` | Chat send button |
 | `herodraft-chat-target` | `TEAM` / `ALL` badge for the message being typed |
 | `herodraft-chat-error` | Inline chat error under the composer |
+| `herodraft-chat-error-dismiss` | Dismiss button on the inline chat error |
 | `herodraft-chat-panel` | Chat panel above the toolbar (md and up) |
 | `herodraft-chat-sheet` | Chat bottom sheet (below md) |
 | `herodraft-chat-log` | Message list |
@@ -664,7 +667,7 @@ All components have `data-testid` attributes for Playwright testing:
 | `herodraft-chat-suggestion-{id}` | A hero suggestion row |
 | `herodraft-chat-new-messages` | "New messages" jump button |
 | `herodraft-chat-toggle` | Button that opens the chat panel or sheet |
-| `herodraft-chat-unread` | Unread count on the toggle |
+| `herodraft-chat-unread` | Unread count on the toggle; kept across reconnects, and messages that arrived during the gap are added |
 | `herodraft-hero-suggest-menu` | Right-click menu on a hero |
 | `herodraft-hero-suggest-pick` / `herodraft-hero-suggest-ban` | Suggest pick / ban menu items |
 

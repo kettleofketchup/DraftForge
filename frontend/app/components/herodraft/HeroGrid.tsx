@@ -304,13 +304,9 @@ export function HeroGrid({
         />
       </div>
 
-      {canSuggest ? (
-        <HeroSuggestMenu onSuggest={handleSuggest}>
-          {heroListEl}
-        </HeroSuggestMenu>
-      ) : (
-        heroListEl
-      )}
+      <HeroSuggestMenu enabled={canSuggest} onSuggest={handleSuggest}>
+        {heroListEl}
+      </HeroSuggestMenu>
     </div>
   );
 }

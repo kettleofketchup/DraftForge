@@ -118,4 +118,32 @@ describe('HeroGrid suggestion context menu', () => {
     fireEvent.click(item);
     expect(suggestHero).toHaveBeenCalledWith('suggest_pick', FREE_HERO);
   });
+
+  it('keeps the hero list mounted when canSuggest flips', () => {
+    const grid = (canSuggest: boolean) => (
+      <HeroGrid
+        onHeroClick={() => {}}
+        disabled={false}
+        showActionButton
+        currentAction="pick"
+        isMyTurn
+        canSuggest={canSuggest}
+      />
+    );
+    const { rerender } = render(grid(true));
+    const list = screen.getByTestId('herodraft-hero-list');
+    rerender(grid(false));
+    expect(screen.getByTestId('herodraft-hero-list')).toBe(list);
+    expect(fireEvent.contextMenu(hero(FREE_HERO))).toBe(true);
+    expect(screen.queryByRole('menu')).toBeNull();
+    rerender(grid(true));
+    expect(screen.getByTestId('herodraft-hero-list')).toBe(list);
+  });
+
+  it('keeps the native menu on the background when canSuggest is false', () => {
+    renderGrid(false);
+    expect(
+      fireEvent.contextMenu(screen.getByTestId('herodraft-attr-grid-str')),
+    ).toBe(true);
+  });
 });

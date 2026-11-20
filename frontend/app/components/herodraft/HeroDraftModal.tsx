@@ -1003,7 +1003,7 @@ export function HeroDraftModal({
                 className="h-12 sm:h-14 md:h-16 shrink-0 border-t border-border flex items-center px-2 sm:px-4 gap-2 sm:gap-4"
                 data-testid="herodraft-bottom-toolbar"
               >
-                <HeroDraftChat draftState={draft.state} />
+                <HeroDraftChat key={draftId} draftState={draft.state} />
 
                 {/* Right side controls */}
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">

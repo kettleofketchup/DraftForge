@@ -14,8 +14,16 @@ export function composerState(a: {
   draftState: string;
   connected: boolean;
   raw: string;
+  unavailable?: boolean;
 }): ComposerState {
-  const { viewer, draftState, connected, raw } = a;
+  const { viewer, draftState, connected, raw, unavailable = false } = a;
+  if (connected && viewer === null && unavailable) {
+    return {
+      inputDisabled: true,
+      sendDisabled: true,
+      placeholder: 'Chat unavailable',
+    };
+  }
   if (viewer === null || !connected) {
     return {
       inputDisabled: false,

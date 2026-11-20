@@ -84,6 +84,8 @@ interface HeroDraftState {
   _connectionId: string | null;
   _unsubscribe: Unsubscribe | null;
   _currentDraftId: number | null;
+  // Survives disconnect so a same-draft reconnect keeps its chat.
+  _chatDraftId: number | null;
   _stopHeartbeat: (() => void) | null;
   // Receive-side tick gap detection. Server logs `tick_loop_stalled`
   // when the broadcaster itself stalls; this catches the COMPLEMENTARY
@@ -128,6 +130,7 @@ const initialState = {
   _connectionId: null,
   _unsubscribe: null,
   _currentDraftId: null,
+  _chatDraftId: null,
   _stopHeartbeat: null,
   _lastTickReceivedAtMs: null,
   _offsetSamples: [] as number[],
@@ -443,13 +446,15 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       _connectionId: connectionId,
       _unsubscribe: unsubscribe,
       _currentDraftId: draftId,
+      _chatDraftId: draftId,
+      ...(get()._chatDraftId === draftId ? {} : { chat: initialChatState }),
       wasKicked: false,
       status: 'connecting',
     });
   },
 
   disconnect: () => {
-    const { _connectionId, _unsubscribe, chat } = get();
+    const { _connectionId, _unsubscribe, _chatDraftId, chat } = get();
 
     // Stop heartbeat first
     get().stopHeartbeat();
@@ -465,6 +470,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
 
     set({
       ...initialState,
+      _chatDraftId,
       chat: resetChatOnDisconnect(chat),
     });
   },
@@ -532,7 +538,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
 
   reset: () => {
     get().disconnect();
-    set({ chat: initialChatState });
+    set({ chat: initialChatState, _chatDraftId: null });
   },
 
   // Computed helpers
@@ -584,7 +590,10 @@ function sendChatFrame(
     return null;
   }
   useHeroDraftStore.setState({
-    chat: addPending(chat, { clientMsgId, raw, sentAt: Date.now() }),
+    chat: {
+      ...addPending(chat, { clientMsgId, raw, sentAt: Date.now() }),
+      lastError: null,
+    },
   });
   return clientMsgId;
 }

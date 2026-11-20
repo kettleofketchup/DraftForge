@@ -360,6 +360,29 @@ test.describe('@cicd HeroDraft chat', () => {
     }
   });
 
+  test('spectator right-click keeps the browser menu', async ({ browser }) => {
+    test.setTimeout(120000);
+    await setUp(browser);
+
+    await spectator.page.evaluate(() => {
+      const w = window as Window & { __heroContextPrevented?: boolean[] };
+      w.__heroContextPrevented = [];
+      window.addEventListener('contextmenu', (e) => {
+        w.__heroContextPrevented?.push(e.defaultPrevented);
+      });
+    });
+    await rightClickHero(spectator.page, AVAILABLE_HERO);
+    await expect(
+      spectator.page.getByTestId('herodraft-hero-suggest-menu'),
+    ).toHaveCount(0);
+    const prevented = await spectator.page.evaluate(
+      () =>
+        (window as Window & { __heroContextPrevented?: boolean[] })
+          .__heroContextPrevented,
+    );
+    expect(prevented).toEqual([false]);
+  });
+
   test('suggest menu is disabled on a banned hero', async ({ browser }) => {
     test.setTimeout(120000);
     await setUp(browser);

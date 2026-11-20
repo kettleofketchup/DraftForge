@@ -62,6 +62,8 @@ describe('initialChatState', () => {
       lastError: null,
       unread: 0,
       panelOpen: false,
+      unavailable: false,
+      resyncAfter: null,
     });
     expect(CHAT_MESSAGE_CAP).toBe(200);
   });
@@ -167,8 +169,23 @@ describe('pending, ack and error', () => {
   });
 
   it('error without a matching pending send has no text', () => {
-    const s = applyChatError(initialChatState, 'unavailable');
+    const s = applyChatError(
+      applyChatHistory(initialChatState, member, []),
+      'unavailable',
+    );
     expect(s.lastError).toEqual({ code: 'unavailable' });
+    expect(s.unavailable).toBe(false);
+  });
+
+  it('marks chat unavailable when the bootstrap fails', () => {
+    const s = applyChatError(initialChatState, 'unavailable');
+    expect(s.unavailable).toBe(true);
+    expect(s.lastError).toBeNull();
+  });
+
+  it('a later history clears the unavailable mark', () => {
+    const s = applyChatError(initialChatState, 'unavailable');
+    expect(applyChatHistory(s, member, []).unavailable).toBe(false);
   });
 });
 
@@ -181,7 +198,7 @@ describe('resetChatOnDisconnect', () => {
     expect(after.messages).toEqual([]);
     expect(after.viewer).toBeNull();
     expect(after.pending).toEqual({});
-    expect(after.unread).toBe(0);
+    expect(after.unread).toBe(3);
     expect(after.panelOpen).toBe(true);
     expect(after.lastError).toEqual({ code: 'unavailable', text: 'gl hf' });
   });
@@ -198,5 +215,50 @@ describe('resetChatOnDisconnect', () => {
   it('clears the error when nothing was in flight', () => {
     const s = applyChatError(initialChatState, 'rate_limited');
     expect(resetChatOnDisconnect(s).lastError).toBeNull();
+  });
+});
+
+describe('unread across reconnects', () => {
+  it('does not count the first history as unread', () => {
+    const s = applyChatHistory(initialChatState, member, [msg(1), msg(2)]);
+    expect(s.unread).toBe(0);
+  });
+
+  it('keeps unread and counts messages that arrived during the gap', () => {
+    let s = applyChatHistory(initialChatState, member, [msg(1)]);
+    s = applyChatMessage(s, msg(2));
+    expect(s.unread).toBe(1);
+    s = resetChatOnDisconnect(s);
+    expect(s.unread).toBe(1);
+    s = applyChatHistory(s, member, [msg(1), msg(2), msg(3), msg(4)]);
+    expect(s.unread).toBe(3);
+    expect(s.resyncAfter).toBeNull();
+  });
+
+  it('counts the whole history when the log was empty before the gap', () => {
+    let s = applyChatHistory(initialChatState, member, []);
+    s = resetChatOnDisconnect(s);
+    s = applyChatHistory(s, member, [msg(1), msg(2)]);
+    expect(s.unread).toBe(2);
+  });
+
+  it('keeps the first mark through a second disconnect', () => {
+    let s = applyChatHistory(initialChatState, member, [msg(1)]);
+    s = resetChatOnDisconnect(resetChatOnDisconnect(s));
+    s = applyChatHistory(s, member, [msg(1), msg(2)]);
+    expect(s.unread).toBe(1);
+  });
+
+  it('does not count a resync while the panel is open', () => {
+    let s = applyChatHistory(initialChatState, member, [msg(1)]);
+    s = resetChatOnDisconnect({ ...s, panelOpen: true });
+    s = applyChatHistory(s, member, [msg(1), msg(2)]);
+    expect(s.unread).toBe(0);
+  });
+
+  it('does not count history after a disconnect before any history', () => {
+    let s = resetChatOnDisconnect(initialChatState);
+    s = applyChatHistory(s, member, [msg(1), msg(2)]);
+    expect(s.unread).toBe(0);
   });
 });

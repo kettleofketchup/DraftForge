@@ -152,4 +152,32 @@ describe('composerState', () => {
       }).sendDisabled,
     ).toBe(false);
   });
+
+  it('disables the composer when chat failed to start', () => {
+    expect(
+      composerState({
+        viewer: null,
+        draftState: 'drafting',
+        connected: true,
+        raw: 'hi',
+        unavailable: true,
+      }),
+    ).toEqual({
+      inputDisabled: true,
+      sendDisabled: true,
+      placeholder: 'Chat unavailable',
+    });
+  });
+
+  it('shows Connecting… while reconnecting even after a failed start', () => {
+    expect(
+      composerState({
+        viewer: null,
+        draftState: 'drafting',
+        connected: false,
+        raw: '',
+        unavailable: true,
+      }).placeholder,
+    ).toBe('Connecting…');
+  });
 });

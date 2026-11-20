@@ -160,6 +160,32 @@ describe('HeroDraftChat composer', () => {
       'hello',
     );
   });
+
+  it('dismisses the error line', () => {
+    seed(member);
+    useHeroDraftStore.setState({
+      chat: {
+        ...useHeroDraftStore.getState().chat,
+        lastError: { code: 'hero_unavailable' },
+      },
+    });
+    render(<HeroDraftChat draftState="drafting" />);
+    fireEvent.click(screen.getByTestId('herodraft-chat-error-dismiss'));
+    expect(screen.queryByTestId('herodraft-chat-error')).toBeNull();
+    expect(useHeroDraftStore.getState().chat.lastError).toBeNull();
+  });
+
+  it('shows chat unavailable when the server could not start chat', () => {
+    seed(null);
+    useHeroDraftStore.setState({
+      chat: { ...useHeroDraftStore.getState().chat, unavailable: true },
+    });
+    render(<HeroDraftChat draftState="drafting" />);
+    expect(input()).toBeDisabled();
+    expect(input()).toHaveAttribute('placeholder', 'Chat unavailable');
+    expect(send()).toBeDisabled();
+    expect(screen.queryByTestId('herodraft-chat-error')).toBeNull();
+  });
 });
 
 describe('HeroDraftChat log', () => {

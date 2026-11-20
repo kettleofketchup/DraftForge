@@ -14,6 +14,10 @@ export interface ChatState {
   lastError: { code: ChatErrorCode; text?: string } | null;
   unread: number;
   panelOpen: boolean;
+  /** The server could not start chat for this socket. */
+  unavailable: boolean;
+  /** Newest message seen before a disconnect; `{ after: null }` means none. */
+  resyncAfter: { after: ChatMessage | null } | null;
 }
 
 export const initialChatState: ChatState = {
@@ -23,6 +27,8 @@ export const initialChatState: ChatState = {
   lastError: null,
   unread: 0,
   panelOpen: false,
+  unavailable: false,
+  resyncAfter: null,
 };
 
 function compareMessages(a: ChatMessage, b: ChatMessage): number {
@@ -52,10 +58,21 @@ export function applyChatHistory(
   messages: ChatMessage[],
 ): ChatState {
   const unique = new Map(messages.map((m) => [m.id, m]));
+  const sorted = capNewest([...unique.values()].sort(compareMessages));
+  const mark = s.resyncAfter;
+  const missed =
+    mark === null || s.panelOpen
+      ? 0
+      : sorted.filter(
+          (m) => mark.after === null || compareMessages(m, mark.after) > 0,
+        ).length;
   return {
     ...s,
     viewer,
-    messages: capNewest([...unique.values()].sort(compareMessages)),
+    messages: sorted,
+    unread: s.unread + missed,
+    unavailable: false,
+    resyncAfter: null,
   };
 }
 
@@ -87,6 +104,9 @@ export function applyChatError(
   code: ChatErrorCode,
   clientMsgId?: string,
 ): ChatState {
+  if (clientMsgId === undefined && code === 'unavailable' && !s.viewer) {
+    return { ...s, unavailable: true };
+  }
   const failed = clientMsgId !== undefined ? s.pending[clientMsgId] : undefined;
   return {
     ...s,
@@ -107,9 +127,13 @@ export function resetChatOnDisconnect(s: ChatState): ChatState {
     (acc, p) => (acc === null || p.sentAt >= acc.sentAt ? p : acc),
     null,
   );
+  const resyncAfter =
+    s.viewer === null ? s.resyncAfter : { after: s.messages.at(-1) ?? null };
   return {
     ...initialChatState,
     panelOpen: s.panelOpen,
+    unread: s.unread,
+    resyncAfter,
     lastError: latest ? { code: 'unavailable', text: latest.raw } : null,
   };
 }

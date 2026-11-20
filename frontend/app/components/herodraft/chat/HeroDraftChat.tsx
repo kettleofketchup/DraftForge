@@ -1,5 +1,6 @@
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '~/components/ui/button';
 import { SecondaryButton } from '~/components/ui/buttons';
 import {
   Sheet,
@@ -40,8 +41,14 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { viewer, lastError, panelOpen, unread, messages } = chat;
-  const state = composerState({ viewer, draftState, connected, raw });
+  const { viewer, lastError, panelOpen, unread, messages, unavailable } = chat;
+  const state = composerState({
+    viewer,
+    draftState,
+    connected,
+    raw,
+    unavailable,
+  });
   const target = viewer?.can_post_team ? parseChatInput(raw).channel : null;
 
   useEffect(() => {
@@ -81,19 +88,32 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
     : 'No messages yet.';
 
   const errorLine = lastError && (
-    <p
+    <div
       role="alert"
-      className="rounded-md bg-destructive/15 px-2 py-1 text-xs text-destructive"
+      className="flex items-start gap-1 rounded-md bg-destructive/15 py-1 pl-2 pr-1 text-xs text-destructive"
       data-testid="herodraft-chat-error"
     >
-      {chatErrorText(lastError.code)}
-      {lastError.text && restoredError !== lastError && (
-        <span className="text-muted-foreground">
-          {' — not sent: '}
-          <span className="whitespace-pre-wrap">{lastError.text}</span>
-        </span>
-      )}
-    </p>
+      <p className="min-w-0 flex-1">
+        {chatErrorText(lastError.code)}
+        {lastError.text && restoredError !== lastError && (
+          <span className="text-muted-foreground">
+            {' — not sent: '}
+            <span className="whitespace-pre-wrap">{lastError.text}</span>
+          </span>
+        )}
+      </p>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={clearChatError}
+        aria-label="Dismiss"
+        className="size-4 shrink-0 text-destructive hover:bg-transparent hover:text-destructive/80"
+        data-testid="herodraft-chat-error-dismiss"
+      >
+        <X className="size-3" />
+      </Button>
+    </div>
   );
 
   const composer = (
