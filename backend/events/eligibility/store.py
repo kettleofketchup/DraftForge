@@ -98,6 +98,7 @@ def refresh_members_eligibility(org_users: Sequence[OrgUser]) -> int:
                 event__organization_id=org_id,
                 status__in=UNMET_TRACKED_STATUSES,
             )
+            .exclude(event__state__in=_CLOSED_EVENT_STATES)
             .select_related("event", "user")
             .order_by("pk")
         )

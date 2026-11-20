@@ -418,6 +418,37 @@ class EnforcementHooksTest(ConductTestCase):
         open_signup.refresh_from_db()
         self.assertEqual(open_signup.unmet_requirements, [CODE])
 
+    def test_finalize_restamp_skips_closed_event_signups(self) -> None:
+        self.enable(require_approval_enabled=True)
+        member = self.make_user()
+        self.no_shows(member, 2)
+        open_signup = self._open_waitlisted(member)
+        done = self.make_event(
+            state=EventState.COMPLETED, scheduled_at=tz.now() - timedelta(hours=3)
+        )
+        done_signup = self.signup(done, member, SignupStatus.RSVP)
+        self.outcome(
+            member,
+            event=done,
+            outcome=Outcome.NO_SHOW,
+            source="staff",
+            finalized=False,
+            set_by=self.admin,
+            reason="did not show",
+        )
+        before = (done_signup.unmet_requirements, done_signup.eligibility_reasons)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            with transaction.atomic():
+                finalize_event_outcomes(done, now=tz.now(), actor=None)
+
+        open_signup.refresh_from_db()
+        done_signup.refresh_from_db()
+        self.assertEqual(open_signup.unmet_requirements, [CODE])
+        self.assertEqual(
+            (done_signup.unmet_requirements, done_signup.eligibility_reasons), before
+        )
+
     def test_refresh_after_staff_edit(self) -> None:
         self.enable(require_approval_enabled=True)
         member = self.make_user()
