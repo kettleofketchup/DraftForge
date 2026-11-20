@@ -1453,8 +1453,8 @@ class OrgEventDefaultsViewSet(viewsets.GenericViewSet):
 
     def partial_update(self, request: Request, pk: str | None = None) -> Response:
         defaults = self.get_object()
-        if not has_org_staff_access(request.user, defaults.organization):
-            raise PermissionDenied("Staff access required.")
+        if not has_org_admin_access(request.user, defaults.organization):
+            raise PermissionDenied("Org admin access required.")
         serializer = self.get_serializer(defaults, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
