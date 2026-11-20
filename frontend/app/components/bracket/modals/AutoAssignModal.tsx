@@ -1,17 +1,17 @@
+import { Loader2, Wand2 } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
+import { api } from '~/components/api/axios';
+import { Badge } from '~/components/ui/badge';
+import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '~/components/ui/dialog';
-import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
-import { Badge } from '~/components/ui/badge';
-import { Loader2, Wand2 } from 'lucide-react';
-import { toast } from 'sonner';
-import { api } from '~/components/api/axios';
 import { cn } from '~/lib/utils';
 
 interface Assignment {
@@ -121,8 +121,8 @@ export function AutoAssignModal({
             Auto-Assign Steam Matches
           </DialogTitle>
           <DialogDescription>
-            Automatically link Steam matches to bracket games based on tournament date, time order,
-            and player overlap.
+            Automatically link Steam matches to bracket games based on
+            tournament date, time order, and player overlap.
           </DialogDescription>
         </DialogHeader>
 
@@ -132,9 +132,13 @@ export function AutoAssignModal({
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : result?.error ? (
-            <div className="text-center py-8 text-destructive">{result.error}</div>
+            <div className="text-center py-8 text-destructive">
+              {result.error}
+            </div>
           ) : result?.message ? (
-            <div className="text-center py-8 text-muted-foreground">{result.message}</div>
+            <div className="text-center py-8 text-muted-foreground">
+              {result.message}
+            </div>
           ) : result?.assignments.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No matches could be auto-assigned. Try linking matches manually.
@@ -163,26 +167,36 @@ export function AutoAssignModal({
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs">
-                          {bracketTypeLabels[assignment.bracket_type] || assignment.bracket_type}
+                          {bracketTypeLabels[assignment.bracket_type] ||
+                            assignment.bracket_type}
                         </Badge>
                         <span className="text-sm font-medium">
-                          Round {assignment.game_round}, Game {assignment.game_position + 1}
+                          Round {assignment.game_round}, Game{' '}
+                          {assignment.game_position + 1}
                         </span>
                       </div>
                       <span className="text-xs text-muted-foreground mt-1">
-                        <span className="text-green-500">
-                          {assignment.radiant_captain || assignment.radiant_team || 'TBD'}
-                          {assignment.radiant_game_num && ` (#${assignment.radiant_game_num})`}
+                        <span className="text-radiant">
+                          {assignment.radiant_captain ||
+                            assignment.radiant_team ||
+                            'TBD'}
+                          {assignment.radiant_game_num &&
+                            ` (#${assignment.radiant_game_num})`}
                         </span>
                         {' vs '}
-                        <span className="text-red-500">
-                          {assignment.dire_captain || assignment.dire_team || 'TBD'}
-                          {assignment.dire_game_num && ` (#${assignment.dire_game_num})`}
+                        <span className="text-dire">
+                          {assignment.dire_captain ||
+                            assignment.dire_team ||
+                            'TBD'}
+                          {assignment.dire_game_num &&
+                            ` (#${assignment.dire_game_num})`}
                         </span>
                       </span>
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className="text-sm">Match #{assignment.match_id}</span>
+                      <span className="text-sm">
+                        Match #{assignment.match_id}
+                      </span>
                       <span className="text-xs text-muted-foreground">
                         {assignment.start_time_display} UTC
                       </span>
@@ -192,10 +206,10 @@ export function AutoAssignModal({
                           className={cn(
                             'text-xs',
                             assignment.player_overlap >= 8
-                              ? 'bg-green-500/20 text-green-500'
+                              ? 'bg-success/20 text-success'
                               : assignment.player_overlap >= 6
-                                ? 'bg-blue-500/20 text-blue-500'
-                                : 'bg-yellow-500/20 text-yellow-500'
+                                ? 'bg-info/20 text-info'
+                                : 'bg-warning/20 text-warning',
                           )}
                         >
                           {assignment.player_overlap}/10
@@ -205,11 +219,13 @@ export function AutoAssignModal({
                           className={cn(
                             'text-xs',
                             assignment.match_method === 'captain_sequence'
-                              ? 'border-green-500 text-green-500'
-                              : 'border-yellow-500 text-yellow-500'
+                              ? 'border-success text-success'
+                              : 'border-warning text-warning',
                           )}
                         >
-                          {assignment.match_method === 'captain_sequence' ? 'seq' : 'overlap'}
+                          {assignment.match_method === 'captain_sequence'
+                            ? 'seq'
+                            : 'overlap'}
                         </Badge>
                       </div>
                     </div>
@@ -221,9 +237,7 @@ export function AutoAssignModal({
         </div>
 
         <DialogFooter className="mt-4">
-          <CancelButton onClick={onClose}>
-            Cancel
-          </CancelButton>
+          <CancelButton onClick={onClose}>Cancel</CancelButton>
           <ConfirmButton
             onClick={applyAssignments}
             disabled={isApplying || !result?.assignments.length}

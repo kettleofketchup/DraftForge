@@ -1,5 +1,7 @@
 import type {
   CreateSeriesEventInput,
+  EligibilityReason,
+  EventEligibility,
   EventSignupType,
   EventType,
   ReadyCheckFields,
@@ -65,6 +67,16 @@ export type SignupBody = {
   intent: 'rsvp' | 'tentative';
   profile?: Record<string, unknown>;
 };
+
+/** 400 body from POST /events/<id>/signup/. */
+export type SignupErrorBody = {
+  error: string;
+  reasons: EligibilityReason[];
+};
+
+/** GET /events/<id>/eligibility/?intent=… */
+export type EligibilityIntent = 'main' | 'maybe';
+export type EventEligibilityResponse = EventEligibility;
 
 export async function signupForEvent(
   eventId: number,
