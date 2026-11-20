@@ -8,7 +8,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { StrictMode, type ReactNode } from 'react';
 import {
   afterEach,
   beforeAll,
@@ -119,6 +119,36 @@ describe('useStaffPlacementSection', () => {
     expect(trigger).toHaveTextContent('Silent');
     for (const code of CODES) expect(checkbox(code).checked).toBe(true);
     expect(screen.getAllByRole('checkbox')).toHaveLength(6);
+  });
+
+  it('shows saved values and stays pristine when data arrives after mount', async () => {
+    const saved: OrgSettings = {
+      ...SETTINGS,
+      staff_override_policy: 'confirm',
+      staff_override_warning_codes: CODES.slice(1),
+    };
+    let resolve: (s: OrgSettings) => void = () => undefined;
+    vi.mocked(getOrgSettings).mockReturnValue(
+      new Promise<OrgSettings>((r) => {
+        resolve = r;
+      }),
+    );
+    qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <StrictMode>
+        <QueryClientProvider client={qc}>
+          <form>
+            <Harness />
+          </form>
+        </QueryClientProvider>
+      </StrictMode>,
+    );
+    setTimeout(() => resolve(saved), 30);
+    const trigger = await screen.findByTestId('org-settings-policy-select');
+    await new Promise((r) => setTimeout(r, 100));
+    expect(trigger).toHaveTextContent('Confirm');
+    expect(checkbox(CODES[0]).checked).toBe(false);
+    expect(unit.isDirty).toBe(false);
   });
 
   it('no Save button renders', async () => {

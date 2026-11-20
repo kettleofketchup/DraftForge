@@ -1,6 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, type ReactNode, type RefObject } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { useForm, type FieldErrors } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -174,11 +180,13 @@ export function useOrgEventDefaultsSections(
     defaultValues: FORM_DEFAULTS,
   });
 
-  // Adopt loaded or refetched values while there are no local edits.
+  // Fields mount only after the form holds the loaded values: Radix Select's
+  // hidden native select emits onChange('') when its value changes after mount.
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    if (defaults && enabled && !form.formState.isDirty) {
-      form.reset(valuesFrom(defaults));
-    }
+    if (!defaults || !enabled) return;
+    if (!form.formState.isDirty) form.reset(valuesFrom(defaults));
+    setHydrated(true);
   }, [defaults, enabled, form]);
 
   const sectionFor = (field: string): string => {
@@ -248,7 +256,7 @@ export function useOrgEventDefaultsSections(
   };
 
   const wrap = (children: ReactNode) =>
-    defaults ? (
+    defaults && hydrated ? (
       <Form {...form}>
         <div className="flex flex-col gap-4">{children}</div>
       </Form>

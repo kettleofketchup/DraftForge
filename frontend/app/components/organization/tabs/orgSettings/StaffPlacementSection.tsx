@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 
@@ -85,8 +85,13 @@ export function useStaffPlacementSection(
     defaultValues: data ? pickFormValues(data) : EMPTY_FORM,
   });
 
+  // Fields mount only after the form holds the loaded values: Radix Select's
+  // hidden native select emits onChange('') when its value changes after mount.
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    if (data && !form.formState.isDirty) form.reset(pickFormValues(data));
+    if (!data) return;
+    if (!form.formState.isDirty) form.reset(pickFormValues(data));
+    setHydrated(true);
   }, [data, form]);
 
   const save = async (): Promise<boolean> => {
@@ -149,7 +154,7 @@ export function useStaffPlacementSection(
           {extractApiError(error) ?? 'Failed to load settings'}
         </p>
       )}
-      {data && <StaffPlacementFields form={form} settings={data} />}
+      {data && hydrated && <StaffPlacementFields form={form} settings={data} />}
     </section>
   );
 
