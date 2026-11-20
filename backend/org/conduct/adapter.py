@@ -137,7 +137,7 @@ class ConductTrack(TrackBase):
     @override
     def merge_members(self, drop: OrgUser, keep: OrgUser) -> TrackOutput:
         reassign_member(drop, keep)
-        return TrackOutput()
+        return EMPTY_OUTPUT
 
     @override
     def repoint_user(self, drop: CustomUser, keep: CustomUser) -> TrackOutput:
@@ -145,7 +145,7 @@ class ConductTrack(TrackBase):
         OrgConductSettings.objects.nocache().filter(updated_by=drop).update(
             updated_by=keep
         )
-        return TrackOutput()
+        return EMPTY_OUTPUT
 
     @override
     def promotion_order[T: HasUserId](
