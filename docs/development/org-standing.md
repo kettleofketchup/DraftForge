@@ -150,6 +150,35 @@ Periods (`Period`, `parse_period`, org-timezone helpers) live in
     and `α = prior_strength`, clamped to `[0, 1]`. Rows older than `max_age_days` are
     ignored; a score is `"new"` until it has `min_count` observations.
 
+## Conduct track
+
+`org/conduct/adapter.py` registers conduct after contribution. Its hooks wrap the
+conduct lifecycle: close finalizes (or voids when cancelled), reopen returns
+`attendance_reopened` for the OrgLog, delete tears outcomes down, a member's own
+withdrawal (`on_signup_withdrawn(by_member=True)`) captures a late cancel, merges move
+outcomes, and `promotion_order` puts back-of-line members after everyone else.
+
+Enforcement is not a standing hook. It is the evaluator check
+`events/eligibility/checks/conduct.py`, the one module in `events/` that imports a
+track package (`org.conduct.eligibility`). The check reads the tier through a
+`StandingCache`, so a waitlist pass builds the gate once and scores once.
+`ensure_self_serve` refuses a self sign-up when the evaluator returns a blocking reason;
+staff placements and re-evaluations pass `for_staff_placement=True`, which turns the
+block into needs-approval.
+
+Conduct writes that change a tier (finalize, staff edits, settings, the feature switch)
+re-stamp stored reasons through `org/standing/restamp.py`: `events.eligibility.store`
+registers `refresh_org_eligibility` and a per-member refresh there at import, and the
+adapter schedules them with `transaction.on_commit`.
+
+## Generic endpoints
+
+- `GET /api/organizations/<org_id>/standing/tracks/`: the viewer's tracks for the org
+  (also embedded in org detail as `standing_tracks`).
+- `GET /api/organizations/<org_id>/standing/<track>/leaderboard/?metric=&period=`: one
+  metric's board. `api.leaderboard` blanks rows and the own row from the track's access
+  rule, whatever the adapter returned. Non-periodic metrics echo `period="current"`.
+
 ## Adding a track
 
 1. Subclass `org.standing.base.TrackBase` in the track's package (`adapter.py`).

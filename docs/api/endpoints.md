@@ -556,15 +556,20 @@ writable:
 
 | Field | Meaning |
 |-------|---------|
-| `features` | Unlocked feature keys, e.g. `["contributions", "promotion"]` |
+| `features` | Unlocked feature keys, e.g. `["contributions", "promotion", "conduct"]` |
 | `can_use_promotion` | Promotion unlocked and the viewer is promoter, staff, admin, owner or site admin |
 | `can_manage_promotion_templates` | Promotion unlocked and the viewer is org staff or above |
 | `can_manage_promoters` | Promotion unlocked and the viewer is org admin or above |
 | `can_view_contributions` | Contributions unlocked |
 | `can_view_contributors` | Contributions unlocked and the viewer passes `can_view_org_members` |
 | `can_manage_contributions` | Contributions unlocked and the viewer is org admin or above |
+| `can_view_conduct` | Conduct unlocked and either the ranking is public or the viewer is org staff or above |
+| `can_view_own_conduct` | Conduct unlocked and the viewer is a member of the org (has an `OrgUser`) |
+| `can_view_conduct_details` | Conduct unlocked and the viewer is org staff or above |
+| `can_manage_conduct` | Conduct unlocked and the viewer is org admin or above |
 
-The detail never includes feature notes, `enabled_by` or `enabled_at`.
+The detail never includes feature notes, `enabled_by` or `enabled_at`. Reading the conduct
+flags never creates the org's conduct settings row.
 
 ## Organization Settings
 
@@ -593,7 +598,7 @@ Guide: [Organization Locked Features](../features/organization-locked-features.m
 `{"code": "not_permitted", "detail": ...}` when the role check fails. Anonymous callers
 get the usual uncoded authentication error on the feature-switch and promoter endpoints,
 and on org-admin contributions endpoints when the feature is unlocked. Only the
-contributions and promotion endpoints (which allow anonymous access) check
+contributions, promotion and conduct endpoints (which allow anonymous access) check
 `feature_locked` before authentication. Validation errors are `400`. Objects named by pk in the URL or body are
 looked up within the URL's organization; a pk from another org is `404` (or `400` for a
 body field).
@@ -603,7 +608,7 @@ body field).
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
 | GET | `/api/organizations/{id}/features/` | Every feature row: `[{feature, enabled, notes, enabled_by: {pk, username} \| null, enabled_at}]`, locked rows included | Site admin |
-| PUT | `/api/organizations/{id}/features/` | Body `{"feature": "contributions" \| "promotion", "enabled": bool, "notes"?: str}`. Logs `enable_feature`/`disable_feature`; first Promotion unlock seeds the starter template. Returns the rows. | Site admin |
+| PUT | `/api/organizations/{id}/features/` | Body `{"feature": "contributions" \| "promotion" \| "conduct", "enabled": bool, "notes"?: str}`. Logs `enable_feature`/`disable_feature`; first Promotion unlock seeds the starter template. Returns the rows. | Site admin |
 | GET | `/api/organizations/{id}/promoters/` | List promoters (user objects) | Org admin, Promotion |
 | POST | `/api/organizations/{id}/promoters/` | Body `{"user_id": int}`. Creates the `OrgUser` if missing, logs `add_promoter`. `400` if already a promoter. | Org admin, Promotion |
 | DELETE | `/api/organizations/{id}/promoters/{user_id}/` | Remove a promoter, logs `remove_promoter`. `400` if not a promoter. | Org admin, Promotion |
@@ -643,6 +648,29 @@ promoter, org staff, admin, owner or site admin.
 | POST | `events/{event_id}/sends/` | Mark sent. Body `{"template_id"?: int \| null, "recipient_id", "text": max 4000}`. `201` with `{id, earns_points, points_awarded, sent_at}`; `points_awarded` is `null` while Contributions is locked. `400` if the event is not promotable or the recipient is outside the pool (checked at N=10), unlinked from Discord or the sender. | Promoter |
 | DELETE | `sends/{send_pk}/` | Undo a send and its ledger entry. `204`. | Its sender while still a promoter, or org staff |
 
+### Conduct
+
+All under `/api/organizations/{id}/conduct/`, all gated on Conduct. Guide:
+[Organization Conduct](../features/organization-conduct.md). Show rates are floats
+rounded to 3 decimals; settings decimals are floats, and PATCH accepts numbers or
+strings. "Event staff" means `has_event_staff_access`: org staff, or league staff of the
+event's league. The event must belong to the URL's org, else `404`.
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `leaderboard/` | `{rows_visible, rows: [{member, show_rate, counted_events, rank}], new_members: [{member, counted_events}], own_row}`. Ranked rows are members with at least `min_events` counted events, sorted by show rate, then counted events, then name; `new_members` lists those with 1 to `min_events - 1`. `rows` and `new_members` are empty unless the viewer passes `can_view_org_members`. `own_row` is `{member, show_rate, counted_events, status, rank \| null}` for an org member, else `null`. No no-show counts. With the ranking private, a non-staff member gets `rows_visible: false` and only `own_row`; a non-member gets `not_permitted`. | Anyone if the ranking is public; otherwise org staff, or own row for members |
+| GET | `members/{org_user_pk}/?limit=&offset=` | `{member, show_rate, status, counted_events, weighted_events, totals: {attended, no_show, late_cancel, excused}, history}`. `history` is newest first (`limit` 1-200, default 50): `{event_id, event_name, event_starts_at, outcome, source, committed, finalized, voided, weight}`, plus `reason` and `set_by` for org staff. `event_id` is `null` once the event is deleted. Independent of the public ranking setting. | The member themselves, or org staff |
+| GET | `settings/` | Every setting plus `defaults: {field: value}`. Never creates the settings row. | Org admin |
+| PATCH | `settings/` | Any subset of the settings. Ranges are checked, `max_age_days` must stay at least `half_life_days` (against the stored value when only one is sent), and unknown fields are `400`. Creates the row on first save, logs OrgLog `update` with `{"area": "conduct_settings", "changed_fields"}`. Returns the GET shape. | Org admin |
+| GET | `events/{event_id}/attendance/` | `{event_id, state, finalized_at, editable, editable_reason, rows}`. Each row: `{member, org_user_pk, signup_status, outcome, source, committed, virtual, finalized, voided, flag, set_by, reason, show_rate, status}`. Before finalize, expected members without a stored outcome appear as `virtual` rows (`pending`, source `default`); the GET writes nothing. `flag` is `null`, `roll_call_unconfirmed` or `dropped_unattributed`. `editable` is `false` before roll call, for cancelled events and for completed events that were never tracked. | Event staff |
+| PUT | `events/{event_id}/attendance/` | Body `{"changes": [{"org_user_pk": int, "outcome": str}], "reason": str}`. `outcome` is `attended`, `no_show`, `late_cancel` or `excused`; `reason` is 3-500 characters and covers the batch. A walk-in uses `{"user_pk": int, "outcome": "attended"}` instead of `org_user_pk`. An expected member whose row has `org_user_pk: null` (a legacy sign-up with no org membership) is sent by `user_pk` with any outcome; the membership is created. Logs one OrgLog `set_attendance` per changed row. Returns the GET shape. `400` for an empty or duplicate batch, a bad outcome or reason, a member from another org, or a non-editable event; nothing is written. | Event staff |
+| GET | `events/{event_id}/forecast/` | `{seat_holders, expected, low, high, waitlisted, pending_approval, capacity, expected_open_seats, new_members, members}`. `low`/`high` is the 80% range. `members` maps every seat-holding, waitlisted or tentative signup's **user** pk to `{show_rate, status, tier, deferred}`; `tier` is `ok`, `back_of_line`, `require_approval` or `block`. | Event staff |
+
+`conduct_finalized_at` on the event payload is set when the event's outcomes are
+finalized or voided; see [Events: Attendance outcomes](../features/events.md#attendance-outcomes).
+With Block enabled, `POST /api/events/{id}/signup/` refuses a blocked member with `400`
+`{"error": "Your attendance record in this organization is below what it requires for self sign-up. Ask an organizer to add you."}`.
+
 ### Internal
 
 | Method | Endpoint | Description |
@@ -674,9 +702,10 @@ approve the signup.
 | `rank_screenshot_missing` | The event requires a rank screenshot for an active rank and none is on file |
 | `battlecup_screenshot_missing` | The event requires a Battle Cup screenshot and none is on file |
 | `below_min_mmr` | The player declared an active rank whose MMR is missing or below the event's minimum |
+| `conduct_below_threshold` | Conduct's Require approval (or Block) is on and the player's show rate is below its threshold |
 
 New games add codes through the backend eligibility registry
-(`events/eligibility.py`); the frontend labels live in
+(`events/eligibility/`, one module per check under `checks/`); the frontend labels live in
 `frontend/app/components/events/unmetRequirements.ts` and show unknown codes as-is.
 
 ## Leagues
@@ -1533,3 +1562,10 @@ All responses follow this format:
 | 403 | Forbidden |
 | 404 | Not Found |
 | 500 | Server Error |
+
+## Organization standing
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/organizations/<org_id>/standing/tracks/` | Unlocked tracks with their metrics and the viewer's `can_view_rows`, `can_view_own`, `can_manage` |
+| GET | `/api/organizations/<org_id>/standing/<track>/leaderboard/` | `?metric=` (default metric when omitted), `?period=all\|YYYY-MM` for periodic metrics. Returns `{track, metric, period, total, rows, rows_visible, own_row}`; 404 unknown track, 400 unknown metric or period, 403 locked feature or not permitted |

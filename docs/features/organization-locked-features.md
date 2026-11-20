@@ -1,9 +1,11 @@
 # Organization Locked Features
 
-Two locked features can be unlocked per organization: **Promotion** (a dashboard for
-inviting past players to upcoming events over Discord DMs) and **Contributions** (a
-points ledger and leaderboard for the people who host, help and promote). This page is
-the guide for org owners and admins. The API is listed in
+Three locked features can be unlocked per organization: **Promotion** (a dashboard for
+inviting past players to upcoming events over Discord DMs), **Contributions** (a
+points ledger and leaderboard for the people who host, help and promote) and
+**Conduct** (attendance records, show rates and turnout forecasts; see
+[Organization Conduct](organization-conduct.md)). This page is the guide for org owners
+and admins. The API is listed in
 [API Endpoints: Organization locked features](../api/endpoints.md#organization-locked-features),
 and the permission rules in [Roles & Permission Matrix](../dev/auth/roles.md#promoter-and-locked-features).
 
@@ -27,7 +29,8 @@ payment provenance (for example "paid via PayPal, Nov 2026"); it is never shown 
 anyone but site admins. Feature rows are never deleted: locking sets `enabled` off and
 keeps the notes.
 
-The two switches are independent. Promotion works without Contributions.
+The switches are independent. Promotion works without Contributions, and Conduct
+works without either.
 
 !!! info "Locked means invisible"
     While a feature is locked its tabs, buttons and admin sections are hidden, and its
@@ -179,6 +182,21 @@ dated the 1st counts in that month. Manual awards can be edited or deleted from 
   surviving account. Duplicate host/helper entries for the same event collapse into one.
 - Deleting the organization deletes its ledger. A site admin deleting a user deletes
   that user's entries first.
+
+---
+
+## Conduct
+
+The **Conduct** tab records who showed up to each event, gives every member a show
+rate, ranks members on the org page and shows event staff a turnout forecast. Staff
+correct outcomes from the **Attendance** panel on the event page, with a required
+reason. Consequences for low show rates (back of the line, require approval, block
+self sign-up) are off until an admin turns them on in the org settings. The full guide
+is [Organization Conduct](organization-conduct.md).
+
+While Conduct is locked nothing new is recorded, but outcomes that already exist are
+still finalized, voided and cleaned up as their events complete, are cancelled, reopened
+or deleted.
 
 ---
 
