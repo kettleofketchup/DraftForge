@@ -13,7 +13,6 @@ const base: OrgPageNavInput = {
   canViewConduct: false,
   canUsePromotion: false,
   canViewClaims: false,
-  canViewSettings: false,
 };
 
 const values = (input: OrgPageNavInput): string[] =>
@@ -35,9 +34,16 @@ describe('buildOrgPageNavOptions', () => {
     expect(values(base)).not.toContain('claims');
   });
 
-  it('lists settings only when the viewer can view settings', () => {
-    expect(values({ ...base, canViewSettings: true })).toContain('settings');
-    expect(values(base)).not.toContain('settings');
+  it('never lists settings; settings open from the header cog', () => {
+    expect(
+      values({
+        ...base,
+        canViewMembers: true,
+        canViewContributions: true,
+        canUsePromotion: true,
+        canViewClaims: true,
+      }),
+    ).not.toContain('settings');
   });
 
   it('adds conduct after contributions when allowed', () => {
@@ -61,7 +67,6 @@ describe('buildOrgPageNavOptions', () => {
         canViewConduct: true,
         canUsePromotion: true,
         canViewClaims: true,
-        canViewSettings: true,
       }),
     ).toEqual([
       'leagues',
@@ -71,7 +76,6 @@ describe('buildOrgPageNavOptions', () => {
       'conduct',
       'promotion',
       'claims',
-      'settings',
     ]);
   });
 });

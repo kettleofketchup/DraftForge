@@ -45,7 +45,7 @@ describe('EVENT_SECTION_FIELDS', () => {
       ...Object.keys(createEventInputSchema.shape),
       ...Object.keys(createSeriesEventInputSchema.shape),
       ...Object.keys(editEventFormSchema.shape),
-      // EditOrgDefaultsModal keeps these in its own local schema.
+      // useOrgEventDefaultsSections keeps these in its own local schema.
       'max_players',
       'auto_approve',
     ]);

@@ -25,16 +25,25 @@ export const OverrideReasonRequiredSchema = z.object({
 
 export const OVERRIDE_REASON_MAX_LENGTH = 500;
 
-export const OverrideReasonFormSchema = z.object({
-  reason: z
-    .string()
-    .trim()
-    .min(1, 'A reason is required')
-    .max(
-      OVERRIDE_REASON_MAX_LENGTH,
-      `Keep the reason under ${OVERRIDE_REASON_MAX_LENGTH} characters`,
-    ),
-});
+export function overrideReasonFormSchema(minLength: number) {
+  return z.object({
+    reason: z
+      .string()
+      .trim()
+      .min(
+        minLength,
+        minLength > 1
+          ? `Give a reason (at least ${minLength} characters).`
+          : 'A reason is required',
+      )
+      .max(
+        OVERRIDE_REASON_MAX_LENGTH,
+        `Keep the reason under ${OVERRIDE_REASON_MAX_LENGTH} characters`,
+      ),
+  });
+}
+
+export const OverrideReasonFormSchema = overrideReasonFormSchema(1);
 export type OverrideReasonFormValues = z.infer<typeof OverrideReasonFormSchema>;
 
 // First attempt omits `reason` so a caller's own reason field survives `...ack`.

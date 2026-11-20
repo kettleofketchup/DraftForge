@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
 } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { createRef, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import {
   afterEach,
@@ -20,7 +21,9 @@ import {
 } from 'vitest';
 import { fetchOrganization } from '~/components/api/api';
 import type { OrganizationType } from '~/components/organization/schemas';
-import { ConductSection } from '~/components/organization/tabs/orgSettings/ConductSection';
+import { useConductSection } from '~/components/organization/tabs/orgSettings/ConductSection';
+import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
+import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
 import type { UserType } from '~/components/user/types';
 import {
   getConductSettings,
@@ -100,20 +103,36 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => undefined;
 });
 
-function renderSection() {
+let unit: SettingsFormUnit;
+const selectSection = vi.fn();
+const sectionsRef = createRef<SettingsDialogHandle<string>>() as {
+  current: SettingsDialogHandle<string> | null;
+};
+
+function Harness({ enabled }: { enabled: boolean }): ReactNode {
+  const section = useConductSection(7, enabled, sectionsRef);
+  unit = section.unit;
+  return <>{section.content}</>;
+}
+
+function renderSection(enabled = true) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return render(<ConductSection organizationId={7} />, { wrapper });
+  return render(<Harness enabled={enabled} />, { wrapper });
+}
+
+async function save(): Promise<boolean> {
+  let ok = false;
+  await act(async () => {
+    ok = await unit.save();
+  });
+  return ok;
 }
 
 function input(field: string): HTMLInputElement {
   return screen.getByTestId(`conduct-setting-${field}`) as HTMLInputElement;
-}
-
-function saveButton(): HTMLButtonElement {
-  return screen.getByTestId('conduct-settings-save') as HTMLButtonElement;
 }
 
 async function loaded() {
@@ -122,6 +141,10 @@ async function loaded() {
 }
 
 beforeEach(() => {
+  sectionsRef.current = {
+    selectSection,
+    sectionOfField: () => undefined,
+  } as unknown as SettingsDialogHandle<string>;
   useUserStore.setState({
     currentUser: { pk: VIEWER, username: 'viewer' } as UserType,
   });
@@ -136,6 +159,7 @@ afterEach(() => {
   vi.mocked(fetchOrganization).mockReset();
   vi.mocked(toast.success).mockClear();
   vi.mocked(toast.error).mockClear();
+  selectSection.mockClear();
 });
 
 describe('ConductSection', () => {
@@ -147,14 +171,15 @@ describe('ConductSection', () => {
     expect(input('half_life_days').value).toBe('30');
     expect(input('prior_show_rate').value).toBe('0.85');
     expect(getConductSettings).toHaveBeenCalledWith(7);
-    expect(saveButton()).toBeDisabled();
+    expect(unit.isDirty).toBe(false);
   });
 
   it('refuses an out-of-range half-life', async () => {
     await loaded();
     fireEvent.change(input('half_life_days'), { target: { value: '5' } });
-    fireEvent.click(saveButton());
+    expect(await save()).toBe(false);
     expect(await screen.findByText('At least 7')).toBeInTheDocument();
+    expect(selectSection).toHaveBeenCalledWith('conduct');
     expect(patchConductSettings).not.toHaveBeenCalled();
   });
 
@@ -162,7 +187,7 @@ describe('ConductSection', () => {
     await loaded();
     fireEvent.change(input('half_life_days'), { target: { value: '400' } });
     fireEvent.change(input('max_age_days'), { target: { value: '300' } });
-    fireEvent.click(saveButton());
+    expect(await save()).toBe(false);
     expect(
       await screen.findByText('Max age must be at least the half-life'),
     ).toBeInTheDocument();
@@ -192,7 +217,7 @@ describe('ConductSection', () => {
     expect(
       screen.getByTestId('conduct-setting-half_life_days-default'),
     ).toBeInTheDocument();
-    expect(saveButton()).toBeEnabled();
+    expect(unit.isDirty).toBe(true);
   });
 
   it('collapses enforcement when every toggle is off', async () => {
@@ -223,17 +248,12 @@ describe('ConductSection', () => {
     await loaded();
     fireEvent.change(input('half_life_days'), { target: { value: '60' } });
     fireEvent.click(input('leaderboard_public'));
-    fireEvent.click(saveButton());
-    await waitFor(() =>
-      expect(patchConductSettings).toHaveBeenCalledWith(7, {
-        half_life_days: 60,
-        leaderboard_public: false,
-      }),
-    );
-    await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith('Conduct settings saved'),
-    );
-    await waitFor(() => expect(saveButton()).toBeDisabled());
+    expect(await save()).toBe(true);
+    expect(patchConductSettings).toHaveBeenCalledWith(7, {
+      half_life_days: 60,
+      leaderboard_public: false,
+    });
+    await waitFor(() => expect(unit.isDirty).toBe(false));
   });
 
   it('shows a server field error beside its input', async () => {
@@ -242,11 +262,12 @@ describe('ConductSection', () => {
     });
     await loaded();
     fireEvent.change(input('min_events'), { target: { value: '5' } });
-    fireEvent.click(saveButton());
+    expect(await save()).toBe(false);
     expect(await screen.findByText('At most 20')).toBeInTheDocument();
     expect(toast.error).not.toHaveBeenCalled();
+    expect(selectSection).toHaveBeenCalledWith('conduct');
     expect(input('min_events').value).toBe('5');
-    expect(saveButton()).toBeEnabled();
+    expect(unit.isDirty).toBe(true);
   });
 
   it('opens enforcement for a server error on a collapsed field', async () => {
@@ -260,7 +281,7 @@ describe('ConductSection', () => {
     });
     await loaded();
     fireEvent.change(input('min_events'), { target: { value: '5' } });
-    fireEvent.click(saveButton());
+    expect(await save()).toBe(false);
     expect(
       await screen.findByText('Ensure this value is less than or equal to 1.'),
     ).toBeInTheDocument();
@@ -273,7 +294,7 @@ describe('ConductSection', () => {
     });
     await loaded();
     fireEvent.change(input('min_events'), { target: { value: '5' } });
-    fireEvent.click(saveButton());
+    expect(await save()).toBe(false);
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith('Not allowed'),
     );
@@ -291,7 +312,7 @@ describe('ConductSection', () => {
         screen.queryByTestId('conduct-setting-block_below'),
       ).not.toBeInTheDocument(),
     );
-    fireEvent.click(saveButton());
+    expect(await save()).toBe(false);
     expect(await screen.findByText('At most 1')).toBeInTheDocument();
     expect(input('block_below')).toBeInTheDocument();
     expect(patchConductSettings).not.toHaveBeenCalled();
@@ -305,5 +326,22 @@ describe('ConductSection', () => {
     renderSection();
     await waitFor(() => expect(fetchOrganization).toHaveBeenCalled());
     expect(getConductSettings).not.toHaveBeenCalled();
+  });
+
+  it('does not load settings while the section is disabled', async () => {
+    renderSection(false);
+    await act(async () => {});
+    expect(fetchOrganization).not.toHaveBeenCalled();
+    expect(getConductSettings).not.toHaveBeenCalled();
+    expect(unit.isDirty).toBe(false);
+  });
+
+  it('discard restores the loaded values', async () => {
+    await loaded();
+    fireEvent.change(input('half_life_days'), { target: { value: '60' } });
+    expect(unit.isDirty).toBe(true);
+    act(() => unit.discard());
+    expect(input('half_life_days').value).toBe('90');
+    await waitFor(() => expect(unit.isDirty).toBe(false));
   });
 });

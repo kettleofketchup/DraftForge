@@ -57,13 +57,15 @@ test.describe('Admin Team Section (@cicd)', () => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
 
-    // Click Edit, which opens the org Settings tab
-    const editBtn = page.locator('[data-testid="edit-organization-button"]');
+    // Click the settings cog
+    const editBtn = page.locator('[data-testid="org-settings-button"]');
     await expect(editBtn).toBeVisible({ timeout: 5000 });
     await editBtn.click();
 
-    // Edit opens the org Settings tab; the admin team is its own section there.
-    await expect(page.locator('[data-testid="org-settings-tab"]')).toBeVisible({
+    // The cog opens the settings modal; the admin team is its own section there.
+    await expect(
+      page.locator('[data-testid="org-settings-modal"]'),
+    ).toBeVisible({
       timeout: 5000,
     });
     const adminTeamTab = page.getByTestId('org-settings-tab-admins');

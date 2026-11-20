@@ -68,11 +68,12 @@ export function useMemberConduct(
 export function useConductSettings(
   orgId: number,
   access: OrgFeatureAccess,
+  enabled = true,
 ): UseQueryResult<ConductSettings> {
   return useQuery({
     queryKey: conductKeys.settings(orgId, access.viewerPk),
     queryFn: () => getConductSettings(orgId),
-    enabled: canManage(access),
+    enabled: enabled && canManage(access),
   });
 }
 

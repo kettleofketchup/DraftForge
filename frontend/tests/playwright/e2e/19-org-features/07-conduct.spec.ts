@@ -119,8 +119,11 @@ test.describe('Org features: conduct @cicd', () => {
   test('admin edits settings @cicd', async ({ page, context }) => {
     await loginOrgFeatures(context, 'admin');
     const pk = data.orgs.features.pk;
-    await visitAndWaitForHydration(page, `/organizations/${pk}?tab=settings`);
-    await page.getByTestId('org-settings-tab-conduct').click();
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${pk}?settings=conduct`,
+    );
+    await expect(page.getByTestId('org-settings-modal')).toBeVisible();
 
     const halfLife = page.getByTestId('conduct-setting-half_life_days');
     await expect(halfLife).toBeVisible();
@@ -130,11 +133,12 @@ test.describe('Org features: conduct @cicd', () => {
         r.request().method() === 'PATCH' &&
         r.url().includes(`/organizations/${pk}/conduct/settings/`),
     );
-    await page.getByTestId('conduct-settings-save').click();
+    await page.getByTestId('org-settings-save').click();
     expect((await saved).status()).toBe(200);
+    await expect(page.getByTestId('org-settings-save-bar')).toHaveCount(0);
 
     await page.reload();
-    await page.getByTestId('org-settings-tab-conduct').click();
+    await expect(page.getByTestId('org-settings-modal')).toBeVisible();
     await expect(
       page.getByTestId('conduct-setting-half_life_days'),
     ).toHaveValue('120');

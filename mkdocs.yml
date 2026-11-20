@@ -51,6 +51,7 @@ plugins:
 
 exclude_docs: |
   plans/
+  superpowers/
 
 markdown_extensions:
   - pymdownx.highlight:

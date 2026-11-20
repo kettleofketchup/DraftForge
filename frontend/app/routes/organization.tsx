@@ -30,7 +30,6 @@ import {
 import {
   CreateEventModal,
   EditEventModal,
-  EditOrgDefaultsModal,
   EditRepeaterModal,
   EventStrip,
   type EventType,
@@ -43,14 +42,12 @@ import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import {
   ClaimsTab,
   DeleteOrganizationDangerZone,
-  OrgSettingsTab,
   useOrganization,
 } from '~/components/organization';
+import { useOrgSettingsParam } from '~/components/organization/hooks/useOrgSettingsParam';
 import { buildOrgPageNavOptions } from '~/components/organization/orgPageNavOptions';
-import {
-  useOrgSettingsTabAccess,
-  useSettingsTabRedirect,
-} from '~/components/organization/tabs/orgSettings/useOrgSettingsTabAccess';
+import { OrgSettingsDialog } from '~/components/organization/OrgSettingsDialog';
+import { useOrgSettingsAccess } from '~/components/organization/tabs/orgSettings/useOrgSettingsAccess';
 import { Badge } from '~/components/ui/badge';
 import {
   AddDiscordBotButton,
@@ -375,8 +372,9 @@ export default function OrganizationDetailPage() {
   );
   const [showAddUser, setShowAddUser] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
-  const [editDefaultsOpen, setEditDefaultsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useUrlTabs('leagues');
+  const [urlTab, setActiveTab] = useUrlTabs('leagues');
+  // Legacy ?tab=settings is rewritten to ?settings= by useOrgSettingsParam.
+  const activeTab = urlTab === 'settings' ? 'leagues' : urlTab;
 
   const { data: events = [], isLoading: eventsLoading } = useEvents(
     pk ? { organization: pk } : undefined,
@@ -451,9 +449,8 @@ export default function OrganizationDetailPage() {
     }
   }, [featureAccess.settled, canUsePromotion, activeTab, setActiveTab]);
 
-  const settingsAccess = useOrgSettingsTabAccess(organization ?? undefined);
-  useSettingsTabRedirect(activeTab, setActiveTab, settingsAccess);
-  const canViewSettings = settingsAccess.canView;
+  const settingsAccess = useOrgSettingsAccess(organization ?? undefined);
+  const settingsParam = useOrgSettingsParam(settingsAccess);
 
   const isOwner = useIsOrganizationOwner(organization);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
@@ -514,7 +511,6 @@ export default function OrganizationDetailPage() {
         canViewConduct,
         canUsePromotion,
         canViewClaims,
-        canViewSettings,
       }),
     [
       leagues.length,
@@ -525,7 +521,6 @@ export default function OrganizationDetailPage() {
       canViewConduct,
       canUsePromotion,
       canViewClaims,
-      canViewSettings,
     ],
   );
 
@@ -578,15 +573,15 @@ export default function OrganizationDetailPage() {
             <div className="flex-1">
               <div className="flex items-start justify-between mb-2">
                 <h1 className="text-3xl font-bold">{organization.name}</h1>
-                {isOrgAdmin && (
-                  <PrimaryButton
+                {settingsAccess.canOpen && (
+                  <SecondaryButton
                     size="sm"
-                    onClick={() => setActiveTab('settings')}
-                    data-testid="edit-organization-button"
+                    data-testid="org-settings-button"
+                    onClick={() => settingsParam.openSettings()}
                   >
-                    <Pencil className="w-4 h-4 mr-2" />
-                    Edit
-                  </PrimaryButton>
+                    <Settings className="h-4 w-4" />
+                    Org Settings
+                  </SecondaryButton>
                 )}
               </div>
 
@@ -670,12 +665,6 @@ export default function OrganizationDetailPage() {
                 Claims
               </TabsTrigger>
             )}
-            {canViewSettings && (
-              <TabsTrigger value="settings" data-testid="org-tab-settings">
-                <Settings className="w-4 h-4 mr-2" />
-                Settings
-              </TabsTrigger>
-            )}
           </TabsList>
 
           {/* Leagues Tab */}
@@ -720,22 +709,6 @@ export default function OrganizationDetailPage() {
                 Events
               </h2>
               <div className="flex items-center gap-2">
-                {canEditEvents && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <SecondaryButton
-                        size="icon"
-                        className="size-9"
-                        aria-label="Edit org event defaults"
-                        data-testid="org-event-defaults-btn"
-                        onClick={() => setEditDefaultsOpen(true)}
-                      >
-                        <Settings className="h-4 w-4" />
-                      </SecondaryButton>
-                    </TooltipTrigger>
-                    <TooltipContent>Edit event defaults</TooltipContent>
-                  </Tooltip>
-                )}
                 {isOrgStaff && (
                   <PrimaryButton
                     data-testid="create-event-btn"
@@ -891,12 +864,6 @@ export default function OrganizationDetailPage() {
               <ClaimsTab organizationId={pk} />
             </TabsContent>
           )}
-
-          {canViewSettings && pk && (
-            <TabsContent value="settings">
-              <OrgSettingsTab organization={organization} />
-            </TabsContent>
-          )}
         </Tabs>
       </div>
 
@@ -965,11 +932,15 @@ export default function OrganizationDetailPage() {
         />
       )}
 
-      {editDefaultsOpen && pk && (
-        <EditOrgDefaultsModal
-          organizationId={pk}
-          open={editDefaultsOpen}
-          onOpenChange={setEditDefaultsOpen}
+      {settingsParam.open && pk && (
+        <OrgSettingsDialog
+          organization={organization}
+          open
+          section={settingsParam.section}
+          onSectionChange={settingsParam.setSection}
+          onOpenChange={(open) => {
+            if (!open) settingsParam.close();
+          }}
         />
       )}
     </div>

@@ -51,6 +51,7 @@ from app.services.team_management import (
     add_standin,
     follow_captain,
     mark_dropout,
+    other_team_user_ids,
     remove_standin,
     rename,
     restore_member,
@@ -163,6 +164,7 @@ from .serializers import (
     TournamentsSerializer,
     UserSerializer,
     _build_users_dict,
+    _tournament_organization,
 )
 from .steam_accounts import steam_account_id_holder, steam_account_id_identity
 from .user_cache import serialize_user_core
@@ -764,21 +766,33 @@ class TeamView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
-        return Response(
-            {**data, "can_manage_team": self._can_manage_team(request.user, pk)}
-        )
+        return Response({**data, **self._viewer_fields(request.user, pk)})
 
-    def _can_manage_team(self, user: CustomUser | AnonymousUser, pk: str) -> bool:
+    def _viewer_fields(
+        self, user: CustomUser | AnonymousUser, pk: str
+    ) -> dict[str, Any]:
+        """Per-viewer, uncached: the flag, plus picker scope for managers."""
         if not user.is_authenticated:
-            return False
+            return {"can_manage_team": False}
         team = (
             Team.objects.nocache().select_related("tournament__league").filter(pk=pk)
         ).first()
-        return (
-            team is not None
-            and team.tournament_id is not None
-            and can_edit_tournament(user, team.tournament)
-        )
+        if (
+            team is None
+            or team.tournament_id is None
+            or not can_edit_tournament(user, team.tournament)
+        ):
+            return {"can_manage_team": False}
+        return self._manager_fields(team)
+
+    def _manager_fields(self, team: Team) -> dict[str, Any]:
+        org = _tournament_organization(team.tournament, fresh=True)
+        return {
+            "can_manage_team": True,
+            "organization_pk": org.pk if org else None,
+            "league_pk": team.tournament.league_id if team.tournament else None,
+            "other_team_user_pks": sorted(other_team_user_ids(team)),
+        }
 
     def get_permissions(self) -> list[BasePermission]:
         if self.action in TEAM_MANAGE_ACTIONS | {
@@ -836,7 +850,9 @@ class TeamView(viewsets.ModelViewSet):
                 acknowledged_codes=data["acknowledged_codes"],
             )
         team = teams.get(pk=change.team.pk)
-        return Response({**self.get_serializer(team).data, "can_manage_team": True})
+        return Response(
+            {**self.get_serializer(team).data, **self._manager_fields(team)}
+        )
 
     @action(detail=True, methods=["post"], url_path="set-captain")
     def set_captain(self, request: Request, pk: str | None = None) -> Response:

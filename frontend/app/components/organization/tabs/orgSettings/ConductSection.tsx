@@ -1,19 +1,26 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, RotateCcw } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode, type RefObject } from 'react';
 import {
   useForm,
   useWatch,
   type Control,
+  type FieldErrors,
   type PathValue,
+  type UseFormReturn,
   type UseFormSetValue,
 } from 'react-hook-form';
 import { toast } from 'sonner';
 
 import { useOrganization } from '~/components/organization/hooks/useOrganization';
+import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
+import {
+  submitForm,
+  type SettingsFormUnit,
+} from '~/components/patterns/settingsSaveBar';
 import { Badge } from '~/components/ui/badge';
-import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
+import { SecondaryButton } from '~/components/ui/buttons';
 import {
   Collapsible,
   CollapsibleContent,
@@ -35,16 +42,11 @@ import {
   ConductSettingsFormSchema,
   useConductSettings,
   usePatchConductSettings,
-  type ConductSettings,
   type ConductSettingsField,
   type ConductSettingsForm,
   type ConductSettingsValues,
 } from '~/features/conduct';
-import {
-  conductKeys,
-  useOrgFeatureAccess,
-  type OrgFeatureAccess,
-} from '~/features/org-features';
+import { conductKeys, useOrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
@@ -136,15 +138,104 @@ export function pickConductFormValues(
   };
 }
 
-export function ConductSection({ organizationId }: { organizationId: number }) {
-  const { organization } = useOrganization(organizationId);
+const SECTION_ID = 'conduct';
+
+export function useConductSection(
+  organizationId: number,
+  enabled: boolean,
+  sectionsRef: RefObject<SettingsDialogHandle<string> | null>,
+): { content: ReactNode; unit: SettingsFormUnit } {
+  const queryClient = useQueryClient();
+  const { organization } = useOrganization(
+    enabled ? organizationId : undefined,
+  );
   const access = useOrgFeatureAccess(organization ?? undefined);
   const { data, isLoading, isError, error } = useConductSettings(
     organizationId,
     access,
+    enabled,
   );
+  const form = useForm<ConductSettingsForm>({
+    resolver: zodResolver(ConductSettingsFormSchema),
+    defaultValues: data ? pickConductFormValues(data) : undefined,
+  });
+  const [enforcementOpen, setEnforcementOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
-  return (
+  useEffect(() => {
+    if (!data) return;
+    if (!form.formState.isDirty) form.reset(pickConductFormValues(data));
+    if (hydrated) return;
+    setEnforcementOpen(ENFORCEMENT_TOGGLES.some((f) => data[f]));
+    setHydrated(true);
+  }, [data, form, hydrated]);
+
+  const mutation = usePatchConductSettings(organizationId, access);
+
+  const revealEnforcement = (fields: Iterable<string>) => {
+    for (const field of fields) {
+      if (isSettingsField(field) && ENFORCEMENT_FIELDS.has(field)) {
+        setEnforcementOpen(true);
+        return;
+      }
+    }
+  };
+
+  const onSubmit =
+    (select: boolean) =>
+    async (values: ConductSettingsForm): Promise<boolean> => {
+      const dirty = form.formState.dirtyFields;
+      const changes: Partial<ConductSettingsForm> = {};
+      for (const field of FIELDS) {
+        if (dirty[field]) Object.assign(changes, { [field]: values[field] });
+      }
+      try {
+        const saved = await mutation.mutateAsync(changes);
+        queryClient.setQueryData(
+          conductKeys.settings(organizationId, access.viewerPk),
+          saved,
+        );
+        form.reset(pickConductFormValues(saved));
+        return true;
+      } catch (err) {
+        log.error('Failed to save conduct settings', { organizationId, err });
+        const fieldErrors = settingsFieldErrors(err);
+        for (const [field, message] of fieldErrors) {
+          form.setError(field, { message });
+        }
+        revealEnforcement(fieldErrors.map(([field]) => field));
+        if (fieldErrors.length === 0) {
+          toast.error(
+            extractApiError(err) ?? 'Could not save conduct settings',
+          );
+        } else if (select) {
+          sectionsRef.current?.selectSection(SECTION_ID);
+        }
+        return false;
+      }
+    };
+
+  const onInvalid =
+    (select: boolean) =>
+    (errors: FieldErrors<ConductSettingsForm>): void => {
+      revealEnforcement(Object.keys(errors));
+      if (select) sectionsRef.current?.selectSection(SECTION_ID);
+      toast.error('Please fix the highlighted fields');
+    };
+
+  const unit: SettingsFormUnit = {
+    id: SECTION_ID,
+    isDirty: enabled && form.formState.isDirty,
+    save: (opts) => {
+      const select = opts?.select !== false;
+      return submitForm(form, onSubmit(select), onInvalid(select));
+    },
+    discard: () => {
+      if (data) form.reset(pickConductFormValues(data));
+    },
+  };
+
+  const content = (
     <section
       data-testid="org-settings-conduct"
       className="rounded-lg border border-border p-6"
@@ -168,90 +259,37 @@ export function ConductSection({ organizationId }: { organizationId: number }) {
           {extractApiError(error) ?? 'Failed to load conduct settings'}
         </p>
       )}
-      {data && (
-        <ConductSettingsFormView
-          organizationId={organizationId}
-          access={access}
-          settings={data}
+      {data && hydrated && (
+        <ConductSettingsFields
+          form={form}
+          defaults={data.defaults}
+          enforcementOpen={enforcementOpen}
+          onEnforcementOpenChange={setEnforcementOpen}
         />
       )}
     </section>
   );
+
+  return { content, unit };
 }
 
-function ConductSettingsFormView({
-  organizationId,
-  access,
-  settings,
+function ConductSettingsFields({
+  form,
+  defaults,
+  enforcementOpen,
+  onEnforcementOpenChange,
 }: {
-  organizationId: number;
-  access: OrgFeatureAccess;
-  settings: ConductSettings;
+  form: UseFormReturn<ConductSettingsForm>;
+  defaults: ConductSettingsValues;
+  enforcementOpen: boolean;
+  onEnforcementOpenChange: (open: boolean) => void;
 }) {
-  const queryClient = useQueryClient();
-  const defaults = settings.defaults;
-  const form = useForm<ConductSettingsForm>({
-    resolver: zodResolver(ConductSettingsFormSchema),
-    defaultValues: pickConductFormValues(settings),
-  });
-  const [enforcementOpen, setEnforcementOpen] = useState(() =>
-    ENFORCEMENT_TOGGLES.some((f) => settings[f]),
-  );
-
-  useEffect(() => {
-    if (!form.formState.isDirty) form.reset(pickConductFormValues(settings));
-  }, [settings, form]);
-
-  const mutation = usePatchConductSettings(organizationId, access);
-
-  const revealEnforcement = (fields: Iterable<string>) => {
-    for (const field of fields) {
-      if (isSettingsField(field) && ENFORCEMENT_FIELDS.has(field)) {
-        setEnforcementOpen(true);
-        return;
-      }
-    }
-  };
-
-  const onSubmit = form.handleSubmit(
-    async (values) => {
-      const dirty = form.formState.dirtyFields;
-      const changes: Partial<ConductSettingsForm> = {};
-      for (const field of FIELDS) {
-        if (dirty[field]) Object.assign(changes, { [field]: values[field] });
-      }
-      try {
-        const saved = await mutation.mutateAsync(changes);
-        queryClient.setQueryData(
-          conductKeys.settings(organizationId, access.viewerPk),
-          saved,
-        );
-        form.reset(pickConductFormValues(saved));
-        toast.success('Conduct settings saved');
-      } catch (err) {
-        log.error('Failed to save conduct settings', { organizationId, err });
-        const fieldErrors = settingsFieldErrors(err);
-        for (const [field, message] of fieldErrors) {
-          form.setError(field, { message });
-        }
-        revealEnforcement(fieldErrors.map(([field]) => field));
-        if (fieldErrors.length === 0) {
-          toast.error(
-            extractApiError(err) ?? 'Could not save conduct settings',
-          );
-        }
-      }
-    },
-    (errors) => revealEnforcement(Object.keys(errors)),
-  );
-
-  const { isDirty, isSubmitting } = form.formState;
   const control = form.control;
   const common = { control, defaults, setValue: form.setValue };
 
   return (
     <Form {...form}>
-      <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-6">
+      <div className="mt-4 flex flex-col gap-6">
         <SettingsGroup title="Scoring">
           <NumberSetting
             {...common}
@@ -316,7 +354,10 @@ function ConductSettingsFormView({
           />
         </SettingsGroup>
 
-        <Collapsible open={enforcementOpen} onOpenChange={setEnforcementOpen}>
+        <Collapsible
+          open={enforcementOpen}
+          onOpenChange={onEnforcementOpenChange}
+        >
           <fieldset
             data-testid="conduct-settings-enforcement"
             className="flex flex-col gap-4"
@@ -395,17 +436,7 @@ function ConductSettingsFormView({
             </CollapsibleContent>
           </fieldset>
         </Collapsible>
-
-        <div>
-          <PrimaryButton
-            type="submit"
-            data-testid="conduct-settings-save"
-            disabled={!isDirty || isSubmitting}
-          >
-            Save
-          </PrimaryButton>
-        </div>
-      </form>
+      </div>
     </Form>
   );
 }
