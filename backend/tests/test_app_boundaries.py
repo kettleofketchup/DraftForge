@@ -151,7 +151,7 @@ TEAM_DRAFT = MovedSlice(
         }
     ),
     model_labels=frozenset({"draft", "draftround", "draftevent", "draftoptions"}),
-    move_migration=("app", "0108_move_team_draft_models_to_draft"),
+    move_migration=("app", "0109_move_team_draft_models_to_draft"),
     cached_labels=frozenset({"draft", "draftoptions", "draftround"}),
 )
 

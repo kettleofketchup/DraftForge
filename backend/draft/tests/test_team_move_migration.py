@@ -18,11 +18,11 @@ DISCORDBOT_TABLES = (
     "discordbot_draftactivityinstance",
 )
 BEFORE_MOVE = [
-    ("app", "0107_move_hero_draft_models_to_draft"),
+    ("app", "0108_move_hero_draft_models_to_draft"),
     ("discordbot", "0013_retarget_draft_activity_herodraft"),
     ("draft", "0001_move_hero_draft_models"),
 ]
-MOVE_MIGRATION = ("app", "0108_move_team_draft_models_to_draft")
+MOVE_MIGRATION = ("app", "0109_move_team_draft_models_to_draft")
 EVENTS_BACKFILL = ("events", "0024_backfill_event_draft_options")
 APP = "app"
 DRAFT = "draft"
@@ -171,6 +171,6 @@ class TeamMoveMigrationTests(TransactionTestCase):
         self._forward()
         self.assertEqual(self._labels({"d": draft_ct.pk, "a": app_ct.pk}), expected)
 
-    def test_events_0024_precedes_app_0108(self) -> None:
+    def test_events_0024_precedes_app_0109(self) -> None:
         graph = MigrationLoader(connection).graph
         self.assertIn(EVENTS_BACKFILL, graph.forwards_plan(MOVE_MIGRATION))

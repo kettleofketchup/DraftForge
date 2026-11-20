@@ -171,7 +171,7 @@ class DraftStateTests(TestCase):
                 self.assertEqual(draft.lock_active_round().pick_number, 1)
 
 
-PRE_TEAM_MOVE = ("app", "0107_move_hero_draft_models_to_draft")
+PRE_TEAM_MOVE = ("app", "0108_move_hero_draft_models_to_draft")
 
 
 def _pre_team_move_apps() -> Apps:
