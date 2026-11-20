@@ -55,7 +55,7 @@ export function LoginAsUserButton({ user }: Props) {
       <Button
         variant="ghost"
         size="icon"
-        className="h-6 w-6 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+        className="h-6 w-6 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
         onClick={handleLogin}
         disabled={isLoading}
         data-testid={`login-as-user-btn-${user.pk}`}

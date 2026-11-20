@@ -1,24 +1,4 @@
 {
-  "app/components/admin-team/AdminTeamSection.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 11
-    }
-  },
-  "app/components/events/EventStateBadge.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 3
-    }
-  },
-  "app/components/events/MmrApprovalModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 10
-    }
-  },
-  "app/components/events/games/dota2/Dota2RankSignalsCard.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 7
-    }
-  },
   "app/components/herodraft/DraftTopBar.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
@@ -37,36 +17,6 @@
   "app/components/navbar/navbar.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
-    }
-  },
-  "app/components/organization/tabs/ClaimCard.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 4
-    }
-  },
-  "app/components/player/DotaProfileCard.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 24
-    }
-  },
-  "app/components/player/PlayerModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/player/PlayerUnderConstruction.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 5
-    }
-  },
-  "app/components/team/TeamModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/team/TeamPopoverContent.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
     }
   },
   "app/components/ui/buttons/SecondaryButton.tsx": {
@@ -92,39 +42,11 @@
   "app/components/user/UserAvatar.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 1
-    },
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/user/UserEventStrip.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 6
-    }
-  },
-  "app/components/user/userCard.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 6
-    }
-  },
-  "app/components/user/userCard/LoginAsUserButton.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
     }
   },
   "app/pages/about/sections/MaintainerSection.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 5
-    }
-  },
-  "app/pages/about/sections/TechnologyStack.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 2
-    }
-  },
-  "app/pages/user/UserProfilePage.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
+      "count": 1
     }
   }
 }

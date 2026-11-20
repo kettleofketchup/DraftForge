@@ -18,21 +18,21 @@ const getStatusBadge = (status: ClaimStatus) => {
   switch (status) {
     case 'pending':
       return (
-        <Badge className="bg-yellow-600 text-white text-[10px] px-1.5 py-0">
+        <Badge className="bg-warning text-warning-foreground text-[10px] px-1.5 py-0">
           <Clock className="w-3 h-3 mr-1" />
           Pending
         </Badge>
       );
     case 'approved':
       return (
-        <Badge className="bg-green-600 text-white text-[10px] px-1.5 py-0">
+        <Badge className="bg-success text-success-foreground text-[10px] px-1.5 py-0">
           <Check className="w-3 h-3 mr-1" />
           Approved
         </Badge>
       );
     case 'rejected':
       return (
-        <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0">
+        <Badge className="bg-error text-error-foreground text-[10px] px-1.5 py-0">
           <X className="w-3 h-3 mr-1" />
           Rejected
         </Badge>
@@ -145,7 +145,7 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
             </div>
           )}
           {claim.rejection_reason && (
-            <div className="text-red-500">Reason: {claim.rejection_reason}</div>
+            <div className="text-error">Reason: {claim.rejection_reason}</div>
           )}
         </div>
       </div>

@@ -15,7 +15,7 @@ export function TechnologyStack() {
     {
       name: 'React',
       description: 'Frontend Framework',
-      colorClass: 'text-blue-500',
+      colorClass: 'text-info',
     },
     {
       name: 'Django',
@@ -35,7 +35,7 @@ export function TechnologyStack() {
     {
       name: 'WebSockets',
       description: 'Authenticated & Anonymous',
-      colorClass: 'text-purple-400',
+      colorClass: 'text-primary',
     },
   ];
 
