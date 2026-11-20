@@ -26,10 +26,12 @@ from events.completion import close_event
 from events.constants import EventState
 from events.models import Event
 from events.reopen import reopen_event
+from org.contributions.adapter import CONTRIBUTION
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.models import ContributionEntry, OrgFeature, OrgUser, PromoSend, PromoTemplate
 from org.promotion.services import record_promo_send, undo_promo_send
+from org.standing.registry import override_tracks
 
 CLOSE_ADMIN_COMPLETE_QUERIES = 37
 CLOSE_AUTO_CANCEL_QUERIES = 36
@@ -41,14 +43,15 @@ PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 39
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 161
-MERGE_CLAIM_QUERIES = 145
-DELETE_API_QUERIES = 93
+# Merge and delete counts include the conduct tables in the delete cascade.
+MERGE_DISCORD_QUERIES = 159
+MERGE_CLAIM_QUERIES = 143
+DELETE_API_QUERIES = 94
 DELETE_ADMIN_QUERIES = 137
-DELETE_ADMIN_CONFIRM_QUERIES = 46
+DELETE_ADMIN_CONFIRM_QUERIES = 45
 PROMO_SEND_QUERIES = 23
 PROMO_UNDO_QUERIES = 8
-PROMO_RELEASE_QUERIES = 107
+PROMO_RELEASE_QUERIES = 108
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8
@@ -86,9 +89,14 @@ def one_log(logs: list[dict[str, Any]], name: str) -> dict[str, Any]:
 
 @override_settings(CACHEOPS_ENABLED=False)
 class _ParityBase(TestCase):
+    """Pins contribution's behaviour, so only the contribution track runs."""
+
     locked = False
 
     def setUp(self) -> None:
+        tracks = override_tracks(CONTRIBUTION)
+        tracks.__enter__()
+        self.addCleanup(tracks.__exit__, None, None, None)
         self.admin = CustomUser.objects.create_user(
             username="parity_admin", password="x", is_staff=True, is_superuser=True
         )

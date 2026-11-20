@@ -295,7 +295,7 @@ class RegistryTests(EvaluatorTestCase):
         u = self.make_user()
         with patch("events.eligibility.evaluate.CHECKS", (self._blocking_check(),)):
             result = evaluate_signup(ev, u)
-            self.assertTrue(check_requirements(ev, u))
+            self.assertFalse(check_requirements(ev, u))
         self.assertFalse(result.admissible)
         self.assertEqual(result.approval, ())
 
@@ -467,4 +467,6 @@ class CheckRequirementsParityTests(EvaluatorTestCase):
             ev = self.make_event(**gate, **dict(zip(self.REQUIRE_FLAGS, flags)))
             for user in users.values():
                 seen.update(_legacy_unmet(ev, user))
-        self.assertEqual(seen, set(ReasonCode.values))
+        self.assertEqual(
+            seen, set(ReasonCode.values) - {ReasonCode.CONDUCT_BELOW_THRESHOLD}
+        )

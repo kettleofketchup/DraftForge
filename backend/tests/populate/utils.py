@@ -16,7 +16,8 @@ from django.db import transaction
 from django.db.models import Q
 
 from app.models import CustomUser, Organization, PositionsModel
-from org.models import ContributionEntry, OrgUser, PromoSend
+from org.models import OrgUser, PromoSend
+from org.standing import api as standing
 
 from .constants import (
     BRACKET_STEAM_ID_BASE,
@@ -174,11 +175,12 @@ def ensure_org_user(
 def delete_ledger_for_users(pks: Iterable[int]) -> None:
     """Drop these users' ledger rows and promo sends so the users can be deleted.
 
-    ContributionEntry.org_user is RESTRICT: deleting a user whose OrgUser
-    holds ledger rows raises RestrictedError.
+    Standing ledger rows are RESTRICT: deleting a user whose OrgUser holds
+    them raises RestrictedError.
     """
     pks = list(pks)
-    ContributionEntry.objects.nocache().filter(org_user__user_id__in=pks).delete()
+    for blockers in standing.deletion_blockers(pks):
+        blockers.delete()
     PromoSend.objects.nocache().filter(
         Q(sender_id__in=pks) | Q(recipient_id__in=pks)
     ).delete()

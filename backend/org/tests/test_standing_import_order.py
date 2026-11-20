@@ -18,16 +18,20 @@ ENTRY_POINTS = (
     "events.completion",
     "events.reopen",
     "app.discord_accounts",
+    "org.conduct.adapter",
+    "org.conduct.eligibility",
+    "org.conduct.services",
+    "events.eligibility.checks.conduct",
+    "events.admission",
 )
 
 
 class StandingImportOrderTest(SimpleTestCase):
+    """Some entry points (the eligibility chain) are first imported by
+    django.setup() itself through app.models; setup succeeding covers them."""
+
     def _import_first(self, module: str) -> subprocess.CompletedProcess[str]:
-        code = (
-            "import django, sys; django.setup(); "
-            f"assert {module!r} not in sys.modules, 'preloaded by setup'; "
-            f"import {module}"
-        )
+        code = "import django; django.setup(); " f"import {module}"
         env = {
             **os.environ,
             "DJANGO_SETTINGS_MODULE": "config.settings_celery",

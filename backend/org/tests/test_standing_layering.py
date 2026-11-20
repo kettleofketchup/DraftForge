@@ -9,12 +9,27 @@ from django.test import SimpleTestCase
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 STANDING_DIR = BACKEND_DIR / "org" / "standing"
 CONTRIBUTIONS_DIR = BACKEND_DIR / "org" / "contributions"
+CONDUCT_DIR = BACKEND_DIR / "org" / "conduct"
+CONDUCT_CHECK = "events.eligibility.checks.conduct"
+CONDUCT_CHECK_IMPORTS = frozenset({"org.conduct.eligibility", "org.standing.cache"})
 
-LEAVES = ("types", "errors", "cache", "periods", "kinds", "ledger", "scoring", "base")
+LEAVES = (
+    "types",
+    "errors",
+    "cache",
+    "periods",
+    "kinds",
+    "ledger",
+    "scoring",
+    "base",
+    "restamp",
+    "serializers",
+)
 DISPATCHERS = (
     "org.standing.api",
     "org.standing.registry",
     "org.contributions.adapter",
+    "org.conduct.adapter",
 )
 LEAF_FORBIDDEN = (
     *DISPATCHERS,
@@ -29,7 +44,7 @@ EVENT_FLOWS = (
     "events.admission",
     "events.eligibility",
 )
-PUBLIC_STANDING = ("org.standing.api", "org.standing.cache")
+PUBLIC_STANDING = ("org.standing.api", "org.standing.cache", "org.standing.restamp")
 LEDGER_MODELS = frozenset({"ContributionEntry", "ContributionPointValue"})
 SKIPPED_DIRS = frozenset({"tests", "migrations", "__pycache__"})
 
@@ -178,7 +193,11 @@ class StandingLayeringTest(SimpleTestCase):
                 )
 
     def test_adapters_avoid_event_flows(self) -> None:
-        paths = [*CONTRIBUTIONS_DIR.glob("*.py"), *STANDING_DIR.glob("*.py")]
+        paths = [
+            *CONTRIBUTIONS_DIR.glob("*.py"),
+            *CONDUCT_DIR.glob("*.py"),
+            *STANDING_DIR.glob("*.py"),
+        ]
         for path in sorted(paths):
             for name in _imported_modules(path):
                 with self.subTest(module=_module_name(path), imported=name):
@@ -198,6 +217,8 @@ class StandingLayeringTest(SimpleTestCase):
                             any(_matches(t, "org.contributions") for t in targets),
                             f"{module} imports {imported} {members}",
                         )
+                        if _matches(imported, "org.conduct"):
+                            self.assertEqual(module, CONDUCT_CHECK)
                         for target in targets:
                             if _matches(target, "org.standing") and target != (
                                 "org.standing"
@@ -229,3 +250,15 @@ class StandingLayeringTest(SimpleTestCase):
         reached = _closure("org.standing.registry")
         bad = sorted(name for name in reached if _matches_any(name, EVENT_FLOWS))
         self.assertFalse(bad, f"org.standing.registry reaches {bad}")
+
+    def test_conduct_check_imports_only_the_sanctioned_modules(self) -> None:
+        path = BACKEND_DIR / "events" / "eligibility" / "checks" / "conduct.py"
+        org_imports = {
+            module
+            for module, _ in _imports(path)
+            if _matches(module, "org") or _matches(module, "app")
+        }
+        self.assertEqual(org_imports, CONDUCT_CHECK_IMPORTS)
+
+    def test_registry_reaches_conduct_adapter(self) -> None:
+        self.assertIn("org.conduct.adapter", _graph()["org.standing.registry"])

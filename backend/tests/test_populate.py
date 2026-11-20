@@ -15,8 +15,9 @@ from rest_framework.test import APIRequestFactory
 
 from app.models import CustomUser, League, Organization, Tournament
 from draft.models import Draft, DraftRound
-from events.constants import EventState
-from events.models import Event
+from events.constants import EventState, SignupStatus
+from events.models import Event, EventSignup
+from org.conduct.constants import Outcome
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry, set_point_value
 from org.features import FeatureKey, org_has_feature, set_org_feature
@@ -27,6 +28,7 @@ from org.models import (
     OrgUser,
     PromoSend,
 )
+from org.models_conduct import AttendanceOutcome
 from org.models_promotion import PromoTemplate
 from org.promotion.recipients import candidates
 from org.promotion.services import record_promo_send
@@ -37,6 +39,8 @@ from tests.data.org_features import (
     FEATURES_ORG,
     LOCKED_FEATURES_ORG,
     ORG_FEATURES_COMPLETED_EVENT_NAME,
+    ORG_FEATURES_CONDUCT_EVENT_NAME,
+    ORG_FEATURES_CONDUCT_PAST_EVENT_NAMES,
     ORG_FEATURES_ORG_LEAGUES,
     ORG_FEATURES_ORGS,
     ORG_FEATURES_PLAYERS,
@@ -44,6 +48,7 @@ from tests.data.org_features import (
     ORG_FEATURES_SERVER_NICKNAMES,
     ORG_FEATURES_TEMPLATE_NAMES,
     ORG_FEATURES_TOURNAMENTS,
+    ORG_FEATURES_UPCOMING2_EVENT_NAME,
     ORG_FEATURES_UPCOMING_EVENT_NAME,
     PRIVATE_FEATURES_ORG,
 )
@@ -372,6 +377,83 @@ class OrgFeaturesPopulateTest(TestCase):
         self.assertGreaterEqual(len(rows), 5)
         self.assertTrue(all(r["discordId"] for r in rows))
 
+    def test_conduct_seeded(self) -> None:
+        data = reset_org_features_data()
+        conduct = data["conduct"]
+        counted = AttendanceOutcome.objects.nocache().counted()
+        self.assertTrue(conduct["ranked_org_user_pks"])
+        for org_user_pk in conduct["ranked_org_user_pks"]:
+            self.assertGreaterEqual(
+                counted.filter(org_user_id=org_user_pk).count(), 3, org_user_pk
+            )
+        self.assertEqual(
+            counted.filter(org_user_id=conduct["new_member_org_user_pk"]).count(), 1
+        )
+        member_org_user_pk = (
+            OrgUser.objects.nocache()
+            .get(
+                user_id=ORG_FEATURES_ROLE_USERS["member"].pk,
+                organization_id=FEATURES_ORG.pk,
+            )
+            .pk
+        )
+        self.assertIn(member_org_user_pk, conduct["ranked_org_user_pks"])
+
+        completed = Event.objects.nocache().get(
+            organization_id=FEATURES_ORG.pk, name=ORG_FEATURES_COMPLETED_EVENT_NAME
+        )
+        self.assertIsNotNone(completed.conduct_finalized_at)
+        rows = AttendanceOutcome.objects.nocache().filter(event=completed)
+        self.assertTrue(all(r.finalized_at is not None for r in rows))
+        kinds = list(rows.values_list("outcome", flat=True))
+        for outcome in (
+            Outcome.ATTENDED,
+            Outcome.NO_SHOW,
+            Outcome.LATE_CANCEL,
+            Outcome.EXCUSED,
+        ):
+            self.assertIn(outcome.value, kinds, outcome)
+        self.assertEqual(
+            rows.get(org_user_id=conduct["completed_event_member_org_user_pk"]).outcome,
+            Outcome.ATTENDED,
+        )
+
+        for name in ORG_FEATURES_CONDUCT_PAST_EVENT_NAMES:
+            past = Event.objects.nocache().get(
+                organization_id=FEATURES_ORG.pk, name=name
+            )
+            self.assertEqual(past.state, EventState.COMPLETED)
+            self.assertIsNotNone(past.conduct_finalized_at)
+
+        forecast_event = Event.objects.nocache().get(
+            organization_id=FEATURES_ORG.pk, name=ORG_FEATURES_CONDUCT_EVENT_NAME
+        )
+        self.assertEqual(data["events"]["conduct_upcoming"]["pk"], forecast_event.pk)
+        self.assertEqual(forecast_event.state, EventState.SIGNUPS_OPEN)
+        self.assertEqual(
+            EventSignup.objects.nocache()
+            .filter(event=forecast_event, status=SignupStatus.APPROVED)
+            .count(),
+            6,
+        )
+        for name in (
+            ORG_FEATURES_UPCOMING_EVENT_NAME,
+            ORG_FEATURES_UPCOMING2_EVENT_NAME,
+        ):
+            self.assertFalse(
+                EventSignup.objects.nocache()
+                .filter(event__organization_id=FEATURES_ORG.pk, event__name=name)
+                .exists(),
+                name,
+            )
+
+        self.assertFalse(
+            AttendanceOutcome.objects.nocache()
+            .filter(organization_id=LOCKED_FEATURES_ORG.pk)
+            .exists()
+        )
+        self.assertFalse(org_has_feature(LOCKED_FEATURES_ORG.pk, FeatureKey.CONDUCT))
+
     def test_completed_event_has_staff_and_ledger(self) -> None:
         event = Event.objects.nocache().get(
             organization_id=FEATURES_ORG.pk, name=ORG_FEATURES_COMPLETED_EVENT_NAME
@@ -601,7 +683,10 @@ class OrgFeaturesEndpointsTest(TestCase):
             },
         )
         self.assertEqual(set(body["users"]), set(ORG_FEATURES_ROLE_USERS))
-        self.assertEqual(set(body["events"]), {"upcoming", "upcoming2", "completed"})
+        self.assertEqual(
+            set(body["events"]),
+            {"upcoming", "upcoming2", "completed", "conduct_upcoming"},
+        )
         self.assertEqual(body["events"]["upcoming"]["pk"], _upcoming().pk)
         self.assertEqual(len(body["templates"]), 4)
 

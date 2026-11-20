@@ -68,7 +68,9 @@ class ContributionAdapterTest(TestCase):
         return ContributionEntry.objects.nocache().filter(event=self.event).count()
 
     def test_registry_holds_contribution(self) -> None:
-        self.assertEqual([t.key for t in registry.tracks()], ["contribution"])
+        self.assertEqual(
+            [t.key for t in registry.tracks()], ["contribution", "conduct"]
+        )
 
     def test_close_completed_awards_and_stamps(self) -> None:
         self._add_helpers(2)
@@ -129,7 +131,9 @@ class ContributionAdapterTest(TestCase):
         )
         with transaction.atomic():
             result = standing.on_event_reopened(self.event, actor=None)
-        self.assertEqual(result.orglog_details(), {"revoked": staff})
+        self.assertEqual(
+            result.orglog_details(), {"revoked": staff, "attendance_reopened": 0}
+        )
         self.assertEqual(result.log_fields(), {"revoked": staff})
         self.assertEqual(self._entries(), 1)
 
@@ -149,7 +153,8 @@ class ContributionAdapterTest(TestCase):
 
     def test_reopen_reset_fields(self) -> None:
         self.assertEqual(
-            standing.reopen_reset_fields(), {"contributions_awarded_at": None}
+            standing.reopen_reset_fields(),
+            {"contributions_awarded_at": None, "conduct_finalized_at": None},
         )
 
     def test_deletion_blockers_lazy(self) -> None:

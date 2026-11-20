@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.contrib.admin.sites import site as admin_site
 from django.http import HttpRequest
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
@@ -10,11 +11,13 @@ from structlog.testing import capture_logs
 from app.admin import CustomUserAdmin
 from app.discord_accounts import merge_discord_accounts
 from app.models import CustomUser, Organization, OrgLog, ProfileClaimRequest
+from events.admin import EventAdmin
 from events.completion import close_event
-from events.constants import EventState
-from events.models import Event
+from events.constants import EventState, SignupStatus
+from events.ledger import SignupActor
+from events.models import Event, EventSignup
 from events.reopen import reopen_event
-from events.services import teardown_event
+from events.services import cancel_event, cancel_signup, teardown_event
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.models import OrgUser
@@ -102,7 +105,9 @@ class StandingCallSiteTest(TestCase):
         self._assert_nested(baseline)
         self.assertEqual(self.fake.hooks, ["on_event_reopened"])
         self.assertEqual(self.fake.calls[0].kwargs["state"], EventState.SIGNUPS_OPEN)
-        self.assertEqual(result.details, {"revoked": 0, "fake_count": 1})
+        self.assertEqual(
+            result.details, {"revoked": 0, "attendance_reopened": 0, "fake_count": 1}
+        )
         details = OrgLog.objects.get(action="reopen_event").details
         self.assertEqual(details["fake_count"], 1)
         self.assertEqual(details["revoked"], 0)
@@ -287,3 +292,79 @@ class StandingCallSiteTest(TestCase):
         self.assertEqual(self.fake.hooks, ["on_user_deleted", "on_user_deleted"])
         self.assertCountEqual([c.kwargs["user"] for c in self.fake.calls], pks)
         self.assertFalse(CustomUser.objects.filter(pk__in=pks).exists())
+
+    def test_admin_event_delete_calls_delete_hook(self) -> None:
+        event_pk = self.event.pk
+        EventAdmin(Event, admin_site).delete_model(self._admin_request(), self.event)
+        self.assertEqual(self.fake.hooks, ["on_event_deleted"])
+        self.assertTrue(self.fake.calls[0].kwargs["exists"])
+        self.assertEqual(self.fake.calls[0].kwargs["actor"], self.admin)
+        self.assertFalse(Event.objects.filter(pk=event_pk).exists())
+
+    def test_admin_event_bulk_delete_calls_hook_per_event(self) -> None:
+        other = Event.objects.create(
+            organization=self.org,
+            name="CS Other",
+            scheduled_at=timezone.now(),
+            created_by=self.admin,
+        )
+        EventAdmin(Event, admin_site).delete_queryset(
+            self._admin_request(),
+            Event.objects.filter(pk__in=[self.event.pk, other.pk]),
+        )
+        self.assertEqual(self.fake.hooks, ["on_event_deleted", "on_event_deleted"])
+        self.assertFalse(
+            Event.objects.filter(pk__in=[self.event.pk, other.pk]).exists()
+        )
+
+    def test_admin_event_delete_rolls_back_when_track_raises(self) -> None:
+        self.fake.raise_on = {"on_event_deleted"}
+        with self.assertRaises(RuntimeError):
+            EventAdmin(Event, admin_site).delete_model(
+                self._admin_request(), self.event
+            )
+        self.assertTrue(Event.objects.filter(pk=self.event.pk).exists())
+
+    def test_cancel_event_calls_close_hook(self) -> None:
+        self._set_state(EventState.SIGNUPS_OPEN)
+        baseline = atomic_baseline()
+        cancel_event(self.event, actor=self.admin)
+        self._assert_nested(baseline)
+        kwargs = self.fake.calls[0].kwargs
+        self.assertEqual(self.fake.hooks, ["on_event_closed"])
+        self.assertTrue(kwargs["cancelled"])
+        self.assertEqual(kwargs["source"], "cancel")
+        self.assertEqual(kwargs["actor"], self.admin)
+        self.assertEqual(kwargs["state"], EventState.CANCELLED)
+
+    def test_cancel_signup_calls_withdrawn_hook(self) -> None:
+        self._set_state(EventState.SIGNUPS_OPEN)
+        member = CustomUser.objects.create_user(username="cs_member", password="x")
+        signup = EventSignup.objects.create(
+            event=self.event, user=member, status=SignupStatus.APPROVED
+        )
+        cancel_signup(signup, actor=SignupActor.discord(member))
+        self.assertEqual(self.fake.hooks, ["on_signup_withdrawn"])
+        kwargs = self.fake.calls[0].kwargs
+        self.assertEqual(kwargs["prior_status"], SignupStatus.APPROVED)
+        self.assertTrue(kwargs["by_member"])
+
+    def test_staff_cancel_signup_is_not_by_member(self) -> None:
+        self._set_state(EventState.SIGNUPS_OPEN)
+        member = CustomUser.objects.create_user(username="cs_member2", password="x")
+        signup = EventSignup.objects.create(
+            event=self.event, user=member, status=SignupStatus.APPROVED
+        )
+        response = self.client.post(f"/api/events/signups/{signup.pk}/cancel_signup/")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(self.fake.calls[0].kwargs["by_member"])
+
+    def test_feature_toggle_calls_hook_for_matching_track(self) -> None:
+        response = self.client.put(
+            reverse("org-features", args=[self.org.pk]),
+            {"feature": "promotion", "enabled": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(self.fake.hooks, ["on_feature_toggled"])
+        self.assertTrue(self.fake.calls[0].kwargs["enabled"])
