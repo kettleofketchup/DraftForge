@@ -141,6 +141,18 @@ describe('RosterTable', () => {
     expect(stacked).toHaveTextContent('3,000 MMR');
   });
 
+  it('treats a zero MMR as not set', () => {
+    renderTable({
+      ...managedTeam,
+      members: managedTeam.members.map((m) => ({ ...m, mmr: 0 })),
+    });
+    const row = screen.getByTestId(`team-member-row-${people.member.pk}`);
+    expect(
+      within(row).queryByTestId(`team-roster-mmr-stacked-${people.member.pk}`),
+    ).toBeNull();
+    expect(within(row).getAllByRole('cell')[2]).toHaveTextContent('—');
+  });
+
   it('takes a custom column list', () => {
     renderTable(managedTeam, { columns: ['player', 'actions'] });
     const head = within(screen.getByTestId('team-roster-table'))

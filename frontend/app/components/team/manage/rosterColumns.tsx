@@ -85,8 +85,9 @@ const ROLE_RANK: Record<string, number> = {
 const byRole = (a: AppRow<RosterRow>, b: AppRow<RosterRow>): number =>
   ROLE_RANK[roleLabel(a.original)] - ROLE_RANK[roleLabel(b.original)];
 
-const formatMmr = (mmr: number | null | undefined): string | null =>
-  mmr == null ? null : `${mmr.toLocaleString('en-US')} MMR`;
+/** A zero or missing MMR means "not set", not a rating. */
+const mmrText = (mmr: number | null | undefined): string | null =>
+  mmr ? mmr.toLocaleString('en-US') : null;
 
 export interface RosterActionContext {
   team: ManagedTeam;
@@ -188,7 +189,7 @@ export function makeRosterColumns({
       ),
       cell: ({ row }) => {
         const { user } = row.original;
-        const mmr = formatMmr(user.mmr);
+        const mmr = mmrText(user.mmr);
         return (
           <div className="flex min-w-0 items-center gap-2">
             <UserAvatar user={user} size="sm" />
@@ -199,7 +200,7 @@ export function makeRosterColumns({
                   className="text-xs text-muted-foreground tabular-nums sm:hidden"
                   data-testid={`${testIdPrefix}-mmr-stacked-${user.pk}`}
                 >
-                  {mmr}
+                  {`${mmr} MMR`}
                 </span>
               ) : null}
             </div>
@@ -232,14 +233,17 @@ export function makeRosterColumns({
           <span className="text-xs text-muted-foreground">Member</span>
         );
       },
-      meta: { headClassName: 'w-24', cellClassName: 'w-24' },
+      meta: {
+        headClassName: 'w-20 sm:w-24',
+        cellClassName: 'w-20 sm:w-24',
+      },
     },
     mmr: {
       id: 'mmr',
       accessorFn: (r) => r.user.mmr ?? 0,
       enableSorting: false,
       header: 'MMR',
-      cell: ({ row }) => row.original.user.mmr?.toLocaleString('en-US') ?? '—',
+      cell: ({ row }) => mmrText(row.original.user.mmr) ?? '—',
       meta: {
         headClassName: 'hidden w-20 text-right sm:table-cell',
         cellClassName:
@@ -259,8 +263,8 @@ export function makeRosterColumns({
         />
       ),
       meta: {
-        headClassName: 'w-14 sm:w-12',
-        cellClassName: 'w-14 text-right sm:w-12',
+        headClassName: 'w-16 sm:w-14',
+        cellClassName: 'w-16 text-right sm:w-14',
       },
     },
   };
