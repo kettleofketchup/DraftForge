@@ -370,12 +370,12 @@ Messages are plain text. Newlines become spaces, and markdown and links are not 
 | `not_participant` | Sender is not on either team (spectators are read-only) |
 | `ambiguous_team` | Sender is on both rosters |
 | `empty` / `too_long` | Body is empty or over 500 characters |
-| `rate_limited` | Over 8 messages in 10 seconds, or the rate limiter is unavailable |
+| `rate_limited` | Over 8 messages in 10 seconds |
 | `draft_closed` | Draft is completed or abandoned |
 | `draft_inactive` | Suggestion sent outside `drafting` |
 | `hero_unavailable` | Hero does not exist or is already picked or banned |
 | `bad_request` | Malformed message |
-| `unavailable` | Chat failed on the server; the draft socket stays open |
+| `unavailable` | Chat failed on the server (including the rate limiter being down); the draft socket stays open |
 
 If `unavailable` arrives before chat history, chat failed to start for that socket: the composer shows "Chat unavailable" and is disabled until the socket reconnects. Any later send or suggestion clears the inline error, and the error has a dismiss button.
 

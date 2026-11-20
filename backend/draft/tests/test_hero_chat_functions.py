@@ -837,7 +837,7 @@ class RateLimitTest(SimpleTestCase):
             self.assertRaises(ChatError) as ctx,
         ):
             check_rate_limit(self.draft_id, self.user_id)
-        self.assertEqual(ctx.exception.code, "rate_limited")
+        self.assertEqual(ctx.exception.code, "unavailable")
         events = [
             e
             for e in logs
@@ -856,7 +856,7 @@ class RateLimitTest(SimpleTestCase):
             self.assertRaises(ChatError) as ctx,
         ):
             check_rate_limit(self.draft_id, self.user_id)
-        self.assertEqual(ctx.exception.code, "rate_limited")
+        self.assertEqual(ctx.exception.code, "unavailable")
         self.assertTrue(
             any(
                 e["event"] == "herodraft_chat_rate_limit_redis_unavailable"

@@ -519,7 +519,7 @@ def check_rate_limit(draft_id: int, user_id: int) -> None:
             user_id=user_id,
             exc_info=True,
         )
-        raise ChatError("rate_limited") from None
+        raise ChatError("unavailable") from None
     if int(count) > RATE_LIMIT_MAX:
         raise ChatError("rate_limited")
 
