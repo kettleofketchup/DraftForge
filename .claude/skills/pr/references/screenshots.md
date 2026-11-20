@@ -6,7 +6,7 @@ screenshot comment, and again whenever new commits change what the UI looks like
 
 Throughout: `<n>` is the PR number, `<wt>` the PR head worktree, `<base-wt>` the
 before worktree, `<main>` = `/home/kettle/git_repos/draftforge` (the main checkout:
-read from it, never write to it or run recipes in it).
+`git -C <main> worktree add/remove/fetch` is fine; never edit its files or run recipes in it).
 
 ## Every just command: the cd form
 
@@ -58,6 +58,7 @@ Each worktree gets its own test stack slot; run one at a time.
 ### Before (merge-base)
 
 ```bash
+git -C <wt> fetch origin
 base=$(git -C <wt> merge-base origin/main HEAD)
 git -C <main> worktree add --detach <main>/.worktrees/pr-<n>-base "$base"
 ln -s <main>/.venv <main>/.worktrees/pr-<n>-base/.venv     # recipes need .venv
@@ -75,7 +76,8 @@ cd <base-wt> && just test::compose restart backend nginx  # allow-cd
 ```
 
 The restart is required: the backend holds the old SQLite file open, so without it the
-API serves the deleted DB. Capture (section 4), then tear down and release:
+API serves the deleted DB. Capture (section 4), then tear down and release, also when
+the capture failed:
 
 ```bash
 cd <base-wt> && just test::down && just test::slot-release  # allow-cd
@@ -98,7 +100,8 @@ before stack means each stack serves its own tree.
 ### No free slot
 
 `just test::upd` fails or `just test::slots` shows all slots taken: leave other
-worktrees' slots alone (no `slot-reap`, `slot-claim` or `slot-release --slot N`). Pick one:
+worktrees' slots alone (no `slot-reap`, `slot-claim` or `slot-release --slot N`) unless
+the user tells you to free one. Pick one:
 
 - Post `Screenshots pending: no free test stack slot. Will follow up.` and report it.
 - Render the real component on a throwaway page outside the repo (e.g. a Vite page in

@@ -40,7 +40,7 @@ Title/body from commits when the branch has 1–3 commits; otherwise ask the use
 
 ### Phase 3 — Screenshots
 
-Runs for a new PR, for a reused PR with no screenshot comment yet, and after new commits that change the UI. Gate on the diff:
+Runs for a new PR, for a reused PR with no screenshot comment yet (no comment body starting `## Screenshots` or `No screenshots:`; a `Screenshots pending:` comment does not count), and after new commits that change the UI. Gate on the diff:
 
 ```bash
 gh pr diff "$PR" --name-only | grep -E '^frontend/app/(components|routes|features)/|^frontend/app/app\.css$|tokens'
