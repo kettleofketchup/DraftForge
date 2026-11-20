@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { DeleteDialog } from '../DeleteDialog';
 
@@ -37,22 +37,30 @@ describe('DeleteDialog', () => {
     const confirm = screen.getByTestId('dd-confirm') as HTMLButtonElement;
     expect(confirm).toBeDisabled();
 
-    fireEvent.change(screen.getByTestId('dd-input'), { target: { value: 'acme league' } });
+    fireEvent.change(screen.getByTestId('dd-input'), {
+      target: { value: 'acme league' },
+    });
     expect(confirm).toBeDisabled(); // case-sensitive
 
-    fireEvent.change(screen.getByTestId('dd-input'), { target: { value: 'Acme League' } });
+    fireEvent.change(screen.getByTestId('dd-input'), {
+      target: { value: 'Acme League' },
+    });
     expect(confirm).not.toBeDisabled();
   });
 
   it('strict equality — no trim on either side', () => {
     setup({ entityName: 'Acme League' });
-    fireEvent.change(screen.getByTestId('dd-input'), { target: { value: '  Acme League  ' } });
+    fireEvent.change(screen.getByTestId('dd-input'), {
+      target: { value: '  Acme League  ' },
+    });
     expect(screen.getByTestId('dd-confirm')).toBeDisabled();
   });
 
   it('clears the typed value when open transitions false then true', () => {
     const { rerender } = setup({ entityName: 'X' });
-    fireEvent.change(screen.getByTestId('dd-input'), { target: { value: 'X' } });
+    fireEvent.change(screen.getByTestId('dd-input'), {
+      target: { value: 'X' },
+    });
     expect(screen.getByTestId('dd-input')).toHaveValue('X');
 
     // Close
@@ -114,18 +122,24 @@ describe('DeleteDialog', () => {
     expect(container).toBeEmptyDOMElement();
     // Loose match — consola prefixes with the tag name, but the message must appear.
     expect(errSpy).toHaveBeenCalled();
-    expect(errSpy.mock.calls.flat().join(' ')).toMatch(/entityName must be non-empty/);
+    expect(errSpy.mock.calls.flat().join(' ')).toMatch(
+      /entityName must be non-empty/,
+    );
     errSpy.mockRestore();
   });
 
   it('uses destructive content styling (inherits ConfirmDialog variant)', () => {
     setup();
-    expect(screen.getByTestId('dd-content').className).toMatch(/bg-red-950/);
+    expect(screen.getByTestId('dd-content').className).toContain(
+      '[background-image:var(--brand-destructive-bg)]',
+    );
   });
 
   it('calls onConfirm when name matches and confirm is clicked', async () => {
     const { onConfirm } = setup({ entityName: 'Acme League' });
-    fireEvent.change(screen.getByTestId('dd-input'), { target: { value: 'Acme League' } });
+    fireEvent.change(screen.getByTestId('dd-input'), {
+      target: { value: 'Acme League' },
+    });
     fireEvent.click(screen.getByTestId('dd-confirm'));
     await vi.waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
   });

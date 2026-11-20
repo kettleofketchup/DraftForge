@@ -308,6 +308,19 @@ body {
     rgba(67, 56, 202, 0.18) 60%,
     rgba(124, 58, 237, 0.12) 100%
   );
+  /* Layered over an opaque bg-background, so the dialog never shows through. */
+  --brand-destructive-bg: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--destructive) 34%, transparent) 0%,
+    color-mix(in oklch, var(--destructive) 24%, transparent) 60%,
+    color-mix(in oklch, var(--primary) 14%, transparent) 100%
+  );
+  --brand-warning-bg: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--warning) 26%, transparent) 0%,
+    color-mix(in oklch, var(--warning) 16%, transparent) 60%,
+    color-mix(in oklch, var(--primary) 12%, transparent) 100%
+  );
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;

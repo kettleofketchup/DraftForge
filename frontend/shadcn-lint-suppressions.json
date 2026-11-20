@@ -39,7 +39,7 @@
   },
   "app/components/ui/dialogs/ConfirmDialog.tsx": {
     "draftforge/no-raw-color-strings": {
-      "count": 4
+      "count": 1
     }
   },
   "app/components/ui/sonner.tsx": {
