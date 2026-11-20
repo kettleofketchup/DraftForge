@@ -1,4 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { Calendar, Search, Unlink } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { api } from '~/components/api/axios';
+import { Badge } from '~/components/ui/badge';
+import { Button } from '~/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -6,16 +11,11 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
-import { Button } from '~/components/ui/button';
-import { Badge } from '~/components/ui/badge';
-import { Search, Unlink, Calendar } from 'lucide-react';
-import { toast } from 'sonner';
-import { api } from '~/components/api/axios';
-import { SteamMatchCard, type MatchSuggestion } from './SteamMatchCard';
-import { DotaMatchStatsModal } from './DotaMatchStatsModal';
-import type { BracketMatch } from '../types';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
+import type { BracketMatch } from '../types';
+import { DotaMatchStatsModal } from './DotaMatchStatsModal';
+import { SteamMatchCard, type MatchSuggestion } from './SteamMatchCard';
 
 interface LinkSteamMatchModalProps {
   isOpen: boolean;
@@ -24,21 +24,24 @@ interface LinkSteamMatchModalProps {
   onLinkUpdated: () => void;
 }
 
-const TIER_STYLES: Record<string, { bg: string; border: string; text: string }> = {
+const TIER_STYLES: Record<
+  string,
+  { bg: string; border: string; text: string }
+> = {
   all_players: {
-    bg: 'bg-green-500/20',
-    border: 'border-green-500',
-    text: 'text-green-400',
+    bg: 'bg-success/20',
+    border: 'border-success',
+    text: 'text-success',
   },
   captains_plus: {
-    bg: 'bg-blue-500/20',
-    border: 'border-blue-500',
-    text: 'text-blue-400',
+    bg: 'bg-info/20',
+    border: 'border-info',
+    text: 'text-info',
   },
   captains_only: {
-    bg: 'bg-yellow-500/20',
-    border: 'border-yellow-500',
-    text: 'text-yellow-400',
+    bg: 'bg-warning/20',
+    border: 'border-warning',
+    text: 'text-warning',
   },
   partial: {
     bg: 'bg-muted',
@@ -82,7 +85,7 @@ export function LinkSteamMatchModal({
       try {
         const params = search ? `?search=${encodeURIComponent(search)}` : '';
         const response = await api.get(
-          `/steam/games/${game.gameId}/match-suggestions/${params}`
+          `/steam/games/${game.gameId}/match-suggestions/${params}`,
         );
         setSuggestions(response.data.suggestions);
         setLinkedMatchId(response.data.linked_match_id);
@@ -155,19 +158,34 @@ export function LinkSteamMatchModal({
       acc[dateLocal].matches.push(suggestion);
       return acc;
     },
-    {} as Record<string, { timestamp: number; matches: MatchSuggestion[]; displayLabel: string; isTournamentDay: boolean }>
+    {} as Record<
+      string,
+      {
+        timestamp: number;
+        matches: MatchSuggestion[];
+        displayLabel: string;
+        isTournamentDay: boolean;
+      }
+    >,
   );
 
   // Sort days: tournament day first, then most recent
-  const sortedDays = Object.entries(groupedByDay).sort(([keyA, a], [keyB, b]) => {
-    // Tournament day always comes first
-    if (a.isTournamentDay) return -1;
-    if (b.isTournamentDay) return 1;
-    // Then sort by timestamp (most recent first)
-    return b.timestamp - a.timestamp;
-  });
+  const sortedDays = Object.entries(groupedByDay).sort(
+    ([keyA, a], [keyB, b]) => {
+      // Tournament day always comes first
+      if (a.isTournamentDay) return -1;
+      if (b.isTournamentDay) return 1;
+      // Then sort by timestamp (most recent first)
+      return b.timestamp - a.timestamp;
+    },
+  );
 
-  const tierOrder = ['all_players', 'captains_plus', 'captains_only', 'partial'];
+  const tierOrder = [
+    'all_players',
+    'captains_plus',
+    'captains_only',
+    'partial',
+  ];
 
   return (
     <>
@@ -224,86 +242,104 @@ export function LinkSteamMatchModal({
                 No matches found
               </div>
             ) : (
-              sortedDays.map(([dateKey, { matches: dayMatches, displayLabel, isTournamentDay }]) => {
-                // Group this day's matches by tier
-                const tierGroups = dayMatches.reduce(
-                  (acc, match) => {
-                    if (!acc[match.tier]) acc[match.tier] = [];
-                    acc[match.tier].push(match);
-                    return acc;
-                  },
-                  {} as Record<string, MatchSuggestion[]>
-                );
+              sortedDays.map(
+                ([
+                  dateKey,
+                  { matches: dayMatches, displayLabel, isTournamentDay },
+                ]) => {
+                  // Group this day's matches by tier
+                  const tierGroups = dayMatches.reduce(
+                    (acc, match) => {
+                      if (!acc[match.tier]) acc[match.tier] = [];
+                      acc[match.tier].push(match);
+                      return acc;
+                    },
+                    {} as Record<string, MatchSuggestion[]>,
+                  );
 
-                return (
-                  <div key={dateKey} className="space-y-2">
-                    {/* Day header */}
-                    <div className={cn(
-                      "sticky top-0 backdrop-blur py-2 border-b flex items-center gap-2",
-                      isTournamentDay ? "bg-primary/10" : "bg-background/95"
-                    )}>
-                      <span className={cn(
-                        "text-sm font-semibold",
-                        isTournamentDay ? "text-primary" : "text-foreground"
-                      )}>
-                        {displayLabel}
-                      </span>
-                      {isTournamentDay && (
-                        <Badge variant="default" className="text-xs py-0">
-                          <Calendar className="h-3 w-3 mr-1" />
-                          Tournament Day
-                        </Badge>
-                      )}
-                      <span className="text-xs text-muted-foreground">
-                        ({dayMatches.length} match{dayMatches.length !== 1 ? 'es' : ''})
-                      </span>
-                    </div>
+                  return (
+                    <div key={dateKey} className="space-y-2">
+                      {/* Day header */}
+                      <div
+                        className={cn(
+                          'sticky top-0 backdrop-blur py-2 border-b flex items-center gap-2',
+                          isTournamentDay
+                            ? 'bg-primary/10'
+                            : 'bg-background/95',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'text-sm font-semibold',
+                            isTournamentDay
+                              ? 'text-primary'
+                              : 'text-foreground',
+                          )}
+                        >
+                          {displayLabel}
+                        </span>
+                        {isTournamentDay && (
+                          <Badge variant="default" className="text-xs py-0">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            Tournament Day
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          ({dayMatches.length} match
+                          {dayMatches.length !== 1 ? 'es' : ''})
+                        </span>
+                      </div>
 
-                    {/* Tier groups within this day */}
-                    {tierOrder.map((tier) => {
-                      const tierSuggestions = tierGroups[tier];
-                      if (!tierSuggestions?.length) return null;
+                      {/* Tier groups within this day */}
+                      {tierOrder.map((tier) => {
+                        const tierSuggestions = tierGroups[tier];
+                        if (!tierSuggestions?.length) return null;
 
-                      // Sort matches within tier by start_time (most recent first)
-                      const sortedTierSuggestions = [...tierSuggestions].sort(
-                        (a, b) => b.start_time - a.start_time
-                      );
+                        // Sort matches within tier by start_time (most recent first)
+                        const sortedTierSuggestions = [...tierSuggestions].sort(
+                          (a, b) => b.start_time - a.start_time,
+                        );
 
-                      const styles = TIER_STYLES[tier];
-                      const tierLabel =
-                        sortedTierSuggestions[0]?.tier_display || tier.replace('_', ' ');
+                        const styles = TIER_STYLES[tier];
+                        const tierLabel =
+                          sortedTierSuggestions[0]?.tier_display ||
+                          tier.replace('_', ' ');
 
-                      return (
-                        <div key={`${dateKey}-${tier}`} data-testid={`tier-${tier}`}>
+                        return (
                           <div
-                            className={cn(
-                              'px-3 py-1 rounded-t-lg border-b text-xs',
-                              styles.bg,
-                              styles.border,
-                              styles.text
-                            )}
+                            key={`${dateKey}-${tier}`}
+                            data-testid={`tier-${tier}`}
                           >
-                            <span className="font-medium">{tierLabel}</span>
+                            <div
+                              className={cn(
+                                'px-3 py-1 rounded-t-lg border-b text-xs',
+                                styles.bg,
+                                styles.border,
+                                styles.text,
+                              )}
+                            >
+                              <span className="font-medium">{tierLabel}</span>
+                            </div>
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2 p-2 border border-t-0 rounded-b-lg">
+                              {sortedTierSuggestions.map((suggestion) => (
+                                <SteamMatchCard
+                                  key={suggestion.match_id}
+                                  match={suggestion}
+                                  onLink={handleLink}
+                                  onViewDetails={setDetailsMatchId}
+                                  isCurrentlyLinked={
+                                    linkedMatchId === suggestion.match_id
+                                  }
+                                />
+                              ))}
+                            </div>
                           </div>
-                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-2 p-2 border border-t-0 rounded-b-lg">
-                            {sortedTierSuggestions.map((suggestion) => (
-                              <SteamMatchCard
-                                key={suggestion.match_id}
-                                match={suggestion}
-                                onLink={handleLink}
-                                onViewDetails={setDetailsMatchId}
-                                isCurrentlyLinked={
-                                  linkedMatchId === suggestion.match_id
-                                }
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })
+                        );
+                      })}
+                    </div>
+                  );
+                },
+              )
             )}
           </div>
         </DialogContent>

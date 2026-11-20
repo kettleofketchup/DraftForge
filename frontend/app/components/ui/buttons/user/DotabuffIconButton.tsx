@@ -3,8 +3,10 @@ import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { brandSecondary, buttonLift } from '../styles';
 
-export interface DotabuffIconButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size' | 'asChild'> {
+export interface DotabuffIconButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant' | 'size' | 'asChild'
+> {
   /** Steam Friend ID (32-bit account ID). Used to build the Dotabuff URL. */
   steamAccountId: number | null | undefined;
   /** Override the title (native tooltip). Defaults to "View Dotabuff profile". */
@@ -27,8 +29,14 @@ const DOTABUFF_LOGO =
  * <DotabuffIconButton steamAccountId={user.steam_account_id} />
  * ```
  */
-const DotabuffIconButton = React.forwardRef<HTMLButtonElement, DotabuffIconButtonProps>(
-  ({ steamAccountId, title = 'View Dotabuff profile', className, ...props }, ref) => {
+const DotabuffIconButton = React.forwardRef<
+  HTMLButtonElement,
+  DotabuffIconButtonProps
+>(
+  (
+    { steamAccountId, title = 'View Dotabuff profile', className, ...props },
+    ref,
+  ) => {
     if (!steamAccountId) return null;
     const url = `https://www.dotabuff.com/players/${steamAccountId}`;
     return (
@@ -40,7 +48,7 @@ const DotabuffIconButton = React.forwardRef<HTMLButtonElement, DotabuffIconButto
           'rounded-full',
           brandSecondary,
           buttonLift,
-          'border-b-violet-700/50 shadow-black/30',
+          'border-b-selection/40 shadow-black/30',
           className,
         )}
         {...props}

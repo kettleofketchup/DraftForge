@@ -2,12 +2,28 @@ import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { HotkeyBadge } from './HotkeyBadge';
-import { brandSecondary, brandSecondaryLift, buttonLift, buttonDisabled } from './styles';
+import {
+  brandSecondary,
+  brandSecondaryLift,
+  buttonDisabled,
+  buttonLift,
+} from './styles';
 
-export type SecondaryColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'sky' | 'cyan' | 'lime' | 'emerald';
+export type SecondaryColor =
+  | 'green'
+  | 'blue'
+  | 'purple'
+  | 'orange'
+  | 'red'
+  | 'sky'
+  | 'cyan'
+  | 'lime'
+  | 'emerald';
 
-export interface SecondaryButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
+export interface SecondaryButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant'
+> {
   /** Optional background color for contextual actions */
   color?: SecondaryColor;
   /** Whether to apply the soft-shadow lift (default: false for brand, true for colored) */
@@ -17,15 +33,15 @@ export interface SecondaryButtonProps
 }
 
 const colorStyles: Record<SecondaryColor, string> = {
-  green: `${buttonLift} ${buttonDisabled} bg-green-800 hover:bg-green-700 text-white shadow-green-900/50`,
-  blue: `${buttonLift} ${buttonDisabled} bg-blue-800 hover:bg-blue-700 text-white shadow-blue-900/50`,
-  purple: `${buttonLift} ${buttonDisabled} bg-purple-800 hover:bg-purple-700 text-white shadow-purple-900/50`,
-  orange: `${buttonLift} ${buttonDisabled} bg-orange-800 hover:bg-orange-700 text-white shadow-orange-900/50`,
-  red: `${buttonLift} ${buttonDisabled} bg-red-800 hover:bg-red-700 text-white shadow-red-900/50`,
-  sky: `${buttonLift} ${buttonDisabled} bg-sky-800 hover:bg-sky-700 text-white shadow-sky-900/50`,
-  cyan: `${buttonLift} ${buttonDisabled} bg-cyan-700 hover:bg-cyan-600 text-white shadow-cyan-900/50`,
+  green: `${buttonLift} ${buttonDisabled} bg-success/45 hover:bg-success/60 text-white shadow-success/20`,
+  blue: `${buttonLift} ${buttonDisabled} bg-accent/75 hover:bg-accent/95 text-white shadow-accent/30`,
+  purple: `${buttonLift} ${buttonDisabled} bg-selection/65 hover:bg-selection/80 text-white shadow-selection/25`,
+  orange: `${buttonLift} ${buttonDisabled} bg-warning/45 hover:bg-warning/60 text-white shadow-warning/20`,
+  red: `${buttonLift} ${buttonDisabled} bg-destructive/60 hover:bg-destructive/75 text-white shadow-destructive/25`,
+  sky: `${buttonLift} ${buttonDisabled} bg-accent/75 hover:bg-accent/95 text-white shadow-accent/30`,
+  cyan: `${buttonLift} ${buttonDisabled} bg-interactive/55 hover:bg-interactive/70 text-white shadow-interactive/15`,
   lime: `${buttonLift} ${buttonDisabled} bg-lime-700 hover:bg-lime-600 text-white shadow-lime-900/50`,
-  emerald: `${buttonLift} ${buttonDisabled} bg-emerald-800 hover:bg-emerald-700 text-white shadow-emerald-900/50`,
+  emerald: `${buttonLift} ${buttonDisabled} bg-success/40 hover:bg-success/55 text-white shadow-success/15`,
 };
 
 /**

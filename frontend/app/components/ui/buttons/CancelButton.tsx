@@ -2,12 +2,18 @@ import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { HotkeyBadge } from './HotkeyBadge';
-import { brandNeutralOpaque, brandNeutralOpaqueLift, brandButtonVariants } from './styles';
+import {
+  brandButtonVariants,
+  brandNeutralOpaque,
+  brandNeutralOpaqueLift,
+} from './styles';
 
 export type CancelButtonVariant = 'default' | 'success' | 'destructive';
 
-export interface CancelButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
+export interface CancelButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant'
+> {
   /** Whether to apply the soft-shadow lift (default: true) */
   depth?: boolean;
   /** Color variant - 'success' for green cancel (e.g., in warning dialogs) */
@@ -37,11 +43,25 @@ export interface CancelButtonProps
  * ```
  */
 const CancelButton = React.forwardRef<HTMLButtonElement, CancelButtonProps>(
-  ({ children = 'Cancel', className, depth = true, variant = 'default', hotkey, ...props }, ref) => {
+  (
+    {
+      children = 'Cancel',
+      className,
+      depth = true,
+      variant = 'default',
+      hotkey,
+      ...props
+    },
+    ref,
+  ) => {
     const variantStyles = {
       default: depth ? brandNeutralOpaqueLift : brandNeutralOpaque,
-      success: depth ? brandButtonVariants.success : 'bg-green-600 text-white hover:bg-green-500',
-      destructive: depth ? brandButtonVariants.destructive : 'bg-red-600 text-white hover:bg-red-500',
+      success: depth
+        ? brandButtonVariants.success
+        : 'bg-success/80 text-white hover:bg-success/95',
+      destructive: depth
+        ? brandButtonVariants.destructive
+        : 'bg-destructive text-white hover:bg-destructive/90',
     };
 
     // When hotkey is unset, pass children as the single child so `asChild`
@@ -51,7 +71,12 @@ const CancelButton = React.forwardRef<HTMLButtonElement, CancelButtonProps>(
         ref={ref}
         // No variant prop — brand styles fully control appearance via className.
         // Passing variant="outline" introduces dark: prefixed classes that override brand bg.
-        className={cn('min-h-11', variantStyles[variant], hotkey && 'relative', className)}
+        className={cn(
+          'min-h-11',
+          variantStyles[variant],
+          hotkey && 'relative',
+          className,
+        )}
         {...props}
       >
         {hotkey ? (
@@ -64,7 +89,7 @@ const CancelButton = React.forwardRef<HTMLButtonElement, CancelButtonProps>(
         )}
       </Button>
     );
-  }
+  },
 );
 
 CancelButton.displayName = 'CancelButton';

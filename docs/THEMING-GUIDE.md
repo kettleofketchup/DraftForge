@@ -132,7 +132,8 @@ behind an accent. Use opacity modifiers for tints (`bg-radiant-surface/60`,
 |-------|--------|---------|----------|
 | Team sides | `radiant`, `radiant-surface`, `dire`, `dire-surface` | Radiant/Dire labels, team panels, stat rows, side borders | `green-*` / `red-*` keyed on `team === 'radiant'` or `is_radiant` |
 | Draft actions | `pick`, `pick-surface`, `ban`, `ban-surface` | Hero pick/ban slots, toasts, history, grid tints; team-draft "picked" | `green-*` / `red-*` keyed on `isPick`, `isBan`, `currentAction` |
-| Draft turn | `turn`, `turn-foreground` | The slot or captain acting now, in hero and team drafts | `yellow-400` active slot; `green-600`/`green-500` current pick |
+| Draft turn | `turn`, `turn-foreground` | Hero draft: the slot acting now | `yellow-400` active slot |
+| Team draft current pick | `current-pick`, `current-pick-foreground` | Team draft: the pick, captain or "your turn" acting now (green, unlike hero draft's yellow) | `green-500`/`green-600`/`green-800`/`green-900` current pick |
 | Draft styles | `draft-snake`, `draft-normal`, `draft-shuffle` | Draft style cards and labels | `green`/`orange`/`purple` `-100`/`-600`/`-800` chips |
 | Positions | `pos-carry`, `pos-mid`, `pos-offlane`, `pos-soft-support`, `pos-hard-support`, each with `-surface` | Position badges, tooltips and the position SVG icons (`fill-pos-*`) | `rose`/`cyan`/`emerald`/`violet`/`indigo` `-200`/`-800`/`-900`, icon hex fills |
 | Site roles | `role-owner`, `role-admin`, `role-staff` | Owner/Admin/Staff badges and icons | `yellow-500` crown, `red-600`/`700` admin, `blue-600`/`700` staff |

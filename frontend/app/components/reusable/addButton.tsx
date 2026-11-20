@@ -1,3 +1,4 @@
+import { PlusCircle } from 'lucide-react'; // Or your preferred icon library
 import React from 'react';
 import { Button } from '~/components/ui/button'; // Adjust path as needed
 import {
@@ -6,7 +7,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip'; // Adjust path as needed
-import { PlusCircle, Trash2 } from 'lucide-react'; // Or your preferred icon library
 
 interface DeleteButtonProps {
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -21,21 +21,21 @@ export const AddButton: React.FC<DeleteButtonProps> = ({
   disabled = false,
   tooltipText = 'Delete item',
   ariaLabel = 'Delete',
-  className = 'bg-green-500 hover:bg-red-600 text-white', // Default className, can be overridden
+  className = 'bg-success hover:bg-success/80 text-white', // Default className, can be overridden
 }) => {
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-    <Button
-      size="icon"
-      variant="outline"
-      onClick={onClick}
-      aria-label={ariaLabel}
-      className={className} // You can adjust or remove this as needed
-    >
-      <PlusCircle color="green" />
-    </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={onClick}
+            aria-label={ariaLabel}
+            className={className} // You can adjust or remove this as needed
+          >
+            <PlusCircle color="green" />
+          </Button>
         </TooltipTrigger>
         <TooltipContent>
           <p>{tooltipText}</p>

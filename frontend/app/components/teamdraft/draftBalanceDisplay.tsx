@@ -46,8 +46,8 @@ export const DraftBalanceDisplay: React.FC = () => {
             variant={isBalanced ? 'default' : 'secondary'}
             className={
               isBalanced
-                ? 'bg-green-100 text-green-800'
-                : 'bg-orange-100 text-orange-800'
+                ? 'bg-success/15 text-success'
+                : 'bg-warning/15 text-warning'
             }
           >
             {balancePercentage().toFixed(1)}% imbalance
@@ -56,7 +56,7 @@ export const DraftBalanceDisplay: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-blue-500" />
+            <TrendingUp className="h-4 w-4 text-success" />
             <div>
               <div className="text-muted-foreground">First Pick</div>
               <div className="font-medium">{formatMMR(firstPickMMR())} MMR</div>
@@ -64,7 +64,7 @@ export const DraftBalanceDisplay: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <TrendingDown className="h-4 w-4 text-orange-500" />
+            <TrendingDown className="h-4 w-4 text-warning" />
             <div>
               <div className="text-muted-foreground">Last Pick</div>
               <div className="font-medium">{formatMMR(lastPickMMR())} MMR</div>
@@ -83,13 +83,13 @@ export const DraftBalanceDisplay: React.FC = () => {
         <div className="mt-3">
           <div className="flex h-2 rounded-full overflow-hidden bg-muted">
             <div
-              className="bg-blue-500 transition-all duration-300"
+              className="bg-chart-1 transition-all duration-300"
               style={{
                 width: `${(firstPickMMR() / (firstPickMMR() + lastPickMMR())) * 100}%`,
               }}
             />
             <div
-              className="bg-orange-500 transition-all duration-300"
+              className="bg-chart-2 transition-all duration-300"
               style={{
                 width: `${(lastPickMMR() / (firstPickMMR() + lastPickMMR())) * 100}%`,
               }}
