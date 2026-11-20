@@ -8,6 +8,8 @@ python := env("DF_JUST_PYTHON", root / ".venv/bin/python")
 just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
 in_env := quote(root / "scripts/in-env.sh")
 image := env("DF_TEST_DB_IMAGE", "draftforge/test-db")
+# Where touch-dbs creates the sqlite files; the slot guard tests point it at a temp dir
+db_dir := env("DF_DB_DIR", root / "backend")
 
 # makemigrations takes an explicit app list (it does not read INSTALLED_APPS):
 # add new Django apps here.
@@ -41,7 +43,7 @@ migrate-env stack:
 
 [private]
 touch-dbs:
-    cd {{quote(root / "backend")}} && touch -a test.db.sqlite3 dev.db.sqlite3 prod.db.sqlite3
+    cd {{quote(db_dir)}} && touch -a test.db.sqlite3 dev.db.sqlite3 prod.db.sqlite3
 
 [group('db')]
 reset-test:

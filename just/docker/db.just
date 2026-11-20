@@ -6,6 +6,8 @@ root := clean(source_directory() / "../..")
 image := env("DF_TEST_DB_IMAGE", "draftforge/test-db")
 registry := env("DF_TEST_DB_REGISTRY", "ghcr.io/kettleofketchup/draftforge/test-db")
 just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
+# The slot guard tests point this at a temp file
+test_db := env("DF_TEST_DB_FILE", root / "backend/test.db.sqlite3")
 
 # Output content hash for test-db sources
 [group('docker::db')]
@@ -36,7 +38,7 @@ build:
     # Build using temp context to avoid .dockerignore excluding sqlite files
     CTX=$(mktemp -d)
     trap 'rm -rf "$CTX"' EXIT
-    cp backend/test.db.sqlite3 "$CTX/"
+    cp {{quote(test_db)}} "$CTX/test.db.sqlite3"
     cp docker/Dockerfile.test-db "$CTX/Dockerfile"
 
     docker build "$CTX" \
