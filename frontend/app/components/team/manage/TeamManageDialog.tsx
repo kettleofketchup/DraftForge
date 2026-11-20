@@ -114,7 +114,7 @@ export function TeamManageDialog({
 
   const handleTeamGone = useCallback(
     (kind?: TeamActionKind) => {
-      log.warn('Team no longer exists', { teamId, kind });
+      log.warn('Team action refused', { teamId, kind, code: 'not_found' });
       setReasonOpen(false);
       onOpenChange(false);
       onTeamGone();

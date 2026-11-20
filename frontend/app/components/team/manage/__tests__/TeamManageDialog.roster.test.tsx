@@ -177,9 +177,10 @@ describe('TeamManageDialog roster actions', () => {
       'tournament',
       TOURNAMENT_PK,
     ]);
-    expect(logger.warn).toHaveBeenCalledWith('Team no longer exists', {
+    expect(logger.warn).toHaveBeenCalledWith('Team action refused', {
       teamId: TEAM_ID,
       kind: 'set_captain',
+      code: 'not_found',
     });
     expect(logger.error).not.toHaveBeenCalled();
     expectReasonNeverLogged();
@@ -196,6 +197,11 @@ describe('TeamManageDialog roster actions', () => {
       'tournament',
       TOURNAMENT_PK,
     ]);
+    expect(logger.warn).toHaveBeenCalledWith('Team action refused', {
+      teamId: TEAM_ID,
+      kind: undefined,
+      code: 'not_found',
+    });
   });
 
   it('sub-in with a replacing pick posts replacing_id', async () => {
