@@ -12,10 +12,9 @@ from org.conduct.constants import (
     FLAG_ROLL_CALL_UNCONFIRMED,
     Outcome,
     OutcomeSource,
-    Tier,
     expected_statuses,
 )
-from org.conduct.enforcement import tier_for_score
+from org.conduct.enforcement import is_deferred, tier_for_score
 from org.conduct.finalize import roll_call_pending_user_ids
 from org.conduct.gate import get_conduct_settings
 from org.conduct.queries import user_scores
@@ -221,9 +220,7 @@ def event_forecast(event: Event, *, now: datetime) -> ForecastData:
             show_rate=rate(score.show_rate),
             status=score.status,
             tier=tier.value,
-            deferred=settings.back_of_line_enabled
-            and status == SignupStatus.WAITLISTED
-            and tier != Tier.OK,
+            deferred=status == SignupStatus.WAITLISTED and is_deferred(score, settings),
         )
 
     capacity = event.max_players or None

@@ -30,6 +30,7 @@ from events.services import (
 from org.conduct.constants import CONDUCT_BLOCK_MESSAGE, Outcome, Tier
 from org.conduct.enforcement import (
     defer_back_of_line,
+    is_deferred,
     tier_for,
     tier_for_score,
     tiers_for,
@@ -38,7 +39,7 @@ from org.conduct.finalize import finalize_event_outcomes
 from org.conduct.gate import GATE_OFF, ConductGate
 from org.conduct.scoring import MemberScore
 from org.conduct.services import set_outcomes
-from org.models_conduct import OrgConductSettings
+from org.models_conduct import AttendanceOutcome, OrgConductSettings
 from org.models_profiles import PlayerDeadlockProfile
 from org.tests.conduct_base import ConductTestCase
 
@@ -117,6 +118,21 @@ class TierTest(ConductTestCase):
         settings = self.all_modes(enforce_on_new_members=True)
         self.assertEqual(tier_for_score(_score(0.1, "new"), settings), Tier.BLOCK)
 
+    def test_deferral_uses_back_of_line_threshold(self) -> None:
+        settings = self.all_modes(
+            back_of_line_below=Decimal("0.50"),
+            require_approval_below=Decimal("0.65"),
+            block_enabled=False,
+        )
+
+        self.assertEqual(tier_for_score(_score(0.60), settings), Tier.REQUIRE_APPROVAL)
+        self.assertFalse(is_deferred(_score(0.60), settings))
+        self.assertTrue(is_deferred(_score(0.45), settings))
+        self.assertFalse(is_deferred(_score(0.45, "new"), settings))
+        self.assertFalse(
+            is_deferred(_score(0.45), self.all_modes(back_of_line_enabled=False))
+        )
+
     def test_tier_for_scores_member(self) -> None:
         now = tz.now()
         for days in (1, 2, 3, 4):
@@ -163,17 +179,16 @@ class _Candidate:
 class DeferTest(SimpleTestCase):
     def test_stable_partition(self) -> None:
         a, b, c, d = (_Candidate(n, i) for i, n in enumerate("abcd", start=1))
-        tiers = {1: Tier.OK, 2: Tier.BACK_OF_LINE, 3: Tier.OK, 4: Tier.BLOCK}
 
-        self.assertEqual(defer_back_of_line([a, b, c, d], tiers), [a, c, b, d])
+        self.assertEqual(defer_back_of_line([a, b, c, d], {2, 4}), [a, c, b, d])
 
-    def test_missing_tier_counts_as_ok(self) -> None:
+    def test_unknown_ids_ignored(self) -> None:
         a, b = _Candidate("a", 1), _Candidate("b", 2)
 
-        self.assertEqual(defer_back_of_line([a, b], {1: Tier.REQUIRE_APPROVAL}), [b, a])
+        self.assertEqual(defer_back_of_line([a, b], {9}), [a, b])
 
     def test_defer_empty(self) -> None:
-        self.assertEqual(defer_back_of_line([], {}), [])
+        self.assertEqual(defer_back_of_line([], set()), [])
 
 
 class EnforcementHooksTest(ConductTestCase):
@@ -465,6 +480,33 @@ class QueryBudgetTest(ConductTestCase):
             gates_built=1,
         )
 
+    def test_back_of_line_promotion_scores_once(self) -> None:
+        self.unlock()
+        OrgConductSettings.objects.create(
+            organization=self.org,
+            back_of_line_enabled=True,
+            require_approval_enabled=True,
+        )
+        event = self.make_event(max_players=2)
+        for position in (1, 2, 3):
+            EventSignup.objects.create(
+                event=event,
+                user=self.make_user(),
+                status=SignupStatus.WAITLISTED,
+                waitlist_position=position,
+            )
+
+        with CaptureQueriesContext(connection) as ctx:
+            promoted = _promote_from_waitlist(event)
+
+        self.assertEqual(len(promoted), 2)
+        score_queries = [
+            q["sql"]
+            for q in ctx.captured_queries
+            if AttendanceOutcome._meta.db_table in q["sql"]
+        ]
+        self.assertEqual(len(score_queries), 1, score_queries)
+
     def test_refresh_unmet_requirements(self) -> None:
         user = self.make_user()
         events = [
@@ -552,6 +594,23 @@ class BackOfLineTest(ConductTestCase):
         cancel_signup(seated[0])
 
         self.assertEqual(self.reload(flagged).status, SignupStatus.APPROVED)
+        self.assertEqual(self.reload(clean).status, SignupStatus.WAITLISTED)
+
+    def test_hold_tier_above_back_of_line_threshold_not_deferred(self) -> None:
+        OrgConductSettings.objects.create(
+            organization=self.org,
+            back_of_line_enabled=True,
+            back_of_line_below=Decimal("0.01"),
+            require_approval_enabled=True,
+            require_approval_below=Decimal("0.99"),
+        )
+        _event, seated, flagged, clean = self.full_event_with_line()
+
+        cancel_signup(seated[0])
+
+        flagged = self.reload(flagged)
+        self.assertEqual(flagged.status, SignupStatus.PENDING_APPROVAL)
+        self.assertEqual(flagged.unmet_requirements, [CODE])
         self.assertEqual(self.reload(clean).status, SignupStatus.WAITLISTED)
 
     def test_deferred_path_promotion_side_effects(self) -> None:

@@ -72,7 +72,8 @@ from events.schemas import DotaModalConfig
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
 from lobby.passwords import PasswordMode, generate_password
 from org.conduct.capture import capture_late_cancel
-from org.conduct.enforcement import defer_back_of_line, tiers_for
+from org.conduct.constants import Tier
+from org.conduct.enforcement import STANDING_OK, defer_back_of_line, standings_for
 from org.conduct.gate import ConductGate, conduct_gate
 from org.conduct.lifecycle import teardown_event_outcomes, void_event_outcomes
 from org.models import OrgUser
@@ -708,11 +709,15 @@ def _sync_signup_steam_account(event: Event, user: CustomUser) -> None:
 
 
 def _promote_one(
-    locked: Event, signup: EventSignup, *, gate: ConductGate
+    locked: Event,
+    signup: EventSignup,
+    *,
+    gate: ConductGate,
+    tier: Tier | None = None,
 ) -> EventSignup:
     signup.waitlist_position = None
     _sync_signup_steam_account(locked, signup.user)
-    unmet = unmet_codes(locked, signup.user, gate=gate)
+    unmet = unmet_codes(locked, signup.user, gate=gate, tier=tier)
     signup.unmet_requirements = unmet
     signup.status = _decide_signup_status(locked, unmet)
     _roster_add_if_joins(signup)
@@ -744,11 +749,13 @@ def _promote_from_waitlist(
             .select_related("user")
             .order_by("waitlist_position")
         )
-        tiers = tiers_for(gate, [s.user for s in candidates])
-        for candidate in defer_back_of_line(candidates, tiers):
+        standings = standings_for(gate, [s.user for s in candidates])
+        deferred = {pk for pk, standing in standings.items() if standing.deferred}
+        for candidate in defer_back_of_line(candidates, deferred):
             if not has_free_seat(locked):
                 break
-            promoted.append(_promote_one(locked, candidate, gate=gate))
+            tier = standings.get(candidate.user_id, STANDING_OK).tier
+            promoted.append(_promote_one(locked, candidate, gate=gate, tier=tier))
     else:
         while has_free_seat(locked):
             next_waitlisted = (

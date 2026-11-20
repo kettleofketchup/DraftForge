@@ -954,6 +954,26 @@ class ConductForecastApiTest(ConductEventApiBase):
             sorted(public),
         )
 
+    def test_forecast_deferred_ignores_stricter_tier(self) -> None:
+        OrgConductSettings.objects.nocache().update_or_create(
+            organization=self.org,
+            defaults={
+                "back_of_line_enabled": True,
+                "back_of_line_below": Decimal("0.01"),
+                "require_approval_enabled": True,
+                "require_approval_below": Decimal("0.99"),
+            },
+        )
+        event = self.make_event(state=EventState.SIGNUPS_OPEN, max_players=1)
+        self.signup(event, self.make_member("confc_held_seat"), SignupStatus.APPROVED)
+        held = self.make_member("confc_held")
+        self.signup(event, held, SignupStatus.WAITLISTED)
+        self.add_outcomes(held, [Outcome.NO_SHOW] * 5)
+
+        member = self.forecast(event)["members"][str(held.user_id)]
+        self.assertEqual(member["tier"], "require_approval")
+        self.assertIs(member["deferred"], False)
+
     def test_forecast_permissions(self) -> None:
         event = self.make_event(tournament_league=self.league)
         for role in (*ROLES, "league_staff"):
