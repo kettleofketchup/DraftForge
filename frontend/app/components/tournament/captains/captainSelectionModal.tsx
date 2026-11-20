@@ -1,6 +1,5 @@
 import { Crown } from 'lucide-react';
 import React, { useCallback } from 'react';
-import { useSearchParams } from 'react-router';
 import { TEAMS_BUTTONS_WIDTH } from '~/components/constants';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
@@ -21,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
+import { useLatestSearchParams } from '~/hooks/useLatestSearchParams';
 import { useUserStore } from '~/store/userStore';
 import { CaptainTable } from './captainTable';
 
@@ -32,7 +32,7 @@ export const CaptainSelectionModal: React.FC = () => {
   const tournament = useUserStore((state) => state.tournament);
   const isStaff = useUserStore((state) => state.isStaff());
   const TriggerButton = isStaff ? PrimaryButton : SecondaryButton;
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useLatestSearchParams();
   const open = searchParams.get(MODAL_PARAM) === MODAL_VALUE;
   const setOpen = useCallback(
     (next: boolean) => {
@@ -40,7 +40,8 @@ export const CaptainSelectionModal: React.FC = () => {
         (prev) => {
           const params = new URLSearchParams(prev);
           if (next) params.set(MODAL_PARAM, MODAL_VALUE);
-          else if (params.get(MODAL_PARAM) === MODAL_VALUE) params.delete(MODAL_PARAM);
+          else if (params.get(MODAL_PARAM) === MODAL_VALUE)
+            params.delete(MODAL_PARAM);
           return params;
         },
         { replace: true, preventScrollReset: true },
@@ -84,8 +85,6 @@ export const CaptainSelectionModal: React.FC = () => {
         </DialogHeader>
         <ScrollArea className={`${SCROLLAREA_CSS}`}>
           <CaptainTable />
-          {/* Optional: Add a vertical scrollbar */}
-          {/* Optional: Add a horizontal scrollbar */}
           <ScrollBar orientation="vertical" />
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
