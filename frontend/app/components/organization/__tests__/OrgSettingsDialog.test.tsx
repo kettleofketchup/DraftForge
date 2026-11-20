@@ -20,6 +20,8 @@ import type { OrganizationType } from '../schemas';
 const updateOrganization = vi.hoisted(() => vi.fn());
 const mutateAsync = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
+const toastSuccess = vi.hoisted(() => vi.fn());
+const staffPlacementEnabled = vi.hoisted(() => vi.fn());
 
 const defaults = vi.hoisted(() => ({
   id: 3,
@@ -76,18 +78,22 @@ vi.mock('~/hooks/useEvent', async (importOriginal) => ({
   useUpdateOrgDefaultsMutation: () => ({ mutateAsync, isPending: false }),
 }));
 vi.mock('../tabs/orgSettings/StaffPlacementSection', () => ({
-  useStaffPlacementSection: () => ({
-    content: <div data-testid="staff-placement-stub" />,
-    unit: undefined,
-  }),
+  useStaffPlacementSection: (_id: number, enabled: boolean) => {
+    staffPlacementEnabled(enabled);
+    return {
+      content: <div data-testid="staff-placement-stub" />,
+      unit: undefined,
+    };
+  },
 }));
 vi.mock('~/components/admin-team', () => ({
   AdminTeamSection: () => <div data-testid="admin-team-section" />,
 }));
 vi.mock('sonner', () => ({
-  toast: { error: toastError, success: vi.fn() },
+  toast: { error: toastError, success: toastSuccess },
 }));
 
+import * as api from '~/components/api/api';
 import { OrgSettingsDialog } from '../OrgSettingsDialog';
 
 class ResizeObserverStub {
@@ -131,16 +137,23 @@ function Harness({
   const [open, setOpen] = useState(true);
   const [section, setSection] = useState<string | null>(initialSection);
   return (
-    <OrgSettingsDialog
-      organization={organization}
-      open={open}
-      section={section}
-      onSectionChange={setSection}
-      onOpenChange={(next) => {
-        onOpenChangeSpy(next);
-        setOpen(next);
-      }}
-    />
+    <>
+      <OrgSettingsDialog
+        organization={organization}
+        open={open}
+        section={section}
+        onSectionChange={setSection}
+        onOpenChange={(next) => {
+          onOpenChangeSpy(next);
+          setOpen(next);
+        }}
+      />
+      <button
+        type="button"
+        data-testid="reopen"
+        onClick={() => setOpen(true)}
+      />
+    </>
   );
 }
 
@@ -157,9 +170,14 @@ function wrap(node: ReactNode): ReactNode {
   );
 }
 
-function renderDialog(initialSection: string | null = null) {
+function renderDialog(
+  initialSection: string | null = null,
+  organization: OrganizationType = ORG,
+) {
   const utils = render(
-    wrap(<Harness organization={ORG} initialSection={initialSection} />),
+    wrap(
+      <Harness organization={organization} initialSection={initialSection} />,
+    ),
   );
   return {
     ...utils,
@@ -195,6 +213,9 @@ beforeEach(() => {
   updateOrganization.mockReset().mockResolvedValue({});
   mutateAsync.mockReset().mockResolvedValue({});
   toastError.mockReset();
+  toastSuccess.mockReset();
+  staffPlacementEnabled.mockReset();
+  vi.mocked(api.getOrgEventDefaults).mockClear();
   onOpenChangeSpy.mockReset();
 });
 afterEach(cleanup);
@@ -330,5 +351,54 @@ describe('OrgSettingsDialog', () => {
     expect(isActive('admins')).toBe(true);
     expect(screen.getByTestId('admin-team-section')).toBeInTheDocument();
     await defaultsLoaded();
+  });
+
+  it('renders nothing and fetches no settings for a viewer who is not an org admin', async () => {
+    renderDialog(null, {
+      ...ORG,
+      admin_ids: [],
+      staff_ids: [VIEWER],
+    } as OrganizationType);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('org-settings-modal')).toBeNull();
+    expect(api.getOrgEventDefaults).not.toHaveBeenCalled();
+    expect(staffPlacementEnabled).not.toHaveBeenCalledWith(true);
+  });
+
+  it('after a successful save, closing does not prompt and success toasts once', async () => {
+    renderDialog();
+    await defaultsLoaded();
+    editBoth();
+    fireEvent.click(await screen.findByTestId('org-settings-save'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('org-settings-save-bar')).toBeNull(),
+    );
+    expect(toastSuccess).toHaveBeenCalledTimes(1);
+    expect(toastSuccess).toHaveBeenCalledWith('Settings saved');
+
+    fireEvent.click(screen.getByTestId('dialog-close-button'));
+    expect(onOpenChangeSpy).toHaveBeenCalledWith(false);
+    expect(screen.queryByText('Discard unsaved changes?')).toBeNull();
+  });
+
+  it('Discard then reopen shows the saved server values', async () => {
+    renderDialog();
+    await defaultsLoaded();
+    editBoth();
+    fireEvent.click(screen.getByTestId('dialog-close-button'));
+    fireEvent.click(await screen.findByTestId('org-settings-discard-confirm'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('org-settings-modal')).toBeNull(),
+    );
+
+    fireEvent.click(screen.getByTestId('reopen'));
+    await defaultsLoaded();
+    expect(screen.getByTestId('org-name-input')).toHaveValue('Org');
+    expect(screen.getByTestId('org-defaults-max-players-input')).toHaveValue(
+      null,
+    );
+    expect(screen.queryByTestId('org-settings-save-bar')).toBeNull();
+    expect(updateOrganization).not.toHaveBeenCalled();
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 });

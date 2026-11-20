@@ -44,16 +44,14 @@ export function OrgSettingsDialog({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const { canOpen, visibleSectionIds } = useOrgSettingsAccess(organization);
   const pk = organization.pk;
+  const enabled = open && pk != null && canOpen;
 
   const profile = useOrgProfileSections(organization, sectionsRef);
   const registry = ORG_SETTINGS_SECTIONS.map((s) => ({
     section: s,
-    ...s.useSection(
-      pk ?? 0,
-      open && pk != null && visibleSectionIds.includes(s.id),
-    ),
+    ...s.useSection(pk ?? 0, enabled && visibleSectionIds.includes(s.id)),
   }));
-  const defaults = useOrgEventDefaultsSections(pk ?? 0, sectionsRef, open);
+  const defaults = useOrgEventDefaultsSections(pk ?? 0, sectionsRef, enabled);
 
   const units: SettingsFormUnit[] = [
     profile.unit,
