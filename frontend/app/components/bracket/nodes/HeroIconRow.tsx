@@ -1,10 +1,10 @@
 // frontend/app/components/bracket/nodes/HeroIconRow.tsx
-import { getHeroIcon, getHeroName } from '~/lib/dota';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
+import { getHeroIcon, getHeroName } from '~/lib/dota';
 import { cn } from '~/lib/utils';
 
 interface HeroIconRowProps {
@@ -15,7 +15,7 @@ interface HeroIconRowProps {
 export function HeroIconRow({ heroIds, isWinner }: HeroIconRowProps) {
   return (
     <div
-      className={cn('flex gap-0.5', isWinner && 'ring-1 ring-green-500 rounded')}
+      className={cn('flex gap-0.5', isWinner && 'ring-1 ring-success rounded')}
     >
       {heroIds.map((heroId, index) => (
         <Tooltip key={`${heroId}-${index}`}>

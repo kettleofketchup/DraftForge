@@ -52,10 +52,7 @@ function ReserveBar({
   return (
     <div className={cn('h-1 rounded bg-black/40 overflow-hidden', className)}>
       <div
-        className={cn(
-          'h-full rounded',
-          draining ? 'bg-red-400' : 'bg-green-400',
-        )}
+        className={cn('h-full rounded', draining ? 'bg-error' : 'bg-success')}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -117,7 +114,7 @@ export function DraftClockBar({
         <div
           data-testid="draft-reserve-tint"
           aria-hidden
-          className="pointer-events-none fixed inset-0 z-40 bg-red-600/15 shadow-[inset_0_0_120px_color-mix(in_oklab,var(--color-error)_45%,transparent)]"
+          className="pointer-events-none fixed inset-0 z-40 bg-error/15 shadow-[inset_0_0_120px_color-mix(in_oklab,var(--color-error)_45%,transparent)]"
         />
       )}
       <div
@@ -134,7 +131,7 @@ export function DraftClockBar({
         className={cn(
           'rounded-lg px-4 py-3 text-white',
           brandBg,
-          reserveDraining && 'ring-2 ring-red-500',
+          reserveDraining && 'ring-2 ring-error',
         )}
       >
         <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
@@ -153,7 +150,7 @@ export function DraftClockBar({
             {isMyTurn && (
               <span
                 data-testid="draft-clock-your-turn"
-                className="rounded bg-green-500 px-2 py-0.5 text-xs font-bold"
+                className="rounded bg-current-pick px-2 py-0.5 text-xs font-bold text-current-pick-foreground"
               >
                 YOUR TURN
               </span>
@@ -181,7 +178,7 @@ export function DraftClockBar({
             ) : armed?.expired ? (
               <span
                 data-testid="draft-clock-expired"
-                className="text-sm font-semibold text-red-300"
+                className="text-sm font-semibold text-error"
               >
                 Clock expired — waiting for{' '}
                 {activeCaptain ? DisplayName(activeCaptain) : 'captain'} or
@@ -203,7 +200,7 @@ export function DraftClockBar({
                       armed &&
                         !inReserve &&
                         armed.graceRemainingMs < GRACE_URGENT_MS &&
-                        'animate-grace-urgent text-red-400',
+                        'animate-grace-urgent text-error',
                     )}
                   >
                     {armed
@@ -216,14 +213,11 @@ export function DraftClockBar({
                   className={cn(
                     'flex min-w-[7rem] flex-col items-center gap-1 rounded-r-lg px-4 py-2',
                     !inReserve && 'opacity-40',
-                    reserveDraining && 'bg-red-600/30',
+                    reserveDraining && 'bg-error/30',
                   )}
                 >
                   <span
-                    className={cn(
-                      clockLabel,
-                      reserveDraining && 'text-red-200',
-                    )}
+                    className={cn(clockLabel, reserveDraining && 'text-error')}
                   >
                     Reserve
                   </span>
@@ -231,7 +225,7 @@ export function DraftClockBar({
                     data-testid="draft-clock-active-reserve"
                     className={cn(
                       clockDigits,
-                      reserveDraining && 'text-red-300',
+                      reserveDraining && 'text-error',
                       reserveDraining &&
                         reserveTotalMs > 0 &&
                         activePct < 20 &&
