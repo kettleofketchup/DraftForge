@@ -591,12 +591,13 @@ class AddMemberGuildNicknameTest(TestCase):
     def test_org_add_invalidates_user_after_commit(self) -> None:
         user = self._existing()
         self._warm(_member())
-        with mock.patch("app.views.admin_team.invalidate_after_commit") as spy:
+        with mock.patch("org.views_admin_team.invalidate_after_commit") as spy:
             self.client.post(
                 f"/api/organizations/{self.org.pk}/members/",
                 {"user_id": user.pk},
                 format="json",
             )
+        spy.assert_called()
         self.assertTrue(
             any(
                 isinstance(a, CustomUser) and a.pk == user.pk
@@ -656,6 +657,7 @@ class AddMemberGuildNicknameTest(TestCase):
                 {"user_id": user.pk},
                 format="json",
             )
+        spy.assert_called()
         self.assertTrue(
             any(
                 isinstance(a, CustomUser) and a.pk == user.pk

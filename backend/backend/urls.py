@@ -23,17 +23,10 @@ from app.views.admin_team import (
     add_league_admin,
     add_league_member,
     add_league_staff,
-    add_org_admin,
-    add_org_member,
-    add_org_staff,
     add_tournament_member,
     remove_league_admin,
     remove_league_staff,
-    remove_org_admin,
-    remove_org_staff,
     search_users,
-    transfer_org_ownership,
-    update_org_user,
 )
 from app.views.csv_import import import_csv_org, import_csv_tournament
 from app.views.internal import (
@@ -81,6 +74,15 @@ from draft.views.team_api import DraftRoundView, DraftView
 from events.views import fire_event_task, get_event_task_schedule
 from org.ssr import OrganizationSSRView
 from org.views import ClaimRequestViewSet
+from org.views_admin_team import (
+    add_org_admin,
+    add_org_member,
+    add_org_staff,
+    remove_org_admin,
+    remove_org_staff,
+    transfer_org_ownership,
+    update_org_user,
+)
 from org.views_features import org_features, org_promoters, remove_org_promoter
 from org.views_organization import OrganizationView
 from org.views_profiles import (
