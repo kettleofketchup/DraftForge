@@ -64,6 +64,7 @@ export {
   createTeam,
   deleteTeam,
   fetchTeam,
+  fetchTeamUsage,
   getTeams,
   updateTeam,
 } from './teamAPI';

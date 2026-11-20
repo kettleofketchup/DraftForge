@@ -8,6 +8,7 @@ import {
 import type { CreateTeamFromCaptainAPI } from '~/components/api/types';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
+import { teamInUseMessage } from '~/lib/deleteTeams';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import type { TournamentType } from '../types';
@@ -75,25 +76,27 @@ export const createTeamFromCaptainHook = async ({
   const team = getTeam();
   if (team && team.pk) {
     log.debug(`Team found for captain: ${captain.username}...deleting team`);
-    if (team.captain && team.captain.pk === captain.pk) setIsCaptain?.(false);
-    toast.promise(deleteTeam(team.pk!), {
+    const deleting = deleteTeam(team.pk);
+    toast.promise(deleting, {
       loading: `Deleting team for ${DisplayName(captain)}`,
-      success: () => {
-        setDraftOrder?.('0');
-        return `Team for ${DisplayName(captain)} has been deleted`;
-      },
-      error: (err) => {
-        log.error('Failed to delete team', err);
-        return `Failed to delete team: ${err.message}`;
-      },
+      success: `Team for ${DisplayName(captain)} has been deleted`,
+      error: (err) =>
+        teamInUseMessage(err) ?? `Failed to delete team: ${err.message}`,
     });
+    try {
+      await deleting;
+    } catch (err) {
+      log.error('Failed to delete team', err);
+      return;
+    }
+    if (team.captain && team.captain.pk === captain.pk) setIsCaptain?.(false);
+    setDraftOrder?.('0');
     const rawData = await fetchTournament(tournament.pk);
     setTournament(
       hydrateTournament(
         rawData as TournamentType & { _users?: Record<number, unknown> },
       ) as TournamentType,
     );
-    // If the captain is being removed, update state
     return;
   }
 

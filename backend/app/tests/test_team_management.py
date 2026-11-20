@@ -114,6 +114,19 @@ class TeamManagementFixture:
         OrgUser.objects.create(user=user, organization=self.org, mmr=3000)
         return user
 
+    def gate_event(self) -> CustomUser:
+        Event.objects.filter(pk=self.event.pk).update(
+            require_steam_id=True, min_mmr=5000
+        )
+        user = self.make_user("roster_low")
+        profile = PlayerDotaProfile.objects.create(
+            org_user=OrgUser.objects.get(user=user, organization=self.org)
+        )
+        profile.declare_rank("active")
+        profile.mmr = 3000
+        profile.save()
+        return user
+
     def refresh(self, team: Team) -> Team:
         return Team.objects.nocache().get(pk=team.pk)
 
@@ -1274,19 +1287,6 @@ class AddStandinTests(TeamManagementFixture, TestCase):
     def fill_standins(self) -> None:
         for i in range(DEFAULT_MAX_STANDINS):
             self.team.dropin_members.add(self.make_user(f"roster_s{i}"))
-
-    def gate_event(self) -> CustomUser:
-        Event.objects.filter(pk=self.event.pk).update(
-            require_steam_id=True, min_mmr=5000
-        )
-        user = self.make_user("roster_low")
-        profile = PlayerDotaProfile.objects.create(
-            org_user=OrgUser.objects.get(user=user, organization=self.org)
-        )
-        profile.declare_rank("active")
-        profile.mmr = 3000
-        profile.save()
-        return user
 
     def test_add_standin(self) -> None:
         change = self.add(self.outsider)
