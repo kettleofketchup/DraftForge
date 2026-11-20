@@ -83,8 +83,9 @@ async function confirmAction(page: Page, reason: string): Promise<void> {
 }
 
 /**
- * A card roster row, matched on its avatar: UserStrip truncates names over
- * 20 characters, so the row text can't be matched in full.
+ * A card roster row, matched on its avatar's alt text: UserStrip truncates
+ * names over 20 characters, and the open manage dialog aria-hides the card,
+ * so neither row text nor role queries can find it.
  */
 function cardRow(
   card: Locator,
@@ -92,7 +93,7 @@ function cardRow(
   username: string,
 ): Locator {
   return card.locator(`[data-testid^="team-card-${kind}-"]`).filter({
-    has: card.page().getByRole('img', { name: username, exact: true }),
+    has: card.page().locator(`img[alt="${username}"]`),
   });
 }
 
