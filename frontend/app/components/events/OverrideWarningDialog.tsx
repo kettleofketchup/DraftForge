@@ -1,10 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router';
 
 import {
-  OverrideReasonFormSchema,
+  overrideReasonFormSchema,
   type OverrideReasonFormValues,
   type OverrideRequired,
 } from '~/components/api/overridesAPI';
@@ -39,6 +39,9 @@ export interface OverrideWarningDialogProps {
   organization?: OrganizationType | null;
   submitting?: boolean;
   reasonError?: string | null;
+  defaultReason?: string;
+  minReasonLength?: number;
+  reasonLabel?: string;
 }
 
 export function orgStaffPlacementPath(organizationId: number): string {
@@ -53,16 +56,23 @@ export function OverrideWarningDialog({
   organization,
   submitting = false,
   reasonError = null,
+  defaultReason = '',
+  minReasonLength = 1,
+  reasonLabel = 'Reason',
 }: OverrideWarningDialogProps) {
   const isOrgAdmin = useIsOrganizationAdmin(organization);
+  const schema = useMemo(
+    () => overrideReasonFormSchema(minReasonLength),
+    [minReasonLength],
+  );
   const form = useForm<OverrideReasonFormValues>({
-    resolver: zodResolver(OverrideReasonFormSchema),
-    defaultValues: { reason: '' },
+    resolver: zodResolver(schema),
+    defaultValues: { reason: open ? defaultReason : '' },
   });
 
   useEffect(() => {
-    if (!open) form.reset({ reason: '' });
-  }, [open, form]);
+    form.reset({ reason: open ? defaultReason : '' });
+  }, [open, defaultReason, form]);
 
   const blocked = override?.blocked ?? false;
   const violations = override?.violations ?? [];
@@ -155,7 +165,7 @@ export function OverrideWarningDialog({
                 name="reason"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Reason</FormLabel>
+                    <FormLabel>{reasonLabel}</FormLabel>
                     <FormControl>
                       <Textarea
                         {...field}
