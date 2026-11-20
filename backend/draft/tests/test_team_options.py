@@ -15,7 +15,6 @@ from rest_framework.test import APIClient
 from app.management.commands import import_prod_tournament, sync_prod_tournaments
 from app.models import League, Organization, Team, Tournament
 from app.serializers import DraftSerializerSlim, TournamentSerializer
-from app.tests.teamdraft_fixtures import TimedDraftFixture
 from draft.models import (
     Draft,
     DraftEvent,
@@ -25,6 +24,7 @@ from draft.models import (
     TimeoutAction,
 )
 from draft.services.team_timeout import skip_turn
+from draft.tests.team_fixtures import TimedDraftFixture
 from tests.data.users import REGULAR_USER
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, TestTournamentConfig
 

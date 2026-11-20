@@ -21,8 +21,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory
 
 from app.models import Team
-from app.tests.teamdraft_fixtures import TimedDraftFixture
-from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 from backend import asgi
 from discordbot.activity_auth import ActivitySocketMiddleware
 from draft.consumers.team import DraftConsumer
@@ -39,6 +37,8 @@ from draft.tasks.draft_tick import (
     heartbeat_key,
     registry_for,
 )
+from draft.tests.team_fixtures import TimedDraftFixture
+from draft.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 from tests.test_teamdraft import expire_draft_clock, stale_draft_heartbeat
 
 

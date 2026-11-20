@@ -1,4 +1,3 @@
-# backend/app/tests/test_draft_events.py
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 

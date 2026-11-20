@@ -9,6 +9,13 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, League, Organization, Team, Tournament
 from draft.models import Draft, DraftOptions, DraftRound
 from draft.serializers.team import DraftSerializer
+from draft.services.shuffle import (
+    assign_next_shuffle_captain,
+    build_shuffle_rounds,
+    get_lowest_mmr_team,
+    get_team_total_mmr,
+    roll_until_winner,
+)
 from org.models import OrgUser
 
 
@@ -53,8 +60,6 @@ class GetTeamTotalMmrTest(TestCase):
 
     def test_calculates_total_mmr(self):
         """Total MMR = captain + all members (excluding captain duplicate)."""
-        from draft.services.shuffle import get_team_total_mmr
-
         result = get_team_total_mmr(self.team)
 
         # 5000 (captain) + 4000 (member1) + 3500 (member2) = 12500
@@ -62,8 +67,6 @@ class GetTeamTotalMmrTest(TestCase):
 
     def test_handles_zero_mmr(self):
         """Members with zero MMR contribute 0."""
-        from draft.services.shuffle import get_team_total_mmr
-
         OrgUser.objects.filter(user=self.member2, organization=self.org).update(mmr=0)
 
         result = get_team_total_mmr(self.team)
@@ -102,8 +105,6 @@ class RollUntilWinnerTest(TestCase):
     @patch("draft.services.shuffle.random.randint")
     def test_returns_winner_on_first_roll(self, mock_randint):
         """First team wins if they roll higher."""
-        from draft.services.shuffle import roll_until_winner
-
         mock_randint.side_effect = [6, 3]  # Team1 rolls 6, Team2 rolls 3
 
         winner, roll_rounds = roll_until_winner([self.team1, self.team2])
@@ -116,8 +117,6 @@ class RollUntilWinnerTest(TestCase):
     @patch("draft.services.shuffle.random.randint")
     def test_rerolls_on_tie(self, mock_randint):
         """Re-rolls when teams tie."""
-        from draft.services.shuffle import roll_until_winner
-
         # First round: tie (4, 4), Second round: team2 wins (2, 5)
         mock_randint.side_effect = [4, 4, 2, 5]
 
@@ -166,8 +165,6 @@ class GetLowestMmrTeamTest(TestCase):
 
     def test_returns_lowest_mmr_team(self):
         """Returns team with lowest total MMR."""
-        from draft.services.shuffle import get_lowest_mmr_team
-
         teams = [self.team1, self.team2, self.team3]
         winner, tie_data = get_lowest_mmr_team(teams)
 
@@ -177,8 +174,6 @@ class GetLowestMmrTeamTest(TestCase):
     @patch("draft.services.shuffle.roll_until_winner")
     def test_handles_tie_with_roll(self, mock_roll):
         """Calls roll_until_winner when teams tie."""
-        from draft.services.shuffle import get_lowest_mmr_team
-
         # Make team1 and team2 have same MMR
         OrgUser.objects.filter(user=self.captain1, organization=self.org).update(
             mmr=4000
@@ -237,8 +232,6 @@ class BuildShuffleRoundsTest(TestCase):
 
     def test_creates_all_rounds_upfront(self):
         """Creates num_teams * 4 rounds."""
-        from draft.services.shuffle import build_shuffle_rounds
-
         build_shuffle_rounds(self.draft)
 
         # 4 teams * 4 picks each = 16 rounds
@@ -246,8 +239,6 @@ class BuildShuffleRoundsTest(TestCase):
 
     def test_first_round_has_captain_assigned(self):
         """First round captain is lowest MMR team."""
-        from draft.services.shuffle import build_shuffle_rounds
-
         build_shuffle_rounds(self.draft)
 
         first_round = self.draft.draft_rounds.order_by("pick_number").first()
@@ -256,8 +247,6 @@ class BuildShuffleRoundsTest(TestCase):
 
     def test_remaining_rounds_have_null_captain(self):
         """Rounds 2-16 have null captain."""
-        from draft.services.shuffle import build_shuffle_rounds
-
         build_shuffle_rounds(self.draft)
 
         rounds = self.draft.draft_rounds.order_by("pick_number")[1:]
@@ -266,8 +255,6 @@ class BuildShuffleRoundsTest(TestCase):
 
     def test_pick_phases_assigned_correctly(self):
         """Pick phases are 1-4 based on round number."""
-        from draft.services.shuffle import build_shuffle_rounds
-
         build_shuffle_rounds(self.draft)
 
         rounds = list(self.draft.draft_rounds.order_by("pick_number"))
@@ -325,14 +312,10 @@ class AssignNextShuffleCaptainTest(TestCase):
             tournament=self.tournament, draft_style="shuffle"
         )
 
-        from draft.services.shuffle import build_shuffle_rounds
-
         build_shuffle_rounds(self.draft)
 
     def test_assigns_captain_to_next_null_round(self):
         """Assigns captain to next round with null captain."""
-        from draft.services.shuffle import assign_next_shuffle_captain
-
         # First round should have captain2 (4000 MMR)
         first_round = self.draft.draft_rounds.order_by("pick_number").first()
         self.assertEqual(first_round.captain.pk, self.captain2.pk)
@@ -352,8 +335,6 @@ class AssignNextShuffleCaptainTest(TestCase):
 
     def test_returns_none_when_no_more_rounds(self):
         """Returns None when all rounds have captains."""
-        from draft.services.shuffle import assign_next_shuffle_captain
-
         # Assign captains to all rounds
         for draft_round in self.draft.draft_rounds.all():
             draft_round.captain = self.captain1
@@ -654,8 +635,6 @@ class FullTeamNotAssignedTest(TestCase):
 
     def test_full_team_not_assigned_as_next_picker(self):
         """Full team should not be assigned as next picker even with lowest MMR."""
-        from draft.services.shuffle import assign_next_shuffle_captain
-
         # Create a round without captain
         DraftRound.objects.create(
             draft=self.draft, captain=None, pick_number=1, pick_phase=1
@@ -670,8 +649,6 @@ class FullTeamNotAssignedTest(TestCase):
 
     def test_returns_none_when_all_teams_full(self):
         """Returns None when all teams have reached max size."""
-        from draft.services.shuffle import assign_next_shuffle_captain
-
         # Make team1 also full
         for i in range(4):
             member = CustomUser.objects.create_user(
@@ -975,8 +952,6 @@ class DraftRestartFuzzTest(TestCase):
 
     def _make_picks(self, draft, num_picks, players):
         """Helper: make N picks on the draft using available players."""
-        from draft.services.shuffle import assign_next_shuffle_captain
-
         rounds = list(draft.draft_rounds.order_by("pick_number"))
         picked = 0
         for i, rnd in enumerate(rounds):
@@ -1055,8 +1030,6 @@ class DraftRestartFuzzTest(TestCase):
             )
 
         # 6. First captain is the lowest-MMR captain
-        from draft.services.shuffle import get_team_total_mmr
-
         teams = list(draft.tournament.teams.all())
         mmrs = {t.captain.pk: get_team_total_mmr(t) for t in teams}
         lowest_pk = min(mmrs, key=mmrs.get)

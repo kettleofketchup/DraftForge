@@ -9,7 +9,7 @@ from rest_framework.test import APIClient
 
 from app import views_main
 from app.models import Team
-from app.tests.teamdraft_fixtures import TimedDraftFixture
+from draft.tests.team_fixtures import TimedDraftFixture
 from user.tests.test_cacheops_integration import _redis_reachable
 
 

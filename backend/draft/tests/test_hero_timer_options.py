@@ -9,7 +9,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Game, Team, Tournament
-from app.tests.teamdraft_fixtures import TimedDraftFixture
 from draft.models import DraftOptions, DraftTeam, HeroDraft, HeroDraftRound
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero import (
@@ -18,6 +17,7 @@ from draft.services.hero import (
     submit_pick,
 )
 from draft.tasks.hero_tick import broadcast_tick, check_timeout
+from draft.tests.team_fixtures import TimedDraftFixture
 
 
 def make_game(prefix: str) -> Game:

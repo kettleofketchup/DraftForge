@@ -8,11 +8,11 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from app.tests.teamdraft_fixtures import TimedDraftFixture
 from draft.models import DraftRound
 from draft.services.shuffle import TIE_ROLL_HOLD_MS
 from draft.services.team_timeout import skip_turn
 from draft.tasks import team_tick as teamdraft_tick
+from draft.tests.team_fixtures import TimedDraftFixture
 from draft.views.team import teamdraft_pause, teamdraft_resume
 
 HOLD = timedelta(milliseconds=TIE_ROLL_HOLD_MS)
