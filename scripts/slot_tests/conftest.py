@@ -1,6 +1,6 @@
 import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -20,6 +20,15 @@ def _scrub_env(monkeypatch: pytest.MonkeyPatch) -> None:
             "GITHUB_WORKSPACE",
         ):
             monkeypatch.delenv(k)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _backend_untouched() -> Iterator[None]:
+    backend = ROOT / "backend"
+    before = {p.name for p in backend.iterdir()}
+    yield
+    added = {p.name for p in backend.iterdir()} - before
+    assert not added, f"slot tests created files in the real backend/: {sorted(added)}"
 
 
 @pytest.fixture

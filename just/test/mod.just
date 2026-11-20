@@ -12,6 +12,8 @@ compose := in_env + " - . " + slots + " compose"
 slots_py := "cd " + quote(root) + " && " + slots
 # The file ensure-db checks; the slot guard tests point it at a temp file
 test_db := env("DF_TEST_DB_FILE", root / "backend/test.db.sqlite3")
+# Where setup copies the main checkout's backend/.env; the slot guard tests point it at a temp file
+backend_env := env("DF_BACKEND_ENV_FILE", root / "backend/.env")
 
 mod pw 'pw.just'
 mod backend 'backend.just'
@@ -97,9 +99,9 @@ setup:
     # If worktree, ensure backend/.env is copied from main repo
     main_repo="$(git rev-parse --git-common-dir 2>/dev/null | sed 's|/\.git$||')"
     if [[ -n "$main_repo" && "$main_repo" != "$PWD/.git" && "$main_repo" != "." ]]; then
-        if [[ -f "$main_repo/backend/.env" && ! -f backend/.env ]]; then
+        if [[ -f "$main_repo/backend/.env" && ! -f {{quote(backend_env)}} ]]; then
             echo "Worktree detected — copying backend/.env from main repo..."
-            cp "$main_repo/backend/.env" backend/.env
+            cp "$main_repo/backend/.env" {{quote(backend_env)}}
         fi
     fi
 
