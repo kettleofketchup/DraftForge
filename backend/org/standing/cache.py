@@ -4,7 +4,7 @@ from org.standing.types import TrackKey
 
 
 class StandingCache:
-    """Opaque per-request memo shared by promotion_order and the eligibility check."""
+    """Opaque per-request memo passed through promotion_order."""
 
     __slots__ = ("_memo",)
 

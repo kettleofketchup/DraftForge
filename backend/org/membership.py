@@ -46,13 +46,5 @@ def viewer_member_organization_ids(user: CustomUser | AnonymousUser) -> list[int
 
 
 def resolve_or_create_org_user(user: CustomUser, organization: Organization) -> OrgUser:
-    """Get or create OrgUser for (user, organization).
-
-    Single source of truth for "user joins org by signing up." Used by:
-      - the web /signup/ endpoint
-      - Discord adapters via _get_org_user()
-      - staff_add_signup()
-      - approve_signup()
-    """
     org_user, _ = OrgUser.objects.get_or_create(user=user, organization=organization)
     return org_user
