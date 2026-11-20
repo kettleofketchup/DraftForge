@@ -1,17 +1,23 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
-import { TooltipProvider } from '~/components/ui/tooltip';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { TOURNAMENT_CARD_SURFACE } from '~/components/tournament/card/cardStyles';
 import type { TournamentType } from '~/components/tournament/types';
+import { TooltipProvider } from '~/components/ui/tooltip';
 import {
   useArchivedTournaments,
   useUpcomingTournaments,
 } from '~/hooks/useTournamentList';
-import { TOURNAMENT_CARD_SURFACE } from '~/components/tournament/card/cardStyles';
-import { useMembership } from '../useMembership';
 import TournamentsPage from '../tournaments';
+import { useMembership } from '../useMembership';
 
 vi.mock('~/hooks/useTournamentList', () => ({
   useUpcomingTournaments: vi.fn(),
@@ -185,7 +191,9 @@ function renderPage(entry = '/tournaments') {
 }
 
 function locationParams(): URLSearchParams {
-  return new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
+  return new URLSearchParams(
+    screen.getByTestId('location-search').textContent ?? '',
+  );
 }
 
 beforeEach(() => {
@@ -198,22 +206,34 @@ beforeEach(() => {
 describe('tournaments page tabs', () => {
   it('enables only the upcoming query on /tournaments', () => {
     renderPage();
-    expect(upcomingMock).toHaveBeenLastCalledWith(expect.anything(), { enabled: true });
-    expect(archivedMock).toHaveBeenLastCalledWith(expect.anything(), { enabled: false });
+    expect(upcomingMock).toHaveBeenLastCalledWith(expect.anything(), {
+      enabled: true,
+    });
+    expect(archivedMock).toHaveBeenLastCalledWith(expect.anything(), {
+      enabled: false,
+    });
     expect(screen.getByTestId('tournaments-tab-upcoming')).toBeInTheDocument();
     expect(screen.getByTestId('tournaments-tab-archived')).toBeInTheDocument();
   });
 
   it('enables only the archived query on ?tab=archived', () => {
     renderPage('/tournaments?tab=archived');
-    expect(upcomingMock).toHaveBeenLastCalledWith(expect.anything(), { enabled: false });
-    expect(archivedMock).toHaveBeenLastCalledWith(expect.anything(), { enabled: true });
+    expect(upcomingMock).toHaveBeenLastCalledWith(expect.anything(), {
+      enabled: false,
+    });
+    expect(archivedMock).toHaveBeenLastCalledWith(expect.anything(), {
+      enabled: true,
+    });
   });
 
   it('renders upcoming for an unknown tab value', () => {
     renderPage('/tournaments?tab=bogus');
-    expect(upcomingMock).toHaveBeenLastCalledWith(expect.anything(), { enabled: true });
-    expect(screen.getByTestId('tournaments-panel-upcoming')).toBeInTheDocument();
+    expect(upcomingMock).toHaveBeenLastCalledWith(expect.anything(), {
+      enabled: true,
+    });
+    expect(
+      screen.getByTestId('tournaments-panel-upcoming'),
+    ).toBeInTheDocument();
   });
 
   it('passes parsed org and league filters and ignores invalid ones', () => {
@@ -229,7 +249,13 @@ describe('organization scope', () => {
   it('defaults a member to their organizations plus open signups on upcoming', () => {
     renderPage();
     expect(upcomingMock).toHaveBeenLastCalledWith(
-      { mine: true, memberOrgIds: [30], openSignups: true, league: undefined, search: '' },
+      {
+        mine: true,
+        memberOrgIds: [30],
+        openSignups: true,
+        league: undefined,
+        search: '',
+      },
       { enabled: true },
     );
   });
@@ -262,7 +288,9 @@ describe('organization scope', () => {
   it('holds the default query until membership resolves', () => {
     stubMembership(undefined, { isLoggedIn: false, membershipPending: true });
     renderPage();
-    expect(upcomingMock).toHaveBeenLastCalledWith(expect.anything(), { enabled: false });
+    expect(upcomingMock).toHaveBeenLastCalledWith(expect.anything(), {
+      enabled: false,
+    });
   });
 
   it('marks both panels busy while the default scope waits for the user', () => {
@@ -292,16 +320,23 @@ describe('organization scope', () => {
   });
 
   it('renders my organizations as one list and badges other orgs with open signups', () => {
-    stubUpcoming({ data: [tournament(1, 30, 'future', true), tournament(2, 32, 'future', true)] });
+    stubUpcoming({
+      data: [
+        tournament(1, 30, 'future', true),
+        tournament(2, 32, 'future', true),
+      ],
+    });
     renderPage();
     expect(screen.queryByTestId('tournaments-tier-yours')).toBeNull();
     expect(screen.queryByTestId('tournaments-tier-others')).toBeNull();
     const member = screen.getByTestId('tournament-card-1');
     const open = screen.getByTestId('tournament-card-2');
-    expect(within(member).queryByTestId('tournament-signups-open-badge')).toBeNull();
-    expect(within(open).getByTestId('tournament-signups-open-badge')).toHaveTextContent(
-      'Signups open',
-    );
+    expect(
+      within(member).queryByTestId('tournament-signups-open-badge'),
+    ).toBeNull();
+    expect(
+      within(open).getByTestId('tournament-signups-open-badge'),
+    ).toHaveTextContent('Signups open');
   });
 
   it('shows no signups badge outside my organizations', () => {
@@ -314,7 +349,9 @@ describe('organization scope', () => {
     stubUpcoming({ data: [] });
     renderPage();
     const empty = screen.getByTestId('tournaments-empty-upcoming');
-    expect(empty).toHaveTextContent('No upcoming tournaments in your organizations');
+    expect(empty).toHaveTextContent(
+      'No upcoming tournaments in your organizations',
+    );
     fireEvent.click(within(empty).getByTestId('tournaments-empty-browse-all'));
     expect(locationParams().get('organization')).toBe('all');
   });
@@ -323,7 +360,9 @@ describe('organization scope', () => {
     stubArchived({ tournaments: [] });
     renderPage('/tournaments?tab=archived');
     const empty = screen.getByTestId('tournaments-empty-archived');
-    expect(empty).toHaveTextContent('No archived tournaments in your organizations');
+    expect(empty).toHaveTextContent(
+      'No archived tournaments in your organizations',
+    );
     fireEvent.click(within(empty).getByTestId('tournaments-empty-browse-all'));
     expect(locationParams().get('organization')).toBe('all');
     expect(locationParams().get('tab')).toBe('archived');
@@ -332,7 +371,9 @@ describe('organization scope', () => {
 
 describe('upcoming tiers', () => {
   it('splits into yours and others with counts', () => {
-    stubUpcoming({ data: [tournament(1, 30), tournament(2, 31), tournament(3, 31)] });
+    stubUpcoming({
+      data: [tournament(1, 30), tournament(2, 31), tournament(3, 31)],
+    });
     renderPage('/tournaments?organization=all');
     expect(screen.getByTestId('tournaments-tier-yours')).toHaveTextContent(
       /Your organizations\s*\(1\)/,
@@ -340,9 +381,13 @@ describe('upcoming tiers', () => {
     expect(screen.getByTestId('tournaments-tier-others')).toHaveTextContent(
       /Other organizations\s*\(2\)/,
     );
-    const yours = screen.getByTestId('tournaments-tier-yours').closest('section');
+    const yours = screen
+      .getByTestId('tournaments-tier-yours')
+      .closest('section');
     expect(yours).toHaveAttribute('data-tier', 'yours');
-    expect(within(yours as HTMLElement).getByTestId('tournament-card-1')).toBeInTheDocument();
+    expect(
+      within(yours as HTMLElement).getByTestId('tournament-card-1'),
+    ).toBeInTheDocument();
   });
 
   it('renders a flat list with an organization filter', () => {
@@ -368,17 +413,23 @@ describe('upcoming tiers', () => {
     expect(
       screen.getByText('No upcoming tournaments in your organizations.'),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('tournaments-empty-yours-archived-link'));
+    fireEvent.click(
+      screen.getByTestId('tournaments-empty-yours-archived-link'),
+    );
     expect(locationParams().get('tab')).toBe('archived');
     await waitFor(() =>
-      expect(document.activeElement).toBe(screen.getByTestId('tournaments-tab-archived')),
+      expect(document.activeElement).toBe(
+        screen.getByTestId('tournaments-tab-archived'),
+      ),
     );
   });
 
   it('shows the live badge on an in-progress upcoming card', () => {
     stubUpcoming({ data: [tournament(1, 30, 'in_progress')] });
     renderPage();
-    expect(screen.getByTestId('tournament-live-badge')).toHaveTextContent('Live');
+    expect(screen.getByTestId('tournament-live-badge')).toHaveTextContent(
+      'Live',
+    );
   });
 });
 
@@ -387,8 +438,8 @@ describe('upcoming states', () => {
     const stub = stubUpcoming({ isError: true, data: undefined });
     renderPage();
     const box = screen.getByTestId('tournaments-error-upcoming');
-    expect(box.classList.contains('from-red-900/40')).toBe(true);
-    expect(box.classList.contains('to-violet-900/40')).toBe(true);
+    expect(box.classList.contains('from-error/20')).toBe(true);
+    expect(box.classList.contains('to-selection/20')).toBe(true);
     expect(box.querySelector('.text-error')).not.toBeNull();
     fireEvent.click(within(box).getByRole('button', { name: /retry/i }));
     expect(stub.refetch).toHaveBeenCalled();
@@ -433,21 +484,30 @@ describe('upcoming states', () => {
     const second = renderPage();
     panel = screen.getByTestId('tournaments-panel-upcoming');
     expect(panel).toHaveAttribute('data-fetching', 'false');
-    expect(within(panel).getByTestId('tournaments-empty-upcoming')).toBeInTheDocument();
+    expect(
+      within(panel).getByTestId('tournaments-empty-upcoming'),
+    ).toBeInTheDocument();
     second.unmount();
 
-    stubUpcoming({ data: [tournament(1, 30), tournament(2, 31)], isFetching: true });
+    stubUpcoming({
+      data: [tournament(1, 30), tournament(2, 31)],
+      isFetching: true,
+    });
     renderPage('/tournaments?organization=all');
     panel = screen.getByTestId('tournaments-panel-upcoming');
     expect(panel).toHaveAttribute('data-fetching', 'true');
-    expect(within(panel).getByTestId('tournaments-tier-others')).toBeInTheDocument();
+    expect(
+      within(panel).getByTestId('tournaments-tier-others'),
+    ).toBeInTheDocument();
   });
 
   it('shows the skeleton while membership is pending', () => {
     stubUpcoming({ data: [tournament(1, 30)] });
     stubMembership(undefined, { membershipPending: true });
     renderPage();
-    expect(screen.getByTestId('tournaments-panel-upcoming')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('tournaments-panel-upcoming'),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId('tournament-card-1')).toBeNull();
     expect(screen.queryByTestId('tournaments-tier-yours')).toBeNull();
   });
@@ -455,14 +515,21 @@ describe('upcoming states', () => {
 
 describe('archived tab', () => {
   it('disables load more while the next page is fetching', () => {
-    stubArchived({ tournaments: [tournament(5, 31, 'past')], hasNextPage: true, isFetchingNextPage: true });
+    stubArchived({
+      tournaments: [tournament(5, 31, 'past')],
+      hasNextPage: true,
+      isFetchingNextPage: true,
+    });
     renderPage('/tournaments?tab=archived');
     expect(screen.getByTestId('tournaments-load-more')).toBeDisabled();
     expect(screen.getByTestId('tournament-card-5')).toBeInTheDocument();
   });
 
   it('loads the next page on click', () => {
-    const stub = stubArchived({ tournaments: [tournament(5, 31, 'past')], hasNextPage: true });
+    const stub = stubArchived({
+      tournaments: [tournament(5, 31, 'past')],
+      hasNextPage: true,
+    });
     renderPage('/tournaments?tab=archived');
     fireEvent.click(screen.getByTestId('tournaments-load-more'));
     expect(stub.fetchNextPage).toHaveBeenCalled();
@@ -490,7 +557,10 @@ describe('archived tab', () => {
   });
 
   it('hides load more without a next page', () => {
-    stubArchived({ tournaments: [tournament(5, 31, 'past')], hasNextPage: false });
+    stubArchived({
+      tournaments: [tournament(5, 31, 'past')],
+      hasNextPage: false,
+    });
     renderPage('/tournaments?tab=archived');
     expect(screen.queryByTestId('tournaments-load-more')).toBeNull();
   });
@@ -510,7 +580,11 @@ describe('archived tab', () => {
   });
 
   it('shows the archived error box when the first page fails', () => {
-    const stub = stubArchived({ isError: true, data: undefined, tournaments: [] });
+    const stub = stubArchived({
+      isError: true,
+      data: undefined,
+      tournaments: [],
+    });
     renderPage('/tournaments?tab=archived');
     const box = screen.getByTestId('tournaments-error-archived');
     expect(box.querySelector('.text-error')).not.toBeNull();
@@ -531,6 +605,8 @@ describe('archived tab', () => {
     stubArchived({ tournaments: [tournament(6, 31, 'in_progress')] });
     renderPage('/tournaments?tab=archived');
     expect(screen.queryByTestId('tournament-live-badge')).toBeNull();
-    expect(screen.getByTestId('tournament-card-state')).toHaveTextContent('Past (not closed)');
+    expect(screen.getByTestId('tournament-card-state')).toHaveTextContent(
+      'Past (not closed)',
+    );
   });
 });

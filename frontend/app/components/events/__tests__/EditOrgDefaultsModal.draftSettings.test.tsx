@@ -43,6 +43,11 @@ const defaults = vi.hoisted(() => ({
   discord_announcement: false,
   discord_announcement_channel_id: '',
   discord_announcement_hours: 24,
+  discord_announcement_role_ids: ['111', '112'],
+  discord_signup_role_ids: ['222'],
+  discord_start_mention: true,
+  discord_start_mention_minutes: 30,
+  discord_start_mention_scope: 'main',
   draft_timer_enabled: true,
   draft_grace_time_ms: 20000,
   draft_reserve_time_ms: 40000,
@@ -177,6 +182,30 @@ describe('EditOrgDefaultsModal ready check', () => {
       auto_confirm: false,
       roll_call_enabled: true,
       roll_call_mode: 'automatic',
+    });
+  });
+});
+
+describe('EditOrgDefaultsModal discord', () => {
+  beforeEach(() => mutateAsync.mockClear());
+
+  it('saves the stored start mention and role mentions unchanged', async () => {
+    render(
+      <EditOrgDefaultsModal organizationId={1} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20),
+    );
+    fireEvent.click(screen.getByTestId('form-dialog-submit'));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0][0].data).toMatchObject({
+      discord_start_mention: true,
+      discord_start_mention_minutes: 30,
+      discord_start_mention_scope: 'main',
+      discord_announcement_role_ids: ['111', '112'],
+      discord_signup_role_ids: ['222'],
     });
   });
 });

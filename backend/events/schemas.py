@@ -127,6 +127,9 @@ class EventTaskSchema(BaseModel):
     discord_announcement_hours: int = 24
     discord_announcement_role_ids: list = []
     discord_signup_role_ids: list = []
+    discord_start_mention: bool = False
+    discord_start_mention_minutes: int = 15
+    discord_start_mention_scope: str = "all_active"
 
     # Config
     timezone: str = "America/New_York"
@@ -358,8 +361,8 @@ def dota_require_screenshot(rank_status: str, cfg: "DotaModalConfig") -> bool:
 
     Called by the Dota modal follow-up (``discordbot/components/dota.py``),
     ``DotaHandler`` (``events/discord/providers/dota.py``) and the signup
-    eligibility check (``events/eligibility.py``). Pure over the transported
-    config so every process calls it.
+    eligibility check (``events/eligibility/checks/requirements.py``). Pure
+    over the transported config so every process calls it.
     """
     if rank_status == "active":
         return cfg.require_rank_screenshot

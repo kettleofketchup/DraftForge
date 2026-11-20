@@ -7,14 +7,20 @@ from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 
 from discordbot.activity_errors import ActivityAuthFailed
+from events.overrides import OverrideReasonRequired, OverrideRequired
 from telemetry.logging import get_logger
 
 log = get_logger("app.exception_handler")
 
 
 def exception_handler(exc: Exception, context: Mapping[str, Any]) -> Response | None:
-    """Wrap DRF's default exception handler to log 4xx/5xx responses."""
+    """Wrap DRF's default handler: render override errors (#585), log 4xx/5xx."""
     response = drf_exception_handler(exc, context)
+
+    if response is None and isinstance(exc, OverrideRequired):
+        response = Response(exc.as_response_data(), status=409)
+    elif response is None and isinstance(exc, OverrideReasonRequired):
+        response = Response(exc.as_response_data(), status=400)
 
     if response is not None and isinstance(exc, ActivityAuthFailed):
         response.status_code = 401

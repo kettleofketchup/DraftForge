@@ -126,7 +126,7 @@ export function DraftLobby({
                 title={team.draft_is_connected ? 'Connected' : 'Disconnected'}
                 className={cn(
                   'h-2.5 w-2.5 rounded-full',
-                  team.draft_is_connected ? 'bg-green-500' : 'bg-gray-500',
+                  team.draft_is_connected ? 'bg-online' : 'bg-offline',
                 )}
               />
               <span
@@ -135,7 +135,7 @@ export function DraftLobby({
                 className={cn(
                   'w-20 shrink-0 text-left text-sm',
                   team.draft_is_ready
-                    ? 'text-green-400'
+                    ? 'text-success'
                     : 'text-muted-foreground',
                 )}
               >

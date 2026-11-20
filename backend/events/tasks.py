@@ -45,6 +45,7 @@ from discordbot.utils import (
     sync_edit_message,
     sync_send_dm,
     sync_send_embed_with_components,
+    sync_send_embed_with_components_no_log,
 )
 from events.discord import (
     build_attendance_reminder_embed,
@@ -60,9 +61,12 @@ from events.discord.embeds import (
 from events.signup_post_lock import (
     acquire_lock,
     clear_pending,
+    mark_dirty,
     mark_pending,
+    now_ms,
     release_lock,
 )
+from events.start_mention import chunk_mentions, start_mention_recipients
 from events.utils import starts_in_future
 from telemetry.logging import get_logger
 
@@ -73,6 +77,12 @@ logger = get_logger(__name__)
 log = get_logger(__name__)
 
 T = TypeVar("T")
+
+SIGNUP_POST_LAG_WARN_MS = 10_000
+
+
+class SignupPostEditFailed(Exception):
+    """Discord rejected or dropped a signup post PATCH."""
 
 
 def _bind_celery_context(
@@ -547,7 +557,6 @@ def _send_event_announcement_impl(event_id: int) -> str:
     thread_name = event.discord_event_title or event.name
     guild_id = event.organization.discord_server_id
 
-    # Get or create DiscordEvent via internal API
     de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id or "")
     if not de_resp or not de_resp.ok:
         logger.error(
@@ -745,6 +754,145 @@ def send_profile_reminder(event_id: int) -> str:
     return f"Sent profile reminder for event {event_id}"
 
 
+START_MENTION_SOURCE = "start_mention"
+START_MENTION_STATES: frozenset[str] = frozenset({"signups_open", "roll_call"})
+
+
+@shared_task(acks_late=True, reject_on_worker_lost=True)
+def send_start_mention(event_id: int, fired_by_user_id: int | None = None) -> str:
+    """Mention in-scope signed-up members in replies to the signup post.
+
+    One lease row (source="start_mention") covers every chunk, so the
+    mention fires once per event even with several beat workers.
+    """
+    return _run_with_bookends(
+        "send_start_mention",
+        event_id,
+        None,
+        lambda: _send_start_mention_impl(event_id, fired_by_user_id),
+    )
+
+
+def _send_start_mention_impl(event_id: int, fired_by_user_id: int | None) -> str:
+    fields = _celery_bookend_fields("send_start_mention", event_id, None)
+    if check_message_log_exists(START_MENTION_SOURCE, event_id):
+        return f"Already fired: start mention for event {event_id}"
+
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Event {event_id} not found"
+    if event.state not in START_MENTION_STATES:
+        return f"Skipped: event state is {event.state}"
+    if not event.discord_start_mention and fired_by_user_id is None:
+        return f"Start mention disabled for event {event_id}"
+
+    discord_state = get_discord_event_state(event_id)
+    if not (
+        discord_state
+        and discord_state.signup_posted
+        and discord_state.signup_message_id
+    ):
+        log.info("start_mention_no_signup_post", reason="no_signup_post", **fields)
+        return f"Skipped: no signup post for event {event_id}"
+    channel_id = _resolve_signup_edit_channel(discord_state, fields)
+
+    try:
+        signups = get_event_signups(event_id)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable("send_start_mention", event_id, exc)
+
+    recipients = start_mention_recipients(signups, event.discord_start_mention_scope)
+    title = (event.discord_event_title or event.name)[:100]
+    header = f"{title} starts <t:{int(event.scheduled_at.timestamp())}:R>."
+    chunks = chunk_mentions(recipients.discord_ids, header)
+    counts = {
+        "mentioned": len(recipients.discord_ids),
+        "skipped_no_discord_id": recipients.skipped_no_discord_id,
+        "chunks": len(chunks),
+    }
+
+    log_pk = claim_discord_message_log(
+        source=START_MENTION_SOURCE,
+        source_id=event_id,
+        channel_id=str(channel_id),
+        embed_data={"type": "start_mention", **counts},
+        fired_by_user_id=fired_by_user_id,
+    )
+    if log_pk is None:
+        log.info("start_mention_lease_held", reason="lease_held", **fields)
+        return f"Start mention for event {event_id}: lease held by another worker"
+
+    reference = {
+        "message_id": discord_state.signup_message_id,
+        "fail_if_not_exists": False,
+    }
+    message_ids: list[str] = []
+    failed = 0
+    try:
+        for index, chunk in enumerate(chunks):
+            try:
+                data, _status = sync_send_embed_with_components_no_log(
+                    channel_id=channel_id,
+                    embed=[],
+                    content=chunk.content,
+                    allowed_mentions={"users": chunk.user_ids},
+                    message_reference=reference,
+                )
+                message_ids.append(str(data.get("id")))
+            except req.RequestException as exc:
+                failed += 1
+                log.error(
+                    "start_mention_chunk_failed",
+                    chunk=index,
+                    error=str(exc),
+                    **fields,
+                )
+    except Exception as exc:
+        finalize_discord_message_log(
+            log_pk,
+            success=False,
+            response_data={"error": str(exc), "sent": len(message_ids), **counts},
+        )
+        raise
+
+    finalize_discord_message_log(
+        log_pk,
+        success=bool(message_ids) or not chunks,
+        discord_message_id=message_ids[0] if message_ids else None,
+        response_data={
+            "type": "start_mention_batch",
+            "message_ids": message_ids,
+            "failed": failed,
+            **counts,
+        },
+    )
+    log.info(
+        "start_mention_sent",
+        sent=len(message_ids),
+        failed=failed,
+        **counts,
+        **fields,
+    )
+
+    guild_id = event.organization.discord_server_id
+    if guild_id and message_ids:
+        de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
+        if de_resp and de_resp.ok:
+            create_event_log(
+                discord_event_id=de_resp.json().get("id"),
+                action=START_MENTION_SOURCE,
+                target_type="DiscordMessageLog",
+                message_id=message_ids[0],
+                message_log_id=log_pk,
+                success=failed == 0,
+            )
+
+    return (
+        f"Mentioned {counts['mentioned']} members in {len(message_ids)} messages "
+        f"for event {event_id}"
+    )
+
+
 @shared_task(bind=True)
 def send_signup_update(
     self: Task, event_id: int, interaction_id: str | None = None, busy_passes: int = 0
@@ -752,8 +900,10 @@ def send_signup_update(
     """Edit the original announcement embed with updated signup lists.
 
     One run per event at a time: a run that finds the edit lock held
-    reschedules itself. Tries DiscordEvent.signup_message first, falls back to
-    DiscordMessageLog for pre-migration events.
+    reschedules itself. A failed read or PATCH retries up to
+    SIGNUP_POST_READ_RETRIES times, then drops the change's dirty time. Tries
+    DiscordEvent.signup_message first, falls back to DiscordMessageLog for
+    pre-migration events.
     """
     return _run_with_bookends(
         "send_signup_update",
@@ -792,27 +942,46 @@ def _serialised_signup_update(
         return f"Rescheduled: signup post for event {event_id} is being edited"
 
     # Cleared before the read, so a change during this run queues another.
-    clear_pending(event_id)
+    dirty_since_ms = clear_pending(event_id)
     try:
-        return _send_signup_update_impl(event_id, interaction_id)
-    except InternalAPIUnavailable as exc:
-        release_lock(event_id, token)
-        token = None
+        return _send_signup_update_impl(event_id, interaction_id, dirty_since_ms)
+    except (InternalAPIUnavailable, SignupPostEditFailed) as exc:
         attempt = task.request.retries
         exhausted = attempt >= config.read_retries
-        skipped = _skip_signup_list_unavailable(
-            "send_signup_update",
-            event_id,
-            exc,
-            attempt=attempt,
-            retries_exhausted=exhausted,
-        )
+        if isinstance(exc, InternalAPIUnavailable):
+            outcome = _skip_signup_list_unavailable(
+                "send_signup_update",
+                event_id,
+                exc,
+                attempt=attempt,
+                retries_exhausted=exhausted,
+            )
+        else:
+            outcome = f"Failed: could not edit announcement for event {event_id}"
         if exhausted:
-            return skipped
-        mark_pending(event_id)
+            log.warning(
+                "signup_post_edit_dropped",
+                reason=type(exc).__name__,
+                attempts=attempt + 1,
+                dirty_since_ms=dirty_since_ms,
+                **fields,
+            )
+            return outcome
+        # Restore under the lock, or a run taking it in the gap gets a stale lag.
+        if dirty_since_ms is not None:
+            mark_dirty(event_id, dirty_since_ms)
+        queued = mark_pending(event_id)
+        release_lock(event_id, token)
+        token = None
+        if not queued:
+            return f"Skipped: a newer edit is queued for event {event_id}"
         raise task.retry(
             countdown=config.retry_seconds, max_retries=config.read_retries
         ) from exc
+    except Exception:
+        if dirty_since_ms is not None:
+            mark_dirty(event_id, dirty_since_ms)
+        raise
     finally:
         if token is not None:
             release_lock(event_id, token)
@@ -854,7 +1023,26 @@ def _resolve_signup_edit_channel(
     return discord_state.signup_thread_id or discord_state.signup_channel_id
 
 
-def _send_signup_update_impl(event_id: int, interaction_id: str | None) -> str:
+def _log_signup_post_edit_applied(
+    fields: dict, message_id: str, dirty_since_ms: int | None
+) -> None:
+    lag_ms = None if dirty_since_ms is None else max(now_ms() - dirty_since_ms, 0)
+    emit = (
+        log.warning
+        if lag_ms is not None and lag_ms > SIGNUP_POST_LAG_WARN_MS
+        else log.info
+    )
+    emit(
+        "signup_post_edit_applied",
+        lag_ms=lag_ms,
+        message_id=str(message_id),
+        **fields,
+    )
+
+
+def _send_signup_update_impl(
+    event_id: int, interaction_id: str | None, dirty_since_ms: int | None = None
+) -> str:
     fields = _celery_bookend_fields("send_signup_update", event_id, interaction_id)
 
     event = get_event_for_task(event_id)
@@ -911,7 +1099,7 @@ def _send_signup_update_impl(event_id: int, interaction_id: str | None) -> str:
     # None for other transient failures. Treat the typed exception as a
     # signal to clear dedup state so the next sync recreates the post.
     try:
-        sync_edit_message(
+        edited = sync_edit_message(
             channel_id=edit_channel_id,
             message_id=message_id,
             embed=result["embeds"],
@@ -928,6 +1116,9 @@ def _send_signup_update_impl(event_id: int, interaction_id: str | None) -> str:
         )
         return f"Recovered: cleared dedup for event {event.pk} (orphaned message)"
 
+    if edited is None:
+        raise SignupPostEditFailed(f"edit failed for event {event.pk}")
+    _log_signup_post_edit_applied(fields, message_id, dirty_since_ms)
     return f"Updated announcement for event {event.pk}"
 
 
@@ -1024,7 +1215,6 @@ def _create_discord_scheduled_event_impl(event_id: int) -> str:
     }
     url = f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events"
 
-    # Get or create DiscordEvent via internal API
     de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
     if not de_resp or not de_resp.ok:
         logger.error(
@@ -1062,11 +1252,9 @@ def _create_discord_scheduled_event_impl(event_id: int) -> str:
             success=success,
         )
 
-        # Store scheduled event ID via internal API
         if success and isinstance(data, dict) and data.get("id"):
             update_discord_event(discord_event_pk, scheduled_event_id=data["id"])
 
-        # Audit log via internal API
         create_event_log(
             discord_event_id=discord_event_pk,
             action="create_scheduled_event",
@@ -1446,7 +1634,6 @@ def send_subscriber_notifications(event_id: int) -> str:
 
     try:
         for sub in subscribers:
-            # Skip subscribers who already signed up
             if sub.user_pk in signed_up_user_pks:
                 skipped += 1
                 continue
@@ -1470,7 +1657,6 @@ def send_subscriber_notifications(event_id: int) -> str:
 
             result = sync_send_dm(sub.discord_id, embed=embed, components=components)
 
-            # Update delivery status via internal API
             if result:
                 if dm_pk:
                     update_event_dm(
