@@ -26,7 +26,11 @@ from app.models import (
 from app.services.draft_reset import reset_draft_teams
 from app.services.team_management import follow_captain
 from tests.test_demo import _reset_demo_herodraft
-from tests.test_herodraft import _setup_draft_state, reset_herodraft
+from tests.test_herodraft import (
+    _setup_draft_state,
+    get_herodraft_by_key,
+    reset_herodraft,
+)
 
 Channel = HeroDraftChatMessage.Channel
 Kind = HeroDraftChatMessage.Kind
@@ -492,3 +496,45 @@ class TestResetEndpointsTest(TenureFixture):
         response = _reset_demo_herodraft(self.tournament)
         self.assertEqual(response.status_code, 200)
         self.assert_reset_and_reseeded()
+
+
+class HeroDraftByKeyTest(TenureFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.tournament.name = "Real Tournament 38"
+        self.tournament.save()
+        self.game.round = 2
+        self.game.bracket_type = "winners"
+        self.game.position = 0
+        self.game.save()
+        env = mock.patch("tests.test_herodraft.isTestEnvironment", return_value=True)
+        env.start()
+        self.addCleanup(env.stop)
+
+    def test_drafting_phase_returns_member_pks_and_active_round(self) -> None:
+        HeroDraft.objects.filter(pk=self.draft.pk).update(
+            is_manual_pause=True, paused_at=timezone.now()
+        )
+        request = APIRequestFactory().get("/api/tests/herodraft-by-key/drafting_phase/")
+        response = get_herodraft_by_key(request, key="drafting_phase")
+        self.assertEqual(response.status_code, 200)
+        by_team = {
+            dt["team_name"]: dt["member_pks"] for dt in response.data["draft_teams"]
+        }
+        self.assertEqual(
+            by_team,
+            {
+                "CT A": sorted([self.mem_a.pk, self.mem_a2.pk]),
+                "CT B": sorted([self.mem_b.pk, self.mem_b2.pk]),
+            },
+        )
+        self.draft.refresh_from_db()
+        self.assertEqual(self.draft.state, HeroDraftState.DRAFTING)
+        self.assertFalse(self.draft.is_manual_pause)
+        self.assertIsNone(self.draft.paused_at)
+        active = list(self.draft.rounds.filter(state="active"))
+        self.assertEqual([r.round_number for r in active], [1])
+        self.assertIsNotNone(active[0].started_at)
+        self.assertFalse(self.draft.draft_teams.filter(is_connected=True).exists())
+        first_pick = self.draft.draft_teams.get(is_first_pick=True)
+        self.assertEqual(active[0].draft_team_id, first_pick.pk)

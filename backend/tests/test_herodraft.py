@@ -414,6 +414,7 @@ def get_herodraft_by_key(request, key: str):
             "is_ready": dt.is_ready,
             "is_radiant": dt.is_radiant,
             "is_first_pick": dt.is_first_pick,
+            "member_pks": sorted(m.pk for m in dt.tournament_team.members.all()),
         }
         for dt in draft.draft_teams.all()
     ]
@@ -432,6 +433,10 @@ def _setup_draft_state(draft: HeroDraft, target_state: str) -> None:
     draft.events.all().delete()
     reset_draft_chat(draft)
     draft.roll_winner = None
+    draft.paused_at = None
+    draft.resuming_until = None
+    draft.is_manual_pause = False
+    draft.save()
 
     # Reset draft teams
     for dt in draft.draft_teams.all():
@@ -490,7 +495,17 @@ def _setup_draft_state(draft: HeroDraft, target_state: str) -> None:
             winner.is_radiant = False
             winner.save()
 
-        # Build draft rounds
-        build_draft_rounds(draft)
+            # No socket is open yet; a stale True makes the tick loop pause
+            # the draft for a missing heartbeat before the captain connects.
+            for dt in (winner, loser):
+                dt.is_connected = False
+                dt.save()
+
+            build_draft_rounds(draft, winner, loser)
+            first_round = draft.rounds.order_by("round_number").first()
+            first_round.state = "active"
+            first_round.started_at = timezone.now()
+            first_round.save()
+
         draft.state = "drafting"
         draft.save()
