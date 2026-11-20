@@ -259,6 +259,10 @@ Rules:
 
 ## Staff Team Management Dialog
 
+!!! success "Implemented"
+    This section describes a shipped feature, unlike the season plans above it on
+    this page.
+
 Built in #546 (epic #490) on the [team management API](../../api/endpoints.md#team-management). Staff
 fix a tournament team's roster after the draft without leaving the tournament page.
 
@@ -280,13 +284,13 @@ action.
 | Make captain | On a member row; same as the captain select. |
 | Mark dropout | Moves a member to the dropouts. Disabled for the last member: sub in a stand-in instead. When the captain drops out, the deputy takes over. |
 | Restore | Moves a dropout back to the members. |
-| Add stand-in | Searches users (at least 3 characters). Org staff see org and league members first, with anyone else under "Not in this organization". League staff who are not org staff search without membership labels. |
-| Sub in | Moves a stand-in into the members. Pick the player they replace, who becomes a dropout, or "No one". |
+| Add stand-in | Searches users (at least 3 characters). Org staff see org and league members first, with anyone else under "Not in this organization". League staff who are not org staff search without membership labels. Players already on another team in the tournament are marked "On another team" and cannot be picked. |
+| Sub in | Moves a stand-in into the members. Pick the player they replace, who becomes a dropout, or "No one". The captain is labelled "(captain)" in that list. |
 | Remove | Removes a stand-in. |
 
 Every action opens a confirm dialog that asks for a reason (3 to 500 characters). The
-reason is saved in the team's history and never written to logs. A captain change, or
-a captain dropping out, warns that ready and connected state resets for any live hero
+reason is saved in the team's history and never written to logs. A captain change, a
+captain dropping out, or a stand-in replacing the captain warns that ready and connected state resets for any live hero
 draft the team is in. While a change is being saved, every control is disabled.
 
 When the server refuses a change it says why and how to fix it (for example, a stand-in
