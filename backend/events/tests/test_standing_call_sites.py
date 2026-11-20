@@ -295,7 +295,9 @@ class StandingCallSiteTest(TestCase):
 
     def test_admin_event_delete_calls_delete_hook(self) -> None:
         event_pk = self.event.pk
+        baseline = atomic_baseline()
         EventAdmin(Event, admin_site).delete_model(self._admin_request(), self.event)
+        self._assert_nested(baseline)
         self.assertEqual(self.fake.hooks, ["on_event_deleted"])
         self.assertTrue(self.fake.calls[0].kwargs["exists"])
         self.assertEqual(self.fake.calls[0].kwargs["actor"], self.admin)
@@ -308,11 +310,17 @@ class StandingCallSiteTest(TestCase):
             scheduled_at=timezone.now(),
             created_by=self.admin,
         )
+        baseline = atomic_baseline()
         EventAdmin(Event, admin_site).delete_queryset(
             self._admin_request(),
             Event.objects.filter(pk__in=[self.event.pk, other.pk]),
         )
+        self._assert_nested(baseline)
         self.assertEqual(self.fake.hooks, ["on_event_deleted", "on_event_deleted"])
+        self.assertEqual(len({c.atomic_depth for c in self.fake.calls}), 1)
+        self.assertCountEqual(
+            [c.kwargs["event"].pk for c in self.fake.calls], [self.event.pk, other.pk]
+        )
         self.assertFalse(
             Event.objects.filter(pk__in=[self.event.pk, other.pk]).exists()
         )

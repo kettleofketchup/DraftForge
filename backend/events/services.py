@@ -1137,15 +1137,19 @@ def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
         event.save(update_fields=["tournament", "updated_at"])
         tournament.delete()
     event.transition_state(EventState.CANCELLED)
+    event.refresh_from_db(from_queryset=Event.objects.nocache().all())
+    standing.on_event_closed(event, cancelled=True, source="cancel", actor=actor)
     try:
         discord_event = event.discord_event
     except DiscordEvent.DoesNotExist:
         discord_event = None
     if discord_event is not None and discord_event.scheduled_event_id:
-        # Clearing the id stops the 60s sync_discord_events resurrecting it.
-        delete_discord_scheduled_event.delay(
-            discord_event.guild_id, discord_event.scheduled_event_id
+        guild_id = discord_event.guild_id
+        scheduled_event_id = discord_event.scheduled_event_id
+        transaction.on_commit(
+            lambda: delete_discord_scheduled_event.delay(guild_id, scheduled_event_id)
         )
+        # Clearing the id stops the 60s sync_discord_events resurrecting it.
         discord_event.scheduled_event_id = None
         discord_event.save(update_fields=["scheduled_event_id"])
         log.info(
@@ -1155,7 +1159,6 @@ def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
             event_id=event.pk,
             guild_id=discord_event.guild_id,
         )
-    standing.on_event_closed(event, cancelled=True, source="cancel", actor=actor)
     return event
 
 
