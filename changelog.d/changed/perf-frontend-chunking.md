@@ -1,0 +1,1 @@
+- Pages load fewer separate script files: small chunks are merged and all icons ship in one file, cutting a first visit from about 62 requests to about 42 (88 to 54 on the tournament page).
