@@ -2,12 +2,14 @@
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import {
+  BrowserRouter,
   MemoryRouter,
   useLocation,
   useNavigate,
   useNavigationType,
 } from 'react-router';
 import { describe, expect, it } from 'vitest';
+import { useUrlTabs } from '~/components/ui/tabs';
 import { useOrgSettingsParam } from '../useOrgSettingsParam';
 
 type Access = { settled: boolean; canOpen: boolean };
@@ -187,5 +189,42 @@ describe('useOrgSettingsParam', () => {
     act(() => result.current.navigate('/organizations/7?tab=settings'));
     expect(search(result).has('tab')).toBe(false);
     expect(search(result).get('settings')).toBe('');
+  });
+});
+
+describe('useOrgSettingsParam with a tab change React has not rendered yet', () => {
+  function setupBrowser(url: string) {
+    window.history.replaceState(null, '', url);
+    return renderHook(
+      () => ({
+        param: useOrgSettingsParam(ADMIN),
+        tab: useUrlTabs('overview'),
+      }),
+      { wrapper: BrowserRouter },
+    );
+  }
+
+  it('tab then openSettings keeps both params', () => {
+    const { result } = setupBrowser('/organizations/7');
+    act(() => {
+      result.current.tab[1]('events');
+      result.current.param.openSettings();
+    });
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get('tab')).toBe('events');
+    expect(params.get('settings')).toBe('');
+    expect(result.current.tab[0]).toBe('events');
+    expect(result.current.param.open).toBe(true);
+  });
+
+  it('setSection then tab keeps both params', () => {
+    const { result } = setupBrowser('/organizations/7?settings=profile');
+    act(() => {
+      result.current.param.setSection('admins');
+      result.current.tab[1]('events');
+    });
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get('settings')).toBe('admins');
+    expect(params.get('tab')).toBe('events');
   });
 });

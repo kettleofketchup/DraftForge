@@ -1,0 +1,1 @@
+- Opening organization settings right after switching tabs no longer drops the selected tab from the URL, so closing settings returns to that tab.

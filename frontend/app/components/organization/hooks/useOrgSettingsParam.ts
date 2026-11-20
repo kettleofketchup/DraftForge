@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useNavigate } from 'react-router';
+import { useLatestSearchParams } from '~/hooks/useLatestSearchParams';
 
 const PARAM = 'settings';
 const NAV_OPTIONS = { replace: true, preventScrollReset: true } as const;
@@ -20,7 +21,7 @@ export function useOrgSettingsParam(access: {
   canOpen: boolean;
 }): OrgSettingsParam {
   const { settled, canOpen } = access;
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useLatestSearchParams();
   const navigate = useNavigate();
   const pushed = useRef(false);
   const raw = searchParams.get(PARAM);
@@ -33,8 +34,7 @@ export function useOrgSettingsParam(access: {
 
   useEffect(() => {
     if (isLegacy) {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
+      setSearchParams((next) => {
         const section = next.get('section') ?? '';
         next.delete('tab');
         next.delete('section');
@@ -44,8 +44,7 @@ export function useOrgSettingsParam(access: {
       return;
     }
     if (denied && raw !== null) {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
+      setSearchParams((next) => {
         next.delete(PARAM);
         return next;
       }, NAV_OPTIONS);
@@ -55,8 +54,7 @@ export function useOrgSettingsParam(access: {
   const setParam = useCallback(
     (value: string | null, push = false) => {
       setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
+        (next) => {
           if (value === null) next.delete(PARAM);
           else next.set(PARAM, value);
           return next;

@@ -1,6 +1,6 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import * as React from 'react';
-import { useSearchParams } from 'react-router';
+import { useLatestSearchParams } from '~/hooks/useLatestSearchParams';
 
 import { cn } from '~/lib/utils';
 
@@ -11,15 +11,14 @@ import { cn } from '~/lib/utils';
  * @returns [activeTab, setActiveTab] - Current tab and setter that updates URL
  */
 function useUrlTabs(defaultValue: string, paramName = 'tab') {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useLatestSearchParams();
 
   const activeTab = searchParams.get(paramName) || defaultValue;
 
   const setActiveTab = React.useCallback(
     (value: string) => {
       setSearchParams(
-        (prev) => {
-          const newParams = new URLSearchParams(prev);
+        (newParams) => {
           if (value === defaultValue) {
             newParams.delete(paramName);
           } else {
