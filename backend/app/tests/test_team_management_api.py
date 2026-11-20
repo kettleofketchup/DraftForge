@@ -819,6 +819,17 @@ class CanManageTeamTests(TeamApiFixture, TestCase):
         self.assertIs(self.detail(self.outsider, loose)["can_manage_team"], False)
         self.assertIs(self.detail(self.site_staff, loose)["can_manage_team"], False)
 
+    def test_detail_after_action_has_new_roster_and_own_flag(self) -> None:
+        self.detail(self.outsider)
+        resp = self.post("set-captain", {"user_id": self.m1.pk, "reason": "swap"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        staff_view = self.detail(self.league_staff)
+        self.assertEqual(staff_view["captain"]["pk"], self.m1.pk)
+        self.assertIs(staff_view["can_manage_team"], True)
+        outsider_view = self.detail(self.outsider)
+        self.assertEqual(outsider_view["captain"]["pk"], self.m1.pk)
+        self.assertIs(outsider_view["can_manage_team"], False)
+
     def test_retrieve_has_managed_fields(self) -> None:
         self.team.left_members.add(self.m2)
         data = self.detail(self.outsider)

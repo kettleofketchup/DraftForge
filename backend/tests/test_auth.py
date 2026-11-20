@@ -52,6 +52,10 @@ from tests.data.users import (
 # Populate functions for non-standard tournament resets. Top-level imports —
 # the previous lambda+__import__ form was a holdover; these are leaf modules
 # with no circular-import risk.
+from tests.helpers.team_management_fixture import (
+    TEAM_MANAGEMENT_TOURNAMENT_NAME,
+    populate_team_management_tournament,
+)
 from tests.populate.bracket import populate_bracket_unset_winner_tournament
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.utils import ensure_org_user
@@ -1009,6 +1013,7 @@ def reset_tournament_by_key(request, key: str):
     RESET_FUNCTIONS = {
         "shuffle_tie_resolution": populate_shuffle_tie_data,
         "bracket_unset_winner": populate_bracket_unset_winner_tournament,
+        "team_management": populate_team_management_tournament,
     }
 
     def clear_existing_draft_redis(name: str) -> None:
@@ -1025,6 +1030,7 @@ def reset_tournament_by_key(request, key: str):
     RESET_TOURNAMENT_NAMES = {
         "shuffle_tie_resolution": SHUFFLE_TIE_TOURNAMENT.name,
         "bracket_unset_winner": BRACKET_UNSET_WINNER_TOURNAMENT.name,
+        "team_management": TEAM_MANAGEMENT_TOURNAMENT_NAME,
     }
 
     reset_fn = RESET_FUNCTIONS.get(key)
