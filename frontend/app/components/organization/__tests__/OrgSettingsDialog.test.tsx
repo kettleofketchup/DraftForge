@@ -361,7 +361,7 @@ describe('OrgSettingsDialog', () => {
 
   it('profile save refetch keeps a dirty event-defaults form dirty', async () => {
     mutateAsync.mockRejectedValue(new Error('boom'));
-    const { rerenderWith } = renderDialog();
+    renderDialog();
     await defaultsLoaded();
 
     editBoth();
@@ -372,9 +372,20 @@ describe('OrgSettingsDialog', () => {
     );
     expect(toastWarning).toHaveBeenCalledTimes(1);
 
-    rerenderWith({ ...ORG, name: 'Renamed' } as OrganizationType);
+    const fetches = vi.mocked(api.getOrgEventDefaults).mock.calls.length;
+    vi.mocked(api.getOrgEventDefaults).mockResolvedValueOnce({
+      ...defaults,
+      max_players: 30,
+    } as unknown as Awaited<ReturnType<typeof api.getOrgEventDefaults>>);
+    await act(() =>
+      client.invalidateQueries({ queryKey: ['org-event-defaults', 7] }),
+    );
+    await waitFor(() =>
+      expect(vi.mocked(api.getOrgEventDefaults).mock.calls.length).toBe(
+        fetches + 1,
+      ),
+    );
 
-    expect(screen.getByTestId('org-name-input')).toHaveValue('Renamed');
     expect(screen.getByTestId('org-defaults-max-players-input')).toHaveValue(
       12,
     );

@@ -8,6 +8,7 @@ import {
   screen,
 } from '@testing-library/react';
 import type { ReactNode, RefObject } from 'react';
+import { toast } from 'sonner';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { updateOrganization } from '~/components/api/api';
 import type { OrganizationType } from '~/components/organization/schemas';
@@ -92,6 +93,21 @@ describe('useOrgProfileSections unit', () => {
       expect.objectContaining({ name: 'New' }),
     );
     expect(unit.isDirty).toBe(false);
+  });
+
+  it('unit.save resolves false, stays dirty and toasts when the request fails', async () => {
+    vi.mocked(updateOrganization).mockRejectedValue(new Error('boom'));
+    renderHarness();
+    fireEvent.change(screen.getByTestId('org-name-input'), {
+      target: { value: 'New' },
+    });
+    let ok = true;
+    await act(async () => {
+      ok = await unit.save();
+    });
+    expect(ok).toBe(false);
+    expect(unit.isDirty).toBe(true);
+    expect(toast.error).toHaveBeenCalledWith('boom');
   });
 
   it('unit.save resolves false and selects the section on an invalid logo URL', async () => {

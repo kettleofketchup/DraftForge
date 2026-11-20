@@ -188,10 +188,11 @@ describe('useStaffPlacementSection', () => {
         </QueryClientProvider>
       </StrictMode>,
     );
-    setTimeout(() => resolve(saved), 30);
+    await act(async () => {
+      resolve(saved);
+    });
     const trigger = await screen.findByTestId('org-settings-policy-select');
-    await new Promise((r) => setTimeout(r, 100));
-    expect(trigger).toHaveTextContent('Confirm');
+    await waitFor(() => expect(trigger).toHaveTextContent('Confirm'));
     expect(checkbox(CODES[0]).checked).toBe(false);
     expect(unit.isDirty).toBe(false);
   });
