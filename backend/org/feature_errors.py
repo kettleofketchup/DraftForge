@@ -2,13 +2,13 @@ from django.contrib.auth.models import AnonymousUser
 from rest_framework.exceptions import NotAuthenticated, PermissionDenied
 
 from app.models import CustomUser, Organization
-from app.permissions_org import (
+from org.features import FeatureKey, org_has_feature
+from org.permissions import (
     has_org_admin_access,
     has_org_staff_access,
     is_org_role_holder,
     is_site_admin,
 )
-from org.features import FeatureKey, org_has_feature
 
 FEATURE_LOCKED = "feature_locked"
 NOT_PERMITTED = "not_permitted"

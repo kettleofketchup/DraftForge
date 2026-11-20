@@ -82,6 +82,15 @@ from org.feature_errors import not_permitted
 from org.features import FeatureKey, active_features
 from org.membership import member_organization_ids, viewer_member_organization_ids
 from org.models import OrgUser
+from org.permissions import (
+    IsOrgAdmin,
+    IsOrgOwner,
+    can_view_org_members,
+    can_view_org_members_from_payload,
+    has_org_staff_access,
+    is_org_role_holder,
+    org_admin_staff_from_payload,
+)
 from org.promotion.services import release_earning_sends
 from org.serializers import OrgUserSerializer
 from org.standing import api as standing
@@ -109,24 +118,17 @@ from .models import (
     Tournament,
 )
 from .permissions import IsStaff
-from .permissions_org import (
+from .permissions_tournament import (
     CanEditTeam,
     CanEditTournament,
     CanManageGame,
     IsLeagueAdmin,
-    IsOrgAdmin,
-    IsOrgOwner,
     can_edit_tournament,
     can_manage_game,
     can_view_league_members,
     can_view_league_members_from_payload,
-    can_view_org_members,
-    can_view_org_members_from_payload,
     check_tournament_league_change,
     has_league_staff_access,
-    has_org_staff_access,
-    is_org_role_holder,
-    org_admin_staff_from_payload,
 )
 from .serializers import (
     GameSerializer,

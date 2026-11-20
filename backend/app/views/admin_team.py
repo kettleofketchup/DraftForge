@@ -22,12 +22,9 @@ from app.models import (
     PositionsModel,
     Tournament,
 )
-from app.permissions_org import (
+from app.permissions_tournament import (
     has_league_admin_access,
     has_league_staff_access,
-    has_org_admin_access,
-    has_org_staff_access,
-    is_org_owner,
 )
 from app.serializers import TournamentUserSerializer
 from app.steam_accounts import (
@@ -38,6 +35,11 @@ from discordbot.services.member_names import normalise_name
 from events.eligibility import refresh_unmet_requirements
 from league.models import LeagueUser
 from org.models import OrgUser
+from org.permissions import (
+    has_org_admin_access,
+    has_org_staff_access,
+    is_org_owner,
+)
 from org.serializers import OrgUserSerializer
 from org.user_search import user_name_q
 from user.querysets import with_user_profiles

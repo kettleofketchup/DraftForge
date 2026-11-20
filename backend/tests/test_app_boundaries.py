@@ -119,6 +119,8 @@ TEAM_DRAFT = MovedSlice(
             ("app.views", "DraftRoundCreateView"),
             ("app.permissions_org", "CanEditDraft"),
             ("app.permissions_org", "CanEditDraftRound"),
+            ("app.permissions_tournament", "CanEditDraft"),
+            ("app.permissions_tournament", "CanEditDraftRound"),
             ("app.functions.tournament", "generate_draft_rounds"),
             ("app.functions.tournament", "rebuild_team"),
             ("app.functions.tournament", "get_draft_style_mmrs"),
@@ -207,9 +209,9 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"recent_draft_events"}),
             "TournamentConsumer replays a tournament's recent team-draft events",
         ),
-        "app/permissions_org.py": BackEdge(
+        "app/permissions_tournament.py": BackEdge(
             frozenset({"HeroDraft"}),
-            "org permission check resolves a hero draft's tournament",
+            "tournament staff check resolves a hero draft's tournament",
         ),
         "app/views/bracket.py": BackEdge(
             frozenset({"HeroDraft"}),

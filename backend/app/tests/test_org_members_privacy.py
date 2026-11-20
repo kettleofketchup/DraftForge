@@ -8,13 +8,13 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, GameType, League, Organization
-from app.permissions_org import (
-    can_view_org_members,
-    can_view_org_members_from_payload,
-)
 from events.models import Event, EventSignup, EventState, SignupStatus
 from league.models import LeagueUser
 from org.models import OrgUser
+from org.permissions import (
+    can_view_org_members,
+    can_view_org_members_from_payload,
+)
 
 
 class OrgMembersPrivacyTest(TestCase):

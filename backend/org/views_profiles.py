@@ -10,10 +10,10 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
 from app.models import Organization
-from app.permissions_org import has_org_staff_access
 from events.eligibility import refresh_unmet_requirements, validate_friend_id
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
+from org.permissions import has_org_staff_access
 
 DOTA_PROFILE_FIELDS = {
     "rank_status",
