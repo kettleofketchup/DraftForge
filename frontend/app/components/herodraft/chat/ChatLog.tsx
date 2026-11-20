@@ -13,6 +13,7 @@ export interface ChatLogProps {
   emptyText: string;
   onHeroClick?: (heroId: number) => void;
   className?: string;
+  viewportClassName?: string;
 }
 
 export function ChatLog({
@@ -20,6 +21,7 @@ export function ChatLog({
   emptyText,
   onHeroClick,
   className,
+  viewportClassName,
 }: ChatLogProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -52,7 +54,11 @@ export function ChatLog({
     <div className={cn('relative min-h-0', className)}>
       <ScrollArea
         className="h-full"
-        viewportProps={{ ref: viewportRef, onScroll: handleScroll }}
+        viewportProps={{
+          ref: viewportRef,
+          onScroll: handleScroll,
+          className: viewportClassName,
+        }}
       >
         <div
           className="flex flex-col py-1"

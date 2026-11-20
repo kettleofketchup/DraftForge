@@ -9,7 +9,6 @@ import {
 } from '~/components/ui/sheet';
 import { VisuallyHidden } from '~/components/ui/visually-hidden';
 import { useMediaQuery } from '~/hooks/useMediaQuery';
-import { cn } from '~/lib/utils';
 import { heroDraftSelectors, useHeroDraftStore } from '~/store/heroDraftStore';
 import { ChatComposer } from './ChatComposer';
 import { chatErrorText } from './chatErrors';
@@ -60,7 +59,12 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
   useEffect(() => {
     if (!isDesktop || !panelOpen) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setChatPanelOpen(false);
+      // Right-clicks and the portaled suggest menu must not close chat.
+      if (e.button !== 0) return;
+      const target = e.target as Element;
+      if (rootRef.current?.contains(target)) return;
+      if (target.closest?.('[data-radix-popper-content-wrapper]')) return;
+      setChatPanelOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
@@ -110,8 +114,9 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
     </div>
   );
 
-  const composer = (
+  const composer = (className?: string) => (
     <ChatComposer
+      className={className}
       inputRef={inputRef}
       value={raw}
       onValueChange={setRaw}
@@ -145,12 +150,12 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
     </SecondaryButton>
   );
 
-  const log = (
+  const log = (props: { className?: string; viewportClassName?: string }) => (
     <ChatLog
       messages={messages}
       emptyText={emptyText}
       onHeroClick={setSelectedHeroId}
-      className="flex-1"
+      {...props}
     />
   );
 
@@ -178,9 +183,9 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
                 Team and all chat for this draft
               </SheetDescription>
             </VisuallyHidden>
-            {log}
+            {log({ className: 'flex-1' })}
             {errorLine}
-            {composer}
+            {composer('flex-none')}
           </SheetContent>
         </Sheet>
       </>
@@ -190,27 +195,28 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
   return (
     <div
       ref={rootRef}
-      className="relative flex min-w-0 flex-1 items-center gap-2"
+      className="relative flex min-w-0 max-w-xl flex-1 items-center gap-2"
       data-herodraft-chat=""
     >
       {(panelOpen || errorLine) && (
-        <div className="absolute bottom-full left-0 right-0 z-20 mb-2 flex flex-col gap-1">
+        <div className="pointer-events-none absolute bottom-full left-0 right-0 z-20 mb-2 flex flex-col gap-1 *:pointer-events-auto">
           {panelOpen && (
             <div
-              className={cn(
-                'flex flex-col overflow-hidden rounded-md border border-border bg-card/95 shadow-lg backdrop-blur',
-                PAUSED_STATES.has(draftState) ? 'h-[25vh]' : 'h-[40vh]',
-              )}
+              className="overflow-hidden rounded-md border border-border bg-card/95 shadow-lg backdrop-blur"
               data-testid="herodraft-chat-panel"
             >
-              {log}
+              {log({
+                viewportClassName: PAUSED_STATES.has(draftState)
+                  ? 'max-h-[25vh]'
+                  : 'max-h-[40vh]',
+              })}
             </div>
           )}
           {errorLine}
         </div>
       )}
       {toggleButton}
-      {composer}
+      {composer()}
     </div>
   );
 }

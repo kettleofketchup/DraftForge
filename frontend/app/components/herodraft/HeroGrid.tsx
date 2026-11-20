@@ -7,10 +7,7 @@ import { ScrollArea } from '~/components/ui/scroll-area';
 import { FastTooltip } from '~/components/ui/tooltip';
 import { heroMatchesSearch } from '~/lib/dota/heroes';
 import { cn } from '~/lib/utils';
-import {
-  type HeroSuggestionKind,
-  useHeroDraftStore,
-} from '~/store/heroDraftStore';
+import { useHeroDraftStore } from '~/store/heroDraftStore';
 import { HeroSuggestMenu } from './chat/HeroSuggestMenu';
 
 // Memoized hero button to prevent re-renders
@@ -135,7 +132,6 @@ export function HeroGrid({
   // Select draft rounds directly for memoization
   const draftRounds = useHeroDraftStore((state) => state.draft?.rounds);
   const suggestHero = useHeroDraftStore((state) => state.suggestHero);
-  const setChatPanelOpen = useHeroDraftStore((state) => state.setChatPanelOpen);
 
   // Auto-focus search when typing anywhere (unless in a dialog/input)
   useEffect(() => {
@@ -214,14 +210,6 @@ export function HeroGrid({
       onHeroClick(heroId);
     },
     [setSelectedHeroId, onHeroClick],
-  );
-
-  const handleSuggest = useCallback(
-    (kind: HeroSuggestionKind, heroId: number) => {
-      suggestHero(kind, heroId);
-      setChatPanelOpen(true);
-    },
-    [suggestHero, setChatPanelOpen],
   );
 
   // Determine overlay color based on current action when it's user's turn
@@ -304,7 +292,7 @@ export function HeroGrid({
         />
       </div>
 
-      <HeroSuggestMenu enabled={canSuggest} onSuggest={handleSuggest}>
+      <HeroSuggestMenu enabled={canSuggest} onSuggest={suggestHero}>
         {heroListEl}
       </HeroSuggestMenu>
     </div>

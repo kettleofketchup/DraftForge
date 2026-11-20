@@ -10,7 +10,10 @@ class ResizeObserverStub {
 globalThis.ResizeObserver ??=
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
+vi.mock('~/hooks/useMediaQuery', () => ({ useMediaQuery: () => true }));
+
 import { HeroGrid } from '~/components/herodraft/HeroGrid';
+import { HeroDraftChat } from '~/components/herodraft/chat/HeroDraftChat';
 import { initialChatState } from '~/components/herodraft/chat/chatState';
 import type { HeroDraft } from '~/components/herodraft/types';
 import { getHeroName } from '~/lib/dota/heroes';
@@ -74,12 +77,61 @@ describe('HeroGrid suggestion context menu', () => {
     expect(within(menu).getByTestId('herodraft-hero-suggest-ban')).toBeTruthy();
   });
 
-  it('suggests a ban and opens the chat panel', () => {
+  it('suggests a ban without opening the chat panel', () => {
     renderGrid(true);
     fireEvent.contextMenu(hero(FREE_HERO));
     fireEvent.click(screen.getByTestId('herodraft-hero-suggest-ban'));
     expect(suggestHero).toHaveBeenCalledWith('suggest_ban', FREE_HERO);
-    expect(useHeroDraftStore.getState().chat.panelOpen).toBe(true);
+    expect(useHeroDraftStore.getState().chat.panelOpen).toBe(false);
+  });
+
+  it('keeps an open chat panel open through right-click and suggest', () => {
+    render(
+      <>
+        <HeroGrid
+          onHeroClick={() => {}}
+          disabled={false}
+          showActionButton
+          currentAction="pick"
+          isMyTurn
+          canSuggest
+        />
+        <HeroDraftChat draftState="drafting" />
+      </>,
+    );
+    fireEvent.click(screen.getByTestId('herodraft-chat-toggle'));
+    const panelOpen = () => useHeroDraftStore.getState().chat.panelOpen;
+    expect(panelOpen()).toBe(true);
+
+    fireEvent.pointerDown(hero(FREE_HERO), { button: 2 });
+    fireEvent.contextMenu(hero(FREE_HERO));
+    expect(panelOpen()).toBe(true);
+
+    const item = screen.getByTestId('herodraft-hero-suggest-pick');
+    fireEvent.pointerDown(item, { button: 0 });
+    fireEvent.click(item);
+    expect(suggestHero).toHaveBeenCalledWith('suggest_pick', FREE_HERO);
+    expect(panelOpen()).toBe(true);
+    expect(screen.getByTestId('herodraft-chat-panel')).toBeInTheDocument();
+  });
+
+  it('still closes the chat panel on a left click outside it', () => {
+    render(
+      <>
+        <HeroGrid
+          onHeroClick={() => {}}
+          disabled={false}
+          showActionButton
+          currentAction="pick"
+          isMyTurn
+          canSuggest
+        />
+        <HeroDraftChat draftState="drafting" />
+      </>,
+    );
+    fireEvent.click(screen.getByTestId('herodraft-chat-toggle'));
+    fireEvent.pointerDown(hero(FREE_HERO), { button: 0 });
+    expect(useHeroDraftStore.getState().chat.panelOpen).toBe(false);
   });
 
   it('suggests a pick', () => {

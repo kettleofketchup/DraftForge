@@ -1000,7 +1000,7 @@ export function HeroDraftModal({
                 <HeroDraftChat key={draftId} draftState={draft.state} />
 
                 {/* Right side controls */}
-                <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0">
                   {/* Login button - shown to guests so they can authenticate and
                       return straight back to this draft (#278). */}
                   {!isLoggedIn && (
