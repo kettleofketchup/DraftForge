@@ -1511,6 +1511,9 @@ class OrgLog(models.Model):
         ("reopen_event", "Reopen Event"),
         ("set_event_staff", "Set Event Staff"),
         ("delete_user_contributions", "Delete User Contributions"),
+        ("set_attendance", "Set Attendance"),
+        ("finalize_attendance", "Finalize Attendance"),
+        ("void_attendance", "Void Attendance"),
     ]
 
     organization = models.ForeignKey(
