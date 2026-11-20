@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useState } from 'react';
+import { type ReactNode, useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { CancelButton, SubmitButton } from '~/components/ui/buttons';
@@ -27,11 +27,16 @@ export function useSettingsSaveBar(
   const [isSaving, setIsSaving] = useState(false);
   const isDirty = units.some((u) => u.isDirty);
 
-  const saveAll = useCallback(async (): Promise<boolean> => {
-    setIsSaving(true);
-    let allOk = true;
-    try {
-      for (const unit of units.filter((u) => u.isDirty)) {
+  const inFlight = useRef<Promise<boolean> | null>(null);
+
+  const saveAll = useCallback((): Promise<boolean> => {
+    if (inFlight.current) return inFlight.current;
+    const dirty = units.filter((u) => u.isDirty);
+    if (dirty.length === 0) return Promise.resolve(true);
+    const run = async (): Promise<boolean> => {
+      setIsSaving(true);
+      let allOk = true;
+      for (const unit of dirty) {
         let ok = false;
         try {
           ok = await unit.save();
@@ -40,11 +45,13 @@ export function useSettingsSaveBar(
         }
         if (!ok) allOk = false;
       }
-    } finally {
+      inFlight.current = null;
       setIsSaving(false);
-    }
-    if (allOk) toast.success('Settings saved');
-    return allOk;
+      if (allOk) toast.success('Settings saved');
+      return allOk;
+    };
+    inFlight.current = run();
+    return inFlight.current;
   }, [units]);
 
   const discardAll = useCallback((): void => {
