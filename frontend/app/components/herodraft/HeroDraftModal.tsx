@@ -589,6 +589,10 @@ export function HeroDraftModal({
   const isCaptain = draft?.draft_teams.some(
     (t) => t.captain?.pk === currentUser?.pk,
   );
+  const pauseOverlayShown =
+    draft?.state === 'paused' ||
+    draft?.state === 'resuming' ||
+    resumeCountdown !== null;
   // Captain-only turn check for hero grid (fixes #98 - team members shouldn't pick)
   const isMyCaptainTurn = currentPickingTeam?.captain?.pk === currentUser?.pk;
   // Find my team - either as captain or as a member
@@ -1006,6 +1010,7 @@ export function HeroDraftModal({
                   )}
                   {/* Pause button - shown during drafting for captains/staff */}
                   {draft.state === 'drafting' &&
+                    !pauseOverlayShown &&
                     (isCaptain || currentUser?.is_staff) && (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -1061,12 +1066,8 @@ export function HeroDraftModal({
               {/* Paused/Resuming overlay - shows during pause and countdown */}
               {(() => {
                 // Use local countdown (not server ticks) to avoid latency issues
-                const isResuming = draft.state === 'resuming';
                 const countdownValue = resumeCountdown;
-                const showOverlay =
-                  draft.state === 'paused' ||
-                  isResuming ||
-                  resumeCountdown !== null;
+                const showOverlay = pauseOverlayShown;
 
                 // Check if both captains are connected
                 const allCaptainsConnected = draft.draft_teams.every(
