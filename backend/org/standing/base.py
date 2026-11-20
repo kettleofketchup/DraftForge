@@ -91,7 +91,11 @@ class TrackBase(abc.ABC):
 
     @abc.abstractmethod
     def access(
-        self, org_id: int, *, viewer: CustomUser | AnonymousUser | None
+        self,
+        org_id: int,
+        *,
+        viewer: CustomUser | AnonymousUser | None,
+        roles: ViewerRoles,
     ) -> TrackAccess: ...
 
     @abc.abstractmethod
@@ -107,19 +111,29 @@ class TrackBase(abc.ABC):
     ) -> Leaderboard: ...
 
     @abc.abstractmethod
+    def member_standing(
+        self,
+        org_user: OrgUser,
+        *,
+        viewer: CustomUser | AnonymousUser | None,
+        roles: ViewerRoles,
+        now: datetime,
+    ) -> Mapping[str, object] | None: ...
+
     def track_info(
         self,
         org_id: int,
         *,
         viewer: CustomUser | AnonymousUser | None,
         roles: ViewerRoles,
-    ) -> TrackInfo: ...
-
-    @abc.abstractmethod
-    def member_standing(
-        self,
-        org_user: OrgUser,
-        *,
-        viewer: CustomUser | AnonymousUser | None,
-        now: datetime,
-    ) -> Mapping[str, object] | None: ...
+    ) -> TrackInfo:
+        access = self.access(org_id, viewer=viewer, roles=roles)
+        return TrackInfo(
+            key=self.key,
+            label=self.label,
+            metrics=self.metrics,
+            can_view_rows=access.can_view_rows,
+            can_view_own=access.can_view_own,
+            board_open=access.board_open,
+            can_manage=roles.is_admin,
+        )

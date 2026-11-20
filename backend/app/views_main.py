@@ -1543,9 +1543,7 @@ def _feature_access(
         data["pk"],
         viewer=user,
         features=features,
-        roles=standing.ViewerRoles(
-            is_admin=is_admin, is_staff=is_staff, can_view_members=can_view
-        ),
+        roles=standing.ViewerRoles.fixed(is_admin, is_staff, can_view),
     )
     conduct = next((t for t in tracks if t.key == "conduct"), None)
     return {
@@ -1558,7 +1556,7 @@ def _feature_access(
         "can_view_contributions": contributions,
         "can_view_contributors": contributions and can_view,
         "can_manage_contributions": contributions and is_admin,
-        "can_view_conduct": conduct is not None and conduct.can_view_rows,
+        "can_view_conduct": conduct is not None and conduct.board_open,
         "can_view_own_conduct": conduct is not None and conduct.can_view_own,
         "can_view_conduct_details": conduct is not None and is_staff,
         "can_manage_conduct": conduct is not None and conduct.can_manage,

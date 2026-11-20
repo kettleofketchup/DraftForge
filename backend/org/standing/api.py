@@ -10,6 +10,11 @@ from django.db.models import QuerySet
 from django.utils import timezone
 
 from app.models import CustomUser, Organization
+from app.permissions_org import (
+    can_view_org_members,
+    has_org_admin_access,
+    has_org_staff_access,
+)
 from events.models import Event, EventSignup
 from org.feature_keys import FeatureKey
 from org.features import org_has_feature
@@ -17,7 +22,12 @@ from org.models import OrgUser
 from org.standing import registry
 from org.standing.base import TrackBase
 from org.standing.cache import StandingCache
-from org.standing.errors import FeatureLocked, UnknownMetric, UnknownTrack
+from org.standing.errors import (
+    AccessDenied,
+    FeatureLocked,
+    UnknownMetric,
+    UnknownTrack,
+)
 from org.standing.periods import Period
 from org.standing.serializers import track_info_data
 from org.standing.types import (
@@ -36,6 +46,7 @@ from org.standing.types import (
 )
 
 __all__ = [
+    "AccessDenied",
     "ViewerRoles",
     "track_info_data",
     "FeatureLocked",
@@ -59,6 +70,7 @@ __all__ = [
     "reopen_reset_fields",
     "track_metrics",
     "tracks_for",
+    "viewer_roles",
 ]
 
 
@@ -218,6 +230,18 @@ def promotion_order[T: HasUserId](
     return ordered
 
 
+def viewer_roles(
+    org: Organization, viewer: CustomUser | AnonymousUser | None
+) -> ViewerRoles:
+    if viewer is None or not viewer.is_authenticated:
+        return ViewerRoles.fixed(False, False, False)
+    return ViewerRoles(
+        is_admin=lambda: has_org_admin_access(viewer, org),
+        is_staff=lambda: has_org_staff_access(viewer, org),
+        can_view_members=lambda: can_view_org_members(viewer, org),
+    )
+
+
 def leaderboard(
     org: Organization,
     track: str,
@@ -233,7 +257,13 @@ def leaderboard(
         raise UnknownMetric(metric)
     if not org_has_feature(org, adapter.feature):
         raise FeatureLocked(adapter.key)
-    access = adapter.access(org.pk, viewer=viewer)
+    roles = viewer_roles(org, viewer)
+    access = adapter.access(org.pk, viewer=viewer, roles=roles)
+    if not access.allowed:
+        raise AccessDenied(
+            adapter.key,
+            authenticated=bool(viewer is not None and viewer.is_authenticated),
+        )
     board = adapter.leaderboard(
         org,
         chosen,
@@ -268,6 +298,7 @@ def member_standing(
     org_user: OrgUser,
     *,
     viewer: CustomUser | AnonymousUser | None,
+    roles: ViewerRoles,
     now: datetime | None = None,
 ) -> dict[TrackKey, Mapping[str, object]]:
     at = now or timezone.now()
@@ -275,7 +306,7 @@ def member_standing(
     for t in registry.tracks():
         if not org_has_feature(org_user.organization_id, t.feature):
             continue
-        block = t.member_standing(org_user, viewer=viewer, now=at)
+        block = t.member_standing(org_user, viewer=viewer, roles=roles, now=at)
         if block is not None:
             found[t.key] = block
     return found

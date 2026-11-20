@@ -1,4 +1,3 @@
-from django.contrib.auth.models import AnonymousUser
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import NotAuthenticated, NotFound, ValidationError
@@ -6,26 +5,13 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser, Organization
-from app.permissions_org import (
-    can_view_org_members,
-    has_org_admin_access,
-    has_org_staff_access,
-)
+from app.models import Organization
 from org.feature_errors import feature_locked, not_permitted
 from org.features import active_features
 from org.standing import api as standing
 from org.standing.periods import parse_period
 from org.standing.serializers import leaderboard_data, track_info_data
-from org.standing.types import TrackInfo, ViewerRoles
-
-
-def _roles(viewer: CustomUser | AnonymousUser, org: Organization) -> ViewerRoles:
-    return ViewerRoles(
-        is_admin=has_org_admin_access(viewer, org),
-        is_staff=has_org_staff_access(viewer, org),
-        can_view_members=can_view_org_members(viewer, org),
-    )
+from org.standing.types import TrackInfo
 
 
 def _tracks(request: Request, org: Organization) -> list[TrackInfo]:
@@ -33,7 +19,7 @@ def _tracks(request: Request, org: Organization) -> list[TrackInfo]:
         org.pk,
         viewer=request.user,
         features=active_features(org.pk),
-        roles=_roles(request.user, org),
+        roles=standing.viewer_roles(org, request.user),
     )
 
 
@@ -64,9 +50,8 @@ def standing_leaderboard(request: Request, org_id: int, track: str) -> Response:
         raise ValidationError({"metric": f"Unknown metric {key!r}."}) from exc
     except standing.FeatureLocked as exc:
         raise feature_locked() from exc
-    info = next(t for t in _tracks(request, org) if t.key == track)
-    if not info.can_view_rows and not info.can_view_own and board.total is None:
-        if not request.user.is_authenticated:
-            raise NotAuthenticated()
-        raise not_permitted()
+    except standing.AccessDenied as exc:
+        if not exc.authenticated:
+            raise NotAuthenticated() from exc
+        raise not_permitted() from exc
     return Response(leaderboard_data(board))

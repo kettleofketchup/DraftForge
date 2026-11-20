@@ -6,7 +6,6 @@ from django.contrib.auth.models import AnonymousUser
 from django.utils import timezone
 
 from app.models import CustomUser, Organization
-from app.permissions_org import can_view_org_members, has_org_staff_access
 from events.models import Event, EventSignup
 from org.conduct.capture import capture_late_cancel
 from org.conduct.eligibility import gate_for, standings
@@ -39,7 +38,6 @@ from org.standing.types import (
     Metric,
     OutputKeys,
     TrackAccess,
-    TrackInfo,
     TrackOutput,
     ViewerRoles,
 )
@@ -161,34 +159,19 @@ class ConductTrack(TrackBase):
 
     @override
     def access(
-        self, org_id: int, *, viewer: CustomUser | AnonymousUser | None
-    ) -> TrackAccess:
-        settings = get_conduct_settings(org_id)
-        board = viewer is not None and (
-            settings.leaderboard_public
-            or has_org_staff_access(viewer, Organization.objects.get(pk=org_id))
-        )
-        return TrackAccess(
-            can_view_rows=bool(board and can_view_org_members(viewer, org_id)),
-            can_view_own=_is_member(viewer, org_id),
-        )
-
-    @override
-    def track_info(
         self,
         org_id: int,
         *,
         viewer: CustomUser | AnonymousUser | None,
         roles: ViewerRoles,
-    ) -> TrackInfo:
-        public = get_conduct_settings(org_id).leaderboard_public
-        return TrackInfo(
-            key=self.key,
-            label=self.label,
-            metrics=self.metrics,
-            can_view_rows=public or roles.is_staff,
-            can_view_own=_is_member(viewer, org_id),
-            can_manage=roles.is_admin,
+    ) -> TrackAccess:
+        member = _is_member(viewer, org_id)
+        board_open = get_conduct_settings(org_id).leaderboard_public or roles.is_staff
+        return TrackAccess(
+            can_view_rows=board_open and roles.can_view_members,
+            can_view_own=member,
+            allowed=board_open or member,
+            board_open=board_open,
         )
 
     @override
@@ -197,14 +180,13 @@ class ConductTrack(TrackBase):
         org_user: OrgUser,
         *,
         viewer: CustomUser | AnonymousUser | None,
+        roles: ViewerRoles,
         now: datetime,
     ) -> Mapping[str, object] | None:
         if viewer is None or not viewer.is_authenticated:
             return None
         org_id = org_user.organization_id
-        if org_user.user_id != viewer.pk and not has_org_staff_access(
-            viewer, org_user.organization
-        ):
+        if org_user.user_id != viewer.pk and not roles.is_staff:
             return None
         settings = get_conduct_settings(org_id)
         score = member_scores(org_id, [org_user.pk], now=now, settings=settings)[

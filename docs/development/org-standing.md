@@ -52,16 +52,31 @@ them.
 | `promotion_order(event, candidates, *, cache)` | No caller yet (waitlist promotion) | No reordering |
 | `leaderboard(org, track, metric, period, *, viewer, now=None)` | `/contributions/leaderboard/` | Points per member for the period |
 
-`leaderboard` raises `UnknownTrack`, `UnknownMetric` or `FeatureLocked`. It blanks
-`rows` and `own_row` when the viewer may not see them (from the track's `access()`),
-never `total`, and sets `rows_visible`.
+`leaderboard` raises `UnknownTrack`, `UnknownMetric`, `FeatureLocked`, or
+`AccessDenied` when the track's `access()` returns `allowed=False`. It blanks `rows`
+and `own_row` when the viewer may not see them, never `total`, and sets
+`rows_visible`. Contribution also serves an `entries` metric (rows ordered by entry
+count) from the same aggregation as `points`.
+
+### Read surface
+
+| Call | Returns |
+|---|---|
+| `viewer_roles(org, viewer)` | A lazy `ViewerRoles`: `is_admin`, `is_staff` and `can_view_members` each run their permission query on first read only. Anonymous or `None` viewers get all-False with no queries |
+| `ViewerRoles.fixed(is_admin, is_staff, can_view_members)` | Eager roles from values the caller already has (org detail uses its cached payload) |
+| `tracks_for(org_id, *, viewer, features, roles)` | One `TrackInfo` per track whose feature is in `features`, in registry order |
+| `member_standing(org_user, *, viewer, roles, now=None)` | `{track_key: block}` for unlocked tracks that let this viewer see the member |
+
+A track implements `access(org_id, *, viewer, roles) -> TrackAccess` (`can_view_rows`,
+`can_view_own`, `allowed`, `board_open`) and
+`member_standing(org_user, *, viewer, roles, now)`. `track_info()` is built on the base
+class from `access()` plus `roles.is_admin` for `can_manage`. A track reads only the
+roles it needs, so contribution's leaderboard costs the same single member-list query
+it always has. Contribution's `member_standing` returns `totals` and `monthly` for the
+member themselves or a viewer who can see the member list, in two queries.
 
 !!! info "Interface status"
-    This is the first cut of the interface. Tracks expose `access()` for read
-    permissions; `track_info()`, `member_standing()` and `api.tracks_for()` arrive
-    with the conduct track and replace or extend it. `ledger.upsert_event_entry`
-    arrives with the leadership track. Test data population is unchanged until the
-    conduct track.
+    `ledger.upsert_event_entry` arrives with the leadership track.
 
 ## Invariants
 
@@ -184,7 +199,7 @@ adapter schedules them with `transaction.on_commit`.
 1. Subclass `org.standing.base.TrackBase` in the track's package (`adapter.py`).
    Override only the hooks you need, mark them `@typing.override`, and keep the
    base signatures exactly (`test_standing_registry` checks this). Implement
-   `access()` and `leaderboard()`.
+   `access()`, `leaderboard()` and `member_standing()`.
 2. Declare `key`, `label`, `feature`, `metrics` (exactly one `default=True`),
    `output_keys` and any `reopen_reset_fields`.
 3. Add the instance to `TRACKS` in `org/standing/registry.py`.

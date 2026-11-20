@@ -23,7 +23,6 @@ from org.standing.types import (
     Metric,
     OutputKeys,
     TrackAccess,
-    TrackInfo,
     TrackOutput,
     ViewerRoles,
 )
@@ -72,6 +71,9 @@ class FakeTrack(TrackBase):
         self.raise_on: set[str] = set()
         self.order_fn: Callable[[Sequence[Any]], list[Any]] | None = None
         self.track_access = TrackAccess(can_view_rows=True, can_view_own=True)
+        self.standing_block: Callable[[OrgUser], Mapping[str, object] | None] = (
+            lambda ou: {"org_user_id": ou.pk}
+        )
         self.board_rows: tuple[LeaderboardRow, ...] = (
             LeaderboardRow(
                 org_user_id=1,
@@ -186,26 +188,13 @@ class FakeTrack(TrackBase):
 
     @override
     def access(
-        self, org_id: int, *, viewer: CustomUser | AnonymousUser | None
-    ) -> TrackAccess:
-        return self.track_access
-
-    @override
-    def track_info(
         self,
         org_id: int,
         *,
         viewer: CustomUser | AnonymousUser | None,
         roles: ViewerRoles,
-    ) -> TrackInfo:
-        return TrackInfo(
-            key=self.key,
-            label=self.label,
-            metrics=self.metrics,
-            can_view_rows=self.track_access.can_view_rows,
-            can_view_own=self.track_access.can_view_own,
-            can_manage=roles.is_admin,
-        )
+    ) -> TrackAccess:
+        return self.track_access
 
     @override
     def member_standing(
@@ -213,9 +202,10 @@ class FakeTrack(TrackBase):
         org_user: OrgUser,
         *,
         viewer: CustomUser | AnonymousUser | None,
+        roles: ViewerRoles,
         now: datetime,
     ) -> Mapping[str, object] | None:
-        return {"org_user_id": org_user.pk}
+        return self.standing_block(org_user)
 
     @override
     def leaderboard(

@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta
 from typing import override
 
+from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization
 from events.constants import EventState
@@ -18,6 +21,10 @@ from org.standing.periods import parse_period
 from org.standing.registry import override_tracks
 from org.standing.types import EMPTY_OUTPUT, TrackAccess, TrackOutput
 from org.tests.standing_fakes import FakeTrack, atomic_baseline
+from org.tests.test_standing_contribution_parity import (
+    LEADERBOARD_MEMBER_QUERIES,
+    _ParityBase,
+)
 
 
 class NoopTrack(FakeTrack):
@@ -76,6 +83,8 @@ class StandingAtomicGuardTest(SimpleTestCase):
             "FeatureLocked",
             "UnknownTrack",
             "UnknownMetric",
+            "AccessDenied",
+            "ViewerRoles",
         ):
             self.assertTrue(hasattr(standing, name), name)
             self.assertIn(name, standing.__all__)
@@ -270,3 +279,133 @@ class StandingApiTest(TestCase):
         self.assertIsNone(board.own_row)
         self.assertEqual(board.total, 42)
         self.assertFalse(board.rows_visible)
+
+    def test_leaderboard_access_denied(self) -> None:
+        period = parse_period(self.org, None)
+        set_org_feature(self.org, FeatureKey.PROMOTION, enabled=True, actor=self.owner)
+        fake = FakeTrack()
+        fake.track_access = TrackAccess(False, False, allowed=False)
+        with override_tracks(fake):
+            with self.assertRaises(standing.AccessDenied) as caught:
+                standing.leaderboard(self.org, "fake", "points", period, viewer=None)
+        self.assertFalse(caught.exception.authenticated)
+        self.assertEqual(caught.exception.track, "fake")
+
+
+class StandingReadSurfaceTest(TestCase):
+    def setUp(self) -> None:
+        self.owner = CustomUser.objects.create_user(username="rs_owner", password="x")
+        self.org = Organization.objects.create(name="RS Org", owner=self.owner)
+        self.member = CustomUser.objects.create_user(username="rs_member", password="x")
+        self.member_ou = OrgUser.objects.create(user=self.member, organization=self.org)
+
+    def test_tracks_for_skips_locked_features(self) -> None:
+        promo = FakeTrack("promo_fake", feature=FeatureKey.PROMOTION)
+        contrib = FakeTrack("contrib_fake", feature=FeatureKey.CONTRIBUTIONS)
+        for roles in (
+            standing.ViewerRoles.fixed(True, False, False),
+            standing.ViewerRoles.fixed(False, False, False),
+        ):
+            with override_tracks(contrib, promo):
+                infos = standing.tracks_for(
+                    self.org.pk,
+                    viewer=self.member,
+                    features={"promotion"},
+                    roles=roles,
+                )
+            self.assertEqual([i.key for i in infos], ["promo_fake"])
+            self.assertEqual(infos[0].can_manage, roles.is_admin)
+            self.assertTrue(infos[0].board_open)
+
+    @override_settings(CACHEOPS_ENABLED=False)
+    def test_tracks_for_zero_queries_for_contribution(self) -> None:
+        with self.assertNumQueries(0):
+            infos = standing.tracks_for(
+                self.org.pk,
+                viewer=self.member,
+                features=["contributions"],
+                roles=standing.ViewerRoles.fixed(False, False, True),
+            )
+        self.assertEqual([i.key for i in infos], ["contribution"])
+        self.assertTrue(infos[0].can_view_rows)
+        self.assertTrue(infos[0].can_view_own)
+        self.assertTrue(infos[0].board_open)
+        self.assertFalse(infos[0].can_manage)
+
+    def test_member_standing_drops_hidden_tracks(self) -> None:
+        set_org_feature(self.org, FeatureKey.PROMOTION, enabled=True, actor=self.owner)
+        set_org_feature(
+            self.org, FeatureKey.CONTRIBUTIONS, enabled=True, actor=self.owner
+        )
+        shown = FakeTrack("shown", feature=FeatureKey.PROMOTION)
+        hidden = FakeTrack("hidden", feature=FeatureKey.CONTRIBUTIONS)
+        hidden.standing_block = lambda ou: None
+        with override_tracks(shown, hidden):
+            found = standing.member_standing(
+                self.member_ou,
+                viewer=self.member,
+                roles=standing.ViewerRoles.fixed(False, False, False),
+            )
+        self.assertEqual(dict(found), {"shown": {"org_user_id": self.member_ou.pk}})
+
+    def test_member_standing_skips_locked_track(self) -> None:
+        set_org_feature(self.org, FeatureKey.PROMOTION, enabled=False, actor=self.owner)
+        with override_tracks(FakeTrack()):
+            found = standing.member_standing(
+                self.member_ou,
+                viewer=self.member,
+                roles=standing.ViewerRoles.fixed(False, False, False),
+            )
+        self.assertEqual(found, {})
+
+    @override_settings(CACHEOPS_ENABLED=False)
+    def test_viewer_roles_anonymous_zero_queries(self) -> None:
+        for viewer in (None, AnonymousUser()):
+            with self.assertNumQueries(0):
+                roles = standing.viewer_roles(self.org, viewer)
+                flags = (roles.is_admin, roles.is_staff, roles.can_view_members)
+            self.assertEqual(flags, (False, False, False))
+
+    @override_settings(CACHEOPS_ENABLED=False)
+    def test_viewer_roles_lazy(self) -> None:
+        with self.assertNumQueries(0):
+            roles = standing.viewer_roles(self.org, self.member)
+        with self.assertNumQueries(1):
+            self.assertTrue(roles.can_view_members)
+            self.assertTrue(roles.can_view_members)
+
+    def test_viewer_roles_reads_permissions(self) -> None:
+        owner_roles = standing.viewer_roles(self.org, self.owner)
+        self.assertEqual(
+            (owner_roles.is_admin, owner_roles.is_staff, owner_roles.can_view_members),
+            (True, True, True),
+        )
+        member_roles = standing.viewer_roles(self.org, self.member)
+        self.assertEqual(
+            (
+                member_roles.is_admin,
+                member_roles.is_staff,
+                member_roles.can_view_members,
+            ),
+            (False, False, True),
+        )
+
+    def test_fixed_roles(self) -> None:
+        roles = standing.ViewerRoles.fixed(True, False, True)
+        self.assertEqual(
+            (roles.is_admin, roles.is_staff, roles.can_view_members),
+            (True, False, True),
+        )
+
+
+class ContributionLeaderboardCountTest(_ParityBase):
+    def test_contribution_leaderboard_query_count_unchanged(self) -> None:
+        self._complete()
+        viewer = CustomUser.objects.create_user(username="rs_viewer", password="x")
+        OrgUser.objects.create(user=viewer, organization=self.org)
+        client = APIClient()
+        client.force_authenticate(viewer)
+        url = reverse("org-contributions-leaderboard", kwargs={"org_id": self.org.pk})
+        response = self.measure(LEADERBOARD_MEMBER_QUERIES, lambda: client.get(url))
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()["rows_visible"])
