@@ -82,6 +82,20 @@ async function confirmAction(page: Page, reason: string): Promise<void> {
   await expect(dialog).toBeHidden();
 }
 
+/**
+ * A card roster row, matched on its avatar: UserStrip truncates names over
+ * 20 characters, so the row text can't be matched in full.
+ */
+function cardRow(
+  card: Locator,
+  kind: 'member' | 'standin' | 'dropout',
+  username: string,
+): Locator {
+  return card.locator(`[data-testid^="team-card-${kind}-"]`).filter({
+    has: card.page().getByRole('img', { name: username, exact: true }),
+  });
+}
+
 function memberRow(dialog: Locator, username: string): Locator {
   return dialog
     .locator('[data-testid^="team-member-row-"]')
@@ -193,11 +207,7 @@ test.describe('Team management dialog', () => {
     const bravo = card(page, 'TM Bravo');
     const standin = `${PREFIX}bravo_standin`;
     const dropout = `${PREFIX}bravo_5`;
-    await expect(
-      bravo
-        .locator('[data-testid^="team-card-standin-"]')
-        .filter({ hasText: standin }),
-    ).toBeVisible();
+    await expect(cardRow(bravo, 'standin', standin)).toBeVisible();
 
     const dialog = await openManage(page, 'TM Bravo');
     await memberRow(dialog, dropout)
@@ -209,11 +219,7 @@ test.describe('Team management dialog', () => {
         .locator('[data-testid^="team-dropout-row-"]')
         .filter({ hasText: dropout }),
     ).toBeVisible();
-    await expect(
-      bravo
-        .locator('[data-testid^="team-card-dropout-"]')
-        .filter({ hasText: dropout }),
-    ).toBeVisible();
+    await expect(cardRow(bravo, 'dropout', dropout)).toBeVisible();
 
     await dialog
       .locator('[data-testid^="team-standin-row-"]')
@@ -228,11 +234,7 @@ test.describe('Team management dialog', () => {
     await expect(
       dialog.locator('[data-testid^="team-standin-row-"]'),
     ).toHaveCount(0);
-    await expect(
-      bravo
-        .locator('[data-testid^="team-card-member-"]')
-        .filter({ hasText: standin }),
-    ).toBeVisible();
+    await expect(cardRow(bravo, 'member', standin)).toBeVisible();
     await expect(
       bravo.locator('[data-testid^="team-card-standin-"]'),
     ).toHaveCount(0);
