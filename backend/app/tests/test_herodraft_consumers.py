@@ -23,6 +23,7 @@ from app.models import (
     Team,
     Tournament,
 )
+from app.tests.ws_helpers import read_until_type
 
 User = get_user_model()
 
@@ -268,8 +269,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        # Receive initial state
-        await communicator.receive_json_from()
+        await read_until_type(communicator, "chat_history")
 
         # Send event through channel layer
         from channels.layers import get_channel_layer
@@ -287,8 +287,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
             },
         )
 
-        # Receive event
-        response = await communicator.receive_json_from()
+        response = await read_until_type(communicator, "herodraft_event")
         self.assertEqual(response["type"], "herodraft_event")
         self.assertEqual(response["event_type"], "hero_selected")
         self.assertEqual(response["draft_team"], self.draft_team1.id)
@@ -306,8 +305,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        # Receive initial state
-        await communicator.receive_json_from()
+        await read_until_type(communicator, "chat_history")
 
         # Send tick through channel layer
         from channels.layers import get_channel_layer
@@ -328,8 +326,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
             },
         )
 
-        # Receive tick
-        response = await communicator.receive_json_from()
+        response = await read_until_type(communicator, "herodraft_tick")
         self.assertEqual(response["type"], "herodraft_tick")
         self.assertEqual(response["current_round"], 1)
         self.assertEqual(response["active_team_id"], self.draft_team1.id)
@@ -773,19 +770,9 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
     async def _await_captain_connected(self, comm: WebsocketCommunicator) -> None:
         """The captain's presence write has committed once this broadcast arrives."""
         while True:
-            frame = await self._next_json_of_type(comm, "herodraft_event")
+            frame = await read_until_type(comm, "herodraft_event")
             if frame.get("event_type") == "captain_connected":
                 return
-
-    async def _next_json_of_type(self, comm, wanted: str, timeout: float = 5) -> dict:
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + timeout
-        while True:
-            frame = await comm.receive_json_from(
-                timeout=max(0.1, deadline - loop.time())
-            )
-            if frame.get("type") == wanted:
-                return frame
 
     async def _next_non_ping_output(self, comm, timeout: float = 5) -> dict:
         while True:
@@ -810,16 +797,16 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         )
         first_comm.scope["user"] = self.captain1
         await first_comm.connect()
-        await self._next_json_of_type(first_comm, "initial_state")
+        await read_until_type(first_comm, "initial_state")
 
         second_comm = WebsocketCommunicator(
             self.get_application(), f"/api/herodraft/{self.draft.id}/"
         )
         second_comm.scope["user"] = self.captain1
         await second_comm.connect()
-        await self._next_json_of_type(second_comm, "initial_state")
+        await read_until_type(second_comm, "initial_state")
 
-        kicked = await self._next_json_of_type(first_comm, "herodraft_kicked")
+        kicked = await read_until_type(first_comm, "herodraft_kicked")
         self.assertEqual(
             kicked, {"type": "herodraft_kicked", "reason": "new_connection"}
         )

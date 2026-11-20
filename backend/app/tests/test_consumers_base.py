@@ -426,3 +426,65 @@ class TestTickStartRunsOffTheSyncThread(SimpleTestCase):
         sensitive = async_to_sync(go)()
         self.assertEqual(len(ran_on), 1)
         self.assertIsNot(ran_on[0], sensitive)
+
+
+class TestExtraGroupsDiscard(SimpleTestCase):
+    def _consumer(self, **attrs: object) -> ConcreteDraftConsumer:
+        consumer = ConcreteDraftConsumer.__new__(ConcreteDraftConsumer)
+        consumer.channel_layer = SimpleNamespace(group_discard=mock.AsyncMock())
+        consumer.channel_name = "chan-1"
+        consumer.room_group_name = "testdraft_7"
+        consumer.draft_id = 7
+        for name, value in attrs.items():
+            setattr(consumer, name, value)
+        return consumer
+
+    def _discarded(self, consumer: ConcreteDraftConsumer) -> set[tuple[str, str]]:
+        return {c.args for c in consumer.channel_layer.group_discard.await_args_list}
+
+    def test_normal_disconnect_discards_extra_groups(self) -> None:
+        consumer = self._consumer(_extra_groups={"testdraft_7_team_3"})
+        asyncio.run(consumer.base_disconnect(1000))
+        self.assertEqual(
+            self._discarded(consumer),
+            {("testdraft_7_team_3", "chan-1"), ("testdraft_7", "chan-1")},
+        )
+        self.assertEqual(consumer._extra_groups, set())
+
+    def test_kicked_disconnect_discards_extra_groups(self) -> None:
+        consumer = self._consumer(
+            _extra_groups={"testdraft_7_team_3"}, _was_kicked=True
+        )
+        asyncio.run(consumer.base_disconnect(4000))
+        self.assertEqual(
+            self._discarded(consumer),
+            {("testdraft_7_team_3", "chan-1"), ("testdraft_7", "chan-1")},
+        )
+        self.assertEqual(consumer._extra_groups, set())
+
+    def test_consumer_without_base_connect_disconnects(self) -> None:
+        consumer = self._consumer()
+        self.assertFalse(hasattr(consumer, "_extra_groups"))
+        asyncio.run(consumer.base_disconnect(1000))
+        self.assertEqual(self._discarded(consumer), {("testdraft_7", "chan-1")})
+
+    def test_hero_consumer_built_with_new_disconnects(self) -> None:
+        consumer = HeroDraftConsumer.__new__(HeroDraftConsumer)
+        consumer.channel_layer = SimpleNamespace(group_discard=mock.AsyncMock())
+        consumer.channel_name = "chan-2"
+        asyncio.run(consumer.base_disconnect(1000))
+        consumer.channel_layer.group_discard.assert_not_awaited()
+
+    def test_base_connect_starts_with_no_extra_groups(self) -> None:
+        class MissingDraftConsumer(ConcreteDraftConsumer):
+            async def draft_exists(self, draft_id):
+                return False
+
+        consumer = MissingDraftConsumer()
+        consumer.scope = {"url_route": {"kwargs": {"draft_id": "22"}}, "path": ""}
+        with (
+            mock.patch.object(consumer, "telemetry_connect", mock.AsyncMock()),
+            mock.patch.object(consumer, "close", mock.AsyncMock()),
+        ):
+            asyncio.run(consumer.base_connect())
+        self.assertEqual(consumer._extra_groups, set())

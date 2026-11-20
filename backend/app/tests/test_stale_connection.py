@@ -6,7 +6,6 @@ Nginx) from killing idle connections during PAUSED state.
 """
 
 import asyncio
-import json
 from datetime import date
 from unittest.mock import patch
 
@@ -19,6 +18,7 @@ from django.urls import re_path
 
 from app.consumers import HeroDraftConsumer
 from app.models import DraftTeam, Game, HeroDraft, HeroDraftState, Team, Tournament
+from app.tests.ws_helpers import read_until_type
 
 User = get_user_model()
 
@@ -107,9 +107,9 @@ class StaleConnectionTestCase(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        # Receive initial state
         response = await communicator.receive_json_from()
         self.assertEqual(response["type"], "initial_state")
+        await read_until_type(communicator, "chat_history")
 
         # Wait for at least one ping message (with FAST_PING_INTERVAL = 0.1s,
         # this should arrive quickly). Drain any non-ping messages first
@@ -154,8 +154,7 @@ class StaleConnectionTestCase(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        # Receive initial state
-        await communicator.receive_json_from()
+        await read_until_type(communicator, "chat_history")
 
         # Wait for ping
         response = await asyncio.wait_for(communicator.receive_json_from(), timeout=2.0)
@@ -184,8 +183,7 @@ class StaleConnectionTestCase(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        # Receive initial state
-        await communicator.receive_json_from()
+        await read_until_type(communicator, "chat_history")
 
         # Collect at least 3 ping messages
         pings = []
@@ -225,9 +223,9 @@ class StaleConnectionTestCase(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        # Receive initial state
         response = await communicator.receive_json_from()
         self.assertEqual(response["type"], "initial_state")
+        await read_until_type(communicator, "chat_history")
 
         # Simulate a tick message via channel layer (as the tick broadcaster would)
         from channels.layers import get_channel_layer
@@ -291,8 +289,7 @@ class StaleConnectionTestCase(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        # Receive initial state
-        await communicator.receive_json_from()
+        await read_until_type(communicator, "chat_history")
 
         # Wait for one ping to confirm the loop is running
         response = await asyncio.wait_for(communicator.receive_json_from(), timeout=2.0)

@@ -15,6 +15,13 @@ from app.broadcast import broadcast_herodraft_state
 from app.cache_utils import invalidate_obj
 from app.consumers_base import BaseDraftConsumer, consumer_db
 from app.draft_state import build_draft_state, herodraft_state_queryset
+from app.functions.herodraft_chat import (
+    SPECTATOR,
+    ChatViewer,
+    resolve_chat_viewer,
+    team_group_name,
+    visible_messages,
+)
 from app.functions.teamdraft import emit_event, team_payload
 from app.models import (
     Draft,
@@ -428,6 +435,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
     PING_ENABLED = True
     kick_duplicate_captain_connections = True
     clear_heartbeat_on_disconnect = True
+    _chat_viewer: ChatViewer = SPECTATOR
 
     # --- Abstract method implementations ---
 
@@ -462,6 +470,90 @@ class HeroDraftConsumer(BaseDraftConsumer):
             HeroDraftState.DRAFTING.value,
             HeroDraftState.RESUMING.value,
         )
+
+    async def send_initial_messages(self, initial_state: dict | None) -> None:
+        await super().send_initial_messages(initial_state)
+        try:
+            await self._chat_bootstrap()
+        except Exception as e:
+            await self._chat_bootstrap_failed(e)
+
+    # --- Chat ---
+
+    def _chat_user_id(self) -> int | None:
+        user = getattr(self, "user", None)
+        if user is not None and user.is_authenticated:
+            return user.pk
+        return None
+
+    @consumer_db
+    def _resolve_chat_viewer(self) -> ChatViewer:
+        return resolve_chat_viewer(self.draft_id, self.user)
+
+    @consumer_db
+    def _chat_history_messages(self, viewer: ChatViewer) -> list[dict[str, Any]]:
+        return visible_messages(self.draft_id, viewer)
+
+    async def _chat_bootstrap(self) -> None:
+        await self._apply_chat_viewer(await self._resolve_chat_viewer())
+        await self._send_chat_history()
+
+    async def _apply_chat_viewer(self, viewer: ChatViewer) -> None:
+        wanted = (
+            team_group_name(self.draft_id, viewer.team_id)
+            if viewer.role == "member" and viewer.team_id is not None
+            else None
+        )
+        for group in tuple(self._extra_groups):
+            if group != wanted:
+                await self.channel_layer.group_discard(group, self.channel_name)
+                self._extra_groups.discard(group)
+        if wanted is not None and wanted not in self._extra_groups:
+            await self.channel_layer.group_add(wanted, self.channel_name)
+            self._extra_groups.add(wanted)
+        self._chat_viewer = viewer
+
+    async def _send_chat_history(self) -> None:
+        viewer = self._chat_viewer
+        messages = await self._chat_history_messages(viewer)
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "chat_history",
+                    "viewer": viewer.as_payload(),
+                    "messages": messages,
+                }
+            )
+        )
+
+    async def _chat_bootstrap_failed(self, error: Exception) -> None:
+        user_id = self._chat_user_id()
+        log.error(
+            "herodraft_chat_bootstrap_failed",
+            system="herodraft",
+            subsystem="chat",
+            draft_id=self.draft_id,
+            user_id=user_id,
+            error_type=type(error).__name__,
+        )
+        self._chat_viewer = ChatViewer(
+            user_id=user_id, team_id=None, role="spectator", joined_at=None
+        )
+        try:
+            await self._discard_extra_groups()
+            await self.send(
+                text_data=json.dumps({"type": "chat_error", "code": "unavailable"})
+            )
+        except Exception as e:
+            log.error(
+                "herodraft_chat_bootstrap_failed",
+                system="herodraft",
+                subsystem="chat",
+                draft_id=self.draft_id,
+                user_id=user_id,
+                stage="cleanup",
+                error_type=type(e).__name__,
+            )
 
     # --- Connect / Disconnect ---
 

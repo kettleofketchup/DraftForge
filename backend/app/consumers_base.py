@@ -516,6 +516,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         self._refresh_task: asyncio.Future[None] | None = None
         self._refresh_step: asyncio.Future[None] | None = None
         self._tick_wanted = False
+        self._extra_groups: set[str] = set()
 
         if (
             self.kick_duplicate_captain_connections
@@ -606,6 +607,12 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             span.set_attribute("ws.connect_outcome", "ok")
             return True
 
+    async def _discard_extra_groups(self) -> None:
+        groups = getattr(self, "_extra_groups", set())
+        for group in tuple(groups):
+            await self.channel_layer.group_discard(group, self.channel_name)
+            groups.discard(group)
+
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         # A handler that raises ends the consumer without websocket.disconnect;
         # run the cleanup anyway so counts, presence and groups don't leak.
@@ -692,6 +699,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                     draft_id=getattr(self, "draft_id", None),
                     user_id=getattr(getattr(self, "user", None), "id", None),
                 )
+                await self._discard_extra_groups()
                 if hasattr(self, "room_group_name"):
                     await self.channel_layer.group_discard(
                         self.room_group_name, self.channel_name
@@ -722,6 +730,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                         error=str(e),
                     )
 
+            await self._discard_extra_groups()
             # Leave room group
             if hasattr(self, "room_group_name"):
                 await self.channel_layer.group_discard(
