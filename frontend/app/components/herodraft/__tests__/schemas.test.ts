@@ -1,8 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   DraftTeamCaptainSchema,
   DraftTeamSchema,
-  HeroDraftSchema,
   HeroDraftWebSocketMessageSchema,
 } from '~/components/herodraft/schemas';
 
@@ -110,5 +109,114 @@ describe('HeroDraftSchema', () => {
       username: 123 as unknown as string,
     };
     expect(() => DraftTeamCaptainSchema.parse(team)).toThrow();
+  });
+});
+
+describe('HeroDraftWebSocketMessageSchema chat frames', () => {
+  // Exact sender shape from backend app/functions/herodraft_chat.py _sender_payload (no `avatar`).
+  const sender = {
+    pk: 7,
+    username: null,
+    nickname: 'Khang',
+    avatarUrl: null,
+    discordId: '123',
+  };
+  const message = {
+    id: '0b8f9a52-3c1e-4f5a-9d2b-6a7c8e9f0a1b',
+    channel: 'team' as const,
+    team_id: 12,
+    kind: 'suggest_ban' as const,
+    hero_id: 74,
+    body: '',
+    created_at: '2026-11-20T18:01:02.123456Z',
+    sender,
+  };
+  const allMessage = {
+    ...message,
+    id: '1c9fab63-4d2f-4a6b-8e3c-7b8d9fa01b2c',
+    channel: 'all' as const,
+    team_id: null,
+    kind: 'text' as const,
+    hero_id: null,
+    body: 'gl hf',
+  };
+  const parse = (frame: unknown) =>
+    HeroDraftWebSocketMessageSchema.safeParse(frame);
+
+  it('parses chat_history with nullable team_id and hero_id', () => {
+    const result = parse({
+      type: 'chat_history',
+      viewer: {
+        role: 'member',
+        team_id: 12,
+        can_post_team: true,
+        can_post_all: true,
+      },
+      messages: [message, allMessage],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('parses a spectator chat_history', () => {
+    const result = parse({
+      type: 'chat_history',
+      viewer: {
+        role: 'spectator',
+        team_id: null,
+        can_post_team: false,
+        can_post_all: false,
+      },
+      messages: [],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('parses chat_message', () => {
+    expect(parse({ type: 'chat_message', message: allMessage }).success).toBe(
+      true,
+    );
+  });
+
+  it('parses chat_ack with and without client_msg_id', () => {
+    expect(
+      parse({ type: 'chat_ack', client_msg_id: 'abc-1', id: message.id })
+        .success,
+    ).toBe(true);
+    expect(parse({ type: 'chat_ack', id: message.id }).success).toBe(true);
+  });
+
+  it('parses chat_error with and without client_msg_id', () => {
+    expect(
+      parse({
+        type: 'chat_error',
+        code: 'rate_limited',
+        client_msg_id: 'abc-1',
+      }).success,
+    ).toBe(true);
+    expect(parse({ type: 'chat_error', code: 'unavailable' }).success).toBe(
+      true,
+    );
+  });
+
+  it('rejects an unknown chat_error code', () => {
+    expect(parse({ type: 'chat_error', code: 'nope' }).success).toBe(false);
+  });
+
+  it('rejects an unknown kind or channel', () => {
+    expect(
+      parse({ type: 'chat_message', message: { ...message, kind: 'emote' } })
+        .success,
+    ).toBe(false);
+    expect(
+      parse({ type: 'chat_message', message: { ...message, channel: 'dm' } })
+        .success,
+    ).toBe(false);
+  });
+
+  it('rejects a non-uuid message id', () => {
+    expect(
+      parse({ type: 'chat_message', message: { ...message, id: '42' } })
+        .success,
+    ).toBe(false);
   });
 });
