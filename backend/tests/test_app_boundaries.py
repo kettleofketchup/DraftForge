@@ -176,15 +176,19 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         "app/services/team_management.py": BackEdge(
             frozenset(
                 {
+                    "Draft",
+                    "DraftRound",
                     "DraftTeam",
                     "HeroDraft",
                     "HeroDraftState",
+                    "TeamDraftState",
                     "apply_captain_tenure",
                     "broadcast_herodraft_state",
+                    "emit_event",
                 }
             ),
-            "team management resets and rebroadcasts the hero drafts of a changed"
-            " team and moves chat membership with captaincy",
+            "roster changes update live team and hero drafts, emit team_changed"
+            " and move hero draft chat membership with captaincy",
         ),
         "app/services/team_references.py": BackEdge(
             frozenset({"DraftTeam", "HeroDraft"}),

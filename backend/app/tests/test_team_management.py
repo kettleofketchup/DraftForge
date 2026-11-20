@@ -11,15 +11,11 @@ from rest_framework.test import APIClient
 
 from app.models import (
     CustomUser,
-    Draft,
-    DraftEvent,
-    DraftRound,
     Game,
     LeadershipProblem,
     League,
     Organization,
     Team,
-    TeamDraftState,
     TeamLog,
     TeamLogAction,
     TeamLogVia,
@@ -45,7 +41,15 @@ from app.services.team_management import (
 )
 from app.services.team_signals import TeamRosterChange, team_roster_changed
 from app.tournament_state import tournament_state_queryset
-from draft.models import DraftTeam, HeroDraft, HeroDraftState
+from draft.models import (
+    Draft,
+    DraftEvent,
+    DraftRound,
+    DraftTeam,
+    HeroDraft,
+    HeroDraftState,
+    TeamDraftState,
+)
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero_state import herodraft_state_queryset
 from events.eligibility import UNMET_LABELS, Unmet, unmet_codes
