@@ -64,6 +64,8 @@ export default defineConfig([
       // Raw palette classes in strings shadcn/no-raw-colors cannot trace to a
       // className (maps, arrays, returns); the processor drops its duplicates.
       'draftforge/no-raw-color-strings': 'error',
+      // Colour literals inside arbitrary values: shadow-[..rgba(..)], bg-[#..].
+      'draftforge/no-arbitrary-color-literals': 'error',
 
       // Off: conflicts with the brand guide or is a design decision, not a lint one.
       'shadcn/no-restyle': 'off',
@@ -97,6 +99,7 @@ export default defineConfig([
       'draftforge/no-display-org-arg': 'off',
       'draftforge/no-direct-name-resolver': 'off',
       'draftforge/no-raw-color-strings': 'off',
+      'draftforge/no-arbitrary-color-literals': 'off',
     },
   },
 ]);

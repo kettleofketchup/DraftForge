@@ -378,6 +378,7 @@ def undo_last_pick(request: Request) -> Response:
         400: No picks to undo
         403: Not authorized
         404: Draft not found
+        409: The picked player is now the team's captain
     """
     serializer = UndoPickSerializer(data=request.data)
     if not serializer.is_valid():
@@ -416,6 +417,16 @@ def undo_last_pick(request: Request) -> Response:
         player = last_round.choice
         team = last_round.team
 
+        if team is not None and team.captain_id == player.pk:
+            return Response(
+                {
+                    "code": "pick_is_captain",
+                    "error": "This player has since been made captain. "
+                    "Change the captain before undoing their pick.",
+                },
+                status=409,
+            )
+
         log.info(
             "pick_undone",
             system="tournament",
@@ -429,6 +440,7 @@ def undo_last_pick(request: Request) -> Response:
 
         if team and player:
             team.members.remove(player)
+            team.left_members.remove(player)
             team.save()
 
         had_completed_at = last_round.completed_at is not None

@@ -101,7 +101,7 @@ export const AddPlayerModal: React.FC<Props> = ({
         <div className="flex flex-col justify-start items-start content-start w-full gap-4 mb-4">
           <div className="justify-self-start self-start w-full">
             {orgUsersLoading && orgId ? (
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-muted-foreground">
                 Loading organization members...
               </div>
             ) : (

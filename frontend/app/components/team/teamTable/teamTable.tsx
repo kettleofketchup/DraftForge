@@ -83,7 +83,7 @@ export const TeamTable: React.FC<TeamTableProps> = memo(
     // Early return if team is undefined or has no members
     if (!team || members.length === 0) {
       return (
-        <div className="p-4 text-center text-gray-500">
+        <div className="p-4 text-center text-muted-foreground">
           <p>No team members found</p>
         </div>
       );

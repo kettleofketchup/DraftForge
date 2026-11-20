@@ -23,7 +23,8 @@ export type DraftEventType =
   | 'pick_timed_out'
   | 'pick_skipped'
   | 'pick_skip_unavailable'
-  | 'draft_options_changed';
+  | 'draft_options_changed'
+  | 'team_changed';
 
 export interface DraftEvent {
   pk: number;
@@ -55,7 +56,8 @@ export type DraftEventPayload =
   | PickTimedOutPayload
   | PickSkippedPayload
   | PickSkipUnavailablePayload
-  | DraftOptionsChangedPayload;
+  | DraftOptionsChangedPayload
+  | TeamChangedPayload;
 
 export interface DraftStartedPayload {
   draft_id: number;
@@ -210,6 +212,12 @@ export interface DraftOptionsChangedPayload {
   changed_by_name: string | null;
   from_state: TeamDraftState;
   to_state: TeamDraftState;
+  pick_number: number | null;
+}
+
+export interface TeamChangedPayload {
+  team_id: number;
+  team_name: string;
   pick_number: number | null;
 }
 

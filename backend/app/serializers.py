@@ -13,6 +13,12 @@ from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
 from app.permissions_org import check_lobby_steam_league_id, request_user
+from app.services.team_references import team_references
+from events.overrides import (
+    REASON_MAX_LENGTH,
+    OverrideReasonRequired,
+    OverrideRequestSerializer,
+)
 from league.models import LeagueUser
 from org.models import OrgUser
 from telemetry.logging import get_logger
@@ -32,6 +38,7 @@ from .models import (
     Organization,
     PositionsModel,
     Team,
+    TeamLog,
     Tournament,
 )
 
@@ -786,9 +793,14 @@ def _users_remaining_pks(draft: Draft) -> list[int]:
         return [u.pk for u in draft.users_remaining]
     if not tournament.users.exists():
         return []
-    excluded = {r.choice_id for r in draft.draft_rounds.all() if r.choice_id} | {
-        t.captain_id for t in tournament.teams.all() if t.captain_id
-    }
+    teams = tournament.teams.all()
+    excluded = (
+        {r.choice_id for r in draft.draft_rounds.all() if r.choice_id}
+        | {t.captain_id for t in teams if t.captain_id}
+        | {m.pk for t in teams for m in t.members.all()}
+        | {m.pk for t in teams for m in t.dropin_members.all()}
+        | {m.pk for t in teams for m in t.left_members.all()}
+    )
     remaining = (
         tournament.users.nocache()
         .exclude(id__in=excluded)
@@ -1227,7 +1239,51 @@ class TeamSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {self._LEADERSHIP_ERROR_FIELDS[k]: v for k, v in errors.items()}
             )
+        if (
+            instance is not None
+            and "members" in attrs
+            and not attrs["members"]
+            and team_references([instance])
+        ):
+            raise serializers.ValidationError(
+                {
+                    "member_ids": [
+                        "This team is used by bracket games or hero drafts; "
+                        "remove it from those first."
+                    ]
+                }
+            )
         return attrs
+
+    # Members last: emptying them may delete the team (see app.signals).
+    _ROSTER_FIELDS: ClassVar[tuple[str, ...]] = (
+        "dropin_members",
+        "left_members",
+        "members",
+    )
+
+    def update(self, instance: Team, validated_data: dict[str, Any]) -> Team:
+        """Apply the roster adding before removing, so a swap never empties the team."""
+        rosters = {
+            name: {user.pk for user in validated_data.pop(name)}
+            for name in self._ROSTER_FIELDS
+            if name in validated_data
+        }
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        removals: dict[str, set[int]] = {}
+        for name, wanted in rosters.items():
+            manager = getattr(instance, name)
+            current = set(manager.nocache().values_list("pk", flat=True))
+            if wanted - current:
+                manager.add(*(wanted - current))
+            removals[name] = current - wanted
+        for name, gone in removals.items():
+            if gone and instance.pk is not None:
+                getattr(instance, name).remove(*gone)
+        return instance
 
     def get_total_mmr(self, obj: Team) -> int:
         """Sum of captain MMR + all member MMRs (excluding captain from members to avoid double-counting)."""
@@ -1288,8 +1344,115 @@ class TeamSerializer(serializers.ModelSerializer):
         )
 
 
+def _leadership_problem_rows(team: Team) -> list[dict[str, str]]:
+    # members.all() so tournament payloads reuse the teams__members prefetch.
+    member_pks = {user.pk for user in team.members.all()}
+    problems = Team.leadership_problems(
+        member_pks, team.captain_id, team.deputy_captain_id
+    )
+    return [
+        {"field": field, "code": str(problem), "message": problem.message}
+        for field, problem in problems.items()
+    ]
+
+
+class ManagedTeamSerializer(TeamSerializer):
+    """Public team detail and staff action responses; never used for writes."""
+
+    left_members = serializers.SerializerMethodField()
+    leadership_problems = serializers.SerializerMethodField()
+
+    def get_left_members(self, team: Team) -> ReturnList:
+        return _serialize_users_with_mmr(team.left_members.all(), team.tournament)
+
+    def get_leadership_problems(self, team: Team) -> list[dict[str, str]]:
+        return _leadership_problem_rows(team)
+
+    class Meta(TeamSerializer.Meta):
+        fields = (*TeamSerializer.Meta.fields, "leadership_problems")
+
+
+class TournamentTeamSerializer(TeamSerializerSlim):
+    leadership_problems = serializers.SerializerMethodField()
+
+    def get_leadership_problems(self, team: Team) -> list[dict[str, str]]:
+        return _leadership_problem_rows(team)
+
+    class Meta(TeamSerializerSlim.Meta):
+        fields = (*TeamSerializerSlim.Meta.fields, "leadership_problems")
+
+
+class TeamLogSerializer(serializers.ModelSerializer):
+    actor = TournamentUserSerializer(read_only=True, allow_null=True)
+    target = TournamentUserSerializer(
+        source="target_user", read_only=True, allow_null=True
+    )
+    team_id = serializers.IntegerField(source="team_snapshot_id", read_only=True)
+
+    class Meta:
+        model = TeamLog
+        fields = (
+            "id",
+            "action",
+            "via",
+            "actor",
+            "target",
+            "reason",
+            "override_rules",
+            "details",
+            "team_name",
+            "team_id",
+            "created_at",
+        )
+        read_only_fields = fields
+
+
+class TeamActionRequestSerializer(OverrideRequestSerializer):
+    reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        default="",
+        trim_whitespace=True,
+        max_length=REASON_MAX_LENGTH,
+    )
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        attrs["reason"] = (attrs.get("reason") or "").strip()
+        if not attrs["reason"]:
+            if attrs.get("acknowledged_codes"):
+                raise OverrideReasonRequired()
+            raise serializers.ValidationError({"reason": ["This field is required."]})
+        return attrs
+
+
+class TeamUserActionRequestSerializer(TeamActionRequestSerializer):
+    user_id = serializers.PrimaryKeyRelatedField(queryset=CustomUser.objects.all())
+
+
+class TeamDeputyRequestSerializer(TeamActionRequestSerializer):
+    user_id = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.all(), allow_null=True
+    )
+
+
+class TeamSubInRequestSerializer(TeamActionRequestSerializer):
+    standin_id = serializers.PrimaryKeyRelatedField(queryset=CustomUser.objects.all())
+    replacing_id = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+
+
+class TeamRenameRequestSerializer(TeamActionRequestSerializer):
+    # Blank/length/unchanged checks belong to the service so codes have one source.
+    name = serializers.CharField(allow_blank=True, trim_whitespace=False)
+
+
 class TournamentSerializer(serializers.ModelSerializer):
-    teams = TeamSerializerSlim(many=True, read_only=True)
+    teams = TournamentTeamSerializer(many=True, read_only=True)
     users = serializers.SerializerMethodField()
     draft = DraftSerializerSlim(many=False, read_only=True)
     draft_options = DraftOptionsSerializer(required=False)

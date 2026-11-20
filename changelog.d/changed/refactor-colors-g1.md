@@ -1,0 +1,1 @@
+- Buttons, brand dropdowns and selects, dialog close buttons and toasts now use the domain color tokens. Warning buttons are amber with dark text instead of orange with white text, destructive buttons use the brighter rose error red, and blue color buttons now match the sky accent.

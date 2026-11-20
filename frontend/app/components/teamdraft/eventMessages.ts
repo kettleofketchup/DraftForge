@@ -13,6 +13,7 @@ import type {
   PickTimedOutPayload,
   PlayerPickedPayload,
   RoundStartedPayload,
+  TeamChangedPayload,
   TieRollPayload,
 } from '~/types/draftEvent';
 
@@ -30,14 +31,19 @@ export function getEventMessage(event: DraftEvent): string {
       const p = event.payload as TieRollPayload;
       const lastRound = p.roll_rounds?.[p.roll_rounds.length - 1] ?? [];
       const rolls = lastRound.map((r) => r.roll).join(' vs ');
-      return rolls ? `Tie resolved! ${p.winner_name} wins (${rolls})` : `Tie resolved! ${p.winner_name} wins`;
+      return rolls
+        ? `Tie resolved! ${p.winner_name} wins (${rolls})`
+        : `Tie resolved! ${p.winner_name} wins`;
     }
     case 'captain_assigned': {
       const p = event.payload as { captain_name: string };
       return `${p.captain_name} is picking next`;
     }
     case 'pick_undone': {
-      const p = event.payload as { undone_player_name: string; pick_number: number };
+      const p = event.payload as {
+        undone_player_name: string;
+        pick_number: number;
+      };
       return `Pick ${p.pick_number} undone (${p.undone_player_name})`;
     }
     case 'draft_lobby_opened': {
@@ -92,6 +98,8 @@ export function getEventMessage(event: DraftEvent): string {
       if (!p.timer_enabled) return `${who} turned the pick clock off`;
       return `${who} turned the pick clock on — ${p.grace_time_ms / 1000}s grace, ${p.reserve_time_ms / 1000}s reserve`;
     }
+    case 'team_changed':
+      return `Team ${(event.payload as TeamChangedPayload).team_name} updated`;
     default:
       return 'Draft event occurred';
   }
@@ -139,6 +147,8 @@ export function getEventIcon(eventType: DraftEventType): string {
       return '🚧';
     case 'draft_options_changed':
       return '⚙️';
+    case 'team_changed':
+      return '👥';
     default:
       return '📋';
   }
@@ -158,7 +168,9 @@ export function getEventToast(event: DraftEvent): string | null {
     case 'draft_options_changed':
       return getEventMessage(event);
     case 'captain_disconnected':
-      return (event.payload as CaptainPresencePayload).is_active_captain ? getEventMessage(event) : null;
+      return (event.payload as CaptainPresencePayload).is_active_captain
+        ? getEventMessage(event)
+        : null;
     default:
       return null;
   }

@@ -1,4 +1,8 @@
-import { dedupeRawColors, noRawColorStrings } from './colors.js';
+import {
+  dedupeRawColors,
+  noArbitraryColorLiterals,
+  noRawColorStrings,
+} from './colors.js';
 import userDisplay from './user-display.js';
 
 export default {
@@ -6,6 +10,7 @@ export default {
   rules: {
     ...userDisplay.rules,
     'no-raw-color-strings': noRawColorStrings,
+    'no-arbitrary-color-literals': noArbitraryColorLiterals,
   },
   processors: { 'dedupe-raw-colors': dedupeRawColors },
 };

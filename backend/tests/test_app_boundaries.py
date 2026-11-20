@@ -78,6 +78,9 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, frozenset[str]]] = {
     "draft": {
         "app/draft_state.py": frozenset({"HeroDraft"}),
         "app/permissions_org.py": frozenset({"HeroDraft"}),
+        "app/services/team_management.py": frozenset(
+            {"DraftTeam", "HeroDraft", "HeroDraftState", "broadcast_herodraft_state"}
+        ),
         "app/services/team_references.py": frozenset({"DraftTeam", "HeroDraft"}),
         "app/views/bracket.py": frozenset({"HeroDraft"}),
         "app/views_main.py": frozenset({"DraftTeam"}),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import Any, ClassVar, Protocol, cast
 
 from cacheops import cached_as
 from django.contrib.auth import login
@@ -13,6 +13,7 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import BooleanField, Case, Count, Q, QuerySet, Value, When
 from django.http import (
+    Http404,
     HttpRequest,
     HttpResponse,
     HttpResponseBadRequest,
@@ -24,6 +25,7 @@ from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import get_object_or_404
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
     AllowAny,
     BasePermission,
@@ -37,7 +39,31 @@ from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 from social_django.utils import load_strategy, psa
 
 from app import tournament_buckets
+from app.cache_utils import invalidate_after_commit
 from app.functions.teamdraft import apply_draft_options
+from app.services.team_audit import (
+    log_snapshot_fields,
+    roster_snapshot,
+    write_team_log,
+)
+from app.services.team_management import (
+    TeamChange,
+    add_standin,
+    follow_captain,
+    mark_dropout,
+    remove_standin,
+    rename,
+    restore_member,
+    set_captain,
+    set_deputy,
+    sub_in,
+)
+from app.services.team_references import TeamUsage, team_references, team_usage
+from app.services.team_signals import (
+    change_from_log,
+    owning_team_audit,
+    send_roster_changed_on_commit,
+)
 from app.tournament_buckets import (
     tournament_bucket_cutoff,
     upcoming_q,
@@ -61,6 +87,7 @@ from events.signup_window import user_signups_open_tournament_ids
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
 from org.contributions.services import delete_user_entries
+from org.feature_errors import not_permitted
 from org.features import FeatureKey, active_features
 from org.membership import member_organization_ids, viewer_member_organization_ids
 from org.models import OrgUser
@@ -86,6 +113,9 @@ from .models import (
     Organization,
     ProfileClaimRequest,
     Team,
+    TeamLog,
+    TeamLogAction,
+    TeamLogVia,
     Tournament,
 )
 from .permissions import IsStaff
@@ -98,6 +128,7 @@ from .permissions_org import (
     IsLeagueAdmin,
     IsOrgAdmin,
     IsOrgOwner,
+    can_edit_tournament,
     can_manage_game,
     can_view_league_members,
     can_view_league_members_from_payload,
@@ -116,9 +147,16 @@ from .serializers import (
     LeagueMatchSerializer,
     LeagueSerializer,
     LeaguesSerializer,
+    ManagedTeamSerializer,
     OrganizationSerializer,
     OrganizationsSerializer,
+    TeamActionRequestSerializer,
+    TeamDeputyRequestSerializer,
+    TeamLogSerializer,
+    TeamRenameRequestSerializer,
     TeamSerializer,
+    TeamSubInRequestSerializer,
+    TeamUserActionRequestSerializer,
     TournamentListSerializer,
     TournamentSerializer,
     TournamentsSerializer,
@@ -585,6 +623,82 @@ class TournamentView(viewsets.ModelViewSet):
                 apply_draft_options(serializer.instance, opts, actor=self.request.user)
 
 
+TEAM_MANAGE_ACTIONS: frozenset[str] = frozenset(
+    {
+        "set_captain",
+        "set_deputy",
+        "dropout",
+        "restore",
+        "standins",
+        "standins_remove",
+        "sub_in",
+        "rename",
+        "history",
+        "usage",
+    }
+)
+
+
+class TeamServiceCall(Protocol):
+    def __call__(
+        self,
+        team: Team,
+        data: dict[str, Any],
+        *,
+        actor: CustomUser,
+        via: TeamLogVia,
+        reason: str,
+        acknowledged_codes: list[str],
+    ) -> TeamChange: ...
+
+
+class TeamLogPagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+def _can_read_scope(
+    user: CustomUser, tournament_id: int | None, organization_id: int | None
+) -> bool:
+    if tournament_id is not None:
+        tournament = (
+            Tournament.objects.nocache()
+            .select_related("league")
+            .filter(pk=tournament_id)
+            .first()
+        )
+        if tournament is not None:
+            return can_edit_tournament(user, tournament)
+    if organization_id is not None:
+        organization = Organization.objects.nocache().filter(pk=organization_id).first()
+        if organization is not None:
+            return has_org_staff_access(user, organization)
+    return bool(user.is_superuser or user.is_staff)
+
+
+def _scope_q(tournament_id: int | None, organization_id: int | None) -> Q:
+    by_tournament = (
+        Q(tournament_id__isnull=True)
+        if tournament_id is None
+        else Q(tournament_id=tournament_id)
+    )
+    by_org = (
+        Q(organization_id__isnull=True)
+        if organization_id is None
+        else Q(organization_id=organization_id)
+    )
+    return by_tournament & by_org
+
+
+def _team_in_use_detail(name: str, usage: list[TeamUsage]) -> str:
+    parts = [
+        f"{u['count']} {u['label'] if u['count'] == 1 else u['label_plural']}"
+        for u in usage
+    ]
+    return f"{name} is still used by {', '.join(parts)} and cannot be deleted."
+
+
 @permission_classes((IsStaff,))
 class TeamView(viewsets.ModelViewSet):
     serializer_class = TeamSerializer
@@ -649,21 +763,387 @@ class TeamView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
-        return Response(data)
+        return Response(
+            {**data, "can_manage_team": self._can_manage_team(request.user, pk)}
+        )
+
+    def _can_manage_team(self, user: CustomUser | AnonymousUser, pk: str) -> bool:
+        if not user.is_authenticated:
+            return False
+        team = (
+            Team.objects.nocache().select_related("tournament__league").filter(pk=pk)
+        ).first()
+        return (
+            team is not None
+            and team.tournament_id is not None
+            and can_edit_tournament(user, team.tournament)
+        )
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.action == "discord_logs":
-            self.permission_classes = [CanEditTournament]
+        if self.action in TEAM_MANAGE_ACTIONS | {
+            "update",
+            "partial_update",
+            "destroy",
+        }:
+            self.permission_classes = [CanEditTeam]
         elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
-        elif self.action in ["update", "partial_update", "destroy"]:
-            self.permission_classes = [CanEditTeam]
         else:
             self.permission_classes = [IsAuthenticated]
         return super(TeamView, self).get_permissions()
 
+    def get_serializer_class(self) -> type[BaseSerializer]:
+        if self.action == "history":
+            return TeamLogSerializer
+        if self.action == "retrieve" or self.action in TEAM_MANAGE_ACTIONS:
+            return ManagedTeamSerializer
+        return TeamSerializer
+
+    def permission_denied(
+        self, request: Request, message: str | None = None, code: str | None = None
+    ) -> None:
+        if request.user.is_authenticated and self.action in TEAM_MANAGE_ACTIONS:
+            raise not_permitted()
+        super().permission_denied(request, message=message, code=code)
+
+    def get_authenticate_header(self, request: Request) -> str | None:
+        if self.action in TEAM_MANAGE_ACTIONS:
+            return 'Session realm="api"'
+        return super().get_authenticate_header(request)
+
+    def _manage(
+        self,
+        request: Request,
+        serializer_class: type[TeamActionRequestSerializer],
+        call: TeamServiceCall,
+    ) -> Response:
+        teams = Team.objects.nocache().select_related("tournament__league")
+        team = get_object_or_404(teams, pk=self.kwargs["pk"])
+        self.check_object_permissions(request, team)
+        body = serializer_class(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        with transaction.atomic():
+            team = get_object_or_404(teams.select_for_update(), pk=team.pk)
+            self.check_object_permissions(request, team)
+            change = call(
+                team,
+                data,
+                actor=request.user,
+                via=TeamLogVia.WEB,
+                reason=data["reason"],
+                acknowledged_codes=data["acknowledged_codes"],
+            )
+        team = teams.get(pk=change.team.pk)
+        return Response({**self.get_serializer(team).data, "can_manage_team": True})
+
+    @action(detail=True, methods=["post"], url_path="set-captain")
+    def set_captain(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamUserActionRequestSerializer,
+            lambda team, data, **kw: set_captain(team, data["user_id"], **kw),
+        )
+
+    @action(detail=True, methods=["post"], url_path="set-deputy")
+    def set_deputy(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamDeputyRequestSerializer,
+            lambda team, data, **kw: set_deputy(team, data["user_id"], **kw),
+        )
+
+    @action(detail=True, methods=["post"])
+    def rename(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamRenameRequestSerializer,
+            lambda team, data, **kw: rename(team, data["name"], **kw),
+        )
+
+    @action(detail=True, methods=["post"])
+    def dropout(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamUserActionRequestSerializer,
+            lambda team, data, **kw: mark_dropout(team, data["user_id"], **kw),
+        )
+
+    @action(detail=True, methods=["post"])
+    def restore(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamUserActionRequestSerializer,
+            lambda team, data, **kw: restore_member(team, data["user_id"], **kw),
+        )
+
+    @action(detail=True, methods=["post"])
+    def standins(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamUserActionRequestSerializer,
+            lambda team, data, **kw: add_standin(team, data["user_id"], **kw),
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="standins/remove",
+        url_name="standins-remove",
+    )
+    def standins_remove(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamUserActionRequestSerializer,
+            lambda team, data, **kw: remove_standin(team, data["user_id"], **kw),
+        )
+
+    @action(detail=True, methods=["post"], url_path="sub-in")
+    def sub_in(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamSubInRequestSerializer,
+            lambda team, data, **kw: sub_in(
+                team, data["standin_id"], data["replacing_id"], **kw
+            ),
+        )
+
+    @action(detail=True, methods=["get"], pagination_class=TeamLogPagination)
+    def history(self, request: Request, pk: str | None = None) -> Response:
+        try:
+            team_pk = int(pk or "")
+        except ValueError:
+            raise Http404 from None
+        rows = TeamLog.objects.filter(team_snapshot_id=team_pk, event_team__isnull=True)
+        scopes: set[tuple[int | None, int | None]] = set(
+            rows.values_list("tournament_id", "organization_id").distinct()
+        )
+        team = (
+            Team.objects.nocache()
+            .select_related("tournament__league")
+            .filter(pk=team_pk)
+            .first()
+        )
+        if team is None:
+            if not scopes:
+                # Non-staff get 403 either way, so the status doesn't reveal ids.
+                if not request.user.is_staff:
+                    raise not_permitted()
+                raise Http404
+            log.debug(
+                "team_history_orphan_access",
+                system="tournament",
+                subsystem="teams",
+                team_id=team_pk,
+            )
+        else:
+            snapshot = log_snapshot_fields(team)
+            scopes.add((snapshot["tournament_id"], snapshot["organization_id"]))
+        readable = [scope for scope in scopes if _can_read_scope(request.user, *scope)]
+        if not readable:
+            raise not_permitted()
+        visible = Q()
+        for scope in readable:
+            visible |= _scope_q(*scope)
+        queryset = with_user_profiles(
+            with_user_profiles(rows.filter(visible), "actor", dota=True),
+            "target_user",
+            dota=True,
+        ).order_by("-created_at", "-pk")
+        page = self.paginate_queryset(queryset)
+        return self.get_paginated_response(self.get_serializer(page, many=True).data)
+
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
+
+    @action(detail=True, methods=["get"])
+    def usage(self, request: Request, pk: str | None = None) -> Response:
+        """What a DELETE would refuse on, without deleting anything."""
+        teams = Team.objects.nocache().select_related("tournament__league")
+        team = get_object_or_404(teams, pk=pk)
+        self.check_object_permissions(request, team)
+        usage = team_usage([team])
+        return Response(
+            {
+                "in_use": bool(usage),
+                "detail": _team_in_use_detail(team.name, usage) if usage else None,
+                "usage": usage,
+            }
+        )
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Legacy DELETE: refuses teams other rows still use, audits the rest."""
+        instance = self.get_object()
+        teams = Team.objects.nocache().select_related("tournament__league")
+        with transaction.atomic(), owning_team_audit():
+            team = get_object_or_404(teams.select_for_update(), pk=instance.pk)
+            self.check_object_permissions(request, team)
+            references = team_references([team])
+            if references:
+                log.warning(
+                    "team_delete_refused",
+                    system="tournament",
+                    subsystem="teams",
+                    team_id=team.pk,
+                    tournament_id=team.tournament_id,
+                    actor_id=request.user.pk,
+                    references=references,
+                )
+                usage = team_usage([team])
+                return Response(
+                    {
+                        "code": "team_in_use",
+                        "detail": _team_in_use_detail(team.name, usage),
+                        "usage": usage,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            before = roster_snapshot(team)
+            row = write_team_log(
+                team,
+                snapshot=log_snapshot_fields(team),
+                action=TeamLogAction.TEAM_DELETED,
+                via=TeamLogVia.WEB,
+                actor=request.user,
+                details={"before": before},
+            )
+            user_ids = {
+                *before["member_ids"],
+                *before["dropin_ids"],
+                *before["left_ids"],
+                *(
+                    pk
+                    for pk in (before["captain_id"], before["deputy_captain_id"])
+                    if pk is not None
+                ),
+            }
+            to_invalidate: list[Any] = list(
+                CustomUser.objects.nocache().filter(pk__in=user_ids)
+            )
+            if team.tournament is not None:
+                to_invalidate.append(team.tournament)
+            invalidate_after_commit(*to_invalidate)
+            send_roster_changed_on_commit(change_from_log(row))
+            team.delete()
+        log.info(
+            "team_deleted",
+            system="tournament",
+            subsystem="teams",
+            team_id=instance.pk,
+            tournament_id=team.tournament_id,
+            actor_id=request.user.pk,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # Serializer source name -> roster_snapshot key, for rows on a deleted team.
+    _SNAPSHOT_KEYS: ClassVar[dict[str, str]] = {
+        "name": "name",
+        "captain": "captain_id",
+        "deputy_captain": "deputy_captain_id",
+        "members": "member_ids",
+        "dropin_members": "dropin_ids",
+        "left_members": "left_ids",
+    }
+
+    def _requested_snapshot(self, data: dict[str, Any]) -> dict[str, Any]:
+        requested: dict[str, Any] = {}
+        for name, key in self._SNAPSHOT_KEYS.items():
+            if name not in data:
+                continue
+            value = data[name]
+            if key.endswith("_ids"):
+                requested[key] = sorted(user.pk for user in value)
+            elif key.endswith("_id"):
+                requested[key] = getattr(value, "pk", None)
+            else:
+                requested[key] = value
+        return requested
+
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Legacy PATCH/PUT: audited, follows captain changes, 204 if the team is gone."""
+        partial = kwargs.pop("partial", False)
+        with transaction.atomic(), owning_team_audit():
+            team = (
+                Team.objects.nocache()
+                .select_for_update()
+                .select_related("tournament__league")
+                .get(pk=self.get_object().pk)
+            )
+            before = roster_snapshot(team)
+            snapshot = log_snapshot_fields(team)
+            old_captain = team.captain
+            tournament = team.tournament
+
+            serializer = self.get_serializer(team, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+
+            deleted = serializer.instance.pk is None
+            extras: dict[str, Any] = {}
+            after: dict[str, Any] | None = None
+            moved_to: Tournament | None = None
+            if deleted:
+                team = None
+                requested = self._requested_snapshot(serializer.validated_data)
+                fields_changed = sorted(
+                    k for k, v in requested.items() if before[k] != v
+                )
+            else:
+                team = (
+                    Team.objects.nocache()
+                    .select_related("tournament__league")
+                    .get(pk=team.pk)
+                )
+                if team.captain_id != before["captain_id"] and team.captain is not None:
+                    extras = follow_captain(
+                        team, old_captain, team.captain, actor=request.user
+                    )
+                after = roster_snapshot(team)
+                fields_changed = sorted(k for k in before if before[k] != after[k])
+                if team.tournament_id != snapshot["tournament_id"]:
+                    fields_changed.append("tournament_id")
+                    extras["before_tournament_id"] = snapshot["tournament_id"]
+                    moved_to = team.tournament
+                snapshot = log_snapshot_fields(team)
+
+            if fields_changed:
+                team_log = write_team_log(
+                    team,
+                    snapshot=snapshot,
+                    action=TeamLogAction.LEGACY_PATCH,
+                    via=TeamLogVia.WEB,
+                    actor=request.user,
+                    details={
+                        "before": before,
+                        "after": after,
+                        "fields_changed": fields_changed,
+                        **({"team_deleted": True} if deleted else {}),
+                        **extras,
+                    },
+                )
+                send_roster_changed_on_commit(change_from_log(team_log))
+                user_ids = {
+                    *before["member_ids"],
+                    *before["dropin_ids"],
+                    *before["left_ids"],
+                    *((after or {}).get("member_ids") or []),
+                    *((after or {}).get("dropin_ids") or []),
+                    *((after or {}).get("left_ids") or []),
+                }
+                to_invalidate: list[Any] = list(
+                    CustomUser.objects.nocache().filter(pk__in=user_ids)
+                )
+                if team is not None:
+                    to_invalidate.append(team)
+                if tournament is not None:
+                    to_invalidate.append(tournament)
+                if moved_to is not None:
+                    to_invalidate.append(moved_to)
+                invalidate_after_commit(*to_invalidate)
+
+        if deleted:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(self.get_serializer(team).data)
 
 
 @permission_classes((IsAuthenticated,))

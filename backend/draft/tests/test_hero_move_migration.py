@@ -17,7 +17,7 @@ HERO_TABLES = (
     "app_herodraftevent",
 )
 BEFORE_MOVE = [
-    ("app", "0106_draftoptions_hero_grace_time_ms_and_more"),
+    ("app", "0107_teamlog"),
     ("discordbot", "0012_draftactivitychannel_draftactivityinstance"),
     ("draft", None),
 ]

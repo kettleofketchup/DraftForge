@@ -78,7 +78,7 @@ const borderClasses: Record<UserAvatarBorder, string> = {
   none: '',
   primary: 'ring-2 ring-primary',
   muted: 'border border-background',
-  captain: 'ring-2 ring-yellow-500',
+  captain: 'ring-2 ring-captain',
 };
 
 /**
@@ -271,7 +271,7 @@ export const UserAvatar = memo(function UserAvatar({
           className={cn(
             'absolute bottom-0 right-0 rounded-full border-2 border-background',
             onlineIndicatorSizes[size],
-            online ? 'bg-green-500' : 'bg-gray-400',
+            online ? 'bg-online' : 'bg-offline',
           )}
           aria-label={online ? 'Online' : 'Offline'}
         />

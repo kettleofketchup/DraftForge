@@ -162,6 +162,222 @@ tournament's signups are open as defined above.
 | GET | `/api/teams/` | List teams |
 | POST | `/api/teams/` | Create team |
 | GET | `/api/teams/{id}/` | Get team |
+| PATCH / PUT | `/api/teams/{id}/` | Update team (tournament staff) |
+| DELETE | `/api/teams/{id}/` | Delete team (tournament staff) |
+| POST / GET | `/api/teams/{id}/<action>/` | [Team management](#team-management) (tournament staff) |
+
+### Updating a team
+
+- A captain or deputy who is not a member, or a deputy who is also the captain, is
+  refused with 400.
+- New members are added before old ones are removed, so replacing the whole roster in
+  one request keeps the team.
+- Emptying `member_ids` on a team that bracket games or hero drafts use is refused with
+  400:
+
+    ```json
+    {"member_ids": ["This team is used by bracket games or hero drafts; remove it from those first."]}
+    ```
+
+- Emptying `member_ids` on a team nothing uses deletes the team, and the response is
+  `204 No Content` with an empty body instead of the team.
+- A change of `captain_id` moves every draft round of the old captain in that tournament
+  (picked and unpicked) to the new captain, resets the team's draft presence, and
+  refreshes a live team draft or hero draft. The `player_picked` events keep the
+  original picker. Setting the captain to `null` moves no rounds, and neither does a
+  change where the old or new captain also captains another team in the tournament.
+- Every update that changes the name, captain, deputy or roster writes one `legacy_patch`
+  row to the team audit log (`TeamLog`), with the roster before and after and the fields
+  that changed. Moving the team to another tournament also writes one, with
+  `tournament_id` in `fields_changed` and `before_tournament_id` in the details. The
+  row's name and tournament columns hold the values after the update. Updates to only
+  `draft_order`, `current_points` or `placement` write no row. Every row sends
+  `team_roster_changed`, renames included.
+
+### Deleting a team
+
+`DELETE /api/teams/{id}/` (tournament staff) refuses a team that bracket games, hero
+drafts, bracket slots, lobbies or tournament results still use, instead of deleting
+those rows with it:
+
+```json
+{
+  "code": "team_in_use",
+  "detail": "Radiant Five is still used by 2 games and cannot be deleted.",
+  "usage": [
+    {
+      "model": "app.Game",
+      "label": "game",
+      "label_plural": "games",
+      "count": 2,
+      "teams": [{"pk": 41, "name": "Radiant Five"}]
+    }
+  ]
+}
+```
+
+The status is `409`. `usage` has one entry per kind of record, and `count` is an
+integer. A team nothing uses is deleted (`204`), and the deletion writes a
+`team_deleted` row to the team audit log with the roster before it.
+
+`GET /api/teams/{id}/usage/` (tournament staff) answers what a DELETE would refuse on,
+without deleting or logging anything:
+
+```json
+{"in_use": true, "detail": "Radiant Five is still used by 2 games and cannot be deleted.", "usage": [...]}
+```
+
+`detail` and `usage` match the `409` body; a team nothing uses gets
+`{"in_use": false, "detail": null, "usage": []}`. Regenerating a tournament's teams
+checks every team this way first and deletes nothing if any is in use.
+
+### Team management
+
+Staff endpoints for changing one team. Each takes a `reason`, writes one row to the
+team audit log (`TeamLog`, `via: "web"`) and sends `team_roster_changed`. Only
+tournament staff can use them: site staff, the league's admins and staff, and the
+organization's owner, admins and staff. A team without a tournament can't be managed.
+
+| Method | Endpoint | Body |
+|--------|----------|------|
+| POST | `/api/teams/{id}/set-captain/` | `{user_id, reason, acknowledged_codes?}` |
+| POST | `/api/teams/{id}/set-deputy/` | `{user_id, reason, acknowledged_codes?}`; `user_id` is an int or `null` (`null` clears the deputy) |
+| POST | `/api/teams/{id}/dropout/` | `{user_id, reason, acknowledged_codes?}` |
+| POST | `/api/teams/{id}/restore/` | `{user_id, reason, acknowledged_codes?}` |
+| POST | `/api/teams/{id}/standins/` | `{user_id, reason, acknowledged_codes?}` |
+| POST | `/api/teams/{id}/standins/remove/` | `{user_id, reason, acknowledged_codes?}` |
+| POST | `/api/teams/{id}/sub-in/` | `{standin_id, replacing_id?, reason, acknowledged_codes?}`; `replacing_id` is an int or `null` |
+| POST | `/api/teams/{id}/rename/` | `{name, reason, acknowledged_codes?}` |
+| GET | `/api/teams/{id}/history/?page=&page_size=` | none |
+| GET | `/api/teams/{id}/usage/` | none |
+
+`reason` is trimmed and at most 500 characters. `acknowledged_codes` is the
+[staff override](../development/staff-overrides.md) field; every action accepts it, but
+today only `standins/` can return a `409` (the team's stand-in limit and the event's
+eligibility rules).
+
+| Outcome | Status | Body |
+|---------|--------|------|
+| Success | 200 | The refreshed team (see the fields below) with `can_manage_team: true` |
+| Not logged in | 401 | `{detail}`, with a `WWW-Authenticate` header |
+| Logged in but not tournament staff, or the team has no tournament | 403 | `{"code": "not_permitted", "detail": ...}` |
+| Team not found | 404 | `{detail}` |
+| Invalid field, unknown user, or a missing `reason` with no `acknowledged_codes` | 400 | Field errors, e.g. `{"reason": ["This field is required."]}` |
+| Missing `reason` on an override retry (`acknowledged_codes` not empty) | 400 | `{"code": "override_reason_required", ...}` |
+
+A missing `reason` therefore has two shapes. The field error is for a first attempt;
+`override_reason_required` is for a retry that echoes `acknowledged_codes`, which the
+override dialog (`useOverrideRetry`) shows on its reason field. Clients that send
+`acknowledged_codes` must handle both.
+| Refused by the team service | 400 | `{code, detail}`, e.g. `{"code": "not_member", "detail": "..."}` |
+| Override needed | 409 | The staff override body |
+
+Refusal codes include `already_captain`, `captain_not_member` (`set-captain/` with a
+user who is neither a member nor a stand-in), `already_deputy`, `no_deputy`,
+`deputy_is_captain`, `deputy_not_member`, `deputy_is_standin`, `not_member`,
+`not_dropout`, `not_standin`, `already_on_team`, `on_other_team`,
+`replacing_not_member`, `last_member` (a dropout can't empty the team),
+`leadership_invariant`, `name_blank`, `name_too_long` and `name_unchanged`.
+`captain_not_member`, `deputy_not_member` and `deputy_is_captain` are the same code
+strings that `leadership_problems` uses (below).
+
+A successful action can also change rows outside the team: a subbed-in stand-in or a new
+captain joins the tournament's players, and a captain change moves draft rounds and
+resets hero draft readiness. Refetch the tournament after a success; the returned team is
+for the management dialog.
+
+#### Stand-in override
+
+Adding a stand-in over the team's limit first answers `409`:
+
+```json
+{
+  "code": "override_required",
+  "blocked": false,
+  "violations": [
+    {
+      "code": "team_standin_cap",
+      "rule": "override-warning",
+      "category": "team",
+      "message": "The team already has 2 stand-ins (limit 2).",
+      "blocking": false,
+      "params": {}
+    }
+  ]
+}
+```
+
+Retry with the code acknowledged and a reason:
+
+```json
+{"user_id": 57, "reason": "Two players stuck in traffic", "acknowledged_codes": ["team_standin_cap"]}
+```
+
+The audit row records the code in `override_rules`, and the violation in
+`details.violations`.
+
+#### History
+
+`GET /api/teams/{id}/history/` returns the team's audit rows, newest first, 25 per page
+(`page_size` up to 100). It still works after the team is deleted. Rows belong to the
+tournament and organization the team had when they were written; staff see the rows for
+the tournaments they can edit. Once the tournament is gone, the organization's staff
+can read them, and site staff can read rows with no organization. A viewer who can read
+none of the rows gets `403`. An unknown team with no rows gets `404` for site staff and
+`403` for everyone else, so the status does not reveal which team ids exist.
+
+```json
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 310,
+      "action": "set_captain",
+      "via": "web",
+      "actor": {"pk": 3, "username": "organizer", "nickname": null, "avatarUrl": null},
+      "target": {"pk": 57, "username": "newcaptain", "nickname": "Captain", "avatarUrl": null},
+      "reason": "Old captain stepped down",
+      "override_rules": [],
+      "details": {
+        "before": {"name": "Radiant Five", "captain_id": 12, "deputy_captain_id": null,
+                   "member_ids": [12, 57], "dropin_ids": [], "left_ids": []},
+        "after": {"name": "Radiant Five", "captain_id": 57, "deputy_captain_id": null,
+                  "member_ids": [12, 57], "dropin_ids": [], "left_ids": []}
+      },
+      "team_name": "Radiant Five",
+      "team_id": 41,
+      "created_at": "2026-11-19T18:02:11.512Z"
+    }
+  ]
+}
+```
+
+`actor` and `target` use the tournament user shape (abridged above) and are `null` for
+system rows or deleted users.
+
+#### Team fields
+
+- `GET /api/teams/{id}/` and the action responses list `left_members` (dropouts) as user
+  objects and add `leadership_problems`. Team detail is public, so anyone can read both;
+  neither reveals anything new, since the bracket payload already lists dropouts and
+  `leadership_problems` follows from the public captain, deputy and member ids.
+- `GET /api/teams/{id}/` adds `can_manage_team`: true when the viewer could use the
+  management endpoints on this team. It is `false` for anonymous viewers and for a team
+  without a tournament.
+- Teams in the tournament payload (`GET /api/tournaments/{id}/`) also carry
+  `leadership_problems`.
+- `leadership_problems` lists a captain or deputy who is not a member, or a deputy who is
+  also the captain, and is empty for a healthy team:
+
+    ```json
+    [{"field": "captain", "code": "captain_not_member", "message": "Captain must be a member of the team."}]
+    ```
+
+    `field` is `captain` or `deputy_captain`; `code` is `captain_not_member`,
+    `deputy_not_member` or `deputy_is_captain`. Fix one with `set-captain/` or
+    `set-deputy/`.
 
 ## Games
 
@@ -948,8 +1164,9 @@ Real-time bidding via Daphne WebSocket (same pattern as HeroDraft).
 | GET | `/api/drafts/{id}/` | Get draft details |
 | PUT | `/api/drafts/{id}/` | Update draft (e.g., change style) |
 | POST | `/api/tournaments/init-draft` | Start or restart the draft for a tournament |
-| POST | `/api/tournaments/draft-rebuild` | Rebuild team rosters from the draft rounds |
+| POST | `/api/tournaments/draft-rebuild` | Rebuild team rosters from the draft rounds; `409 team_changes_logged` when staff changed a team (audit log) and rounds exist |
 | POST | `/api/tournaments/pick_player` | Pick player for draft round |
+| POST | `/api/tournaments/undo-pick` | Undo the last pick (`draft_pk`); `409 pick_is_captain` when the picked player is now the team's captain |
 
 ### Start or Restart Draft
 

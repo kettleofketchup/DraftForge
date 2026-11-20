@@ -36,7 +36,7 @@ def relabel_reverse(apps: Apps, schema_editor: BaseDatabaseSchemaEditor) -> None
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("app", "0106_draftoptions_hero_grace_time_ms_and_more"),
+        ("app", "0107_teamlog"),
         ("contenttypes", "0002_remove_content_type_name"),
         ("discordbot", "0013_retarget_draft_activity_herodraft"),
         ("draft", "0001_move_hero_draft_models"),
