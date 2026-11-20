@@ -20,7 +20,7 @@ export function TechnologyStack() {
     {
       name: 'Django',
       description: 'Backend API',
-      colorClass: 'text-white-500',
+      colorClass: 'text-foreground',
     },
     {
       name: 'Discord OAuth',
