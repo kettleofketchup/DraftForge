@@ -42,6 +42,8 @@ export interface SettingsSection<
   content: React.ReactNode;
   /** Extra search terms, for settings a search can't read from the page. */
   keywords?: string[];
+  /** Sidebar heading this section sits under; groups keep first-appearance order. */
+  group?: string;
   /** Mount on first visit, then stay mounted. */
   lazy?: boolean;
   /**
@@ -69,6 +71,11 @@ export interface SettingsDialogProps<V extends string = string> extends Omit<
   loading?: React.ReactNode;
   sectionRef?: React.Ref<SettingsDialogHandle<V>>;
   searchPlaceholder?: string;
+  /** Rendered after the panels, inside the scroll body. */
+  footer?: React.ReactNode;
+  /** Controlled section; falls back to the first when unknown or null. */
+  section?: string | null;
+  onSectionChange?: (value: V) => void;
 }
 
 interface SearchHit<V extends string> {
@@ -456,8 +463,17 @@ function useSettingsLayout<V extends string>({
     else if (firstMatch) selectSection(firstMatch.value);
   };
 
-  const sectionLabel = (value: V) =>
-    sections.find((s) => s.value === value)?.label;
+  const sectionLabel = (value: V) => {
+    const s = sections.find((x) => x.value === value);
+    return s?.group ? `${s.label} · ${s.group}` : s?.label;
+  };
+
+  const groups: { name?: string; items: SettingsSection<V>[] }[] = [];
+  for (const s of visible) {
+    let g = groups.find((x) => x.name === s.group);
+    if (!g) groups.push((g = { name: s.group, items: [] }));
+    g.items.push(s);
+  }
 
   const status = !searching
     ? ''
@@ -553,42 +569,51 @@ function useSettingsLayout<V extends string>({
       >
         <SidebarHeader>{search}</SidebarHeader>
         <SidebarContent>
-          <SidebarGroup>
-            {searching && <SidebarGroupLabel>Categories</SidebarGroupLabel>}
-            <SidebarGroupContent>
+          {searching && (
+            <SidebarGroup className="pb-0">
+              <SidebarGroupLabel>Categories</SidebarGroupLabel>
               {emptyState}
-              <TabsPrimitive.List asChild>
-                <SidebarMenu>
-                  {visible.map((s) => {
-                    const Icon = s.icon;
-                    return (
-                      <SidebarMenuItem key={s.value} role="none">
-                        <TabsPrimitive.Trigger value={s.value} asChild>
-                          <SidebarMenuButton
-                            isActive={active === s.value}
-                            data-testid={`${testIdPrefix}-tab-${s.value}`}
-                            data-invalid={s.invalid || undefined}
-                            className={cn(
-                              'cursor-pointer',
-                              searching &&
-                                !matchedSections.has(s.value) &&
-                                'opacity-60',
-                            )}
-                          >
-                            {Icon && <Icon />}
-                            <span className="min-w-0 flex-1 truncate">
-                              {s.label}
-                            </span>
-                            {s.invalid && <InvalidDot />}
-                          </SidebarMenuButton>
-                        </TabsPrimitive.Trigger>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              </TabsPrimitive.List>
-            </SidebarGroupContent>
-          </SidebarGroup>
+            </SidebarGroup>
+          )}
+          <TabsPrimitive.List asChild>
+            <div>
+              {groups.map((g) => (
+                <SidebarGroup key={g.name ?? ''}>
+                  {g.name && <SidebarGroupLabel>{g.name}</SidebarGroupLabel>}
+                  <SidebarGroupContent>
+                    <SidebarMenu role="none">
+                      {g.items.map((s) => {
+                        const Icon = s.icon;
+                        return (
+                          <SidebarMenuItem key={s.value} role="none">
+                            <TabsPrimitive.Trigger value={s.value} asChild>
+                              <SidebarMenuButton
+                                isActive={active === s.value}
+                                data-testid={`${testIdPrefix}-tab-${s.value}`}
+                                data-invalid={s.invalid || undefined}
+                                className={cn(
+                                  'cursor-pointer',
+                                  searching &&
+                                    !matchedSections.has(s.value) &&
+                                    'opacity-60',
+                                )}
+                              >
+                                {Icon && <Icon />}
+                                <span className="min-w-0 flex-1 truncate">
+                                  {s.label}
+                                </span>
+                                {s.invalid && <InvalidDot />}
+                              </SidebarMenuButton>
+                            </TabsPrimitive.Trigger>
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              ))}
+            </div>
+          </TabsPrimitive.List>
           {hitList && (
             <SidebarGroup>
               <SidebarGroupLabel>Matching settings</SidebarGroupLabel>
@@ -603,9 +628,17 @@ function useSettingsLayout<V extends string>({
   const mobileNav = (
     <div className="flex flex-col gap-3">
       {search}
-      {emptyState || (
-        <FormTabsList tabs={visible} testIdPrefix={testIdPrefix} />
-      )}
+      {emptyState ||
+        groups.map((g) => (
+          <div key={g.name ?? ''} className="flex flex-col gap-1.5">
+            {g.name && (
+              <p className="text-xs font-medium text-muted-foreground">
+                {g.name}
+              </p>
+            )}
+            <FormTabsList tabs={g.items} testIdPrefix={testIdPrefix} />
+          </div>
+        ))}
       {hitList && (
         <ScrollArea
           className="rounded-md border border-border"
@@ -678,6 +711,9 @@ export function SettingsDialog<V extends string>({
   loading,
   sectionRef,
   searchPlaceholder,
+  footer,
+  section,
+  onSectionChange,
   ...dialogProps
 }: SettingsDialogProps<V>) {
   const isLoading = loading != null && loading !== false;
@@ -688,6 +724,8 @@ export function SettingsDialog<V extends string>({
     sectionRef,
     searchPlaceholder,
     variant: 'dialog',
+    value: section,
+    onValueChange: onSectionChange,
   });
 
   return (
@@ -704,7 +742,14 @@ export function SettingsDialog<V extends string>({
             : 'min-h-0 flex-1 overflow-hidden -mr-6 pr-6'
       }
     >
-      {isLoading ? loading : panels}
+      {isLoading ? (
+        loading
+      ) : (
+        <>
+          {panels}
+          {footer}
+        </>
+      )}
     </FormDialog>
   );
 }

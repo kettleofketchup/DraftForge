@@ -288,4 +288,116 @@ describe('SettingsDialog', () => {
     );
     expect(document.getElementById('name-input')).toBeInTheDocument();
   });
+
+  describe('groups, footer and controlled section', () => {
+    const grouped: SettingsSection[] = [
+      { value: 'a', label: 'Alpha', group: 'Organization', content: <p>a</p> },
+      { value: 'b', label: 'Beta', group: 'Organization', content: <p>b</p> },
+      {
+        value: 'c',
+        label: 'Gamma',
+        group: 'New Event Defaults',
+        content: <p>c</p>,
+      },
+    ];
+
+    it('renders a labelled sidebar group per section group, in first-appearance order', () => {
+      render(<Harness items={grouped} />);
+      expect(screen.getByText('Organization')).toBeInTheDocument();
+      expect(screen.getByText('New Event Defaults')).toBeInTheDocument();
+      const groups = document.querySelectorAll('[data-sidebar="group"]');
+      expect(groups[0]).toHaveTextContent('Organization');
+      expect(groups[1]).toHaveTextContent('New Event Defaults');
+      expect(groups[1].contains(navItem('c'))).toBe(true);
+      expect(groups[0].contains(navItem('c'))).toBe(false);
+    });
+
+    it('search hit names the group for grouped sections', () => {
+      render(
+        <Harness
+          items={[
+            {
+              value: 'd1',
+              label: 'Discord',
+              group: 'Organization',
+              content: <label>Server</label>,
+            },
+            {
+              value: 'd2',
+              label: 'Discord',
+              group: 'New Event Defaults',
+              content: <label>Server</label>,
+            },
+          ]}
+        />,
+      );
+      type('server');
+      const subtitles = screen
+        .getAllByTestId('s-search-hit')
+        .map((h) => h.querySelectorAll('span')[1]?.textContent);
+      expect(subtitles).toEqual([
+        'Discord · Organization',
+        'Discord · New Event Defaults',
+      ]);
+    });
+
+    it('opens on the controlled section and reports changes', () => {
+      const onSectionChange = vi.fn();
+      render(
+        <TooltipProvider>
+          <SettingsDialog
+            open
+            onOpenChange={() => {}}
+            title="Settings"
+            onSubmit={onSubmit}
+            sections={grouped}
+            testIdPrefix="x"
+            section="b"
+            onSectionChange={onSectionChange}
+          />
+        </TooltipProvider>,
+      );
+      expect(screen.getByTestId('x-tab-b')).toHaveAttribute(
+        'data-state',
+        'active',
+      );
+      fireEvent.mouseDown(screen.getByTestId('x-tab-c'), { button: 0 });
+      expect(onSectionChange).toHaveBeenCalledWith('c');
+    });
+
+    it('renders footer below panels', () => {
+      render(
+        <TooltipProvider>
+          <SettingsDialog
+            open
+            onOpenChange={() => {}}
+            title="Settings"
+            onSubmit={onSubmit}
+            sections={grouped}
+            testIdPrefix="s"
+            footer={<div data-testid="foot" />}
+          />
+        </TooltipProvider>,
+      );
+      expect(screen.getByTestId('foot')).toBeInTheDocument();
+    });
+
+    it('renders group headings above each group tab strip on mobile', () => {
+      mockViewport(true);
+      render(<Harness items={grouped} />);
+      const lists = screen.getAllByRole('tablist');
+      expect(lists).toHaveLength(2);
+      const org = screen.getByText('Organization');
+      const defaults = screen.getByText('New Event Defaults');
+      expect(org.tagName).toBe('P');
+      expect(
+        org.compareDocumentPosition(lists[0]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        defaults.compareDocumentPosition(lists[1]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+  });
 });
