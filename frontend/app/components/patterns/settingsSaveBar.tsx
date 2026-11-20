@@ -1,4 +1,4 @@
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type {
   FieldValues,
   SubmitErrorHandler,
@@ -10,6 +10,9 @@ import { CancelButton, SubmitButton } from '~/components/ui/buttons';
 import { getLogger } from '~/lib/logger';
 
 const log = getLogger('settingsSaveBar');
+
+/** A save pending this long is reported as stuck and no longer blocks closing. */
+export const SAVE_STUCK_MS = 15_000;
 
 export interface SettingsFormUnit {
   id: string;
@@ -45,12 +48,27 @@ export function useSettingsSaveBar(
 ): {
   isDirty: boolean;
   isSaving: boolean;
+  /** A save has been pending longer than SAVE_STUCK_MS. */
+  isSaveStuck: boolean;
   saveAll: () => Promise<boolean>;
   discardAll: () => void;
   saveBar: ReactNode;
 } {
   const [isSaving, setIsSaving] = useState(false);
+  const [isSaveStuck, setIsSaveStuck] = useState(false);
   const isDirty = units.some((u) => u.isDirty);
+
+  useEffect(() => {
+    if (!isSaving) {
+      setIsSaveStuck(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      log.warn('settings save still pending', { after_ms: SAVE_STUCK_MS });
+      setIsSaveStuck(true);
+    }, SAVE_STUCK_MS);
+    return () => window.clearTimeout(timer);
+  }, [isSaving]);
 
   const inFlight = useRef<Promise<boolean> | null>(null);
 
@@ -95,7 +113,7 @@ export function useSettingsSaveBar(
       data-testid={`${prefix}-save-bar`}
     >
       <span className="mr-auto text-sm text-muted-foreground">
-        Unsaved changes
+        {isSaveStuck ? 'Still saving…' : 'Unsaved changes'}
       </span>
       <CancelButton
         type="button"
@@ -115,5 +133,5 @@ export function useSettingsSaveBar(
     </div>
   ) : null;
 
-  return { isDirty, isSaving, saveAll, discardAll, saveBar };
+  return { isDirty, isSaving, isSaveStuck, saveAll, discardAll, saveBar };
 }

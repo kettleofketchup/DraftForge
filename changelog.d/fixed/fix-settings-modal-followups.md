@@ -1,1 +1,2 @@
 - Closing the organization settings modal now returns to the page's earlier history entry, so one Back leaves the page.
+- The organization settings modal can be closed again when a save request hangs for more than 15 seconds; the save bar shows "Still saving…".
