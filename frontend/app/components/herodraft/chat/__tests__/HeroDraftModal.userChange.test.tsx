@@ -10,48 +10,91 @@ vi.mock('react-router', async (importOriginal) => ({
 import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
 import type { UserType } from '~/index';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
-import { useUserStore } from '~/store/userStore';
+import { type CurrentUserStatus, useUserStore } from '~/store/userStore';
 
 const original = useHeroDraftStore.getState();
 const originalUser = useUserStore.getState().currentUser;
+const originalStatus = useUserStore.getState().currentUserStatus;
 
 afterEach(() => {
   useHeroDraftStore.setState(original, true);
-  useUserStore.setState({ currentUser: originalUser });
+  useUserStore.setState({
+    currentUser: originalUser,
+    currentUserStatus: originalStatus,
+  });
 });
+
+function setUser(user: Partial<UserType>, status?: CurrentUserStatus): void {
+  useUserStore.setState({
+    currentUser: user as UserType,
+    ...(status ? { currentUserStatus: status } : {}),
+  });
+}
+
+function mountModal(
+  user: Partial<UserType>,
+  status: CurrentUserStatus,
+): string[] {
+  const calls: string[] = [];
+  useHeroDraftStore.setState({
+    connect: vi.fn((id: number) => {
+      calls.push(`connect:${id}`);
+    }),
+    disconnect: vi.fn(() => {
+      calls.push('disconnect');
+    }),
+    clearChatError: vi.fn(() => {
+      calls.push('clearChatError');
+    }),
+    startHeartbeat: vi.fn(),
+  });
+  setUser(user, status);
+  render(<HeroDraftModal draftId={7} open onClose={() => {}} />);
+  expect(calls).toEqual(['connect:7']);
+  return calls;
+}
+
+const RECONNECT = ['connect:7', 'disconnect', 'clearChatError', 'connect:7'];
 
 describe('HeroDraftModal user change (T19)', () => {
   it('reconnects when the logged-in user changes', () => {
-    const calls: string[] = [];
-    const connect = vi.fn((id: number) => {
-      calls.push(`connect:${id}`);
-    });
-    const disconnect = vi.fn(() => {
-      calls.push('disconnect');
-    });
-    const clearChatError = vi.fn(() => {
-      calls.push('clearChatError');
-    });
-    useHeroDraftStore.setState({
-      connect,
-      disconnect,
-      clearChatError,
-      startHeartbeat: vi.fn(),
-    });
-    useUserStore.setState({ currentUser: { pk: 1 } as UserType });
+    const calls = mountModal({ pk: 1 }, 'resolved');
 
-    render(<HeroDraftModal draftId={7} open onClose={() => {}} />);
-    expect(calls).toEqual(['connect:7']);
+    act(() => setUser({ pk: 2 }));
+    expect(calls).toEqual(RECONNECT);
 
-    act(() => useUserStore.setState({ currentUser: { pk: 2 } as UserType }));
-    expect(calls).toEqual([
-      'connect:7',
-      'disconnect',
-      'clearChatError',
-      'connect:7',
-    ]);
-
-    act(() => useUserStore.setState({ currentUser: { pk: 2 } as UserType }));
+    act(() => setUser({ pk: 2 }));
     expect(calls).toHaveLength(4);
+  });
+
+  it('does not reconnect when the store first resolves to a user', () => {
+    const calls = mountModal({ pk: 0 }, 'loading');
+
+    act(() => setUser({ pk: 5 }));
+    act(() => setUser({ pk: 5 }, 'resolved'));
+    expect(calls).toEqual(['connect:7']);
+  });
+
+  it('does not reconnect when the store resolves to logged out', () => {
+    const calls = mountModal({ pk: 0 }, 'unknown');
+
+    act(() => setUser({}, 'loading'));
+    act(() => setUser({}, 'resolved'));
+    expect(calls).toEqual(['connect:7']);
+  });
+
+  it('reconnects on a login after resolving logged out', () => {
+    const calls = mountModal({}, 'resolved');
+
+    act(() => setUser({ pk: 5 }));
+    expect(calls).toEqual(RECONNECT);
+  });
+
+  it('reconnects on a login after the first resolve', () => {
+    const calls = mountModal({ pk: 0 }, 'loading');
+
+    act(() => setUser({}, 'resolved'));
+    act(() => setUser({ pk: 5 }));
+    expect(calls).toEqual(RECONNECT);
   });
 });

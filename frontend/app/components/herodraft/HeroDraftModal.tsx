@@ -178,7 +178,7 @@ export function HeroDraftModal({
   activityHeader,
 }: HeroDraftModalProps) {
   const navigate = useNavigate();
-  const { currentUser } = useUserStore();
+  const { currentUser, currentUserStatus } = useUserStore();
   const showActivityHeader = embedded && activityHeader != null;
 
   // WebSocket store - unified state and connection management
@@ -233,17 +233,38 @@ export function HeroDraftModal({
   }, [open, draftId, wsConnect, wsDisconnect]);
 
   // The socket identity is fixed at the handshake; a login or logout without a
-  // reload must reconnect so the server resolves the new chat viewer.
-  const currentUserPk = currentUser?.pk;
-  const prevUserPkRef = useRef(currentUserPk);
+  // reload must reconnect so the server resolves the new chat viewer. The
+  // store's first resolve is not a login: the cookie already authenticated the
+  // socket, and a needless reconnect would pause the draft for a captain.
+  const currentUserKey = currentUser?.pk || null;
+  const userBaselineRef = useRef<{ key: number | null } | null>(
+    currentUserStatus === 'resolved' || currentUserKey !== null
+      ? { key: currentUserKey }
+      : null,
+  );
   useEffect(() => {
-    if (prevUserPkRef.current === currentUserPk) return;
-    prevUserPkRef.current = currentUserPk;
+    const baseline = userBaselineRef.current;
+    if (baseline === null) {
+      if (currentUserStatus === 'resolved') {
+        userBaselineRef.current = { key: currentUserKey };
+      }
+      return;
+    }
+    if (baseline.key === currentUserKey) return;
+    baseline.key = currentUserKey;
     if (!open || !draftId) return;
     wsDisconnect();
     clearChatError();
     wsConnect(draftId);
-  }, [currentUserPk, open, draftId, wsConnect, wsDisconnect, clearChatError]);
+  }, [
+    currentUserKey,
+    currentUserStatus,
+    open,
+    draftId,
+    wsConnect,
+    wsDisconnect,
+    clearChatError,
+  ]);
 
   // Handle events from WebSocket - show toasts
   useEffect(() => {
