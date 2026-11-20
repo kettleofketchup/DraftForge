@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import override
 
 from django.db import transaction
@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from app.models import CustomUser, Organization
 from events.constants import EventState
-from events.models import Event
+from events.models import Event, EventSignup
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.models import OrgUser
@@ -54,6 +54,14 @@ class StandingAtomicGuardTest(SimpleTestCase):
                 lambda: standing.on_event_changed(event, fields=frozenset({"name"})),
                 lambda: standing.merge_users(user, CustomUser(pk=2), member_pairs=[]),
                 lambda: standing.on_user_deleted(user, actor=None),
+                lambda: standing.on_signup_withdrawn(
+                    EventSignup(pk=1, event=event),
+                    prior_status="confirmed",
+                    by_member=True,
+                ),
+                lambda: standing.on_feature_toggled(
+                    1, FeatureKey.PROMOTION, enabled=True
+                ),
             ]
             for call in calls:
                 with self.assertRaises(RuntimeError):
@@ -165,7 +173,9 @@ class StandingApiTest(TestCase):
     def test_undeclared_output_key_raises(self) -> None:
         class Sloppy(FakeTrack):
             @override
-            def on_event_deleted(self, event, *, actor, now):  # type: ignore[no-untyped-def]
+            def on_event_deleted(
+                self, event: Event, *, actor: CustomUser | None, now: datetime
+            ) -> TrackOutput:
                 return TrackOutput(orglog={"surprise": 1})
 
         with override_tracks(Sloppy()), transaction.atomic():
