@@ -345,3 +345,32 @@ describe('heroDraftStore chat error banner', () => {
     expect(chat().lastError).toEqual({ code: 'rate_limited' });
   });
 });
+
+describe('heroDraftStore chat on close and identity change', () => {
+  const seedChatState = () => {
+    emit({ type: 'chat_history', viewer: memberViewer, messages: [msg(1)] });
+    emit({ type: 'chat_message', message: msg(2) });
+    emit({ type: 'chat_error', code: 'rate_limited' });
+    useHeroDraftStore.getState().sendChat('unsent');
+  };
+
+  it('a same-user disconnect() and reconnect to the same draft keeps unread', () => {
+    seedChatState();
+    useHeroDraftStore.getState().disconnect();
+    useHeroDraftStore.getState().connect(2);
+    expect(chat().unread).toBe(1);
+    expect(chat().resyncAfter).toEqual({ after: expect.anything() });
+    expect(chat().lastError).toEqual({ code: 'unavailable', text: 'unsent' });
+  });
+
+  it('reset() then connect() to the same draft starts from the initial chat', () => {
+    seedChatState();
+    useHeroDraftStore.getState().setChatPanelOpen(true);
+    useHeroDraftStore.getState().setChatPanelOpen(false);
+    emit({ type: 'chat_message', message: msg(3) });
+    useHeroDraftStore.getState().reset();
+    expect(chat()).toEqual(initialChatState);
+    useHeroDraftStore.getState().connect(2);
+    expect(chat()).toEqual(initialChatState);
+  });
+});

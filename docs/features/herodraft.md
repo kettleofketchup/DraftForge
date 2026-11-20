@@ -343,7 +343,7 @@ Privacy is enforced on the server:
 - Team messages are sent only to the WebSocket group of that team, and each delivery is checked again against the current roster before it is sent.
 - History (the last 100 messages you may see) is filtered per user by a database query when you connect.
 - A player only sees team messages posted after they joined the team. A player who is removed from a team stops receiving its chat straight away, and gets a fresh history without it.
-- If a game's team is replaced, or the team's roster is reset, the old team's chat is no longer shown to anyone.
+- Logging in, logging out or switching account with the draft open reconnects the socket as the new user and starts chat from scratch: the log, unread count, panel state and any error from the previous user are dropped. Closing the draft does the same.
 - Logging out with the draft open reconnects the socket as a spectator and clears the log.
 - Team chat stays private after the draft ends.
 
@@ -667,7 +667,7 @@ All components have `data-testid` attributes for Playwright testing:
 | `herodraft-chat-suggestion-{id}` | A hero suggestion row |
 | `herodraft-chat-new-messages` | "New messages" jump button |
 | `herodraft-chat-toggle` | Button that opens the chat panel or sheet |
-| `herodraft-chat-unread` | Unread count on the toggle; kept across reconnects, and messages that arrived during the gap are added |
+| `herodraft-chat-unread` | Unread count on the toggle; kept across reconnects of the same user, and messages that arrived during the gap are added |
 | `herodraft-hero-suggest-menu` | Right-click menu on a hero |
 | `herodraft-hero-suggest-pick` / `herodraft-hero-suggest-ban` | Suggest pick / ban menu items |
 

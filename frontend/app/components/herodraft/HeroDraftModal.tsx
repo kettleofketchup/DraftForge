@@ -189,9 +189,8 @@ export function HeroDraftModal({
     (state) => state.setSelectedHeroId,
   );
   const wsConnect = useHeroDraftStore((state) => state.connect);
-  const wsDisconnect = useHeroDraftStore((state) => state.disconnect);
+  const wsReset = useHeroDraftStore((state) => state.reset);
   const wsReconnect = useHeroDraftStore((state) => state.reconnect);
-  const clearChatError = useHeroDraftStore((state) => state.clearChatError);
   const chatViewerRole = useHeroDraftStore((state) => state.chat.viewer?.role);
   const startHeartbeat = useHeroDraftStore((state) => state.startHeartbeat);
   const isConnected = useHeroDraftStore(heroDraftSelectors.isConnected);
@@ -229,9 +228,9 @@ export function HeroDraftModal({
     wsConnect(draftId);
 
     return () => {
-      wsDisconnect();
+      wsReset();
     };
-  }, [open, draftId, wsConnect, wsDisconnect]);
+  }, [open, draftId, wsConnect, wsReset]);
 
   // The socket identity is fixed at the handshake; a login or logout without a
   // reload must reconnect so the server resolves the new chat viewer. The
@@ -254,18 +253,9 @@ export function HeroDraftModal({
     if (baseline.key === currentUserKey) return;
     baseline.key = currentUserKey;
     if (!open || !draftId) return;
-    wsDisconnect();
-    clearChatError();
+    wsReset();
     wsConnect(draftId);
-  }, [
-    currentUserKey,
-    currentUserStatus,
-    open,
-    draftId,
-    wsConnect,
-    wsDisconnect,
-    clearChatError,
-  ]);
+  }, [currentUserKey, currentUserStatus, open, draftId, wsConnect, wsReset]);
 
   // Handle events from WebSocket - show toasts
   useEffect(() => {

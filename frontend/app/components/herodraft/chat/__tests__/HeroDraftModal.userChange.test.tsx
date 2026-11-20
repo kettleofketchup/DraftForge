@@ -34,7 +34,7 @@ function setUser(user: Partial<UserType>, status?: CurrentUserStatus): void {
 function mountModal(
   user: Partial<UserType>,
   status: CurrentUserStatus,
-): string[] {
+): { calls: string[]; rerender: (open: boolean) => void } {
   const calls: string[] = [];
   useHeroDraftStore.setState({
     connect: vi.fn((id: number) => {
@@ -43,32 +43,47 @@ function mountModal(
     disconnect: vi.fn(() => {
       calls.push('disconnect');
     }),
-    clearChatError: vi.fn(() => {
-      calls.push('clearChatError');
+    reset: vi.fn(() => {
+      calls.push('reset');
     }),
     startHeartbeat: vi.fn(),
   });
   setUser(user, status);
-  render(<HeroDraftModal draftId={7} open onClose={() => {}} />);
+  const view = render(<HeroDraftModal draftId={7} open onClose={() => {}} />);
   expect(calls).toEqual(['connect:7']);
-  return calls;
+  return {
+    calls,
+    rerender: (open) =>
+      view.rerender(
+        <HeroDraftModal draftId={7} open={open} onClose={() => {}} />,
+      ),
+  };
 }
 
-const RECONNECT = ['connect:7', 'disconnect', 'clearChatError', 'connect:7'];
+const RECONNECT = ['connect:7', 'reset', 'connect:7'];
+
+describe('HeroDraftModal close', () => {
+  it('resets the store so the next open starts a fresh chat', () => {
+    const { calls, rerender } = mountModal({ pk: 1 }, 'resolved');
+
+    act(() => rerender(false));
+    expect(calls).toEqual(['connect:7', 'reset']);
+  });
+});
 
 describe('HeroDraftModal user change (T19)', () => {
   it('reconnects when the logged-in user changes', () => {
-    const calls = mountModal({ pk: 1 }, 'resolved');
+    const { calls } = mountModal({ pk: 1 }, 'resolved');
 
     act(() => setUser({ pk: 2 }));
     expect(calls).toEqual(RECONNECT);
 
     act(() => setUser({ pk: 2 }));
-    expect(calls).toHaveLength(4);
+    expect(calls).toEqual(RECONNECT);
   });
 
   it('does not reconnect when the store first resolves to a user', () => {
-    const calls = mountModal({ pk: 0 }, 'loading');
+    const { calls } = mountModal({ pk: 0 }, 'loading');
 
     act(() => setUser({ pk: 5 }));
     act(() => setUser({ pk: 5 }, 'resolved'));
@@ -76,7 +91,7 @@ describe('HeroDraftModal user change (T19)', () => {
   });
 
   it('does not reconnect when the store resolves to logged out', () => {
-    const calls = mountModal({ pk: 0 }, 'unknown');
+    const { calls } = mountModal({ pk: 0 }, 'unknown');
 
     act(() => setUser({}, 'loading'));
     act(() => setUser({}, 'resolved'));
@@ -84,14 +99,14 @@ describe('HeroDraftModal user change (T19)', () => {
   });
 
   it('reconnects on a login after resolving logged out', () => {
-    const calls = mountModal({}, 'resolved');
+    const { calls } = mountModal({}, 'resolved');
 
     act(() => setUser({ pk: 5 }));
     expect(calls).toEqual(RECONNECT);
   });
 
   it('reconnects on a login after the first resolve', () => {
-    const calls = mountModal({ pk: 0 }, 'loading');
+    const { calls } = mountModal({ pk: 0 }, 'loading');
 
     act(() => setUser({}, 'resolved'));
     act(() => setUser({ pk: 5 }));
