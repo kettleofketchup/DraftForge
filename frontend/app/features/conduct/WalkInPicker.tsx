@@ -15,6 +15,10 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
 import { conductKeys, type OrgFeatureAccess } from '~/features/org-features';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
+import { extractApiError } from '~/lib/apiError';
+import { getLogger } from '~/lib/logger';
+
+const log = getLogger('WalkInPicker');
 
 const DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 2;
@@ -56,6 +60,15 @@ export function WalkInPicker({
     queryFn: () => searchUsers(term, orgId),
     enabled: open && term.length >= MIN_QUERY_LENGTH,
   });
+
+  const typed = query.trim();
+  const searching =
+    search.isFetching || (typed !== term && typed.length >= MIN_QUERY_LENGTH);
+
+  useEffect(() => {
+    if (search.isError)
+      log.error('walk-in search failed', { orgId, error: search.error });
+  }, [search.isError, search.error, orgId]);
 
   const candidates = useMemo<WalkInCandidate[]>(
     () =>
@@ -104,8 +117,25 @@ export function WalkInPicker({
             </li>
           ))}
         </ul>
+        {searching && (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="attendance-walkin-searching"
+          >
+            Searching...
+          </p>
+        )}
+        {search.isError && !searching && (
+          <p
+            className="text-sm text-destructive"
+            data-testid="attendance-walkin-error"
+          >
+            {extractApiError(search.error) ?? 'Search failed'}
+          </p>
+        )}
         {term.length >= MIN_QUERY_LENGTH &&
           search.isSuccess &&
+          !searching &&
           candidates.length === 0 && (
             <p
               className="text-sm text-muted-foreground"

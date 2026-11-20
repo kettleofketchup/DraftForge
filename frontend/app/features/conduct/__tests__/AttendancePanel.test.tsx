@@ -297,6 +297,39 @@ describe('AttendancePanel', () => {
     expect(screen.queryByTestId('attendance-source-11')).toBeNull();
   });
 
+  it('shows a walk-in search failure', async () => {
+    vi.mocked(getAttendance).mockResolvedValue(attendance());
+    vi.mocked(searchUsers).mockRejectedValue({
+      response: { status: 500, data: { detail: 'Search is down' } },
+    });
+    renderPanel();
+    await screen.findByTestId('attendance-row-11');
+    fireEvent.click(screen.getByTestId('attendance-add-walkin'));
+    fireEvent.change(await screen.findByTestId('attendance-walkin-search'), {
+      target: { value: 'wal' },
+    });
+
+    expect(
+      await screen.findByTestId('attendance-walkin-error'),
+    ).toHaveTextContent('Search is down');
+    expect(screen.queryByTestId('attendance-walkin-empty')).toBeNull();
+  });
+
+  it('shows searching while the walk-in search runs', async () => {
+    vi.mocked(getAttendance).mockResolvedValue(attendance());
+    vi.mocked(searchUsers).mockReturnValue(new Promise(() => {}));
+    renderPanel();
+    await screen.findByTestId('attendance-row-11');
+    fireEvent.click(screen.getByTestId('attendance-add-walkin'));
+    fireEvent.change(await screen.findByTestId('attendance-walkin-search'), {
+      target: { value: 'wal' },
+    });
+
+    expect(
+      await screen.findByTestId('attendance-walkin-searching'),
+    ).toHaveTextContent('Searching...');
+  });
+
   it('adds a walk-in from org members only and saves it', async () => {
     vi.mocked(getAttendance).mockResolvedValue(attendance());
     vi.mocked(putAttendance).mockResolvedValue(attendance());

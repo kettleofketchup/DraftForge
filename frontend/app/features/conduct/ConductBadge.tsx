@@ -22,12 +22,14 @@ export function ConductBadge({
         className="border-border bg-muted text-muted-foreground"
         data-testid="conduct-badge"
       >
+        <span className="sr-only">Show rate </span>
         {scoreLabel(member)}
       </Badge>
       {member.deferred && (
         <LazyTooltip content={DEFERRED_NOTE}>
           <Badge
             variant="outline"
+            role="note"
             tabIndex={0}
             aria-label={DEFERRED_NOTE}
             className="border-warning/30 bg-warning/20 text-warning"

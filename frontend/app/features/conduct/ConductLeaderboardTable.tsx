@@ -49,11 +49,11 @@ export function ConductLeaderboardTable({
         pk === selectedPk && 'bg-base-300/60',
         selectable && 'cursor-pointer hover:bg-base-300/60',
       ),
-      'aria-selected': pk === selectedPk ? true : undefined,
       'aria-current': own ? true : undefined,
       ...(selectable
         ? {
             role: 'button',
+            'aria-pressed': pk === selectedPk,
             tabIndex: 0,
             'aria-label': `View ${DisplayName(r.member)}'s attendance`,
             onClick: () => onSelect(pk),

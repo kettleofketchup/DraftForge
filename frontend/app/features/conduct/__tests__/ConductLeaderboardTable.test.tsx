@@ -126,8 +126,15 @@ describe('ConductLeaderboardTable', () => {
     fireEvent.click(screen.getByTestId('conduct-row-11'));
     expect(onSelect).toHaveBeenLastCalledWith(11);
     expect(screen.getByTestId('conduct-row-11')).toHaveAttribute(
-      'aria-selected',
+      'aria-pressed',
       'true',
+    );
+    expect(screen.getByTestId('conduct-row-12')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(screen.getByTestId('conduct-row-11')).not.toHaveAttribute(
+      'aria-selected',
     );
   });
 });

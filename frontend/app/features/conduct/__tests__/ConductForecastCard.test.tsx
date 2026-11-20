@@ -117,6 +117,17 @@ describe('ConductForecastCard', () => {
     ).toHaveTextContent('2 awaiting approval');
   });
 
+  it('shows the load error to staff', async () => {
+    vi.mocked(getForecast).mockRejectedValue({
+      response: { status: 500, data: { detail: 'Server error' } },
+    });
+    wrap(<ConductForecastCard orgId={1} eventId={7} access={access} />);
+
+    expect(
+      await screen.findByTestId('conduct-forecast-error'),
+    ).toHaveTextContent('Server error');
+  });
+
   it('does not fetch when disabled', () => {
     wrap(
       <ConductForecastCard
@@ -138,7 +149,9 @@ describe('ConductBadge', () => {
 
   it('renders the show rate for a scored member', () => {
     wrap(<ConductBadge member={member()} />);
-    expect(screen.getByTestId('conduct-badge')).toHaveTextContent('79%');
+    expect(screen.getByTestId('conduct-badge')).toHaveTextContent(
+      'Show rate 79%',
+    );
     expect(
       screen.queryByTestId('conduct-badge-deferred'),
     ).not.toBeInTheDocument();
@@ -157,6 +170,7 @@ describe('ConductBadge', () => {
     );
     const deferred = screen.getByTestId('conduct-badge-deferred');
     expect(deferred).toHaveTextContent('Deferred');
+    expect(deferred).toHaveAttribute('role', 'note');
     expect(deferred).toHaveAccessibleName(DEFERRED_NOTE);
 
     fireEvent.focus(deferred);
