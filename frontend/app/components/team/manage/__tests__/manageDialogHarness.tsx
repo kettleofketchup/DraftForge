@@ -14,7 +14,6 @@ import type {
   ManagedTeam,
   TeamHistoryPage,
 } from '~/components/api/teamManagementAPI';
-import type { TeamType } from '~/components/tournament/types';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import {
   TeamManageDialog,
@@ -149,17 +148,4 @@ export async function typeReasonAndConfirm(reason: string): Promise<void> {
   const confirm = screen.getByTestId('team-action-confirm');
   await waitFor(() => expect(confirm).not.toBeDisabled());
   fireEvent.click(confirm);
-}
-
-export function liveTeam(overrides: Partial<TeamType> = {}): TeamType {
-  return {
-    pk: TEAM_ID,
-    name: 'Rostered',
-    captain: { pk: 2 },
-    deputy_captain: { pk: 3 },
-    members: [{ pk: 2 }, { pk: 3 }, { pk: 4 }],
-    dropin_members: [{ pk: 12 }],
-    left_members: [{ pk: 5 }],
-    ...overrides,
-  } as unknown as TeamType;
 }

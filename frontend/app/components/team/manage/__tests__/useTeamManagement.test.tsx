@@ -146,6 +146,39 @@ describe('useTeamHistory', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(api.fetchTeamHistory).toHaveBeenCalledWith(TEAM_ID, 2, 25);
   });
+
+  const page = (count: number) => ({
+    count,
+    next: null,
+    previous: null,
+    results: [],
+  });
+
+  it('keeps the previous page while paging within one team', async () => {
+    api.fetchTeamHistory.mockResolvedValueOnce(page(30));
+    api.fetchTeamHistory.mockReturnValueOnce(new Promise(() => undefined));
+    const { wrapper } = setup();
+    const { result, rerender } = renderHook(
+      ({ p }: { p: number }) => useTeamHistory(TEAM_ID, p),
+      { wrapper, initialProps: { p: 1 } },
+    );
+    await waitFor(() => expect(result.current.data?.count).toBe(30));
+    rerender({ p: 2 });
+    expect(result.current.data?.count).toBe(30);
+  });
+
+  it('drops the previous team history when the team changes', async () => {
+    api.fetchTeamHistory.mockResolvedValueOnce(page(30));
+    api.fetchTeamHistory.mockReturnValueOnce(new Promise(() => undefined));
+    const { wrapper } = setup();
+    const { result, rerender } = renderHook(
+      ({ id }: { id: number }) => useTeamHistory(id, 1),
+      { wrapper, initialProps: { id: TEAM_ID } },
+    );
+    await waitFor(() => expect(result.current.data?.count).toBe(30));
+    rerender({ id: TEAM_ID + 1 });
+    expect(result.current.data).toBeUndefined();
+  });
 });
 
 describe('useTeamActionMutation', () => {

@@ -4,11 +4,11 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
+import { CAPTAIN_CHANGE_WARNING } from '../teamActionCopy';
 import { historyPage, managedTeam } from './fixtures';
 import {
   axiosError,
   invalidatedKeys,
-  liveTeam,
   openTab,
   renderDialog,
   requestRowAction,
@@ -256,17 +256,22 @@ describe('TeamManageDialog roster actions', () => {
     expect(axiosMock.post).toHaveBeenCalledTimes(1);
   });
 
-  it('refetches the team when the live roster changes', async () => {
-    const { invalidate, rerenderWith } = renderDialog({
-      liveTeam: liveTeam(),
+  it('warns that the draft resets when a stand-in replaces the captain', async () => {
+    renderDialog();
+    await requestRowAction('team-standin-row-12', 'Sub in');
+    expect(screen.queryByTestId('team-action-warning')).toBeNull();
+    fireEvent.pointerDown(screen.getByTestId('team-action-replacing'), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: 'mouse',
     });
-    await screen.findByTestId('team-member-row-4');
-    expect(invalidatedKeys(invalidate)).not.toContainEqual(['team', TEAM_ID]);
-    rerenderWith({
-      liveTeam: liveTeam({ deputy_captain: { pk: 4 } as never }),
-    });
-    await waitFor(() =>
-      expect(invalidatedKeys(invalidate)).toContainEqual(['team', TEAM_ID]),
+    fireEvent.click(
+      within(screen.getByRole('listbox')).getByRole('option', {
+        name: 'roster_c (captain)',
+      }),
+    );
+    expect(screen.getByTestId('team-action-warning')).toHaveTextContent(
+      CAPTAIN_CHANGE_WARNING,
     );
   });
 

@@ -67,7 +67,6 @@ export const TeamModal: React.FC<TeamModalProps> = ({
   }, [team.members]);
 
   const currentUser = useUserStore((s) => s.currentUser);
-  const storeTournament = useUserStore((s) => s.tournament);
   const managed = useManagedTeam(team.pk, {
     enabled: open && !!currentUser?.pk,
   });
@@ -76,16 +75,8 @@ export const TeamModal: React.FC<TeamModalProps> = ({
   useInvalidateOnRosterChange(team.pk, rosterSignature(team));
 
   const tournamentPk = managed.data?.tournament?.pk;
-  const sameTournament =
-    storeTournament?.pk != null && storeTournament.pk === tournamentPk;
-  const organizationPk = sameTournament
-    ? (storeTournament.organization_pk ?? null)
-    : null;
-  const leaguePk = sameTournament
-    ? typeof storeTournament.league === 'object'
-      ? (storeTournament.league?.pk ?? null)
-      : (storeTournament.league ?? null)
-    : null;
+  const organizationPk = managed.data?.organization_pk ?? null;
+  const leaguePk = managed.data?.league_pk ?? null;
 
   const problems = canManage ? (managed.data?.leadership_problems ?? []) : [];
   const captainProblems = problems.filter(
@@ -275,7 +266,6 @@ export const TeamModal: React.FC<TeamModalProps> = ({
           tournamentPk={tournamentPk}
           organizationPk={organizationPk}
           leaguePk={leaguePk}
-          liveTeam={team}
           onTeamGone={() => onOpenChange(false)}
         />
       )}

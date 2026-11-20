@@ -147,7 +147,7 @@ describe('AddStandinPicker', () => {
     expect(screen.queryByText('Not in this organization')).toBeNull();
   });
 
-  it('treats a null organization like league staff', async () => {
+  it('searches everyone with a neutral note when the tournament has no organization', async () => {
     useUserStore.setState({
       currentUser: {
         pk: VIEWER,
@@ -160,8 +160,19 @@ describe('AddStandinPicker', () => {
     expect(await screen.findByTestId('team-standin-result-20')).toBeTruthy();
     expect(searchCalls()[0][1]).toEqual({ params: { q: 'abc' } });
     expect(
-      screen.getByText("Organization membership can't be shown for your role."),
+      screen.getByText('This tournament has no organization to rank by.'),
     ).toBeTruthy();
+    expect(screen.queryByText(/for your role/i)).toBeNull();
+  });
+
+  it('marks players on another team and does not let them be picked', async () => {
+    const { onPick } = renderPicker({ otherTeamPks: [20] });
+    await search('abc');
+    const row = await screen.findByTestId('team-standin-result-20');
+    expect(row).toHaveTextContent('On another team');
+    expect(row).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(row);
+    expect(onPick).not.toHaveBeenCalled();
   });
 
   it('shows "Search unavailable" when the search fails', async () => {
@@ -218,6 +229,20 @@ describe('TeamManageDialog stand-in search', () => {
     fireEvent.click(await screen.findByTestId(`team-standin-result-${pk}`));
     await screen.findByTestId('team-action-dialog');
   }
+
+  it('marks players the server reports on other teams', async () => {
+    routeGets(axiosMock, {
+      team: { ...managedTeam, other_team_user_pks: [21] },
+      org: org([VIEWER]),
+      search: results,
+    });
+    renderDialog();
+    await screen.findByTestId('team-standin-row-12');
+    await search('abc');
+    expect(
+      await screen.findByTestId('team-standin-result-21'),
+    ).toHaveTextContent('On another team');
+  });
 
   it('excludes the team roster and opens the reason dialog for add_standin', async () => {
     axiosMock.post.mockResolvedValueOnce({ data: managedTeam });

@@ -34,16 +34,29 @@ export interface AddStandinPickerProps {
   organization: OrganizationType | null | undefined;
   leaguePk: number | null | undefined;
   excludePks: number[];
+  /** Rostered on another team in this tournament; the server refuses them. */
+  otherTeamPks?: number[];
   disabled?: boolean;
   onPick: (user: RosterUser) => void;
 }
 
-type Candidate = { user: RosterUser; label: string | null };
+type Candidate = {
+  user: RosterUser;
+  label: string | null;
+  onOtherTeam: boolean;
+};
 
-function toCandidate(result: SearchUserResult): Candidate | null {
+function toCandidate(
+  result: SearchUserResult,
+  onOtherTeam: boolean,
+): Candidate | null {
   const parsed = RosterUserSchema.safeParse(result);
   return parsed.success
-    ? { user: parsed.data, label: result.membership_label ?? null }
+    ? {
+        user: parsed.data,
+        label: result.membership_label ?? null,
+        onOtherTeam,
+      }
     : null;
 }
 
@@ -59,6 +72,7 @@ export function AddStandinPicker({
   organization,
   leaguePk,
   excludePks,
+  otherTeamPks,
   disabled,
   onPick,
 }: AddStandinPickerProps) {
@@ -78,11 +92,12 @@ export function AddStandinPicker({
 
   const { inside, outside } = useMemo(() => {
     const excluded = new Set(excludePks);
+    const elsewhere = new Set(otherTeamPks);
     const inside: Candidate[] = [];
     const outside: Candidate[] = [];
     for (const result of search.data ?? []) {
       if (result.pk == null || excluded.has(result.pk)) continue;
-      const candidate = toCandidate(result);
+      const candidate = toCandidate(result, elsewhere.has(result.pk));
       if (!candidate) continue;
       const isInside =
         !isOrgStaff ||
@@ -91,7 +106,7 @@ export function AddStandinPicker({
       (isInside ? inside : outside).push(candidate);
     }
     return { inside, outside };
-  }, [search.data, excludePks, isOrgStaff]);
+  }, [search.data, excludePks, otherTeamPks, isOrgStaff]);
 
   const handleOpenChange = (next: boolean) => {
     if (!next) setQuery('');
@@ -103,16 +118,21 @@ export function AddStandinPicker({
     onPick(user);
   };
 
-  const renderItem = ({ user, label }: Candidate) => (
+  const renderItem = ({ user, label, onOtherTeam }: Candidate) => (
     <CommandItem
       key={user.pk}
       value={String(user.pk)}
       data-testid={`team-standin-result-${user.pk}`}
+      disabled={onOtherTeam}
       onSelect={() => pick(user)}
     >
       <UserAvatar user={user} size="sm" />
       <span className="truncate">{DisplayName(user)}</span>
-      {isOrgStaff && label ? (
+      {onOtherTeam ? (
+        <Badge variant="outline" className="ml-auto text-xs">
+          On another team
+        </Badge>
+      ) : isOrgStaff && label ? (
         <Badge variant="outline" className="ml-auto text-xs">
           {label}
         </Badge>
@@ -170,7 +190,9 @@ export function AddStandinPicker({
           <CommandList>{body}</CommandList>
           {isOrgStaff ? null : (
             <p className="border-t px-3 py-2 text-xs text-muted-foreground">
-              Organization membership can&apos;t be shown for your role.
+              {organization?.pk == null
+                ? 'This tournament has no organization to rank by.'
+                : "Organization membership can't be shown for your role."}
             </p>
           )}
         </Command>

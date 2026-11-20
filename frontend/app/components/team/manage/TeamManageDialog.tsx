@@ -15,7 +15,6 @@ import {
 import { OverrideWarningDialog } from '~/components/events/OverrideWarningDialog';
 import { useOverrideRetry } from '~/components/events/useOverrideRetry';
 import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
-import type { TeamType } from '~/components/tournament/types';
 import { Alert, AlertDescription } from '~/components/ui/alert';
 import {
   Dialog,
@@ -39,9 +38,7 @@ import {
 import { TeamHistoryTable } from './TeamHistoryTable';
 import { TeamRosterPanel } from './TeamRosterPanel';
 import {
-  rosterSignature,
   teamManageKeys,
-  useInvalidateOnRosterChange,
   useManagedTeam,
   useTeamActionMutation,
   useTeamHistory,
@@ -63,7 +60,6 @@ export interface TeamManageDialogProps {
   tournamentPk: number | undefined;
   organizationPk: number | null | undefined;
   leaguePk: number | null | undefined;
-  liveTeam?: TeamType | null;
   onTeamGone: () => void;
 }
 
@@ -97,7 +93,6 @@ export function TeamManageDialog({
   tournamentPk,
   organizationPk,
   leaguePk,
-  liveTeam,
   onTeamGone,
 }: TeamManageDialogProps) {
   const queryClient = useQueryClient();
@@ -107,7 +102,6 @@ export function TeamManageDialog({
     queryFn: () => fetchOrganization(organizationPk!),
     enabled: open && organizationPk != null,
   });
-  useInvalidateOnRosterChange(teamId, rosterSignature(liveTeam ?? {}));
 
   const [tab, setTab] = useState('roster');
   const [historyPage, setHistoryPage] = useState(1);
@@ -311,6 +305,7 @@ export function TeamManageDialog({
                       organization={organization ?? null}
                       leaguePk={leaguePk}
                       excludePks={rosterPks(team)}
+                      otherTeamPks={team.other_team_user_pks ?? []}
                       disabled={pending}
                       onPick={(user) =>
                         requestAction(addStandinRequest(team, user))
@@ -360,6 +355,7 @@ export function TeamManageDialog({
           destructive={request.destructive}
           defaultReason={lastReasons.current[request.action.kind] ?? ''}
           replacingOptions={request.withReplacing ? team?.members : undefined}
+          replacingCaptain={request.replacingCaptain}
           pending={pending}
           onSubmit={submit}
         />

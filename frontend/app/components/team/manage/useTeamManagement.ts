@@ -1,5 +1,4 @@
 import {
-  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -53,7 +52,9 @@ export function useTeamHistory(
   return useQuery({
     queryKey: teamManageKeys.history(teamId, page),
     queryFn: () => fetchTeamHistory(teamId, page, HISTORY_PAGE_SIZE),
-    placeholderData: keepPreviousData,
+    // Keep the last page only while paging the same team.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === teamId ? previous : undefined,
     enabled: opts.enabled ?? true,
   });
 }

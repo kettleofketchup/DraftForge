@@ -205,33 +205,31 @@ describe('TeamModal manage entry point', () => {
     );
   });
 
-  it('passes no org or league when the store holds a different tournament', async () => {
+  it('takes org and league from the team payload, not the store tournament', async () => {
     useUserStore.setState({
       tournament: {
         pk: TOURNAMENT_PK + 1,
-        organization_pk: 7,
-        league: 3,
+        organization_pk: 99,
+        league: 98,
       } as unknown as TournamentType,
     });
+    serve({ ...managedTeam, organization_pk: 7, league_pk: 3 });
     renderModal();
     fireEvent.click(await screen.findByTestId('team-manage-button'));
     expect(dialogProps.last).toMatchObject({
       tournamentPk: TOURNAMENT_PK,
-      organizationPk: null,
-      leaguePk: null,
+      organizationPk: 7,
+      leaguePk: 3,
     });
   });
 
-  it('reads a numeric league pk from the matching store tournament', async () => {
-    useUserStore.setState({
-      tournament: {
-        pk: TOURNAMENT_PK,
-        organization_pk: 7,
-        league: 9,
-      } as unknown as TournamentType,
-    });
+  it('passes no org or league when the payload has none', async () => {
+    serve({ ...managedTeam, organization_pk: null, league_pk: null });
     renderModal();
     fireEvent.click(await screen.findByTestId('team-manage-button'));
-    expect(dialogProps.last).toMatchObject({ organizationPk: 7, leaguePk: 9 });
+    expect(dialogProps.last).toMatchObject({
+      organizationPk: null,
+      leaguePk: null,
+    });
   });
 });

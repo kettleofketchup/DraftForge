@@ -65,6 +65,28 @@ describe('ManagedTeamSchema', () => {
     expect(team.leadership_problems[0].field).toBe('captain');
   });
 
+  it('parses the manager-only picker scope', () => {
+    const team = ManagedTeamSchema.parse({
+      ...managedTeam,
+      other_team_user_pks: [6],
+    });
+    expect(team.organization_pk).toBe(7);
+    expect(team.league_pk).toBe(3);
+    expect(team.other_team_user_pks).toEqual([6]);
+  });
+
+  it('accepts a viewer payload without the picker scope', () => {
+    const {
+      organization_pk: _org,
+      league_pk: _league,
+      other_team_user_pks: _others,
+      ...viewer
+    } = managedTeam;
+    const team = ManagedTeamSchema.parse({ ...viewer, can_manage_team: false });
+    expect(team.organization_pk).toBeUndefined();
+    expect(team.other_team_user_pks).toBeUndefined();
+  });
+
   it('accepts a team without a tournament', () => {
     expect(
       ManagedTeamSchema.safeParse({ ...managedTeam, tournament: null }).success,

@@ -55,6 +55,10 @@ export const ManagedTeamSchema = z.object({
   placement: z.number().nullable(),
   leadership_problems: z.array(LeadershipProblemSchema),
   can_manage_team: z.boolean(),
+  // Sent only to viewers who can manage the team.
+  organization_pk: z.number().nullable().optional(),
+  league_pk: z.number().nullable().optional(),
+  other_team_user_pks: z.array(z.number()).optional(),
 });
 export type ManagedTeam = z.infer<typeof ManagedTeamSchema>;
 
