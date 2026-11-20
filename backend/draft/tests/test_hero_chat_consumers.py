@@ -671,6 +671,55 @@ class ChatSendTest(ChatSendFixture):
         finally:
             await self.close_all()
 
+    async def test_publish_failure_still_acks_stored_message(self) -> None:
+        sentinel = "publish-fail-0b7e"
+        try:
+            mem_a = await self.connect_as(self.mem_a)
+            with (
+                mock.patch.object(
+                    _RecordingConsumer,
+                    "_publish_chat",
+                    side_effect=RuntimeError("layer down"),
+                ),
+                capture_logs() as logs,
+            ):
+                await mem_a.send_json_to(
+                    {"type": "chat_send", "body": sentinel, "client_msg_id": "pf"}
+                )
+                frames = [
+                    await read_until_types(mem_a, {"chat_ack", "chat_message"})
+                    for _ in range(2)
+                ]
+                rest = await drain(mem_a, 0.3)
+            by_type = {f["type"]: f for f in frames}
+            self.assertEqual(by_type["chat_ack"]["client_msg_id"], "pf")
+            self.assertEqual(by_type["chat_message"]["message"]["body"], sentinel)
+            self.assertEqual(
+                by_type["chat_ack"]["id"], by_type["chat_message"]["message"]["id"]
+            )
+            self.assertNotIn("chat_error", [f.get("type") for f in rest])
+            self.assertEqual(
+                await database_sync_to_async(
+                    HeroDraftChatMessage.objects.filter(body=sentinel).count
+                )(),
+                1,
+            )
+            failed = [e for e in logs if e["event"] == "herodraft_chat_publish_failed"]
+            self.assertEqual(len(failed), 1)
+            self.assertEqual(failed[0]["system"], "herodraft")
+            self.assertEqual(failed[0]["subsystem"], "chat")
+            self.assertNotIn(sentinel, json.dumps(failed[0], default=str))
+            self.assertNotIn(
+                "unavailable",
+                [
+                    e.get("code")
+                    for e in logs
+                    if e["event"] == "herodraft_chat_rejected"
+                ],
+            )
+        finally:
+            await self.close_all()
+
     async def test_bad_client_msg_id_and_body(self) -> None:
         try:
             mem_a = await self.connect_as(self.mem_a)

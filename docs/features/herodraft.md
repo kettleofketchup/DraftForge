@@ -407,6 +407,7 @@ All chat logs use `system="herodraft"`, `subsystem="chat"`. Message text and her
 | Event | Level | Trigger |
 |-------|-------|---------|
 | `herodraft_chat_sent` | info | Message stored; carries `channel` and `length` |
+| `herodraft_chat_publish_failed` | error | Message was stored but the channel layer refused it; the sender still gets the ack and their own copy, so they do not resend |
 | `herodraft_chat_rejected` | info / error | Send refused; carries `code` (`rate_limited` included; error level for `unavailable`) |
 | `herodraft_chat_rejections_throttled` | warning | A socket passed 8 refused frames in 10 s; its further `herodraft_chat_rejected` and `ws_malformed_message` logs are dropped until the window ends |
 | `herodraft_chat_rate_limit_redis_unavailable` | warning | Redis failed; the send is refused |

@@ -241,7 +241,6 @@ class HeroDraftConsumer(BaseDraftConsumer):
             return
         try:
             result = await self._authorize_and_post(msg_type, data)
-            await self._publish_chat(result)
         except ChatError as e:
             self._log_chat_rejected(e.code)
             await self._send_chat_error(e.code, client_msg_id)
@@ -260,6 +259,25 @@ class HeroDraftConsumer(BaseDraftConsumer):
             await self._send_chat_error("unavailable", client_msg_id)
             return
 
+        try:
+            await self._publish_chat(result)
+        except Exception as e:
+            # Stored already: telling the client "not sent" would invite a duplicate.
+            log.error(
+                "herodraft_chat_publish_failed",
+                system="herodraft",
+                subsystem="chat",
+                draft_id=self.draft_id,
+                user_id=self._chat_user_id(),
+                channel=result.channel,
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
+            await self.send(
+                text_data=json.dumps(
+                    {"type": "chat_message", "message": result.message}
+                )
+            )
         ack: dict[str, Any] = {"type": "chat_ack", "id": result.message["id"]}
         if client_msg_id is not None:
             ack["client_msg_id"] = client_msg_id
