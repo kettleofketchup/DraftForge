@@ -6,6 +6,7 @@ from rest_framework.test import APIClient
 
 from app.models import (
     CustomUser,
+    GameType,
     League,
     Organization,
     PositionsModel,
@@ -14,7 +15,8 @@ from app.models import (
 )
 from app.services.team_leadership import teams_with_leadership_problems
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import OrgUser, OrgUserGameMmr
+from tests.populate.utils import ensure_org_user
 
 
 class TournamentCSVImportTest(TestCase):
@@ -234,3 +236,56 @@ class TournamentCSVImportTest(TestCase):
         teams = Team.objects.filter(tournament=self.tournament)
         self.assertEqual(teams.exclude(captain=None).count(), 2)
         self.assertEqual(teams_with_leadership_problems(teams), [])
+
+
+class TournamentCSVImportDotaRowTest(TestCase):
+    def setUp(self) -> None:
+        self.admin = CustomUser.objects.create_user(
+            username="trow_admin", password="pass"
+        )
+        self.org = Organization.objects.create(name="TRow Org", owner=self.admin)
+        self.org.admins.add(self.admin)
+        self.league = League.objects.create(
+            name="TRow League", organization=self.org, steam_league_id=99998
+        )
+        self.tournament = Tournament.objects.create(
+            name="TRow Tournament", league=self.league, date_played=timezone.now()
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+        self.url = f"/api/tournaments/{self.tournament.pk}/import-csv/"
+        self.user = CustomUser.objects.create_user(
+            username="trow_member", password="pass", steamid=76561198012345679
+        )
+        self.org_user = ensure_org_user(self.user, self.org, mmr=1000)
+
+    def dota_row(self) -> int:
+        return OrgUserGameMmr.objects.get(
+            org_user=self.org_user, game_type=GameType.DOTA2
+        ).mmr
+
+    def post(self, mmr: int, **extra: object) -> dict:
+        resp = self.client.post(
+            self.url,
+            {"rows": [{"steam_friend_id": "76561198012345679", "mmr": mmr}], **extra},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        return resp.data
+
+    def test_update_mmr_org_target_writes_dota_row(self) -> None:
+        self.tournament.users.add(self.user)
+        data = self.post(6000, update_mmr=True, mmr_target="organization")
+        self.assertEqual(data["summary"]["updated"], 1)
+        self.assertEqual(self.dota_row(), 6000)
+
+    def test_existing_org_member_added_writes_dota_row(self) -> None:
+        data = self.post(6500)
+        self.assertEqual(data["summary"]["added"], 1)
+        self.assertEqual(self.dota_row(), 6500)
+
+    def test_out_of_range_for_existing_org_member_is_row_error(self) -> None:
+        data = self.post(25000)
+        self.assertEqual(data["summary"]["errors"], 1)
+        self.assertFalse(self.tournament.users.filter(pk=self.user.pk).exists())
+        self.assertEqual(self.dota_row(), 1000)

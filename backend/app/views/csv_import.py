@@ -14,6 +14,7 @@ from app.cache_utils import invalidate_obj
 from app.display_names import user_display_name
 from app.models import (
     CustomUser,
+    GameType,
     League,
     Organization,
     OrgLog,
@@ -24,6 +25,7 @@ from app.models import (
 from app.permissions_org import has_org_staff_access
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
+from org.mmr import OrgMmrError, set_org_mmr
 from org.models import OrgUser
 from telemetry.logging import get_logger
 
@@ -328,7 +330,13 @@ def import_csv_org(request: Request, org_id: int) -> Response:
                 base_mmr=base_mmr,
             )
             if update_mmr and base_mmr is not None:
-                OrgUser.objects.filter(user=user, organization=org).update(mmr=base_mmr)
+                mmr_error = _set_org_dota_mmr(user, org, base_mmr)
+                if mmr_error:
+                    results.append(
+                        {"row": i + 1, "status": "error", "reason": mmr_error}
+                    )
+                    summary["errors"] += 1
+                    continue
                 results.append(
                     {
                         "row": i + 1,
@@ -373,13 +381,24 @@ def import_csv_org(request: Request, org_id: int) -> Response:
     return Response({"summary": summary, "results": results})
 
 
+def _set_org_dota_mmr(user: CustomUser, org: Organization, base_mmr: int) -> str | None:
+    org_user = OrgUser.objects.filter(user=user, organization=org).first()
+    if org_user is None:
+        return None
+    try:
+        set_org_mmr(org_user, GameType.DOTA2, base_mmr, mark_verified=False)
+    except OrgMmrError as exc:
+        return f"Invalid mmr: {exc}"
+    return None
+
+
 def _update_mmr_for_target(
     user: CustomUser,
     org: Organization | None,
     league: League | None,
     mmr_target: str | None,
     base_mmr: int,
-) -> None:
+) -> str | None:
     """Update MMR at the specified target level (organization or league)."""
     if mmr_target == "league" and league and org:
         org_user = OrgUser.objects.filter(user=user, organization=org).first()
@@ -390,7 +409,8 @@ def _update_mmr_for_target(
                 defaults={"org_user": org_user, "mmr": base_mmr},
             )
     elif org:
-        OrgUser.objects.filter(user=user, organization=org).update(mmr=base_mmr)
+        return _set_org_dota_mmr(user, org, base_mmr)
+    return None
 
 
 @api_view(["POST"])
@@ -498,7 +518,15 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
 
         if tournament.users.filter(pk=user.pk).exists():
             if update_mmr and base_mmr is not None:
-                _update_mmr_for_target(user, org, league, mmr_target, base_mmr)
+                mmr_error = _update_mmr_for_target(
+                    user, org, league, mmr_target, base_mmr
+                )
+                if mmr_error:
+                    results.append(
+                        {"row": i + 1, "status": "error", "reason": mmr_error}
+                    )
+                    summary["errors"] += 1
+                    continue
                 results.append(
                     {
                         "row": i + 1,
@@ -530,9 +558,13 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
             except IntegrityError:
                 # Already a member of the org -- update MMR if provided
                 if base_mmr is not None:
-                    OrgUser.objects.filter(user=user, organization=org).update(
-                        mmr=base_mmr
-                    )
+                    mmr_error = _set_org_dota_mmr(user, org, base_mmr)
+                    if mmr_error:
+                        results.append(
+                            {"row": i + 1, "status": "error", "reason": mmr_error}
+                        )
+                        summary["errors"] += 1
+                        continue
 
         # For league-level MMR, also create/update LeagueUser
         if league and mmr_target == "league" and base_mmr is not None:

@@ -3,8 +3,9 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, PositionsModel
-from org.models import OrgUser
+from app.models import CustomUser, GameType, Organization, PositionsModel
+from org.models import OrgUser, OrgUserGameMmr
+from tests.populate.utils import ensure_org_user
 
 
 class OrgCSVImportTest(TestCase):
@@ -343,3 +344,52 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         user.refresh_from_db()
         self.assertEqual(user.nickname, "GivenName")
+
+
+class OrgCSVImportDotaRowTest(TestCase):
+    def setUp(self) -> None:
+        self.admin = CustomUser.objects.create_user(
+            username="row_admin", password="pass"
+        )
+        self.org = Organization.objects.create(name="Row Org", owner=self.admin)
+        self.org.admins.add(self.admin)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+        self.url = f"/api/organizations/{self.org.pk}/import-csv/"
+        self.user = CustomUser.objects.create_user(
+            username="row_member", password="pass", steamid=76561198011111112
+        )
+        self.org_user = ensure_org_user(self.user, self.org, mmr=1000)
+
+    def post(self, mmr: int) -> dict:
+        resp = self.client.post(
+            self.url,
+            {
+                "rows": [{"steam_friend_id": "76561198011111112", "mmr": mmr}],
+                "update_mmr": True,
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        return resp.data
+
+    def test_update_mmr_writes_dota_row(self) -> None:
+        data = self.post(5000)
+        self.assertEqual(data["summary"]["updated"], 1)
+        self.assertEqual(
+            OrgUserGameMmr.objects.get(
+                org_user=self.org_user, game_type=GameType.DOTA2
+            ).mmr,
+            5000,
+        )
+
+    def test_update_mmr_out_of_range_is_row_error(self) -> None:
+        data = self.post(25000)
+        self.assertEqual(data["summary"]["errors"], 1)
+        self.assertEqual(data["results"][0]["status"], "error")
+        self.assertEqual(
+            OrgUserGameMmr.objects.get(
+                org_user=self.org_user, game_type=GameType.DOTA2
+            ).mmr,
+            1000,
+        )

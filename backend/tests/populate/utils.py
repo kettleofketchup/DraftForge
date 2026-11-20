@@ -6,7 +6,7 @@ import os
 import random
 import re
 from collections.abc import Iterable
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 import redis
 from cacheops.redis import redis_client as cacheops_redis
@@ -15,8 +15,9 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 
-from app.models import CustomUser, Organization, PositionsModel
-from org.models import ContributionEntry, OrgUser, PromoSend
+from app.models import CustomUser, GameType, League, Organization, PositionsModel
+from org.mmr import LEAGUE_GAME, org_mmr_for, validate_org_mmr
+from org.models import ContributionEntry, OrgUser, OrgUserGameMmr, PromoSend
 
 from .constants import (
     BRACKET_STEAM_ID_BASE,
@@ -25,6 +26,9 @@ from .constants import (
     MOCK_USERNAMES,
     TOURNAMENT_USERS,
 )
+
+if TYPE_CHECKING:
+    from league.models import LeagueUser
 
 RESERVED_STEAM_ACCOUNT_IDS: Final[range] = range(
     BRACKET_STEAM_ID_BASE, BRACKET_STEAM_ID_BASE + BRACKET_USER_COUNT
@@ -144,30 +148,47 @@ def ensure_org_user(
     organization: Organization,
     mmr: int | None = None,
     guild_nickname: str | None = None,
+    game_mmrs: dict[int, int] | None = None,
 ) -> OrgUser:
     """Ensure OrgUser exists for user in organization.
 
+    `mmr` is the Dota 2 org MMR. A None value, or a game absent from
+    `game_mmrs`, leaves that game as it is; an explicit 0 clears it.
     A None guild_nickname leaves an existing server nickname as it is.
     """
+    wanted: dict[int, int] = dict(game_mmrs or {})
+    if mmr is not None:
+        wanted[GameType.DOTA2] = mmr
+    for game_type, value in wanted.items():
+        validate_org_mmr(game_type, value)
+    dota = wanted.get(GameType.DOTA2)
     org_user, created = OrgUser.objects.get_or_create(
         user=user,
         organization=organization,
         defaults={
-            "mmr": mmr if mmr is not None else 0,
+            "mmr": dota if dota is not None else 0,
             "guild_nickname": guild_nickname,
         },
     )
-    if created:
-        return org_user
-    update_fields: list[str] = []
-    if mmr is not None and org_user.mmr != mmr:
-        org_user.mmr = mmr
-        update_fields.append("mmr")
-    if guild_nickname is not None and org_user.guild_nickname != guild_nickname:
-        org_user.guild_nickname = guild_nickname
-        update_fields.append("guild_nickname")
-    if update_fields:
-        org_user.save(update_fields=update_fields)
+    if not created:
+        update_fields: list[str] = []
+        if dota is not None and org_user.mmr != dota:
+            org_user.mmr = dota
+            update_fields.append("mmr")
+        if guild_nickname is not None and org_user.guild_nickname != guild_nickname:
+            org_user.guild_nickname = guild_nickname
+            update_fields.append("guild_nickname")
+        if update_fields:
+            org_user.save(update_fields=update_fields)
+    for game_type, value in wanted.items():
+        if value:
+            OrgUserGameMmr.objects.update_or_create(
+                org_user=org_user, game_type=game_type, defaults={"mmr": value}
+            )
+        else:
+            OrgUserGameMmr.objects.filter(
+                org_user=org_user, game_type=game_type
+            ).delete()
     return org_user
 
 
@@ -184,12 +205,17 @@ def delete_ledger_for_users(pks: Iterable[int]) -> None:
     ).delete()
 
 
-def ensure_league_user(user, org_user, league):
+def ensure_league_user(
+    user: CustomUser, org_user: OrgUser, league: League
+) -> "LeagueUser":
     """Ensure LeagueUser exists for user in league."""
     from league.models import LeagueUser
 
     league_user, created = LeagueUser.objects.get_or_create(
-        user=user, org_user=org_user, league=league, defaults={"mmr": org_user.mmr}
+        user=user,
+        org_user=org_user,
+        league=league,
+        defaults={"mmr": org_mmr_for(org_user.organization_id, user.pk, LEAGUE_GAME)},
     )
     return league_user
 
