@@ -43,7 +43,7 @@ them.
 | `on_event_reopened(event, *, actor, now=None)` | `events.reopen` | Revokes host/helper points; returns `revoked` (OrgLog, log) |
 | `reopen_reset_fields()` | `events.reopen` compare-and-set | `{"contributions_awarded_at": None}`, cleared in the same `UPDATE` |
 | `on_event_deleted(event, *, actor, now=None)` | `events.services.teardown_event` | Nothing |
-| `on_event_changed(event, *, fields, now=None)` | Event PATCH (time/name), staff edit, host/helper dedupe after a merge | Re-syncs host/helper points once awarded; returns `synced` (log) |
+| `on_event_changed(event, *, fields, now=None)` | Event PATCH (every changed model field), staff edit, host/helper dedupe after a merge | Re-syncs host/helper points once awarded when `fields` includes a time, name or staff field; returns `synced` (log) |
 | `on_signup_withdrawn(signup, *, prior_status, by_member, now=None)` | No caller yet | Nothing |
 | `on_feature_toggled(org_id, feature, *, enabled)` | No caller yet | Nothing |
 | `merge_users(drop, keep, *, member_pairs)` | Profile claim merge (`org/views.py`), Discord account merge (`app/discord_accounts.py`) | Moves ledger rows to the kept member, repoints `awarded_by`/`updated_by` |
@@ -55,6 +55,13 @@ them.
 `leaderboard` raises `UnknownTrack`, `UnknownMetric` or `FeatureLocked`. It blanks
 `rows` and `own_row` when the viewer may not see them (from the track's `access()`),
 never `total`, and sets `rows_visible`.
+
+!!! info "Interface status"
+    This is the first cut of the interface. Tracks expose `access()` for read
+    permissions; `track_info()`, `member_standing()` and `api.tracks_for()` arrive
+    with the conduct track and replace or extend it. `ledger.upsert_event_entry`
+    arrives with the leadership track. Test data population is unchanged until the
+    conduct track.
 
 ## Invariants
 
@@ -95,9 +102,9 @@ Both merge sites follow the same order inside one atomic block:
 4. Delete the dropped `OrgUser` rows. This must come after step 2: ledger rows point
    at `OrgUser` with `RESTRICT`.
 5. After events are repointed, `events.staff.dedupe_host_helpers(keep)` removes the
-   kept user from the helpers of events they also host; the caller calls
-   `standing.on_event_changed(event, fields=frozenset({"helpers"}))` for each
-   returned event.
+   kept user from the helpers of events they also host and calls
+   `standing.on_event_changed(event, fields=frozenset({"helpers"}))` for each of
+   those events.
 
 `merge_users` calls each track's `merge_members` once per pair and `repoint_user`
 once. Per track, `merge_members` outputs are combined across pairs (ints added,
@@ -107,8 +114,9 @@ output namespace.
 
 !!! note "Grafana"
     `event_staff_deduped` now logs with `system="events", subsystem="services"`, not
-    `org`/`contributions`, and no longer carries `synced`. The re-sync is logged by
-    the contribution track through `on_event_changed`.
+    `org`/`contributions`. It still carries `synced`, the number of deduped events
+    whose staff points were re-synced (summed from each `on_event_changed` result's
+    `log_fields()`).
 
 ## Ledger and kinds
 
