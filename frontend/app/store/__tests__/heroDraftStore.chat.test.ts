@@ -29,6 +29,8 @@ vi.mock('~/lib/websocket', () => ({
 }));
 
 const { useHeroDraftStore } = await import('~/store/heroDraftStore');
+const { addPending, initialChatState } =
+  await import('~/components/herodraft/chat/chatState');
 
 const UUID_V4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -278,5 +280,68 @@ describe('heroDraftStore chat disconnect', () => {
     emit({ type: 'chat_history', viewer: memberViewer, messages: [msg(1)] });
     setStatus('connected');
     expect(chat().messages).toHaveLength(1);
+  });
+});
+
+describe('heroDraftStore chat across drafts', () => {
+  it('starts a fresh chat when a different draft is opened', () => {
+    useHeroDraftStore.setState((s) => ({
+      chat: addPending(
+        { ...s.chat, panelOpen: true, unread: 4 },
+        { clientMsgId: 'c1', raw: 'ban pudge', sentAt: 1 },
+      ),
+    }));
+    useHeroDraftStore.getState().disconnect();
+    expect(chat().lastError?.text).toBe('ban pudge');
+
+    useHeroDraftStore.getState().connect(3);
+    expect(chat()).toEqual(initialChatState);
+  });
+
+  it('keeps the restored chat when the same draft reconnects', () => {
+    useHeroDraftStore.setState((s) => ({
+      chat: addPending(
+        { ...s.chat, panelOpen: true },
+        { clientMsgId: 'c1', raw: 'ban pudge', sentAt: 1 },
+      ),
+    }));
+    useHeroDraftStore.getState().disconnect();
+    useHeroDraftStore.getState().connect(2);
+    expect(chat().panelOpen).toBe(true);
+    expect(chat().lastError).toEqual({
+      code: 'unavailable',
+      text: 'ban pudge',
+    });
+  });
+
+  it('switching drafts while connected also starts fresh', () => {
+    useHeroDraftStore.setState((s) => ({
+      chat: { ...s.chat, panelOpen: true, unread: 2 },
+    }));
+    useHeroDraftStore.getState().connect(3);
+    expect(chat()).toEqual(initialChatState);
+  });
+});
+
+describe('heroDraftStore chat error banner', () => {
+  it('a later suggestion clears an earlier error', () => {
+    useHeroDraftStore.setState((s) => ({
+      chat: { ...s.chat, lastError: { code: 'rate_limited' } },
+    }));
+    expect(
+      useHeroDraftStore.getState().suggestHero('suggest_pick', 5),
+    ).not.toBeNull();
+    expect(chat().lastError).toBeNull();
+  });
+
+  it('keeps the error when the send is refused', () => {
+    send.mockImplementation(() => false);
+    useHeroDraftStore.setState((s) => ({
+      chat: { ...s.chat, lastError: { code: 'rate_limited' } },
+    }));
+    expect(
+      useHeroDraftStore.getState().suggestHero('suggest_pick', 5),
+    ).toBeNull();
+    expect(chat().lastError).toEqual({ code: 'rate_limited' });
   });
 });
