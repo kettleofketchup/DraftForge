@@ -45,6 +45,7 @@ class MessageKey(StrEnum):
     RSVP_CONFIRM_REQUEST = "rsvp.confirm_request"
     RSVP_ESCALATION_NUDGE = "rsvp.escalation_nudge"
     EVENT_ATTENDANCE_REMINDER = "event.attendance_reminder"
+    EVENT_START_MENTION = "event.start_mention"
     RSVP_PROMOTION = "rsvp.promotion"
     RSVP_ROSTER_CHANGE = "rsvp.roster_change"
     RSVP_DROP_NOTICE = "rsvp.drop_notice"
@@ -126,6 +127,7 @@ class MessageRegistry(RegistryModel):
 
 DM_OR_EPHEMERAL: tuple[Channel, ...] = (Channel.DM, Channel.EPHEMERAL)
 DM_ONLY: tuple[Channel, ...] = (Channel.DM,)
+CHANNEL_POST_ONLY: tuple[Channel, ...] = (Channel.CHANNEL_POST,)
 
 GROUPS: tuple[MessageGroup, ...] = (
     MessageGroup(
@@ -220,6 +222,17 @@ MESSAGE_TYPES: tuple[MessageType, ...] = (
         description="Reminds you to confirm your attendance for an event.",
         audience=Audience.SIGNUP,
         channels=DM_ONLY,
+    ),
+    MessageType(
+        key=MessageKey.EVENT_START_MENTION,
+        group=GroupKey.ATTENDANCE,
+        label="Start mention",
+        description=(
+            "Mentions you in a reply to the sign-up post shortly before "
+            "an event you signed up for starts."
+        ),
+        audience=Audience.SIGNUP,
+        channels=CHANNEL_POST_ONLY,
     ),
     MessageType(
         key=MessageKey.RSVP_PROMOTION,

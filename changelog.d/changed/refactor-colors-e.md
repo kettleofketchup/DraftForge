@@ -1,0 +1,1 @@
+- Position badges, tooltips and icons now use the domain-color tokens: each position icon takes its badge's color (carry rose, mid cyan, offlane green, soft support violet, hard support indigo), and the badges get a little brighter on hover. The team-draft position coverage cards and table use the success, warning and error colors, so "contested" rows are amber instead of orange.

@@ -1,6 +1,6 @@
-import * as React from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { CheckIcon, ChevronDownIcon } from 'lucide-react';
+import * as React from 'react';
 
 import { brandBg } from '~/components/ui/buttons';
 import {
@@ -17,10 +17,18 @@ import { cn } from '~/lib/utils';
 /** Brand-styled wrapper over shadcn Select — violet/blue gradient on trigger + popover. */
 
 export const BrandSelect = Select;
-export { SelectGroup, SelectLabel, SelectScrollDownButton, SelectScrollUpButton, SelectSeparator, SelectValue };
+export {
+  SelectGroup,
+  SelectLabel,
+  SelectScrollDownButton,
+  SelectScrollUpButton,
+  SelectSeparator,
+  SelectValue,
+};
 
-interface BrandSelectTriggerProps
-  extends React.ComponentProps<typeof SelectPrimitive.Trigger> {
+interface BrandSelectTriggerProps extends React.ComponentProps<
+  typeof SelectPrimitive.Trigger
+> {
   /** `sm` height = 32px (h-8); `default` = 36px (h-9). */
   size?: 'sm' | 'default';
 }
@@ -36,14 +44,14 @@ export const BrandSelectTrigger = React.forwardRef<
     className={cn(
       'inline-flex w-fit items-center justify-between gap-2 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-[box-shadow,background-color,border-color] outline-none',
       'data-[size=default]:h-9 data-[size=sm]:h-8',
-      'bg-gradient-to-r from-violet-500/20 to-blue-500/10 ring-1 ring-violet-400/60',
-      'text-violet-50',
-      'hover:from-violet-500/30 hover:to-blue-500/20 hover:ring-violet-400/80',
-      'focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-200',
-      'data-[state=open]:ring-2 data-[state=open]:ring-violet-400 data-[state=open]:from-violet-500/35 data-[state=open]:to-blue-500/25',
+      'bg-gradient-to-r from-selection/20 to-accent/15 ring-1 ring-primary/60',
+      'text-foreground',
+      'hover:from-selection/30 hover:to-accent/25 hover:ring-primary/80',
+      'focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-base-200',
+      'data-[state=open]:ring-2 data-[state=open]:ring-primary data-[state=open]:from-selection/35 data-[state=open]:to-accent/35',
       'data-[placeholder]:text-muted-foreground',
       'disabled:cursor-not-allowed disabled:opacity-50',
-      '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4 [&_svg:not([class*="text-"])]:text-violet-300',
+      '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4 [&_svg:not([class*="text-"])]:text-primary',
       '*:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate',
       className,
     )}
@@ -106,8 +114,8 @@ export const BrandSelectItem = React.forwardRef<
     className={cn(
       'relative flex w-full cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm text-foreground select-none outline-hidden',
       'focus:outline-none',
-      'focus:bg-gradient-to-r focus:from-violet-500/30 focus:to-blue-500/20 focus:text-violet-100',
-      'data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-violet-500/40 data-[state=checked]:to-blue-500/30 data-[state=checked]:text-white',
+      'focus:bg-gradient-to-r focus:from-selection/30 focus:to-accent/25 focus:text-foreground',
+      'data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-selection/40 data-[state=checked]:to-accent/40 data-[state=checked]:text-white',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4',
       className,
@@ -116,7 +124,7 @@ export const BrandSelectItem = React.forwardRef<
   >
     <span className="absolute right-2 flex size-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <CheckIcon className="size-4 text-violet-300" />
+        <CheckIcon className="size-4 text-primary" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

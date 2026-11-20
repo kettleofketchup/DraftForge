@@ -44,7 +44,7 @@ const POLICY_OPTIONS: readonly {
   {
     value: 'silent',
     label: 'Silent',
-    help: 'Staff placements ignore seating rules (current behaviour)',
+    help: 'Staff placements ignore seating rules',
   },
   {
     value: 'confirm',
@@ -83,6 +83,9 @@ export function StaffPlacementSection({
       <h2 className="text-lg font-semibold">Staff placement</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         How seating rules apply when staff place members on a roster.
+        Eligibility and team rules, such as a missing Steam ID, MMR below the
+        minimum or the stand-in cap, always ask staff to confirm with a reason,
+        whatever this policy says.
       </p>
       {isLoading && (
         <div className="mt-4 flex flex-col gap-3">
@@ -202,7 +205,7 @@ function StaffPlacementForm({
             };
             return (
               <FormItem>
-                <FormLabel>Rules staff are warned about</FormLabel>
+                <FormLabel>Seating rules staff are warned about</FormLabel>
                 <div className="flex flex-col gap-2">
                   {settings.available_warning_codes.map(({ code, label }) => (
                     <label
@@ -225,9 +228,6 @@ function StaffPlacementForm({
             );
           }}
         />
-        <p className="text-xs text-muted-foreground">
-          These settings take effect when staff placement checks ship.
-        </p>
         <div>
           <PrimaryButton
             type="submit"

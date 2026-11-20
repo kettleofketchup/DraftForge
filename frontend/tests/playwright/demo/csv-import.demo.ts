@@ -13,14 +13,14 @@
  * Pipeline: just demo::csv → just demo::trim → just demo::gifs
  */
 
+import { chromium, test, type Locator, type Page } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+import { API_URL, loginAdmin, waitForHydration } from '../fixtures/auth';
 import { BASE_URL } from '../fixtures/base-url';
-import { test, chromium, type Page, type Locator } from '@playwright/test';
-import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
 import { waitForDemoReady } from '../fixtures/demo-utils';
 import { findTournamentCard } from '../helpers/tournament';
-import * as path from 'path';
-import * as fs from 'fs';
-import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,12 +40,18 @@ function cursorInitScript() {
     const el = document.createElement('div');
     el.id = 'demo-cursor';
     el.style.cssText = [
-      'position:fixed', 'width:20px', 'height:20px', 'border-radius:50%',
-      'background:rgba(239,68,68,0.55)', 'border:2px solid white',
+      'position:fixed',
+      'width:20px',
+      'height:20px',
+      'border-radius:50%',
+      'background:rgba(239,68,68,0.55)',
+      'border:2px solid white',
       'box-shadow:0 0 6px rgba(0,0,0,0.4)',
-      'pointer-events:none', 'z-index:999999',
+      'pointer-events:none',
+      'z-index:999999',
       'transform:translate(-50%,-50%)',
-      'left:-40px', 'top:-40px',
+      'left:-40px',
+      'top:-40px',
     ].join(';');
     document.body.appendChild(el);
     document.addEventListener('mousemove', (e) => {
@@ -70,7 +76,10 @@ async function moveTo(page: Page, locator: Locator, durationMs = 500) {
     ({ tx, ty, ms }) => {
       return new Promise<void>((resolve) => {
         const cursor = document.getElementById('demo-cursor');
-        if (!cursor) { resolve(); return; }
+        if (!cursor) {
+          resolve();
+          return;
+        }
         const fromX = parseFloat(cursor.style.left) || 400;
         const fromY = parseFloat(cursor.style.top) || 400;
         const steps = Math.max(12, Math.round(ms / 16));
@@ -150,7 +159,8 @@ test.describe('CSV Import Demo', () => {
       fs.mkdirSync(videoDir, { recursive: true });
     }
 
-    let executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
+    let executablePath =
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
     if (executablePath === '/usr/bin/chromium-browser') {
       executablePath = '/usr/lib/chromium/chromium';
     }
@@ -205,7 +215,9 @@ test.describe('CSV Import Demo', () => {
     // =========================================================================
     console.log('Step 2: Create tournament');
 
-    const createButton = page.getByRole('button', { name: /create tournament/i });
+    const createButton = page.getByRole('button', {
+      name: /create tournament/i,
+    });
     await createButton.waitFor({ state: 'visible', timeout: 15000 });
 
     // Trim metadata — start video right when the page is ready
@@ -246,7 +258,9 @@ test.describe('CSV Import Demo', () => {
     const calendar = page.locator('[data-slot="calendar"]');
     await calendar.waitFor({ state: 'visible', timeout: 5000 });
     await page.waitForTimeout(300);
-    const dayButton = calendar.locator('[data-testid="calendar-day-15"]').first();
+    const dayButton = calendar
+      .locator('[data-testid="calendar-day-15"]')
+      .first();
     await demoClick(page, dayButton, 100);
     await page.waitForTimeout(400);
 
@@ -258,7 +272,9 @@ test.describe('CSV Import Demo', () => {
     await page.waitForTimeout(300);
 
     // Select league (Demo CSV League, pk=4)
-    const leagueSelect = page.locator('[data-testid="tournament-league-select"]');
+    const leagueSelect = page.locator(
+      '[data-testid="tournament-league-select"]',
+    );
     await demoClick(page, leagueSelect, 100);
     const leagueOption = page.locator('[data-testid="tournament-league-4"]');
     await leagueOption.waitFor({ state: 'visible', timeout: 5000 });
@@ -266,7 +282,9 @@ test.describe('CSV Import Demo', () => {
     await page.waitForTimeout(300);
 
     // Submit
-    const submitButton = page.locator('[data-testid="tournament-submit-button"]');
+    const submitButton = page.locator(
+      '[data-testid="tournament-submit-button"]',
+    );
     await demoClick(page, submitButton, 100);
     await nameInput.waitFor({ state: 'hidden', timeout: 15000 });
 
@@ -280,7 +298,9 @@ test.describe('CSV Import Demo', () => {
     // Step 3 — Click into tournament
     // =========================================================================
     console.log('Step 3: Navigate into tournament');
-    const viewButton = tournamentCard.locator('[data-testid^="tournament-view-"]');
+    const viewButton = tournamentCard.locator(
+      '[data-testid^="tournament-view-"]',
+    );
     await demoClick(page, viewButton, 150);
 
     await page.locator('[data-testid="tournamentDetailPage"]').waitFor({
@@ -327,23 +347,29 @@ test.describe('CSV Import Demo', () => {
     });
     await page.locator('#pw-csv-upload').setInputFiles(CSV_FIXTURE);
     await page.evaluate(() => {
-      const input = document.getElementById('pw-csv-upload') as HTMLInputElement;
+      const input = document.getElementById(
+        'pw-csv-upload',
+      ) as HTMLInputElement;
       const file = input.files?.[0];
       if (!file) return;
       const dt = new DataTransfer();
       dt.items.add(file);
       const target = document.querySelector('[class*="border-dashed"]');
       if (target) {
-        target.dispatchEvent(new DragEvent('drop', {
-          dataTransfer: dt,
-          bubbles: true,
-          cancelable: true,
-        }));
+        target.dispatchEvent(
+          new DragEvent('drop', {
+            dataTransfer: dt,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
       }
       input.remove();
     });
 
-    await page.getByText('40 valid').waitFor({ state: 'visible', timeout: 10000 });
+    await page
+      .getByText('40 valid')
+      .waitFor({ state: 'visible', timeout: 10000 });
     await page.waitForTimeout(2000);
 
     // =========================================================================
@@ -353,7 +379,9 @@ test.describe('CSV Import Demo', () => {
     const importBtn = page.getByRole('button', { name: /Import 40 row/ });
     await demoClick(page, importBtn, 100);
 
-    await page.getByRole('button', { name: 'Done' }).waitFor({ state: 'visible', timeout: 30000 });
+    await page
+      .getByRole('button', { name: 'Done' })
+      .waitFor({ state: 'visible', timeout: 30000 });
     await page.waitForTimeout(3000);
 
     // =========================================================================
@@ -418,7 +446,9 @@ test.describe('CSV Import Demo', () => {
       await seedOption.waitFor({ state: 'visible', timeout: 5000 });
       await demoClick(page, seedOption, 100);
       // Wait for bracket nodes to render
-      await page.waitForSelector('.react-flow__node', { timeout: 15000 }).catch(() => {});
+      await page
+        .waitForSelector('.react-flow__node', { timeout: 15000 })
+        .catch(() => {});
       await page.waitForTimeout(3000);
     } else if (tournamentPk) {
       // Fallback: generate via test API
@@ -429,7 +459,9 @@ test.describe('CSV Import Demo', () => {
       await page.reload();
       await waitForHydration(page);
       await page.locator('[data-testid="bracketTab"]').click();
-      await page.waitForSelector('.react-flow__node', { timeout: 15000 }).catch(() => {});
+      await page
+        .waitForSelector('.react-flow__node', { timeout: 15000 })
+        .catch(() => {});
       await page.waitForTimeout(3000);
     }
 
@@ -450,17 +482,24 @@ test.describe('CSV Import Demo', () => {
     await page.waitForTimeout(1000);
 
     // Pick winner for first match (winners bracket)
-    const matchNode1 = page.locator('[data-testid="bracket-match-node"]').first();
+    const matchNode1 = page
+      .locator('[data-testid="bracket-match-node"]')
+      .first();
     if (await matchNode1.isVisible({ timeout: 3000 }).catch(() => false)) {
       await demoClick(page, matchNode1, 100);
-      await page.locator('[data-testid="matchStatsModal"]').waitFor({
-        state: 'visible',
-        timeout: 5000,
-      }).catch(() => {});
+      await page
+        .locator('[data-testid="matchStatsModal"]')
+        .waitFor({
+          state: 'visible',
+          timeout: 5000,
+        })
+        .catch(() => {});
       await page.waitForTimeout(800);
 
       const radiantWinsBtn1 = page.locator('[data-testid="radiantWinsButton"]');
-      if (await radiantWinsBtn1.isVisible({ timeout: 3000 }).catch(() => false)) {
+      if (
+        await radiantWinsBtn1.isVisible({ timeout: 3000 }).catch(() => false)
+      ) {
         await demoClick(page, radiantWinsBtn1, 100);
         await page.waitForTimeout(1500);
       }
@@ -469,13 +508,18 @@ test.describe('CSV Import Demo', () => {
     }
 
     // Pick winner for second match (winners bracket) — populates losers bracket
-    const matchNode2 = page.locator('[data-testid="bracket-match-node"]').nth(1);
+    const matchNode2 = page
+      .locator('[data-testid="bracket-match-node"]')
+      .nth(1);
     if (await matchNode2.isVisible({ timeout: 3000 }).catch(() => false)) {
       await demoClick(page, matchNode2, 100);
-      await page.locator('[data-testid="matchStatsModal"]').waitFor({
-        state: 'visible',
-        timeout: 5000,
-      }).catch(() => {});
+      await page
+        .locator('[data-testid="matchStatsModal"]')
+        .waitFor({
+          state: 'visible',
+          timeout: 5000,
+        })
+        .catch(() => {});
       await page.waitForTimeout(800);
 
       const direWinsBtn = page.locator('[data-testid="direWinsButton"]');
@@ -493,11 +537,13 @@ test.describe('CSV Import Demo', () => {
 
     // Find first losers bracket match that has 2 real teams (no TBD slots).
     const losersMatchIndex = await page.evaluate(() => {
-      const nodes = document.querySelectorAll('[data-testid="bracket-match-node"]');
+      const nodes = document.querySelectorAll(
+        '[data-testid="bracket-match-node"]',
+      );
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
         // Losers bracket nodes have red-tinted background
-        if (!node.className.includes('red-950')) continue;
+        if (!node.className.includes('bracket-losers')) continue;
         // Check both team slots are filled (no "TBD" text)
         const tbdSlots = node.querySelectorAll('.italic');
         if (tbdSlots.length === 0) return i;
@@ -506,14 +552,19 @@ test.describe('CSV Import Demo', () => {
     });
 
     if (losersMatchIndex >= 0) {
-      const losersMatch = page.locator('[data-testid="bracket-match-node"]').nth(losersMatchIndex);
+      const losersMatch = page
+        .locator('[data-testid="bracket-match-node"]')
+        .nth(losersMatchIndex);
       await losersMatch.scrollIntoViewIfNeeded();
       await page.waitForTimeout(500);
       await demoClick(page, losersMatch, 100);
-      await page.locator('[data-testid="matchStatsModal"]').waitFor({
-        state: 'visible',
-        timeout: 5000,
-      }).catch(() => {});
+      await page
+        .locator('[data-testid="matchStatsModal"]')
+        .waitFor({
+          state: 'visible',
+          timeout: 5000,
+        })
+        .catch(() => {});
       await page.waitForTimeout(2000);
       await page.keyboard.press('Escape');
       await page.waitForTimeout(1000);
@@ -526,10 +577,15 @@ test.describe('CSV Import Demo', () => {
     await page.close();
     await context.close();
 
-    const videoFiles = fs.readdirSync(videoDir).filter((f) => f.endsWith('.webm'));
+    const videoFiles = fs
+      .readdirSync(videoDir)
+      .filter((f) => f.endsWith('.webm'));
     if (videoFiles.length > 0) {
       const sorted = videoFiles
-        .map((f) => ({ name: f, time: fs.statSync(path.join(videoDir, f)).mtimeMs }))
+        .map((f) => ({
+          name: f,
+          time: fs.statSync(path.join(videoDir, f)).mtimeMs,
+        }))
         .sort((a, b) => b.time - a.time);
       const src = path.join(videoDir, sorted[0].name);
       const dest = path.join(videoDir, 'csv_import.webm');

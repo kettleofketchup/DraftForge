@@ -408,14 +408,14 @@ export const PositionCoverageCard = memo(
     let colorClass: string;
     let badgeColorClass: string;
     if (bestRank >= 5) {
-      colorClass = 'bg-red-900/60 border-red-500/70';
-      badgeColorClass = 'bg-red-600 text-white';
+      colorClass = 'bg-error/25 border-error/70';
+      badgeColorClass = 'bg-error text-error-foreground';
     } else if (hasWarning || !hasUniqueAssignment || bestRank >= 3) {
-      colorClass = 'bg-orange-900/50 border-orange-500/60';
-      badgeColorClass = 'bg-orange-600 text-white';
+      colorClass = 'bg-warning/20 border-warning/60';
+      badgeColorClass = 'bg-warning text-warning-foreground';
     } else {
-      colorClass = 'bg-green-900/50 border-green-500/50';
-      badgeColorClass = 'bg-green-600 text-white';
+      colorClass = 'bg-success/20 border-success/50';
+      badgeColorClass = 'bg-success text-success-foreground';
     }
 
     return (
@@ -478,8 +478,8 @@ const PlayerCard = memo(
           className={cn(
             'text-[9px] font-medium px-1.5 py-0.5 rounded truncate max-w-full text-center',
             isBest
-              ? 'text-white bg-slate-600/80'
-              : 'text-slate-300 bg-slate-700/60',
+              ? 'text-white bg-base-50/80'
+              : 'text-text-secondary bg-base-100/60',
           )}
         >
           {displayName.length > 6 ? `${displayName.slice(0, 5)}…` : displayName}
@@ -497,7 +497,7 @@ const PlayerCard = memo(
                 'absolute -top-1 -right-1 h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center',
                 isBest
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-slate-600 text-slate-200',
+                  : 'bg-base-50 text-text-primary',
               )}
             >
               {rank}
@@ -505,7 +505,7 @@ const PlayerCard = memo(
           </div>
         </PlayerPopover>
         {/* MMR badge below */}
-        <span className="text-[9px] font-medium text-slate-300 bg-slate-700/80 px-1.5 py-0.5 rounded">
+        <span className="text-[9px] font-medium text-text-secondary bg-base-100/80 px-1.5 py-0.5 rounded">
           {user.mmr?.toLocaleString() || '—'}
         </span>
       </div>
@@ -597,15 +597,15 @@ const PositionConflictTable = memo(
             const noCoverage = coverage.bestRank >= 6;
 
             // Determine row color
-            let rowColorClass = 'bg-green-900/30 border-green-500/30';
+            let rowColorClass = 'bg-success/10 border-success/30';
             if (noCoverage) {
-              rowColorClass = 'bg-red-900/30 border-red-500/30';
+              rowColorClass = 'bg-error/10 border-error/30';
             } else if (
               hasWarning ||
               !hasUniqueAssignment ||
               coverage.bestRank >= 3
             ) {
-              rowColorClass = 'bg-orange-900/30 border-orange-500/30';
+              rowColorClass = 'bg-warning/10 border-warning/30';
             }
 
             return (
@@ -629,7 +629,7 @@ const PositionConflictTable = memo(
                 {/* Status */}
                 <div className="flex-1 min-w-0">
                   {noCoverage ? (
-                    <span className="text-xs text-red-400">No coverage</span>
+                    <span className="text-xs text-error">No coverage</span>
                   ) : coverage.conflicts.length > 0 ? (
                     <div className="flex flex-col gap-0.5">
                       {coverage.conflicts.map((message, i) => {
@@ -642,7 +642,7 @@ const PositionConflictTable = memo(
                             key={i}
                             className={cn(
                               'text-xs',
-                              isPositive ? 'text-green-400' : 'text-orange-400',
+                              isPositive ? 'text-success' : 'text-warning',
                             )}
                           >
                             {message}
@@ -651,9 +651,7 @@ const PositionConflictTable = memo(
                       })}
                     </div>
                   ) : (
-                    <span className="text-xs text-green-400">
-                      Good coverage
-                    </span>
+                    <span className="text-xs text-success">Good coverage</span>
                   )}
                 </div>
 

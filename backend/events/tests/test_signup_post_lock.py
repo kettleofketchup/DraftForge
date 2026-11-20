@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from unittest.mock import patch
 
 import redis
 from django.core.exceptions import ImproperlyConfigured
@@ -12,6 +13,23 @@ from events import signup_post_lock as lock
 
 ENABLED = SignupPostConfig(disabled=False)
 DISABLED = SignupPostConfig(disabled=True)
+
+
+class FakePipeline:
+    def __init__(self, client: "FakeRedis") -> None:
+        self.client = client
+        self.calls: list[tuple[str, tuple[str, ...]]] = []
+
+    def delete(self, *keys: str) -> "FakePipeline":
+        self.calls.append(("delete", keys))
+        return self
+
+    def getdel(self, key: str) -> "FakePipeline":
+        self.calls.append(("getdel", (key,)))
+        return self
+
+    def execute(self) -> list[object]:
+        return [getattr(self.client, name)(*args) for name, args in self.calls]
 
 
 class FakeRedis:
@@ -37,6 +55,12 @@ class FakeRedis:
             if self.data.pop(key, None) is not None:
                 removed += 1
         return removed
+
+    def getdel(self, key: str) -> str | None:
+        return self.data.pop(key, None)
+
+    def pipeline(self) -> FakePipeline:
+        return FakePipeline(self)
 
     def register_script(self, script: str) -> Callable[..., int]:
         """Stand-in for the compare-and-delete Lua script, run atomically."""
@@ -89,6 +113,9 @@ class SignupPostLockTests(SimpleTestCase):
             lock.pending_key(5), namespaced_key("events:signup_post:pending:5")
         )
         self.assertEqual(lock.lock_key(5), namespaced_key("events:signup_post:lock:5"))
+        self.assertEqual(
+            lock.dirty_key(5), namespaced_key("events:signup_post:dirty:5")
+        )
 
     def test_mark_pending_once(self) -> None:
         self.assertTrue(lock.mark_pending(5))
@@ -101,6 +128,23 @@ class SignupPostLockTests(SimpleTestCase):
         lock.mark_pending(5)
         lock.clear_pending(5)
         self.assertTrue(lock.mark_pending(5))
+
+    def test_clear_pending_returns_oldest_dirty_time(self) -> None:
+        with patch.object(lock, "now_ms", side_effect=[1000, 5000]):
+            lock.mark_dirty(5)
+            lock.mark_dirty(5)
+        self.assertEqual(self.redis.ttls[lock.dirty_key(5)], lock.DIRTY_TTL_SECONDS)
+        lock.mark_pending(5)
+        self.assertEqual(lock.clear_pending(5), 1000)
+        self.assertNotIn(lock.dirty_key(5), self.redis.data)
+        self.assertNotIn(lock.pending_key(5), self.redis.data)
+        self.assertIsNone(lock.clear_pending(5))
+
+    def test_restored_dirty_time_replaces_newer_one(self) -> None:
+        with patch.object(lock, "now_ms", return_value=5000):
+            lock.mark_dirty(5)
+        lock.mark_dirty(5, 1000)
+        self.assertEqual(lock.clear_pending(5), 1000)
 
     def test_lock_exclusive_and_release_by_token(self) -> None:
         token = lock.acquire_lock(5)
@@ -131,10 +175,11 @@ class SignupPostLockTests(SimpleTestCase):
         with capture_logs() as logs:
             self.assertEqual(lock.acquire_lock(5), lock.FAIL_OPEN)
             self.assertTrue(lock.mark_pending(5))
-            lock.clear_pending(5)
+            lock.mark_dirty(5)
+            self.assertIsNone(lock.clear_pending(5))
             lock.release_lock(5, "token")
         events = [e for e in logs if e["event"] == "signup_post_lock_unavailable"]
-        self.assertEqual(len(events), 4)
+        self.assertEqual(len(events), 5)
         for entry in events:
             self.assertEqual(entry["log_level"], "warning")
             self.assertEqual(entry["system"], "discord")
@@ -155,7 +200,12 @@ class SignupPostLockRealRedisTests(SimpleTestCase):
 
     def setUp(self) -> None:
         set_client_for_tests(None)
-        self.addCleanup(get_redis_client().delete, lock.lock_key(987654))
+        self.addCleanup(
+            get_redis_client().delete,
+            lock.lock_key(987654),
+            lock.pending_key(987654),
+            lock.dirty_key(987654),
+        )
 
     def test_release_script_deletes_only_own_token(self) -> None:
         client = get_redis_client()
@@ -165,6 +215,14 @@ class SignupPostLockRealRedisTests(SimpleTestCase):
         self.assertEqual(client.get(lock.lock_key(987654)), token)
         lock.release_lock(987654, token)
         self.assertIsNone(client.get(lock.lock_key(987654)))
+
+    def test_clear_pending_takes_dirty_time(self) -> None:
+        client = get_redis_client()
+        lock.mark_dirty(987654, 1234)
+        lock.mark_pending(987654)
+        self.assertEqual(lock.clear_pending(987654), 1234)
+        self.assertIsNone(client.get(lock.dirty_key(987654)))
+        self.assertIsNone(client.get(lock.pending_key(987654)))
 
 
 @override_settings(SIGNUP_POST=DISABLED)
@@ -177,6 +235,8 @@ class SignupPostLockDisabledTests(SimpleTestCase):
     def test_disabled_always_acquires(self) -> None:
         self.assertTrue(lock.mark_pending(5))
         self.assertTrue(lock.mark_pending(5))
+        lock.mark_dirty(5)
+        self.assertIsNone(lock.clear_pending(5))
         self.assertEqual(lock.acquire_lock(5), lock.FAIL_OPEN)
         self.assertEqual(lock.acquire_lock(5), lock.FAIL_OPEN)
         self.assertEqual(self.redis.data, {})

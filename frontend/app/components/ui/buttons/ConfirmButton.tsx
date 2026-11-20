@@ -3,12 +3,18 @@ import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { HotkeyBadge } from './HotkeyBadge';
-import { brandGradient, brandButtonVariants } from './styles';
+import { brandButtonVariants, brandGradient } from './styles';
 
-export type ConfirmButtonVariant = 'default' | 'destructive' | 'warning' | 'success';
+export type ConfirmButtonVariant =
+  | 'default'
+  | 'destructive'
+  | 'warning'
+  | 'success';
 
-export interface ConfirmButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
+export interface ConfirmButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant'
+> {
   /** Whether the button is in a loading state */
   loading?: boolean;
   /** Visual variant */
@@ -59,12 +65,16 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
       loadingText,
       ...props
     },
-    ref
+    ref,
   ) => {
     const variantStyles = {
       default: depth ? brandButtonVariants.success : brandGradient,
-      destructive: depth ? brandButtonVariants.destructive : 'bg-red-600 text-white hover:bg-red-500',
-      warning: depth ? brandButtonVariants.warning : 'bg-orange-500 text-white hover:bg-orange-400',
+      destructive: depth
+        ? brandButtonVariants.destructive
+        : 'bg-destructive text-white hover:bg-destructive/90',
+      warning: depth
+        ? brandButtonVariants.warning
+        : 'bg-warning text-warning-foreground hover:bg-warning/90',
       success: depth ? brandButtonVariants.success : brandGradient,
     };
 
@@ -90,7 +100,12 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
       <Button
         ref={ref}
         disabled={disabled || loading}
-        className={cn('min-h-11', variantStyles[variant], hotkey && 'relative', className)}
+        className={cn(
+          'min-h-11',
+          variantStyles[variant],
+          hotkey && 'relative',
+          className,
+        )}
         {...props}
       >
         {hotkey ? (
@@ -103,7 +118,7 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
         )}
       </Button>
     );
-  }
+  },
 );
 
 ConfirmButton.displayName = 'ConfirmButton';

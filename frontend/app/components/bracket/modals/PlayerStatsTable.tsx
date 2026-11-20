@@ -49,27 +49,27 @@ export function PlayerStatsTable({
     <div
       className={cn(
         'rounded-lg overflow-hidden',
-        team === 'radiant' ? 'bg-green-950/60' : 'bg-red-950/60',
+        team === 'radiant' ? 'bg-radiant-surface/60' : 'bg-dire-surface/60',
       )}
     >
       {/* Team Header */}
       <div
         className={cn(
           'flex items-center justify-between px-3 py-2',
-          team === 'radiant' ? 'bg-green-900/50' : 'bg-red-900/50',
+          team === 'radiant' ? 'bg-radiant/15' : 'bg-dire/15',
         )}
       >
         <div className="flex items-center gap-2">
           <span
             className={cn(
               'font-semibold uppercase',
-              team === 'radiant' ? 'text-green-400' : 'text-red-400',
+              team === 'radiant' ? 'text-radiant' : 'text-dire',
             )}
           >
             {teamLabel}
           </span>
           {isWinner && (
-            <span className="text-xs bg-green-600 px-1.5 py-0.5 rounded">
+            <span className="text-xs bg-success text-success-foreground px-1.5 py-0.5 rounded">
               Victory
             </span>
           )}
@@ -102,11 +102,11 @@ export function PlayerStatsTable({
                 'text-sm',
                 team === 'radiant'
                   ? index % 2 === 0
-                    ? 'bg-green-950/40'
-                    : 'bg-green-900/30'
+                    ? 'bg-radiant-surface/40'
+                    : 'bg-radiant-surface'
                   : index % 2 === 0
-                    ? 'bg-red-950/40'
-                    : 'bg-red-900/30',
+                    ? 'bg-dire-surface/40'
+                    : 'bg-dire-surface',
               )}
             >
               <TableCell className="p-1">
@@ -120,10 +120,10 @@ export function PlayerStatsTable({
               <TableCell className="font-medium">
                 {player.username ? DisplayName(player) : 'Unknown'}
               </TableCell>
-              <TableCell className="text-center text-green-400">
+              <TableCell className="text-center text-success">
                 {player.kills}
               </TableCell>
-              <TableCell className="text-center text-red-400">
+              <TableCell className="text-center text-error">
                 {player.deaths}
               </TableCell>
               <TableCell className="text-center text-muted-foreground">
@@ -135,9 +135,9 @@ export function PlayerStatsTable({
                 {player.denies}
               </TableCell>
               <TableCell className="text-center">
-                <span className="text-yellow-400">{player.gold_per_min}</span>
+                <span className="text-stat-gold">{player.gold_per_min}</span>
                 <span className="text-muted-foreground">/</span>
-                <span className="text-blue-400">{player.xp_per_min}</span>
+                <span className="text-stat-xp">{player.xp_per_min}</span>
               </TableCell>
               <TableCell className="text-right">
                 {formatNumber(player.hero_damage)}

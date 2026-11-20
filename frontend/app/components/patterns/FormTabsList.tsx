@@ -1,4 +1,4 @@
-import type * as React from 'react';
+import * as React from 'react';
 import { TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { cn } from '~/lib/utils';
 
@@ -17,16 +17,68 @@ interface FormTabsListProps {
   className?: string;
 }
 
-/** Tab strip for tabbed form dialogs: one scrollable compact row below sm, full width above. */
+/**
+ * Tab strip for tabbed form dialogs: compact wrapping rows below sm, one full
+ * width row above. Where that row overflows, the edge with hidden tabs fades
+ * and the active tab scrolls into view.
+ */
 export function FormTabsList({
   tabs,
   testIdPrefix,
   className,
 }: FormTabsListProps) {
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const [fade, setFade] = React.useState({ start: false, end: false });
+
+  const measure = React.useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const start = el.scrollLeft > 1;
+    const end = el.scrollLeft < max - 1;
+    setFade((f) => (f.start === start && f.end === end ? f : { start, end }));
+  }, []);
+
+  React.useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    let activeEl: HTMLElement | null = null;
+    const reveal = () => {
+      const next = el.querySelector<HTMLElement>('[data-state="active"]');
+      if (!next || next === activeEl) return;
+      activeEl = next;
+      if (el.scrollWidth <= el.clientWidth) return;
+      const left = next.offsetLeft - (el.clientWidth - next.offsetWidth) / 2;
+      el.scrollTo?.({ left: Math.max(0, left) });
+      measure();
+    };
+    reveal();
+    measure();
+    const mutations = new MutationObserver(reveal);
+    mutations.observe(el, {
+      subtree: true,
+      childList: true,
+      attributeFilter: ['data-state'],
+    });
+    const resize =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(measure);
+    resize?.observe(el);
+    return () => {
+      mutations.disconnect();
+      resize?.disconnect();
+    };
+  }, [measure]);
+
   return (
     <TabsList
+      ref={listRef}
+      onScroll={measure}
+      data-fade-start={fade.start || undefined}
+      data-fade-end={fade.end || undefined}
       className={cn(
-        'w-full min-h-0 flex-nowrap justify-start overflow-x-auto [scrollbar-width:none] sm:min-h-11 sm:justify-center',
+        'scroll-fade-x w-full min-h-0 flex-wrap justify-start sm:flex-nowrap overflow-x-auto [scrollbar-width:none] sm:min-h-11 sm:justify-center',
         className,
       )}
     >
