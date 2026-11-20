@@ -37,6 +37,7 @@ from app.steam_accounts import (
 from discordbot.services.member_names import normalise_name
 from events.eligibility import refresh_unmet_requirements
 from league.models import LeagueUser
+from org.mmr import game_mmrs_prefetch
 from org.models import OrgUser
 from org.serializers import OrgUserSerializer
 from org.user_search import user_name_q
@@ -832,7 +833,14 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
             *(lu.league for lu in league_users),
         )
 
-    return Response(OrgUserSerializer(org_user).data)
+    written = (
+        with_user_profiles(OrgUser.objects.nocache(), "user", dota=True)
+        .prefetch_related(game_mmrs_prefetch(fresh=True))
+        .get(pk=org_user.pk)
+    )
+    return Response(
+        OrgUserSerializer(written, context={"include_game_mmrs": True}).data
+    )
 
 
 @api_view(["POST"])

@@ -22,10 +22,12 @@ from org.models import OrgUser
 TEAM_SIZE = 5
 _user_ids = itertools.count(100_000)
 # tournament, league, org, games, lobbies, herodrafts, 3 roster tables,
-# org users, league users
-BRACKET_QUERIES = 11
-# insert missing org users, then reread them with their league users
-ORG_USER_CREATE_QUERIES = 3
+# org users, league users, org user game MMRs
+# +1: OrgUserGameMmr prefetch
+BRACKET_QUERIES = 12
+# insert missing org users, then reread them with their league users and
+# game MMRs (+1: OrgUserGameMmr prefetch on the reread)
+ORG_USER_CREATE_QUERIES = 4
 
 # (bracket_type, round, games in round)
 DOUBLE_ELIM_8: tuple[tuple[str, int, int], ...] = (
@@ -180,8 +182,9 @@ class BracketQueryTests(TestCase):
 
     def test_query_count_without_org(self) -> None:
         fx = build_bracket("plain", with_org=False)
-        # source event and users replace league, org, org users and league users
-        self.assertEqual(self.get_bracket(fx.tournament)[1], BRACKET_QUERIES - 2)
+        # source event and users replace league, org, org users, league users
+        # and game MMRs
+        self.assertEqual(self.get_bracket(fx.tournament)[1], BRACKET_QUERIES - 3)
 
     def test_query_count_does_not_grow_with_teams(self) -> None:
         small = build_bracket("small", team_count=4)

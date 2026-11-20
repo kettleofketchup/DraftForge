@@ -91,7 +91,8 @@ from org.contributions.services import delete_user_entries
 from org.feature_errors import not_permitted
 from org.features import FeatureKey, active_features
 from org.membership import member_organization_ids, viewer_member_organization_ids
-from org.models import OrgUser
+from org.mmr import game_mmrs_prefetch
+from org.models import OrgUser, OrgUserGameMmr
 from org.promotion.services import release_earning_sends
 from org.serializers import OrgUserSerializer
 from telemetry.logging import get_logger
@@ -142,6 +143,7 @@ from .permissions_org import (
     org_admin_staff_from_payload,
 )
 from .serializers import (
+    TEAM_MMR_MAPS,
     DraftRoundSerializer,
     DraftSerializer,
     GameSerializer,
@@ -164,6 +166,7 @@ from .serializers import (
     UserSerializer,
     _build_users_dict,
     _tournament_organization,
+    build_team_mmr_maps,
 )
 from .steam_accounts import steam_account_id_holder, steam_account_id_identity
 from .user_cache import serialize_user_core
@@ -728,13 +731,22 @@ class TeamView(viewsets.ModelViewSet):
             Game,
             Draft,
             DraftRound,
+            OrgUserGameMmr,
             extra=cache_key,
             timeout=60 * 60,
         )
         def get_data() -> Any:
             log.debug("team_list_cache_miss", system="api", subsystem="main")
-            queryset = self.filter_queryset(self.get_queryset())
-            serializer = self.get_serializer(queryset, many=True)
+            teams = list(
+                self.filter_queryset(self.get_queryset())
+                .select_related("tournament__league")
+                .prefetch_related("members")
+            )
+            context = {
+                **self.get_serializer_context(),
+                TEAM_MMR_MAPS: build_team_mmr_maps(teams),
+            }
+            serializer = self.get_serializer(teams, many=True, context=context)
             return serializer.data
 
         data = get_data()
@@ -1829,6 +1841,7 @@ class OrganizationView(viewsets.ModelViewSet):
 
         @cached_as(
             OrgUser,
+            OrgUserGameMmr,
             CustomUser,
             BaseUserProfile,
             DotaUserProfile,
@@ -1838,8 +1851,10 @@ class OrganizationView(viewsets.ModelViewSet):
         def get_data() -> Any:
             org_users = with_user_profiles(
                 OrgUser.objects.filter(organization=org), "user", dota=True
+            ).prefetch_related(game_mmrs_prefetch(fresh=False))
+            serializer = OrgUserSerializer(
+                org_users, many=True, context={"include_game_mmrs": True}
             )
-            serializer = OrgUserSerializer(org_users, many=True)
             return serializer.data
 
         data = get_data()

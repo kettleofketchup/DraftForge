@@ -102,7 +102,7 @@ from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
 from org.contributions.services import should_sync_staff, sync_event_staff_entries
 from org.feature_errors import not_permitted
-from org.models import OrgUser
+from org.models import OrgUser, OrgUserGameMmr
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile
 from user.querysets import with_user_profiles
@@ -693,6 +693,7 @@ class EventViewSet(viewsets.ModelViewSet):
             CustomUser,
             BaseUserProfile,
             OrgUser,
+            OrgUserGameMmr,
             Organization,
             keep_fresh=True,
             extra=cache_key,
@@ -1188,6 +1189,7 @@ class EventViewSet(viewsets.ModelViewSet):
             DiscordMessageLog,
             CustomUser,
             OrgUser,
+            OrgUserGameMmr,
             Organization,
             extra=f"discord_state:{pk}",
             timeout=60,

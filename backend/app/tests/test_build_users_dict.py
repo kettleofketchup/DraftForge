@@ -20,6 +20,7 @@ ORG_ENTRY_KEYS = {
     "steam_account_id",
     "avatarUrl",
     "mmr",
+    "mmr_game_type",
     "league_mmr",
 }
 NONORG_ENTRY_KEYS = {

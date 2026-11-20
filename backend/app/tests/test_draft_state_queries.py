@@ -63,24 +63,30 @@ MMRS_8: list[int] = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
 # Paused org draft: draft, tournament, rounds, teams, members, dropins, lefts,
 # users (8 prefetch), users_remaining (1), draft_options (1), league +
 # organization (2), OrgUser lookup, missing-OrgUser probe, OrgUser profiles,
-# league memberships (4), bulk _users core (1). latest_round, active_round and
-# clock_armed read the prefetched rounds.
-DRAFT_STATE_QUERIES: int = 17
+# league memberships, game MMRs (5), bulk _users core (1). latest_round,
+# active_round and clock_armed read the prefetched rounds.
+# +1: OrgUserGameMmr prefetch
+DRAFT_STATE_QUERIES: int = 18
 # Ready = the post-commit broadcast + the tournament response (with its
 # league/source_event/games/captains/draft lookups) + the view's own captain
 # check, row locks, update and event insert. Same for 4 and 8 teams. The
-# leagueless fixture's source_event org lookup runs once per users dict.
+# leagueless fixture's source_event org lookup runs once per users dict; it has
+# no org, so no OrgUser batch (and no OrgUserGameMmr prefetch) runs.
 READY_ENDPOINT_QUERIES: int = 41
 # Pick, outermost transaction (TransactionTestCase, cacheops off): 26 for
 # auth, locks, the pick, timing, next-round activation and two event inserts
-# (+BEGIN/COMMIT), 17 for the one shared broadcast state behind both events,
+# (+BEGIN/COMMIT), 18 for the one shared broadcast state behind both events,
 # 2 data_version stamps (build + reuse), BEGIN/COMMIT around the autocommit
-# build, 22 for the tournament response.
-PICK_QUERIES: int = 71
-# Upper bounds at the time of writing; the 4 == 8 team equality is the real pin.
-TOURNAMENT_RESPONSE_QUERIES: int = 23
-RESUME_ENDPOINT_QUERIES: int = 54
-UNDO_ENDPOINT_QUERIES: int = 65
+# build, 23 for the tournament response.
+# +2: OrgUserGameMmr prefetch in the broadcast state and the tournament response
+PICK_QUERIES: int = 73
+# The draft state plus the broadcast's data_version stamp.
+BROADCAST_EVENT_QUERIES: int = DRAFT_STATE_QUERIES + 1
+# +1: OrgUserGameMmr prefetch in the users dict
+TOURNAMENT_RESPONSE_QUERIES: int = 24
+# +2: OrgUserGameMmr prefetch in the broadcast state and the tournament response
+RESUME_ENDPOINT_QUERIES: int = 56
+UNDO_ENDPOINT_QUERIES: int = 67
 
 
 def legacy_users_dict(tournament: Tournament) -> dict:
@@ -316,7 +322,7 @@ class DraftStateQueryCountTests(TestCase):
             ):
                 counts.append(self.count(lambda e=event: broadcast_event(e)))
         self.assertEqual(counts[0], counts[1])
-        self.assertLessEqual(counts[0], DRAFT_STATE_QUERIES + 2)
+        self.assertEqual(counts[0], BROADCAST_EVENT_QUERIES)
 
     def test_tournament_response_is_constant(self) -> None:
         counts = [
@@ -328,7 +334,7 @@ class DraftStateQueryCountTests(TestCase):
             for fx in (self.small, self.large)
         ]
         self.assertEqual(counts[0], counts[1])
-        self.assertLessEqual(counts[0], TOURNAMENT_RESPONSE_QUERIES)
+        self.assertEqual(counts[0], TOURNAMENT_RESPONSE_QUERIES)
 
     def test_resume_endpoint_is_constant(self) -> None:
         counts = []
@@ -346,7 +352,7 @@ class DraftStateQueryCountTests(TestCase):
                     )
                 )
         self.assertEqual(counts[0], counts[1])
-        self.assertLessEqual(counts[0], RESUME_ENDPOINT_QUERIES)
+        self.assertEqual(counts[0], RESUME_ENDPOINT_QUERIES)
 
     def test_undo_endpoint_is_constant(self) -> None:
         counts = []
@@ -356,7 +362,7 @@ class DraftStateQueryCountTests(TestCase):
             ):
                 counts.append(self.count(lambda f=fx: self.undo_with_commit(f)))
         self.assertEqual(counts[0], counts[1])
-        self.assertLessEqual(counts[0], UNDO_ENDPOINT_QUERIES)
+        self.assertEqual(counts[0], UNDO_ENDPOINT_QUERIES)
 
     def post_with_commit(self, client: APIClient, url: str) -> None:
         with self.captureOnCommitCallbacks(execute=True):

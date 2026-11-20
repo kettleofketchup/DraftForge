@@ -1,8 +1,15 @@
 from django.test import TestCase
 
 from app.models import CustomUser, Organization
+from org.mmr import game_mmrs_prefetch
 from org.models import OrgUser
 from org.serializers import OrgUserSerializer
+
+
+def _prefetched(org_user: OrgUser) -> OrgUser:
+    return OrgUser.objects.prefetch_related(game_mmrs_prefetch(fresh=False)).get(
+        pk=org_user.pk
+    )
 
 
 class OrgUserSerializerGuildNicknameTest(TestCase):
@@ -17,9 +24,11 @@ class OrgUserSerializerGuildNicknameTest(TestCase):
             user=self.user, organization=self.org, guild_nickname="DragonClaw"
         )
         self.assertEqual(
-            OrgUserSerializer(org_user).data["guildNickname"], "DragonClaw"
+            OrgUserSerializer(_prefetched(org_user)).data["guildNickname"], "DragonClaw"
         )
 
     def test_ignores_user_guild_nickname(self) -> None:
         org_user = OrgUser.objects.create(user=self.user, organization=self.org)
-        self.assertIsNone(OrgUserSerializer(org_user).data["guildNickname"])
+        self.assertIsNone(
+            OrgUserSerializer(_prefetched(org_user)).data["guildNickname"]
+        )
