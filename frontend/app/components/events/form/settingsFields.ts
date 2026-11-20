@@ -339,6 +339,19 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       description: 'Discord role IDs to @mention in the signup post',
       keywords: ['ping'],
     },
+    discord_start_mention: {
+      label: 'Mention signed-up members before start',
+      description:
+        'Reply to the signup post with an @mention of every signed-up member shortly before the event starts',
+      keywords: ['ping', 'reminder'],
+    },
+    discord_start_mention_minutes: {
+      label: 'Start mention: when to send',
+    },
+    discord_start_mention_scope: {
+      label: 'Who to mention',
+      keywords: ['waitlist', 'main list'],
+    },
     discord_announcement: {
       label: 'Pre-day announcement',
       description: 'Post an announcement in a channel before the event',

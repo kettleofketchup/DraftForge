@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from django.conf import settings
 from structlog.contextvars import get_contextvars
 
-from events.signup_post_lock import mark_pending
+from events.signup_post_lock import mark_dirty, mark_pending
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -77,6 +77,7 @@ def notify_signup_changed(event: "Event") -> None:
     if not event.discord_announcement_channel_id:
         _log_skipped(event, "no_channel_id", "send_signup_update")
         return
+    mark_dirty(event.pk)
     if not mark_pending(event.pk):
         _log_skipped(event, "update_already_pending", "send_signup_update")
         return
