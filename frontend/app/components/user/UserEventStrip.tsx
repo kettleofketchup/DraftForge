@@ -102,17 +102,20 @@ export const UserEventStrip = memo(
           <Badge
             key="medal"
             variant="outline"
-            className="px-1.5 py-0 text-xs font-medium text-amber-300 border-amber-500/30"
+            className="px-1.5 py-0 text-xs font-medium text-rank-ranked border-rank-ranked/30"
           >
             {dotaProfile.rank_medal}
           </Badge>,
         );
-      } else if (dotaProfile.rank_status === 'never' && dotaProfile.battle_cup_tier) {
+      } else if (
+        dotaProfile.rank_status === 'never' &&
+        dotaProfile.battle_cup_tier
+      ) {
         parts.push(
           <Badge
             key="tier"
             variant="outline"
-            className="px-1.5 py-0 text-xs font-medium text-blue-300 border-blue-500/30"
+            className="px-1.5 py-0 text-xs font-medium text-rank-unranked border-rank-unranked/30"
           >
             BC T{dotaProfile.battle_cup_tier}
           </Badge>,
@@ -137,7 +140,7 @@ export const UserEventStrip = memo(
             <TooltipTrigger asChild>
               <Badge
                 variant="outline"
-                className="px-1 py-0 text-[10px] text-emerald-400 border-emerald-500/30 cursor-help"
+                className="px-1 py-0 text-[10px] text-success border-success/30 cursor-help"
               >
                 ✓ SS
               </Badge>
@@ -184,7 +187,12 @@ export const UserEventStrip = memo(
           </PlayerPopover>
           {userWithPositions && (
             <div className="mt-0.5">
-              <RolePositions user={userWithPositions} compact disableTooltips unranked />
+              <RolePositions
+                user={userWithPositions}
+                compact
+                disableTooltips
+                unranked
+              />
             </div>
           )}
         </div>
