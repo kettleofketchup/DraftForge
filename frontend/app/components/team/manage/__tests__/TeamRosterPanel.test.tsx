@@ -428,6 +428,11 @@ describe('roster rows', () => {
         'roster-status-deputy',
       ),
     ).toBeTruthy();
+    expect(
+      within(
+        screen.getByTestId(memberRow(managedTeam.captain!.pk)),
+      ).getByTestId('roster-status-captain'),
+    ).toBeTruthy();
   });
 
   it('renders the add stand-in slot', () => {

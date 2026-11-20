@@ -13,14 +13,48 @@ function renderWithTooltips(ui: ReactElement) {
   return render(<TooltipProvider>{ui}</TooltipProvider>);
 }
 
+const ROSTER_STATUSES = [
+  ['captain', 'Captain'],
+  ['deputy', 'Deputy'],
+  ['standin', 'Stand-in'],
+  ['dropout', 'Dropout'],
+] as const;
+
+const RAW_PALETTE =
+  /\b(?:bg|text|border)-(?:red|green|blue|purple|violet|emerald|rose|orange|amber|cyan|teal)-\d/;
+
 describe('RosterStatusBadge', () => {
-  it.each([
-    ['standin', 'Stand-in'],
-    ['dropout', 'Dropout'],
-    ['deputy', 'Deputy'],
-  ] as const)('renders %s as "%s"', (status, text) => {
+  it.each(ROSTER_STATUSES)('renders %s as "%s"', (status, text) => {
     render(<RosterStatusBadge status={status} />);
-    expect(screen.getByText(text)).toBeTruthy();
+    expect(screen.getByTestId(`roster-status-${status}`)).toHaveTextContent(
+      text,
+    );
+  });
+
+  it.each(ROSTER_STATUSES)(
+    'gives %s the shared size and a token tone',
+    (status) => {
+      render(<RosterStatusBadge status={status} />);
+      const badge = screen.getByTestId(`roster-status-${status}`);
+      for (const cls of ['text-[10px]', 'px-1.5', 'py-0']) {
+        expect(badge).toHaveClass(cls);
+      }
+      expect(badge.className).not.toMatch(RAW_PALETTE);
+    },
+  );
+
+  it('gives each status its own tone', () => {
+    render(
+      <>
+        {ROSTER_STATUSES.map(([status]) => (
+          <RosterStatusBadge key={status} status={status} />
+        ))}
+      </>,
+    );
+    const classes = ROSTER_STATUSES.map(
+      ([status]) => screen.getByTestId(`roster-status-${status}`).className,
+    );
+    expect(new Set(classes).size).toBe(ROSTER_STATUSES.length);
   });
 });
 

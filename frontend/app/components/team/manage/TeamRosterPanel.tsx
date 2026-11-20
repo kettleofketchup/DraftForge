@@ -6,7 +6,6 @@ import type {
   RosterUser,
 } from '~/components/api/teamManagementAPI';
 import { Alert, AlertDescription } from '~/components/ui/alert';
-import { Badge } from '~/components/ui/badge';
 import {
   BrandSelect,
   BrandSelectContent,
@@ -236,9 +235,7 @@ export function TeamRosterPanel({
                 testId={`team-member-row-${m.pk}`}
                 badges={
                   <>
-                    {isCaptain ? (
-                      <Badge variant="outline">Captain</Badge>
-                    ) : null}
+                    {isCaptain ? <RosterStatusBadge status="captain" /> : null}
                     {m.pk === deputy?.pk ? (
                       <RosterStatusBadge status="deputy" />
                     ) : null}
