@@ -40,12 +40,6 @@
     }
   },
   "app/components/organization/tabs/ClaimCard.tsx": {
-    "draftforge/no-avatar-fallback": {
-      "count": 1
-    },
-    "draftforge/use-user-avatar": {
-      "count": 1
-    },
     "shadcn/no-raw-colors": {
       "count": 4
     }

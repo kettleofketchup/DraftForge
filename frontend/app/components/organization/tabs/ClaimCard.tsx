@@ -1,9 +1,9 @@
 import { motion } from 'framer-motion';
 import { Check, Clock, X } from 'lucide-react';
 import type { ProfileClaimRequest } from '~/components/api/api';
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Badge } from '~/components/ui/badge';
 import { ConfirmButton, DestructiveButton } from '~/components/ui/buttons';
+import { UserAvatar } from '~/components/user/UserAvatar';
 
 type ClaimStatus = 'pending' | 'approved' | 'rejected';
 
@@ -71,17 +71,21 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
         <div className="flex items-start gap-4">
           {/* Claimer info */}
           <div className="flex items-center gap-3 flex-1">
-            <Avatar className="h-10 w-10 ring-2 ring-primary">
-              {claim.claimer_avatar && (
-                <AvatarImage src={claim.claimer_avatar} alt={claim.claimer_username} />
-              )}
-              <AvatarFallback>
-                {claim.claimer_username.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              user={{
+                pk: claim.claimer,
+                username: claim.claimer_username,
+                avatar: claim.claimer_avatar,
+                discordId: claim.claimer_discord_id,
+              }}
+              size="lg"
+              border="primary"
+            />
             <div>
               <div className="font-medium">{claim.claimer_username}</div>
-              <div className="text-sm text-muted-foreground">wants to claim</div>
+              <div className="text-sm text-muted-foreground">
+                wants to claim
+              </div>
             </div>
           </div>
 
@@ -136,7 +140,8 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
           <div>Created: {formatDate(claim.created_at)}</div>
           {claim.reviewed_at && (
             <div>
-              Reviewed by {claim.reviewed_by_username} on {formatDate(claim.reviewed_at)}
+              Reviewed by {claim.reviewed_by_username} on{' '}
+              {formatDate(claim.reviewed_at)}
             </div>
           )}
           {claim.rejection_reason && (
