@@ -32,6 +32,7 @@ from org.standing.cache import StandingCache
 from org.standing.periods import Period
 from org.standing.scoring import cutoff
 from org.standing.types import (
+    EMPTY_OUTPUT,
     CloseSource,
     HasUserId,
     HookName,
@@ -90,18 +91,22 @@ class ConductTrack(TrackBase):
         actor: CustomUser | None,
         now: datetime,
     ) -> TrackOutput:
-        logged_actor = None if source == "auto" else actor
+        conduct_actor = actor if source in ("admin", "cancel") else None
         if cancelled:
-            void_event_outcomes(event, now=now, actor=logged_actor)
+            claimed = void_event_outcomes(event, now=now, actor=conduct_actor) > 0
         else:
-            finalize_event_outcomes(event, now=now, actor=logged_actor)
+            claimed = (
+                finalize_event_outcomes(event, now=now, actor=conduct_actor) is not None
+            )
         event.conduct_finalized_at = (
-            Event.objects.nocache()
+            now
+            if claimed
+            else Event.objects.nocache()
             .filter(pk=event.pk)
             .values_list("conduct_finalized_at", flat=True)
             .first()
         )
-        return TrackOutput()
+        return EMPTY_OUTPUT
 
     @override
     def on_event_reopened(
@@ -115,7 +120,7 @@ class ConductTrack(TrackBase):
         self, event: Event, *, actor: CustomUser | None, now: datetime
     ) -> TrackOutput:
         teardown_event_outcomes(event, actor=actor, now=now)
-        return TrackOutput()
+        return EMPTY_OUTPUT
 
     @override
     def on_signup_withdrawn(

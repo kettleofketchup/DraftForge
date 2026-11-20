@@ -1,9 +1,10 @@
 from datetime import timedelta
 
 from django.contrib.admin.sites import site
-from django.db import transaction
+from django.db import connection, transaction
 from django.http import HttpRequest
 from django.test import RequestFactory
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
@@ -202,6 +203,29 @@ class ReopenCleanupTest(ConductTestCase):
         logs = self._reopen_logs(event)
         self.assertEqual(len(logs), 1)
         self.assertEqual(logs[0].details["attendance_reopened"], 5)
+
+    def test_reopen_one_update(self) -> None:
+        self.unlock()
+        event = self.make_event(state=EventState.COMPLETED)
+        Event.objects.filter(pk=event.pk).update(
+            conduct_finalized_at=tz.now(), contributions_awarded_at=tz.now()
+        )
+        event.refresh_from_db()
+
+        with CaptureQueriesContext(connection) as ctx:
+            reopen_event(event, actor=self.admin)
+
+        updates = [
+            q["sql"]
+            for q in ctx.captured_queries
+            if q["sql"].startswith('UPDATE "events_event"')
+        ]
+        self.assertEqual(len(updates), 1)
+        self.assertIn('"contributions_awarded_at" = NULL', updates[0])
+        self.assertIn('"conduct_finalized_at" = NULL', updates[0])
+        event = Event.objects.nocache().get(pk=event.pk)
+        self.assertIsNone(event.conduct_finalized_at)
+        self.assertIsNone(event.contributions_awarded_at)
 
     def test_reopen_runs_with_feature_locked(self) -> None:
         event = self.make_event(state=EventState.CANCELLED)

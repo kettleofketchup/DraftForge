@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
-from django.db import transaction
+from django.db import connection, transaction
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 
 from app.models import CustomUser, OrgLog
@@ -10,6 +12,7 @@ from events.models import Event, ReadyCheck
 from events.ready_check_constants import ReadyCheckOutcome, ReadyCheckPhase
 from events.reopen import reopen_event
 from events.services import cancel_event
+from org.conduct.adapter import CONDUCT
 from org.conduct.constants import Outcome, OutcomeSource
 from org.conduct.finalize import finalize_event_outcomes
 from org.conduct.gate import get_conduct_settings
@@ -336,6 +339,58 @@ class FinalizeAtCompletionTest(ConductTestCase):
         self.assertEqual(rows[member.pk].outcome, Outcome.ATTENDED)
         self.assertIsNotNone(rows[member.pk].finalized_at)
         self.assertEqual(self._finalize_logs(), [])
+
+    def test_close_hook_exception_rolls_back(self) -> None:
+        event = self._event()
+        self.signup(event, self.make_user(), SignupStatus.APPROVED)
+
+        with (
+            patch(
+                "org.conduct.adapter.finalize_event_outcomes",
+                side_effect=RuntimeError("boom"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            self._complete(event)
+
+        event = Event.objects.nocache().get(pk=event.pk)
+        self.assertEqual(event.state, EventState.IN_PROGRESS)
+        self.assertIsNone(event.conduct_finalized_at)
+        self.assertIsNone(event.contributions_awarded_at)
+        self.assertEqual(self._rows(event), {})
+
+    def test_close_hook_stamps_event_without_rereading(self) -> None:
+        event = self._event()
+        now = tz.now()
+
+        with (
+            transaction.atomic(),
+            CaptureQueriesContext(connection) as ctx,
+        ):
+            CONDUCT.on_event_closed(
+                event, cancelled=False, source="admin", actor=self.admin, now=now
+            )
+
+        self.assertEqual(event.conduct_finalized_at, now)
+        self.assertFalse(
+            [
+                q["sql"]
+                for q in ctx.captured_queries
+                if q["sql"].startswith('SELECT "events_event"."conduct_finalized_at"')
+            ]
+        )
+
+    def test_close_hook_keeps_earlier_stamp(self) -> None:
+        event = self._event()
+        earlier = tz.now() - timedelta(hours=1)
+        Event.objects.filter(pk=event.pk).update(conduct_finalized_at=earlier)
+
+        with transaction.atomic():
+            CONDUCT.on_event_closed(
+                event, cancelled=False, source="admin", actor=self.admin, now=tz.now()
+            )
+
+        self.assertEqual(event.conduct_finalized_at, earlier)
 
     def test_cancel_closes_do_not_finalize(self) -> None:
         event = self._event(state=EventState.ROLL_CALL)
