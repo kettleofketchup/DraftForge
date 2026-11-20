@@ -14,11 +14,11 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser, GameType, Tournament
 from discordbot.models import DiscordMessageLog
-from events.admission import ensure_self_serve
+from events.admission import SignupRefused, ensure_self_serve
 from events.constants import EventState, SignupStatus
 from events.discord.handlers import handle_signup_button
 from events.discord.reactions import handle_reaction_signup
-from events.eligibility import Unmet, refresh_unmet_requirements
+from events.eligibility import Unmet, evaluate_signup, refresh_unmet_requirements
 from events.models import Event, EventSignup
 from events.services import (
     _promote_from_waitlist,
@@ -230,6 +230,26 @@ class EnforcementHooksTest(ConductTestCase):
         self.assertEqual([r["code"] for r in body["reasons"]], [CODE])
         self.assertFalse(EventSignup.objects.filter(event=event).exists())
 
+    def test_block_web_signup_evaluates_once(self) -> None:
+        user = self.blocked_member()
+        event = self.make_event()
+        client = APIClient()
+        client.force_authenticate(user)
+
+        with (
+            patch(
+                "events.admission.evaluate_signup", wraps=evaluate_signup
+            ) as admitted,
+            patch("events.views.evaluate_signup", wraps=evaluate_signup) as reevaluated,
+        ):
+            resp = client.post(
+                f"/api/events/{event.pk}/signup/", {"intent": "rsvp"}, format="json"
+            )
+
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(admitted.call_count, 1)
+        reevaluated.assert_not_called()
+
     def test_block_discord_button(self) -> None:
         user = self.blocked_member()
         user.discordId = DISCORD_ID
@@ -290,6 +310,60 @@ class EnforcementHooksTest(ConductTestCase):
 
         self.assertEqual(signup.unmet_requirements, [CODE])
         self.assertEqual(signup.status, SignupStatus.PENDING_APPROVAL)
+
+    def test_get_eligibility_blocked_member(self) -> None:
+        user = self.blocked_member()
+        event = self.make_event()
+        client = APIClient()
+        client.force_authenticate(user)
+
+        resp = client.get(f"/api/events/{event.pk}/eligibility/")
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        body = resp.json()
+        self.assertFalse(body["admissible"])
+        [reason] = body["reasons"]
+        self.assertEqual(reason["code"], CODE)
+        self.assertEqual(reason["severity"], "block")
+
+    def test_owner_reinstate_blocked_400_staff_reinstate_pending(self) -> None:
+        user = self.blocked_member()
+        event = self.make_event(auto_approve=True)
+        signup = self.signup(event, user, SignupStatus.CANCELLED)
+        url = f"/api/events/signups/{signup.pk}/reinstate/"
+        owner = APIClient()
+        owner.force_authenticate(user)
+
+        resp = owner.post(url)
+
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(resp.json()["error"], CONDUCT_BLOCK_MESSAGE)
+        signup.refresh_from_db()
+        self.assertEqual(signup.status, SignupStatus.CANCELLED)
+
+        staff = APIClient()
+        staff.force_authenticate(self.admin)
+
+        resp = staff.post(url)
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        signup = EventSignup.objects.nocache().get(pk=signup.pk)
+        self.assertEqual(signup.status, SignupStatus.PENDING_APPROVAL)
+        self.assertEqual(signup.unmet_requirements, [CODE])
+
+    def test_refusal_carries_message_and_result(self) -> None:
+        user = self.blocked_member()
+        event = self.make_event()
+
+        with self.assertRaises(SignupRefused) as caught:
+            ensure_self_serve(event, user)
+
+        refused = caught.exception
+        self.assertEqual(str(refused), CONDUCT_BLOCK_MESSAGE)
+        self.assertEqual(refused.result.codes, [CODE])
+        again = SignupRefused("custom", refused.result)
+        self.assertEqual(str(again), "custom")
+        self.assertIs(again.result, refused.result)
 
     def test_require_approval_pending_on_auto_approve(self) -> None:
         self.enable(require_approval_enabled=True)

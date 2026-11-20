@@ -55,8 +55,8 @@ def self_serve_refusal(event: SupportsAdmission) -> str | None:
 class SignupRefused(ValueError):
     """Self sign-up refused by a blocking eligibility reason."""
 
-    def __init__(self, result: EligibilityResult) -> None:
-        super().__init__(result.blocking[0].message)
+    def __init__(self, message: str, result: EligibilityResult) -> None:
+        super().__init__(message)
         self.result = result
 
 
@@ -92,4 +92,4 @@ def ensure_self_serve(
         user_id=user.pk,
         codes=result.codes,
     )
-    raise SignupRefused(result)
+    raise SignupRefused(result.blocking[0].message, result)

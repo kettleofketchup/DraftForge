@@ -44,12 +44,17 @@ from app.permissions_org import (
     has_org_staff_access,
 )
 from draft.models import Draft, HeroDraft
-from events.admission import ensure_self_serve
+from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import ActorRole, Commitment, EventState
 from events.discord import notify_create_discord_event, notify_signup_changed
-from events.eligibility import evaluate_signup, has_registered_steam_id, recheck_signup
+from events.eligibility import (
+    EligibilityResult,
+    evaluate_signup,
+    has_registered_steam_id,
+    recheck_signup,
+)
 from events.ledger import SignupActor
 from events.models import (
     Event,
@@ -588,9 +593,14 @@ def _intent_commitment(intent: object) -> Commitment:
 
 
 def _signup_refusal(
-    event: Event, user: CustomUser, intent: object, error: str
+    event: Event,
+    user: CustomUser,
+    intent: object,
+    error: str,
+    result: EligibilityResult | None = None,
 ) -> Response:
-    result = evaluate_signup(event, user, intent=_intent_commitment(intent))
+    if result is None:
+        result = evaluate_signup(event, user, intent=_intent_commitment(intent))
     return Response(
         {"error": error, "reasons": result.as_dicts()},
         status=status.HTTP_400_BAD_REQUEST,
@@ -899,6 +909,8 @@ class EventViewSet(viewsets.ModelViewSet):
         intent = body.get("intent")
         try:
             ensure_self_serve(event, request.user, intent=_intent_commitment(intent))
+        except SignupRefused as exc:
+            return _signup_refusal(event, request.user, intent, str(exc), exc.result)
         except ValueError as exc:
             return _signup_refusal(event, request.user, intent, str(exc))
 

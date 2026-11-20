@@ -6,7 +6,7 @@ from django.conf import settings
 from structlog.testing import capture_logs
 
 from app.models import CustomUser, GameType
-from events.constants import Commitment
+from events.constants import Commitment, SignupStatus
 from events.eligibility import (
     CHECKS,
     EvalContext,
@@ -24,7 +24,7 @@ from events.eligibility import (
 )
 from events.models import Event
 from events.schemas import DotaModalConfig, dota_require_screenshot
-from events.services import check_requirements
+from events.services import _decide_signup_status, check_requirements
 from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
@@ -298,6 +298,10 @@ class RegistryTests(EvaluatorTestCase):
             self.assertFalse(check_requirements(ev, u))
         self.assertFalse(result.admissible)
         self.assertEqual(result.approval, ())
+        self.assertTrue(ev.auto_approve)
+        self.assertEqual(
+            _decide_signup_status(ev, result), SignupStatus.PENDING_APPROVAL
+        )
 
     def test_context_is_loaded_once_and_never_creates_org_user(self) -> None:
         ev = self.make_event(require_steam_id=True)
