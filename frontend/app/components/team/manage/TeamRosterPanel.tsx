@@ -56,7 +56,7 @@ function GhostItem({ user, note }: { user: RosterUser; note: string }) {
   return (
     <BrandSelectItem value={String(user.pk)} disabled>
       <TriangleAlert className="text-destructive" aria-hidden />
-      {`${DisplayName(user)} (${note})`}
+      <span className="truncate">{`${DisplayName(user)} (${note})`}</span>
     </BrandSelectItem>
   );
 }

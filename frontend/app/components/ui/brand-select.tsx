@@ -52,7 +52,7 @@ export const BrandSelectTrigger = React.forwardRef<
       'data-[placeholder]:text-muted-foreground',
       'disabled:cursor-not-allowed disabled:opacity-50',
       '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4 [&_svg:not([class*="text-"])]:text-primary',
-      '*:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate',
+      '*:data-[slot=select-value]:flex *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 *:data-[slot=select-value]:truncate',
       className,
     )}
     {...props}
@@ -118,6 +118,7 @@ export const BrandSelectItem = React.forwardRef<
       'data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-selection/40 data-[state=checked]:to-accent/40 data-[state=checked]:text-white',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4',
+      '*:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2',
       className,
     )}
     {...props}

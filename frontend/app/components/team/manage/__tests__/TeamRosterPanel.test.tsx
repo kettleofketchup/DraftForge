@@ -242,6 +242,20 @@ describe('leadership selects', () => {
     );
   });
 
+  it('keeps the ghost captain warning icon inline with a truncating label', () => {
+    renderPanel(ghostCaptainTeam);
+    const value = screen
+      .getByTestId('team-manage-captain-select')
+      .querySelector('[data-slot=select-value]')!;
+    const icon = value.querySelector('svg.lucide-triangle-alert');
+    const label = value.querySelector('span.truncate');
+    expect(icon).not.toBeNull();
+    expect(label?.textContent).toBe(
+      `${name(ghostCaptainTeam.captain!)} (not a member)`,
+    );
+    expect(icon!.parentElement).toBe(label!.parentElement);
+  });
+
   it('shows a ghost deputy as "(not a member)"', () => {
     renderPanel(ghostDeputyTeam);
     expect(screen.getByTestId('team-manage-deputy-select').textContent).toBe(
