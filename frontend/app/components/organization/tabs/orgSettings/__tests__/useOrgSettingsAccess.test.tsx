@@ -5,9 +5,9 @@ import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import {
-  useOrgSettingsTabAccess,
+  useOrgSettingsAccess,
   useSettingsTabRedirect,
-} from '../useOrgSettingsTabAccess';
+} from '../useOrgSettingsAccess';
 
 const VIEWER = 5;
 
@@ -35,16 +35,16 @@ function org(
 }
 
 function access(o: OrganizationType | undefined) {
-  return renderHook(() => useOrgSettingsTabAccess(o)).result.current;
+  return renderHook(() => useOrgSettingsAccess(o)).result.current;
 }
 
-describe('useOrgSettingsTabAccess', () => {
+describe('useOrgSettingsAccess', () => {
   beforeEach(() => setViewer(VIEWER));
 
   it('denies org staff', () => {
     expect(access(org({ staff_ids: [VIEWER] }))).toEqual({
       settled: true,
-      canView: false,
+      canOpen: false,
       visibleSectionIds: [],
     });
   });
@@ -52,30 +52,30 @@ describe('useOrgSettingsTabAccess', () => {
   it('denies a plain member', () => {
     const result = access(org());
     expect(result.settled).toBe(true);
-    expect(result.canView).toBe(false);
+    expect(result.canOpen).toBe(false);
   });
 
   it('allows the owner', () => {
     expect(access(org({ owner_id: VIEWER }))).toEqual({
       settled: true,
-      canView: true,
+      canOpen: true,
       visibleSectionIds: ['staff-placement'],
     });
   });
 
   it('allows an org admin', () => {
-    expect(access(org({ admin_ids: [VIEWER] })).canView).toBe(true);
+    expect(access(org({ admin_ids: [VIEWER] })).canOpen).toBe(true);
   });
 
   it('allows a site admin', () => {
     setViewer(VIEWER, true);
-    expect(access(org()).canView).toBe(true);
+    expect(access(org()).canOpen).toBe(true);
   });
 
   it('is not settled while the org is loading', () => {
     expect(access(undefined)).toEqual({
       settled: false,
-      canView: false,
+      canOpen: false,
       visibleSectionIds: [],
     });
   });
@@ -85,20 +85,20 @@ describe('useOrgSettingsTabAccess', () => {
       org({ admin_ids: [VIEWER], members_viewer_pk: undefined }),
     );
     expect(result.settled).toBe(false);
-    expect(result.canView).toBe(false);
+    expect(result.canOpen).toBe(false);
   });
 
   it('is not settled while the payload viewer differs', () => {
     const result = access(org({ admin_ids: [VIEWER] }, 9));
     expect(result.settled).toBe(false);
-    expect(result.canView).toBe(false);
+    expect(result.canOpen).toBe(false);
   });
 
   it('is not settled before the current user resolves', () => {
     setViewer(null);
     const result = access(org({ admin_ids: [VIEWER] }));
     expect(result.settled).toBe(false);
-    expect(result.canView).toBe(false);
+    expect(result.canOpen).toBe(false);
   });
 });
 
@@ -106,14 +106,14 @@ describe('useSettingsTabRedirect', () => {
   type Props = {
     tab: string;
     settled: boolean;
-    canView: boolean;
+    canOpen: boolean;
   };
 
   function setup(initial: Props) {
     const setActiveTab = vi.fn();
     const hook = renderHook(
-      ({ tab, settled, canView }: Props) =>
-        useSettingsTabRedirect(tab, setActiveTab, { settled, canView }),
+      ({ tab, settled, canOpen }: Props) =>
+        useSettingsTabRedirect(tab, setActiveTab, { settled, canOpen }),
       { initialProps: initial },
     );
     return { setActiveTab, ...hook };
@@ -123,10 +123,10 @@ describe('useSettingsTabRedirect', () => {
     const { setActiveTab, rerender } = setup({
       tab: 'settings',
       settled: false,
-      canView: false,
+      canOpen: false,
     });
     expect(setActiveTab).not.toHaveBeenCalled();
-    rerender({ tab: 'settings', settled: true, canView: false });
+    rerender({ tab: 'settings', settled: true, canOpen: false });
     expect(setActiveTab).toHaveBeenCalledWith('leagues');
   });
 
@@ -134,9 +134,9 @@ describe('useSettingsTabRedirect', () => {
     const { setActiveTab, rerender } = setup({
       tab: 'settings',
       settled: false,
-      canView: false,
+      canOpen: false,
     });
-    rerender({ tab: 'settings', settled: true, canView: true });
+    rerender({ tab: 'settings', settled: true, canOpen: true });
     expect(setActiveTab).not.toHaveBeenCalled();
   });
 
@@ -144,9 +144,9 @@ describe('useSettingsTabRedirect', () => {
     const { setActiveTab, rerender } = setup({
       tab: 'events',
       settled: false,
-      canView: false,
+      canOpen: false,
     });
-    rerender({ tab: 'events', settled: true, canView: false });
+    rerender({ tab: 'events', settled: true, canOpen: false });
     expect(setActiveTab).not.toHaveBeenCalled();
   });
 });

@@ -16,7 +16,7 @@ import {
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { ORG_SETTINGS_SECTIONS } from './orgSettings/sections';
 import { useOrgProfileSections } from './orgSettings/useOrgProfileSections';
-import { useOrgSettingsTabAccess } from './orgSettings/useOrgSettingsTabAccess';
+import { useOrgSettingsAccess } from './orgSettings/useOrgSettingsAccess';
 
 /**
  * Every organization setting on one page: the organization's own fields
@@ -30,7 +30,7 @@ export function OrgSettingsTab({
 }) {
   const sectionsRef = useRef<SettingsDialogHandle<string>>(null);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
-  const { visibleSectionIds } = useOrgSettingsTabAccess(organization);
+  const { visibleSectionIds } = useOrgSettingsAccess(organization);
   const queryClient = useQueryClient();
   const profile = useOrgProfileSections(organization, sectionsRef);
   const registry = ORG_SETTINGS_SECTIONS.map((s) => ({

@@ -47,9 +47,9 @@ import {
 } from '~/components/organization';
 import { buildOrgPageNavOptions } from '~/components/organization/orgPageNavOptions';
 import {
-  useOrgSettingsTabAccess,
+  useOrgSettingsAccess,
   useSettingsTabRedirect,
-} from '~/components/organization/tabs/orgSettings/useOrgSettingsTabAccess';
+} from '~/components/organization/tabs/orgSettings/useOrgSettingsAccess';
 import { Badge } from '~/components/ui/badge';
 import {
   AddDiscordBotButton,
@@ -442,9 +442,9 @@ export default function OrganizationDetailPage() {
     }
   }, [featureAccess.settled, canUsePromotion, activeTab, setActiveTab]);
 
-  const settingsAccess = useOrgSettingsTabAccess(organization ?? undefined);
+  const settingsAccess = useOrgSettingsAccess(organization ?? undefined);
   useSettingsTabRedirect(activeTab, setActiveTab, settingsAccess);
-  const canViewSettings = settingsAccess.canView;
+  const canViewSettings = settingsAccess.canOpen;
 
   const isOwner = useIsOrganizationOwner(organization);
   const isOrgAdmin = useIsOrganizationAdmin(organization);

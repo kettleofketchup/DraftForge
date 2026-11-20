@@ -1,18 +1,21 @@
 import { useEffect } from 'react';
 import type { OrganizationType } from '~/components/organization/schemas';
+import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { useUserStore } from '~/store/userStore';
 import { ORG_SETTINGS_SECTIONS } from './sections';
 
-export interface OrgSettingsTabAccess {
-  canView: boolean;
+export interface OrgSettingsAccess {
   settled: boolean;
+  /** Org admins and above, once the org payload matches the current viewer. */
+  canOpen: boolean;
   visibleSectionIds: string[];
 }
 
-export function useOrgSettingsTabAccess(
+export function useOrgSettingsAccess(
   org: OrganizationType | undefined,
-): OrgSettingsTabAccess {
+): OrgSettingsAccess {
   const viewerPk = useUserStore((s) => s.currentUser?.pk ?? null);
+  const isOrgAdmin = useIsOrganizationAdmin(org);
   const settled =
     org?.members_viewer_pk !== undefined && org.members_viewer_pk === viewerPk;
   const visibility = ORG_SETTINGS_SECTIONS.map((section) => ({
@@ -24,7 +27,7 @@ export function useOrgSettingsTabAccess(
     : [];
   return {
     settled,
-    canView: settled && visibleSectionIds.length > 0,
+    canOpen: settled && isOrgAdmin,
     visibleSectionIds,
   };
 }
@@ -32,12 +35,12 @@ export function useOrgSettingsTabAccess(
 export function useSettingsTabRedirect(
   activeTab: string,
   setActiveTab: (tab: string) => void,
-  access: Pick<OrgSettingsTabAccess, 'canView' | 'settled'>,
+  access: Pick<OrgSettingsAccess, 'canOpen' | 'settled'>,
 ): void {
-  const { canView, settled } = access;
+  const { canOpen, settled } = access;
   useEffect(() => {
-    if (activeTab === 'settings' && settled && !canView) {
+    if (activeTab === 'settings' && settled && !canOpen) {
       setActiveTab('leagues');
     }
-  }, [activeTab, settled, canView, setActiveTab]);
+  }, [activeTab, settled, canOpen, setActiveTab]);
 }

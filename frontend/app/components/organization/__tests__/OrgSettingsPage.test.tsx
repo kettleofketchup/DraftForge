@@ -16,9 +16,9 @@ vi.mock('~/hooks/usePermissions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/hooks/usePermissions')>()),
   useIsOrganizationAdmin: () => true,
 }));
-vi.mock('../tabs/orgSettings/useOrgSettingsTabAccess', () => ({
-  useOrgSettingsTabAccess: () => ({
-    canView: true,
+vi.mock('../tabs/orgSettings/useOrgSettingsAccess', () => ({
+  useOrgSettingsAccess: () => ({
+    canOpen: true,
     settled: true,
     visibleSectionIds: access.visibleSectionIds,
   }),
