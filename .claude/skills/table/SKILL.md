@@ -60,6 +60,12 @@ page. Need another column? Add it to the factory's union.
 - Cell actions are brand buttons (`SecondaryButton size="sm" className="min-h-11 sm:min-h-8"`),
   call `e.stopPropagation()` so they don't fire `onRowClick`, and carry `${prefix}-<action>-<id>`.
   Inline text links in cells are exempt from the 44px floor; the row is the touch target.
+- More than one action per row, or rows whose actions differ: `DataTableRowActions` (a ⋮ menu,
+  `aria-label` "Actions for <name>", trigger `${prefix}-actions-<id>`, items
+  `${prefix}-<action>-<id>`). Keep a disabled action listed with its `hint` rather than hiding it.
+  Worked example: `components/team/manage/rosterColumns.tsx`.
+- Table-level actions ("Add …") and a count go on `toolbarActions` / `toolbarStart`
+  (`${prefix}-actions` bar), which works without `enableToolbar`.
 
 ## Test ids
 

@@ -74,10 +74,17 @@ function pick(testId: string, label: string) {
   fireEvent.click(within(listbox).getByRole('option', { name: label }));
 }
 
-function rowButton(rowTestId: string, label: string): HTMLButtonElement {
-  return within(screen.getByTestId(rowTestId)).getByRole('button', {
-    name: label,
-  }) as HTMLButtonElement;
+function openRowMenu(pk: number): void {
+  fireEvent.pointerDown(screen.getByTestId(`team-roster-actions-${pk}`), {
+    button: 0,
+    ctrlKey: false,
+    pointerType: 'mouse',
+  });
+}
+
+function rowAction(pk: number, label: string): HTMLElement {
+  openRowMenu(pk);
+  return screen.getByRole('menuitem', { name: new RegExp(`^${label}`) });
 }
 
 const banner = () => within(screen.getByTestId('team-leadership-banner'));
@@ -321,17 +328,13 @@ describe('roster rows', () => {
 
   it('hides "Make captain" on the captain', () => {
     renderPanel(managedTeam);
-    expect(
-      within(screen.getByTestId(memberRow(people.captain.pk))).queryByRole(
-        'button',
-        { name: 'Make captain' },
-      ),
-    ).toBeNull();
+    openRowMenu(people.captain.pk);
+    expect(screen.queryByRole('menuitem', { name: 'Make captain' })).toBeNull();
   });
 
   it('"Make captain" requests set_captain with the warning', () => {
     const spy = renderPanel(managedTeam);
-    fireEvent.click(rowButton(memberRow(people.member.pk), 'Make captain'));
+    fireEvent.click(rowAction(people.member.pk, 'Make captain'));
     expect(lastRequest(spy)).toEqual({
       action: { kind: 'set_captain', user: people.member },
       title: 'Change captain?',
@@ -343,7 +346,7 @@ describe('roster rows', () => {
 
   it('"Mark dropout" on a member has no warning', () => {
     const spy = renderPanel(managedTeam);
-    fireEvent.click(rowButton(memberRow(people.member.pk), 'Mark dropout'));
+    fireEvent.click(rowAction(people.member.pk, 'Mark dropout'));
     expect(lastRequest(spy)).toEqual({
       action: { kind: 'mark_dropout', user: people.member },
       title: 'Mark dropout?',
@@ -355,7 +358,7 @@ describe('roster rows', () => {
 
   it('"Mark dropout" on the captain adds the warning', () => {
     const spy = renderPanel(managedTeam);
-    fireEvent.click(rowButton(memberRow(people.captain.pk), 'Mark dropout'));
+    fireEvent.click(rowAction(people.captain.pk, 'Mark dropout'));
     expect(lastRequest(spy)).toEqual({
       action: { kind: 'mark_dropout', user: people.captain },
       title: 'Mark dropout?',
@@ -368,9 +371,7 @@ describe('roster rows', () => {
 
   it('"Restore" on a dropout requests restore_member', () => {
     const spy = renderPanel(managedTeam);
-    fireEvent.click(
-      rowButton(`team-dropout-row-${people.dropout.pk}`, 'Restore'),
-    );
+    fireEvent.click(rowAction(people.dropout.pk, 'Restore'));
     expect(lastRequest(spy)).toEqual({
       action: { kind: 'restore_member', user: people.dropout },
       title: 'Restore member?',
@@ -381,9 +382,7 @@ describe('roster rows', () => {
 
   it('"Remove" on a stand-in requests remove_standin', () => {
     const spy = renderPanel(managedTeam);
-    fireEvent.click(
-      rowButton(`team-standin-row-${people.standin.pk}`, 'Remove'),
-    );
+    fireEvent.click(rowAction(people.standin.pk, 'Remove stand-in'));
     expect(lastRequest(spy)).toEqual({
       action: { kind: 'remove_standin', user: people.standin },
       title: 'Remove stand-in?',
@@ -395,9 +394,7 @@ describe('roster rows', () => {
 
   it('"Sub in" requests sub_in with no replacement and asks for one', () => {
     const spy = renderPanel(managedTeam);
-    fireEvent.click(
-      rowButton(`team-standin-row-${people.standin.pk}`, 'Sub in'),
-    );
+    fireEvent.click(rowAction(people.standin.pk, 'Sub in'));
     expect(lastRequest(spy)).toEqual({
       action: { kind: 'sub_in', standin: people.standin, replacing: null },
       title: 'Sub in stand-in?',
@@ -435,26 +432,33 @@ describe('roster rows', () => {
     ).toBeTruthy();
   });
 
-  it('renders the add stand-in slot', () => {
+  it('renders the add stand-in slot in the table toolbar', () => {
     renderPanel(managedTeam, { addStandinSlot: <span>picker slot</span> });
-    expect(screen.getByText('picker slot')).toBeTruthy();
+    expect(
+      within(screen.getByTestId('team-roster-actions')).getByText(
+        'picker slot',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('keeps the leadership selects above the roster table', () => {
+    renderPanel(managedTeam);
+    const select = screen.getByTestId('team-manage-captain-select');
+    const table = screen.getByTestId('team-roster-table');
+    expect(
+      select.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
 
 describe('panel states', () => {
-  it('disables "Mark dropout" for the last member, with a tooltip', async () => {
+  it('disables "Mark dropout" for the last member, with the reason', () => {
     const spy = renderPanel(singleMemberTeam);
-    const button = rowButton(
-      `team-member-row-${people.captain.pk}`,
-      'Mark dropout',
-    );
-    expect(button.disabled).toBe(true);
-    fireEvent.click(button);
+    const item = rowAction(people.captain.pk, 'Mark dropout');
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveTextContent('A team needs at least one member');
+    fireEvent.click(item);
     expect(spy).not.toHaveBeenCalled();
-    fireEvent.focus(button.parentElement!);
-    expect(
-      (await screen.findAllByText('A team needs at least one member')).length,
-    ).toBeGreaterThan(0);
   });
 
   it('disables every action and select while pending', () => {
@@ -465,16 +469,14 @@ describe('panel states', () => {
     expect(ghostButtons.length).toBe(2);
     expectAllDisabled(ghostButtons);
 
-    const panelButtons = screen.getAllByRole('button');
+    const panelButtons = actionButtons();
     expect(panelButtons.length).toBeGreaterThan(2);
     expectAllDisabled(panelButtons);
   });
 
   it('disables roster rows while pending', () => {
     const spy = renderPanel(managedTeam, { pending: true });
-    const buttons = screen
-      .getAllByRole('button')
-      .concat(screen.getAllByRole('combobox'));
+    const buttons = actionButtons().concat(screen.getAllByRole('combobox'));
     expectAllDisabled(buttons);
     buttons.forEach((b) => fireEvent.click(b));
     expect(spy).not.toHaveBeenCalled();
@@ -494,17 +496,22 @@ describe('panel states', () => {
 
   it('never calls the API', () => {
     const spy = renderPanel(managedTeam);
-    fireEvent.click(
-      rowButton(`team-member-row-${people.member.pk}`, 'Make captain'),
-    );
-    fireEvent.click(
-      rowButton(`team-standin-row-${people.standin.pk}`, 'Sub in'),
-    );
+    fireEvent.click(rowAction(people.member.pk, 'Make captain'));
+    fireEvent.click(rowAction(people.standin.pk, 'Sub in'));
     expect(spy).toHaveBeenCalledTimes(2);
     expect(axiosMock.get).not.toHaveBeenCalled();
     expect(axiosMock.post).not.toHaveBeenCalled();
   });
 });
+
+/** Every button except the table's sort headers, which stay usable while pending. */
+function actionButtons(): HTMLElement[] {
+  return screen
+    .getAllByRole('button')
+    .filter(
+      (b) => !b.getAttribute('data-testid')?.startsWith('data-table-sort-'),
+    );
+}
 
 function expectAllDisabled(elements: HTMLElement[]) {
   for (const el of elements) {

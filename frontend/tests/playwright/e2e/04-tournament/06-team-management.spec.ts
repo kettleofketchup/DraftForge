@@ -97,10 +97,24 @@ function cardRow(
   });
 }
 
-function memberRow(dialog: Locator, username: string): Locator {
+function rosterRow(
+  dialog: Locator,
+  kind: 'member' | 'standin' | 'dropout',
+  username: string,
+): Locator {
   return dialog
-    .locator('[data-testid^="team-member-row-"]')
+    .locator(`[data-testid^="team-${kind}-row-"]`)
     .filter({ hasText: username });
+}
+
+function memberRow(dialog: Locator, username: string): Locator {
+  return rosterRow(dialog, 'member', username);
+}
+
+/** Picks `label` from a roster row's actions menu. */
+async function rowAction(row: Locator, label: string): Promise<void> {
+  await row.getByRole('button', { name: /^Actions for / }).click();
+  await row.page().getByRole('menuitem', { name: label, exact: true }).click();
 }
 
 /** The warning icon and its label share one line inside `container`. */
@@ -197,9 +211,7 @@ test.describe('Team management dialog', () => {
     await expect(alpha).toContainText(`Captain: ${PREFIX}alpha_1`);
 
     const dialog = await openManage(page, 'TM Alpha');
-    await memberRow(dialog, `${PREFIX}alpha_3`)
-      .getByRole('button', { name: 'Make captain' })
-      .click();
+    await rowAction(memberRow(dialog, `${PREFIX}alpha_3`), 'Make captain');
     await confirmAction(page, 'Captain asked to step down');
 
     await expect(
@@ -222,22 +234,12 @@ test.describe('Team management dialog', () => {
     await expect(cardRow(bravo, 'standin', standin)).toBeVisible();
 
     const dialog = await openManage(page, 'TM Bravo');
-    await memberRow(dialog, dropout)
-      .getByRole('button', { name: 'Mark dropout' })
-      .click();
+    await rowAction(memberRow(dialog, dropout), 'Mark dropout');
     await confirmAction(page, 'Left for the evening');
-    await expect(
-      dialog
-        .locator('[data-testid^="team-dropout-row-"]')
-        .filter({ hasText: dropout }),
-    ).toBeVisible();
+    await expect(rosterRow(dialog, 'dropout', dropout)).toBeVisible();
     await expect(cardRow(bravo, 'dropout', dropout)).toBeVisible();
 
-    await dialog
-      .locator('[data-testid^="team-standin-row-"]')
-      .filter({ hasText: standin })
-      .getByRole('button', { name: 'Sub in' })
-      .click();
+    await rowAction(rosterRow(dialog, 'standin', standin), 'Sub in');
     await expect(page.getByTestId('team-action-replacing')).toContainText(
       'No one',
     );
