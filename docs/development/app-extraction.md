@@ -162,7 +162,7 @@ Add a `MovedSlice` to `backend/tests/test_app_boundaries.py` and append it to `M
 - `retired_modules`: module paths that no longer exist.
 - `model_labels`: lower-case model names. The guard checks `app_label` and `db_table` for each.
 
-Update `ALLOWED_BACK_EDGES[<new_app>]` with each production file in the source app that still imports from the new app, and the names it imports. Test modules are exempt. The guard fails when a listed name is no longer imported, so the list only shrinks.
+Update `ALLOWED_BACK_EDGES[<new_app>]` with each production file in the source app that still imports from the new app, and the names it imports. Test modules are exempt. The guard fails when a listed name is no longer imported, so the list only shrinks. Each listed name also becomes an attribute of that source-app module, so the guard blocks importing it from there (for example `from app.draft_state import HeroDraft`) in every other file.
 
 ### 10. Fix stale references
 

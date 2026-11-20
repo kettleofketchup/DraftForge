@@ -78,6 +78,7 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, frozenset[str]]] = {
     "draft": {
         "app/draft_state.py": frozenset({"HeroDraft"}),
         "app/permissions_org.py": frozenset({"HeroDraft"}),
+        "app/services/team_references.py": frozenset({"DraftTeam", "HeroDraft"}),
         "app/views/bracket.py": frozenset({"HeroDraft"}),
         "app/views_main.py": frozenset({"DraftTeam"}),
     },
@@ -167,6 +168,13 @@ def find_violations(
     module_name = _module_of(path)
     found: list[str] = []
     for s in slices:
+        re_exports = {
+            (_module_of(file), name)
+            for file, names in back_edges.get(s.new_app, {}).items()
+            if file != path
+            for name in names
+        }
+        forbidden = s.moved | re_exports
         moved_here = {name for old, name in s.moved if old == module_name}
         for name, line in _top_level_names(tree):
             if name in moved_here:
@@ -176,7 +184,7 @@ def find_violations(
 
         for module, name, line in _imported(tree, path):
             full = f"{module}.{name}" if name else module
-            if name and (module, name) in s.moved:
+            if name and (module, name) in forbidden:
                 found.append(f"{path}:{line}: [{s.name}] imports {name} via {module}")
             if any(_within(module, r) or _within(full, r) for r in s.retired_modules):
                 found.append(f"{path}:{line}: [{s.name}] imports retired module {full}")
@@ -322,6 +330,21 @@ class GuardSelfTests(SimpleTestCase):
         )
         self.assertClean(
             'patch("app.internal_client.create_herodraft_for_game")\n', "x.py"
+        )
+
+    def test_back_edge_names_not_reexported(self) -> None:
+        self.assertFlagged("from app.draft_state import HeroDraft\n", "discordbot/x.py")
+        self.assertFlagged("from app.views_main import DraftTeam\n", "events/views.py")
+        self.assertFlagged(
+            "from .draft_state import HeroDraft\n", "app/x.py", back_edges=SMALL_EDGES
+        )
+        self.assertClean(
+            "from app.draft_state import build_draft_state\n", "discordbot/x.py"
+        )
+        self.assertClean(
+            "from draft.models import HeroDraft\n",
+            "app/draft_state.py",
+            back_edges=SMALL_EDGES,
         )
 
     def test_test_modules_exempt_from_back_edges(self) -> None:

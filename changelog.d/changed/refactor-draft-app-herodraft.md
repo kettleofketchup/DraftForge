@@ -5,6 +5,9 @@
   from `app` to `draft` so existing admin permissions carry over.
 - The team `references` payload key `app.DraftTeam.tournament_team` is now
   `draft.DraftTeam.tournament_team`.
+- In the team usage list returned with a blocked or completed draft reset,
+  the hero draft entry's `model` is now `draft.HeroDraft` (was `app.HeroDraft`).
+  Its `label` and `label_plural` are unchanged.
 - Hero draft logger names follow the new module paths (for example
   `app.functions.herodraft` is now `draft.services.hero`), and so does the
   OpenTelemetry instrumentation scope on `herodraft.*` spans. Span names and

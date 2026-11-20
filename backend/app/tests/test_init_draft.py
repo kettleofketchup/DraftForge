@@ -638,11 +638,11 @@ class InitDraftEndpointTests(TestCase):
 
         self.assertEqual(resp.status_code, 409)
         usage = {u["model"]: u for u in resp.data["usage"]}
-        self.assertEqual(set(usage), {"app.HeroDraft"})
-        self.assertEqual(usage["app.HeroDraft"]["count"], 1)
-        self.assertEqual(usage["app.HeroDraft"]["label"], "HeroDraft")
+        self.assertEqual(set(usage), {"draft.HeroDraft"})
+        self.assertEqual(usage["draft.HeroDraft"]["count"], 1)
+        self.assertEqual(usage["draft.HeroDraft"]["label"], "HeroDraft")
         self.assertEqual(
-            [t["name"] for t in usage["app.HeroDraft"]["teams"]], ["Team A", "Team B"]
+            [t["name"] for t in usage["draft.HeroDraft"]["teams"]], ["Team A", "Team B"]
         )
 
     def test_report_names_captain_and_kept_usage(self) -> None:
