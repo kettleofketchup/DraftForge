@@ -87,13 +87,13 @@ from events.models import Event
 from events.signup_window import user_signups_open_tournament_ids
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
-from org.contributions.services import delete_user_entries
 from org.feature_errors import not_permitted
 from org.features import FeatureKey, active_features
 from org.membership import member_organization_ids, viewer_member_organization_ids
 from org.models import OrgUser
 from org.promotion.services import release_earning_sends
 from org.serializers import OrgUserSerializer
+from org.standing import api as standing
 from telemetry.logging import get_logger
 
 # BaseUserProfile owns nickname/avatar; DotaUserProfile owns
@@ -356,7 +356,7 @@ class UserView(viewsets.ModelViewSet):
     def perform_destroy(self, instance: CustomUser) -> None:
         with transaction.atomic():
             release_earning_sends(instance)
-            delete_user_entries(instance, actor=self.request.user)
+            standing.on_user_deleted(instance, actor=self.request.user)
             instance.delete()
 
     @permission_classes((IsAdminUser,))

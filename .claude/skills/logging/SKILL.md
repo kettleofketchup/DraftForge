@@ -70,7 +70,8 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `org` | `features` | — | `org/features.py` | Locked feature switch writes (`org_feature_set`, after commit) |
 | `org` | `settings` | — | `org/settings_service.py` | OrgSettings lazy create and admin updates |
 | `org` | `promoters` | — | `org/views_features.py` | Promoter add/remove (`org_promoter_added`, `org_promoter_removed`) |
-| `org` | `contributions` | — | `org/contributions/services.py`, `org/contributions/periods.py` | Ledger writes: awards, host/helper sync, manual award edit/delete, point values and rescores, merge reassign/dedupe, user-delete cleanup; invalid org timezone fallback (`org_timezone_invalid`) |
+| `org` | `contributions` | — | `org/contributions/services.py` | Ledger writes: awards, host/helper sync, manual award edit/delete, point values and rescores, merge reassign, user-delete cleanup |
+| `org` | `standing` | — | `org/standing/periods.py`, `org/standing/ledger.py` | Shared standing helpers: invalid org timezone fallback (`org_timezone_invalid`) |
 | `org` | `promotion` | — | `org/promotion/services.py`, `org/promotion/views.py`, `org/promotion/starter.py` | Promo send record/undo, merge demotions, template create/update/delete, starter template seeding. Never message text |
 | `lobby` | `client` | — | `lobby/client.py` | dota_lobby API calls: failed requests with the problem `code`, `retryable` and retry attempt (never bodies, passwords or the API key) |
 | `lobby` | `api`, `webhook`, `events`, `broadcast`, `signals` | — | `lobby/views_internal.py`, `lobby/events.py`, `lobby/broadcast.py`, `lobby/signals.py` | Internal lobby API (claim/accepted/conflict), webhook receiver (bad signature, ignored, applied), event application (`lobby_gameid_conflict`), websocket broadcast failures, auto-create/close/flip triggers. Never the lobby password |

@@ -2,13 +2,14 @@ from collections import defaultdict
 from datetime import datetime
 from typing import TypedDict
 
-from django.db.models import Count, Q, QuerySet, Sum
+from django.db.models import QuerySet
 from django.utils import timezone
 
 from app.display_names import first_name
 from app.models import Organization
-from org.contributions.periods import Period, month_period, resolve_org_tz
 from org.models import ContributionEntry, OrgUser
+from org.standing import ledger
+from org.standing.periods import Period, month_period, resolve_org_tz
 from user.querysets import with_user_profiles
 
 
@@ -34,35 +35,15 @@ class MemberTotals(TypedDict):
     this_month: int
 
 
-def _in_period(
-    qs: QuerySet[ContributionEntry], period: Period
-) -> QuerySet[ContributionEntry]:
-    if period.start is not None:
-        qs = qs.filter(occurred_at__gte=period.start)
-    if period.end is not None:
-        qs = qs.filter(occurred_at__lt=period.end)
-    return qs
-
-
-def _sum(qs: QuerySet[ContributionEntry]) -> int:
-    return qs.aggregate(total=Sum("points"))["total"] or 0
-
-
 def org_total(org: Organization, period: Period) -> int:
-    return _sum(
-        _in_period(ContributionEntry.objects.nocache().filter(organization=org), period)
-    )
+    return ledger.org_total(org.pk, track="contribution", period=period)
 
 
 def leaderboard(
     org: Organization, period: Period, *, limit: int = 100
 ) -> list[LeaderboardRow]:
     sums = list(
-        _in_period(ContributionEntry.objects.nocache().filter(organization=org), period)
-        .values("org_user")
-        .annotate(total=Sum("points"), entries=Count("pk"))
-        .filter(~Q(total=0))
-        .order_by("-total", "org_user__user__username", "org_user")[:limit]
+        ledger.sum_by_member(org.pk, track="contribution", period=period)[:limit]
     )
     org_users = with_user_profiles(
         OrgUser.objects.filter(pk__in=[s["org_user"] for s in sums]), "user"
@@ -89,7 +70,7 @@ def leaderboard(
 
 def member_entries(org_user: OrgUser, period: Period) -> QuerySet[ContributionEntry]:
     return (
-        _in_period(
+        ledger.in_period(
             ContributionEntry.objects.nocache().filter(org_user=org_user), period
         )
         .select_related("event")
@@ -131,4 +112,7 @@ def member_totals(org_user: OrgUser, *, now: datetime | None = None) -> MemberTo
     local_now = (now or timezone.now()).astimezone(tz)
     this_month = month_period(tz, local_now.year, local_now.month)
     qs = ContributionEntry.objects.nocache().filter(org_user=org_user)
-    return MemberTotals(all_time=_sum(qs), this_month=_sum(_in_period(qs, this_month)))
+    return MemberTotals(
+        all_time=ledger.total(qs),
+        this_month=ledger.total(ledger.in_period(qs, this_month)),
+    )

@@ -13,7 +13,6 @@ from events.models import Event
 from events.services import resolve_or_create_org_user
 from events.tests.base import EventTestCase
 from org.contributions.kinds import ContributionKind
-from org.contributions.periods import parse_period
 from org.contributions.queries import leaderboard
 from org.contributions.services import (
     SyncResult,
@@ -23,6 +22,7 @@ from org.contributions.services import (
 from org.feature_keys import FeatureKey
 from org.features import org_has_feature, set_org_feature
 from org.models import ContributionEntry
+from org.standing.periods import parse_period
 
 
 class CompletionTestBase(EventTestCase):

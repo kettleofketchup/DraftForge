@@ -29,15 +29,13 @@ from app.models import (
 )
 from app.permissions_org import IsOrgStaff
 from events.models import Event
+from events.staff import dedupe_host_helpers
 from league.models import LeagueUser
-from org.contributions.services import (
-    dedupe_event_staff,
-    reassign_member,
-    repoint_user_attribution,
-)
+from org.accounts import repoint_org_attribution
 from org.models import OrgUser, PromoSend
 from org.promotion.services import demote_colliding_earning_sends
 from org.serializers import ProfileClaimRequestSerializer
+from org.standing import api as standing
 from steam.models import LeaguePlayerStats, PlayerMatchStats
 from telemetry.logging import get_logger
 
@@ -228,6 +226,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         # ============================================================
 
         # OrgUser memberships
+        pairs: list[tuple[OrgUser, OrgUser]] = []
         for org_user in OrgUser.objects.filter(user=target_user):
             existing = OrgUser.objects.filter(
                 user=claimer, organization=org_user.organization
@@ -237,11 +236,14 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 if org_user.mmr > existing.mmr:
                     existing.mmr = org_user.mmr
                     existing.save()
-                reassign_member(org_user, existing)
-                org_user.delete()
+                pairs.append((org_user, existing))
             else:
                 org_user.user = claimer
                 org_user.save()
+        standing.merge_users(target_user, claimer, member_pairs=pairs)
+        repoint_org_attribution(target_user, claimer)
+        for org_user, _ in pairs:
+            org_user.delete()
 
         staffed = Event.objects.nocache().filter(
             Q(host=target_user) | Q(helpers=target_user)
@@ -252,7 +254,8 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         for event in list(Event.objects.nocache().filter(helpers=target_user)):
             event.helpers.add(claimer)
             event.helpers.remove(target_user)
-        dedupe_event_staff(claimer)
+        for event in dedupe_host_helpers(claimer):
+            standing.on_event_changed(event, fields=frozenset({"helpers"}))
         if staffed_ids:
             invalidate_after_commit(
                 *stale_events,
@@ -346,7 +349,6 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         LeagueLog.objects.filter(actor=target_user).update(actor=claimer)
         LeagueLog.objects.filter(target_user=target_user).update(target_user=claimer)
 
-        repoint_user_attribution(target_user, claimer)
         demote_colliding_earning_sends(claimer, target_user)
         PromoSend.objects.filter(sender=target_user).update(sender=claimer)
         PromoSend.objects.filter(recipient=target_user).update(recipient=claimer)

@@ -100,9 +100,9 @@ from events.services import (
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS
 from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
-from org.contributions.services import should_sync_staff, sync_event_staff_entries
 from org.feature_errors import not_permitted
 from org.models import OrgUser
+from org.standing import api as standing
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile
 from user.querysets import with_user_profiles
@@ -742,12 +742,17 @@ class EventViewSet(viewsets.ModelViewSet):
                 from_queryset=Event.objects.nocache().select_for_update(),
                 fields=_CONCURRENTLY_WRITTEN_EVENT_FIELDS,
             )
-            if (
-                event.scheduled_at,
-                event.ends_at,
-                event.name,
-            ) != previous_ledger_fields and should_sync_staff(event):
-                sync_event_staff_entries(event)
+            changed_ledger_fields = frozenset(
+                name
+                for name, before in zip(
+                    ("scheduled_at", "ends_at", "name"),
+                    previous_ledger_fields,
+                    strict=True,
+                )
+                if getattr(event, name) != before
+            )
+            if changed_ledger_fields:
+                standing.on_event_changed(event, fields=changed_ledger_fields)
         invalidate_after_commit(event)
         if event.allow_user_signups != previous_allow_user_signups:
             transaction.on_commit(lambda: notify_signup_changed(event))
@@ -1135,9 +1140,9 @@ class EventViewSet(viewsets.ModelViewSet):
             event.host_id = host_id
             event.save(update_fields=["host", "updated_at"])
             event.helpers.set(helper_ids)
-            synced = should_sync_staff(event)
-            if synced:
-                sync_event_staff_entries(event)
+            staff_result = standing.on_event_changed(
+                event, fields=frozenset({"host", "helpers"})
+            )
             OrgLog.objects.create(
                 organization=org,
                 actor=request.user,
@@ -1160,7 +1165,7 @@ class EventViewSet(viewsets.ModelViewSet):
             actor_id=request.user.pk,
             host_id=host_id,
             helper_count=len(helper_ids),
-            synced=synced,
+            **staff_result.log_fields(),
         )
         return Response(_event_payload(event.pk, request.user))
 

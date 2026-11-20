@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 
-from django.db.models import Q
 from django.contrib.auth.models import AnonymousUser
+from django.db.models import Q
 
 from app.models import CustomUser, League, Organization
 from org.models import OrgUser
@@ -13,11 +13,15 @@ def member_organization_ids(
     admin_org_ids: Iterable[int],
     staff_org_ids: Iterable[int],
 ) -> list[int]:
-    member_ids = OrgUser.objects.filter(user=user).nocache().values_list(
-        "organization_id", flat=True
+    member_ids = (
+        OrgUser.objects.filter(user=user)
+        .nocache()
+        .values_list("organization_id", flat=True)
     )
     league_org_ids = (
-        League.objects.filter(Q(admins=user) | Q(staff=user), organization__isnull=False)
+        League.objects.filter(
+            Q(admins=user) | Q(staff=user), organization__isnull=False
+        )
         .nocache()
         .values_list("organization_id", flat=True)
     )
@@ -39,3 +43,16 @@ def viewer_member_organization_ids(user: CustomUser | AnonymousUser) -> list[int
     return member_organization_ids(
         user, admin_org_ids=admin_ids, staff_org_ids=staff_ids
     )
+
+
+def resolve_or_create_org_user(user: CustomUser, organization: Organization) -> OrgUser:
+    """Get or create OrgUser for (user, organization).
+
+    Single source of truth for "user joins org by signing up." Used by:
+      - the web /signup/ endpoint
+      - Discord adapters via _get_org_user()
+      - staff_add_signup()
+      - approve_signup()
+    """
+    org_user, _ = OrgUser.objects.get_or_create(user=user, organization=organization)
+    return org_user

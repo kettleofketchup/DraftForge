@@ -16,7 +16,6 @@ from app.models import CustomUser, Organization
 from app.permissions_org import can_view_org_members, has_org_staff_access
 from events.models import Event
 from org.contributions.kinds import DEFAULT_POINTS, RATED_KINDS, ContributionKind
-from org.contributions.periods import Period, parse_period
 from org.contributions.queries import (
     LeaderboardRow,
     leaderboard,
@@ -44,6 +43,7 @@ from org.contributions.services import (
 from org.feature_errors import not_permitted, require_feature, require_org_admin
 from org.features import FeatureKey
 from org.models import ContributionEntry, ContributionPointValue, OrgUser
+from org.standing.periods import Period, parse_period
 from user.querysets import with_user_profiles
 
 
