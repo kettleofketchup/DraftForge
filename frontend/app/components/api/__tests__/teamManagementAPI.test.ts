@@ -7,6 +7,7 @@ vi.mock('~/components/api/axios', () => ({ default: { get, post } }));
 
 import {
   addTeamStandin,
+  fetchManagedTeam,
   fetchTeamHistory,
   isTeamManagementError,
   ManagedTeamSchema,
@@ -14,10 +15,12 @@ import {
   removeTeamStandin,
   renameTeam,
   restoreTeamMember,
+  runTeamAction,
   setTeamCaptain,
   setTeamDeputy,
   subInTeamStandin,
   TeamHistoryPageSchema,
+  type TeamAction,
 } from '../teamManagementAPI';
 import fixtures from './fixtures/managedTeam.json';
 import historyPage from './fixtures/teamHistoryPage.json';
@@ -200,5 +203,103 @@ describe('fetchTeamHistory', () => {
     expect(get).toHaveBeenCalledWith('/teams/5/history/', {
       params: { page: 1, page_size: 50 },
     });
+  });
+});
+
+describe('fetchManagedTeam', () => {
+  it('GETs the team detail and parses it', async () => {
+    get.mockResolvedValue({ data: managedTeam });
+    const team = await fetchManagedTeam(7);
+    expect(get).toHaveBeenCalledWith('/teams/7/');
+    expect(team.pk).toBe(managedTeam.pk);
+    expect(team.can_manage_team).toBe(true);
+  });
+
+  it('rejects a malformed response', async () => {
+    get.mockResolvedValue({ data: { ...managedTeam, can_manage_team: 'x' } });
+    await expect(fetchManagedTeam(7)).rejects.toThrow();
+  });
+});
+
+describe('runTeamAction', () => {
+  const team = ManagedTeamSchema.parse(managedTeam);
+  const [captain, , member] = team.members;
+  const standin = team.dropin_members[0];
+  const ackBody = {
+    reason: 'because',
+    acknowledged_codes: ['team_standin_cap'],
+  };
+
+  it.each<[string, TeamAction, string, Record<string, unknown>]>([
+    [
+      'set_captain',
+      { kind: 'set_captain', user: member },
+      'set-captain',
+      { user_id: member.pk },
+    ],
+    [
+      'set_deputy',
+      { kind: 'set_deputy', user: member },
+      'set-deputy',
+      { user_id: member.pk },
+    ],
+    [
+      'set_deputy (clear)',
+      { kind: 'set_deputy', user: null },
+      'set-deputy',
+      { user_id: null },
+    ],
+    [
+      'mark_dropout',
+      { kind: 'mark_dropout', user: member },
+      'dropout',
+      { user_id: member.pk },
+    ],
+    [
+      'restore_member',
+      { kind: 'restore_member', user: member },
+      'restore',
+      { user_id: member.pk },
+    ],
+    [
+      'add_standin',
+      { kind: 'add_standin', user: standin },
+      'standins',
+      { user_id: standin.pk },
+    ],
+    [
+      'remove_standin',
+      { kind: 'remove_standin', user: standin },
+      'standins/remove',
+      { user_id: standin.pk },
+    ],
+    [
+      'sub_in',
+      { kind: 'sub_in', standin, replacing: captain },
+      'sub-in',
+      { standin_id: standin.pk, replacing_id: captain.pk },
+    ],
+    [
+      'sub_in (no replacing)',
+      { kind: 'sub_in', standin, replacing: null },
+      'sub-in',
+      { standin_id: standin.pk, replacing_id: null },
+    ],
+  ])('%s posts its endpoint and body', async (_name, action, path, ids) => {
+    const result = await runTeamAction(5, action, ackBody);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith(`/teams/5/${path}/`, {
+      ...ids,
+      ...ackBody,
+    });
+    expect(result.pk).toBe(managedTeam.pk);
+  });
+
+  it('propagates errors unchanged', async () => {
+    const err = axiosError(409, { code: 'override_required' });
+    post.mockRejectedValue(err);
+    await expect(
+      runTeamAction(5, { kind: 'add_standin', user: standin }, body),
+    ).rejects.toBe(err);
   });
 });

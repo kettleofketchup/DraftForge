@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { UserSchema } from '../user';
+import { LeadershipProblemSchema } from './leadershipProblemSchema';
 
 export const TeamSchema = z.object({
   name: z.string().min(1).max(100).nullable(),
@@ -7,6 +8,7 @@ export const TeamSchema = z.object({
   members: z.array(UserSchema).nullable(),
   pk: z.number().min(0).nullable(),
   captain: UserSchema.nullable(),
+  deputy_captain: UserSchema.nullable().optional(),
   dropin_members: z.array(UserSchema).nullable(),
   left_members: z.array(UserSchema).nullable(),
   draft_order: z.number().nullable(),
@@ -19,4 +21,5 @@ export const TeamSchema = z.object({
   draft_reserve_ms: z.number().nullable().optional(),
   draft_is_ready: z.boolean().optional(),
   draft_is_connected: z.boolean().optional(),
+  leadership_problems: z.array(LeadershipProblemSchema).optional(),
 });
