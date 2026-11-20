@@ -11,8 +11,14 @@ from django.db.models import Q, QuerySet
 from app.models import DraftTeam, HeroDraft, Team
 
 _COUNTED_ON_DELETE = (models.CASCADE, models.SET_NULL)
-# Audit rows outlive the team (SET_NULL); they never block a reset or delete.
-_EXCLUDED_KEYS = frozenset({"app.TeamLog.team"})
+# Audit rows outlive the team (SET_NULL); chat dies with it. Neither blocks a reset or delete.
+_EXCLUDED_KEYS = frozenset(
+    {
+        "app.TeamLog.team",
+        "app.HeroDraftChatMessage.team",
+        "app.HeroDraftChatMembership.team",
+    }
+)
 
 
 def _reference_relations() -> list[models.ForeignObjectRel]:

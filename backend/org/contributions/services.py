@@ -8,7 +8,13 @@ from django.db.models import Count
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Organization, OrgLog
+from app.models import (
+    CustomUser,
+    HeroDraftChatMembership,
+    HeroDraftChatMessage,
+    Organization,
+    OrgLog,
+)
 from app.permissions_org import is_org_role_holder
 from events.constants import EventState
 from events.models import Event
@@ -513,6 +519,8 @@ def repoint_user_attribution(drop: CustomUser, keep: CustomUser) -> int:
         + PromoTemplate.objects.nocache()
         .filter(created_by=drop)
         .update(created_by=keep)
+        + HeroDraftChatMessage.objects.filter(sender=drop).update(sender=keep)
+        + HeroDraftChatMembership.objects.filter(user=drop).update(user=keep)
     )
 
 

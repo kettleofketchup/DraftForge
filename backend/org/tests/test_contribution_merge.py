@@ -11,7 +11,17 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.discord_accounts import merge_discord_accounts
-from app.models import CustomUser, Organization, ProfileClaimRequest
+from app.functions.herodraft import new_herodraft_for_game
+from app.models import (
+    CustomUser,
+    Game,
+    HeroDraftChatMembership,
+    HeroDraftChatMessage,
+    Organization,
+    ProfileClaimRequest,
+    Team,
+    Tournament,
+)
 from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind
@@ -152,15 +162,40 @@ class RepointAttributionTest(_LedgerFixture):
             updated_by=drop,
         )
 
+        tournament = Tournament.objects.create(
+            name="Attr Tournament", date_played=timezone.now()
+        )
+        radiant = Team.objects.create(name="Attr R", tournament=tournament)
+        dire = Team.objects.create(name="Attr D", tournament=tournament)
+        draft = new_herodraft_for_game(
+            Game.objects.create(
+                tournament=tournament, radiant_team=radiant, dire_team=dire
+            )
+        )
+        message = HeroDraftChatMessage.objects.create(
+            draft=draft,
+            channel=HeroDraftChatMessage.Channel.TEAM,
+            team=radiant,
+            sender=drop,
+            body="gl",
+        )
+        membership = HeroDraftChatMembership.objects.create(
+            draft=draft, team=radiant, user=drop, joined_at=timezone.now()
+        )
+
         changed = repoint_user_attribution(drop, keep)
 
-        self.assertEqual(changed, 3)
+        self.assertEqual(changed, 5)
         entry.refresh_from_db()
         feature.refresh_from_db()
         value.refresh_from_db()
+        message.refresh_from_db()
+        membership.refresh_from_db()
         self.assertEqual(entry.awarded_by_id, keep.pk)
         self.assertEqual(feature.enabled_by_id, keep.pk)
         self.assertEqual(value.updated_by_id, keep.pk)
+        self.assertEqual(message.sender_id, keep.pk)
+        self.assertEqual(membership.user_id, keep.pk)
 
 
 class ClaimMergeContributionsTest(_LedgerFixture):

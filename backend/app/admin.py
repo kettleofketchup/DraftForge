@@ -11,7 +11,13 @@ from org.contributions.services import delete_user_entries
 from org.models import ContributionEntry
 from org.promotion.services import release_earning_sends
 
-from .models import CustomUser, HeroDraft, HeroDraftEvent, TeamLog
+from .models import (
+    CustomUser,
+    HeroDraft,
+    HeroDraftChatMessage,
+    HeroDraftEvent,
+    TeamLog,
+)
 
 
 class CustomUserAdmin(admin.ModelAdmin):
@@ -135,7 +141,27 @@ class TeamLogAdmin(admin.ModelAdmin):
         return False
 
 
+class HeroDraftChatMessageAdmin(admin.ModelAdmin):
+    list_display = ("draft", "channel", "team", "sender", "kind", "created_at")
+    list_select_related = ("draft", "team", "sender")
+    list_filter = ("channel", "kind")
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(
+        self, request: HttpRequest, obj: HeroDraftChatMessage | None = None
+    ) -> bool:
+        return False
+
+    def has_delete_permission(
+        self, request: HttpRequest, obj: HeroDraftChatMessage | None = None
+    ) -> bool:
+        return False
+
+
 admin.site.register(CustomUser, CustomUserAdmin)
 admin.site.register(HeroDraft, HeroDraftAdmin)
 admin.site.register(HeroDraftEvent, HeroDraftEventAdmin)
 admin.site.register(TeamLog, TeamLogAdmin)
+admin.site.register(HeroDraftChatMessage, HeroDraftChatMessageAdmin)
