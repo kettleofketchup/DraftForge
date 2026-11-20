@@ -3,6 +3,8 @@
 @import '@fontsource-variable/inter/index.css';
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant draft-split (@media (min-width: 64rem) and (min-height: 56rem));
+@custom-variant draft-stacked (@media not ((min-width: 64rem) and (min-height: 56rem)));
 
 /* Tailwind v4 dropped the v3 `container` auto-width/max-width behavior; pages
    that say `<div class="container mx-auto px-4">` were getting no width rule,
