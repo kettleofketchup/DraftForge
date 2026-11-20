@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
+from structlog.testing import capture_logs
 
 from app.discord_accounts import merge_discord_accounts
 from app.models import CustomUser, Organization, OrgLog
@@ -98,8 +99,10 @@ class StandingCallSiteTest(TestCase):
         self._assert_nested(baseline)
         self.assertEqual(self.fake.hooks, ["on_event_reopened"])
         self.assertEqual(self.fake.calls[0].kwargs["state"], EventState.SIGNUPS_OPEN)
-        self.assertIn("revoked", result.details)
-        self.assertIn("fake_count", result.details)
+        self.assertEqual(result.details, {"revoked": 0, "fake_count": 1})
+        details = OrgLog.objects.get(action="reopen_event").details
+        self.assertEqual(details["fake_count"], 1)
+        self.assertEqual(details["revoked"], 0)
 
     def test_reopen_rolls_back_when_track_raises(self) -> None:
         self._set_state(EventState.COMPLETED)
@@ -148,16 +151,20 @@ class StandingCallSiteTest(TestCase):
             self.org, FeatureKey.CONTRIBUTIONS, enabled=True, actor=self.admin
         )
         baseline = atomic_baseline()
-        response = self.client.put(
-            f"/api/events/{self.event.pk}/staff/",
-            {"host_id": self.admin.pk, "helper_ids": []},
-            format="json",
-        )
+        with capture_logs() as logs:
+            response = self.client.put(
+                f"/api/events/{self.event.pk}/staff/",
+                {"host_id": self.admin.pk, "helper_ids": []},
+                format="json",
+            )
         self.assertLess(response.status_code, 300, response.content)
         self._assert_nested(baseline)
         self.assertEqual(
             self.fake.calls[0].kwargs["fields"], frozenset({"host", "helpers"})
         )
+        staff_log = next(e for e in logs if e["event"] == "event_staff_set")
+        self.assertIs(staff_log["fake_ran"], True)
+        self.assertIs(staff_log["synced"], False)
 
     def _merge_fixture(self) -> tuple[CustomUser, CustomUser, OrgUser, OrgUser]:
         keep = CustomUser.objects.create_user(username="cs_keep", password="x")
