@@ -73,6 +73,7 @@ beforeEach(() => {
   stateChanges.length = 0;
   send.mockClear();
   send.mockImplementation(() => true);
+  useHeroDraftStore.getState().reset();
   useHeroDraftStore.getState().connect(2);
   setStatus('connected');
 });
@@ -122,9 +123,17 @@ describe('heroDraftStore chat frames', () => {
     });
   });
 
-  it('chat_error without client_msg_id sets the code only', () => {
+  it('chat_error unavailable before any viewer marks chat unavailable', () => {
+    emit({ type: 'chat_error', code: 'unavailable' });
+    expect(chat().unavailable).toBe(true);
+    expect(chat().lastError).toBeNull();
+  });
+
+  it('chat_error without client_msg_id sets the code only once a viewer is known', () => {
+    emit({ type: 'chat_history', viewer: memberViewer, messages: [] });
     emit({ type: 'chat_error', code: 'unavailable' });
     expect(chat().lastError).toEqual({ code: 'unavailable' });
+    expect(chat().unavailable).toBe(false);
   });
 });
 
