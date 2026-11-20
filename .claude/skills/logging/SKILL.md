@@ -41,6 +41,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `celery` | `task` | — | `telemetry/celery.py` | Generic Celery task lifecycle bookends (started/completed/failed) |
 | `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
 | `events` | `scheduling` | — | `events/tasks.py`, `events/management/` | Event generation, signup opening, repeaters |
+| `events` | `eligibility` | — | `events/eligibility/evaluate.py` | `eligibility_evaluated`: reason `codes` and `admissible` for every signup evaluation |
 | `tournament` | `discord` | — | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
 | `avatars` | `endpoint` | — | `user/internal/avatar.py` | Internal endpoints: list-linked-users, list-guild-ids, bulk-update + invalidate |
 | `avatars` | `refresh` | — | `app/tasks/avatar_refresh.py::refresh_avatars_batched` | Daily Celery beat: read guild-member cache, diff against DB, POST bulk-update |
@@ -62,6 +63,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `internal_client` | `http` | — | `app/internal_client/` (`transport.py` and per-domain modules) | Internal HTTP client errors and JSON-parse failures |
 | `discord` | `bot`, `utils`, `views`, `channels`, `roles`, `users` | — | `discordbot/**` | Bot lifecycle, message utils, slash views, channel/role/user services |
 | `events` | `tasks`, `services`, `views`, `dispatch` | — | `events/**` | Event task lifecycle, signup services, manual fire, tournament-link dispatch |
+| `events` | `overrides` | — | `events/overrides.py` | Staff override policy check (`override_checked`) and blocks (`override_blocked`) |
 | `steam` | `api`, `game_linking`, `match`, `mmr`, `stats`, `model`, `league_sync`, `retry`, `ingest` | — | `steam/**` | Steam API, account/game linking, match fetch/store, MMR/stats, league sync, retry, internal store_match ingest |
 | `bracket` | `generate`, `model` | — | `bracket/**` | Bracket generation + model-level cache logging |
 | `org` | `views` | — | `org/views.py` | Org admin actions (user delete/merge) |

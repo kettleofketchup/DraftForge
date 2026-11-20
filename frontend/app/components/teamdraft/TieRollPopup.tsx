@@ -1,4 +1,13 @@
-import { Dice1, Dice2, Dice3, Dice4, Dice5, Dice6, X, type LucideIcon } from 'lucide-react';
+import {
+  Dice1,
+  Dice2,
+  Dice3,
+  Dice4,
+  Dice5,
+  Dice6,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -21,9 +30,15 @@ export interface TieRollTimeline {
   totalMs: number;
 }
 
-export function tieRollTimeline(rounds: number, holdMs: number): TieRollTimeline {
+export function tieRollTimeline(
+  rounds: number,
+  holdMs: number,
+): TieRollTimeline {
   const totalMs = Math.max(holdMs, MIN_ROUND_MS * rounds + WINNER_LINGER_MS);
-  const roundMs = Math.min(MAX_ROUND_MS, Math.max(MIN_ROUND_MS, (totalMs - WINNER_LINGER_MS) / Math.max(rounds, 1)));
+  const roundMs = Math.min(
+    MAX_ROUND_MS,
+    Math.max(MIN_ROUND_MS, (totalMs - WINNER_LINGER_MS) / Math.max(rounds, 1)),
+  );
   return { roundMs, winnerAtMs: roundMs * rounds, totalMs };
 }
 
@@ -34,11 +49,20 @@ export interface TieRollFrame {
   winnerShown: boolean;
 }
 
-export function tieRollFrame(elapsedMs: number, rounds: number, t: TieRollTimeline): TieRollFrame {
-  if (elapsedMs >= t.winnerAtMs) return { round: rounds - 1, tumbling: false, winnerShown: true };
+export function tieRollFrame(
+  elapsedMs: number,
+  rounds: number,
+  t: TieRollTimeline,
+): TieRollFrame {
+  if (elapsedMs >= t.winnerAtMs)
+    return { round: rounds - 1, tumbling: false, winnerShown: true };
   const round = Math.min(rounds - 1, Math.floor(elapsedMs / t.roundMs));
   const inRound = elapsedMs - round * t.roundMs;
-  return { round, tumbling: inRound < t.roundMs * TUMBLE_SHARE, winnerShown: false };
+  return {
+    round,
+    tumbling: inRound < t.roundMs * TUMBLE_SHARE,
+    winnerShown: false,
+  };
 }
 
 export interface TieRollTeam {
@@ -58,7 +82,13 @@ interface TieRollPopupProps {
 
 const perfNow = () => performance.now();
 
-export function TieRollPopup({ tie, teams, onDone, clockHeld, now = perfNow }: TieRollPopupProps) {
+export function TieRollPopup({
+  tie,
+  teams,
+  onDone,
+  clockHeld,
+  now = perfNow,
+}: TieRollPopupProps) {
   const rounds = tie.roll_rounds.length;
   const timeline = tieRollTimeline(rounds, tie.hold_ms ?? DEFAULT_TIE_HOLD_MS);
   const nowRef = useRef(now);
@@ -66,7 +96,10 @@ export function TieRollPopup({ tie, teams, onDone, clockHeld, now = perfNow }: T
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    const id = setInterval(() => setElapsed(nowRef.current() - startedAt), FRAME_MS);
+    const id = setInterval(
+      () => setElapsed(nowRef.current() - startedAt),
+      FRAME_MS,
+    );
     return () => clearInterval(id);
   }, [startedAt]);
 
@@ -76,13 +109,19 @@ export function TieRollPopup({ tie, teams, onDone, clockHeld, now = perfNow }: T
 
   const frame = tieRollFrame(elapsed, rounds, timeline);
   const step = Math.floor(elapsed / FRAME_MS);
-  const captainOf = (teamId: number) => teams.find((t) => t.id === teamId)?.captain ?? null;
+  const captainOf = (teamId: number) =>
+    teams.find((t) => t.id === teamId)?.captain ?? null;
   const labelOf = (teamId: number) => {
     const captain = captainOf(teamId);
-    return captain ? DisplayName(captain) : (tie.tied_teams.find((t) => t.id === teamId)?.name ?? 'Team');
+    return captain
+      ? DisplayName(captain)
+      : (tie.tied_teams.find((t) => t.id === teamId)?.name ?? 'Team');
   };
   const winnerLabel = labelOf(tie.winner_id);
-  const secondsLeft = Math.max(0, Math.ceil((timeline.totalMs - elapsed) / 1000));
+  const secondsLeft = Math.max(
+    0,
+    Math.ceil((timeline.totalMs - elapsed) / 1000),
+  );
   const remainingPct = Math.max(0, 100 - (100 * elapsed) / timeline.totalMs);
 
   return (
@@ -92,17 +131,21 @@ export function TieRollPopup({ tie, teams, onDone, clockHeld, now = perfNow }: T
       data-winner-id={tie.winner_id}
       role="status"
       aria-live="polite"
-      className="pointer-events-auto fixed inset-x-3 bottom-20 z-[60] animate-in fade-in slide-in-from-right-8 duration-300 rounded-xl border border-white/15 bg-slate-950/95 p-4 text-white shadow-2xl backdrop-blur md:inset-x-auto md:bottom-auto md:top-14 md:right-4 md:w-[24rem]"
+      className="pointer-events-auto fixed inset-x-3 bottom-20 z-[60] animate-in fade-in slide-in-from-right-8 duration-300 rounded-xl border border-white/15 bg-base-950/95 p-4 text-white shadow-2xl backdrop-blur md:inset-x-auto md:bottom-auto md:top-14 md:right-4 md:w-[24rem]"
     >
       <span className="sr-only">
-        Tie{tie.pick_number ? ` for pick ${tie.pick_number}` : ''}: {winnerLabel} won the dice roll and picks next.
+        Tie{tie.pick_number ? ` for pick ${tie.pick_number}` : ''}:{' '}
+        {winnerLabel} won the dice roll and picks next.
       </span>
       <div className="flex items-start justify-between gap-2" aria-hidden>
         <div>
           <div className="text-base font-semibold">
-            Tie{tie.pick_number ? ` for pick #${tie.pick_number}` : ''}: rolling dice
+            Tie{tie.pick_number ? ` for pick #${tie.pick_number}` : ''}: rolling
+            dice
           </div>
-          <div className="text-xs text-muted-foreground">Same team MMR. Highest roll picks next.</div>
+          <div className="text-xs text-muted-foreground">
+            Same team MMR. Highest roll picks next.
+          </div>
         </div>
         <button
           type="button"
@@ -117,12 +160,16 @@ export function TieRollPopup({ tie, teams, onDone, clockHeld, now = perfNow }: T
 
       <ul className="mt-2 flex flex-col gap-1.5" aria-hidden>
         {tie.tied_teams.map((team, idx) => {
-          const roll = tie.roll_rounds[frame.round]?.find((r) => r.team_id === team.id);
+          const roll = tie.roll_rounds[frame.round]?.find(
+            (r) => r.team_id === team.id,
+          );
           const out = !roll;
           const isWinner = frame.winnerShown && team.id === tie.winner_id;
           const lost = frame.winnerShown && !isWinner;
           const tumbling = frame.tumbling && !out && frame.round >= 0;
-          const face = tumbling ? ((step + idx * 2) % 6) + 1 : (roll?.roll ?? 1);
+          const face = tumbling
+            ? ((step + idx * 2) % 6) + 1
+            : (roll?.roll ?? 1);
           const Die = DICE[face - 1];
           const history = tie.roll_rounds
             .slice(0, tumbling ? frame.round : frame.round + 1)
@@ -136,7 +183,7 @@ export function TieRollPopup({ tie, teams, onDone, clockHeld, now = perfNow }: T
               data-winner={isWinner}
               className={cn(
                 'flex items-center gap-3 rounded-lg px-2.5 py-2 transition-colors',
-                isWinner ? 'bg-green-600/25 ring-1 ring-green-400' : 'bg-white/5',
+                isWinner ? 'bg-success/25 ring-1 ring-success' : 'bg-white/5',
                 (out || lost) && 'opacity-40',
               )}
             >
@@ -145,17 +192,32 @@ export function TieRollPopup({ tie, teams, onDone, clockHeld, now = perfNow }: T
               ) : (
                 <div className="h-8 w-8 shrink-0 rounded-full bg-muted" />
               )}
-              <span className={cn('flex-1 truncate text-sm', isWinner && 'font-semibold')}>{labelOf(team.id)}</span>
+              <span
+                className={cn(
+                  'flex-1 truncate text-sm',
+                  isWinner && 'font-semibold',
+                )}
+              >
+                {labelOf(team.id)}
+              </span>
               {history.length > 1 && (
-                <span className="font-mono text-[10px] text-muted-foreground">{history.slice(0, -1).join(' · ')}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {history.slice(0, -1).join(' · ')}
+                </span>
               )}
               {out ? (
-                <span className="text-[10px] uppercase text-muted-foreground">out</span>
+                <span className="text-[10px] uppercase text-muted-foreground">
+                  out
+                </span>
               ) : (
                 <Die
                   data-testid={`tie-roll-die-${team.id}`}
                   data-face={tumbling ? undefined : face}
-                  className={cn('h-9 w-9', tumbling && 'animate-spin [animation-duration:400ms]', isWinner ? 'text-green-300' : 'text-white')}
+                  className={cn(
+                    'h-9 w-9',
+                    tumbling && 'animate-spin [animation-duration:400ms]',
+                    isWinner ? 'text-success' : 'text-white',
+                  )}
                 />
               )}
             </li>
@@ -166,18 +228,29 @@ export function TieRollPopup({ tie, teams, onDone, clockHeld, now = perfNow }: T
       <div className="mt-2 flex items-center gap-2" aria-hidden>
         <span
           data-testid="tie-roll-result"
-          className={cn('flex-1 text-sm', frame.winnerShown ? 'font-semibold text-green-300' : 'text-muted-foreground')}
+          className={cn(
+            'flex-1 text-sm',
+            frame.winnerShown
+              ? 'font-semibold text-success'
+              : 'text-muted-foreground',
+          )}
         >
           {frame.winnerShown ? `${winnerLabel} picks next` : 'Rolling…'}
         </span>
         {clockHeld && (
-          <span data-testid="tie-roll-countdown" className="text-xs tabular-nums text-muted-foreground">
+          <span
+            data-testid="tie-roll-countdown"
+            className="text-xs tabular-nums text-muted-foreground"
+          >
             Clock starts in {secondsLeft}s
           </span>
         )}
       </div>
       <div className="mt-1 h-1 overflow-hidden rounded bg-white/10" aria-hidden>
-        <div className="h-full bg-primary transition-[width] duration-100" style={{ width: `${remainingPct}%` }} />
+        <div
+          className="h-full bg-primary transition-[width] duration-100"
+          style={{ width: `${remainingPct}%` }}
+        />
       </div>
     </div>
   );

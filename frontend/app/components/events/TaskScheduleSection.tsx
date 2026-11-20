@@ -18,7 +18,7 @@ interface FiredByUser {
   avatar: string | null;
 }
 
-interface TaskEntry {
+export interface TaskEntry {
   task: string;
   label: string;
   fires_at: string | null;
@@ -73,6 +73,20 @@ function formatRelativeTime(dateStr: string): string {
   return `${prefix}${days}d ${hours % 24}h${suffix}`;
 }
 
+const isRepostTask = (task: TaskEntry) =>
+  task.status === 'fired' &&
+  (task.task === 'signup_post' || task.task === 'announcement');
+
+export function fireConfirmDescription(task: TaskEntry): string {
+  if (isRepostTask(task)) {
+    return `This will clear the existing post tracking and create a fresh "${task.label}" in Discord. Use this if the original message was deleted or you want to push an updated version.`;
+  }
+  if (task.task === 'start_mention') {
+    return 'This will @mention every signed-up member in replies to the signup post right now. It can only be sent once per event.';
+  }
+  return `This will immediately execute "${task.label}" for this event. This action cannot be undone.`;
+}
+
 interface TaskScheduleSectionProps {
   eventId: number;
   isAdmin?: boolean;
@@ -110,13 +124,6 @@ export function TaskScheduleSection({
       }
     },
   });
-
-  // signup_post + announcement can be re-fired even after they've fired —
-  // this becomes a "Repost" action that clears dedup and pushes a fresh post.
-  // Other tasks keep their one-shot semantics, so the wording stays "Fire".
-  const isRepost = (task: TaskEntry) =>
-    task.status === 'fired' &&
-    (task.task === 'signup_post' || task.task === 'announcement');
 
   if (isLoading) {
     return (
@@ -265,7 +272,7 @@ export function TaskScheduleSection({
                       onClick={() => setConfirmTask(task)}
                       disabled={fireMutation.isPending}
                       title={
-                        isRepost(task)
+                        isRepostTask(task)
                           ? `Repost ${task.label}`
                           : `Fire ${task.label} now`
                       }
@@ -285,17 +292,13 @@ export function TaskScheduleSection({
         open={!!confirmTask}
         onOpenChange={(open) => !open && setConfirmTask(null)}
         title={
-          confirmTask && isRepost(confirmTask)
+          confirmTask && isRepostTask(confirmTask)
             ? `Repost ${confirmTask.label}?`
             : `Fire ${confirmTask?.label}?`
         }
-        description={
-          confirmTask && isRepost(confirmTask)
-            ? `This will clear the existing post tracking and create a fresh "${confirmTask.label}" in Discord. Use this if the original message was deleted or you want to push an updated version.`
-            : `This will immediately execute "${confirmTask?.label}" for this event. This action cannot be undone.`
-        }
+        description={confirmTask ? fireConfirmDescription(confirmTask) : ''}
         confirmLabel={
-          confirmTask && isRepost(confirmTask) ? 'Repost' : 'Fire Now'
+          confirmTask && isRepostTask(confirmTask) ? 'Repost' : 'Fire Now'
         }
         variant="default"
         onConfirm={() => {

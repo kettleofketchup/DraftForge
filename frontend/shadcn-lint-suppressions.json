@@ -211,97 +211,12 @@
       "count": 1
     }
   },
-  "app/components/teamdraft/DraftEventFab.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/teamdraft/DraftLobby.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
-  "app/components/teamdraft/DraftNotificationBadge.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/teamdraft/DraftToasts.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 4
-    }
-  },
-  "app/components/teamdraft/FloatingDraftIndicator.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
   "app/components/teamdraft/TeamPositionCoverage.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 15
     },
     "shadcn/no-raw-colors": {
       "count": 11
-    }
-  },
-  "app/components/teamdraft/TieRollPopup.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 5
-    }
-  },
-  "app/components/teamdraft/liveView.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 5
-    }
-  },
-  "app/components/teamdraft/roundView/TurnIndicator.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/teamdraft/roundView/draftRoundCard.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/teamdraft/roundView/draftTable.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/teamdraft/sections/AvailablePlayersSection.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 5
-    }
-  },
-  "app/components/teamdraft/sections/PickOrderSection.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 8
-    }
-  },
-  "app/components/teamdraft/shuffle/DoublePickThreshold.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 5
-    }
-  },
-  "app/components/teamdraft/shuffle/ShufflePickOrder.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 8
-    }
-  },
-  "app/components/teamdraft/timer/DraftClockBar.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 10
-    }
-  },
-  "app/components/teamdraft/timer/DraftPauseOverlay.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
-  "app/components/teamdraft/timer/PickOrderReserve.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 4
     }
   },
   "app/components/ui/base-handle.tsx": {

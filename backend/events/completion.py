@@ -107,6 +107,7 @@ def close_event(
                 },
             )
         invalidate_after_commit(stale, event)
+        event.refresh_signup_post_on_commit()
 
     log.info(
         "event_closed",

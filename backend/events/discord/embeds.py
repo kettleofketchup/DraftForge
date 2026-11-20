@@ -12,7 +12,7 @@ from django.conf import settings
 
 from app.constants import LOGO_URL
 from app.internal_client import get_event_signups
-from events.constants import SEAT_HOLDING_STATUSES
+from events.constants import SEAT_HOLDING_STATUSES, EventState
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -51,6 +51,15 @@ def _discord_timestamp(dt: datetime, style: str = "F") -> str:
 def _event_url(event: "EmbedEvent") -> str:
     return f"{SITE_URL}/events/{event.pk}" if SITE_URL else ""
 
+
+# Signup post status line per event state; open signups need none.
+STATE_NOTICES: dict[str, str] = {
+    EventState.UPCOMING: "Signups are not open yet.",
+    EventState.ROLL_CALL: "Signups are closed. Roll call is under way.",
+    EventState.IN_PROGRESS: "Signups are closed. The tournament is under way.",
+    EventState.COMPLETED: "This event has finished.",
+    EventState.CANCELLED: "This event was cancelled.",
+}
 
 DECLINED_STATUSES = {"cancelled", "rejected", "dropped"}
 CONFIRMED_STATUSES = {"confirmed", "approved"}
@@ -276,7 +285,8 @@ def build_announcement_v2(event: "EmbedEvent") -> dict[str, Any]:
     """Build embed + components payload for event announcement.
 
     Returns dict with 'embed' (single embed dict) and 'components' (action rows).
-    The embed has: logo thumbnail, title, description, event details row,
+    The embed has: logo thumbnail, title, a status line for any state but
+    open signups, description, event details row,
     signup/declined/tentative row, and event page link.
     """
     from events.discord.components import build_announcement_components
@@ -286,6 +296,10 @@ def build_announcement_v2(event: "EmbedEvent") -> dict[str, Any]:
 
     if event.discord_event_info:
         desc += f"\n\n{event.discord_event_info}"
+
+    notice = STATE_NOTICES.get(event.state)
+    if notice:
+        desc = f"**{notice}**\n\n{desc}"
 
     # Line 1: Discord date timestamp (renders as "March 20, 2026" in user's locale)
     # Line 2: Discord time timestamp + event timezone time in parentheses
