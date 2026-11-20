@@ -1,9 +1,13 @@
+import { Copy, Loader2, Mail, Play, Plus, RotateCcw, X } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { Copy, Loader2, Mail, Play, Plus, RotateCcw, X } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
-import { DestructiveButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
+import {
+  DestructiveButton,
+  PrimaryButton,
+  SecondaryButton,
+} from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import {
   useCloseGameLobby,
@@ -50,7 +54,13 @@ export function LobbyPanel({ gameId }: LobbyPanelProps) {
   return <LobbyPanelBody gameId={gameId} data={data} />;
 }
 
-export function LobbyPanelBody({ gameId, data }: { gameId: number; data: GameLobbyResponse }) {
+export function LobbyPanelBody({
+  gameId,
+  data,
+}: {
+  gameId: number;
+  data: GameLobbyResponse;
+}) {
   const lobby = data.lobby;
   const active = lobby && !lobby.ended ? lobby : null;
   const players = lobby?.players?.length ? lobby.players : (data.players ?? []);
@@ -72,7 +82,10 @@ export function LobbyPanelBody({ gameId, data }: { gameId: number; data: GameLob
             {lobbyStateLabel(lobby.state)}
           </Badge>
         ) : (
-          <span className="text-xs text-muted-foreground" data-testid="lobby-state-none">
+          <span
+            className="text-xs text-muted-foreground"
+            data-testid="lobby-state-none"
+          >
             No lobby yet
           </span>
         )}
@@ -82,13 +95,19 @@ export function LobbyPanelBody({ gameId, data }: { gameId: number; data: GameLob
       {lobby && <ProvisionalResult lobby={lobby} />}
       {lobby?.last_error_code && (
         <p className="text-xs text-destructive" data-testid="lobby-error">
-          {lobbyErrorText(lobby.last_error_code, lobby.last_error_detail ?? undefined)}
+          {lobbyErrorText(
+            lobby.last_error_code,
+            lobby.last_error_detail ?? undefined,
+          )}
         </p>
       )}
 
-      {data.can_manage && !active && data.eligibility && !data.eligibility.ok && (
-        <EligibilityHint eligibility={data.eligibility} />
-      )}
+      {data.can_manage &&
+        !active &&
+        data.eligibility &&
+        !data.eligibility.ok && (
+          <EligibilityHint eligibility={data.eligibility} />
+        )}
 
       {players.length > 0 && (
         <PlayerList
@@ -104,7 +123,12 @@ export function LobbyPanelBody({ gameId, data }: { gameId: number; data: GameLob
       )}
 
       {data.can_manage && (
-        <StaffControls gameId={gameId} data={data} active={active} players={players} />
+        <StaffControls
+          gameId={gameId}
+          data={data}
+          active={active}
+          players={players}
+        />
       )}
     </div>
   );
@@ -132,7 +156,10 @@ function LobbyDetails({ lobby }: { lobby: GameLobby }) {
       {lobby.password && (
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">Password: </span>
-          <code className="rounded bg-muted px-1.5 py-0.5" data-testid="lobby-password">
+          <code
+            className="rounded bg-muted px-1.5 py-0.5"
+            data-testid="lobby-password"
+          >
             {lobby.password}
           </code>
           <SecondaryButton
@@ -151,7 +178,10 @@ function LobbyDetails({ lobby }: { lobby: GameLobby }) {
         </p>
       )}
       {lobby.match_id && (
-        <p className="text-xs text-muted-foreground" data-testid="lobby-match-id">
+        <p
+          className="text-xs text-muted-foreground"
+          data-testid="lobby-match-id"
+        >
           Lobby match ID: {lobby.match_id}
         </p>
       )}
@@ -161,10 +191,14 @@ function LobbyDetails({ lobby }: { lobby: GameLobby }) {
 
 function provisionalWinnerName(lobby: GameLobby): string | null {
   const teams = [lobby.radiant_team, lobby.dire_team];
-  const byId = teams.find((t) => t && t.id === lobby.provisional_winner_team_id);
+  const byId = teams.find(
+    (t) => t && t.id === lobby.provisional_winner_team_id,
+  );
   if (byId) return byId.name;
-  if (lobby.provisional_winner_side === 'radiant') return lobby.radiant_team?.name ?? 'Radiant';
-  if (lobby.provisional_winner_side === 'dire') return lobby.dire_team?.name ?? 'Dire';
+  if (lobby.provisional_winner_side === 'radiant')
+    return lobby.radiant_team?.name ?? 'Radiant';
+  if (lobby.provisional_winner_side === 'dire')
+    return lobby.dire_team?.name ?? 'Dire';
   return null;
 }
 
@@ -172,7 +206,7 @@ function ProvisionalResult({ lobby }: { lobby: GameLobby }) {
   if (lobby.provisional_scored === false) {
     return (
       <p
-        className="rounded-md border border-yellow-600/50 bg-yellow-500/10 p-2 text-xs"
+        className="rounded-md border border-warning/50 bg-warning/10 p-2 text-xs"
         data-testid="lobby-provisional-result"
       >
         The lobby reported the match ended without a scored result.
@@ -184,11 +218,11 @@ function ProvisionalResult({ lobby }: { lobby: GameLobby }) {
   const side = lobby.provisional_winner_side === 'dire' ? 'Dire' : 'Radiant';
   return (
     <p
-      className="rounded-md border border-yellow-600/50 bg-yellow-500/10 p-2 text-xs"
+      className="rounded-md border border-warning/50 bg-warning/10 p-2 text-xs"
       data-testid="lobby-provisional-result"
     >
-      Lobby reported: {winner} ({side}) win, provisional. Confirm the winner below; the
-      Steam match link stays authoritative.
+      Lobby reported: {winner} ({side}) win, provisional. Confirm the winner
+      below; the Steam match link stays authoritative.
     </p>
   );
 }
@@ -200,7 +234,10 @@ function EligibilityHint({
 }) {
   const missing = eligibility.details.players ?? [];
   return (
-    <div className="text-xs text-muted-foreground" data-testid="lobby-eligibility">
+    <div
+      className="text-xs text-muted-foreground"
+      data-testid="lobby-eligibility"
+    >
       <p>{lobbyErrorText(eligibility.code)}</p>
       {missing.length > 0 && (
         <p data-testid="lobby-missing-players">
@@ -230,9 +267,14 @@ function PlayerList({
     try {
       const result = await invite.mutateAsync({ players: [player.account_id] });
       if (result.invited.length) toast.success(`Invite sent to ${player.name}`);
-      else toast.info(`${player.name} was not invited (${result.skipped[0]?.reason ?? 'skipped'})`);
+      else
+        toast.info(
+          `${player.name} was not invited (${result.skipped[0]?.reason ?? 'skipped'})`,
+        );
     } catch (error) {
-      toast.error('Invite failed', { description: lobbyRequestErrorText(error) });
+      toast.error('Invite failed', {
+        description: lobbyRequestErrorText(error),
+      });
     }
   };
 
@@ -240,7 +282,9 @@ function PlayerList({
     <div className="grid gap-3 sm:grid-cols-2" data-testid="lobby-players">
       {(['radiant', 'dire'] as const).map((side) => (
         <div key={side} className="min-w-0 space-y-1.5">
-          <p className="text-xs font-medium capitalize text-muted-foreground">{side}</p>
+          <p className="text-xs font-medium capitalize text-muted-foreground">
+            {side}
+          </p>
           {players
             .filter((p) => p.side === side)
             .map((player) => (
@@ -260,7 +304,10 @@ function PlayerList({
                   >
                     {player.name}
                     {player.captain && (
-                      <span className="font-normal text-muted-foreground"> (C)</span>
+                      <span className="font-normal text-muted-foreground">
+                        {' '}
+                        (C)
+                      </span>
                     )}
                   </p>
                   <p
@@ -299,10 +346,16 @@ function SelfInviteButton({ gameId }: { gameId: number }) {
   const onClick = async () => {
     try {
       const result = await invite.mutateAsync({});
-      if (result.invited.length) toast.success('Invite sent. Check your Dota 2 client.');
-      else toast.info(`No invite sent (${result.skipped[0]?.reason ?? 'skipped'})`);
+      if (result.invited.length)
+        toast.success('Invite sent. Check your Dota 2 client.');
+      else
+        toast.info(
+          `No invite sent (${result.skipped[0]?.reason ?? 'skipped'})`,
+        );
     } catch (error) {
-      toast.error('Invite failed', { description: lobbyRequestErrorText(error) });
+      toast.error('Invite failed', {
+        description: lobbyRequestErrorText(error),
+      });
     }
   };
   return (
@@ -353,12 +406,18 @@ function StaffControls({
   const anyoneToInvite = players.some(needsInvite);
   const pregame = !!active && PREGAME_LOBBY_STATES.includes(active.state);
 
-  const run = async (label: string, action: () => Promise<unknown>, success: string) => {
+  const run = async (
+    label: string,
+    action: () => Promise<unknown>,
+    success: string,
+  ) => {
     try {
       await action();
       toast.success(success);
     } catch (error) {
-      toast.error(`${label} failed`, { description: lobbyRequestErrorText(error) });
+      toast.error(`${label} failed`, {
+        description: lobbyRequestErrorText(error),
+      });
     }
   };
 
@@ -405,7 +464,11 @@ function StaffControls({
         <SecondaryButton
           size="sm"
           onClick={() =>
-            run('Lobby request', () => create.mutateAsync({ replace: true }), 'New lobby requested')
+            run(
+              'Lobby request',
+              () => create.mutateAsync({ replace: true }),
+              'New lobby requested',
+            )
           }
           disabled={create.isPending}
           data-testid="lobby-recreate-btn"
@@ -418,7 +481,11 @@ function StaffControls({
         <SecondaryButton
           size="sm"
           onClick={() =>
-            run('Invite', () => invite.mutateAsync({ missing: true }), 'Invites sent')
+            run(
+              'Invite',
+              () => invite.mutateAsync({ missing: true }),
+              'Invites sent',
+            )
           }
           disabled={invite.isPending}
           data-testid="lobby-invite-missing-btn"
@@ -432,7 +499,11 @@ function StaffControls({
           size="sm"
           onClick={() =>
             active?.state === 'ready'
-              ? run('Launch', () => launch.mutateAsync(false), 'Launching the match')
+              ? run(
+                  'Launch',
+                  () => launch.mutateAsync(false),
+                  'Launching the match',
+                )
               : setConfirmForce(true)
           }
           disabled={launch.isPending}
@@ -468,7 +539,11 @@ function StaffControls({
         isLoading={launch.isPending}
         confirmTestId="lobby-force-launch-confirm"
         onConfirm={async () => {
-          await run('Launch', () => launch.mutateAsync(true), 'Launching the match');
+          await run(
+            'Launch',
+            () => launch.mutateAsync(true),
+            'Launching the match',
+          );
           setConfirmForce(false);
         }}
       />

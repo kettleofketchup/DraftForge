@@ -1,17 +1,4 @@
 {
-  "app/components/events/DiscordLogSection.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 16
-    },
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/game/gameCard/gameCard.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
   "app/components/herodraft/DraftTopBar.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
@@ -27,19 +14,9 @@
       "count": 2
     }
   },
-  "app/components/lobby/LobbyPanel.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 4
-    }
-  },
-  "app/components/navbar/NavItem.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
   "app/components/navbar/navbar.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 3
+      "count": 2
     }
   },
   "app/components/organization/tabs/ClaimCard.tsx": {
@@ -47,16 +24,6 @@
       "count": 1
     },
     "draftforge/use-user-avatar": {
-      "count": 1
-    }
-  },
-  "app/components/team/teamCard.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/team/teamTable/teamTable.tsx": {
-    "shadcn/no-raw-colors": {
       "count": 1
     }
   },
@@ -80,66 +47,12 @@
       "count": 2
     }
   },
-  "app/components/user/DiscordUserDropdown.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 2
-    },
-    "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
   "app/components/user/UserAvatar.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 1
     }
   },
-  "app/components/user/searchUser.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 1
-    },
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/features/leaderboard/LeaderboardPage.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 5
-    }
-  },
-  "app/features/leaderboard/LeaderboardTable.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
   "app/pages/about/sections/MaintainerSection.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/pages/profile/profile.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/pages/tournament/hasErrors.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/pages/tournament/tabs/players/addPlayerDropdown.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 1
-    },
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/pages/tournament/tabs/players/addPlayerModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/pages/users/users.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
     }

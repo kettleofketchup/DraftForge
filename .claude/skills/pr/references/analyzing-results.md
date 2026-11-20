@@ -1,7 +1,5 @@
 # Phase 5 — Analyse and report
 
-Two pulls happen in parallel; one merged report goes to the user.
-
 ## CI failures
 
 ### Pull failed runs
@@ -49,48 +47,6 @@ Per repo feedback, **never call a test flaky and never silently skip a pre-exist
 
 > ⚠ Pre-existing failure: `test_X` failed in `Y.py` but the diff doesn't touch `Y.py` or its dependencies. This is a bug to surface, not flake.
 
-## Copilot inline comments
-
-### Pull comments
-
-```bash
-comments=$(gh api "repos/{owner}/{repo}/pulls/$PR/comments" \
-  --jq '[.[] | select((.user.login // "") | test("copilot"; "i"))
-       | {path, line, body, html_url}]')
-top_review=$(gh api "repos/{owner}/{repo}/pulls/$PR/reviews" \
-  --jq '[.[] | select((.user.login // "") | test("copilot"; "i"))
-       | {state, body, submitted_at}] | last')
-```
-
-### Match each comment to a skill
-
-For every comment, walk each `.github/instructions/*.instructions.md` file, parse its `applyTo` glob, and check whether the comment's `path` matches. A comment can match multiple files (e.g., a frontend component file matches both `react.instructions.md` and `brand.instructions.md`).
-
-```bash
-# Pseudocode — implement inline in the skill turn
-for c in comments:
-  matched_skills = []
-  for inst_file in .github/instructions/*.instructions.md:
-    applyTo = parse_frontmatter(inst_file).applyTo  # comma-separated globs
-    if any(fnmatch(c.path, g) for g in applyTo.split(',')):
-      matched_skills.append(basename(inst_file).removesuffix('.instructions.md'))
-  c.skills = matched_skills
-```
-
-Tag each comment with its matched skill(s) so the user knows which canonical source to consult.
-
-### Severity heuristic
-
-Copilot doesn't expose a severity field. Infer from the comment body:
-
-| Keywords | Severity |
-|----------|----------|
-| "must", "should not", "never", "incorrect", "broken", "wrong" | **block** |
-| "consider", "you may want", "could improve", "suggestion" | **nit** |
-| Everything else | **warn** |
-
-Don't be precious about it — this is a hint to the user, not a contract.
-
 ## Output format
 
 Single report, sections in this order:
@@ -109,15 +65,12 @@ URL: <html_url>
 
 (if no failures: ✓ All checks passing)
 
-## Copilot review ({comment count} comments, top-level state: {state})
+### Pending at timeout: <check names>   (only if the watch timed out)
 
-Top-level: <one-line summary of top_review.body>
+## Screenshots
 
-### <path>:<line>  [skills: brand, react]  severity: block
-<comment.body trimmed to ~3 lines>
-→ canonical: .claude/skills/<skill>/SKILL.md
-
-(repeat per comment, grouped by file)
+<link to the screenshot comment> — <N> changes, <desktop/mobile>
+(or: skipped, no visual changes / pending, no free slot)
 
 ## Recommended next steps
 
@@ -128,6 +81,5 @@ Top-level: <one-line summary of top_review.body>
 ## Output discipline
 
 - **No raw JSON dumps in the report.** Use the structured format above.
-- **No more than ~10 inline comments shown.** If Copilot left more, summarise the rest as "+N more in <files>".
-- **Skill-pointer lines must be valid paths.** If `.claude/skills/<name>/` doesn't exist locally, drop the pointer rather than print a broken path.
+- **Root-cause hints point at real paths.** Name a `.claude/skills/<name>/` only if it exists locally.
 - **End with actionable next steps**, not a flat list of every issue.

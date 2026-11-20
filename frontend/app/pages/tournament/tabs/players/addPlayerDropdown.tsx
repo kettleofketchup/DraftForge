@@ -111,7 +111,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
                   value={user?.username}
                   className={({ active }) =>
                     `cursor-pointer select-none p-2 ${
-                      active ? 'bg-purple-900 text-primary-content' : ''
+                      active ? 'bg-selection/30 text-selection-foreground' : ''
                     }`
                   }
                   data-testid={`playerOption-${user?.username}`}
@@ -122,7 +122,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
                       {DisplayName(user)}{' '}
                       {user?.username &&
                         DisplayName(user) !== user.username && (
-                          <span className="text-sm text-gray-500">
+                          <span className="text-sm text-muted-foreground">
                             {/* eslint-disable-next-line draftforge/use-display-name -- secondary @handle tells same-named users apart */}
                             (@{user.username})
                           </span>
@@ -134,7 +134,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
                 </ComboboxOption>
               ))
             ) : (
-              <div className="p-2 text-sm text-gray-500">
+              <div className="p-2 text-sm text-muted-foreground">
                 No users or too many users found
               </div>
             )}
