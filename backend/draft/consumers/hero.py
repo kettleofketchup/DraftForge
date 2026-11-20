@@ -16,6 +16,7 @@ from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero_broadcast import broadcast_herodraft_state
 from draft.services.hero_chat import (
+    CHAT_DELIVERY_CACHE_S,
     CHAT_RESYNC_EVENTS,
     REJECT_LOG_MAX,
     REJECT_LOG_WINDOW_S,
@@ -78,6 +79,8 @@ class HeroDraftConsumer(BaseDraftConsumer):
     _chat_viewer: ChatViewer = SPECTATOR
     # Set when a viewer lookup failed; the socket is held as spectator until one succeeds.
     _chat_degraded: bool = False
+    # Last successful team-delivery check; roster resyncs and viewer changes clear it.
+    _chat_verified_at: float | None = None
     _reject_window_start: float = 0.0
     _reject_count: int = 0
 
@@ -361,6 +364,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
             await self.channel_layer.group_add(wanted, self.channel_name)
             self._extra_groups.add(wanted)
         self._chat_viewer = viewer
+        self._chat_verified_at = None
 
     async def _send_chat_history(self) -> None:
         viewer = self._chat_viewer
@@ -391,6 +395,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
         self._chat_viewer = ChatViewer(
             user_id=user_id, team_id=None, role="spectator", joined_at=None
         )
+        self._chat_verified_at = None
         if self._chat_degraded:
             return
         self._chat_degraded = True
@@ -680,11 +685,13 @@ class HeroDraftConsumer(BaseDraftConsumer):
             return
         if team_group_name(self.draft_id, team_id) not in self._extra_groups:
             return
-        try:
-            viewer = await self._resolve_chat_viewer()
-        except Exception as e:
-            await self._chat_bootstrap_failed(e)
-            return
+        viewer = self._recently_verified_member(team_id)
+        if viewer is None:
+            try:
+                viewer = await self._resolve_chat_viewer()
+            except Exception as e:
+                await self._chat_bootstrap_failed(e)
+                return
         if viewer.role != "member" or viewer.team_id != team_id:
             log.info(
                 "herodraft_chat_delivery_revoked",
@@ -702,6 +709,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
             await self._regroup(viewer)
             return
         self._chat_viewer = viewer
+        self._chat_verified_at = monotonic()
         message = event["message"]
         if _created_before(message, viewer.joined_at):
             return
@@ -709,7 +717,21 @@ class HeroDraftConsumer(BaseDraftConsumer):
             text_data=json.dumps({"type": "chat_message", "message": message})
         )
 
+    def _recently_verified_member(self, team_id: int) -> ChatViewer | None:
+        viewer = self._chat_viewer
+        checked = self._chat_verified_at
+        if (
+            self._chat_degraded
+            or checked is None
+            or viewer.role != "member"
+            or viewer.team_id != team_id
+            or monotonic() - checked >= CHAT_DELIVERY_CACHE_S
+        ):
+            return None
+        return viewer
+
     async def herodraft_chat_resync(self, event: dict[str, Any]) -> None:
+        self._chat_verified_at = None
         user_id = self._chat_user_id()
         if user_id is None:
             return
@@ -724,6 +746,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
             await self._chat_resync()
 
     async def _resync_after_draft_event(self, chat_roster: Any) -> None:
+        self._chat_verified_at = None
         user_id = self._chat_user_id()
         if user_id is None:
             return

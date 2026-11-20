@@ -52,6 +52,7 @@ RATE_LIMIT_MAX = 8
 RATE_LIMIT_WINDOW_S = 10
 REJECT_LOG_MAX = 8
 REJECT_LOG_WINDOW_S = 10.0
+CHAT_DELIVERY_CACHE_S = 5.0
 
 _CLOSED_STATES = frozenset({HeroDraftState.COMPLETED, HeroDraftState.ABANDONED})
 _SUGGESTION_KINDS = frozenset(
@@ -160,7 +161,9 @@ def close_membership(
     )
     if team_id is not None:
         rows = rows.filter(team_id=team_id)
-    rows.update(left_at=at or timezone.now())
+    # A read first keeps the common no-row case (spectators on connect) off the write lock.
+    if rows.exists():
+        rows.update(left_at=at or timezone.now())
 
 
 def _member_team_ids(draft_id: int, user_id: int) -> list[int]:

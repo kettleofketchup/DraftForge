@@ -11,6 +11,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.db import connection
 from django.db.models import Q
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from structlog.testing import capture_logs
 
@@ -287,6 +288,19 @@ class ResolveNocacheTest(ChatFixtureMixin, TransactionTestCase):
         self.assertEqual(row.team_id, self.team_a.pk)
         self.assertTrue(before <= row.joined_at <= after)
         self.assertEqual(viewer.joined_at, row.joined_at)
+
+
+class SpectatorResolveWritesTest(ChatFixture):
+    def test_spectator_without_open_row_issues_no_write(self) -> None:
+        with CaptureQueriesContext(connection) as ctx:
+            viewer = resolve_chat_viewer(self.draft.pk, self.outsider)
+        self.assertEqual(viewer.role, "spectator")
+        writes = [
+            q["sql"]
+            for q in ctx.captured_queries
+            if q["sql"].lstrip().upper().startswith(("UPDATE", "INSERT", "DELETE"))
+        ]
+        self.assertEqual(writes, [])
 
 
 class MembershipHelpersTest(ChatFixture):

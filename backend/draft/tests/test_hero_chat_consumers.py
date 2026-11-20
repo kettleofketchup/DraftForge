@@ -50,6 +50,7 @@ from draft.routing import websocket_urlpatterns
 from draft.services.hero import new_herodraft_for_game
 from draft.services.hero_broadcast import broadcast_herodraft_state
 from draft.services.hero_chat import (
+    CHAT_DELIVERY_CACHE_S,
     RATE_LIMIT_MAX,
     REJECT_LOG_MAX,
     REJECT_LOG_WINDOW_S,
@@ -1344,6 +1345,65 @@ class ChatDegradedRecoveryTest(ChatSendFixture):
                     HeroDraftChatMessage.objects.filter(body="still-down").exists
                 )()
             )
+        finally:
+            await self.close_all()
+
+
+class ChatDeliveryCacheTest(ChatSendFixture):
+    async def test_positive_check_cached_until_resync(self) -> None:
+        try:
+            cap_a = await self.connect_as(self.cap_a)
+            mem_a = await self.connect_as(self.mem_a)
+            with mock.patch(
+                "draft.consumers.hero.resolve_chat_viewer", wraps=resolve_chat_viewer
+            ) as resolve:
+
+                def mem_a_checks() -> int:
+                    return sum(
+                        1 for c in resolve.call_args_list if c.args[1] is self.mem_a
+                    )
+
+                for n in range(3):
+                    await self.send_chat(cap_a, f"cached {n}", f"c{n}")
+                    await read_until_type(mem_a, "chat_message")
+                self.assertEqual(mem_a_checks(), 1)
+
+                await get_channel_layer().group_send(
+                    f"herodraft_{self.draft.pk}",
+                    {
+                        "type": "herodraft.chat_resync",
+                        "team_ids": [self.team_a.pk],
+                        "user_ids": [],
+                    },
+                )
+                await read_until_type(mem_a, "chat_history")
+                after_resync = mem_a_checks()
+                await self.send_chat(cap_a, "after resync", "c9")
+                await read_until_type(mem_a, "chat_message")
+                self.assertEqual(mem_a_checks(), after_resync + 1)
+        finally:
+            await self.close_all()
+
+    async def test_cached_check_expires(self) -> None:
+        clock = [1000.0]
+        try:
+            with mock.patch(
+                "draft.consumers.hero.monotonic", side_effect=lambda: clock[0]
+            ):
+                cap_a = await self.connect_as(self.cap_a)
+                mem_a = await self.connect_as(self.mem_a)
+                await self.send_chat(cap_a, "warm", "w")
+                await read_until_type(mem_a, "chat_message")
+                await database_sync_to_async(
+                    Team.members.through.objects.filter(
+                        team_id=self.team_a.pk, customuser_id=self.mem_a.pk
+                    ).delete
+                )()
+                clock[0] += CHAT_DELIVERY_CACHE_S
+                await self.send_chat(cap_a, "expired-7c3d", "x")
+                history = await read_history_with_role(mem_a, "spectator")
+                self.assertNotIn("expired-7c3d", json.dumps(history))
+                await self.assert_no_chat_frame(mem_a, "expired-7c3d")
         finally:
             await self.close_all()
 
