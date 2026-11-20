@@ -38,7 +38,6 @@ def broadcast_herodraft_event(
         )
         return
 
-    # Create event record (if not already created by the view)
     event = HeroDraftEvent.objects.create(
         draft=draft,
         event_type=event_type,
@@ -46,7 +45,6 @@ def broadcast_herodraft_event(
         metadata=metadata or {},
     )
 
-    # Build payload
     payload = {
         "type": "herodraft.event",
         "event_type": event_type,
@@ -56,7 +54,6 @@ def broadcast_herodraft_event(
         "timestamp": event.created_at.isoformat(),
     }
 
-    # Include full draft state with prefetched members
     try:
         draft = herodraft_state_queryset().get(id=draft.id)
         payload["draft_state"] = HeroDraftSerializer(draft).data
@@ -70,7 +67,6 @@ def broadcast_herodraft_event(
             error=str(e),
         )
 
-    # Send to channel group
     room_group_name = f"herodraft_{draft.id}"
 
     try:
@@ -126,7 +122,6 @@ def broadcast_herodraft_state(
         )
         return
 
-    # Build payload with current state
     payload = {
         "type": "herodraft.event",
         "event_type": event_type,
@@ -139,7 +134,6 @@ def broadcast_herodraft_state(
     if draft_team:
         payload["draft_team"] = DraftTeamSerializerFull(draft_team).data
 
-    # Include full draft state with prefetched members
     try:
         draft = herodraft_state_queryset().get(id=draft.id)
         payload["draft_state"] = HeroDraftSerializer(draft).data
@@ -154,7 +148,6 @@ def broadcast_herodraft_state(
         )
         return  # Don't broadcast without state
 
-    # Send to channel group
     room_group_name = f"herodraft_{draft.id}"
 
     try:

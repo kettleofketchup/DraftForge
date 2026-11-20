@@ -155,13 +155,10 @@ def reset_herodraft_on_team_change(
     draft.is_manual_pause = False
     draft.save()
 
-    # Re-invalidate AFTER commit. The .save() calls above already invalidate
-    # via Model.save() → invalidate_obj, but those fire immediately while
-    # save_bracket's @transaction.atomic is still open — between the
-    # immediate invalidate and the commit, a concurrent reader could pull
-    # the pre-update rows from the DB and re-cache them with the old
-    # captains, defeating the whole reset. `invalidate_after_commit` schedules
-    # a second invalidation on transaction.on_commit to close that race.
+    # Model.save() → invalidate_obj fires while save_bracket's
+    # @transaction.atomic is still open, so a concurrent reader could re-cache
+    # the pre-update rows (old captains) before COMMIT, defeating the reset.
+    # `invalidate_after_commit` invalidates again on transaction.on_commit.
     invalidate_after_commit(draft, *updated_draft_teams)
 
     # Defer the broadcast to commit too. If we fired now, clients would

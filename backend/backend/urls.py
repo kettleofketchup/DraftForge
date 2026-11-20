@@ -169,7 +169,7 @@ urlpatterns = [
         app_views.steam_account_id_lookup,
         name="steam_account_id_lookup",
     ),
-    # User profile (Task 1 — see backend/user/urls.py)
+    # User profile (see backend/user/urls.py)
     path("api/users/", include("user.urls")),
     path("api/", include(router.urls)),
     path("api/current_user", current_user),

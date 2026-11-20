@@ -74,7 +74,6 @@ def create_herodraft_for_game(request: Request, game_id: int) -> Response:
             .get(pk=game_id)
         )
 
-        # Idempotent: return existing
         if hasattr(game, "herodraft"):
             return Response({"id": game.herodraft.pk, "created": False})
 

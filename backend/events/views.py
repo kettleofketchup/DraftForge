@@ -855,7 +855,7 @@ class EventViewSet(viewsets.ModelViewSet):
         """Single canonical signup endpoint accepting an intent + optional profile patch.
 
         Body: {"intent": "rsvp" | "tentative", "profile": {...}}
-        Replaces the older /rsvp/ and /tentative/ actions (deleted in Task 29).
+        Replaces the removed /rsvp/ and /tentative/ actions.
         """
         event = self.get_object()
         try:

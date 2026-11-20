@@ -101,15 +101,13 @@ class HeroDraftConsumer(BaseDraftConsumer):
     async def receive(self, text_data: str) -> None:
         """Handle incoming WebSocket messages from clients.
 
-        Wrapped in a `ws.message` span via `traced_message` so each
-        incoming WS message appears as its own trace in Tempo with
-        `ws.message_type` set. Handler spans (e.g. `ws.heartbeat`)
-        become children of this span — Tempo shows the full waterfall
-        of "message dispatch overhead → handler work" without needing
-        to instrument every handler separately.
+        Each message gets its own `ws.message` trace in Tempo via
+        `traced_message`, tagged `ws.message_type`. Handler spans (e.g.
+        `ws.heartbeat`) nest under it, so dispatch vs. handler time shows
+        without instrumenting each handler.
         """
         if not self._is_captain:
-            return  # Only process messages from captains
+            return
 
         try:
             data = json.loads(text_data)
@@ -161,12 +159,9 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 ).first()
 
                 if draft_team:
-                    # Determine before-mutation whether this is a reconnect
-                    # (i.e., the captain has connected at least once before in
-                    # this draft session). The frontend uses this to render
-                    # "joined" vs "reconnected" toast text without doing its
-                    # own session-tracking — server is the source of truth on
-                    # connection history.
+                    # Reconnect = an earlier captain_connected in this draft, read
+                    # before this event is written. The frontend's "joined" vs
+                    # "reconnected" toast relies on it; the server owns history.
                     is_reconnect = (
                         is_connected
                         and HeroDraftEvent.objects.filter(
@@ -203,9 +198,8 @@ class HeroDraftConsumer(BaseDraftConsumer):
                         draft_state=draft.state,
                     )
 
-                    # Handle pause on disconnect - only during DRAFTING phase
-                    # (when timers are running and picks matter)
-                    # Ignore disconnects during RESUMING to prevent infinite time exploit
+                    # Pause only in DRAFTING (timers running, picks matter);
+                    # pausing in RESUMING would allow an infinite-time exploit.
                     if not is_connected and draft.state == HeroDraftState.DRAFTING:
                         draft.state = HeroDraftState.PAUSED
                         draft.paused_at = timezone.now()
@@ -291,14 +285,12 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     async def herodraft_event(self, event: dict[str, Any]) -> None:
         """Handle herodraft.event messages from channel layer."""
-        # Build message with only fields that have actual values
-        # Using .get() with missing keys returns None, which serializes to null
-        # and fails Zod validation where .optional() expects undefined, not null
+        # Omit missing/None fields instead of .get()-ing them: null fails Zod's
+        # .optional(), which accepts undefined only.
         message = {
             "type": "herodraft_event",
             "event_type": event.get("event_type"),
         }
-        # Only include optional fields if they have values
         if "event_id" in event and event["event_id"] is not None:
             message["event_id"] = event["event_id"]
         if "draft_team" in event and event["draft_team"] is not None:

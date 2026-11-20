@@ -284,7 +284,7 @@ class TestSpanInstrumentation(SimpleTestCase):
 
 @override_settings(REDIS_KEY_NAMESPACE="")
 class TestBaseHooks(SimpleTestCase):
-    """Non-abstract hooks added for the team draft (spec §1)."""
+    """Non-abstract hooks added for the team draft."""
 
     def test_new_hooks_are_not_abstract(self):
         for name in (
