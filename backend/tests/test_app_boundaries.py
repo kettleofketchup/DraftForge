@@ -126,29 +126,72 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "bracket view prefetches each game's hero draft",
         ),
         "app/views_main.py": BackEdge(
-            frozenset({"DraftTeam"}),
-            "current_user lists active hero drafts the user captains",
+            frozenset({"DraftTeam", "apply_draft_options"}),
+            "current_user lists active hero drafts the user captains; "
+            "tournament create/update applies draft options",
         ),
         "app/consumers.py": BackEdge(
-            frozenset({"BaseDraftConsumer", "CAPTAIN_CHANNEL_TTL", "TickDriver"}),
-            "temporary: DraftConsumer moves to draft with the team draft models",
-        ),
-        "app/functions/draft_picks.py": BackEdge(
-            frozenset({"evaluate_client_pick_time"}),
-            "temporary: draft_picks moves to draft with the team draft models",
-        ),
-        "app/tasks/teamdraft_tick.py": BackEdge(
             frozenset(
                 {
+                    "BaseDraftConsumer",
                     "CAPTAIN_CHANNEL_TTL",
-                    "HEARTBEAT_STALE_SECONDS",
-                    "draft_tick",
-                    "get_connection_count",
-                    "get_redis_client",
-                    "heartbeat_key",
+                    "TEAM_TICK_DRIVER",
+                    "TickDriver",
+                    "build_draft_state",
+                    "captain_conn_key",
+                    "captain_is_fresh",
+                    "emit_event",
+                    "recent_draft_events",
+                    "team_payload",
                 }
             ),
-            "temporary: teamdraft_tick moves to draft with the team draft models",
+            "TEMP slice2: DraftConsumer moves to draft in Task 5; "
+            "recent_draft_events stays permanently for TournamentConsumer",
+        ),
+        "app/functions/draft_picks.py": BackEdge(
+            frozenset(
+                {
+                    "activate_round",
+                    "advance_after_pick",
+                    "assign_next_shuffle_captain",
+                    "atomic_sharing_draft_state",
+                    "broadcast_event_after_commit",
+                    "evaluate_client_pick_time",
+                    "record_pick_timing",
+                    "start_team_tick_broadcaster_after_commit",
+                }
+            ),
+            "TEMP slice2: draft_picks moves to draft in Task 5",
+        ),
+        "app/functions/teamdraft_views.py": BackEdge(
+            frozenset(
+                {
+                    "RESUME_COUNTDOWN_SECONDS",
+                    "activate_round",
+                    "atomic_sharing_draft_state",
+                    "emit_event",
+                    "seed_missing_reserve_pools",
+                    "start_draft",
+                    "start_team_tick_broadcaster_after_commit",
+                    "team_for_round",
+                    "team_payload",
+                }
+            ),
+            "TEMP slice2: teamdraft_views moves to draft in Task 5",
+        ),
+        "app/functions/tournament.py": BackEdge(
+            frozenset({"NoEligibleCaptains", "TeamsReferenced", "reset_draft_teams"}),
+            "TEMP slice2: the draft setup views move to draft in Task 5",
+        ),
+        "app/models.py": BackEdge(
+            frozenset(
+                {
+                    "broadcast_event_after_commit",
+                    "build_shuffle_rounds",
+                    "get_team_total_mmr",
+                }
+            ),
+            "TEMP slice2: Draft's lazy service imports leave with Draft in Task 6",
         ),
     },
 }

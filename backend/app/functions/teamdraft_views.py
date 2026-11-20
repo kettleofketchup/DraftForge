@@ -11,9 +11,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.broadcast import atomic_sharing_draft_state
 from app.cache_utils import invalidate_after_commit
-from app.functions.teamdraft import (
+from app.functions.tournament import _serialize_tournament
+from app.models import Draft, DraftOptions, DraftRound, Team, TeamDraftState
+from app.permissions_org import can_edit_tournament
+from draft.services.team import (
     RESUME_COUNTDOWN_SECONDS,
     activate_round,
     emit_event,
@@ -22,10 +24,8 @@ from app.functions.teamdraft import (
     team_for_round,
     team_payload,
 )
-from app.functions.tournament import _serialize_tournament
-from app.models import Draft, DraftOptions, DraftRound, Team, TeamDraftState
-from app.permissions_org import can_edit_tournament
-from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
+from draft.services.team_broadcast import atomic_sharing_draft_state
+from draft.tasks.team_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

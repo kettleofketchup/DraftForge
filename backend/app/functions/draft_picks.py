@@ -10,14 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.broadcast import atomic_sharing_draft_state, broadcast_event_after_commit
 from app.cache_utils import invalidate_after_commit
-from app.functions.shuffle_draft import assign_next_shuffle_captain
-from app.functions.teamdraft import (
-    activate_round,
-    advance_after_pick,
-    record_pick_timing,
-)
 from app.functions.tournament import _serialize_tournament
 from app.models import (
     CustomUser,
@@ -30,8 +23,18 @@ from app.models import (
     Tournament,
 )
 from app.permissions_org import can_edit_tournament
-from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
+from draft.services.shuffle import assign_next_shuffle_captain
+from draft.services.team import (
+    activate_round,
+    advance_after_pick,
+    record_pick_timing,
+)
+from draft.services.team_broadcast import (
+    atomic_sharing_draft_state,
+    broadcast_event_after_commit,
+)
 from draft.tasks.draft_tick import evaluate_client_pick_time
+from draft.tasks.team_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

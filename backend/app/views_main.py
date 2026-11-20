@@ -31,7 +31,6 @@ from social_django.utils import load_strategy
 
 from app import tournament_buckets
 from app.cache_utils import invalidate_after_commit
-from app.functions.teamdraft import apply_draft_options
 from app.services.team_audit import (
     log_snapshot_fields,
     roster_snapshot,
@@ -74,6 +73,7 @@ from app.tournament_list import (
     tournaments_list_cache_key,
 )
 from draft.models import DraftTeam
+from draft.services.team import apply_draft_options
 from events.models import Event
 from events.signup_window import user_signups_open_tournament_ids
 from league.models import LeagueUser

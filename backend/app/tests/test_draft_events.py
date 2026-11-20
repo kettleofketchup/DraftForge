@@ -197,10 +197,10 @@ class ShuffleDraftEventIntegrationTest(TestCase):
             draft_style="shuffle",
         )
 
-    @patch("app.broadcast.broadcast_event")
+    @patch("draft.services.team_broadcast.broadcast_event")
     def test_build_shuffle_rounds_creates_draft_started_event(self, mock_broadcast):
         """Building shuffle rounds creates a draft_started event, broadcast on commit."""
-        from app.functions.shuffle_draft import build_shuffle_rounds
+        from draft.services.shuffle import build_shuffle_rounds
 
         with self.captureOnCommitCallbacks(execute=True):
             build_shuffle_rounds(self.draft)
@@ -213,12 +213,12 @@ class ShuffleDraftEventIntegrationTest(TestCase):
         # Verify broadcast was called
         mock_broadcast.assert_called_once()
 
-    @patch("app.broadcast.broadcast_event")
+    @patch("draft.services.team_broadcast.broadcast_event")
     def test_assign_next_shuffle_captain_creates_captain_assigned_event(
         self, mock_broadcast
     ):
         """Assigning next captain creates a captain_assigned event."""
-        from app.functions.shuffle_draft import (
+        from draft.services.shuffle import (
             assign_next_shuffle_captain,
             build_shuffle_rounds,
         )
@@ -295,7 +295,7 @@ class TournamentEventIntegrationTest(TestCase):
             pick_number=1,
         )
 
-    @patch("app.broadcast.broadcast_event")
+    @patch("draft.services.team_broadcast.broadcast_event")
     def test_pick_player_for_round_creates_player_picked_event(self, mock_broadcast):
         """Picking a player creates a player_picked event."""
         from rest_framework.test import APIRequestFactory
@@ -326,7 +326,7 @@ class TournamentEventIntegrationTest(TestCase):
         self.assertEqual(event.actor, self.captain)
         mock_broadcast.assert_called()
 
-    @patch("app.broadcast.broadcast_event")
+    @patch("draft.services.team_broadcast.broadcast_event")
     def test_undo_last_pick_creates_pick_undone_event(self, mock_broadcast):
         """Undoing a pick creates a pick_undone event."""
         from rest_framework.test import APIRequestFactory
@@ -391,10 +391,10 @@ class BroadcastEventTest(TestCase):
             draft_style="shuffle",
         )
 
-    @patch("app.broadcast.get_channel_layer")
+    @patch("draft.services.team_broadcast.get_channel_layer")
     def test_broadcast_event_sends_to_draft_group(self, mock_get_channel_layer):
         """Broadcast sends event to draft channel group."""
-        from app.broadcast import broadcast_event
+        from draft.services.team_broadcast import broadcast_event
 
         mock_channel_layer = MagicMock()
         mock_channel_layer.group_send = AsyncMock()
@@ -413,10 +413,10 @@ class BroadcastEventTest(TestCase):
         draft_call = [c for c in calls if f"draft_{self.draft.pk}" in str(c)]
         self.assertEqual(len(draft_call), 1)
 
-    @patch("app.broadcast.get_channel_layer")
+    @patch("draft.services.team_broadcast.get_channel_layer")
     def test_broadcast_event_sends_to_tournament_group(self, mock_get_channel_layer):
         """Broadcast sends event to tournament channel group."""
-        from app.broadcast import broadcast_event
+        from draft.services.team_broadcast import broadcast_event
 
         mock_channel_layer = MagicMock()
         mock_channel_layer.group_send = AsyncMock()

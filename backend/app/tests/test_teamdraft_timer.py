@@ -20,12 +20,12 @@ from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory
 
 from app.consumers import DraftConsumer
-from app.functions import teamdraft
 from app.models import Draft, DraftEvent, DraftOptions, Team, TeamDraftState
-from app.tasks import teamdraft_tick
 from app.tests.teamdraft_fixtures import TimedDraftFixture
 from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
+from draft.services import team as teamdraft
 from draft.tasks import draft_tick
+from draft.tasks import team_tick as teamdraft_tick
 from draft.tasks.draft_tick import (
     TickDriver,
     captain_channel_key,
@@ -59,7 +59,7 @@ class LifecycleHelperTests(TestCase):
         self.assertEqual(teamdraft.team_payload(None)["captain_id"], None)
 
     def test_emit_event_broadcasts_only_after_commit(self):
-        with patch("app.broadcast.broadcast_event") as mock_bc:
+        with patch("draft.services.team_broadcast.broadcast_event") as mock_bc:
             with self.captureOnCommitCallbacks(execute=True) as callbacks:
                 ev = teamdraft.emit_event(
                     self.fx.draft,
@@ -595,7 +595,7 @@ class PickMatrixTests(EndpointTestBase):
 
     def test_broadcasts_are_deferred_to_commit(self):
         rnd = self.start()
-        with patch("app.broadcast.broadcast_event") as mock_bc:
+        with patch("draft.services.team_broadcast.broadcast_event") as mock_bc:
             with self.captureOnCommitCallbacks(execute=False) as callbacks:
                 self.assertEqual(self.fx.pick(rnd, rnd.captain).status_code, 201)
                 mock_bc.assert_not_called()
@@ -1005,7 +1005,7 @@ class TickPayloadTests(TestCase):
         )
         rnd.started_at = timezone.now()
         rnd.save()
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
+        with patch("draft.tasks.team_tick.get_connection_count", return_value=1):
             self.assertEqual(
                 teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, "")
             )
@@ -1020,7 +1020,7 @@ class TickPayloadTests(TestCase):
             teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
             (False, "no_connections"),
         )
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
+        with patch("draft.tasks.team_tick.get_connection_count", return_value=1):
             self.assertEqual(
                 teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, "")
             )
@@ -1110,7 +1110,7 @@ class AutoPauseTests(TransactionTestCase):
         self.r.set(self.hb, str(time.time()))
         self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
         freshness = async_to_sync(teamdraft_tick.broadcast_paused_freshness)
-        with patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=Layer()):
+        with patch("draft.tasks.team_tick.get_channel_layer", return_value=Layer()):
             freshness(self.fx.draft.pk)
             sent.clear()
             freshness(self.fx.draft.pk)
@@ -1143,7 +1143,7 @@ class AutoPauseTests(TransactionTestCase):
         self.r.delete(self.hb)
         self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
         freshness = async_to_sync(teamdraft_tick.broadcast_paused_freshness)
-        with patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=Layer()):
+        with patch("draft.tasks.team_tick.get_channel_layer", return_value=Layer()):
             freshness(self.fx.draft.pk)
             freshness(self.fx.draft.pk)
         mine = [m["fresh"] for m in sent if m["captain_id"] == self.rnd.captain_id]
@@ -1166,7 +1166,7 @@ class AutoPauseTests(TransactionTestCase):
         self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
         freshness = async_to_sync(teamdraft_tick.broadcast_paused_freshness)
         with (
-            patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=Layer()),
+            patch("draft.tasks.team_tick.get_channel_layer", return_value=Layer()),
             patch.object(teamdraft_tick.log, "error") as logged,
         ):
             freshness(self.fx.draft.pk)
@@ -1200,8 +1200,10 @@ class AutoPauseTests(TransactionTestCase):
         driver = teamdraft_tick.TeamDraftTickDriver()
         self.addCleanup(driver.forget, self.fx.draft.pk)
         with (
-            patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0),
-            patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=None),
+            patch(
+                "draft.tasks.team_tick.get_connection_count", return_value=0
+            ) as count,
+            patch("draft.tasks.team_tick.get_channel_layer", return_value=None),
         ):
             self.assertEqual(self.tick(driver), (True, ""))
             self.assertEqual(self.state(), TeamDraftState.DRAFTING)
@@ -1211,14 +1213,18 @@ class AutoPauseTests(TransactionTestCase):
             self.assertEqual(
                 driver.should_continue(self.fx.draft.pk), (False, "no_connections")
             )
+        count.assert_called()
 
     def test_no_connections_and_absent_active_captain_stops(self):
         self.assertFalse(self.active_team.draft_has_connected)
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0):
+        with patch(
+            "draft.tasks.team_tick.get_connection_count", return_value=0
+        ) as count:
             self.assertEqual(
                 teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
                 (False, "no_connections"),
             )
+        count.assert_called()
 
     def test_a_timeout_check_far_from_due_takes_no_write_lock(self):
         self.assertTrue(Draft.objects.get(pk=self.fx.draft.pk).clock_armed)
@@ -1237,8 +1243,8 @@ class AutoPauseTests(TransactionTestCase):
         driver = teamdraft_tick.TeamDraftTickDriver()
         self.addCleanup(driver.forget, self.fx.draft.pk)
         with (
-            patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1),
-            patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=None),
+            patch("draft.tasks.team_tick.get_connection_count", return_value=1),
+            patch("draft.tasks.team_tick.get_channel_layer", return_value=None),
             patch.object(
                 teamdraft_tick.transaction, "atomic", wraps=transaction.atomic
             ) as atomic,
@@ -1255,10 +1261,13 @@ class AutoPauseTests(TransactionTestCase):
         draft.state = TeamDraftState.PAUSED
         draft.save()
         driver = teamdraft_tick.TeamDraftTickDriver()
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0):
+        with patch(
+            "draft.tasks.team_tick.get_connection_count", return_value=0
+        ) as count:
             self.assertEqual(
                 driver.should_continue(self.fx.draft.pk), (False, "no_connections")
             )
+        count.assert_called()
 
     def test_resume_countdown_locks_only_when_due(self):
         draft = Draft.objects.get(pk=self.fx.draft.pk)
@@ -1283,8 +1292,8 @@ class AutoPauseTests(TransactionTestCase):
         driver = teamdraft_tick.TeamDraftTickDriver()
         self.addCleanup(driver.forget, self.fx.draft.pk)
         with (
-            patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1),
-            patch("app.tasks.teamdraft_tick.broadcast_paused_freshness") as freshness,
+            patch("draft.tasks.team_tick.get_connection_count", return_value=1),
+            patch("draft.tasks.team_tick.broadcast_paused_freshness") as freshness,
         ):
             self.tick(driver)
         freshness.assert_not_called()
@@ -1293,10 +1302,13 @@ class AutoPauseTests(TransactionTestCase):
         draft_pk = self.fx.draft.pk
         teamdraft_tick._paused_freshness[draft_pk] = {self.rnd.captain_id: True}
         stop = threading.Event()
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0):
+        with patch(
+            "draft.tasks.team_tick.get_connection_count", return_value=0
+        ) as count:
             async_to_sync(draft_tick.run_tick_loop)(
                 teamdraft_tick.TEAM_TICK_DRIVER, draft_pk, stop
             )
+        count.assert_called()
         self.assertNotIn(draft_pk, teamdraft_tick._paused_freshness)
 
     def test_unarmed_or_resuming_is_ignored(self):
@@ -1335,7 +1347,7 @@ class AutoPauseTests(TransactionTestCase):
         draft.save()
         with patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.assertEqual(self.fx.undo(self.fx.staff).status_code, 200)
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
+        with patch("draft.tasks.team_tick.get_connection_count", return_value=1):
             self.assertEqual(
                 teamdraft_tick.should_continue_ticking(draft.pk), (True, "")
             )

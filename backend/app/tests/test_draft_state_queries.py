@@ -23,9 +23,6 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app import broadcast
-from app import tournament_state as tournament_state_module
-from app.broadcast import atomic_sharing_draft_state, broadcast_event
 from app.consumers import DraftConsumer
 from app.functions.tournament import _serialize_tournament
 from app.models import (
@@ -46,13 +43,16 @@ from app.serializers import (
     _tournament_organization,
 )
 from app.tests.teamdraft_fixtures import TimedDraftFixture
-from app.tournament_state import (
+from app.tournament_state import tournament_state_queryset
+from app.user_cache import serialize_user_core
+from draft.services import team_broadcast as broadcast
+from draft.services import team_state as team_state_module
+from draft.services.team_broadcast import atomic_sharing_draft_state, broadcast_event
+from draft.services.team_state import (
     build_draft_state,
     draft_state_queryset,
     recent_draft_events,
-    tournament_state_queryset,
 )
-from app.user_cache import serialize_user_core
 from events.models import Event
 from league.models import LeagueUser
 from org.models import OrgUser
@@ -177,7 +177,9 @@ class DraftStateOutputTests(TestCase):
         expected = dumps(self.lazy_draft_state())
         layer = FakeChannelLayer()
         event = DraftEvent.objects.filter(draft=self.fx.draft).first()
-        with patch("app.broadcast.get_channel_layer", return_value=layer):
+        with patch(
+            "draft.services.team_broadcast.get_channel_layer", return_value=layer
+        ):
             broadcast_event(event)
         self.assertEqual(dumps(layer.messages[0]["draft_state"]), expected)
         self.assertEqual(dumps(initial_state(self.fx.draft.pk)), expected)
@@ -335,10 +337,12 @@ class DraftStateQueryCountTests(TestCase):
         counts = []
         for fx in (self.small, self.large):
             event = DraftEvent.objects.filter(draft=fx.draft).first()
+            layer = FakeChannelLayer()
             with patch(
-                "app.broadcast.get_channel_layer", return_value=FakeChannelLayer()
+                "draft.services.team_broadcast.get_channel_layer", return_value=layer
             ):
                 counts.append(self.count(lambda e=event: broadcast_event(e)))
+            self.assertTrue(layer.messages)
         self.assertEqual(counts[0], counts[1])
         self.assertLessEqual(counts[0], DRAFT_STATE_QUERIES + 2)
 
@@ -443,7 +447,9 @@ class FreshCallerTests(TransactionTestCase):
         event = DraftEvent.objects.create(
             draft=self.fx.draft, event_type="captain_ready"
         )
-        with patch("app.broadcast.get_channel_layer", return_value=layer):
+        with patch(
+            "draft.services.team_broadcast.get_channel_layer", return_value=layer
+        ):
             broadcast_event(event)
         self.assertEqual(
             self.team_name(layer.messages[0]["draft_state"]["tournament"]), "Renamed"
@@ -463,7 +469,7 @@ class DraftStateSnapshotTests(TransactionTestCase):
         fx = TimedDraftFixture(prefix="snap")
         user = fx.players[0]
         seen: dict[str, object] = {}
-        real = tournament_state_module.build_users_dict_with_org
+        real = team_state_module.build_users_dict_with_org
 
         def rename() -> None:
             try:
@@ -484,9 +490,7 @@ class DraftStateSnapshotTests(TransactionTestCase):
             seen["writer"] = writer
             return real(tournament, fresh=fresh)
 
-        with patch.object(
-            tournament_state_module, "build_users_dict_with_org", mid_build
-        ):
+        with patch.object(team_state_module, "build_users_dict_with_org", mid_build):
             state = build_draft_state(fx.draft.pk, fresh=True)
         seen["writer"].join(timeout=35)
         self.assertEqual(state["_users"][str(user.pk)]["username"], user.username)
@@ -502,7 +506,7 @@ class DraftStateSnapshotTests(TransactionTestCase):
     def test_cached_build_opens_no_transaction(self) -> None:
         fx = make_fixture(4, "snapc")
         seen: list[bool] = []
-        real = tournament_state_module.build_users_dict_with_org
+        real = team_state_module.build_users_dict_with_org
 
         def mid_build(
             tournament: Tournament, *, fresh: bool
@@ -512,9 +516,7 @@ class DraftStateSnapshotTests(TransactionTestCase):
 
         reset_queries()
         with (
-            patch.object(
-                tournament_state_module, "build_users_dict_with_org", mid_build
-            ),
+            patch.object(team_state_module, "build_users_dict_with_org", mid_build),
             CaptureQueriesContext(connection) as ctx,
         ):
             build_draft_state(fx.draft.pk, fresh=False)
@@ -638,7 +640,9 @@ class PickHelpers(TransactionTestCase):
         player = draft.users_remaining.first()
         responses: list = []
         with (
-            patch("app.broadcast.get_channel_layer", return_value=layer),
+            patch(
+                "draft.services.team_broadcast.get_channel_layer", return_value=layer
+            ),
             patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
         ):
             queries = count_queries(
@@ -649,7 +653,9 @@ class PickHelpers(TransactionTestCase):
 
     def assert_pick_builds_the_draft_state_once(self) -> None:
         fx = self.armed_fixture(4)
-        with patch("app.broadcast.build_draft_state", wraps=build_draft_state) as spy:
+        with patch(
+            "draft.services.team_broadcast.build_draft_state", wraps=build_draft_state
+        ) as spy:
             self.pick(fx)
         self.assertEqual(spy.call_count, 1)
 
@@ -713,8 +719,13 @@ class SharedDraftStateTests(TransactionTestCase):
         layer = FakeChannelLayer()
 
         with (
-            patch("app.broadcast.get_channel_layer", return_value=layer),
-            patch("app.broadcast.build_draft_state", wraps=build_draft_state) as spy,
+            patch(
+                "draft.services.team_broadcast.get_channel_layer", return_value=layer
+            ),
+            patch(
+                "draft.services.team_broadcast.build_draft_state",
+                wraps=build_draft_state,
+            ) as spy,
         ):
             with atomic_sharing_draft_state():
                 transaction.on_commit(lambda: broadcast_event(first))
@@ -788,9 +799,12 @@ class SharedDraftStateTests(TransactionTestCase):
             thread.start()
             thread.join()
 
+        layer = FakeChannelLayer()
         with (
-            patch("app.broadcast.get_channel_layer", return_value=FakeChannelLayer()),
-            patch("app.broadcast.build_draft_state", recording_build),
+            patch(
+                "draft.services.team_broadcast.get_channel_layer", return_value=layer
+            ),
+            patch("draft.services.team_broadcast.build_draft_state", recording_build),
         ):
             with atomic_sharing_draft_state():
                 transaction.on_commit(lambda: broadcast_event(event))
@@ -802,16 +816,24 @@ class SharedDraftStateTests(TransactionTestCase):
         self.assertEqual(builders.count(inheriting[0]), 1)
         self.assertEqual(builders[0], threading.get_ident())
         self.assertEqual(snapshots[0], snapshots[1])
+        self.assertTrue(layer.messages)
 
     def test_nested_block_does_not_share(self) -> None:
         fx = TimedDraftFixture(prefix="nested")
         event = DraftEvent.objects.create(draft=fx.draft, event_type="captain_ready")
+        layer = FakeChannelLayer()
         with (
-            patch("app.broadcast.get_channel_layer", return_value=FakeChannelLayer()),
-            patch("app.broadcast.build_draft_state", wraps=build_draft_state) as spy,
+            patch(
+                "draft.services.team_broadcast.get_channel_layer", return_value=layer
+            ),
+            patch(
+                "draft.services.team_broadcast.build_draft_state",
+                wraps=build_draft_state,
+            ) as spy,
         ):
             with transaction.atomic():
                 with atomic_sharing_draft_state():
                     transaction.on_commit(lambda: broadcast_event(event))
                     transaction.on_commit(lambda: broadcast_event(event))
         self.assertEqual(spy.call_count, 2)
+        self.assertTrue(layer.messages)

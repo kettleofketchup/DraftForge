@@ -535,7 +535,7 @@ class InitDraftEndpointTests(TestCase):
         with (
             patch("app.functions.tournament.notify_draft_started") as notify,
             patch("app.cache_utils.invalidate_obj") as invalidate,
-            patch("app.broadcast.broadcast_event") as broadcast,
+            patch("draft.services.team_broadcast.broadcast_event") as broadcast,
         ):
             order.attach_mock(invalidate, "invalidate")
             order.attach_mock(broadcast, "broadcast")
@@ -716,7 +716,7 @@ class InitDraftEndpointTests(TestCase):
         draft = Draft.objects.get(tournament=self.tournament)
         DraftEvent.objects.filter(draft=draft).delete()
 
-        with patch("app.broadcast.broadcast_event") as broadcast:
+        with patch("draft.services.team_broadcast.broadcast_event") as broadcast:
             with self.captureOnCommitCallbacks(execute=True):
                 resp = self.post()
 

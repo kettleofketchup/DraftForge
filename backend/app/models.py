@@ -1372,8 +1372,8 @@ class Draft(models.Model):
         return TeamDraftState.DRAFTING
 
     def _emit_lobby_opened(self, options: "DraftOptions") -> None:
-        # Cycle: app.broadcast imports app.models.
-        from app.broadcast import broadcast_event_after_commit
+        # Cycle: draft.services.team_broadcast imports app.models.
+        from draft.services.team_broadcast import broadcast_event_after_commit
 
         event = DraftEvent.objects.create(
             draft=self,
@@ -1387,8 +1387,8 @@ class Draft(models.Model):
         broadcast_event_after_commit(event)
 
     def _emit_draft_started(self, team_count: int) -> None:
-        # Cycle: app.broadcast imports app.models.
-        from app.broadcast import broadcast_event_after_commit
+        # Cycle: draft.services.team_broadcast imports app.models.
+        from draft.services.team_broadcast import broadcast_event_after_commit
 
         event = DraftEvent.objects.create(
             draft=self,
@@ -1796,7 +1796,8 @@ class Draft(models.Model):
 
         # Delegate to shuffle module for shuffle style
         if self.draft_style == "shuffle":
-            from app.functions.shuffle_draft import build_shuffle_rounds
+            # Cycle: draft.services.shuffle imports app.models.
+            from draft.services.shuffle import build_shuffle_rounds
 
             build_shuffle_rounds(self, teams)
             if self.state == TeamDraftState.PENDING:
@@ -1948,7 +1949,8 @@ class Draft(models.Model):
         if not teams:
             raise ValueError("No teams in tournament")
 
-        from app.functions.shuffle_draft import get_team_total_mmr
+        # Cycle: draft.services.shuffle imports app.models.
+        from draft.services.shuffle import get_team_total_mmr
 
         # Get organization for MMR lookups
         org = None

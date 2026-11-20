@@ -11,7 +11,6 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.functions.teamdraft_timeout import skip_turn
 from app.management.commands import import_prod_tournament, sync_prod_tournaments
 from app.models import (
     Draft,
@@ -27,6 +26,7 @@ from app.models import (
 )
 from app.serializers import DraftSerializerSlim, TournamentSerializer
 from app.tests.teamdraft_fixtures import TimedDraftFixture
+from draft.services.team_timeout import skip_turn
 from tests.data.users import REGULAR_USER
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, TestTournamentConfig
 
@@ -403,7 +403,7 @@ class SettingsWriteTests(TestCase):
         self.assertEqual(r.status_code, 200, r.data)
 
     def test_timer_off_from_pending_emits_options_changed(self):
-        with patch("app.broadcast.broadcast_event") as sent:
+        with patch("draft.services.team_broadcast.broadcast_event") as sent:
             self._patch_options({"timer_enabled": False})
         event = self.fx.events("draft_options_changed").get()
         self.assertEqual(event.actor, self.fx.staff)

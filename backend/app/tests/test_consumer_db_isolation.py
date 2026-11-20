@@ -24,13 +24,13 @@ from app.channel_layers import (
 from app.consumer_db import CONSUMER_DB_THREADS, consumer_db
 from app.consumers import DraftConsumer
 from app.models import Draft, Game, Team, Tournament
-from app.tasks.teamdraft_tick import captain_conn_key
 from app.tests.ws_helpers import read_until_type
 from draft.consumers import base as consumers_base
 from draft.consumers import hero as hero_consumers
 from draft.consumers.hero import HeroDraftConsumer
 from draft.models import DraftTeam, HeroDraft
 from draft.tasks.draft_tick import get_redis_client
+from draft.tasks.team_tick import captain_conn_key
 
 User = get_user_model()
 

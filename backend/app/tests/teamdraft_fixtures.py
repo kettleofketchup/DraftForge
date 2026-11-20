@@ -10,10 +10,8 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from app.functions import teamdraft
-from app.functions.teamdraft_timeout import skip_turn
-from app.functions.teamdraft_views import teamdraft_pause
 from app.functions.draft_picks import pick_player_for_round, undo_last_pick
+from app.functions.teamdraft_views import teamdraft_pause
 from app.models import (
     CustomUser,
     Draft,
@@ -25,6 +23,8 @@ from app.models import (
     Team,
     Tournament,
 )
+from draft.services import team as teamdraft
+from draft.services.team_timeout import skip_turn
 from org.models import OrgUser
 
 User = get_user_model()

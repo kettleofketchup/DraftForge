@@ -10,10 +10,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from app.functions.teamdraft import emit_event, team_for_round, team_payload
-from app.functions.teamdraft_timeout import TIMEOUT_ACTIONS
 from app.models import Draft, DraftRound, Team, TeamDraftState
 from app.redis_keys import namespaced_key
+from draft.services.team import emit_event, team_for_round, team_payload
+from draft.services.team_timeout import TIMEOUT_ACTIONS
 from draft.tasks import draft_tick
 from draft.tasks.draft_tick import (
     CAPTAIN_CHANNEL_TTL,

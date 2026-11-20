@@ -16,12 +16,12 @@ from app.serializers import (
     _build_users_dict,
     _tournament_organization,
 )
-from app.services.draft_reset import (
+from app.tournament_state import tournament_state_queryset
+from draft.services.team_reset import (
     NoEligibleCaptains,
     TeamsReferenced,
     reset_draft_teams,
 )
-from app.tournament_state import tournament_state_queryset
 from events.discord.tournament_dispatch import notify_draft_started
 from org.display_names import guild_nicknames, org_nicknames_public
 from telemetry.logging import get_logger

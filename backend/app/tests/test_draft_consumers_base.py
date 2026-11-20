@@ -17,8 +17,8 @@ from django.urls import re_path
 
 from app.consumers import DraftConsumer
 from app.models import Draft, Team, Tournament
-from app.tasks import teamdraft_tick
 from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
+from draft.tasks import team_tick as teamdraft_tick
 from draft.tasks.draft_tick import (
     captain_channel_key,
     conn_count_key,

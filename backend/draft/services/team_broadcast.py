@@ -17,7 +17,7 @@ from django.db.backends.base.base import BaseDatabaseWrapper
 
 from app.models import Draft
 from app.serializers import DraftEventSerializer
-from app.tournament_state import build_draft_state
+from draft.services.team_state import build_draft_state
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
