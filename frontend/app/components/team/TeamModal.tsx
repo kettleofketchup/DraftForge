@@ -134,7 +134,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({
             {team.members?.length} players
           </span>
           <span className="flex items-center gap-1.5">
-            <Trophy className="h-4 w-4 text-yellow-500" />
+            <Trophy className="h-4 w-4 text-medal-gold" />
             {avgMMR.toLocaleString()} avg MMR
           </span>
           <span className="text-muted-foreground/70">

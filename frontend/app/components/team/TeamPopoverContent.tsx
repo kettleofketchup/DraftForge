@@ -112,7 +112,7 @@ export const TeamPopoverContent: React.FC<TeamPopoverContentProps> = ({
                   {team.members?.length} players
                 </span>
                 <span className="flex items-center gap-1">
-                  <Trophy className="h-3.5 w-3.5 text-yellow-500" />
+                  <Trophy className="h-3.5 w-3.5 text-medal-gold" />
                   {avgMMR.toLocaleString()} avg
                 </span>
               </div>

@@ -77,7 +77,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
             onChange={(event) => setQuery(event.target.value)}
             onClick={(event) => log.debug(event.target)}
           />
-          <ComboboxOptions className="border bg-gray-900 shadow-lg rounded-lg max-h-60 overflow-y-auto mt-2">
+          <ComboboxOptions className="border bg-popover shadow-lg rounded-lg max-h-60 overflow-y-auto mt-2">
             {filteredUsers &&
             filteredUsers.length > 0 &&
             filteredUsers.length < 20 ? (
@@ -87,7 +87,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
                   value={user.username}
                   className={({ active }) =>
                     `cursor-pointer select-none p-2 ${
-                      active ? 'bg-purple-900 text-primary-content' : ''
+                      active ? 'bg-selection/30 text-selection-foreground' : ''
                     }`
                   }
                 >
@@ -101,7 +101,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
                 </ComboboxOption>
               ))
             ) : (
-              <div className="p-2 text-sm text-gray-500">
+              <div className="p-2 text-sm text-muted-foreground">
                 No users or too many users found
               </div>
             )}

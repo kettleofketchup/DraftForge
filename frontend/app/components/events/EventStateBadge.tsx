@@ -51,7 +51,8 @@ const stateConfig: Record<string, { label: string; className: string }> = {
   },
   [SignupStatus.TENTATIVE]: {
     label: 'Tentative',
-    className: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
+    className:
+      'bg-signup-tentative/20 text-signup-tentative border-signup-tentative/30',
   },
   [SignupStatus.REJECTED]: {
     label: 'Rejected',
