@@ -25,7 +25,9 @@ class DedupeHostHelpersTest(TestCase):
         self.event_b.helpers.add(self.user)
 
     def test_removes_user_from_helpers_where_host(self) -> None:
-        self.assertEqual(dedupe_host_helpers(self.user), [self.event_a])
+        with self.assertLogs("events.staff", level="INFO") as logs:
+            self.assertEqual(dedupe_host_helpers(self.user), [self.event_a])
+        self.assertIn("event_staff_deduped", logs.output[0])
         self.assertFalse(self.event_a.helpers.filter(pk=self.user.pk).exists())
         self.assertTrue(self.event_b.helpers.filter(pk=self.user.pk).exists())
 
