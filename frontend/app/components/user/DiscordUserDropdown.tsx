@@ -129,17 +129,6 @@ const DiscordUserDropdown: React.FC<Props> = ({
               @{user.user.username}
             </span>
           </div>
-
-          {/* TODO add a quickadd button*/}
-          {/* {!isUserAlreadyAdded(user) && (
-            <Button
-              size="sm"
-              className="justify-end bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-300 disabled:text-gray-500"
-            >
-              <PlusCircleIcon color="green" />
-              <p className="text-sm"> Quick Add</p>
-            </Button>
-          )} */}
         </div>
       </ComboboxOption>
     );
