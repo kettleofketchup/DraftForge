@@ -29,6 +29,7 @@ vi.mock('~/lib/websocket', () => ({
 }));
 
 const { useHeroDraftStore } = await import('~/store/heroDraftStore');
+const { useUserStore } = await import('~/store/userStore');
 const { addPending, initialChatState } =
   await import('~/components/herodraft/chat/chatState');
 
@@ -221,6 +222,25 @@ describe('heroDraftStore chat actions', () => {
       useHeroDraftStore.getState().suggestHero('suggest_pick', 1),
     ).toBeNull();
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("does not count the current user's own chat_message as unread", () => {
+    const previous = useUserStore.getState().currentUser;
+    useUserStore.setState({
+      currentUser: { ...previous, pk: sender.pk } as typeof previous,
+    });
+    try {
+      emit({ type: 'chat_history', viewer: memberViewer, messages: [] });
+      emit({ type: 'chat_message', message: msg(1) });
+      expect(chat().unread).toBe(0);
+      emit({
+        type: 'chat_message',
+        message: msg(2, { sender: { ...sender, pk: sender.pk + 1 } }),
+      });
+      expect(chat().unread).toBe(1);
+    } finally {
+      useUserStore.setState({ currentUser: previous });
+    }
   });
 
   it('setChatPanelOpen opens the panel and clears unread', () => {

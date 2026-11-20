@@ -241,6 +241,26 @@ describe('resetChatOnDisconnect', () => {
 });
 
 describe('unread across reconnects', () => {
+  it("does not count the viewer's own live messages as unread", () => {
+    let s = applyChatHistory(initialChatState, member, [], 1);
+    s = applyChatMessage(s, msg(2), 1);
+    expect(s.unread).toBe(0);
+    s = applyChatMessage(s, msg(3, { sender: { ...msg(3).sender, pk: 2 } }), 1);
+    expect(s.unread).toBe(1);
+  });
+
+  it("does not count the viewer's own messages from a resync", () => {
+    let s = applyChatHistory(initialChatState, member, [msg(1)], 1);
+    s = resetChatOnDisconnect(s);
+    s = applyChatHistory(
+      s,
+      member,
+      [msg(1), msg(2), msg(3, { sender: { ...msg(3).sender, pk: 2 } })],
+      1,
+    );
+    expect(s.unread).toBe(1);
+  });
+
   it('does not count the first history as unread', () => {
     const s = applyChatHistory(initialChatState, member, [msg(1), msg(2)]);
     expect(s.unread).toBe(0);

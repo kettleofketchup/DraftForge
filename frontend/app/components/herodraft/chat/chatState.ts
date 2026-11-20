@@ -52,10 +52,14 @@ function withoutPending(
   return rest;
 }
 
+const fromOther = (m: ChatMessage, selfId?: number): boolean =>
+  selfId === undefined || m.sender.pk !== selfId;
+
 export function applyChatHistory(
   s: ChatState,
   viewer: ChatViewer,
   messages: ChatMessage[],
+  selfId?: number,
 ): ChatState {
   const unique = new Map(messages.map((m) => [m.id, m]));
   const sorted = capNewest([...unique.values()].sort(compareMessages));
@@ -64,7 +68,9 @@ export function applyChatHistory(
     mark === null || s.panelOpen
       ? 0
       : sorted.filter(
-          (m) => mark.after === null || compareMessages(m, mark.after) > 0,
+          (m) =>
+            fromOther(m, selfId) &&
+            (mark.after === null || compareMessages(m, mark.after) > 0),
         ).length;
   return {
     ...s,
@@ -76,7 +82,11 @@ export function applyChatHistory(
   };
 }
 
-export function applyChatMessage(s: ChatState, m: ChatMessage): ChatState {
+export function applyChatMessage(
+  s: ChatState,
+  m: ChatMessage,
+  selfId?: number,
+): ChatState {
   if (s.messages.some((existing) => existing.id === m.id)) return s;
   let index = s.messages.length;
   while (index > 0 && compareMessages(s.messages[index - 1], m) > 0) index -= 1;
@@ -90,7 +100,7 @@ export function applyChatMessage(s: ChatState, m: ChatMessage): ChatState {
   return {
     ...s,
     messages: capped,
-    unread: s.panelOpen ? s.unread : s.unread + 1,
+    unread: s.panelOpen || !fromOther(m, selfId) ? s.unread : s.unread + 1,
   };
 }
 

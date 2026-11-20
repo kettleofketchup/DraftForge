@@ -35,6 +35,7 @@ import { getLogger } from '~/lib/logger';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
 import { getWebSocketManager } from '~/lib/websocket';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('heroDraftStore');
 const chatLog = getLogger('herodraft:chat');
@@ -410,12 +411,15 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
               get().chat,
               message.viewer,
               message.messages,
+              chatSelfId(),
             ),
           });
           break;
 
         case 'chat_message':
-          set({ chat: applyChatMessage(get().chat, message.message) });
+          set({
+            chat: applyChatMessage(get().chat, message.message, chatSelfId()),
+          });
           break;
 
         case 'chat_ack':
@@ -568,6 +572,10 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       .map((r) => r.hero_id as number);
   },
 }));
+
+function chatSelfId(): number | undefined {
+  return useUserStore.getState().currentUser?.pk ?? undefined;
+}
 
 function sendChatFrame(
   raw: string,

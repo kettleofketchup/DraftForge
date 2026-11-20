@@ -671,7 +671,7 @@ All components have `data-testid` attributes for Playwright testing:
 | `herodraft-chat-suggestion-{id}` | A hero suggestion row |
 | `herodraft-chat-new-messages` | "New messages" jump button |
 | `herodraft-chat-toggle` | Button that opens the chat panel or sheet |
-| `herodraft-chat-unread` | Unread count on the toggle; kept across reconnects of the same user, and messages that arrived during the gap are added |
+| `herodraft-chat-unread` | Unread count on the toggle; your own messages never count. Kept across reconnects of the same user, and messages that arrived during the gap are added |
 | `herodraft-hero-suggest-menu` | Right-click menu on a hero |
 | `herodraft-hero-suggest-pick` / `herodraft-hero-suggest-ban` | Suggest pick / ban menu items |
 
