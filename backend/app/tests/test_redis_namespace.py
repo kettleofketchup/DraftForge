@@ -357,6 +357,9 @@ class HeroDraftChatRateLimitKeyTests(SimpleTestCase):
     @override_settings(REDIS_KEY_NAMESPACE="")
     def test_production_key_format(self) -> None:
         self.assertEqual(hero_chat.rate_limit_key(3, 4), "herodraft:chat:rate:3:4")
+        self.assertEqual(
+            hero_chat.rate_limit_key(3, 4, "all"), "herodraft:chat:rate:all:3:4"
+        )
 
     @override_settings(REDIS_KEY_NAMESPACE="ns:")
     def test_key_is_namespaced(self) -> None:

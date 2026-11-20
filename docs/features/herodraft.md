@@ -353,7 +353,7 @@ Privacy is enforced on the server:
 | Rule | Value |
 |------|-------|
 | Message length | 1-500 characters, after removing control characters and invisible format characters (bidi overrides, zero-width spaces; ZWJ and ZWNJ are kept) and trimming (the `/all ` prefix does not count) |
-| Rate limit | 8 messages per 10 seconds per user per draft, text and suggestions combined |
+| Rate limit | Per user per draft, in two separate buckets: team chat (text and suggestions combined) 8 per 10 seconds, all chat 4 per 10 seconds |
 | History on connect | Last 100 visible messages |
 | Messages kept in the client | 200 |
 | Text chat | Open in every state until the draft ends, including while paused |
@@ -371,7 +371,7 @@ Messages are plain text. Newlines and Unicode line or paragraph separators becom
 | `not_participant` | Sender is not on either team (spectators are read-only) |
 | `ambiguous_team` | Sender is on both rosters |
 | `empty` / `too_long` | Body is empty or over 500 characters |
-| `rate_limited` | Over 8 messages in 10 seconds |
+| `rate_limited` | Over 8 team messages, or 4 all-chat messages, in 10 seconds |
 | `draft_closed` | Draft is completed or abandoned |
 | `draft_inactive` | Suggestion sent outside `drafting` |
 | `hero_unavailable` | Hero does not exist or is already picked or banned |
@@ -413,7 +413,7 @@ All chat logs use `system="herodraft"`, `subsystem="chat"`. Message text and her
 | `herodraft_chat_publish_failed` | error | Message was stored but the channel layer refused it; the sender still gets the ack and their own copy, so they do not resend |
 | `herodraft_chat_rejected` | info / error | Send refused; carries `code` (`rate_limited` included; error level for `unavailable`) |
 | `herodraft_chat_rejections_throttled` | warning | A socket passed 8 refused frames in 10 s; its further `herodraft_chat_rejected` and `ws_malformed_message` logs are dropped until the window ends |
-| `herodraft_chat_rate_limit_redis_unavailable` | warning | Redis failed; the send is refused |
+| `herodraft_chat_rate_limit_redis_unavailable` | warning | Redis failed; the send is refused. Carries the `channel` bucket |
 | `herodraft_chat_delivery_revoked` | info | A team frame was dropped because the user is no longer on that team |
 | `herodraft_chat_ambiguous_membership` | warning | User is on both rosters |
 | `herodraft_chat_bootstrap_failed` | error | Chat history or a roster lookup failed; the socket stays open as a spectator until a later lookup succeeds |

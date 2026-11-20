@@ -50,6 +50,7 @@ from draft.routing import websocket_urlpatterns
 from draft.services.hero import new_herodraft_for_game
 from draft.services.hero_broadcast import broadcast_herodraft_state
 from draft.services.hero_chat import (
+    ALL_RATE_LIMIT_MAX,
     CHAT_DELIVERY_CACHE_S,
     RATE_LIMIT_MAX,
     REJECT_LOG_MAX,
@@ -137,7 +138,10 @@ class ChatConsumerFixture(TransactionTestCase):
         self.comms: list[WebsocketCommunicator] = []
         redis_client = get_redis_client()
         for rate_user in CustomUser.objects.all():
-            redis_client.delete(rate_limit_key(self.draft.pk, rate_user.pk))
+            redis_client.delete(
+                rate_limit_key(self.draft.pk, rate_user.pk),
+                rate_limit_key(self.draft.pk, rate_user.pk, "all"),
+            )
 
     def application(self) -> URLRouter:
         return URLRouter(
@@ -797,6 +801,26 @@ class ChatSendTest(ChatSendFixture):
                 reply,
                 {"type": "chat_error", "code": "rate_limited", "client_msg_id": "over"},
             )
+        finally:
+            await self.close_all()
+
+    async def test_all_chat_rate_limit_is_tighter_and_separate(self) -> None:
+        try:
+            mem_a = await self.connect_as(self.mem_a)
+            for n in range(ALL_RATE_LIMIT_MAX):
+                reply = await self.send_chat(mem_a, f"/all rate {n}", f"a{n}")
+                self.assertEqual(reply["type"], "chat_ack", reply)
+            reply = await self.send_chat(mem_a, "/all rate over", "aover")
+            self.assertEqual(
+                reply,
+                {
+                    "type": "chat_error",
+                    "code": "rate_limited",
+                    "client_msg_id": "aover",
+                },
+            )
+            reply = await self.send_chat(mem_a, "team still open", "team")
+            self.assertEqual(reply["type"], "chat_ack", reply)
         finally:
             await self.close_all()
 

@@ -49,6 +49,7 @@ ChatErrorCode = Literal[
 HISTORY_LIMIT = 100
 MAX_BODY_LENGTH = 500
 RATE_LIMIT_MAX = 8
+ALL_RATE_LIMIT_MAX = 4
 RATE_LIMIT_WINDOW_S = 10
 REJECT_LOG_MAX = 8
 REJECT_LOG_WINDOW_S = 10.0
@@ -527,12 +528,23 @@ class PostResult:
     message: dict[str, Any]
 
 
-def rate_limit_key(draft_id: int, user_id: int) -> str:
-    return namespaced_key(f"herodraft:chat:rate:{draft_id}:{user_id}")
+def rate_limit_key(draft_id: int, user_id: int, channel: ChatChannel = "team") -> str:
+    bucket = "all:" if channel == "all" else ""
+    return namespaced_key(f"herodraft:chat:rate:{bucket}{draft_id}:{user_id}")
 
 
-def check_rate_limit(draft_id: int, user_id: int) -> None:
-    key = rate_limit_key(draft_id, user_id)
+def rate_limit_channel(msg_type: str, data: dict[str, object]) -> ChatChannel:
+    body = data.get("body")
+    if msg_type == "chat_send" and isinstance(body, str):
+        return parse_composer(body)[0]
+    return "team"
+
+
+def check_rate_limit(
+    draft_id: int, user_id: int, channel: ChatChannel = "team"
+) -> None:
+    key = rate_limit_key(draft_id, user_id, channel)
+    limit = ALL_RATE_LIMIT_MAX if channel == "all" else RATE_LIMIT_MAX
     try:
         pipe = get_redis_client().pipeline(transaction=True)
         pipe.set(key, 0, ex=RATE_LIMIT_WINDOW_S, nx=True)
@@ -545,10 +557,11 @@ def check_rate_limit(draft_id: int, user_id: int) -> None:
             subsystem="chat",
             draft_id=draft_id,
             user_id=user_id,
+            channel=channel,
             exc_info=True,
         )
         raise ChatError("unavailable") from None
-    if int(count) > RATE_LIMIT_MAX:
+    if int(count) > limit:
         raise ChatError("rate_limited")
 
 

@@ -26,6 +26,7 @@ from draft.models import (
 from draft.services import hero, hero_chat, heroes
 from draft.services.hero import new_herodraft_for_game
 from draft.services.hero_chat import (
+    ALL_RATE_LIMIT_MAX,
     RATE_LIMIT_MAX,
     RATE_LIMIT_WINDOW_S,
     SPECTATOR,
@@ -39,6 +40,7 @@ from draft.services.hero_chat import (
     parse_composer,
     post_suggestion,
     post_text,
+    rate_limit_channel,
     rate_limit_key,
     resolve_chat_viewer,
     serialize_message,
@@ -812,15 +814,60 @@ class RateLimitTest(SimpleTestCase):
         self.draft_id = random.randint(10**8, 10**9)
         self.user_id = random.randint(10**8, 10**9)
         self.key = rate_limit_key(self.draft_id, self.user_id)
+        self.all_key = rate_limit_key(self.draft_id, self.user_id, "all")
         self.redis = hero_chat.get_redis_client()
-        self.redis.delete(self.key)
+        self.redis.delete(self.key, self.all_key)
 
     def tearDown(self) -> None:
-        self.redis.delete(self.key)
+        self.redis.delete(self.key, self.all_key)
 
     def test_limits(self) -> None:
         self.assertEqual(RATE_LIMIT_MAX, 8)
+        self.assertEqual(ALL_RATE_LIMIT_MAX, 4)
         self.assertEqual(RATE_LIMIT_WINDOW_S, 10)
+
+    def test_rate_limit_channel(self) -> None:
+        self.assertEqual(rate_limit_channel("chat_send", {"body": "/all gg"}), "all")
+        self.assertEqual(rate_limit_channel("chat_send", {"body": "gg"}), "team")
+        self.assertEqual(rate_limit_channel("chat_send", {"body": 5}), "team")
+        self.assertEqual(
+            rate_limit_channel("chat_suggest", {"body": "/all x", "kind": "pick"}),
+            "team",
+        )
+
+    def test_all_chat_bucket_is_separate_key(self) -> None:
+        self.assertNotEqual(self.key, self.all_key)
+        self.assertEqual(rate_limit_key(self.draft_id, self.user_id, "team"), self.key)
+
+    def test_fifth_all_chat_call_rate_limited(self) -> None:
+        for _ in range(ALL_RATE_LIMIT_MAX):
+            check_rate_limit(self.draft_id, self.user_id, "all")
+        with self.assertRaises(ChatError) as ctx:
+            check_rate_limit(self.draft_id, self.user_id, "all")
+        self.assertEqual(ctx.exception.code, "rate_limited")
+        self.assertLessEqual(self.redis.ttl(self.all_key), RATE_LIMIT_WINDOW_S)
+
+    def test_all_chat_flood_leaves_team_bucket_untouched(self) -> None:
+        for _ in range(ALL_RATE_LIMIT_MAX):
+            check_rate_limit(self.draft_id, self.user_id, "all")
+        for _ in range(RATE_LIMIT_MAX):
+            check_rate_limit(self.draft_id, self.user_id, "team")
+        with self.assertRaises(ChatError):
+            check_rate_limit(self.draft_id, self.user_id, "all")
+        with self.assertRaises(ChatError):
+            check_rate_limit(self.draft_id, self.user_id)
+
+    def test_all_chat_redis_unavailable_fails_closed(self) -> None:
+        with (
+            mock.patch.object(
+                hero_chat,
+                "get_redis_client",
+                side_effect=redis.ConnectionError("down"),
+            ),
+            self.assertRaises(ChatError) as ctx,
+        ):
+            check_rate_limit(self.draft_id, self.user_id, "all")
+        self.assertEqual(ctx.exception.code, "unavailable")
 
     def test_ninth_call_rate_limited(self) -> None:
         for _ in range(RATE_LIMIT_MAX):
