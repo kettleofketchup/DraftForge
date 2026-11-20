@@ -137,3 +137,15 @@ export function subInRequest(
     withReplacing: true,
   };
 }
+
+export function addStandinRequest(
+  team: ManagedTeam,
+  user: RosterUser,
+): PendingTeamAction {
+  return {
+    action: { kind: 'add_standin', user },
+    title: 'Add stand-in?',
+    summary: `Add ${DisplayName(user)} as a stand-in for ${team.name}.`,
+    confirmText: 'Add stand-in',
+  };
+}

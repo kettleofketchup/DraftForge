@@ -1,4 +1,8 @@
 export {
+  AddStandinPicker,
+  type AddStandinPickerProps,
+} from './AddStandinPicker';
+export {
   LeadershipProblemBadge,
   leadershipProblemSentence,
   type LeadershipProblemBadgeProps,

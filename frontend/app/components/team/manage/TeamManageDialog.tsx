@@ -26,7 +26,9 @@ import {
 } from '~/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { getLogger } from '~/lib/logger';
+import { AddStandinPicker } from './AddStandinPicker';
 import type { PendingTeamAction } from './pendingTeamAction';
+import { addStandinRequest } from './teamActionCopy';
 import {
   TeamActionReasonDialog,
   type TeamActionReasonValues,
@@ -78,14 +80,18 @@ function withReplacing(
   return { ...action, replacing };
 }
 
+const rosterPks = (team: ManagedTeam): number[] =>
+  [...team.members, ...team.dropin_members, ...team.left_members].map(
+    (u) => u.pk,
+  );
+
 export function TeamManageDialog({
   open,
   onOpenChange,
   teamId,
   tournamentPk,
   organizationPk,
-  // Consumed by the stand-in search.
-  leaguePk: _leaguePk,
+  leaguePk,
   liveTeam,
   onTeamGone,
 }: TeamManageDialogProps) {
@@ -270,6 +276,17 @@ export function TeamManageDialog({
                   pending={pending}
                   error={error}
                   onRequestAction={requestAction}
+                  addStandinSlot={
+                    <AddStandinPicker
+                      organization={organization ?? null}
+                      leaguePk={leaguePk}
+                      excludePks={rosterPks(team)}
+                      disabled={pending}
+                      onPick={(user) =>
+                        requestAction(addStandinRequest(team, user))
+                      }
+                    />
+                  }
                 />
               ) : managed.isError && managedStatus !== 404 ? (
                 <Alert variant="destructive">

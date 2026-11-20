@@ -51,9 +51,16 @@ type AxiosMock = {
 
 export function routeGets(
   axiosMock: AxiosMock,
-  routes: { team?: ManagedTeam | AxiosError; org?: unknown },
+  routes: {
+    team?: ManagedTeam | AxiosError;
+    org?: unknown;
+    search?: unknown[];
+  },
 ): void {
   axiosMock.get.mockImplementation((url: string) => {
+    if (url === '/users/search/' && routes.search) {
+      return Promise.resolve({ data: routes.search });
+    }
     if (url === `/teams/${TEAM_ID}/`) {
       return routes.team instanceof AxiosError
         ? Promise.reject(routes.team)
