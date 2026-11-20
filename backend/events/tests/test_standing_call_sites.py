@@ -1,12 +1,15 @@
 from datetime import timedelta
 
-from django.test import TestCase
+from django.contrib.admin.sites import site as admin_site
+from django.http import HttpRequest
+from django.test import RequestFactory, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
+from app.admin import CustomUserAdmin
 from app.discord_accounts import merge_discord_accounts
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser, Organization, OrgLog, ProfileClaimRequest
 from events.completion import close_event
 from events.constants import EventState
 from events.models import Event
@@ -215,3 +218,62 @@ class StandingCallSiteTest(TestCase):
         self._assert_nested(baseline)
         self.assertEqual(self.fake.hooks, ["on_user_deleted"])
         self.assertEqual(self.fake.calls[0].kwargs["user"], victim.pk)
+
+    def test_claim_merge_calls_merge_users_and_dedupe_hook(self) -> None:
+        claimer, target, claimer_ou, target_ou = self._merge_fixture()
+        self.event.host = claimer
+        self.event.save()
+        self.event.helpers.add(target)
+        claim = ProfileClaimRequest.objects.create(
+            claimer=claimer,
+            target_user=target,
+            organization=self.org,
+            status=ProfileClaimRequest.Status.PENDING,
+        )
+        baseline = atomic_baseline()
+        response = self.client.post(f"/api/claim-requests/{claim.pk}/approve/")
+        self.assertEqual(response.status_code, 200, response.content)
+        self._assert_nested(baseline)
+        self.assertEqual(
+            self.fake.hooks, ["merge_members", "repoint_user", "on_event_changed"]
+        )
+        self.assertEqual(
+            self.fake.calls[0].kwargs,
+            {"drop": target_ou.pk, "keep": claimer_ou.pk, "drop_exists": True},
+        )
+        self.assertEqual(self.fake.calls[-1].kwargs["fields"], frozenset({"helpers"}))
+        self.assertFalse(OrgUser.objects.filter(pk=target_ou.pk).exists())
+        self.assertFalse(self.event.helpers.filter(pk=claimer.pk).exists())
+
+    def _admin_request(self) -> HttpRequest:
+        request = RequestFactory().post("/admin/app/customuser/")
+        request.user = self.admin
+        return request
+
+    def test_admin_user_delete_calls_on_user_deleted(self) -> None:
+        victim = CustomUser.objects.create_user(username="cs_victim", password="x")
+        victim_pk = victim.pk
+        baseline = atomic_baseline()
+        CustomUserAdmin(CustomUser, admin_site).delete_model(
+            self._admin_request(), victim
+        )
+        self._assert_nested(baseline)
+        self.assertEqual(self.fake.hooks, ["on_user_deleted"])
+        self.assertEqual(self.fake.calls[0].kwargs["user"], victim_pk)
+        self.assertEqual(self.fake.calls[0].kwargs["actor"], self.admin)
+        self.assertFalse(CustomUser.objects.filter(pk=victim_pk).exists())
+
+    def test_admin_bulk_delete_calls_on_user_deleted_per_user(self) -> None:
+        victims = [
+            CustomUser.objects.create_user(username=f"cs_victim{i}", password="x")
+            for i in range(2)
+        ]
+        pks = [v.pk for v in victims]
+        baseline = atomic_baseline()
+        CustomUserAdmin(CustomUser, admin_site).delete_queryset(
+            self._admin_request(), CustomUser.objects.filter(pk__in=pks)
+        )
+        self._assert_nested(baseline)
+        self.assertEqual(self.fake.hooks, ["on_user_deleted", "on_user_deleted"])
+        self.assertCountEqual([c.kwargs["user"] for c in self.fake.calls], pks)
+        self.assertFalse(CustomUser.objects.filter(pk__in=pks).exists())
