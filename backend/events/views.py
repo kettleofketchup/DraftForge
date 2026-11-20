@@ -1425,7 +1425,7 @@ class OrgEventDefaultsViewSet(viewsets.GenericViewSet):
     """Get or update event defaults for an organization.
 
     GET   /events/defaults/?organization=<pk>  — returns defaults (auto-creates if missing)
-    PATCH /events/defaults/<pk>/               — update defaults (org staff only)
+    PATCH /events/defaults/<pk>/               — update defaults (org admins only)
     """
 
     serializer_class = OrgEventDefaultsSerializer
