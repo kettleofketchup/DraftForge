@@ -597,7 +597,7 @@ export default function OrganizationDetailPage() {
                     href={organization.discord_link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 transition-colors"
+                    className="inline-flex items-center gap-2 text-discord hover:text-discord/80 transition-colors"
                   >
                     <DiscordIcon className="w-5 h-5" />
                     <span>Join our Discord</span>

@@ -11,6 +11,8 @@ from django.db.models import Q, QuerySet
 from app.models import DraftTeam, HeroDraft, Team
 
 _COUNTED_ON_DELETE = (models.CASCADE, models.SET_NULL)
+# Audit rows outlive the team (SET_NULL); they never block a reset or delete.
+_EXCLUDED_KEYS = frozenset({"app.TeamLog.team"})
 
 
 def _reference_relations() -> list[models.ForeignObjectRel]:
@@ -22,6 +24,7 @@ def _reference_relations() -> list[models.ForeignObjectRel]:
         and (rel.one_to_many or rel.one_to_one)
         and not rel.related_model._meta.auto_created
         and rel.on_delete in _COUNTED_ON_DELETE
+        and _key(rel) not in _EXCLUDED_KEYS
     ]
 
 

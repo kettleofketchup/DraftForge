@@ -222,7 +222,9 @@ class EnforcementHooksTest(ConductTestCase):
         )
 
         self.assertEqual(resp.status_code, 400, resp.content)
-        self.assertEqual(resp.json(), {"error": CONDUCT_BLOCK_MESSAGE})
+        body = resp.json()
+        self.assertEqual(body["error"], CONDUCT_BLOCK_MESSAGE)
+        self.assertEqual([r["code"] for r in body["reasons"]], [CODE])
         self.assertFalse(EventSignup.objects.filter(event=event).exists())
 
     def test_block_discord_button(self) -> None:
@@ -298,6 +300,9 @@ class EnforcementHooksTest(ConductTestCase):
         held = EventSignup.objects.nocache().get(pk=held.pk)
         self.assertEqual(held.status, SignupStatus.PENDING_APPROVAL)
         self.assertEqual(held.unmet_requirements, [CODE])
+        [reason] = held.eligibility_reasons
+        self.assertEqual(reason["severity"], "needs_approval")
+        self.assertEqual(reason["rule"], "org-conduct-threshold")
         self.assertEqual(clean.status, SignupStatus.APPROVED)
 
     def _open_waitlisted(self, user: CustomUser) -> EventSignup:
@@ -462,7 +467,8 @@ class EnforcementHooksTest(ConductTestCase):
 
 _GATE_PATCHES = (
     "events.admission.conduct_gate",
-    "events.eligibility.conduct_gate",
+    "events.eligibility.checks.conduct.conduct_gate",
+    "events.eligibility.store.conduct_gate",
     "events.services.conduct_gate",
 )
 

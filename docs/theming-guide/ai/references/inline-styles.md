@@ -121,20 +121,13 @@ import { brandDialogPanel } from '~/components/ui/buttons';
 <UserStrip user={user} showBorder={false} className={brandDialogPanel} />
 ```
 
-## Destructive content-surface exception (the only sanctioned raw `bg-red-*`)
+## Destructive dialog surface
 
-`bg-red-950/95 border-red-800` is the documented destructive content-surface
-class and is **allowed in exactly one place**: the `contentVariantStyles.destructive`
-entry inside `frontend/app/components/ui/dialogs/ConfirmDialog.tsx`. This is the
-source of truth for the destructive dialog surface; `<DeleteDialog>` inherits it
-unchanged via composition.
-
-Raw `bg-red-*` or `border-red-*` anywhere else in `frontend/app/` (including new
-variants on `ConfirmDialog` or any feature component) remains a `block` finding.
-Use semantic tokens instead:
-
-- `bg-destructive` / `border-destructive` / `ring-destructive` for the destructive intent.
-- `bg-base-900/80` for recessed surfaces inside the destructive dialog (see `DeleteDialog`'s Input).
+`ConfirmDialog`'s destructive surface is `bg-error-surface/95 border-error/40`;
+`<DeleteDialog>` inherits it. There is no sanctioned raw `bg-red-*` anymore: use
+`bg-destructive` / `border-destructive` / `ring-destructive` for the destructive intent,
+`bg-error-surface` for opaque error fills, and `bg-base-900/80` for recessed surfaces
+inside the destructive dialog (see `DeleteDialog`'s Input).
 
 ## What's NOT an inline-style violation
 

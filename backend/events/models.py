@@ -618,6 +618,14 @@ class Event(
         self.state = new_state
         self.updated_at = now
         invalidate_after_commit(stale, self)
+        self.refresh_signup_post_on_commit()
+
+    def refresh_signup_post_on_commit(self) -> None:
+        """Re-render the Discord signup post once the state change commits."""
+        # Function-local: events.discord imports events.models.
+        from events.discord.dispatch import notify_signup_changed
+
+        transaction.on_commit(lambda: notify_signup_changed(self))
 
 
 class EventTeam(models.Model):
@@ -662,8 +670,15 @@ class EventSignup(models.Model):
         max_length=20, choices=SignupStatus.choices, default=SignupStatus.RSVP
     )
     waitlist_position = models.IntegerField(null=True, blank=True)
-    # events.eligibility.Unmet codes from the last requirements check.
+    # events.eligibility.ReasonCode codes from the last requirements check.
     unmet_requirements = models.JSONField(default=list, blank=True)
+    # Reason.as_dict() for each code in unmet_requirements.
+    eligibility_reasons = models.JSONField(
+        default=list,
+        blank=True,
+        db_default=models.Value([], output_field=models.JSONField()),
+    )
+    eligibility_checked_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     signed_up_at = models.DateTimeField(db_default=Now())

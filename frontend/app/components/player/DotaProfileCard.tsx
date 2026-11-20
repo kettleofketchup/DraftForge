@@ -59,14 +59,14 @@ const RANK_STATUS_LABELS: Record<string, string> = {
 };
 
 const MEDAL_COLORS: Record<string, string> = {
-  Herald: 'bg-zinc-600/30 text-zinc-300 border-zinc-500/30',
-  Guardian: 'bg-amber-800/30 text-amber-300 border-amber-600/30',
-  Crusader: 'bg-lime-800/30 text-lime-300 border-lime-600/30',
-  Archon: 'bg-sky-800/30 text-sky-300 border-sky-600/30',
-  Legend: 'bg-violet-800/30 text-violet-300 border-violet-600/30',
-  Ancient: 'bg-red-800/30 text-red-300 border-red-600/30',
-  Divine: 'bg-cyan-800/30 text-cyan-300 border-cyan-600/30',
-  Immortal: 'bg-yellow-700/30 text-yellow-200 border-yellow-500/30',
+  Herald: 'bg-tier-herald/15 text-tier-herald border-tier-herald/30',
+  Guardian: 'bg-tier-guardian/15 text-tier-guardian border-tier-guardian/30',
+  Crusader: 'bg-tier-crusader/15 text-tier-crusader border-tier-crusader/30',
+  Archon: 'bg-tier-archon/15 text-tier-archon border-tier-archon/30',
+  Legend: 'bg-tier-legend/15 text-tier-legend border-tier-legend/30',
+  Ancient: 'bg-tier-ancient/15 text-tier-ancient border-tier-ancient/30',
+  Divine: 'bg-tier-divine/15 text-tier-divine border-tier-divine/30',
+  Immortal: 'bg-tier-immortal/15 text-tier-immortal border-tier-immortal/30',
 };
 
 function getMedalColor(medal: string): string {

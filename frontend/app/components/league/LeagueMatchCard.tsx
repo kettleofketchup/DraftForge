@@ -58,7 +58,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
             <div
               className={cn(
                 'flex items-center gap-3 flex-1',
-                radiantWon && 'ring-2 ring-green-500 rounded-lg p-2',
+                radiantWon && 'ring-2 ring-radiant rounded-lg p-2',
               )}
             >
               {match.radiant_captain ? (
@@ -66,7 +66,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
                   <div className="flex items-center gap-2 cursor-pointer">
                     <UserAvatar user={match.radiant_captain} size="lg" />
                     <div>
-                      <p className="font-medium text-green-600">
+                      <p className="font-medium text-radiant">
                         {DisplayName(match.radiant_captain)}
                       </p>
                       <p className="text-xs text-muted-foreground">Radiant</p>
@@ -84,16 +84,14 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
                 <div className="text-lg font-bold">
                   <span
                     className={
-                      radiantWon ? 'text-green-600' : 'text-muted-foreground'
+                      radiantWon ? 'text-radiant' : 'text-muted-foreground'
                     }
                   >
                     {radiantWon ? 'W' : 'L'}
                   </span>
                   <span className="mx-2">-</span>
                   <span
-                    className={
-                      direWon ? 'text-red-600' : 'text-muted-foreground'
-                    }
+                    className={direWon ? 'text-dire' : 'text-muted-foreground'}
                   >
                     {direWon ? 'W' : 'L'}
                   </span>
@@ -107,14 +105,14 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
             <div
               className={cn(
                 'flex items-center gap-3 flex-1 justify-end',
-                direWon && 'ring-2 ring-red-500 rounded-lg p-2',
+                direWon && 'ring-2 ring-dire rounded-lg p-2',
               )}
             >
               {match.dire_captain ? (
                 <PlayerPopover player={match.dire_captain}>
                   <div className="flex items-center gap-2 cursor-pointer">
                     <div className="text-right">
-                      <p className="font-medium text-red-600">
+                      <p className="font-medium text-dire">
                         {DisplayName(match.dire_captain)}
                       </p>
                       <p className="text-xs text-muted-foreground">Dire</p>

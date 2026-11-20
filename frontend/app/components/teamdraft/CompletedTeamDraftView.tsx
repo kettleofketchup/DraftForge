@@ -1,19 +1,19 @@
 // frontend/app/components/teamdraft/CompletedTeamDraftView.tsx
-import { useCallback, useMemo } from 'react';
 import { Trophy, Users } from 'lucide-react';
+import { useCallback, useMemo } from 'react';
+import type { TeamType } from '~/components/tournament/types';
 import { Badge } from '~/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
-import { cn } from '~/lib/utils';
-import { DisplayName } from '~/components/user/avatar';
-import { UserAvatar } from '~/components/user/UserAvatar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { UserStrip } from '~/components/user';
-import { TeamPositionCoverageRow } from './TeamPositionCoverage';
-import { formatDuration } from '~/lib/dota/utils';
-import type { DraftRoundType } from './types';
-import type { TeamType } from '~/components/tournament/types';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import { formatDuration } from '~/lib/dota/utils';
+import { cn } from '~/lib/utils';
+import { TeamPositionCoverageRow } from './TeamPositionCoverage';
+import type { DraftRoundType } from './types';
 
 interface CompletedTeamDraftViewProps {
   teams: TeamType[];
@@ -69,17 +69,30 @@ function TeamMembersList({
               isCaptain || hasDuration || hasSkips ? (
                 <div className="flex items-center gap-1">
                   {isCaptain && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-primary border-primary">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 text-primary border-primary"
+                    >
                       Captain
                     </Badge>
                   )}
                   {hasDuration && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0" data-testid={`pick-duration-${member.pk}`}>
-                      {formatDuration((round!.pick_duration_ms as number) / 1000)}
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0"
+                      data-testid={`pick-duration-${member.pk}`}
+                    >
+                      {formatDuration(
+                        (round!.pick_duration_ms as number) / 1000,
+                      )}
                     </Badge>
                   )}
                   {hasSkips && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-400 border-amber-400" data-testid={`pick-skips-${member.pk}`}>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 text-warning border-warning"
+                      data-testid={`pick-skips-${member.pk}`}
+                    >
                       skipped ×{round!.skip_count}
                     </Badge>
                   )}
@@ -93,7 +106,13 @@ function TeamMembersList({
   );
 }
 
-function TeamCard({ team, rank, organizationId, leaguePk, rounds }: TeamCardProps) {
+function TeamCard({
+  team,
+  rank,
+  organizationId,
+  leaguePk,
+  rounds,
+}: TeamCardProps) {
   const { openTeamModal } = useSharedPopoverActions();
   const captain = team.captain;
   const displayName = captain ? DisplayName(captain) : team.name;
@@ -101,17 +120,20 @@ function TeamCard({ team, rank, organizationId, leaguePk, rounds }: TeamCardProp
   // Calculate average MMR
   const averageMMR = useMemo(() => {
     if (!team.members || team.members.length === 0) return 0;
-    const totalMMR = team.members.reduce((acc: number, member: UserType) => acc + (member.mmr || 0), 0);
+    const totalMMR = team.members.reduce(
+      (acc: number, member: UserType) => acc + (member.mmr || 0),
+      0,
+    );
     return Math.round(totalMMR / team.members.length);
   }, [team.members]);
 
   // Determine rank badge color
   const rankColors = [
-    'bg-yellow-500 text-yellow-900', // 1st - Gold
-    'bg-gray-400 text-gray-900',     // 2nd - Silver
-    'bg-amber-700 text-amber-100',   // 3rd - Bronze
+    'bg-medal-gold text-base-950', // 1st - Gold
+    'bg-medal-silver text-base-950', // 2nd - Silver
+    'bg-medal-bronze text-foreground', // 3rd - Bronze
   ];
-  const rankColor = rankColors[rank - 1] || 'bg-slate-600 text-slate-200';
+  const rankColor = rankColors[rank - 1] || 'bg-base-50 text-foreground';
 
   const handleClick = useCallback(() => {
     openTeamModal(team);
@@ -122,7 +144,7 @@ function TeamCard({ team, rank, organizationId, leaguePk, rounds }: TeamCardProp
       className={cn(
         'w-full cursor-pointer transition-all duration-200 flex flex-col',
         'hover:ring-2 hover:ring-primary/50 hover:shadow-lg',
-        'bg-slate-800/80 border-slate-700'
+        'bg-card/80 border-border',
       )}
       data-testid={`completed-team-card-${team.pk}`}
       onClick={handleClick}
@@ -138,15 +160,18 @@ function TeamCard({ team, rank, organizationId, leaguePk, rounds }: TeamCardProp
           <UserAvatar
             user={captain}
             size="xl"
-            className="ring-2 ring-slate-600"
+            className="ring-2 ring-base-50"
           />
 
           {/* Team Name & Captain */}
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-lg text-white truncate" data-testid="team-card-name">
+            <CardTitle
+              className="text-lg text-white truncate"
+              data-testid="team-card-name"
+            >
               {team.name}
             </CardTitle>
-            <p className="text-sm text-slate-400 truncate">
+            <p className="text-sm text-muted-foreground truncate">
               Captain: {displayName}
             </p>
           </div>
@@ -157,14 +182,17 @@ function TeamCard({ team, rank, organizationId, leaguePk, rounds }: TeamCardProp
         {/* Stats Row */}
         <div className="flex items-center gap-4 mb-3 shrink-0">
           <div className="flex items-center gap-1.5">
-            <Trophy className="h-4 w-4 text-yellow-500" />
-            <span className="text-sm font-medium text-slate-200" data-testid="team-avg-mmr-label">
+            <Trophy className="h-4 w-4 text-medal-gold" />
+            <span
+              className="text-sm font-medium text-foreground"
+              data-testid="team-avg-mmr-label"
+            >
               {averageMMR.toLocaleString()} avg MMR
             </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Users className="h-4 w-4 text-blue-400" />
-            <span className="text-sm text-slate-300">
+            <Users className="h-4 w-4 text-info" />
+            <span className="text-sm text-text-secondary">
               {team.members?.length || 0} players
             </span>
           </div>
@@ -172,23 +200,55 @@ function TeamCard({ team, rank, organizationId, leaguePk, rounds }: TeamCardProp
 
         {/* Tabs for Members and Position Coverage - always visible */}
         {/* Stop propagation to prevent opening team modal when clicking tabs */}
-        <div onClick={(e) => e.stopPropagation()} className="flex-1 flex flex-col min-h-0">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="flex-1 flex flex-col min-h-0"
+        >
           {/* Position coverage requires 2+ members to be meaningful */}
           {(team.members?.length || 0) >= 2 ? (
-            <Tabs defaultValue="members" className="w-full flex-1 flex flex-col min-h-0">
+            <Tabs
+              defaultValue="members"
+              className="w-full flex-1 flex flex-col min-h-0"
+            >
               <TabsList className="w-full grid grid-cols-2 h-8 mb-2 shrink-0">
-                <TabsTrigger value="members" className="text-xs">Members</TabsTrigger>
-                <TabsTrigger value="positions" className="text-xs">Guessed Positions</TabsTrigger>
+                <TabsTrigger value="members" className="text-xs">
+                  Members
+                </TabsTrigger>
+                <TabsTrigger value="positions" className="text-xs">
+                  Guessed Positions
+                </TabsTrigger>
               </TabsList>
-              <TabsContent value="positions" className="mt-0 flex-1 overflow-y-auto">
-                <TeamPositionCoverageRow team={team} teamName={team.name || displayName} showFullTable />
+              <TabsContent
+                value="positions"
+                className="mt-0 flex-1 overflow-y-auto"
+              >
+                <TeamPositionCoverageRow
+                  team={team}
+                  teamName={team.name || displayName}
+                  showFullTable
+                />
               </TabsContent>
-              <TabsContent value="members" className="mt-0 flex-1 overflow-y-auto">
-                <TeamMembersList members={team.members || []} captain={captain} organizationId={organizationId} leaguePk={leaguePk} rounds={rounds} />
+              <TabsContent
+                value="members"
+                className="mt-0 flex-1 overflow-y-auto"
+              >
+                <TeamMembersList
+                  members={team.members || []}
+                  captain={captain}
+                  organizationId={organizationId}
+                  leaguePk={leaguePk}
+                  rounds={rounds}
+                />
               </TabsContent>
             </Tabs>
           ) : (
-            <TeamMembersList members={team.members || []} captain={captain} organizationId={organizationId} leaguePk={leaguePk} rounds={rounds} />
+            <TeamMembersList
+              members={team.members || []}
+              captain={captain}
+              organizationId={organizationId}
+              leaguePk={leaguePk}
+              rounds={rounds}
+            />
           )}
         </div>
       </CardContent>
@@ -199,12 +259,25 @@ function TeamCard({ team, rank, organizationId, leaguePk, rounds }: TeamCardProp
 // Export TeamCard and TeamMembersList for reuse in TeamsTab
 export { TeamCard, TeamMembersList };
 
-export function CompletedTeamDraftView({ teams, organizationId, leaguePk, rounds }: CompletedTeamDraftViewProps) {
+export function CompletedTeamDraftView({
+  teams,
+  organizationId,
+  leaguePk,
+  rounds,
+}: CompletedTeamDraftViewProps) {
   // Sort teams by average MMR (highest first)
   const sortedTeams = useMemo(() => {
     return [...teams].sort((a, b) => {
-      const aMMR = a.members?.reduce((acc: number, m: UserType) => acc + (m.mmr || 0), 0) || 0;
-      const bMMR = b.members?.reduce((acc: number, m: UserType) => acc + (m.mmr || 0), 0) || 0;
+      const aMMR =
+        a.members?.reduce(
+          (acc: number, m: UserType) => acc + (m.mmr || 0),
+          0,
+        ) || 0;
+      const bMMR =
+        b.members?.reduce(
+          (acc: number, m: UserType) => acc + (m.mmr || 0),
+          0,
+        ) || 0;
       const aAvg = a.members?.length ? aMMR / a.members.length : 0;
       const bAvg = b.members?.length ? bMMR / b.members.length : 0;
       return bAvg - aAvg;
@@ -233,7 +306,14 @@ export function CompletedTeamDraftView({ teams, organizationId, leaguePk, rounds
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 w-full max-w-6xl">
         {sortedTeams.map((team, index) => (
-          <TeamCard key={team.pk} team={team} rank={index + 1} organizationId={organizationId} leaguePk={leaguePk} rounds={rounds} />
+          <TeamCard
+            key={team.pk}
+            team={team}
+            rank={index + 1}
+            organizationId={organizationId}
+            leaguePk={leaguePk}
+            rounds={rounds}
+          />
         ))}
       </div>
     </div>

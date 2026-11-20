@@ -255,6 +255,33 @@ export const eventSchema = z
 
 export type EventType = z.infer<typeof eventSchema>;
 
+export const ELIGIBILITY_SEVERITIES = ['block', 'needs_approval'] as const;
+
+// Mirrors backend events.eligibility.Reason.as_dict().
+export const eligibilityReasonSchema = z.object({
+  code: z.string(),
+  severity: z.enum(ELIGIBILITY_SEVERITIES),
+  rule: z.string(),
+  message: z.string(),
+  fix: z
+    .object({
+      kind: z.string(),
+      url: z.string().nullable(),
+    })
+    .nullable(),
+  params: z.record(z.string(), z.unknown()).default({}),
+});
+
+export type EligibilityReason = z.infer<typeof eligibilityReasonSchema>;
+
+export const eventEligibilitySchema = z.object({
+  admissible: z.boolean(),
+  reasons: z.array(eligibilityReasonSchema),
+  has_registered_steam_id: z.boolean(),
+});
+
+export type EventEligibility = z.infer<typeof eventEligibilitySchema>;
+
 export const eventSignupSchema = z.object({
   id: z.number(),
   event: z.number(),
@@ -310,6 +337,7 @@ export const eventSignupSchema = z.object({
   status: z.string(),
   holds_seat: z.boolean().optional(),
   unmet_requirements: z.array(z.string()).optional(),
+  eligibility_reasons: z.array(eligibilityReasonSchema).optional(),
   waitlist_position: z.number().nullable(),
   created_at: z.string(),
   updated_at: z.string(),

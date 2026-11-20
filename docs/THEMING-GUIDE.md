@@ -95,8 +95,8 @@ Use accents **intentionally** - don't scatter random colors.
 | Success | emerald-400 | `text-success`, `bg-success` | Match won, completed |
 | Warning | amber-400 | `text-warning`, `bg-warning` | Achievements, rankings |
 | Error (text/badges) | rose-500 | `text-error`, `bg-destructive` | Inline errors, delete buttons |
-| Error (surfaces) | red-900/violet-900 | `brandErrorBg` | Error containers — muted wine gradient |
-| Error (cards) | red-900/60 | `brandErrorCard` | Error cards within containers |
+| Error (surfaces) | `error`/`selection` tints | `brandErrorBg` | Error containers — muted wine gradient |
+| Error (cards) | `error`/30 | `brandErrorCard` | Error cards within containers |
 | Info | sky-400 | `text-info`, `bg-info` | Informational callouts |
 | Selection | violet-500 | `bg-selection` | Selected items |
 
@@ -108,7 +108,7 @@ Use accents **intentionally** - don't scatter random colors.
 <Badge className="bg-info">New Feature</Badge>
 ```
 
-> **Error surfaces** use raw Tailwind colors (`red-900`, `violet-900`) instead of semantic `--error` tokens. This is intentional: error containers need deep wine/muted tones to maintain the "muted surfaces + bright accents" pattern. The semantic `rose-500` error token is for bright inline accents.
+> **Error surfaces** keep their deep wine look with low-opacity `error` and `selection` tints (`brandErrorBg`, `brandErrorCard`). Where a surface must be opaque (dialogs, toasts), use `bg-error-surface` / `bg-warning-surface` / `bg-success-surface` (see Domain Colors).
 
 ---
 
@@ -132,7 +132,8 @@ behind an accent. Use opacity modifiers for tints (`bg-radiant-surface/60`,
 |-------|--------|---------|----------|
 | Team sides | `radiant`, `radiant-surface`, `dire`, `dire-surface` | Radiant/Dire labels, team panels, stat rows, side borders | `green-*` / `red-*` keyed on `team === 'radiant'` or `is_radiant` |
 | Draft actions | `pick`, `pick-surface`, `ban`, `ban-surface` | Hero pick/ban slots, toasts, history, grid tints; team-draft "picked" | `green-*` / `red-*` keyed on `isPick`, `isBan`, `currentAction` |
-| Draft turn | `turn`, `turn-foreground` | The slot or captain acting now, in hero and team drafts | `yellow-400` active slot; `green-600`/`green-500` current pick |
+| Draft turn | `turn`, `turn-foreground` | Hero draft: the slot acting now | `yellow-400` active slot |
+| Team draft current pick | `current-pick`, `current-pick-foreground` | Team draft: the pick, captain or "your turn" acting now (green, unlike hero draft's yellow) | `green-500`/`green-600`/`green-800`/`green-900` current pick |
 | Draft styles | `draft-snake`, `draft-normal`, `draft-shuffle` | Draft style cards and labels | `green`/`orange`/`purple` `-100`/`-600`/`-800` chips |
 | Positions | `pos-carry`, `pos-mid`, `pos-offlane`, `pos-soft-support`, `pos-hard-support`, each with `-surface` | Position badges, tooltips and the position SVG icons (`fill-pos-*`) | `rose`/`cyan`/`emerald`/`violet`/`indigo` `-200`/`-800`/`-900`, icon hex fills |
 | Site roles | `role-owner`, `role-admin`, `role-staff` | Owner/Admin/Staff badges and icons | `yellow-500` crown, `red-600`/`700` admin, `blue-600`/`700` staff |
@@ -144,6 +145,11 @@ behind an accent. Use opacity modifiers for tints (`bg-radiant-surface/60`,
 | Placings | `medal-gold`, `medal-silver`, `medal-bronze` | 1st/2nd/3rd, trophies | `yellow-500`, `gray-400`, `amber-700` |
 | Presence | `online`, `offline`, `live` | Online dots, draft connection state, live match badges | `green-500` / `gray-400`/`500` / `red-500` dots |
 | Match stats | `stat-gold`, `stat-xp` | GPM and XPM numbers | `yellow-400`, `blue-400` |
+| Captains | `captain` | Captain names and the captain avatar ring | `yellow-400`/`yellow-500` |
+| Search match | `search-match` | Heroes or rows matching the current search | `green-400`/`green-600` highlight |
+| Opaque status surfaces | `success-surface`, `warning-surface`, `error-surface`, `selection-surface` | Dialog and toast fills that must not let the page bleed through | `green-950`/`orange-950`/`red-950`/`violet-950` |
+| Text on status surfaces | `success-tint`, `warning-tint`, `error-tint` | Near-white body text on those surfaces (`brandReadable*`) | `emerald-50`/`orange-50`/`rose-50` |
+| Destructive hover | `destructive-hover` | Lighter hover for destructive text and icons | `red-400` |
 | Third-party | `discord` | Discord buttons and links | `indigo-*` on Discord actions |
 
 ```tsx

@@ -37,7 +37,7 @@ export function PlayerPickedToast({ payload }: PlayerPickedToastProps) {
       <span className="font-medium truncate max-w-[80px]" title={captainName}>
         {truncateName(captainName)}
       </span>
-      <span className="text-green-500 font-semibold">picked</span>
+      <span className="text-pick font-semibold">picked</span>
       <UserAvatar
         src={payload.picked_avatar_url || undefined}
         user={picked}
@@ -71,7 +71,7 @@ export function PlayerPickToast({ captain, player }: PlayerPickToastProps) {
     <div className="flex items-center gap-2">
       <UserAvatar user={captain || undefined} size="sm" className="shrink-0" />
       <span className="font-medium">{captainName}</span>
-      <span className="text-green-500 font-semibold">picked</span>
+      <span className="text-pick font-semibold">picked</span>
       <UserAvatar user={player || undefined} size="sm" className="shrink-0" />
       <span className="font-medium">{playerName}</span>
     </div>
@@ -92,9 +92,7 @@ export function DoublePickToast({ captain }: DoublePickToastProps) {
     <div className="flex items-center gap-2">
       <UserAvatar user={captain || undefined} size="sm" className="shrink-0" />
       <span className="font-medium">{captainName}</span>
-      <span className="text-orange-500 font-semibold">
-        gets double pick! 🔥
-      </span>
+      <span className="text-pick font-semibold">gets double pick! 🔥</span>
     </div>
   );
 }
@@ -113,7 +111,7 @@ export function CaptainTurnToast({ captain }: CaptainTurnToastProps) {
     <div className="flex items-center gap-2">
       <UserAvatar user={captain || undefined} size="sm" className="shrink-0" />
       <span className="font-medium">{captainName}</span>
-      <span className="text-blue-500">is now picking...</span>
+      <span className="text-info">is now picking...</span>
     </div>
   );
 }

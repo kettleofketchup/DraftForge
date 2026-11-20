@@ -173,7 +173,7 @@ export const GameCard: React.FC<Props> = ({
         {game.gameid && (
           <Button
             variant={'secondary'}
-            className="w-24 outline-green-500"
+            className="w-24"
             onClick={() => setShowStatsModal(true)}
             data-testid="view-stats-btn"
           >

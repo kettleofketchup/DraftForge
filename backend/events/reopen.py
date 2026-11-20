@@ -96,6 +96,7 @@ def reopen_event(event: Event, *, actor: CustomUser | None) -> ReopenResult:
         stale = copy.copy(event)
         event.refresh_from_db(from_queryset=Event.objects.nocache().all())
         invalidate_after_commit(stale, event)
+        event.refresh_signup_post_on_commit()
 
     log.info(
         "event_reopened",

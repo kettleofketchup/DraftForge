@@ -41,6 +41,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `celery` | `task` | — | `telemetry/celery.py` | Generic Celery task lifecycle bookends (started/completed/failed) |
 | `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
 | `events` | `scheduling` | — | `events/tasks.py`, `events/management/` | Event generation, signup opening, repeaters |
+| `events` | `eligibility` | — | `events/eligibility/evaluate.py` | `eligibility_evaluated`: reason `codes` and `admissible` for every signup evaluation |
 | `tournament` | `discord` | — | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
 | `avatars` | `endpoint` | — | `user/internal/avatar.py` | Internal endpoints: list-linked-users, list-guild-ids, bulk-update + invalidate |
 | `avatars` | `refresh` | — | `app/tasks/avatar_refresh.py::refresh_avatars_batched` | Daily Celery beat: read guild-member cache, diff against DB, POST bulk-update |

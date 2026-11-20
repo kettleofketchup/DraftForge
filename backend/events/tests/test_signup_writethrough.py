@@ -23,7 +23,7 @@ from structlog.testing import capture_logs
 
 from app.models import CustomUser, Organization, PositionsModel
 from events.constants import SignupStatus
-from events.eligibility import sync_steam_account_from_profiles
+from events.eligibility import EligibilityResult, sync_steam_account_from_profiles
 from events.models import Event, EventSignup
 from events.schemas import SignupInputPatch
 from events.services import (
@@ -278,10 +278,14 @@ class SignupSteamSyncOrderingTest(EventTestCase):
     def _skips(self, logs: list[dict[str, object]]) -> list[dict[str, object]]:
         return [e for e in logs if e["event"] == "signup_steam_writethrough_skipped"]
 
-    def _recording_check(self, seen: list[int | None]) -> Callable[..., list]:
-        def record(event: Event, user: CustomUser, **_kwargs: object) -> list:
+    def _recording_check(
+        self, seen: list[int | None]
+    ) -> Callable[..., EligibilityResult]:
+        def record(
+            event: Event, user: CustomUser, **_kwargs: object
+        ) -> EligibilityResult:
             seen.append(user.steam_account_id)
-            return []
+            return EligibilityResult()
 
         return record
 
@@ -303,7 +307,7 @@ class SignupSteamSyncOrderingTest(EventTestCase):
         user = self._user_with_friend_id("525252")
         seen: list[int | None] = []
         with patch(
-            "events.services.unmet_codes",
+            "events.services.evaluate_signup",
             side_effect=self._recording_check(seen),
         ):
             process_rsvp(ev, user)
@@ -321,7 +325,7 @@ class SignupSteamSyncOrderingTest(EventTestCase):
         )
         seen: list[int | None] = []
         with patch(
-            "events.services.unmet_codes",
+            "events.services.evaluate_signup",
             side_effect=self._recording_check(seen),
         ):
             cancel_signup(holder)

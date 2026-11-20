@@ -3,6 +3,8 @@
 @import '@fontsource-variable/inter/index.css';
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant draft-split (@media (min-width: 64rem) and (min-height: 56rem));
+@custom-variant draft-stacked (@media not ((min-width: 64rem) and (min-height: 56rem)));
 
 /* Tailwind v4 dropped the v3 `container` auto-width/max-width behavior; pages
    that say `<div class="container mx-auto px-4">` were getting no width rule,
@@ -233,6 +235,8 @@ body {
   --color-ban-surface: var(--ban-surface);
   --color-turn: var(--turn);
   --color-turn-foreground: var(--turn-foreground);
+  --color-current-pick: var(--current-pick);
+  --color-current-pick-foreground: var(--current-pick-foreground);
   --color-draft-snake: var(--draft-snake);
   --color-draft-normal: var(--draft-normal);
   --color-draft-shuffle: var(--draft-shuffle);
@@ -276,6 +280,16 @@ body {
   --color-stat-gold: var(--stat-gold);
   --color-stat-xp: var(--stat-xp);
   --color-discord: var(--discord);
+  --color-captain: var(--captain);
+  --color-search-match: var(--search-match);
+  --color-success-surface: var(--success-surface);
+  --color-warning-surface: var(--warning-surface);
+  --color-error-surface: var(--error-surface);
+  --color-selection-surface: var(--selection-surface);
+  --color-success-tint: var(--success-tint);
+  --color-warning-tint: var(--warning-tint);
+  --color-error-tint: var(--error-tint);
+  --color-destructive-hover: var(--destructive-hover);
 
   /* Brand shadows */
   --shadow-brand-glow:
@@ -501,6 +515,9 @@ body {
   --ban-surface: oklch(0.258 0.092 26);
   --turn: oklch(0.852 0.199 91.9);
   --turn-foreground: oklch(0.21 0.034 264.7);
+  /* Team draft: the pick or captain acting now (hero draft uses turn) */
+  --current-pick: oklch(0.627 0.194 149.2);
+  --current-pick-foreground: oklch(0.985 0.002 265);
 
   /* Draft styles */
   --draft-snake: oklch(0.723 0.219 149.6);
@@ -565,6 +582,24 @@ body {
   /* Match stats */
   --stat-gold: oklch(0.852 0.199 91.9);
   --stat-xp: oklch(0.707 0.165 254.6);
+
+  /* Captains */
+  --captain: oklch(0.795 0.184 86);
+
+  /* Search match highlight */
+  --search-match: oklch(0.792 0.209 151.7);
+
+  /* Opaque status surfaces (dialogs, toasts) and the near-white text on them */
+  --success-surface: oklch(0.266 0.065 152.9);
+  --warning-surface: oklch(0.266 0.079 36.3);
+  --error-surface: oklch(0.258 0.092 26);
+  --selection-surface: oklch(0.283 0.141 291.1);
+  --success-tint: oklch(0.979 0.021 166.1);
+  --warning-tint: oklch(0.98 0.016 73.7);
+  --error-tint: oklch(0.969 0.015 12.4);
+
+  /* Lighter destructive for hover on destructive text */
+  --destructive-hover: oklch(0.704 0.191 22.2);
 
   /* Third-party brands */
   --discord: oklch(0.585 0.204 277.1);
@@ -762,7 +797,7 @@ body {
     1px 1px 0 var(--base-400);
 }
 
-.text-outline-sm {
+@utility text-outline-sm {
   text-shadow:
     -0.5px -0.5px 0 var(--base-400),
     0.5px -0.5px 0 var(--base-400),
@@ -801,6 +836,10 @@ body {
 }
 
 .text-link:hover {
+  color: var(--secondary-hover);
+}
+
+@utility text-secondary-hover {
   color: var(--secondary-hover);
 }
 
@@ -853,7 +892,7 @@ body {
 }
 
 /* Combined: dark shadow + subtle glow */
-.shadow-elevated {
+@utility shadow-elevated {
   box-shadow:
     0 4px 6px -1px oklch(0 0 0 / 25%),
     0 2px 4px -2px oklch(0 0 0 / 20%),
@@ -868,14 +907,14 @@ body {
 }
 
 /* Hover shadow transition */
-.shadow-hover {
+@utility shadow-hover {
   transition: box-shadow 0.2s ease;
-}
 
-.shadow-hover:hover {
-  box-shadow:
-    0 10px 25px -5px oklch(0 0 0 / 30%),
-    0 0 15px var(--glow-violet);
+  &:hover {
+    box-shadow:
+      0 10px 25px -5px oklch(0 0 0 / 30%),
+      0 0 15px var(--glow-violet);
+  }
 }
 
 /* ===== HERODRAFT ANIMATIONS ===== */

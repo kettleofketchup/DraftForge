@@ -44,8 +44,9 @@ from app.permissions_org import (
 from events.admission import ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
-from events.constants import ActorRole, EventState
+from events.constants import ActorRole, Commitment, EventState
 from events.discord import notify_create_discord_event, notify_signup_changed
+from events.eligibility import evaluate_signup, has_registered_steam_id, recheck_signup
 from events.ledger import SignupActor
 from events.models import (
     Event,
@@ -402,8 +403,8 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         """List all subscribers for this repeater."""
         repeater = self.get_object()
         # RepeaterSubscriptionSerializer reads user.nickname + user.avatar,
-        # which go through the @property on CustomUser → base_profile (T1
-        # epic). Without this prefetch the list view is N+1 cold-cache.
+        # which go through the @property on CustomUser → base_profile. Without
+        # this prefetch the list view is N+1 cold-cache.
         subs = with_user_profiles(
             RepeaterSubscription.objects.filter(event_repeater=repeater), "user"
         )
@@ -559,6 +560,27 @@ _CONCURRENTLY_WRITTEN_EVENT_FIELDS = [
 ]
 
 
+_SIGNUP_INTENT_COMMITMENT: dict[str, Commitment] = {
+    "rsvp": Commitment.MAIN,
+    "tentative": Commitment.MAYBE,
+}
+
+
+def _signup_refusal(
+    event: Event, user: CustomUser, intent: object, error: str
+) -> Response:
+    commitment = (
+        _SIGNUP_INTENT_COMMITMENT.get(intent, Commitment.MAIN)
+        if isinstance(intent, str)
+        else Commitment.MAIN
+    )
+    result = evaluate_signup(event, user, intent=commitment)
+    return Response(
+        {"error": error, "reasons": result.as_dicts()},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
 def _parse_datetime_param(params: QueryDict, name: str) -> datetime | None:
     raw = params.get(name)
     if not raw:
@@ -588,7 +610,6 @@ class EventViewSet(viewsets.ModelViewSet):
             qs = with_event_staff(qs)
         params = self.request.query_params
 
-        # Filter by organization
         org_id = params.get("organization")
         if org_id:
             qs = qs.filter(organization_id=org_id)
@@ -601,14 +622,12 @@ class EventViewSet(viewsets.ModelViewSet):
         elif state:
             qs = qs.filter(state=state)
 
-        # Search by name or organization name
         search = params.get("search")
         if search:
             qs = qs.filter(
                 Q(name__icontains=search) | Q(organization__name__icontains=search)
             )
 
-        # Filter by event repeater
         repeater_id = params.get("event_repeater")
         if repeater_id:
             qs = qs.filter(event_repeater_id=repeater_id)
@@ -633,7 +652,6 @@ class EventViewSet(viewsets.ModelViewSet):
                 signups_open_at__isnull=False, signups_open_at__lte=signups_due_before
             )
 
-        # Boolean filters
         has_repeater = params.get("has_repeater")
         if has_repeater == "true":
             qs = qs.filter(event_repeater__isnull=False)
@@ -642,7 +660,6 @@ class EventViewSet(viewsets.ModelViewSet):
         if has_announcement_channel == "true":
             qs = qs.filter(discord_announcement_channel_id__gt="")
 
-        # Ordering
         ordering = params.get("ordering", "-scheduled_at")
         if ordering == "closest":
             qs = qs.annotate(distance=Abs(F("scheduled_at") - Now())).order_by(
@@ -861,20 +878,18 @@ class EventViewSet(viewsets.ModelViewSet):
         """Single canonical signup endpoint accepting an intent + optional profile patch.
 
         Body: {"intent": "rsvp" | "tentative", "profile": {...}}
-        Replaces the older /rsvp/ and /tentative/ actions (deleted in Task 29).
         """
         event = self.get_object()
+        body = request.data or {}
+        intent = body.get("intent")
         try:
             ensure_self_serve(event, request.user)
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return _signup_refusal(event, request.user, intent, str(exc))
 
-        body = request.data or {}
-        intent = body.get("intent")
-        if intent not in ("rsvp", "tentative"):
-            return Response(
-                {"error": "intent must be 'rsvp' or 'tentative'"},
-                status=status.HTTP_400_BAD_REQUEST,
+        if not isinstance(intent, str) or intent not in _SIGNUP_INTENT_COMMITMENT:
+            return _signup_refusal(
+                event, request.user, intent, "intent must be 'rsvp' or 'tentative'"
             )
 
         try:
@@ -882,7 +897,7 @@ class EventViewSet(viewsets.ModelViewSet):
         except PydanticValidationError as exc:
             first = exc.errors()[0] if exc.errors() else {}
             msg = first.get("msg") or str(exc)
-            return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
+            return _signup_refusal(event, request.user, intent, msg)
 
         org_user = resolve_or_create_org_user(request.user, event.organization)
 
@@ -897,13 +912,46 @@ class EventViewSet(viewsets.ModelViewSet):
                     )
         except DjangoValidationError as exc:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-            return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
+            return _signup_refusal(event, request.user, intent, msg)
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return _signup_refusal(event, request.user, intent, str(exc))
 
         return Response(
             EventSignupSerializer(signup, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True,
+        methods=["get"],
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def eligibility(self, request: Request, pk: str | None = None) -> Response:
+        """GET /api/events/<pk>/eligibility/?intent=main|maybe for the request
+        user. Never creates an OrgUser."""
+        event = self.get_object()
+        intent = request.query_params.get("intent", Commitment.MAIN)
+        if intent not in Commitment.values:
+            return Response(
+                {"error": "intent must be 'main' or 'maybe'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        result = evaluate_signup(event, request.user, intent=intent)
+        org_user = (
+            OrgUser.objects.filter(
+                user=request.user, organization_id=event.organization_id
+            ).first()
+            if event.organization_id
+            else None
+        )
+        return Response(
+            {
+                "admissible": result.admissible,
+                "reasons": result.as_dicts(),
+                "has_registered_steam_id": has_registered_steam_id(
+                    request.user, org_user
+                ),
+            }
         )
 
     @action(detail=True, methods=["post"], url_path="admin-signup")
@@ -965,9 +1013,9 @@ class EventViewSet(viewsets.ModelViewSet):
     def reopen_signups(self, request: Request, pk: str | None = None) -> Response:
         """Corrective transition from ROLL_CALL back to SIGNUPS_OPEN.
 
-        Quiet: no Discord re-announcement, no signup-changed notify. The
-        roster is resynced to the signup-phase rule, so approved players come
-        back when roll_call_enabled is off.
+        Quiet: no Discord re-announcement; the signup post is edited in
+        place. The roster is resynced to the signup-phase rule, so approved
+        players come back when roll_call_enabled is off.
         """
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
@@ -1158,8 +1206,8 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self) -> QuerySet[EventSignup]:
         # EventSignupSerializer's `username` (display name) reads
         # user.nickname, and it ships user.avatar — both resolve through the
-        # CustomUser @property to base_profile (T1 epic). Without
-        # user__base_profile this is N+1 cold-cache on busy events.
+        # CustomUser @property to base_profile. Without user__base_profile this
+        # is N+1 cold-cache on busy events.
         qs = with_user_profiles(
             EventSignup.objects.select_related(
                 "event__tournament__league__organization", "event_team"
@@ -1214,6 +1262,17 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response(
             EventSignupSerializer(result, context={"request": request}).data
+        )
+
+    @action(detail=True, methods=["post"])
+    def recheck(self, request: Request, pk: str | None = None) -> Response:
+        signup = self.get_object()
+        if not has_event_staff_access(request.user, signup.event):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        with transaction.atomic():
+            recheck_signup(signup)
+        return Response(
+            EventSignupSerializer(signup, context={"request": request}).data
         )
 
     @action(detail=True, methods=["post"])
@@ -1497,7 +1556,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             entry["status"] = "disabled"
             return entry
 
-        # Determine status
         if task == "signup_reminder":
             s = (
                 "fired"

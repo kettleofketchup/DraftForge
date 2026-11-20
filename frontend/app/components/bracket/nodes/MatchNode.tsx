@@ -1,21 +1,5 @@
-import { memo } from 'react';
 import { type NodeProps, Position } from '@xyflow/react';
-import {
-  BaseNode,
-  BaseNodeHeader,
-  BaseNodeHeaderTitle,
-  BaseNodeContent,
-} from '~/components/ui/base-node';
-import { BaseHandle } from '~/components/ui/base-handle';
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { Badge } from '~/components/ui/badge';
-import { cn } from '~/lib/utils';
-import type { MatchNodeData } from '../types';
-import type { TeamType } from '~/components/tournament/types';
-import { DisplayName } from '~/components/user/avatar';
-import { getRoundLabel } from '../utils/doubleElimination';
-import { BracketBadge } from '../BracketBadge';
-import { getBadgeLetter } from '../utils/badgeUtils';
+import { memo } from 'react';
 import {
   LOBBY_DOT_BASE,
   lobbyStateDot,
@@ -23,11 +7,27 @@ import {
   lobbyStateToneName,
   showLobbyDot,
 } from '~/components/lobby/states';
+import type { TeamType } from '~/components/tournament/types';
+import { Badge } from '~/components/ui/badge';
+import { BaseHandle } from '~/components/ui/base-handle';
+import {
+  BaseNode,
+  BaseNodeContent,
+  BaseNodeHeader,
+  BaseNodeHeaderTitle,
+} from '~/components/ui/base-node';
+import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import { cn } from '~/lib/utils';
+import { BracketBadge } from '../BracketBadge';
+import type { MatchNodeData } from '../types';
+import { getBadgeLetter } from '../utils/badgeUtils';
+import { getRoundLabel } from '../utils/doubleElimination';
 
 const statusConfig = {
   pending: { label: 'Upcoming', className: 'bg-muted text-muted-foreground' },
-  live: { label: 'LIVE', className: 'bg-red-500 text-white animate-pulse' },
-  completed: { label: 'Final', className: 'bg-green-500/20 text-green-500' },
+  live: { label: 'LIVE', className: 'bg-live text-white animate-pulse' },
+  completed: { label: 'Final', className: 'bg-success/20 text-success' },
 };
 
 // Bracket type visual styling
@@ -38,114 +38,128 @@ const bracketTypeStyles = {
     headerBg: '',
   },
   losers: {
-    bg: 'bg-red-950/30',
+    bg: 'bg-bracket-losers/20',
     border: 'border-white/60',
-    headerBg: 'bg-red-900/30',
+    headerBg: 'bg-bracket-losers/30',
   },
   grand_finals: {
-    bg: 'bg-purple-950/20',
+    bg: 'bg-bracket-grand-finals/10',
     border: 'border-white/70',
-    headerBg: 'bg-purple-900/20',
+    headerBg: 'bg-bracket-grand-finals/20',
   },
   swiss: {
-    bg: 'bg-blue-950/20',
+    bg: 'bg-bracket-swiss/10',
     border: 'border-white/70',
-    headerBg: 'bg-blue-900/20',
+    headerBg: 'bg-bracket-swiss/20',
   },
 };
 
-export const MatchNode = memo(({ data, selected }: NodeProps & { data: MatchNodeData }) => {
-  const status = statusConfig[data.status];
-  const roundLabel = getRoundLabel(data.bracketType, data.round);
-  const bracketStyle = bracketTypeStyles[data.bracketType] || bracketTypeStyles.winners;
+export const MatchNode = memo(
+  ({ data, selected }: NodeProps & { data: MatchNodeData }) => {
+    const status = statusConfig[data.status];
+    const roundLabel = getRoundLabel(data.bracketType, data.round);
+    const bracketStyle =
+      bracketTypeStyles[data.bracketType] || bracketTypeStyles.winners;
 
-  // Calculate badge for winners bracket
-  const winnersBadgeLetter =
-    data.bracketType === 'winners' && data.loserNextMatchId
-      ? getBadgeLetter(data.bracketType, data.round, data.position, true)
-      : null;
+    // Calculate badge for winners bracket
+    const winnersBadgeLetter =
+      data.bracketType === 'winners' && data.loserNextMatchId
+        ? getBadgeLetter(data.bracketType, data.round, data.position, true)
+        : null;
 
-  // Get badges for losers bracket slots
-  const radiantBadgeLetter = data.badgeMapping?.[`${data.id}:radiant`];
-  const direBadgeLetter = data.badgeMapping?.[`${data.id}:dire`];
+    // Get badges for losers bracket slots
+    const radiantBadgeLetter = data.badgeMapping?.[`${data.id}:radiant`];
+    const direBadgeLetter = data.badgeMapping?.[`${data.id}:dire`];
 
-  return (
-    <BaseNode
-      data-testid="bracket-match-node"
-      data-bracket-type={data.bracketType}
-      data-round={data.round}
-      data-position={data.position}
-      data-game-pk={data.gameId ?? ''}
-      className={cn(
-        'w-52 cursor-pointer transition-all relative',
-        bracketStyle.bg,
-        bracketStyle.border,
-        selected && 'ring-2 ring-primary'
-      )}
-    >
-      {/* Left handle - receives winner from previous match */}
-      <BaseHandle type="target" position={Position.Left} />
+    return (
+      <BaseNode
+        data-testid="bracket-match-node"
+        data-bracket-type={data.bracketType}
+        data-round={data.round}
+        data-position={data.position}
+        data-game-pk={data.gameId ?? ''}
+        className={cn(
+          'w-52 cursor-pointer transition-all relative',
+          bracketStyle.bg,
+          bracketStyle.border,
+          selected && 'ring-2 ring-primary',
+        )}
+      >
+        {/* Left handle - receives winner from previous match */}
+        <BaseHandle type="target" position={Position.Left} />
 
-      {/* Losers bracket badges - left side of slots */}
-      {data.bracketType === 'losers' && radiantBadgeLetter && (
-        <BracketBadge letter={radiantBadgeLetter} position="left" slot="top" />
-      )}
-      {data.bracketType === 'losers' && direBadgeLetter && (
-        <BracketBadge letter={direBadgeLetter} position="left" slot="bottom" />
-      )}
+        {/* Losers bracket badges - left side of slots */}
+        {data.bracketType === 'losers' && radiantBadgeLetter && (
+          <BracketBadge
+            letter={radiantBadgeLetter}
+            position="left"
+            slot="top"
+          />
+        )}
+        {data.bracketType === 'losers' && direBadgeLetter && (
+          <BracketBadge
+            letter={direBadgeLetter}
+            position="left"
+            slot="bottom"
+          />
+        )}
 
-      {/* Header with round label and status */}
-      <BaseNodeHeader className={cn('border-b pb-2', bracketStyle.headerBg)}>
-        <BaseNodeHeaderTitle className="text-xs text-muted-foreground">
-          {roundLabel}
-        </BaseNodeHeaderTitle>
-        <span className="flex items-center gap-1.5">
-          {showLobbyDot(data.lobbyState) && (
-            <span
-              role="img"
-              className={cn(LOBBY_DOT_BASE, lobbyStateDot(data.lobbyState))}
-              title={`Lobby: ${lobbyStateLabel(data.lobbyState)}`}
-              aria-label={`Lobby: ${lobbyStateLabel(data.lobbyState)}`}
-              data-testid="match-lobby-dot"
-              data-lobby-state={data.lobbyState}
-              data-lobby-tone={lobbyStateToneName(data.lobbyState)}
-            />
-          )}
-          <Badge variant="outline" className={cn('text-xs', status.className)}>
-            {status.label}
-          </Badge>
-        </span>
-      </BaseNodeHeader>
+        {/* Header with round label and status */}
+        <BaseNodeHeader className={cn('border-b pb-2', bracketStyle.headerBg)}>
+          <BaseNodeHeaderTitle className="text-xs text-muted-foreground">
+            {roundLabel}
+          </BaseNodeHeaderTitle>
+          <span className="flex items-center gap-1.5">
+            {showLobbyDot(data.lobbyState) && (
+              <span
+                role="img"
+                className={cn(LOBBY_DOT_BASE, lobbyStateDot(data.lobbyState))}
+                title={`Lobby: ${lobbyStateLabel(data.lobbyState)}`}
+                aria-label={`Lobby: ${lobbyStateLabel(data.lobbyState)}`}
+                data-testid="match-lobby-dot"
+                data-lobby-state={data.lobbyState}
+                data-lobby-tone={lobbyStateToneName(data.lobbyState)}
+              />
+            )}
+            <Badge
+              variant="outline"
+              className={cn('text-xs', status.className)}
+            >
+              {status.label}
+            </Badge>
+          </span>
+        </BaseNodeHeader>
 
-      {/* Team slots */}
-      <BaseNodeContent className="gap-1 p-2">
-        <TeamSlot
-          team={data.radiantTeam}
-          score={data.radiantScore}
-          isWinner={data.winner === 'radiant'}
-          isCompleted={data.status === 'completed'}
-          slot="radiant"
-        />
-        <div className="border-t my-1" />
-        <TeamSlot
-          team={data.direTeam}
-          score={data.direScore}
-          isWinner={data.winner === 'dire'}
-          isCompleted={data.status === 'completed'}
-          slot="dire"
-        />
-      </BaseNodeContent>
+        {/* Team slots */}
+        <BaseNodeContent className="gap-1 p-2">
+          <TeamSlot
+            team={data.radiantTeam}
+            score={data.radiantScore}
+            isWinner={data.winner === 'radiant'}
+            isCompleted={data.status === 'completed'}
+            slot="radiant"
+          />
+          <div className="border-t my-1" />
+          <TeamSlot
+            team={data.direTeam}
+            score={data.direScore}
+            isWinner={data.winner === 'dire'}
+            isCompleted={data.status === 'completed'}
+            slot="dire"
+          />
+        </BaseNodeContent>
 
-      {/* Right handle - winner advances to next match */}
-      <BaseHandle type="source" position={Position.Right} />
+        {/* Right handle - winner advances to next match */}
+        <BaseHandle type="source" position={Position.Right} />
 
-      {/* Winners bracket badge - right side */}
-      {winnersBadgeLetter && (
-        <BracketBadge letter={winnersBadgeLetter} position="right" />
-      )}
-    </BaseNode>
-  );
-});
+        {/* Winners bracket badge - right side */}
+        {winnersBadgeLetter && (
+          <BracketBadge letter={winnersBadgeLetter} position="right" />
+        )}
+      </BaseNode>
+    );
+  },
+);
 
 MatchNode.displayName = 'MatchNode';
 
@@ -173,33 +187,33 @@ function TeamSlot({ team, score, isWinner, isCompleted, slot }: TeamSlotProps) {
 
   // Use captain's username and avatar
   const captain = team.captain;
-  const displayName = captain ? DisplayName(captain) : team.name ?? 'Unknown';
-  const avatarUrl = captain?.avatarUrl ?? captain?.avatar;
+  const displayName = captain ? DisplayName(captain) : (team.name ?? 'Unknown');
 
   return (
     <div
       className={cn(
         'flex items-center gap-2 p-1.5 rounded transition-colors',
-        isWinner && isCompleted && 'bg-green-500/10',
-        !isWinner && isCompleted && 'opacity-50'
+        isWinner && isCompleted && 'bg-success/10',
+        !isWinner && isCompleted && 'opacity-50',
       )}
       data-testid={`bracket-team-slot-${slot}`}
-      data-team-status={isCompleted ? (isWinner ? 'winner' : 'loser') : 'pending'}
+      data-team-status={
+        isCompleted ? (isWinner ? 'winner' : 'loser') : 'pending'
+      }
       data-team-pk={team.pk}
     >
       {/* Captain avatar */}
-      <Avatar className="h-6 w-6">
-        <AvatarImage src={avatarUrl ?? undefined} />
-        <AvatarFallback className="text-xs">
-          {displayName.substring(0, 2).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar
+        user={captain ?? undefined}
+        fallbackName={team.name ?? 'Unknown'}
+        size="sm"
+      />
 
       {/* Captain username */}
       <span
         className={cn(
           'flex-1 text-sm truncate min-w-[60px] max-w-[120px]',
-          isWinner && isCompleted && 'font-semibold'
+          isWinner && isCompleted && 'font-semibold',
         )}
         title={displayName}
       >
@@ -211,7 +225,7 @@ function TeamSlot({ team, score, isWinner, isCompleted, slot }: TeamSlotProps) {
         <span
           className={cn(
             'text-sm font-mono',
-            isWinner ? 'text-green-500 font-bold' : 'text-muted-foreground'
+            isWinner ? 'text-success font-bold' : 'text-muted-foreground',
           )}
         >
           {score}
@@ -221,7 +235,7 @@ function TeamSlot({ team, score, isWinner, isCompleted, slot }: TeamSlotProps) {
       {/* Winner indicator */}
       {isWinner && isCompleted && (
         <span
-          className="text-green-500"
+          className="text-success"
           data-testid={`bracket-winner-check-${slot}`}
         >
           &#x2713;

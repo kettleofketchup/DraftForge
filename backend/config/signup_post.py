@@ -8,9 +8,9 @@ Environment variables:
 
     SIGNUP_POST_DEBOUNCE_SECONDS  delay before a queued post edit runs, default 2
     SIGNUP_POST_LOCK_SECONDS      per-event edit lock lifetime, default 90
-    SIGNUP_POST_READ_RETRIES      retries when the signup list cannot be read,
-                                  default 3
-    SIGNUP_POST_RETRY_SECONDS     wait before a read retry or before trying a
+    SIGNUP_POST_READ_RETRIES      retries when the signup list cannot be read
+                                  or Discord rejects the edit, default 3
+    SIGNUP_POST_RETRY_SECONDS     wait before such a retry or before trying a
                                   held lock again, default 2, at least 1
     SIGNUP_POST_BUSY_WARN_PASSES  held-lock passes before one warning is
                                   logged, default 5

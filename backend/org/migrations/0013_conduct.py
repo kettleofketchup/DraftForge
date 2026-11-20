@@ -10,8 +10,8 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('app', '0107_orglog_conduct_actions'),
-        ('events', '0033_event_conduct_finalized_at'),
+        ('app', '0108_orglog_conduct_actions'),
+        ('events', '0034_event_conduct_finalized_at'),
         ('org', '0012_merge_orgsettings_rank_declared_at'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

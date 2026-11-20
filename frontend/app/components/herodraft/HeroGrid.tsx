@@ -1,13 +1,13 @@
 // frontend/app/components/herodraft/HeroGrid.tsx
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { heroes } from 'dotaconstants';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { brandBg } from '~/components/ui/buttons/styles';
 import { Input } from '~/components/ui/input';
 import { ScrollArea } from '~/components/ui/scroll-area';
-import { useHeroDraftStore } from '~/store/heroDraftStore';
-import { cn } from '~/lib/utils';
-import { brandBg } from '~/components/ui/buttons/styles';
-import { heroMatchesSearch } from '~/lib/dota/heroes';
 import { FastTooltip } from '~/components/ui/tooltip';
+import { heroMatchesSearch } from '~/lib/dota/heroes';
+import { cn } from '~/lib/utils';
+import { useHeroDraftStore } from '~/store/heroDraftStore';
 
 // Memoized hero button to prevent re-renders
 // IMPORTANT: Don't pass searchQuery directly - pass pre-computed booleans instead
@@ -44,14 +44,16 @@ const HeroButton = memo(function HeroButton({
         // Don't use HTML disabled - it prevents hover states for spectators
         className={cn(
           'size-[24px] sm:size-[28px] md:size-[32px] lg:size-[40px] xl:size-[48px] 2xl:size-[56px] shrink-0 p-0.5',
-          'rounded-full bg-gradient-to-b from-slate-600 to-slate-800',
-          'border border-slate-500/50 shadow-md shadow-black/50',
-          'hover:from-slate-500 hover:to-slate-700 hover:scale-110 hover:z-10 hover:shadow-lg hover:shadow-black/60',
+          'rounded-full bg-gradient-to-b from-base-100 to-base-400',
+          'border border-border shadow-md shadow-black/50',
+          'hover:from-base-50 hover:to-base-200 hover:scale-110 hover:z-10 hover:shadow-lg hover:shadow-black/60',
           'transition-all duration-150',
-          isSelected && 'ring-2 ring-yellow-400 scale-110 z-10 from-yellow-600/50 to-slate-800',
-          isHighlighted && 'ring-2 ring-green-400 from-green-600/30 to-slate-800',
+          isSelected &&
+            'ring-2 ring-turn scale-110 z-10 from-turn/40 to-base-400',
+          isHighlighted &&
+            'ring-2 ring-search-match from-search-match/30 to-base-400',
           isDimmed && 'opacity-30 grayscale',
-          !available && 'cursor-not-allowed'
+          !available && 'cursor-not-allowed',
         )}
         data-testid={`herodraft-hero-${hero.id}`}
         data-hero-id={hero.id}
@@ -92,20 +94,28 @@ const ATTRIBUTE_LABELS: Record<HeroAttribute, string> = {
 };
 
 const ATTRIBUTE_COLORS: Record<HeroAttribute, string> = {
-  str: 'bg-red-900/40',
-  agi: 'bg-green-900/40',
-  int: 'bg-blue-900/40',
-  all: 'bg-yellow-900/40',
+  str: 'bg-attr-str/20',
+  agi: 'bg-attr-agi/20',
+  int: 'bg-attr-int/20',
+  all: 'bg-attr-all/20',
 };
 
-export function HeroGrid({ onHeroClick, disabled, showActionButton, currentAction, isMyTurn }: HeroGridProps) {
+export function HeroGrid({
+  onHeroClick,
+  disabled,
+  showActionButton,
+  currentAction,
+  isMyTurn,
+}: HeroGridProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Use selectors to prevent re-renders when unrelated state changes
   const searchQuery = useHeroDraftStore((state) => state.searchQuery);
   const setSearchQuery = useHeroDraftStore((state) => state.setSearchQuery);
   const selectedHeroId = useHeroDraftStore((state) => state.selectedHeroId);
-  const setSelectedHeroId = useHeroDraftStore((state) => state.setSelectedHeroId);
+  const setSelectedHeroId = useHeroDraftStore(
+    (state) => state.setSelectedHeroId,
+  );
   // Select draft rounds directly for memoization
   const draftRounds = useHeroDraftStore((state) => state.draft?.rounds);
 
@@ -165,12 +175,12 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
 
   const isHeroAvailable = useCallback(
     (heroId: number) => !usedHeroIds.includes(heroId),
-    [usedHeroIds]
+    [usedHeroIds],
   );
 
   const matchesSearch = useCallback(
     (heroId: number) => filteredHeroes.some((h) => h.id === heroId),
-    [filteredHeroes]
+    [filteredHeroes],
   );
 
   const handleHeroClick = useCallback(
@@ -178,18 +188,26 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
       setSelectedHeroId(heroId);
       onHeroClick(heroId);
     },
-    [setSelectedHeroId, onHeroClick]
+    [setSelectedHeroId, onHeroClick],
   );
 
   // Determine overlay color based on current action when it's user's turn
-  const actionOverlay = isMyTurn && currentAction
-    ? currentAction === 'ban'
-      ? 'bg-red-900/40'  // Dark red tint for bans
-      : 'bg-green-900/40'  // Dark green tint for picks
-    : '';
+  const actionOverlay =
+    isMyTurn && currentAction
+      ? currentAction === 'ban'
+        ? 'bg-ban-surface/80' // Dark red tint for bans
+        : 'bg-pick-surface/80' // Dark green tint for picks
+      : '';
 
   return (
-    <div className={cn("flex flex-col h-full overflow-hidden relative", brandBg, actionOverlay)} data-testid="herodraft-hero-grid">
+    <div
+      className={cn(
+        'flex flex-col h-full overflow-hidden relative',
+        brandBg,
+        actionOverlay,
+      )}
+      data-testid="herodraft-hero-grid"
+    >
       <div className="p-2 shrink-0" data-testid="herodraft-search-container">
         <Input
           ref={searchInputRef}
@@ -202,16 +220,25 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
         />
       </div>
 
-      <div className="flex-1 flex flex-col p-1 min-h-0 gap-1" data-testid="herodraft-hero-list">
+      <div
+        className="flex-1 flex flex-col p-1 min-h-0 gap-1"
+        data-testid="herodraft-hero-list"
+      >
         {ATTRIBUTE_ORDER.map((attr) => {
           const heroesForAttr = heroList.filter((h) => h.attr === attr);
           return (
             <ScrollArea
               key={attr}
-              className={cn('rounded p-1.5 flex-1 min-h-0', ATTRIBUTE_COLORS[attr])}
+              className={cn(
+                'rounded p-1.5 flex-1 min-h-0',
+                ATTRIBUTE_COLORS[attr],
+              )}
               data-testid={`herodraft-attr-section-${attr}`}
             >
-              <h3 className="text-[10px] font-semibold mb-1 text-white/70" data-testid={`herodraft-attr-label-${attr}`}>
+              <h3
+                className="text-[10px] font-semibold mb-1 text-white/70"
+                data-testid={`herodraft-attr-label-${attr}`}
+              >
                 {ATTRIBUTE_LABELS[attr]}
               </h3>
               <div

@@ -180,9 +180,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
         <span
           className={cn(
             'text-[10px] sm:text-xs truncate max-w-[40px] sm:max-w-[56px] mt-0.5 sm:mt-1 hidden sm:block',
-            isCaptain
-              ? 'font-semibold text-yellow-400'
-              : 'text-muted-foreground',
+            isCaptain ? 'font-semibold text-captain' : 'text-muted-foreground',
           )}
           data-testid={`${testIdPrefix}-name`}
         >
@@ -197,7 +195,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
     if (!isMyTurn || draft.state !== 'drafting') {
       return 'bg-background';
     }
-    return currentAction === 'ban' ? 'bg-red-900/90' : 'bg-green-900/90';
+    return currentAction === 'ban' ? 'bg-ban-surface/90' : 'bg-pick-surface/90';
   };
 
   return (
@@ -205,7 +203,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
       className={cn(
         getTopBarBackground(),
         brandBg,
-        'border-b border-gray-800 shrink-0 transition-colors duration-300',
+        'border-b border-border shrink-0 transition-colors duration-300',
       )}
       data-testid="herodraft-topbar"
     >
@@ -263,7 +261,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
               <span
                 className={cn(
                   'text-xs sm:text-sm font-bold tracking-wide',
-                  currentAction === 'ban' ? 'text-red-300' : 'text-green-300',
+                  currentAction === 'ban' ? 'text-ban' : 'text-pick',
                 )}
               >
                 YOUR TURN
@@ -272,8 +270,8 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
                 className={cn(
                   'text-xl sm:text-3xl font-black tracking-wider',
                   currentAction === 'ban'
-                    ? 'text-red-400 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]'
-                    : 'text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]',
+                    ? 'text-ban drop-shadow-[0_0_10px_color-mix(in_oklab,var(--color-ban)_50%,transparent)]'
+                    : 'text-pick drop-shadow-[0_0_10px_color-mix(in_oklab,var(--color-pick)_50%,transparent)]',
                 )}
               >
                 {currentAction.toUpperCase()}
@@ -327,14 +325,14 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
       {/* Row 2: Timers */}
       {timerEnabled ? (
         <div
-          className="grid grid-cols-3 sm:grid-cols-5 items-center p-1 sm:p-2 border-t border-gray-800"
+          className="grid grid-cols-3 sm:grid-cols-5 items-center p-1 sm:p-2 border-t border-border"
           data-testid="herodraft-timers-row"
         >
           {/* Team A Reserve */}
           <div
             className={cn(
               'text-center font-mono text-sm sm:text-lg overflow-visible',
-              teamAReserve < RESERVE_CRITICAL_MS && 'text-red-400',
+              teamAReserve < RESERVE_CRITICAL_MS && 'text-error',
             )}
             data-testid="herodraft-team-a-reserve"
           >
@@ -366,8 +364,8 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
               className={cn(
                 'font-mono text-xl sm:text-2xl font-bold inline-block origin-center',
                 graceRemaining < GRACE_URGENT_MS
-                  ? 'text-red-400 animate-grace-urgent'
-                  : 'text-yellow-400',
+                  ? 'text-error animate-grace-urgent'
+                  : 'text-turn',
               )}
               data-testid="herodraft-grace-time"
             >
@@ -381,7 +379,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           <div
             className={cn(
               'text-center font-mono text-sm sm:text-lg overflow-visible',
-              teamBReserve < RESERVE_CRITICAL_MS && 'text-red-400',
+              teamBReserve < RESERVE_CRITICAL_MS && 'text-error',
             )}
             data-testid="herodraft-team-b-reserve"
           >
