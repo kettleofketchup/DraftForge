@@ -35,11 +35,19 @@ describe('BrandSelect', () => {
   it('lays the trigger value out as a row so icons stay inline', () => {
     renderSelect();
     const trigger = screen.getByTestId('trigger');
-    expect(trigger.className).toContain('*:data-[slot=select-value]:flex');
     expect(trigger.className).toContain(
-      '*:data-[slot=select-value]:items-center',
+      '*:data-[slot=select-value]:has-[>svg]:flex',
     );
-    expect(trigger.className).toContain('*:data-[slot=select-value]:gap-2');
+    expect(trigger.className).toContain(
+      '*:data-[slot=select-value]:has-[>svg]:items-center',
+    );
+    expect(trigger.className).toContain(
+      '*:data-[slot=select-value]:has-[>svg]:gap-2',
+    );
+    // Unconditional flex would stop plain-text values from ellipsizing.
+    expect(trigger.className.split(' ')).not.toContain(
+      '*:data-[slot=select-value]:flex',
+    );
     const value = trigger.querySelector('[data-slot=select-value]')!;
     expect(value.querySelector('svg')).not.toBeNull();
     expect(value.textContent).toBe('Alice (not a member)');

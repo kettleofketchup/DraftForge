@@ -854,4 +854,43 @@ test.describe('Tournament discovery (@cicd)', () => {
     }));
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
   });
+
+  test('@cicd long filter values end in an ellipsis at 390 px', async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(
+      `/tournaments?organization=${HOME_ORG}&league=${HOME_LEAGUE}`,
+    );
+    await waitForFilterRow(page);
+    await expect(page.getByTestId('tournaments-filter-league')).toContainText(
+      'Discovery Home',
+    );
+    await testInfo.attach('filter-bar-390', {
+      body: await page
+        .getByTestId('tournaments-filter-organization')
+        .screenshot(),
+      contentType: 'image/png',
+    });
+
+    for (const id of [
+      'tournaments-filter-organization',
+      'tournaments-filter-league',
+    ]) {
+      const value = page.getByTestId(id).locator('[data-slot="select-value"]');
+      const box = await value.evaluate((el) => {
+        const style = getComputedStyle(el);
+        return {
+          display: style.display,
+          textOverflow: style.textOverflow,
+          overflows: el.scrollWidth > el.clientWidth,
+        };
+      });
+      expect(box, id).toEqual({
+        display: 'block',
+        textOverflow: 'ellipsis',
+        overflows: true,
+      });
+    }
+  });
 });

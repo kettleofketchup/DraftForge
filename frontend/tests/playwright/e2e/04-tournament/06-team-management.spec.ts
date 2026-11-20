@@ -103,6 +103,17 @@ function memberRow(dialog: Locator, username: string): Locator {
     .filter({ hasText: username });
 }
 
+/** The warning icon and its label share one line inside `container`. */
+async function expectIconInline(container: Locator): Promise<void> {
+  const icon = await container.locator('svg').first().boundingBox();
+  const label = await container.locator('span').first().boundingBox();
+  if (!icon || !label) throw new Error('icon or label is not rendered');
+  const iconMid = icon.y + icon.height / 2;
+  expect(iconMid).toBeGreaterThan(label.y);
+  expect(iconMid).toBeLessThan(label.y + label.height);
+  expect(icon.x + icon.width).toBeLessThanOrEqual(label.x);
+}
+
 test.describe('Team management dialog', () => {
   test.describe.configure({ mode: 'serial', timeout: 60_000 });
 
@@ -257,6 +268,37 @@ test.describe('Team management dialog', () => {
     await expect(row).toContainText(/Org Staff Tester|org_staff_tester/);
     await expect(row).toContainText(`${PREFIX}alpha_3`);
   });
+
+  for (const width of [390, 1440]) {
+    test(`@cicd ghost captain icon sits inline at ${width} px`, async ({
+      page,
+      loginOrgStaff: login,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await login();
+      await page.goto(`/tournament/${tournament.pk}/teams`);
+      await page.getByTestId('teamsTabContent').waitFor({ state: 'visible' });
+      const dialog = await openManage(page, 'TM Ghost');
+      const trigger = dialog.getByTestId('team-manage-captain-select');
+      await expect(trigger).toContainText(`${GHOST} (not a member)`);
+      await expectIconInline(trigger.locator('[data-slot="select-value"]'));
+      await testInfo.attach(`captain-trigger-${width}`, {
+        body: await trigger.screenshot(),
+        contentType: 'image/png',
+      });
+
+      await trigger.click();
+      const item = page
+        .getByRole('option')
+        .filter({ hasText: `${GHOST} (not a member)` });
+      await expect(item).toBeVisible();
+      await expectIconInline(item.locator(':scope > span').last());
+      await testInfo.attach(`captain-list-${width}`, {
+        body: await page.locator('[data-slot="select-content"]').screenshot(),
+        contentType: 'image/png',
+      });
+    });
+  }
 
   test('@cicd ghost captain is fixed from the Teams-tab alert', async ({
     page,
