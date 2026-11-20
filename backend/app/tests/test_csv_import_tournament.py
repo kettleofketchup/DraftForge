@@ -289,3 +289,131 @@ class TournamentCSVImportDotaRowTest(TestCase):
         self.assertEqual(data["summary"]["errors"], 1)
         self.assertFalse(self.tournament.users.filter(pk=self.user.pk).exists())
         self.assertEqual(self.dota_row(), 1000)
+
+
+class TournamentCSVImportGameTest(TestCase):
+    STEAM_ID = 76561198012345680
+    NEW_STEAM_ID = 76561198012345681
+
+    def setUp(self) -> None:
+        self.admin = CustomUser.objects.create_user(
+            username="tgame_admin", password="pass"
+        )
+        self.org = Organization.objects.create(name="TGame Org", owner=self.admin)
+        self.org.admins.add(self.admin)
+        self.league = League.objects.create(
+            name="TGame League", organization=self.org, steam_league_id=99997
+        )
+        self.dl_tournament = Tournament.objects.create(
+            name="TGame DL",
+            league=self.league,
+            date_played=timezone.now(),
+            game_type=GameType.DEADLOCK,
+        )
+        self.dota_tournament = Tournament.objects.create(
+            name="TGame Dota", league=self.league, date_played=timezone.now()
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+        self.user = CustomUser.objects.create_user(
+            username="tgame_member", password="pass", steamid=self.STEAM_ID
+        )
+        self.org_user = ensure_org_user(
+            self.user, self.org, mmr=1000, game_mmrs={GameType.DEADLOCK: 700}
+        )
+
+    def post(self, tournament: Tournament, rows: list[dict], **extra: object):
+        return self.client.post(
+            f"/api/tournaments/{tournament.pk}/import-csv/",
+            {"rows": rows, **extra},
+            format="json",
+        )
+
+    def rows_for(self, org_user: OrgUser) -> dict[int, int]:
+        return dict(
+            OrgUserGameMmr.objects.nocache()
+            .filter(org_user=org_user)
+            .values_list("game_type", "mmr")
+        )
+
+    def test_tournament_import_uses_tournament_game(self) -> None:
+        self.dl_tournament.users.add(self.user)
+        resp = self.post(
+            self.dl_tournament,
+            [
+                {"steam_friend_id": str(self.STEAM_ID), "mmr": 2600},
+                {"steam_friend_id": str(self.NEW_STEAM_ID), "mmr": 1900},
+            ],
+            update_mmr=True,
+            game_type=GameType.DOTA2,
+        )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.data["summary"]["updated"], 1)
+        self.assertEqual(resp.data["summary"]["added"], 1)
+        self.assertEqual(
+            self.rows_for(self.org_user),
+            {GameType.DOTA2: 1000, GameType.DEADLOCK: 2600},
+        )
+        new_ou = OrgUser.objects.get(
+            user__steamid=self.NEW_STEAM_ID, organization=self.org
+        )
+        self.assertEqual(self.rows_for(new_ou), {GameType.DEADLOCK: 1900})
+
+    def test_tournament_import_existing_org_member_writes_tournament_game(
+        self,
+    ) -> None:
+        resp = self.post(
+            self.dl_tournament, [{"steam_friend_id": str(self.STEAM_ID), "mmr": 2700}]
+        )
+
+        self.assertEqual(resp.data["summary"]["added"], 1)
+        self.assertEqual(
+            self.rows_for(self.org_user),
+            {GameType.DOTA2: 1000, GameType.DEADLOCK: 2700},
+        )
+
+    def test_tournament_import_new_member_out_of_range_row_error(self) -> None:
+        resp = self.post(
+            self.dl_tournament,
+            [{"steam_friend_id": str(self.NEW_STEAM_ID), "mmr": -1}],
+        )
+
+        self.assertEqual(resp.data["summary"]["errors"], 1)
+        self.assertFalse(
+            OrgUser.objects.filter(user__steamid=self.NEW_STEAM_ID).exists()
+        )
+
+    def test_tournament_import_league_target_rejected_for_deadlock(self) -> None:
+        self.dl_tournament.users.add(self.user)
+        LeagueUser.objects.update_or_create(
+            user=self.user,
+            league=self.league,
+            defaults={"org_user": self.org_user, "mmr": 1000},
+        )
+        resp = self.post(
+            self.dl_tournament,
+            [{"steam_friend_id": str(self.STEAM_ID), "mmr": 7000}],
+            update_mmr=True,
+            mmr_target="league",
+        )
+
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(
+            LeagueUser.objects.get(user=self.user, league=self.league).mmr, 1000
+        )
+
+    def test_tournament_import_league_target_allowed_for_dota(self) -> None:
+        self.dota_tournament.users.add(self.user)
+        resp = self.post(
+            self.dota_tournament,
+            [{"steam_friend_id": str(self.STEAM_ID), "mmr": 7000}],
+            update_mmr=True,
+            mmr_target="league",
+        )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(
+            LeagueUser.objects.get(user=self.user, league=self.league).mmr, 7000
+        )
+        self.assertEqual(self.rows_for(self.org_user)[GameType.DOTA2], 1000)

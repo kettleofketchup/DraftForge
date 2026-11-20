@@ -1,18 +1,18 @@
-import { z } from 'zod';
 import type { FieldNamesMarkedBoolean } from 'react-hook-form';
+import { z } from 'zod';
+import { updateOrgUser } from '~/components/api/api';
+import { GAME_TYPE } from '~/components/game/constants';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user/types';
-import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import {
   useIsLeagueAdmin,
   useIsOrganizationStaff,
   useIsSuperuser,
 } from '~/hooks/usePermissions';
-import { updateOrgUser } from '~/components/api/api';
-import { GAME_TYPE } from '~/components/game/constants';
 import { selectPositions } from '~/store/selectPositions';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 
 // Dota positions use a 0-5 self-rating scale: 0=hidden, 1=favorite, 5=avoid.
 const PositionFieldSchema = z.coerce.number().int().min(0).max(5);
@@ -32,9 +32,16 @@ export const EditUserSchema = z.object({
 
 export type EditUserInput = z.infer<typeof EditUserSchema>;
 
+// gameType: the game the edited `mmr` was read for (Dota when absent).
 export type EditUserScope =
-  | { kind: 'org'; organization: OrganizationType }
-  | { kind: 'league'; league: LeagueType; organization?: OrganizationType; orgId?: number }
+  | { kind: 'org'; organization: OrganizationType; gameType?: number }
+  | {
+      kind: 'league';
+      league: LeagueType;
+      organization?: OrganizationType;
+      orgId?: number;
+      gameType?: number;
+    }
   | { kind: 'global' };
 
 export type EditableField = keyof EditUserInput;
@@ -59,7 +66,9 @@ export function resolveOrgUserLink(
   const maybeEntry = user as UserType | UserEntry;
   if (isUserEntry(maybeEntry)) {
     const id =
-      (ctx.organizationId ? maybeEntry.orgData[ctx.organizationId]?.id : undefined) ??
+      (ctx.organizationId
+        ? maybeEntry.orgData[ctx.organizationId]?.id
+        : undefined) ??
       (ctx.leagueId ? maybeEntry.leagueData[ctx.leagueId]?.id : undefined);
     if (id != null) return id;
   }
@@ -81,14 +90,21 @@ export function resolveEditScope(
     leagueId?: number;
     currentOrg: OrganizationType | null;
     currentLeague: LeagueType | null;
+    gameType?: number;
   },
 ): EditUserScope {
   if (resolveOrgUserLink(user, ctx) == null) return { kind: 'global' };
+  const game = ctx.gameType != null ? { gameType: ctx.gameType } : {};
   if (ctx.leagueId && ctx.currentLeague?.pk === ctx.leagueId) {
-    return { kind: 'league', league: ctx.currentLeague, orgId: ctx.organizationId };
+    return {
+      kind: 'league',
+      league: ctx.currentLeague,
+      orgId: ctx.organizationId,
+      ...game,
+    };
   }
   if (ctx.currentOrg && ctx.currentOrg.pk === ctx.organizationId) {
-    return { kind: 'org', organization: ctx.currentOrg };
+    return { kind: 'org', organization: ctx.currentOrg, ...game };
   }
   return { kind: 'global' };
 }
@@ -173,6 +189,15 @@ function applyLocal(user: UserClassType, updated: UserType): UserType {
   return updated;
 }
 
+// The PATCH rejects a bare `mmr`: it must name the game it was read for.
+function withMmrGame(
+  payload: Partial<EditUserInput>,
+  gameType: number | undefined,
+): Partial<EditUserInput> & { mmr_game_type?: number } {
+  if (!('mmr' in payload)) return payload;
+  return { ...payload, mmr_game_type: gameType ?? GAME_TYPE.DOTA2 };
+}
+
 export async function dispatchPatch(
   user: UserClassType,
   scope: EditUserScope,
@@ -183,7 +208,14 @@ export async function dispatchPatch(
     const orgId: number | undefined = scope.organization.pk;
     if (!orgId) throw new Error('Org scope requires organization.pk');
     if (!orgUserPk) throw new Error('Org scope requires user.orgUserPk');
-    return applyLocal(user, await updateOrgUser(orgId, orgUserPk, payload));
+    return applyLocal(
+      user,
+      await updateOrgUser(
+        orgId,
+        orgUserPk,
+        withMmrGame(payload, scope.gameType),
+      ),
+    );
   }
   if (scope.kind === 'league') {
     // FLEXIBLE POINT: today routes through the parent org's OrgUser endpoint.
@@ -192,9 +224,18 @@ export async function dispatchPatch(
       scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk;
     const orgUserPk: number | undefined = user.orgUserPk;
     if (!orgId || !orgUserPk) {
-      throw new Error('League scope requires a parent org with an OrgUser link');
+      throw new Error(
+        'League scope requires a parent org with an OrgUser link',
+      );
     }
-    return applyLocal(user, await updateOrgUser(orgId, orgUserPk, payload));
+    return applyLocal(
+      user,
+      await updateOrgUser(
+        orgId,
+        orgUserPk,
+        withMmrGame(payload, scope.gameType),
+      ),
+    );
   }
   if (!user.pk) throw new Error('Global scope requires user.pk');
   return user.dbUpdate(payload);
@@ -205,7 +246,10 @@ export function scopeToContext(
 ): { orgId?: number } | undefined {
   if (scope.kind === 'org') return { orgId: scope.organization.pk };
   if (scope.kind === 'league')
-    return { orgId: scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk };
+    return {
+      orgId:
+        scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk,
+    };
   return undefined;
 }
 

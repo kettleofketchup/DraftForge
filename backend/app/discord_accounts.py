@@ -26,6 +26,7 @@ from org.contributions.services import (
     reassign_member,
     repoint_user_attribution,
 )
+from org.mmr import merge_org_mmrs
 from org.models import OrgUser
 from org.promotion.services import demote_colliding_earning_sends
 from telemetry.logging import get_logger
@@ -106,6 +107,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
                     keep_ou.guild_nickname = drop_ou.guild_nickname
                     keep_ou.save(update_fields=["guild_nickname"])
                     invalidate_after_commit(keep)
+                merge_org_mmrs(drop_ou, keep_ou)
                 reassign_member(drop_ou, keep_ou)
                 drop_ou.delete()
         repoint_user_attribution(drop, keep)

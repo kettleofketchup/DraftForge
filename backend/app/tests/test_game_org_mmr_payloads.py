@@ -338,7 +338,7 @@ class OrgUserPatchResponseTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.patch(
                 f"/api/organizations/{self.org.pk}/users/{self.org_user.pk}/",
-                {"mmr": 6500},
+                {"game_mmrs": {"1": 6500}},
                 format="json",
             )
         self.assertEqual(response.status_code, 200, response.content)

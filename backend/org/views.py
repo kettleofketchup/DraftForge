@@ -35,6 +35,7 @@ from org.contributions.services import (
     reassign_member,
     repoint_user_attribution,
 )
+from org.mmr import merge_org_mmrs
 from org.models import OrgUser, PromoSend
 from org.promotion.services import demote_colliding_earning_sends
 from org.serializers import ProfileClaimRequestSerializer
@@ -233,10 +234,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 user=claimer, organization=org_user.organization
             ).first()
             if existing:
-                # Keep the one with higher MMR
-                if org_user.mmr > existing.mmr:
-                    existing.mmr = org_user.mmr
-                    existing.save()
+                merge_org_mmrs(org_user, existing)
                 reassign_member(org_user, existing)
                 org_user.delete()
             else:

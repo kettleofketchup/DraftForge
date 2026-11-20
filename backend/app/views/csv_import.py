@@ -25,7 +25,14 @@ from app.models import (
 from app.permissions_org import has_org_staff_access
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
-from org.mmr import OrgMmrError, set_org_mmr
+from org.mmr import (
+    LEAGUE_GAME,
+    OrgMmrError,
+    bulk_set_org_mmrs,
+    game_for_tournament,
+    set_org_mmr,
+    validate_org_mmr,
+)
 from org.models import OrgUser
 from telemetry.logging import get_logger
 
@@ -250,11 +257,21 @@ def import_csv_org(request: Request, org_id: int) -> Response:
 
     rows = request.data.get("rows", [])
     update_mmr = bool(request.data.get("update_mmr", False))
+    game_type = request.data.get("game_type")
+    if game_type is None:
+        game_type = GameType.DOTA2
+    elif isinstance(game_type, bool) or game_type not in GameType.values:
+        return Response(
+            {"error": f"Unknown game_type: {game_type!r}"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    game_label = GameType(game_type).label
     log.info(
         "csv_org_import_started",
         system="api",
         subsystem="csv_import",
         update_mmr=update_mmr,
+        game_type=game_type,
         count=len(rows) if isinstance(rows, list) else 0,
     )
 
@@ -271,6 +288,7 @@ def import_csv_org(request: Request, org_id: int) -> Response:
 
     results = []
     summary = {"added": 0, "skipped": 0, "created": 0, "errors": 0, "updated": 0}
+    pending_mmrs: dict[int, int | None] = {}
 
     for i, row in enumerate(rows):
         if not isinstance(row, dict):
@@ -291,7 +309,7 @@ def import_csv_org(request: Request, org_id: int) -> Response:
             summary["errors"] += 1
             continue
 
-        base_mmr, mmr_err = _parse_int(row.get("mmr"), "mmr")
+        base_mmr, mmr_err = _parse_mmr_cell(row.get("mmr"), game_type)
         if mmr_err:
             results.append({"row": i + 1, "status": "error", "reason": mmr_err})
             summary["errors"] += 1
@@ -315,11 +333,7 @@ def import_csv_org(request: Request, org_id: int) -> Response:
         # Try to create OrgUser (savepoint needed for SQLite IntegrityError recovery)
         try:
             with transaction.atomic():
-                OrgUser.objects.create(
-                    user=user,
-                    organization=org,
-                    mmr=base_mmr or 0,
-                )
+                OrgUser.objects.create(user=user, organization=org)
         except IntegrityError:
             log.info(
                 "csv_row_existing_member",
@@ -330,18 +344,12 @@ def import_csv_org(request: Request, org_id: int) -> Response:
                 base_mmr=base_mmr,
             )
             if update_mmr and base_mmr is not None:
-                mmr_error = _set_org_dota_mmr(user, org, base_mmr)
-                if mmr_error:
-                    results.append(
-                        {"row": i + 1, "status": "error", "reason": mmr_error}
-                    )
-                    summary["errors"] += 1
-                    continue
+                pending_mmrs[user.pk] = base_mmr
                 results.append(
                     {
                         "row": i + 1,
                         "status": "updated",
-                        "reason": f"MMR updated to {base_mmr}",
+                        "reason": f"{game_label} MMR updated to {base_mmr}",
                         "user": TournamentUserSerializer(user).data,
                     }
                 )
@@ -360,6 +368,8 @@ def import_csv_org(request: Request, org_id: int) -> Response:
 
         if created:
             summary["created"] += 1
+        if base_mmr:
+            pending_mmrs[user.pk] = base_mmr
 
         result = {
             "row": i + 1,
@@ -378,18 +388,29 @@ def import_csv_org(request: Request, org_id: int) -> Response:
             target_user=user,
         )
 
+    if pending_mmrs:
+        bulk_set_org_mmrs(org.pk, game_type, pending_mmrs)
+
     return Response({"summary": summary, "results": results})
 
 
-def _set_org_dota_mmr(user: CustomUser, org: Organization, base_mmr: int) -> str | None:
-    org_user = OrgUser.objects.filter(user=user, organization=org).first()
-    if org_user is None:
-        return None
+def _parse_mmr_cell(value: Any, game_type: int) -> tuple[int | None, str | None]:
+    base_mmr, error = _parse_int(value, "mmr")
+    if error or base_mmr is None:
+        return base_mmr, error
     try:
-        set_org_mmr(org_user, GameType.DOTA2, base_mmr, mark_verified=False)
+        validate_org_mmr(game_type, base_mmr)
     except OrgMmrError as exc:
-        return f"Invalid mmr: {exc}"
-    return None
+        return None, f"Invalid mmr: {exc}"
+    return base_mmr, None
+
+
+def _set_org_game_mmr(
+    user: CustomUser, org: Organization, game_type: int, base_mmr: int
+) -> None:
+    org_user = OrgUser.objects.filter(user=user, organization=org).first()
+    if org_user is not None:
+        set_org_mmr(org_user, game_type, base_mmr, mark_verified=False)
 
 
 def _update_mmr_for_target(
@@ -397,8 +418,9 @@ def _update_mmr_for_target(
     org: Organization | None,
     league: League | None,
     mmr_target: str | None,
+    game_type: int,
     base_mmr: int,
-) -> str | None:
+) -> None:
     """Update MMR at the specified target level (organization or league)."""
     if mmr_target == "league" and league and org:
         org_user = OrgUser.objects.filter(user=user, organization=org).first()
@@ -409,8 +431,7 @@ def _update_mmr_for_target(
                 defaults={"org_user": org_user, "mmr": base_mmr},
             )
     elif org:
-        return _set_org_dota_mmr(user, org, base_mmr)
-    return None
+        _set_org_game_mmr(user, org, game_type, base_mmr)
 
 
 @api_view(["POST"])
@@ -439,6 +460,7 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
 
     org = tournament.league.organization if tournament.league else None
     league = tournament.league
+    game_type = game_for_tournament(tournament)
     rows = request.data.get("rows", [])
     update_mmr = bool(request.data.get("update_mmr", False))
     mmr_target = request.data.get(
@@ -450,6 +472,7 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
         subsystem="csv_import",
         update_mmr=update_mmr,
         mmr_target=mmr_target,
+        game_type=game_type,
         tournament_id=tournament.pk,
         count=len(rows) if isinstance(rows, list) else 0,
     )
@@ -467,6 +490,14 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
     if mmr_target == "league" and not league:
         return Response(
             {"error": "Tournament has no league for league-level MMR"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if mmr_target == "league" and game_type != LEAGUE_GAME:
+        return Response(
+            {
+                "error": f"League-level MMR is {LEAGUE_GAME.label} only; "
+                f"use the organization target for {game_type.label}"
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -495,7 +526,7 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
             summary["errors"] += 1
             continue
 
-        base_mmr, mmr_err = _parse_int(row.get("mmr"), "mmr")
+        base_mmr, mmr_err = _parse_mmr_cell(row.get("mmr"), game_type)
         if mmr_err:
             results.append({"row": i + 1, "status": "error", "reason": mmr_err})
             summary["errors"] += 1
@@ -518,15 +549,9 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
 
         if tournament.users.filter(pk=user.pk).exists():
             if update_mmr and base_mmr is not None:
-                mmr_error = _update_mmr_for_target(
-                    user, org, league, mmr_target, base_mmr
+                _update_mmr_for_target(
+                    user, org, league, mmr_target, game_type, base_mmr
                 )
-                if mmr_error:
-                    results.append(
-                        {"row": i + 1, "status": "error", "reason": mmr_error}
-                    )
-                    summary["errors"] += 1
-                    continue
                 results.append(
                     {
                         "row": i + 1,
@@ -552,19 +577,14 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
         if org:
             try:
                 with transaction.atomic():
-                    OrgUser.objects.create(
-                        user=user, organization=org, mmr=base_mmr or 0
-                    )
+                    OrgUser.objects.create(user=user, organization=org)
             except IntegrityError:
                 # Already a member of the org -- update MMR if provided
                 if base_mmr is not None:
-                    mmr_error = _set_org_dota_mmr(user, org, base_mmr)
-                    if mmr_error:
-                        results.append(
-                            {"row": i + 1, "status": "error", "reason": mmr_error}
-                        )
-                        summary["errors"] += 1
-                        continue
+                    _set_org_game_mmr(user, org, game_type, base_mmr)
+            else:
+                if base_mmr:
+                    _set_org_game_mmr(user, org, game_type, base_mmr)
 
         # For league-level MMR, also create/update LeagueUser
         if league and mmr_target == "league" and base_mmr is not None:

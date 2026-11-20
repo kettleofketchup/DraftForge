@@ -146,7 +146,7 @@ export async function getOrganizationUsers(orgId: number): Promise<UserType[]> {
 export async function updateOrgUser(
   organizationId: number,
   orgUserId: number,
-  data: Partial<UserType>,
+  data: Partial<UserType> & { mmr_game_type?: number },
 ): Promise<UserType> {
   const response = await axios.patch<UserType>(
     `/organizations/${organizationId}/users/${orgUserId}/`,

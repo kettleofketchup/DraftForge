@@ -1,11 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { updateOrgUser } from '~/components/api/api';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import {
   buildDefaults,
+  dispatchPatch,
   EditUserSchema,
   pickDirty,
 } from '~/components/user/userCard/editUserSchema';
+
+vi.mock('~/components/api/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/components/api/api')>()),
+  updateOrgUser: vi.fn(),
+}));
 
 const baseUser = {
   pk: 42,
@@ -163,5 +170,19 @@ describe('EditUserSchema', () => {
       },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('dispatchPatch mmr game bridge', () => {
+  it('sends mmr_game_type with mmr so the backend never guesses the game', async () => {
+    const mock = vi.mocked(updateOrgUser);
+    mock.mockResolvedValue({ pk: 42, mmr: 6000 } as any);
+    const user = { ...baseUser, dbUpdate: vi.fn() };
+    await dispatchPatch(
+      user,
+      { kind: 'org', organization: org },
+      { mmr: 6000 },
+    );
+    expect(mock).toHaveBeenCalledWith(11, 7, { mmr: 6000, mmr_game_type: 1 });
   });
 });

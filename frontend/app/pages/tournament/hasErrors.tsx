@@ -129,6 +129,7 @@ export const hasErrors = () => {
           leagueId,
           currentOrg,
           currentLeague: league,
+          gameType: tournament?.game_type,
         });
         issues.push({ user, scope, issues: userIssues });
       }
@@ -138,6 +139,7 @@ export const hasErrors = () => {
     return issues;
   }, [
     tournament?.users,
+    tournament?.game_type,
     entities,
     orgId,
     leagueId,
