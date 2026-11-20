@@ -31,6 +31,10 @@ class ImportOrderTests(SimpleTestCase):
         result = self._import_first("app.broadcast")
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_exception_handler_first(self) -> None:
+        result = self._import_first("app.exception_handler")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_serializers_never_import_team_management(self) -> None:
         source = (BACKEND_DIR / "app" / "serializers.py").read_text()
         self.assertNotIn("team_management", source)
