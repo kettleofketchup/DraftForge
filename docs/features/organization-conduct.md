@@ -65,6 +65,11 @@ Changing a setting re-scores everyone straight away. Scores are computed from th
 outcomes each time they are read, so there is no rescore step. Every settings change is
 written to the `OrgLog`.
 
+Saving a change that affects scores or enforcement also rechecks the open sign-ups in
+the organization, so the "Attendance record below org threshold" badge appears or clears
+straight away. Locking or unlocking Conduct does the same; while it is locked no badge
+is shown.
+
 ---
 
 ## The score
@@ -187,7 +192,8 @@ and also stays pending for staff.
   again then.
 - **Deleting** an event removes outcomes that were never finalized and voids finalized
   ones. Voided outcomes stay in the member's history, with the event shown as "Removed",
-  but no longer count.
+  but no longer count. Deletes from the Django admin do the same. The admin shows the
+  event's conduct finalize time as read-only.
 
 ---
 

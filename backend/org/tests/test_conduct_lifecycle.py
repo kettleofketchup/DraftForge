@@ -1,6 +1,9 @@
 from datetime import timedelta
 
+from django.contrib.admin.sites import site
 from django.db import transaction
+from django.http import HttpRequest
+from django.test import RequestFactory
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
@@ -301,6 +304,42 @@ class TeardownOnDeleteTest(ConductTestCase):
         self.assertEqual(
             logs[0].details, {"event_id": event_pk, "deleted": 1, "voided": 1}
         )
+
+    def _admin_request(self) -> HttpRequest:
+        request = RequestFactory().post("/admin/")
+        request.user = self.admin
+        return request
+
+    def test_admin_delete_voids_finalized_rows(self) -> None:
+        event = self.make_event(state=EventState.COMPLETED)
+        finalized = self.outcome(self.make_user(), event=event, outcome=Outcome.NO_SHOW)
+        model_admin = site._registry[Event]
+
+        model_admin.delete_model(self._admin_request(), event)
+
+        finalized.refresh_from_db()
+        self.assertIsNone(finalized.event_id)
+        self.assertIsNotNone(finalized.voided_at)
+
+    def test_admin_bulk_delete_voids_finalized_rows(self) -> None:
+        events = [self.make_event(state=EventState.COMPLETED) for _ in range(2)]
+        rows = [self.outcome(self.make_user(), event=event) for event in events]
+        model_admin = site._registry[Event]
+
+        model_admin.delete_queryset(
+            self._admin_request(),
+            Event.objects.filter(pk__in=[event.pk for event in events]),
+        )
+
+        for row in rows:
+            row.refresh_from_db()
+            self.assertIsNotNone(row.voided_at)
+        self.assertFalse(
+            Event.objects.nocache().filter(pk__in=[e.pk for e in events]).exists()
+        )
+
+    def test_admin_conduct_finalized_at_read_only(self) -> None:
+        self.assertIn("conduct_finalized_at", site._registry[Event].readonly_fields)
 
     def test_already_voided_row_keeps_voided_at(self) -> None:
         event = self.make_event()
