@@ -50,10 +50,10 @@ export const TurnIndicator: React.FC = () => {
   return (
     <div
       data-testid="turn-indicator"
-      className={`p-4 rounded-lg text-center ${isMyTurn ? 'bg-turn animate-pulse' : 'bg-base-200'}`}
+      className={`p-4 rounded-lg text-center ${isMyTurn ? 'bg-current-pick/70 animate-pulse' : 'bg-base-200'}`}
     >
       {isMyTurn ? (
-        <span className="text-lg font-bold text-turn-foreground">
+        <span className="text-lg font-bold text-current-pick-foreground">
           It's YOUR turn to pick! (Pick #{pickNumber})
         </span>
       ) : (

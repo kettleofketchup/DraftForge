@@ -150,7 +150,7 @@ export function DraftClockBar({
             {isMyTurn && (
               <span
                 data-testid="draft-clock-your-turn"
-                className="rounded bg-turn px-2 py-0.5 text-xs font-bold text-turn-foreground"
+                className="rounded bg-current-pick px-2 py-0.5 text-xs font-bold text-current-pick-foreground"
               >
                 YOUR TURN
               </span>

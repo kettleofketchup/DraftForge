@@ -138,7 +138,7 @@ export const ShufflePickOrder: React.FC = () => {
                 className={cn(
                   'flex-shrink-0 p-3 min-w-[140px] h-full',
                   isCurrentPicker(status.team)
-                    ? 'border-turn border-2 bg-turn/15'
+                    ? 'border-current-pick border-2 bg-current-pick/15'
                     : 'border-muted',
                 )}
               >
@@ -194,7 +194,7 @@ export const ShufflePickOrder: React.FC = () => {
                     className={cn(
                       'mt-1 text-xs',
                       isCurrentPicker(status.team)
-                        ? 'bg-turn text-turn-foreground'
+                        ? 'bg-current-pick text-current-pick-foreground'
                         : 'invisible',
                     )}
                   >

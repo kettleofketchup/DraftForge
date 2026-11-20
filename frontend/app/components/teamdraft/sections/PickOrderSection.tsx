@@ -180,7 +180,7 @@ export const PickOrderSection = memo(() => {
                   'gap-1.5 md:gap-0',
                   'md:min-w-[70px]',
                   pick.isCurrent
-                    ? 'bg-turn/15 border-2 border-turn'
+                    ? 'bg-current-pick/15 border-2 border-current-pick'
                     : 'bg-muted/30 border border-muted hover:bg-muted/50',
                 )}
                 data-testid={`upcoming-pick-${idx}`}
@@ -191,7 +191,8 @@ export const PickOrderSection = memo(() => {
                   variant={pick.isCurrent ? 'default' : 'secondary'}
                   className={cn(
                     'text-[9px] md:text-[10px] px-1 md:mb-0.5',
-                    pick.isCurrent && 'bg-turn text-turn-foreground',
+                    pick.isCurrent &&
+                      'bg-current-pick text-current-pick-foreground',
                   )}
                 >
                   {pick.isCurrent ? 'NOW' : `#${pick.pickNumber}`}
@@ -203,7 +204,7 @@ export const PickOrderSection = memo(() => {
                     size="lg"
                     className={cn(
                       'w-8 h-8 md:w-10 md:h-10 shrink-0',
-                      pick.isCurrent && 'ring-2 ring-turn',
+                      pick.isCurrent && 'ring-2 ring-current-pick',
                     )}
                   />
                 ) : (
@@ -252,7 +253,7 @@ export const PickOrderSection = memo(() => {
                 captain.isMaxed
                   ? 'bg-muted/20 border border-muted/50 opacity-50 grayscale'
                   : captain.isCurrent
-                    ? 'bg-turn/15 border-2 border-turn'
+                    ? 'bg-current-pick/15 border-2 border-current-pick'
                     : 'bg-muted/30 border border-muted hover:bg-muted/50',
               )}
               data-testid={`pick-order-captain-${idx}`}
@@ -267,7 +268,8 @@ export const PickOrderSection = memo(() => {
                 }
                 className={cn(
                   'text-[9px] md:text-[10px] px-1 md:mb-0.5',
-                  captain.isCurrent && 'bg-turn text-turn-foreground',
+                  captain.isCurrent &&
+                    'bg-current-pick text-current-pick-foreground',
                   captain.isMaxed && 'bg-muted/50 text-muted-foreground',
                 )}
               >
@@ -284,7 +286,7 @@ export const PickOrderSection = memo(() => {
                   size="lg"
                   className={cn(
                     'w-8 h-8 md:w-10 md:h-10 shrink-0',
-                    captain.isCurrent && 'ring-2 ring-turn',
+                    captain.isCurrent && 'ring-2 ring-current-pick',
                   )}
                 />
               ) : (

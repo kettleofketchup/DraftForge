@@ -52,7 +52,9 @@ const draftRoundCardPropsAreEqual = (
 
 export const DraftRoundCard = memo(
   ({ draftRound, maxRounds, isCur }: DraftRoundCardProps) => {
-    const bgColor = isCur ? 'bg-turn/15 border-turn' : 'bg-base-800';
+    const bgColor = isCur
+      ? 'bg-current-pick/25 border-current-pick'
+      : 'bg-base-800';
 
     return (
       <motion.div

@@ -111,7 +111,7 @@ export function CaptainTurnToast({ captain }: CaptainTurnToastProps) {
     <div className="flex items-center gap-2">
       <UserAvatar user={captain || undefined} size="sm" className="shrink-0" />
       <span className="font-medium">{captainName}</span>
-      <span className="text-turn">is now picking...</span>
+      <span className="text-info">is now picking...</span>
     </div>
   );
 }
