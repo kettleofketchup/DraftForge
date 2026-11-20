@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
@@ -116,6 +117,7 @@ class _ParityBase(TestCase):
         self.client.force_authenticate(self.admin)
 
     def measure(self, expected: int, fn: Callable[[], Any]) -> Any:
+        ContentType.objects.clear_cache()
         with CaptureQueriesContext(connection) as ctx:
             result = fn()
         self.queries = ctx.captured_queries
