@@ -35,7 +35,17 @@ import type {
 
 const log = getLogger('draftWebSocketStore');
 
-function showEventToast(event: DraftEvent): void {
+const START_EVENTS = new Set(['draft_started', 'draft_lobby_opened']);
+let startToastsMutedUntil = 0;
+
+/** The client that reset the draft shows its own result; skip the matching start toasts. */
+export function muteDraftStartToasts(ms: number): void {
+  startToastsMutedUntil = Date.now() + ms;
+}
+
+export function showEventToast(event: DraftEvent): void {
+  if (START_EVENTS.has(event.event_type) && Date.now() < startToastsMutedUntil)
+    return;
   if (event.event_type === 'player_picked') {
     toast(PlayerPickedToast({ payload: event.payload as PlayerPickedPayload }));
     return;
@@ -88,7 +98,24 @@ interface DraftWebSocketState {
   clearForceJump: () => void;
   /** Apply draft events buffered since the last flush (normally runs on a short timer). */
   flushDraftEvents: () => void;
+  /** Forget a snapshot whose rounds `draft` no longer has (a restart rebuilt them). */
+  dropStaleDraftState: (draft: FreshDraft) => void;
   reset: () => void;
+}
+
+type FreshDraft = {
+  pk?: number | null;
+  draft_rounds?: { pk?: number | null }[] | null;
+};
+
+export function isStaleDraftState(
+  state: WebSocketDraftState | null,
+  draft: FreshDraft,
+): boolean {
+  if (!state) return false;
+  if (draft.pk != null && state.pk !== draft.pk) return true;
+  const fresh = new Set((draft.draft_rounds ?? []).map((r) => r.pk));
+  return (state.draft_rounds ?? []).some((r) => !fresh.has(r.pk));
 }
 
 function numericKeys(
@@ -547,6 +574,14 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>(
       set({
         ...initialState,
       });
+    },
+
+    dropStaleDraftState: (draft: FreshDraft) => {
+      if (!isStaleDraftState(get().draftState, draft)) return;
+      log.debug('Dropping stale draft state after restart', {
+        draftPk: draft.pk,
+      });
+      set({ draftState: null, _draftStateSeq: null });
     },
 
     reset: () => {

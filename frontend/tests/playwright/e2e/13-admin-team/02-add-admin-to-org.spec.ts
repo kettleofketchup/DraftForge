@@ -1,7 +1,7 @@
 /**
  * Admin Team Section - Add Admin to Organization
  *
- * Tests the AddUserModal integration inside EditOrganizationModal.
+ * Tests the AddUserModal integration in the org Settings tab (Admin Team).
  * This is the key regression test for the nested dialog bug fix:
  * - autoFocus timing conflict with Radix FocusScope was causing
  *   the AddUserModal to immediately close when opened.
@@ -15,46 +15,62 @@
  * - Database populated (just db::populate::all)
  */
 
+import { expect, test, visitAndWaitForHydration } from '../../fixtures';
 import { API_URL } from '../../fixtures/base-url';
-import { test, expect, visitAndWaitForHydration } from '../../fixtures';
 import {
-  waitForAddUserModal,
+  closeAddUserModal,
+  expectUserAlreadyAdded,
   searchAndAddUser,
   searchUser,
-  expectUserAlreadyAdded,
-  closeAddUserModal,
+  waitForAddUserModal,
 } from '../../helpers/add-user';
-
 
 /** Username of regular test user (pk=1003) who is NOT an org admin. */
 const ADDABLE_USERNAME = 'bucketoffish55';
 
 /** Helper: get org PK from league 1 detail endpoint. */
-async function getOrgPk(context: import('@playwright/test').BrowserContext): Promise<number> {
+async function getOrgPk(
+  context: import('@playwright/test').BrowserContext,
+): Promise<number> {
   const resp = await context.request.get(`${API_URL}/leagues/1/`);
   if (!resp.ok()) throw new Error(`Failed to fetch league 1: ${resp.status()}`);
   const data = await resp.json();
-  return typeof data.organization === 'object' ? data.organization.pk : data.organization;
+  return typeof data.organization === 'object'
+    ? data.organization.pk
+    : data.organization;
 }
 
 /** Helper: reset org admin team to known state via test endpoint. */
-async function resetOrgAdminTeam(context: import('@playwright/test').BrowserContext, orgPk: number): Promise<void> {
-  const resp = await context.request.post(`${API_URL}/tests/org/${orgPk}/reset-admin-team/`);
+async function resetOrgAdminTeam(
+  context: import('@playwright/test').BrowserContext,
+  orgPk: number,
+): Promise<void> {
+  const resp = await context.request.post(
+    `${API_URL}/tests/org/${orgPk}/reset-admin-team/`,
+  );
   if (!resp.ok()) {
     console.warn(`[reset] Failed to reset org admin team: ${resp.status()}`);
   }
 }
 
-/** Helper: open the Edit Organization modal from the org page. */
-async function openEditOrgModal(page: import('@playwright/test').Page): Promise<void> {
+/** Helper: open the org Settings tab (via Edit) on the Admin Team section. */
+async function openEditOrgModal(
+  page: import('@playwright/test').Page,
+): Promise<void> {
   const editBtn = page.locator('[data-testid="edit-organization-button"]');
   await expect(editBtn).toBeVisible({ timeout: 5000 });
   await editBtn.click();
-  await expect(page.locator('[data-testid="edit-organization-modal"]')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('[data-testid="org-settings-tab"]')).toBeVisible({
+    timeout: 5000,
+  });
+  // Edit opens the org Settings tab; the admin team is its own section there.
+  await page.getByTestId('org-settings-tab-admins').click();
 }
 
 /** Helper: scroll to Admin Team section and click Add Admin. */
-async function clickAddAdmin(page: import('@playwright/test').Page): Promise<void> {
+async function clickAddAdmin(
+  page: import('@playwright/test').Page,
+): Promise<void> {
   const addAdminBtn = page.locator('[data-testid="add-admin-btn"]');
   await addAdminBtn.scrollIntoViewIfNeeded();
   await expect(addAdminBtn).toBeVisible({ timeout: 5000 });
@@ -85,7 +101,7 @@ test.describe('Add Admin to Organization (@cicd)', () => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
 
-    // Open edit modal
+    // Open org settings on the Admin Team section
     await openEditOrgModal(page);
 
     // Click Add Admin to open AddUserModal
@@ -102,8 +118,10 @@ test.describe('Add Admin to Organization (@cicd)', () => {
     // Close AddUserModal
     await closeAddUserModal(page);
 
-    // Verify edit modal is still open after closing AddUserModal
-    await expect(page.locator('[data-testid="edit-organization-modal"]')).toBeVisible({ timeout: 3000 });
+    // Verify the settings page is still showing after closing AddUserModal
+    await expect(page.locator('[data-testid="org-settings-tab"]')).toBeVisible({
+      timeout: 3000,
+    });
   });
 
   test('@cicd Can search and add a user as admin', async ({
@@ -116,7 +134,7 @@ test.describe('Add Admin to Organization (@cicd)', () => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
 
-    // Open edit modal → Add Admin → AddUserModal
+    // Open org settings → Add Admin → AddUserModal
     await openEditOrgModal(page);
     await clickAddAdmin(page);
     await waitForAddUserModal(page);
@@ -127,12 +145,16 @@ test.describe('Add Admin to Organization (@cicd)', () => {
     // Close AddUserModal
     await closeAddUserModal(page);
 
-    // Verify edit modal is still open
-    await expect(page.locator('[data-testid="edit-organization-modal"]')).toBeVisible({ timeout: 3000 });
+    // Verify the settings page is still showing
+    await expect(page.locator('[data-testid="org-settings-tab"]')).toBeVisible({
+      timeout: 3000,
+    });
 
     // Verify the user now appears in the admin team list
     // Allow time for the org refetch cycle to complete and update the admin list
-    const newAdminRow = page.locator(`[data-testid="team-member-${ADDABLE_USERNAME}"]`);
+    const newAdminRow = page.locator(
+      `[data-testid="team-member-${ADDABLE_USERNAME}"]`,
+    );
     await expect(newAdminRow).toBeVisible({ timeout: 10000 });
     await newAdminRow.scrollIntoViewIfNeeded();
   });
@@ -147,7 +169,7 @@ test.describe('Add Admin to Organization (@cicd)', () => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
 
-    // Open edit modal → Add Admin → AddUserModal
+    // Open org settings → Add Admin → AddUserModal
     await openEditOrgModal(page);
     await clickAddAdmin(page);
     await waitForAddUserModal(page);

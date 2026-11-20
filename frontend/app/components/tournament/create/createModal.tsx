@@ -1,15 +1,6 @@
 import { PlusCircleIcon } from 'lucide-react';
 import { useState } from 'react';
-import { DIALOG_CSS } from '~/components/reusable/modal';
 import { PrimaryButton } from '~/components/ui/buttons';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '~/components/ui/dialog';
 import {
   Tooltip,
   TooltipContent,
@@ -17,7 +8,6 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { canCreateTournament } from '~/lib/tournamentPermissions';
-import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import type { TournamentClassType } from '../types';
 import { TournamentEditForm } from './editForm';
@@ -35,16 +25,18 @@ export const TournamentCreateModal: React.FC<Props> = () => {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <DialogTrigger asChild>
-              <PrimaryButton size="lg" data-testid="tournament-create-button">
-                <PlusCircleIcon className="text-white" />
-                Create Tournament
-              </PrimaryButton>
-            </DialogTrigger>
+            <PrimaryButton
+              size="lg"
+              data-testid="tournament-create-button"
+              onClick={() => setOpen(true)}
+            >
+              <PlusCircleIcon className="text-white" />
+              Create Tournament
+            </PrimaryButton>
           </TooltipTrigger>
           <TooltipContent>
             <p>Create a new tournament</p>
@@ -52,23 +44,16 @@ export const TournamentCreateModal: React.FC<Props> = () => {
         </Tooltip>
       </TooltipProvider>
 
-      <DialogContent
-        className={cn(DIALOG_CSS, 'flex h-[100svh] flex-col overflow-hidden')}
+      <TournamentEditForm
+        tourn={{} as TournamentClassType}
+        open={open}
+        onOpenChange={setOpen}
+        title="Create Tournament"
+        description="Please fill in the details below to create a new tournament."
+        onSuccess={() => setOpen(false)}
         data-testid="tournament-create-modal"
-      >
-        <DialogHeader>
-          <DialogTitle>Create Tournament</DialogTitle>
-          <DialogDescription>
-            Please fill in the details below to create a new tournament.
-          </DialogDescription>
-        </DialogHeader>
-
-        <TournamentEditForm
-          tourn={{} as TournamentClassType}
-          onSuccess={() => setOpen(false)}
-        />
-      </DialogContent>
-    </Dialog>
+      />
+    </>
   );
 };
 

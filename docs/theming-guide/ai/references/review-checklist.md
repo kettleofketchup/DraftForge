@@ -22,6 +22,7 @@ Walk this list against any diff that touches an [in-scope source tree](scope.md)
 - [ ] User names render via `DisplayName()` from `~/components/user/avatar`, never a raw `username` / `nickname` / `discord_username` string.
 - [ ] `<EntityBreadcrumb>` on every detail page that requires it (organization, league, event, event-series, tournament, rollcall). → [substitutions](component-substitutions.md#breadcrumbs)
 - [ ] No hand-built breadcrumb `<nav>` markup on those pages.
+- [ ] Single-choice options use the shared `<RadioGroup>` / `<RadioGroupItem>`, not `<input type="radio">` or a per-call-site restyle. → [substitutions](component-substitutions.md#radios)
 - [ ] New record lists use a `<Domain>Table` on `<DataTable>`, not flex rows or a raw `<table>`. → [substitutions](component-substitutions.md#tables)
 
 ## 3. Tokens vs Literals

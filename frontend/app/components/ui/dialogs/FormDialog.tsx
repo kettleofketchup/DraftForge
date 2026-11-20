@@ -57,6 +57,10 @@ export interface FormDialogProps {
   'data-testid'?: string;
   /** Test ID for the title heading */
   titleTestId?: string;
+  /** Test IDs for the footer buttons and the form element. */
+  submitTestId?: string;
+  cancelTestId?: string;
+  formTestId?: string;
   /** Wraps the scrollable body, e.g. to put navigation beside it. */
   frame?: (body: React.ReactNode) => React.ReactNode;
   /** Replaces the size's default class on the body's ScrollArea. */
@@ -108,6 +112,9 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       className,
       'data-testid': dataTestId,
       titleTestId,
+      submitTestId = 'form-dialog-submit',
+      cancelTestId = 'modal-cancel-button',
+      formTestId,
       frame,
       scrollClassName,
     },
@@ -251,7 +258,11 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
             Radix Viewport's overflow:hidden. `relative` keeps absolutely
             positioned hidden inputs (Radix Select's native select) inside
             the scroll viewport instead of overflowing the root. */}
-        <form onSubmit={handleSubmit} className="relative space-y-4 px-1 py-1">
+        <form
+          onSubmit={handleSubmit}
+          className="relative space-y-4 px-1 py-1"
+          data-testid={formTestId}
+        >
           {children}
         </form>
       </ScrollArea>
@@ -305,7 +316,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
                 onClick={() => onOpenChange(false)}
                 disabled={isSubmitting}
                 hotkey="⌫"
-                data-testid="modal-cancel-button"
+                data-testid={cancelTestId}
               >
                 {cancelLabel}
               </CancelButton>
@@ -314,7 +325,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
                 onClick={handleSubmit}
                 loading={isSubmitting}
                 hotkey="↵"
-                data-testid="form-dialog-submit"
+                data-testid={submitTestId}
               >
                 {submitLabel}
               </ConfirmButton>
