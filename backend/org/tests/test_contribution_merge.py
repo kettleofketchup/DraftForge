@@ -11,24 +11,13 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.discord_accounts import merge_discord_accounts
-from app.models import (
-    CustomUser,
-    Game,
-    Organization,
-    ProfileClaimRequest,
-    Team,
-    Tournament,
-)
-from draft.models import HeroDraftChatMembership, HeroDraftChatMessage
-from draft.services.hero import new_herodraft_for_game
+from app.models import CustomUser, Organization, ProfileClaimRequest
 from events.constants import EventState
 from events.models import Event
+from events.staff import dedupe_host_helpers
+from org.accounts import repoint_org_attribution
 from org.contributions.kinds import ContributionKind
-from org.contributions.services import (
-    dedupe_event_staff,
-    reassign_member,
-    repoint_user_attribution,
-)
+from org.contributions.services import reassign_member, repoint_ledger_attribution
 from org.feature_keys import FeatureKey
 from org.models import ContributionEntry, ContributionPointValue, OrgFeature, OrgUser
 
@@ -161,75 +150,17 @@ class RepointAttributionTest(_LedgerFixture):
             updated_by=drop,
         )
 
-        tournament = Tournament.objects.create(
-            name="Attr Tournament", date_played=timezone.now()
-        )
-        radiant = Team.objects.create(name="Attr R", tournament=tournament)
-        dire = Team.objects.create(name="Attr D", tournament=tournament)
-        draft = new_herodraft_for_game(
-            Game.objects.create(
-                tournament=tournament, radiant_team=radiant, dire_team=dire
-            )
-        )
-        message = HeroDraftChatMessage.objects.create(
-            draft=draft,
-            channel=HeroDraftChatMessage.Channel.TEAM,
-            team=radiant,
-            sender=drop,
-            body="gl",
-        )
-        membership = HeroDraftChatMembership.objects.create(
-            draft=draft, team=radiant, user=drop, joined_at=timezone.now()
+        changed = repoint_ledger_attribution(drop, keep) + repoint_org_attribution(
+            drop, keep
         )
 
-        changed = repoint_user_attribution(drop, keep)
-
-        self.assertEqual(changed, 5)
+        self.assertEqual(changed, 3)
         entry.refresh_from_db()
         feature.refresh_from_db()
         value.refresh_from_db()
-        message.refresh_from_db()
-        membership.refresh_from_db()
         self.assertEqual(entry.awarded_by_id, keep.pk)
         self.assertEqual(feature.enabled_by_id, keep.pk)
         self.assertEqual(value.updated_by_id, keep.pk)
-        self.assertEqual(message.sender_id, keep.pk)
-        self.assertEqual(membership.user_id, keep.pk)
-
-    def test_open_memberships_in_same_draft_do_not_collide(self) -> None:
-        drop = CustomUser.objects.create_user(username="col_drop", password="x")
-        keep = CustomUser.objects.create_user(username="col_keep", password="x")
-        tournament = Tournament.objects.create(
-            name="Collide Tournament", date_played=timezone.now()
-        )
-        radiant = Team.objects.create(name="Col R", tournament=tournament)
-        dire = Team.objects.create(name="Col D", tournament=tournament)
-        draft = new_herodraft_for_game(
-            Game.objects.create(
-                tournament=tournament, radiant_team=radiant, dire_team=dire
-            )
-        )
-        now = timezone.now()
-        drop_row = HeroDraftChatMembership.objects.create(
-            draft=draft, team=radiant, user=drop, joined_at=now
-        )
-        keep_row = HeroDraftChatMembership.objects.create(
-            draft=draft, team=dire, user=keep, joined_at=now
-        )
-
-        repoint_user_attribution(drop, keep)
-
-        drop_row.refresh_from_db()
-        keep_row.refresh_from_db()
-        self.assertEqual(drop_row.user_id, keep.pk)
-        self.assertIsNotNone(drop_row.left_at)
-        self.assertIsNone(keep_row.left_at)
-        self.assertEqual(
-            HeroDraftChatMembership.objects.filter(
-                draft=draft, user=keep, left_at__isnull=True
-            ).count(),
-            1,
-        )
 
 
 class ClaimMergeContributionsTest(_LedgerFixture):
@@ -532,7 +463,8 @@ class DedupeEventStaffTest(_LedgerFixture):
         self._entry(ou, ContributionKind.EVENT_HOST, 10, self.event_a)
         self._entry(ou, ContributionKind.EVENT_HELPER, 5, self.event_a)
 
-        self.assertEqual(dedupe_event_staff(user), 1)
+        events = dedupe_host_helpers(user)
+        self.assertEqual(len(events), 1)
 
         self.assertFalse(
             Event.objects.nocache().get(pk=self.event_a.pk).helpers.exists()

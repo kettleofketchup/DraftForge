@@ -76,6 +76,7 @@ MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT,)
 # target app -> production file (relative to backend/) -> names it may import from that app
 ALLOWED_BACK_EDGES: dict[str, dict[str, frozenset[str]]] = {
     "draft": {
+        "app/discord_accounts.py": frozenset({"repoint_chat_attribution"}),
         "app/draft_state.py": frozenset({"HeroDraft"}),
         "app/permissions_org.py": frozenset({"HeroDraft"}),
         "app/services/draft_reset.py": frozenset({"delete_team_chat"}),

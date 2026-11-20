@@ -75,7 +75,9 @@ class ReopenEventServiceTest(ReopenTestBase):
         result = reopen_event(self.ev, actor=self.admin)
         self.assertEqual(
             result,
-            ReopenResult(reopened=True, state=EventState.SIGNUPS_OPEN, revoked=3),
+            ReopenResult(
+                reopened=True, state=EventState.SIGNUPS_OPEN, details={"revoked": 3}
+            ),
         )
         self.ev.refresh_from_db()
         self.assertEqual(self.ev.state, EventState.SIGNUPS_OPEN)
@@ -137,7 +139,7 @@ class ReopenEventServiceTest(ReopenTestBase):
         result = reopen_event(self.ev, actor=self.admin)
         self.assertEqual(
             result,
-            ReopenResult(reopened=False, state=EventState.IN_PROGRESS, revoked=0),
+            ReopenResult(reopened=False, state=EventState.IN_PROGRESS),
         )
         self.ev.refresh_from_db()
         self.assertEqual(self.ev.state, EventState.IN_PROGRESS)
@@ -151,7 +153,7 @@ class ReopenEventServiceTest(ReopenTestBase):
         self.assertTrue(first.reopened)
         self.assertEqual(
             second,
-            ReopenResult(reopened=False, state=EventState.SIGNUPS_OPEN, revoked=0),
+            ReopenResult(reopened=False, state=EventState.SIGNUPS_OPEN),
         )
         self.assertEqual(self._reopen_logs().count(), 1)
 
@@ -185,7 +187,9 @@ class ReopenEventServiceTest(ReopenTestBase):
 
         self.assertEqual(
             raced["inner"],
-            ReopenResult(reopened=True, state=EventState.SIGNUPS_OPEN, revoked=3),
+            ReopenResult(
+                reopened=True, state=EventState.SIGNUPS_OPEN, details={"revoked": 3}
+            ),
         )
         self.assertFalse(outer.reopened)
         self.assertEqual(self._staff_entries().count(), 0)
@@ -214,7 +218,9 @@ class ReopenEventServiceTest(ReopenTestBase):
         )
         self.assertEqual(
             outer,
-            ReopenResult(reopened=True, state=EventState.SIGNUPS_OPEN, revoked=3),
+            ReopenResult(
+                reopened=True, state=EventState.SIGNUPS_OPEN, details={"revoked": 3}
+            ),
         )
         self.ev.refresh_from_db()
         self.assertEqual(self.ev.state, EventState.SIGNUPS_OPEN)

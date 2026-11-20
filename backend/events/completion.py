@@ -10,7 +10,7 @@ from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, OrgLog
 from events.constants import EVENT_STATE_TRANSITIONS, EventState
 from events.models import Event
-from org.contributions.services import SyncResult, sync_event_staff_entries
+from org.standing import api as standing
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -26,14 +26,6 @@ _CLOSE_STATES: frozenset[EventState] = frozenset(
 class CloseResult:
     closed: bool
     state: str
-
-
-def _should_award(event: Event, new_state: EventState, source: CloseSource) -> bool:
-    if new_state == EventState.COMPLETED:
-        return True
-    if source != "auto" or new_state != EventState.CANCELLED:
-        return False
-    return event.host_id is not None or event.helpers.nocache().exists()
 
 
 def close_event(
@@ -86,13 +78,13 @@ def close_event(
         stale = copy.copy(event)
         event.refresh_from_db(from_queryset=Event.objects.nocache().all())
 
-        sync: SyncResult | None = None
-        if _should_award(event, new_state, source):
-            sync = sync_event_staff_entries(event)
-            Event.objects.nocache().filter(pk=event.pk).update(
-                contributions_awarded_at=now
-            )
-            event.contributions_awarded_at = now
+        result = standing.on_event_closed(
+            event,
+            cancelled=new_state == EventState.CANCELLED,
+            source=source,
+            actor=actor,
+            now=now,
+        )
 
         if source == "admin" and new_state == EventState.COMPLETED:
             OrgLog.objects.create(
@@ -103,7 +95,7 @@ def close_event(
                     "event_id": event.pk,
                     "from": old_state,
                     "to": new_state.value,
-                    "awarded": sync.created if sync is not None else 0,
+                    **result.orglog_details(),
                 },
             )
         invalidate_after_commit(stale, event)
@@ -118,8 +110,7 @@ def close_event(
         source=source,
         from_state=old_state,
         new_state=new_state.value,
-        awarded=sync is not None,
-        created=sync.created if sync is not None else 0,
+        **result.log_fields(),
         actor_id=actor.pk if actor is not None else None,
     )
     return CloseResult(closed=True, state=new_state.value)

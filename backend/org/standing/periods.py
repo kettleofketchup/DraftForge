@@ -31,7 +31,7 @@ def resolve_org_tz(org: Organization) -> ZoneInfo:
         log.warning(
             "org_timezone_invalid",
             system="org",
-            subsystem="contributions",
+            subsystem="standing",
             org_id=org.pk,
             timezone=name,
         )

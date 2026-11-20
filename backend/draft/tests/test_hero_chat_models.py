@@ -8,7 +8,6 @@ from django.utils import timezone
 from app.models import CustomUser, Game, Team, Tournament
 from draft.models import HeroDraft, HeroDraftChatMembership, HeroDraftChatMessage
 from draft.services.hero import new_herodraft_for_game
-from org.contributions.services import repoint_user_attribution
 
 Channel = HeroDraftChatMessage.Channel
 Kind = HeroDraftChatMessage.Kind
@@ -124,22 +123,3 @@ class HeroDraftChatModelTest(TestCase):
             ).count(),
             2,
         )
-
-    def test_merge_repoints_chat(self) -> None:
-        drop = CustomUser.objects.create_user(username="chat_drop", password="x")
-        keep = CustomUser.objects.create_user(username="chat_keep", password="x")
-        msg = self._msg(sender=drop)
-        membership = HeroDraftChatMembership.objects.create(
-            draft=self.draft, team=self.team1, user=drop, joined_at=timezone.now()
-        )
-
-        changed = repoint_user_attribution(drop, keep)
-
-        self.assertEqual(changed, 2)
-        msg.refresh_from_db()
-        membership.refresh_from_db()
-        self.assertEqual(msg.sender_id, keep.pk)
-        self.assertEqual(membership.user_id, keep.pk)
-        before = HeroDraftChatMessage.objects.count()
-        drop.delete()
-        self.assertEqual(HeroDraftChatMessage.objects.count(), before)

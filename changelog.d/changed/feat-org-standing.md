@@ -1,0 +1,1 @@
+- Organization contributions now run through a single internal standing interface. No user-visible change.

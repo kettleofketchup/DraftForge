@@ -16,14 +16,11 @@ from app.models import CustomUser, Organization
 from app.permissions_org import can_view_org_members, has_org_staff_access
 from events.models import Event
 from org.contributions.kinds import DEFAULT_POINTS, RATED_KINDS, ContributionKind
-from org.contributions.periods import Period, parse_period
 from org.contributions.queries import (
     LeaderboardRow,
-    leaderboard,
     member_entries,
     member_monthly,
     member_totals,
-    org_total,
 )
 from org.contributions.serializers import (
     EntriesQuerySerializer,
@@ -41,9 +38,16 @@ from org.contributions.services import (
     set_point_value,
     update_manual_award,
 )
-from org.feature_errors import not_permitted, require_feature, require_org_admin
+from org.feature_errors import (
+    feature_locked,
+    not_permitted,
+    require_feature,
+    require_org_admin,
+)
 from org.features import FeatureKey
 from org.models import ContributionEntry, ContributionPointValue, OrgUser
+from org.standing import api as standing
+from org.standing.periods import Period, parse_period
 from user.querysets import with_user_profiles
 
 
@@ -98,16 +102,28 @@ def _own_row(org_user: OrgUser, period: Period) -> LeaderboardRow | None:
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def contributions_leaderboard(request: Request, org_id: int) -> Response:
-    org = _org(org_id)
-    period = _period(request, org)
-    rows_visible = can_view_org_members(request.user, org)
+    org = get_object_or_404(Organization, pk=org_id)
+    try:
+        period = _period(request, org)
+    except ValidationError:
+        require_feature(org, FeatureKey.CONTRIBUTIONS)
+        raise
+    try:
+        board = standing.leaderboard(
+            org, "contribution", "points", period, viewer=request.user
+        )
+    except standing.FeatureLocked as exc:
+        raise feature_locked() from exc
     own = _own_org_user(request.user, org)
     return Response(
         {
             "period": period.label,
-            "total": org_total(org, period),
-            "rows_visible": rows_visible,
-            "rows": leaderboard(org, period) if rows_visible else [],
+            "total": board.total,
+            "rows_visible": board.rows_visible,
+            "rows": [
+                {**row.member, "points": row.value, "entries": row.sample}
+                for row in board.rows
+            ],
             "own_row": _own_row(own, period) if own is not None else None,
         }
     )

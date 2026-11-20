@@ -85,11 +85,6 @@
             </a>
           {% endif %}
         {% endfor %}
-
-        <a class="btn btn-info" name="ajax-login" href="#">
-          <i class="fa fa-refresh"></i>
-          Ajax
-        </a>
       </div>
 
       <div>
@@ -222,53 +217,6 @@
           </div>
         </div>
       </form>
-    </div>
-
-    <div id="ajax-login-modal" class="modal fade">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-            <h4 class="modal-title">Ajax Authentication by AccessToken</h4>
-          </div>
-
-          <div class="modal-body">
-            <form action="#" method="post" class="form-horizontal" role="form">
-              <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
-              <div class="form-group">
-                <label class="control-label" for="backend">Backend:</label>
-                <select class="form-control" name="backend">
-                  <option value=""></option>
-                  {% for name, backend in available_backends|oauth_backends %}
-                    <option value="{{ name }}">{{ backend|backend_name }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label class="control-label" for="access_token">Access token:</label>
-                <input class="form-control" id="access_token" name="access_token" type="text" value="" placeholder="OAuth1 or OAuth2 access token">
-              </div>
-
-              <div class="form-group">
-                <label class="control-label" for="access_token_secret">Access token secret:</label>
-                <input class="form-control" id="access_token_secret" name="access_token_secret" type="text" value="" placeholder="OAuth1 access token secret">
-              </div>
-            </form>
-
-            <div class="login-result" style="display: none;">
-              <p><strong>User Id:</strong><span class="user-id"></span></p>
-              <p><strong>Username:</strong><span class="user-username"></span></p>
-              <p>This page will be reloaded in 10s and the user should be logged in.</p>
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-primary">Login</button>
-          </div>
-        </div>
-      </div>
     </div>
 
     <div id="persona-modal" class="modal fade">
@@ -513,29 +461,6 @@
         $countryRequired = modalDialog('#country-required-modal');
         $cityRequired = modalDialog('#city-required-modal');
         $stateRequired = modalDialog('#state-required-modal');
-
-        modalDialog('#ajax-login-modal', 'ajax-login', function (event) {
-          var $backend, $accessToken, $accessTokenSecret, $fields, $result;
-          event.preventDefault();
-
-          $modal = $(this).closest('.modal');
-          $form = $modal.find('form');
-          $backend = $modal.find('[name="backend"]');
-          $accessToken = $modal.find('[name="access_token"]');
-          $accessTokenSecret = $modal.find('[name="access_token_secret"]');
-          $result = $modal.find('.login-result');
-
-          $.get('/ajax-auth/' + $backend.val() + '/', {
-            access_token: $accessToken.val(),
-            access_token_secret: $accessTokenSecret.val(),
-          }, function (data, xhr, response) {
-            $result.find('.user-id').html(data.id);
-            $result.find('.user-username').html(data.username);
-            $form.hide();
-            $result.show();
-            setTimeout(function () { window.location = '/'; }, 10000);
-          }, 'json')
-        });
 
         modalDialog('#persona-modal', 'persona', function (event) {
           var $form;

@@ -316,6 +316,19 @@ def repoint_draft_memberships(
     _seed_teams(draft_id, new - prior, now)
 
 
+def repoint_chat_attribution(drop: CustomUser, keep: CustomUser) -> int:
+    HeroDraftChatMembership.objects.filter(
+        user=drop,
+        left_at__isnull=True,
+        draft_id__in=HeroDraftChatMembership.objects.filter(
+            user=keep, left_at__isnull=True
+        ).values("draft_id"),
+    ).update(left_at=timezone.now())
+    return HeroDraftChatMessage.objects.filter(sender=drop).update(
+        sender=keep
+    ) + HeroDraftChatMembership.objects.filter(user=drop).update(user=keep)
+
+
 def _sync_user_tenure(draft_id: int, user_ids: Iterable[int], at: datetime) -> None:
     for user_id in user_ids:
         team_ids = _member_team_ids(draft_id, user_id)
