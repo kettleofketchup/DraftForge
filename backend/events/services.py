@@ -373,9 +373,10 @@ def create_tentative_signup(
         if existing.status == SignupStatus.DROPPED:
             raise ValueError(DROPPED_SIGNUP_MESSAGE)
         if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
-            standing.on_signup_withdrawn(
-                existing, prior_status=existing.status, by_member=_by_member(actor)
-            )
+            if _by_member(actor) and existing.status in seat_holding_statuses(event):
+                standing.on_signup_withdrawn(
+                    existing, prior_status=existing.status, by_member=True
+                )
             cancel_signup(existing)
             notify_scheduled_by_cancel = True
         EventSignup.objects.filter(pk=existing.pk).delete()
@@ -653,9 +654,8 @@ def cancel_signup(
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
     signup.save(update_fields=["status", "updated_at"])
-    standing.on_signup_withdrawn(
-        signup, prior_status=prior_status, by_member=_by_member(actor)
-    )
+    if _by_member(actor):
+        standing.on_signup_withdrawn(signup, prior_status=prior_status, by_member=True)
     _roster_remove_if_left(signup)
     if prior_status in seat_holding_statuses(signup.event):
         _promote_from_waitlist(signup.event)

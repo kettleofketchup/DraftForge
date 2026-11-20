@@ -17,7 +17,13 @@ from events.constants import EventState, SignupStatus
 from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from events.reopen import reopen_event
-from events.services import cancel_event, cancel_signup, teardown_event
+from events.services import (
+    cancel_event,
+    cancel_signup,
+    create_tentative_signup,
+    decline_signup,
+    teardown_event,
+)
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.models import OrgUser
@@ -357,7 +363,20 @@ class StandingCallSiteTest(TestCase):
         self.assertEqual(kwargs["prior_status"], SignupStatus.APPROVED)
         self.assertTrue(kwargs["by_member"])
 
-    def test_staff_cancel_signup_is_not_by_member(self) -> None:
+    def test_member_web_cancel_calls_withdrawn_hook_once(self) -> None:
+        self._set_state(EventState.SIGNUPS_OPEN)
+        member = CustomUser.objects.create_user(username="cs_member3", password="x")
+        signup = EventSignup.objects.create(
+            event=self.event, user=member, status=SignupStatus.APPROVED
+        )
+        client = APIClient()
+        client.force_authenticate(member)
+        response = client.post(f"/api/events/signups/{signup.pk}/cancel_signup/")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(self.fake.hooks, ["on_signup_withdrawn"])
+        self.assertTrue(self.fake.calls[0].kwargs["by_member"])
+
+    def test_staff_cancel_signup_skips_withdrawn_hook(self) -> None:
         self._set_state(EventState.SIGNUPS_OPEN)
         member = CustomUser.objects.create_user(username="cs_member2", password="x")
         signup = EventSignup.objects.create(
@@ -365,7 +384,47 @@ class StandingCallSiteTest(TestCase):
         )
         response = self.client.post(f"/api/events/signups/{signup.pk}/cancel_signup/")
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertFalse(self.fake.calls[0].kwargs["by_member"])
+        self.assertEqual(self.fake.hooks, [])
+
+    def test_actorless_cancel_skips_withdrawn_hook(self) -> None:
+        self._set_state(EventState.SIGNUPS_OPEN)
+        member = CustomUser.objects.create_user(username="cs_member4", password="x")
+        signup = EventSignup.objects.create(
+            event=self.event, user=member, status=SignupStatus.APPROVED
+        )
+        cancel_signup(signup)
+        self.assertEqual(self.fake.hooks, [])
+
+    def test_tentative_switch_from_approved_calls_withdrawn_hook_once(self) -> None:
+        self._set_state(EventState.SIGNUPS_OPEN)
+        member = CustomUser.objects.create_user(username="cs_member5", password="x")
+        EventSignup.objects.create(
+            event=self.event, user=member, status=SignupStatus.APPROVED
+        )
+        create_tentative_signup(self.event, member, actor=SignupActor.discord(member))
+        self.assertEqual(self.fake.hooks, ["on_signup_withdrawn"])
+        kwargs = self.fake.calls[0].kwargs
+        self.assertEqual(kwargs["prior_status"], SignupStatus.APPROVED)
+        self.assertTrue(kwargs["by_member"])
+
+    def test_tentative_switch_from_waitlist_skips_withdrawn_hook(self) -> None:
+        self._set_state(EventState.SIGNUPS_OPEN)
+        member = CustomUser.objects.create_user(username="cs_member6", password="x")
+        EventSignup.objects.create(
+            event=self.event, user=member, status=SignupStatus.WAITLISTED
+        )
+        create_tentative_signup(self.event, member, actor=SignupActor.discord(member))
+        self.assertEqual(self.fake.hooks, [])
+
+    def test_member_decline_forwards_actor_to_withdrawn_hook(self) -> None:
+        self._set_state(EventState.SIGNUPS_OPEN)
+        member = CustomUser.objects.create_user(username="cs_member7", password="x")
+        EventSignup.objects.create(
+            event=self.event, user=member, status=SignupStatus.APPROVED
+        )
+        decline_signup(self.event, member, actor=SignupActor.discord(member))
+        self.assertEqual(self.fake.hooks, ["on_signup_withdrawn"])
+        self.assertTrue(self.fake.calls[0].kwargs["by_member"])
 
     def test_feature_toggle_calls_hook_for_matching_track(self) -> None:
         response = self.client.put(

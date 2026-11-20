@@ -128,7 +128,7 @@ class ConductTrack(TrackBase):
     ) -> TrackOutput:
         if by_member:
             capture_late_cancel(signup, prior_status=prior_status, now=now)
-        return TrackOutput()
+        return EMPTY_OUTPUT
 
     @override
     def on_feature_toggled(self, org_id: int, *, enabled: bool) -> None:
