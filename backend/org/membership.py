@@ -48,3 +48,13 @@ def viewer_member_organization_ids(user: CustomUser | AnonymousUser) -> list[int
 def resolve_or_create_org_user(user: CustomUser, organization: Organization) -> OrgUser:
     org_user, _ = OrgUser.objects.get_or_create(user=user, organization=organization)
     return org_user
+
+
+def member_access(
+    user: CustomUser | AnonymousUser, can_view: bool
+) -> dict[str, bool | int | None]:
+    """Per-viewer member-list flag plus the viewer it was computed for."""
+    return {
+        "can_view_members": can_view,
+        "members_viewer_pk": user.pk if user.is_authenticated else None,
+    }
