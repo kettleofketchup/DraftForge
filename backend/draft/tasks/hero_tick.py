@@ -1,4 +1,4 @@
-"""HeroDraft tick driver bound to the shared runner in app.tasks.draft_tick.
+"""HeroDraft tick driver bound to the shared runner in draft.tasks.draft_tick.
 
 Diagnostic events and Tempo spans (herodraft.tick.iteration with child
 herodraft.tick.<step>) are emitted by draft_tick.run_tick_loop.
@@ -16,15 +16,6 @@ from channels.layers import get_channel_layer
 from django.db import transaction
 from django.utils import timezone
 
-from app.tasks import draft_tick
-from app.tasks.draft_tick import (
-    HEARTBEAT_STALE_SECONDS,
-    LOCK_TIMEOUT,
-    TICK_GAP_STALL_THRESHOLD_S,
-    TICK_ITERATION_SLOW_THRESHOLD_S,
-    TICK_STEP_SLOW_THRESHOLD_S,
-    TaskInfo,
-)
 from draft.models import (
     DraftTeam,
     HeroDraft,
@@ -34,6 +25,15 @@ from draft.models import (
 )
 from draft.services.hero import auto_random_pick
 from draft.services.hero_broadcast import broadcast_herodraft_state
+from draft.tasks import draft_tick
+from draft.tasks.draft_tick import (
+    HEARTBEAT_STALE_SECONDS,
+    LOCK_TIMEOUT,
+    TICK_GAP_STALL_THRESHOLD_S,
+    TICK_ITERATION_SLOW_THRESHOLD_S,
+    TICK_STEP_SLOW_THRESHOLD_S,
+    TaskInfo,
+)
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

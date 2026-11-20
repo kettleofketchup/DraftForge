@@ -23,7 +23,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app.draft_state import build_draft_state
 from app.exception_handler import exception_handler
 from app.functions.tournament import _serialize_tournament
 from app.models import (
@@ -55,6 +54,7 @@ from app.services.team_references import team_references, team_usage
 from app.services.team_signals import TeamRosterChange, team_roster_changed
 from app.tests.test_draft_state_queries import make_fixture
 from app.tests.test_team_management import TeamManagementFixture
+from app.tournament_state import build_draft_state
 from app.views_main import TeamView
 from draft.models import DraftTeam, HeroDraft
 from draft.serializers.hero import HeroDraftSerializer

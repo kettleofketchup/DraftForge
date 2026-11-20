@@ -4,12 +4,13 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 from django.utils import timezone
 
-from app.consumers_base import BaseDraftConsumer, consumer_db
-from app.tasks.draft_tick import TickDriver
+from app.consumer_db import consumer_db
+from draft.consumers.base import BaseDraftConsumer
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero_broadcast import broadcast_herodraft_state
 from draft.services.hero_state import herodraft_state_queryset
+from draft.tasks.draft_tick import TickDriver
 from draft.tasks.hero_tick import HERO_TICK_DRIVER
 from telemetry.logging import get_logger
 

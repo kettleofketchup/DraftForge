@@ -7,7 +7,6 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.draft_state import tournament_state_queryset
 from app.models import (
     CustomUser,
     Draft,
@@ -29,6 +28,7 @@ from app.services.team_references import (
     team_references,
     team_usage,
 )
+from app.tournament_state import tournament_state_queryset
 from bracket.models import BracketSlot, TournamentBracket
 from draft.models import DraftTeam, HeroDraft
 from league.models import LeagueUser

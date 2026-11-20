@@ -9,7 +9,7 @@ from django.conf import settings
 from django.test import TransactionTestCase
 
 from app.models import Tournament
-from app.tasks.draft_tick import (
+from draft.tasks.draft_tick import (
     conn_count_key,
     get_connection_count,
     get_redis_client,
