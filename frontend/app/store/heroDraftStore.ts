@@ -6,6 +6,17 @@
  */
 
 import { create } from 'zustand';
+import {
+  addPending,
+  applyChatAck,
+  applyChatError,
+  applyChatHistory,
+  applyChatMessage,
+  initialChatState,
+  resetChatOnDisconnect,
+  type ChatState,
+} from '~/components/herodraft/chat/chatState';
+import { parseChatInput } from '~/components/herodraft/chat/parseChatInput';
 import { HeroDraftWebSocketMessageSchema } from '~/components/herodraft/schemas';
 import type {
   DraftTeam,
@@ -26,6 +37,9 @@ import { getWebSocketManager } from '~/lib/websocket';
 import { useUserCacheStore } from '~/store/userCacheStore';
 
 const log = getLogger('heroDraftStore');
+const chatLog = getLogger('herodraft:chat');
+
+export type HeroSuggestionKind = 'suggest_pick' | 'suggest_ban';
 
 function ingestDraftUsers(draft: HeroDraft): void {
   const users = draft.draft_teams.flatMap((t) => [
@@ -64,6 +78,7 @@ interface HeroDraftState {
   selectedHeroId: number | null;
   searchQuery: string;
   lastEvent: HeroDraftEvent | null;
+  chat: ChatState;
 
   // Internal tracking
   _connectionId: string | null;
@@ -85,6 +100,10 @@ interface HeroDraftState {
   stopHeartbeat: () => void;
   setSelectedHeroId: (heroId: number | null) => void;
   setSearchQuery: (query: string) => void;
+  sendChat: (raw: string) => string | null;
+  suggestHero: (kind: HeroSuggestionKind, heroId: number) => string | null;
+  setChatPanelOpen: (open: boolean) => void;
+  clearChatError: () => void;
   reset: () => void;
 
   // Computed helpers
@@ -105,6 +124,7 @@ const initialState = {
   selectedHeroId: null,
   searchQuery: '',
   lastEvent: null,
+  chat: initialChatState,
   _connectionId: null,
   _unsubscribe: null,
   _currentDraftId: null,
@@ -153,10 +173,20 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
 
     const connectionId = manager.connect(url, {
       onStateChange: (state) => {
+        const prev = get();
+        const lostConnection =
+          prev.status === 'connected' && state.status !== 'connected';
+        if (lostConnection && Object.keys(prev.chat.pending).length > 0) {
+          chatLog.warn('chat_pending_lost_on_disconnect', {
+            draft_id: draftId,
+            pending: Object.keys(prev.chat.pending).length,
+          });
+        }
         set({
           status: state.status,
           error: state.error,
           reconnectAttempts: state.reconnectAttempts,
+          ...(lostConnection ? { chat: resetChatOnDisconnect(prev.chat) } : {}),
         });
       },
       staleTimeoutMs: 3000, // Server pings every 1s; 3 missed pings = stale
@@ -366,9 +396,44 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             wasKicked: true,
             error: 'Connection replaced by new tab',
             status: 'disconnected',
+            chat: resetChatOnDisconnect(get().chat),
           });
           break;
         }
+
+        case 'chat_history':
+          set({
+            chat: applyChatHistory(
+              get().chat,
+              message.viewer,
+              message.messages,
+            ),
+          });
+          break;
+
+        case 'chat_message':
+          set({ chat: applyChatMessage(get().chat, message.message) });
+          break;
+
+        case 'chat_ack':
+          if (message.client_msg_id !== undefined) {
+            set({ chat: applyChatAck(get().chat, message.client_msg_id) });
+          }
+          break;
+
+        case 'chat_error':
+          chatLog.info('chat_rejected', {
+            draft_id: get()._currentDraftId,
+            code: message.code,
+          });
+          set({
+            chat: applyChatError(
+              get().chat,
+              message.code,
+              message.client_msg_id,
+            ),
+          });
+          break;
       }
     });
 
@@ -384,7 +449,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
   },
 
   disconnect: () => {
-    const { _connectionId, _unsubscribe } = get();
+    const { _connectionId, _unsubscribe, chat } = get();
 
     // Stop heartbeat first
     get().stopHeartbeat();
@@ -400,6 +465,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
 
     set({
       ...initialState,
+      chat: resetChatOnDisconnect(chat),
     });
   },
 
@@ -447,8 +513,26 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
   setSelectedHeroId: (heroId) => set({ selectedHeroId: heroId }),
   setSearchQuery: (query) => set({ searchQuery: query }),
 
+  sendChat: (raw) => {
+    if (parseChatInput(raw).body === '') return null;
+    return sendChatFrame(raw, { type: 'chat_send', body: raw });
+  },
+
+  suggestHero: (kind, heroId) =>
+    sendChatFrame('', { type: 'chat_suggest', kind, hero_id: heroId }),
+
+  setChatPanelOpen: (open) => {
+    const { chat } = get();
+    set({
+      chat: { ...chat, panelOpen: open, unread: open ? 0 : chat.unread },
+    });
+  },
+
+  clearChatError: () => set({ chat: { ...get().chat, lastError: null } }),
+
   reset: () => {
     get().disconnect();
+    set({ chat: initialChatState });
   },
 
   // Computed helpers
@@ -477,6 +561,33 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       .map((r) => r.hero_id as number);
   },
 }));
+
+function sendChatFrame(
+  raw: string,
+  frame:
+    | { type: 'chat_send'; body: string }
+    | { type: 'chat_suggest'; kind: HeroSuggestionKind; hero_id: number },
+): string | null {
+  const { _connectionId, _currentDraftId, status, chat } =
+    useHeroDraftStore.getState();
+  if (!_connectionId || status !== 'connected') return null;
+  const clientMsgId = crypto.randomUUID();
+  const sent = getWebSocketManager().send(_connectionId, {
+    ...frame,
+    client_msg_id: clientMsgId,
+  });
+  if (!sent) {
+    chatLog.warn('chat_send_refused', {
+      draft_id: _currentDraftId,
+      type: frame.type,
+    });
+    return null;
+  }
+  useHeroDraftStore.setState({
+    chat: addPending(chat, { clientMsgId, raw, sentAt: Date.now() }),
+  });
+  return clientMsgId;
+}
 
 // ─────────────────────────────────────────────────────────────────
 // Selectors
