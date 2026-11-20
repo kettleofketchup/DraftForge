@@ -49,6 +49,8 @@ HISTORY_LIMIT = 100
 MAX_BODY_LENGTH = 500
 RATE_LIMIT_MAX = 8
 RATE_LIMIT_WINDOW_S = 10
+REJECT_LOG_MAX = 8
+REJECT_LOG_WINDOW_S = 10.0
 
 _CLOSED_STATES = frozenset({HeroDraftState.COMPLETED, HeroDraftState.ABANDONED})
 _SUGGESTION_KINDS = frozenset(
@@ -506,13 +508,6 @@ def check_rate_limit(draft_id: int, user_id: int) -> None:
         )
         raise ChatError("rate_limited") from None
     if int(count) > RATE_LIMIT_MAX:
-        log.info(
-            "herodraft_chat_rate_limited",
-            system="herodraft",
-            subsystem="chat",
-            draft_id=draft_id,
-            user_id=user_id,
-        )
         raise ChatError("rate_limited")
 
 

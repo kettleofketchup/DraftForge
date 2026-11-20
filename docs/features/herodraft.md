@@ -405,8 +405,8 @@ All chat logs use `system="herodraft"`, `subsystem="chat"`. Message text and her
 | Event | Level | Trigger |
 |-------|-------|---------|
 | `herodraft_chat_sent` | info | Message stored; carries `channel` and `length` |
-| `herodraft_chat_rejected` | info / error | Send refused; carries `code` (error level for `unavailable`) |
-| `herodraft_chat_rate_limited` | info | Over the rate limit |
+| `herodraft_chat_rejected` | info / error | Send refused; carries `code` (`rate_limited` included; error level for `unavailable`) |
+| `herodraft_chat_rejections_throttled` | warning | A socket passed 8 refused frames in 10 s; its further `herodraft_chat_rejected` and `ws_malformed_message` logs are dropped until the window ends |
 | `herodraft_chat_rate_limit_redis_unavailable` | warning | Redis failed; the send is refused |
 | `herodraft_chat_delivery_revoked` | info | A team frame was dropped because the user is no longer on that team |
 | `herodraft_chat_ambiguous_membership` | warning | User is on both rosters |

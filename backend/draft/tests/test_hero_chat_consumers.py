@@ -51,6 +51,8 @@ from draft.services.hero import new_herodraft_for_game
 from draft.services.hero_broadcast import broadcast_herodraft_state
 from draft.services.hero_chat import (
     RATE_LIMIT_MAX,
+    REJECT_LOG_MAX,
+    REJECT_LOG_WINDOW_S,
     ChatError,
     draft_roster_user_ids,
     rate_limit_key,
@@ -719,6 +721,63 @@ class ChatSendTest(ChatSendFixture):
                 reply,
                 {"type": "chat_error", "code": "rate_limited", "client_msg_id": "over"},
             )
+        finally:
+            await self.close_all()
+
+    async def test_anonymous_reject_flood_logs_are_throttled(self) -> None:
+        try:
+            anon = await self.connect_as(self.anonymous)
+            with capture_logs() as logs:
+                for n in range(REJECT_LOG_MAX * 3):
+                    reply = await self.send_chat(anon, "flood", f"f{n}")
+                    self.assertEqual(reply["code"], "not_participant")
+                for _ in range(REJECT_LOG_MAX):
+                    await anon.send_to(text_data="{not json")
+                await anon.send_json_to({"type": "chat_send", "client_msg_id": "a b"})
+                self.assertEqual(
+                    await read_until_types(anon, {"chat_error"}),
+                    {"type": "chat_error", "code": "bad_request"},
+                )
+            events = [e["event"] for e in logs]
+            self.assertEqual(events.count("herodraft_chat_rejected"), REJECT_LOG_MAX)
+            self.assertEqual(events.count("herodraft_chat_rejections_throttled"), 1)
+            self.assertEqual(events.count("ws_malformed_message"), 0)
+        finally:
+            await self.close_all()
+
+    async def test_member_rate_limited_flood_logs_are_throttled(self) -> None:
+        try:
+            mem_a = await self.connect_as(self.mem_a)
+            for n in range(RATE_LIMIT_MAX):
+                await self.send_chat(mem_a, f"ok {n}", f"ok{n}")
+            with capture_logs() as logs:
+                for n in range(REJECT_LOG_MAX * 3):
+                    reply = await self.send_chat(mem_a, "over", f"o{n}")
+                    self.assertEqual(reply["code"], "rate_limited")
+            events = [e["event"] for e in logs]
+            self.assertEqual(events.count("herodraft_chat_rejected"), REJECT_LOG_MAX)
+            self.assertEqual(events.count("herodraft_chat_rejections_throttled"), 1)
+            self.assertNotIn("herodraft_chat_rate_limited", events)
+        finally:
+            await self.close_all()
+
+    async def test_reject_log_budget_resets_each_window(self) -> None:
+        clock = [1000.0]
+        try:
+            with mock.patch(
+                "draft.consumers.hero.monotonic", side_effect=lambda: clock[0]
+            ):
+                spectator = await self.connect_as(self.spectator)
+                with capture_logs() as logs:
+                    for n in range(REJECT_LOG_MAX + 2):
+                        await self.send_chat(spectator, "x", f"s{n}")
+                    clock[0] += REJECT_LOG_WINDOW_S
+                    await self.send_chat(spectator, "x", "next-window")
+            events = [e["event"] for e in logs]
+            self.assertEqual(
+                events.count("herodraft_chat_rejected"), REJECT_LOG_MAX + 1
+            )
+            self.assertEqual(events.count("herodraft_chat_rejections_throttled"), 1)
         finally:
             await self.close_all()
 

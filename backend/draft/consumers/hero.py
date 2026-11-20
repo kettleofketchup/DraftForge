@@ -2,6 +2,7 @@ import json
 import re
 from datetime import datetime
 from importlib import import_module
+from time import monotonic
 from typing import TYPE_CHECKING, Any
 
 from asgiref.sync import sync_to_async
@@ -16,6 +17,8 @@ from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero_broadcast import broadcast_herodraft_state
 from draft.services.hero_chat import (
     CHAT_RESYNC_EVENTS,
+    REJECT_LOG_MAX,
+    REJECT_LOG_WINDOW_S,
     SPECTATOR,
     ChatError,
     ChatErrorCode,
@@ -72,6 +75,8 @@ class HeroDraftConsumer(BaseDraftConsumer):
     kick_duplicate_captain_connections = True
     clear_heartbeat_on_disconnect = True
     _chat_viewer: ChatViewer = SPECTATOR
+    _reject_window_start: float = 0.0
+    _reject_count: int = 0
 
     # --- Abstract method implementations ---
 
@@ -193,7 +198,29 @@ class HeroDraftConsumer(BaseDraftConsumer):
             frame["client_msg_id"] = client_msg_id
         await self.send(text_data=json.dumps(frame))
 
+    def _reject_log_allowed(self) -> bool:
+        now = monotonic()
+        if (
+            self._reject_count == 0
+            or now - self._reject_window_start >= REJECT_LOG_WINDOW_S
+        ):
+            self._reject_window_start = now
+            self._reject_count = 0
+        self._reject_count += 1
+        if self._reject_count == REJECT_LOG_MAX + 1:
+            log.warning(
+                "herodraft_chat_rejections_throttled",
+                system="herodraft",
+                subsystem="chat",
+                draft_id=self.draft_id,
+                user_id=self._chat_user_id(),
+                window_s=REJECT_LOG_WINDOW_S,
+            )
+        return self._reject_count <= REJECT_LOG_MAX
+
     def _log_chat_rejected(self, code: ChatErrorCode, **extra: Any) -> None:
+        if not self._reject_log_allowed():
+            return
         log.info(
             "herodraft_chat_rejected",
             system="herodraft",
@@ -392,6 +419,8 @@ class HeroDraftConsumer(BaseDraftConsumer):
         try:
             data = json.loads(text_data)
         except json.JSONDecodeError:
+            if not self._reject_log_allowed():
+                return
             log.warning(
                 "ws_malformed_message",
                 system="herodraft",
