@@ -12,7 +12,7 @@ export default defineConfig({
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
   build: {
     rollupOptions: {
-      // Fewer, larger chunks: a cold load was ~60 requests, many single icons.
+      // Fewer, larger chunks; without this a cold load is ~60 requests, many single icons.
       output: {
         experimentalMinChunkSize: 20_000,
         manualChunks(id) {
