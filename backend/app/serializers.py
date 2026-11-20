@@ -20,7 +20,12 @@ from events.overrides import (
     OverrideRequestSerializer,
 )
 from league.models import LeagueUser
-from org.mmr import game_for_tournament, game_mmrs_prefetch, org_mmr_map
+from org.mmr import (
+    LEAGUE_GAME,
+    game_for_tournament,
+    game_mmrs_prefetch,
+    org_mmr_map,
+)
 from org.models import OrgUser
 from telemetry.logging import get_logger
 from user.querysets import with_user_profiles
@@ -1669,9 +1674,6 @@ class TournamentSerializer(serializers.ModelSerializer):
                 if added_users and instance.league:
                     org = instance.league.organization
                     if org:
-                        from league.models import LeagueUser
-                        from org.models import OrgUser
-
                         # Get existing OrgUsers for these users in this org
                         existing_org_users = {
                             ou.user_id: ou
@@ -1685,11 +1687,7 @@ class TournamentSerializer(serializers.ModelSerializer):
                         for user in added_users:
                             if user.pk not in existing_org_users:
                                 new_org_users.append(
-                                    OrgUser(
-                                        user=user,
-                                        organization=org,
-                                        mmr=0,
-                                    )
+                                    OrgUser(user=user, organization=org)
                                 )
                         if new_org_users:
                             OrgUser.objects.bulk_create(new_org_users)
@@ -1709,6 +1707,15 @@ class TournamentSerializer(serializers.ModelSerializer):
                         )
 
                         # Create missing LeagueUsers in bulk
+                        league_mmrs = org_mmr_map(
+                            org.pk,
+                            [
+                                u.pk
+                                for u in added_users
+                                if u.pk not in existing_league_users
+                            ],
+                            LEAGUE_GAME,
+                        )
                         new_league_users = []
                         for user in added_users:
                             if user.pk not in existing_league_users:
@@ -1719,7 +1726,7 @@ class TournamentSerializer(serializers.ModelSerializer):
                                             user=user,
                                             org_user=org_user,
                                             league=instance.league,
-                                            mmr=org_user.mmr,
+                                            mmr=league_mmrs.get(user.pk, 0),
                                         )
                                     )
                         if new_league_users:

@@ -2,7 +2,6 @@
 
 from datetime import timedelta
 
-from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
 
@@ -10,11 +9,10 @@ from app.models import (
     CustomUser,
     League,
     LeagueMatch,
-    LeagueMatchParticipant,
     LeagueRating,
     Organization,
 )
-from org.models import OrgUser
+from tests.populate.utils import ensure_org_user
 
 
 class MatchFinalizationServiceTest(TestCase):
@@ -40,12 +38,12 @@ class MatchFinalizationServiceTest(TestCase):
         for i in range(5):
             p = CustomUser.objects.create_user(username=f"radiant{i}", password="test")
             self.radiant.append(p)
-            OrgUser.objects.create(user=p, organization=self.org, mmr=3000)
+            ensure_org_user(p, self.org, mmr=3000)
 
         for i in range(5):
             p = CustomUser.objects.create_user(username=f"dire{i}", password="test")
             self.dire.append(p)
-            OrgUser.objects.create(user=p, organization=self.org, mmr=3000)
+            ensure_org_user(p, self.org, mmr=3000)
 
     def test_finalize_creates_ratings_if_missing(self):
         """Finalize should create LeagueRating records for new players."""

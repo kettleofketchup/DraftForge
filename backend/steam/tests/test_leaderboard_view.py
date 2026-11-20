@@ -1,14 +1,19 @@
 from typing import Any
 
+from django.db import connection
 from django.test import RequestFactory, TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework.request import Request
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League
+from app.models import CustomUser, League, Organization
+from common.game import GameType
+from league.models import LeagueUser
 from steam.constants import LEAGUE_ID
 from steam.models import LeaguePlayerStats
 from steam.tests.league_summary_fixtures import make_player
 from steam.views import LeaderboardView
+from tests.populate.utils import ensure_org_user
 
 URL = "/api/steam/leaderboard/"
 
@@ -91,3 +96,72 @@ class LeaderboardViewTests(TestCase):
         self.assertEqual(
             self._ordering({"sort_by": "games_played"}), ("-games_played", "pk")
         )
+
+
+class LeaderboardOrgMmrTests(TestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.org = Organization.objects.create(name="Leaderboard Org")
+        self.league = League.objects.create(
+            name="Leaderboard League", steam_league_id=LEAGUE_ID, organization=self.org
+        )
+        self._seq = 0
+
+    def _row(self) -> CustomUser:
+        self._seq += 1
+        user = make_player(f"lbo_user_{self._seq}", 76561198000400000 + self._seq)
+        org_user = ensure_org_user(
+            user,
+            self.org,
+            mmr=3000 + self._seq,
+            game_mmrs={GameType.DEADLOCK: 9000 + self._seq},
+        )
+        LeagueUser.objects.create(
+            user=user, org_user=org_user, league=self.league, mmr=5000 + self._seq
+        )
+        LeaguePlayerStats.objects.create(
+            user=user, league_id=LEAGUE_ID, games_played=10, win_rate=0.5
+        )
+        return user
+
+    def _get(self) -> tuple[int, list[dict[str, Any]]]:
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get(URL)
+        self.assertEqual(response.status_code, 200)
+        return len(ctx.captured_queries), response.json()["results"]
+
+    def test_leaderboard_reads_dota_org_mmr(self) -> None:
+        users = [self._row() for _ in range(2)]
+        stranger = make_player("lbo_stranger", 76561198000499999)
+        LeaguePlayerStats.objects.create(
+            user=stranger, league_id=LEAGUE_ID, games_played=10, win_rate=0.1
+        )
+
+        _, results = self._get()
+
+        by_user = {r["user_id"]: r for r in results}
+        for i, user in enumerate(users, start=1):
+            self.assertEqual(by_user[user.pk]["base_mmr"], 3000 + i)
+            self.assertEqual(by_user[user.pk]["league_mmr"], 5000 + i)
+        self.assertEqual(by_user[stranger.pk]["base_mmr"], 0)
+        self.assertEqual(by_user[stranger.pk]["league_mmr"], 0)
+
+    def test_leaderboard_constant_queries(self) -> None:
+        for _ in range(2):
+            self._row()
+        two, results = self._get()
+        self.assertEqual(len(results), 2)
+        for _ in range(4):
+            self._row()
+        six, results = self._get()
+        self.assertEqual(len(results), 6)
+        self.assertEqual(two, six)
+
+    def test_league_stats_single_reads_dota_org_mmr(self) -> None:
+        user = self._row()
+
+        response = self.client.get(f"/api/steam/league-stats/{user.pk}/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["base_mmr"], 3001)
+        self.assertEqual(response.json()["league_mmr"], 5001)

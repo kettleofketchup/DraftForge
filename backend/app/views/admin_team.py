@@ -37,7 +37,7 @@ from app.steam_accounts import (
 from discordbot.services.member_names import normalise_name
 from events.eligibility import refresh_unmet_requirements
 from league.models import LeagueUser
-from org.mmr import game_mmrs_prefetch
+from org.mmr import LEAGUE_GAME, game_mmrs_prefetch, org_mmr_for
 from org.models import OrgUser
 from org.serializers import OrgUserSerializer
 from org.user_search import user_name_q
@@ -871,7 +871,12 @@ def add_league_member(request: Request, league_id: int) -> Response:
             if org_user.guild_nickname is None and nick is not None:
                 org_user.guild_nickname = nick
                 org_user.save(update_fields=["guild_nickname"])
-            LeagueUser.objects.create(user=user, org_user=org_user, league=league)
+            LeagueUser.objects.create(
+                user=user,
+                org_user=org_user,
+                league=league,
+                mmr=org_mmr_for(league.organization_id, user.pk, LEAGUE_GAME),
+            )
             invalidate_after_commit(user)
     except IntegrityError:
         return Response(
