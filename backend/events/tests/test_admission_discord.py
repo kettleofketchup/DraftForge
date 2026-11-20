@@ -8,6 +8,7 @@ from discordbot.models import DiscordMessageLog
 from events.admission import SELF_SERVE_DISABLED_MESSAGE
 from events.constants import EventState
 from events.discord.components import build_announcement_components
+from events.discord.embeds import STATE_NOTICES, build_announcement_v2
 from events.discord.handlers import (
     handle_battle_cup_submit,
     handle_previous_rank_submit,
@@ -151,14 +152,76 @@ class AnnouncementComponentsTests(EventTestCase):
         self.assertTrue(any(i.startswith("event_signup:") for i in ids))
         self.assertTrue(any(i.startswith("event_tentative:") for i in ids))
 
-    def test_self_serve_buttons_follow_flag_not_state(self) -> None:
-        # The post is rebuilt mid roll call (decline, reinstate) and is not
-        # rebuilt on reopen, so a state-aware post would strand Sign Up.
-        event = self.make_event(state=EventState.ROLL_CALL, allow_user_signups=True)
-        ids = _custom_ids(build_announcement_components(event))
-        self.assertTrue(any(i.startswith("event_signup:") for i in ids))
-        self.assertTrue(any(i.startswith("event_tentative:") for i in ids))
+    def _ids_in_state(self, state: EventState, **overrides: object) -> list[str]:
+        event = self.make_event(state=state, allow_user_signups=True, **overrides)
+        return _custom_ids(build_announcement_components(event))
 
+    def test_buttons_per_state(self) -> None:
+        expected = {
+            EventState.UPCOMING: {"event_decline"},
+            EventState.SIGNUPS_OPEN: {
+                "event_signup",
+                "event_tentative",
+                "event_decline",
+            },
+            EventState.ROLL_CALL: {"event_decline"},
+            EventState.IN_PROGRESS: set(),
+            EventState.COMPLETED: set(),
+            EventState.CANCELLED: set(),
+        }
+        for state, buttons in expected.items():
+            with self.subTest(state=state):
+                ids = self._ids_in_state(state)
+                self.assertEqual({i.split(":")[0] for i in ids}, buttons)
+
+    def test_closed_post_without_actions_has_no_empty_row(self) -> None:
+        event = self.make_event(state=EventState.COMPLETED)
+        self.assertEqual(build_announcement_components(event), [])
+
+    def _schema_ids(self, state: EventState, **extra: object) -> list[str]:
+        schema = EventTaskSchema(
+            id=self.event.pk,
+            name=self.event.name,
+            state=state,
+            scheduled_at=self.event.scheduled_at,
+            allow_user_signups=True,
+            **extra,
+        )
+        return [
+            i.split(":")[0] for i in _custom_ids(build_announcement_components(schema))
+        ]
+
+    def test_notify_me_stays_after_the_event_closes(self) -> None:
+        ids = self._schema_ids(EventState.CANCELLED, event_repeater_id=1)
+        self.assertEqual(ids, ["event_notify"])
+
+    def test_task_schema_buttons_follow_state(self) -> None:
+        self.assertEqual(self._schema_ids(EventState.ROLL_CALL), ["event_decline"])
+
+
+@patch("events.discord.embeds.get_event_signups", return_value=[])
+class AnnouncementStatusLineTests(EventTestCase):
+    def _description(self, state: EventState) -> str:
+        event = self.make_event(state=state, description="Weekly inhouse.")
+        return build_announcement_v2(event)["embeds"][0]["description"]
+
+    def test_open_signups_has_no_status_line(self, _signups: MagicMock) -> None:
+        self.assertEqual(self._description(EventState.SIGNUPS_OPEN), "Weekly inhouse.")
+
+    def test_status_line_per_state(self, _signups: MagicMock) -> None:
+        for state, notice in STATE_NOTICES.items():
+            with self.subTest(state=state):
+                self.assertEqual(
+                    self._description(state), f"**{notice}**\n\nWeekly inhouse."
+                )
+
+    def test_every_non_open_state_has_a_status_line(self, _signups: MagicMock) -> None:
+        self.assertEqual(
+            set(STATE_NOTICES), set(EventState) - {EventState.SIGNUPS_OPEN}
+        )
+
+
+class AnnouncementPayloadStateTests(EventTestCase):
     @override_settings(INTERNAL_SERVICE_TOKEN="test-internal-token")
     def test_task_schema_reads_flag_from_internal_payload(self) -> None:
         event = self.make_event(allow_user_signups=False)
@@ -169,7 +232,9 @@ class AnnouncementComponentsTests(EventTestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         data = resp.json()
         self.assertIn("allow_user_signups", data)
-        self.assertFalse(EventTaskSchema.model_validate(data).allow_user_signups)
+        schema = EventTaskSchema.model_validate(data)
+        self.assertFalse(schema.allow_user_signups)
+        self.assertEqual(schema.state, EventState.SIGNUPS_OPEN)
 
 
 class FlagChangeRepostTests(EventTestCase):

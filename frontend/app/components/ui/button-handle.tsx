@@ -1,13 +1,13 @@
-import { Position, type HandleProps } from "@xyflow/react";
-import { BaseHandle } from "~/components/ui/base-handle";
+import { Position, type HandleProps } from '@xyflow/react';
+import { BaseHandle } from '~/components/ui/base-handle';
 
 const wrapperClassNames: Record<Position, string> = {
   [Position.Top]:
-    "flex-col-reverse left-1/2 -translate-y-full -translate-x-1/2",
-  [Position.Bottom]: "flex-col left-1/2 translate-y-[10px] -translate-x-1/2",
+    'flex-col-reverse left-1/2 -translate-y-full -translate-x-1/2',
+  [Position.Bottom]: 'flex-col left-1/2 translate-y-[10px] -translate-x-1/2',
   [Position.Left]:
-    "flex-row-reverse top-1/2 -translate-x-full -translate-y-1/2",
-  [Position.Right]: "top-1/2 -translate-y-1/2 translate-x-[10px]",
+    'flex-row-reverse top-1/2 -translate-x-full -translate-y-1/2',
+  [Position.Right]: 'top-1/2 -translate-y-1/2 translate-x-[10px]',
 };
 
 export const ButtonHandle = ({
@@ -26,7 +26,7 @@ export const ButtonHandle = ({
           className={`absolute flex items-center ${wrapperClassName} pointer-events-none`}
         >
           <div
-            className={`bg-gray-300 ${vertical ? "h-10 w-[1px]" : "h-[1px] w-10"}`}
+            className={`bg-muted-foreground ${vertical ? 'h-10 w-[1px]' : 'h-[1px] w-10'}`}
           />
           <div className="nodrag nopan pointer-events-auto">{children}</div>
         </div>

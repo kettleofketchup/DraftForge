@@ -1,8 +1,9 @@
 """Fire path — replaces the body of check_event_reminders.
 
 Iterates the REMINDERS registry every 30 seconds (via celery beat). For each
-candidate event in the right state, evaluates `now >= scheduled_at - hours`
-and dispatches the reminder task by name via current_app.send_task.
+candidate event in the right state, evaluates `now >= scheduled_at - lead`
+(lead in hours or minutes) and dispatches the reminder task by name via
+current_app.send_task.
 
 Idempotency:
 - The in-process check_message_log_exists short-circuit at the top of the
@@ -16,15 +17,18 @@ Idempotency:
   reminders.
 """
 
-from datetime import timedelta
+from collections.abc import Callable
+from datetime import datetime
+from typing import Any
 
 from celery import current_app
+from dateutil.parser import isoparse
 from django.utils import timezone
 
 from events.scheduling.registry import REMINDERS, ScheduledReminder
 
 
-def fire_due_reminders():
+def fire_due_reminders() -> str:
     """Walk REMINDERS, dispatching tasks for each due-and-unfired reminder.
 
     Returns a status string for celery worker logs.
@@ -43,14 +47,14 @@ def fire_due_reminders():
             if check_message_log_exists(reminder.log_source, event_id):
                 continue  # once-fired-stays-fired (load-shedder)
 
-            hours = _ev_attr(ev, reminder.hours_field) or 0
-            if hours <= 0:
+            lead = reminder.lead_time(_ev_attr(ev, reminder.lead_field))
+            if lead is None:
                 continue
 
             scheduled_at = _parse_scheduled_at(_ev_attr(ev, "scheduled_at"))
             if scheduled_at is None:
                 continue
-            threshold = scheduled_at - timedelta(hours=hours)
+            threshold = scheduled_at - lead
             if now >= threshold:
                 # Look up the task by registered name and dispatch via
                 # .delay(). Equivalent to current_app.send_task(name, args)
@@ -70,7 +74,10 @@ def fire_due_reminders():
     return f"fire_due_reminders: dispatched={dispatched} reminders={len(REMINDERS)}"
 
 
-def _candidates_for(reminder: ScheduledReminder, get_events_list):
+def _candidates_for(
+    reminder: ScheduledReminder,
+    get_events_list: Callable[..., list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
     """Build the get_events_list filter from the reminder's required_states.
 
     The internal client supports comma-separated `states` and the
@@ -84,7 +91,7 @@ def _candidates_for(reminder: ScheduledReminder, get_events_list):
     return get_events_list(**kwargs)
 
 
-def _ev_attr(ev, name):
+def _ev_attr(ev: object, name: str) -> Any:
     """Read an attribute off an event payload from get_events_list.
 
     The internal client returns dict-likes; support both dict and object access.
@@ -94,12 +101,10 @@ def _ev_attr(ev, name):
     return getattr(ev, name, None)
 
 
-def _parse_scheduled_at(value):
+def _parse_scheduled_at(value: str | datetime | None) -> datetime | None:
     """Parse the scheduled_at field — slim serializer returns ISO strings."""
     if value is None:
         return None
     if isinstance(value, str):
-        from dateutil.parser import isoparse
-
         return isoparse(value)
     return value

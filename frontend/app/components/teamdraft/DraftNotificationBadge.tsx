@@ -19,7 +19,7 @@ export const DraftNotificationBadge: React.FC = () => {
   return (
     <motion.div
       data-testid="draft-notification-badge"
-      className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white shadow-md"
+      className="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full border-2 border-white shadow-md"
       animate={{
         scale: [1, 1.2, 1],
         opacity: [1, 0.7, 1],

@@ -182,7 +182,7 @@ function TeamMembersList({
                   {hasSkips && (
                     <Badge
                       variant="outline"
-                      className="text-[10px] px-1.5 py-0 text-amber-400 border-amber-400"
+                      className="text-[10px] px-1.5 py-0 text-warning border-warning"
                       data-testid={`pick-skips-${member.pk}`}
                     >
                       skipped ×{round!.skip_count}
@@ -241,11 +241,11 @@ function TeamCard({
 
   // Determine rank badge color
   const rankColors = [
-    'bg-yellow-500 text-yellow-900', // 1st - Gold
-    'bg-gray-400 text-gray-900', // 2nd - Silver
-    'bg-amber-700 text-amber-100', // 3rd - Bronze
+    'bg-medal-gold text-base-950', // 1st - Gold
+    'bg-medal-silver text-base-950', // 2nd - Silver
+    'bg-medal-bronze text-foreground', // 3rd - Bronze
   ];
-  const rankColor = rankColors[rank - 1] || 'bg-slate-600 text-slate-200';
+  const rankColor = rankColors[rank - 1] || 'bg-base-50 text-foreground';
 
   const handleClick = useCallback(() => {
     openTeamModal(team);
@@ -256,7 +256,7 @@ function TeamCard({
       className={cn(
         'w-full cursor-pointer transition-all duration-200 flex flex-col',
         'hover:ring-2 hover:ring-primary/50 hover:shadow-lg',
-        'bg-slate-800/80 border-slate-700',
+        'bg-card/80 border-border',
       )}
       data-testid={`completed-team-card-${team.pk}`}
       onClick={handleClick}
@@ -272,7 +272,7 @@ function TeamCard({
           <UserAvatar
             user={captain}
             size="xl"
-            className="ring-2 ring-slate-600"
+            className="ring-2 ring-base-50"
           />
 
           {/* Team Name & Captain */}
@@ -291,7 +291,7 @@ function TeamCard({
                 />
               )}
             </div>
-            <p className="text-sm text-slate-400 truncate">
+            <p className="text-sm text-muted-foreground truncate">
               Captain: {displayName}
             </p>
           </div>
@@ -302,17 +302,17 @@ function TeamCard({
         {/* Stats Row */}
         <div className="flex items-center gap-4 mb-3 shrink-0">
           <div className="flex items-center gap-1.5">
-            <Trophy className="h-4 w-4 text-yellow-500" />
+            <Trophy className="h-4 w-4 text-medal-gold" />
             <span
-              className="text-sm font-medium text-slate-200"
+              className="text-sm font-medium text-foreground"
               data-testid="team-avg-mmr-label"
             >
               {averageMMR.toLocaleString()} avg MMR
             </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Users className="h-4 w-4 text-blue-400" />
-            <span className="text-sm text-slate-300">
+            <Users className="h-4 w-4 text-info" />
+            <span className="text-sm text-text-secondary">
               {team.members?.length || 0} players
             </span>
           </div>

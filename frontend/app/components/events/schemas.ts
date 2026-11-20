@@ -41,6 +41,9 @@ export function rollCallLabel(enabled: boolean, mode: string): string {
   return ROLL_CALL_MODE_LABELS[mode as RollCallMode] ?? mode;
 }
 
+export const START_MENTION_SCOPES = ['main', 'all_active'] as const;
+export type StartMentionScope = (typeof START_MENTION_SCOPES)[number];
+
 export const READY_CHECK_SCOPES = ['main_only', 'main_and_fill'] as const;
 export type ReadyCheckScope = (typeof READY_CHECK_SCOPES)[number];
 export const READY_CHECK_SCOPE_LABELS: Record<ReadyCheckScope, string> = {
@@ -188,6 +191,11 @@ export const eventSchema = z
     discord_announcement_hours: z.number(),
     discord_announcement_role_ids: z.array(z.string()).default([]),
     discord_signup_role_ids: z.array(z.string()).default([]),
+    discord_start_mention: z.boolean().default(false),
+    discord_start_mention_minutes: z.number().int().min(1).default(15),
+    discord_start_mention_scope: z
+      .enum(START_MENTION_SCOPES)
+      .default('all_active'),
     discord_subscriber_dm: z.boolean().optional(),
     discord_subscriber_dm_hours: z.number().optional(),
     discord_require_rank_screenshot: z.boolean(),
@@ -247,6 +255,33 @@ export const eventSchema = z
 
 export type EventType = z.infer<typeof eventSchema>;
 
+export const ELIGIBILITY_SEVERITIES = ['block', 'needs_approval'] as const;
+
+// Mirrors backend events.eligibility.Reason.as_dict().
+export const eligibilityReasonSchema = z.object({
+  code: z.string(),
+  severity: z.enum(ELIGIBILITY_SEVERITIES),
+  rule: z.string(),
+  message: z.string(),
+  fix: z
+    .object({
+      kind: z.string(),
+      url: z.string().nullable(),
+    })
+    .nullable(),
+  params: z.record(z.string(), z.unknown()).default({}),
+});
+
+export type EligibilityReason = z.infer<typeof eligibilityReasonSchema>;
+
+export const eventEligibilitySchema = z.object({
+  admissible: z.boolean(),
+  reasons: z.array(eligibilityReasonSchema),
+  has_registered_steam_id: z.boolean(),
+});
+
+export type EventEligibility = z.infer<typeof eventEligibilitySchema>;
+
 export const eventSignupSchema = z.object({
   id: z.number(),
   event: z.number(),
@@ -302,6 +337,7 @@ export const eventSignupSchema = z.object({
   status: z.string(),
   holds_seat: z.boolean().optional(),
   unmet_requirements: z.array(z.string()).optional(),
+  eligibility_reasons: z.array(eligibilityReasonSchema).optional(),
   waitlist_position: z.number().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -507,6 +543,11 @@ export const discordConfigSchema = z
     discord_announcement_hours: z.number().int().min(1),
     discord_announcement_role_ids: z.array(z.string()).default([]),
     discord_signup_role_ids: z.array(z.string()).default([]),
+    discord_start_mention: z.boolean().default(false),
+    discord_start_mention_minutes: z.number().int().min(1).default(15),
+    discord_start_mention_scope: z
+      .enum(START_MENTION_SCOPES)
+      .default('all_active'),
     discord_subscriber_dm: z.boolean().optional(),
     discord_subscriber_dm_hours: z.number().int().min(1).optional(),
     discord_require_rank_screenshot: z.boolean(),
@@ -546,6 +587,9 @@ export const DISCORD_CONFIG_DEFAULTS = {
   discord_announcement_hours: 24,
   discord_announcement_role_ids: [] as string[],
   discord_signup_role_ids: [] as string[],
+  discord_start_mention: false,
+  discord_start_mention_minutes: 15,
+  discord_start_mention_scope: 'all_active' as StartMentionScope,
   discord_require_rank_screenshot: false,
   discord_require_battlecup_screenshot: false,
   min_mmr: null as number | null,

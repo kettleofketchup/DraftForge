@@ -29,6 +29,7 @@ import {
 import { useUpdateOrgDefaultsMutation } from '~/hooks/useEvent';
 import { DiscordConfigSection } from './DiscordConfigSection';
 import {
+  discordResetValues,
   eventFieldTestIds,
   EventFormDialog,
   EventTournamentFields,
@@ -143,38 +144,7 @@ export function EditOrgDefaultsModal({
         game_mode: defaults.game_mode,
         max_players: defaults.max_players,
         auto_approve: defaults.auto_approve,
-        discord_create_event: defaults.discord_create_event,
-        discord_sync_signups: defaults.discord_sync_signups,
-        discord_event_title: defaults.discord_event_title,
-        discord_event_description: defaults.discord_event_description,
-        discord_event_info: defaults.discord_event_info,
-        discord_signup_reminder: defaults.discord_signup_reminder,
-        discord_signup_reminder_hours: defaults.discord_signup_reminder_hours,
-        discord_confirm_attendance: defaults.discord_confirm_attendance,
-        discord_confirm_attendance_hours:
-          defaults.discord_confirm_attendance_hours,
-        discord_profile_reminder: defaults.discord_profile_reminder,
-        discord_profile_reminder_hours: defaults.discord_profile_reminder_hours,
-        discord_mark_interested: defaults.discord_mark_interested,
-        discord_post_signups: defaults.discord_post_signups,
-        discord_post_signups_channel_id:
-          defaults.discord_post_signups_channel_id,
-        discord_announcement: defaults.discord_announcement,
-        discord_announcement_channel_id:
-          defaults.discord_announcement_channel_id,
-        discord_announcement_hours: defaults.discord_announcement_hours,
-        discord_require_rank_screenshot:
-          defaults.discord_require_rank_screenshot ?? false,
-        discord_require_battlecup_screenshot:
-          defaults.discord_require_battlecup_screenshot ?? false,
-        min_mmr: defaults.min_mmr ?? null,
-        allow_active_mmr: defaults.allow_active_mmr ?? true,
-        allow_previous_rank: defaults.allow_previous_rank ?? true,
-        allow_battlecup_rating: defaults.allow_battlecup_rating ?? true,
-        // Approval rule flags — see CreateEventModal for the regression note.
-        require_steam_id: defaults.require_steam_id ?? false,
-        require_mmr_verified: defaults.require_mmr_verified ?? false,
-        require_profile_complete: defaults.require_profile_complete ?? false,
+        ...discordResetValues(defaults),
         ...signupRulesFrom(defaults),
         ...eventFieldsToDraftSettingsFormInput(defaults),
         ...readyCheckResetValues(defaults),

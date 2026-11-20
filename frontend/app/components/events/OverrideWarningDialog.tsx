@@ -7,6 +7,7 @@ import {
   overrideReasonFormSchema,
   type OverrideReasonFormValues,
   type OverrideRequired,
+  type OverrideViolation,
 } from '~/components/api/overridesAPI';
 import type { OrganizationType } from '~/components/organization/schemas';
 import { Badge } from '~/components/ui/badge';
@@ -45,8 +46,17 @@ export interface OverrideWarningDialogProps {
 }
 
 export function orgStaffPlacementPath(organizationId: number): string {
-  return `/organizations/${organizationId}?tab=settings`;
+  return `/organizations/${organizationId}?tab=settings&section=staff-placement`;
 }
+
+export const VIOLATION_CATEGORY_LABEL: Record<
+  OverrideViolation['category'],
+  string
+> = {
+  seating: 'Seating rule',
+  eligibility: 'Eligibility rule',
+  team: 'Team rule',
+};
 
 export function OverrideWarningDialog({
   open,
@@ -112,7 +122,9 @@ export function OverrideWarningDialog({
               )}
             >
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold">{violation.rule}</span>
+                <span className="text-sm font-semibold">
+                  {VIOLATION_CATEGORY_LABEL[violation.category]}
+                </span>
                 {violation.blocking && (
                   <Badge
                     variant="destructive"

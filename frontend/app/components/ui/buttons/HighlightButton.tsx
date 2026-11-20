@@ -2,8 +2,10 @@ import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 
-export interface HighlightButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
+export interface HighlightButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant'
+> {
   /** Optional avatar URL displayed as a rounded image before children */
   avatarUrl?: string;
   /** Alt text for the avatar */
@@ -22,31 +24,32 @@ export interface HighlightButtonProps
  * </HighlightButton>
  * ```
  */
-const HighlightButton = React.forwardRef<HTMLButtonElement, HighlightButtonProps>(
-  ({ className, children, avatarUrl, avatarAlt, ...props }, ref) => (
-    <Button
-      ref={ref}
-      className={cn(
-        'bg-gradient-to-r from-teal-600/50 to-violet-600/40',
-        'border border-teal-400/30',
-        'hover:from-teal-500/60 hover:to-violet-500/50 hover:border-teal-300/50',
-        'text-teal-100 shadow-lg shadow-teal-900/30',
-        'transition-all',
-        className,
-      )}
-      {...props}
-    >
-      {avatarUrl && (
-        <img
-          src={avatarUrl}
-          alt={avatarAlt ?? ''}
-          className="h-5 w-5 rounded-full object-cover ring-1 ring-teal-400/50"
-        />
-      )}
-      {children}
-    </Button>
-  ),
-);
+const HighlightButton = React.forwardRef<
+  HTMLButtonElement,
+  HighlightButtonProps
+>(({ className, children, avatarUrl, avatarAlt, ...props }, ref) => (
+  <Button
+    ref={ref}
+    className={cn(
+      'bg-gradient-to-r from-secondary/40 to-selection/35',
+      'border border-secondary/35',
+      'hover:from-secondary/60 hover:to-selection/50 hover:border-secondary/65',
+      'text-foreground shadow-lg shadow-secondary/10',
+      'transition-all',
+      className,
+    )}
+    {...props}
+  >
+    {avatarUrl && (
+      <img
+        src={avatarUrl}
+        alt={avatarAlt ?? ''}
+        className="h-5 w-5 rounded-full object-cover ring-1 ring-secondary/55"
+      />
+    )}
+    {children}
+  </Button>
+));
 
 HighlightButton.displayName = 'HighlightButton';
 

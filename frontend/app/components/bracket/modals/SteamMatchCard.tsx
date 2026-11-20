@@ -53,7 +53,7 @@ function PlayerDisplay({ player }: { player: MatchedPlayer }) {
       <span
         className={cn(
           'text-xs truncate max-w-[100px]',
-          player.is_captain ? 'text-yellow-500 font-medium' : 'text-foreground',
+          player.is_captain ? 'text-medal-gold font-medium' : 'text-foreground',
           player.user_id && 'hover:underline',
         )}
       >
@@ -122,7 +122,7 @@ export function SteamMatchCard({
       <div className="flex justify-between gap-4 py-3">
         {/* Radiant side */}
         <div className="flex-1">
-          <p className="text-xs text-green-500 font-medium mb-1">Radiant</p>
+          <p className="text-xs text-radiant font-medium mb-1">Radiant</p>
           <div className="space-y-0.5">
             {(match.matched_players ?? [])
               .filter((p) => p.is_radiant)
@@ -142,7 +142,7 @@ export function SteamMatchCard({
 
         {/* Dire side */}
         <div className="flex-1">
-          <p className="text-xs text-red-500 font-medium mb-1">Dire</p>
+          <p className="text-xs text-dire font-medium mb-1">Dire</p>
           <div className="space-y-0.5">
             {(match.matched_players ?? [])
               .filter((p) => !p.is_radiant)

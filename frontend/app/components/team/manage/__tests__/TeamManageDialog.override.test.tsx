@@ -96,7 +96,7 @@ describe('TeamManageDialog overrides', () => {
 
     await startCaptainChange();
     const dialog = await screen.findByTestId('override-warning-dialog');
-    expect(dialog).toHaveTextContent('override-warning');
+    expect(dialog).toHaveTextContent('Team rule');
     expect(dialog).toHaveTextContent('Stand-in cap 2 reached');
     expect(screen.getByLabelText('Reason (recorded in team history)')).toBe(
       screen.getByTestId('override-reason'),
