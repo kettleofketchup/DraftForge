@@ -9,9 +9,16 @@ import {
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
 
-import { type SettingsFormUnit, useSettingsSaveBar } from '../settingsSaveBar';
+import { useForm } from 'react-hook-form';
+import {
+  type SettingsFormUnit,
+  submitForm,
+  useSettingsSaveBar,
+} from '../settingsSaveBar';
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+}));
 
 const unit = (
   id: string,
@@ -81,6 +88,49 @@ describe('useSettingsSaveBar', () => {
     expect(ok).toBe(true);
     expect(toast.success).toHaveBeenCalledTimes(1);
     expect(toast.success).toHaveBeenCalledWith('Settings saved');
+  });
+
+  it('warns once when some units saved and others failed', async () => {
+    vi.mocked(toast.warning).mockClear();
+    vi.mocked(toast.success).mockClear();
+    const units = [
+      unit('a'),
+      unit('b', { save: vi.fn().mockResolvedValue(false) }),
+      unit('c', { save: vi.fn().mockResolvedValue(false) }),
+    ];
+    const { result } = renderHook(() => useSettingsSaveBar(units, OPTS));
+    await act(async () => {
+      await result.current.saveAll();
+    });
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    expect(toast.warning).toHaveBeenCalledWith(
+      'Some settings saved. Fix the highlighted fields to save the rest.',
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('does not warn when every unit failed', async () => {
+    vi.mocked(toast.warning).mockClear();
+    const units = [unit('a', { save: vi.fn().mockResolvedValue(false) })];
+    const { result } = renderHook(() => useSettingsSaveBar(units, OPTS));
+    await act(async () => {
+      await result.current.saveAll();
+    });
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it('lets only the first failing unit select its section', async () => {
+    const a = unit('a', { save: vi.fn().mockResolvedValue(false) });
+    const b = unit('b', { save: vi.fn().mockResolvedValue(false) });
+    const c = unit('c');
+    const units = [a, b, c];
+    const { result } = renderHook(() => useSettingsSaveBar(units, OPTS));
+    await act(async () => {
+      await result.current.saveAll();
+    });
+    expect(a.save).toHaveBeenCalledWith({ select: true });
+    expect(b.save).toHaveBeenCalledWith({ select: false });
+    expect(c.save).toHaveBeenCalledWith({ select: false });
   });
 
   it('discardAll calls discard on every dirty unit', () => {
@@ -166,5 +216,25 @@ describe('useSettingsSaveBar', () => {
     });
     expect(ok).toBe(true);
     expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+describe('submitForm', () => {
+  const useHost = () => useForm<{ n: string }>({ defaultValues: { n: '' } });
+
+  it('resolves what onValid returns', async () => {
+    const { result } = renderHook(useHost);
+    expect(await submitForm(result.current, async () => true)).toBe(true);
+    expect(await submitForm(result.current, async () => false)).toBe(false);
+  });
+
+  it('resolves false and calls onInvalid when validation fails', async () => {
+    const { result } = renderHook(useHost);
+    result.current.register('n', { required: true });
+    const onValid = vi.fn().mockResolvedValue(true);
+    const onInvalid = vi.fn();
+    expect(await submitForm(result.current, onValid, onInvalid)).toBe(false);
+    expect(onValid).not.toHaveBeenCalled();
+    expect(onInvalid).toHaveBeenCalledTimes(1);
   });
 });

@@ -33,10 +33,13 @@ const ORG = {
 } as OrganizationType;
 
 const selectSection = vi.fn();
+const sectionOfField = vi.fn(
+  (_field: string, _within?: readonly string[]) => 'general',
+);
 const sectionsRef = {
   current: {
     selectSection,
-    sectionOfField: () => 'general',
+    sectionOfField,
   },
 } as unknown as RefObject<SettingsDialogHandle<string> | null>;
 
@@ -103,6 +106,33 @@ describe('useOrgProfileSections unit', () => {
     expect(ok).toBe(false);
     expect(updateOrganization).not.toHaveBeenCalled();
     expect(selectSection).toHaveBeenCalledWith('general');
+  });
+
+  it('looks fields up within the profile sections only', async () => {
+    renderHarness();
+    fireEvent.change(screen.getByTestId('org-logo-input'), {
+      target: { value: 'not a url' },
+    });
+    await act(async () => {
+      await unit.save();
+    });
+    expect(sectionOfField).toHaveBeenCalledWith('logo', [
+      'general',
+      'discord',
+      'members',
+      'rules',
+    ]);
+  });
+
+  it('does not select the section when select is false', async () => {
+    renderHarness();
+    fireEvent.change(screen.getByTestId('org-logo-input'), {
+      target: { value: 'not a url' },
+    });
+    await act(async () => {
+      await unit.save({ select: false });
+    });
+    expect(selectSection).not.toHaveBeenCalled();
   });
 
   it('discard restores organization values', () => {

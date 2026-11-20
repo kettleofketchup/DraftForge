@@ -8,7 +8,8 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import { StrictMode, type ReactNode } from 'react';
+import { createRef, StrictMode, type ReactNode } from 'react';
+import { toast } from 'sonner';
 import {
   afterEach,
   beforeAll,
@@ -24,6 +25,7 @@ import {
   patchOrgSettings,
   type OrgSettings,
 } from '~/components/api/orgSettingsAPI';
+import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
 import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
 import { useStaffPlacementSection } from '../StaffPlacementSection';
 
@@ -63,9 +65,13 @@ beforeAll(() => {
 
 let qc: QueryClient;
 let unit: SettingsFormUnit;
+const selectSection = vi.fn();
+const sectionsRef = createRef<SettingsDialogHandle<string>>() as {
+  current: SettingsDialogHandle<string> | null;
+};
 
 function Harness({ enabled = true }: { enabled?: boolean }): ReactNode {
-  const section = useStaffPlacementSection(7, enabled);
+  const section = useStaffPlacementSection(7, enabled, sectionsRef);
   unit = section.unit;
   return <>{section.content}</>;
 }
@@ -108,6 +114,9 @@ function refetched(changes: Partial<OrgSettings>) {
 }
 
 beforeEach(() => {
+  selectSection.mockClear();
+  vi.mocked(toast.error).mockClear();
+  sectionsRef.current = { selectSection, sectionOfField: () => undefined };
   vi.mocked(getOrgSettings).mockResolvedValue(SETTINGS);
 });
 
@@ -118,6 +127,38 @@ afterEach(() => {
 });
 
 describe('useStaffPlacementSection', () => {
+  it('selects its section and toasts when validation fails', async () => {
+    vi.mocked(getOrgSettings).mockResolvedValue({
+      ...SETTINGS,
+      staff_override_policy: 'bogus',
+    } as unknown as OrgSettings);
+    await loaded();
+    let ok = true;
+    await act(async () => {
+      ok = await unit.save();
+    });
+    expect(ok).toBe(false);
+    expect(patchOrgSettings).not.toHaveBeenCalled();
+    expect(selectSection).toHaveBeenCalledWith('staff-placement');
+    expect(toast.error).toHaveBeenCalledWith(
+      'Please fix the highlighted fields',
+      expect.anything(),
+    );
+  });
+
+  it('toasts but does not select when select is false', async () => {
+    vi.mocked(getOrgSettings).mockResolvedValue({
+      ...SETTINGS,
+      staff_override_policy: 'bogus',
+    } as unknown as OrgSettings);
+    await loaded();
+    await act(async () => {
+      await unit.save({ select: false });
+    });
+    expect(selectSection).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalled();
+  });
+
   it('renders loaded values', async () => {
     const trigger = await loaded();
     expect(trigger).toHaveTextContent('Silent');

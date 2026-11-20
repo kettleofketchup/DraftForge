@@ -1,6 +1,7 @@
 import { UserCog, type LucideIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import type { OrganizationType } from '~/components/organization/schemas';
+import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
 import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { useStaffPlacementSection } from './StaffPlacementSection';
@@ -15,6 +16,7 @@ export interface OrgSettingsSection {
   useSection: (
     organizationId: number,
     enabled: boolean,
+    sectionsRef: RefObject<SettingsDialogHandle<string> | null>,
   ) => { content: ReactNode; unit?: SettingsFormUnit };
   useVisible: (org: OrganizationType | undefined) => boolean;
 }

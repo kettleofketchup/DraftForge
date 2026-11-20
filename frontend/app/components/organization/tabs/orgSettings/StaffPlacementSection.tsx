@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type ReactNode } from 'react';
-import { useForm, type UseFormReturn } from 'react-hook-form';
+import { useEffect, useState, type ReactNode, type RefObject } from 'react';
+import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 
 import {
@@ -13,7 +13,11 @@ import {
   type StaffOverridePolicy,
   type StaffPlacementFormValues,
 } from '~/components/api/orgSettingsAPI';
-import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
+import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
+import {
+  submitForm,
+  type SettingsFormUnit,
+} from '~/components/patterns/settingsSaveBar';
 import {
   Form,
   FormControl,
@@ -65,6 +69,8 @@ export function pickFormValues(s: OrgSettings): StaffPlacementFormValues {
   };
 }
 
+const SECTION_ID = 'staff-placement';
+
 const EMPTY_FORM: StaffPlacementFormValues = {
   staff_override_policy: 'silent',
   staff_override_warning_codes: [],
@@ -73,6 +79,7 @@ const EMPTY_FORM: StaffPlacementFormValues = {
 export function useStaffPlacementSection(
   organizationId: number,
   enabled: boolean,
+  sectionsRef: RefObject<SettingsDialogHandle<string> | null>,
 ): { content: ReactNode; unit: SettingsFormUnit } {
   const queryClient = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
@@ -94,35 +101,45 @@ export function useStaffPlacementSection(
     setHydrated(true);
   }, [data, form]);
 
-  const save = async (): Promise<boolean> => {
-    let ok = false;
-    await form.handleSubmit(async (values) => {
-      const dirty = form.formState.dirtyFields;
-      const changes: Partial<StaffPlacementFormValues> = {};
-      if (dirty.staff_override_policy) {
-        changes.staff_override_policy = values.staff_override_policy;
-      }
-      if (dirty.staff_override_warning_codes) {
-        changes.staff_override_warning_codes =
-          values.staff_override_warning_codes;
-      }
-      try {
-        const saved = await patchOrgSettings(organizationId, changes);
-        queryClient.setQueryData(orgSettingsKey(organizationId), saved);
-        form.reset(pickFormValues(saved));
-        ok = true;
-      } catch (err) {
-        log.error('Failed to save org settings', { organizationId, err });
-        toast.error(extractApiError(err) ?? 'Could not save settings');
-      }
-    })();
-    return ok;
+  const onSubmit = async (
+    values: StaffPlacementFormValues,
+  ): Promise<boolean> => {
+    const dirty = form.formState.dirtyFields;
+    const changes: Partial<StaffPlacementFormValues> = {};
+    if (dirty.staff_override_policy) {
+      changes.staff_override_policy = values.staff_override_policy;
+    }
+    if (dirty.staff_override_warning_codes) {
+      changes.staff_override_warning_codes =
+        values.staff_override_warning_codes;
+    }
+    try {
+      const saved = await patchOrgSettings(organizationId, changes);
+      queryClient.setQueryData(orgSettingsKey(organizationId), saved);
+      form.reset(pickFormValues(saved));
+      return true;
+    } catch (err) {
+      log.error('Failed to save org settings', { organizationId, err });
+      toast.error(extractApiError(err) ?? 'Could not save settings');
+      return false;
+    }
   };
 
+  const onInvalid =
+    (select: boolean) =>
+    (errors: FieldErrors<StaffPlacementFormValues>): void => {
+      const message = Object.values(errors)[0]?.message;
+      if (select) sectionsRef.current?.selectSection(SECTION_ID);
+      toast.error('Please fix the highlighted fields', {
+        description: typeof message === 'string' ? message : undefined,
+      });
+    };
+
   const unit: SettingsFormUnit = {
-    id: 'staff-placement',
+    id: SECTION_ID,
     isDirty: enabled && form.formState.isDirty,
-    save,
+    save: (opts) =>
+      submitForm(form, onSubmit, onInvalid(opts?.select !== false)),
     discard: () => {
       if (data) form.reset(pickFormValues(data));
     },

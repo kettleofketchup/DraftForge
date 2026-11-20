@@ -18,7 +18,10 @@ import type {
   SettingsDialogHandle,
   SettingsSection,
 } from '~/components/patterns/SettingsDialog';
-import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
+import {
+  submitForm,
+  type SettingsFormUnit,
+} from '~/components/patterns/settingsSaveBar';
 import { COMMON_TIMEZONES } from '~/components/tournament/schemas';
 import {
   Form,
@@ -64,6 +67,8 @@ const META: Record<
   rules: { label: 'Rules', icon: ScrollText, keywords: ['template', 'league'] },
 };
 
+const PROFILE_SECTIONS = Object.keys(META);
+
 function valuesFrom(
   organization: OrganizationType,
 ): z.input<typeof EditOrganizationSchema> {
@@ -103,7 +108,7 @@ export function useOrgProfileSections(
   }, [organization, form]);
 
   const sectionFor = (field: string): string =>
-    sectionsRef.current?.sectionOfField(field) ?? 'general';
+    sectionsRef.current?.sectionOfField(field, PROFILE_SECTIONS) ?? 'general';
 
   async function onSubmit(data: EditOrganizationInput): Promise<boolean> {
     if (!organization.pk) return false;
@@ -125,26 +130,22 @@ export function useOrgProfileSections(
     }
   }
 
-  function onInvalid(errors: FieldErrors<EditOrganizationInput>) {
-    const [key, error] = Object.entries(errors)[0] ?? [];
-    if (!key) return;
-    sectionsRef.current?.selectSection(sectionFor(key));
-    toast.error('Please fix the highlighted fields', {
-      description:
-        typeof error?.message === 'string' ? error.message : undefined,
-    });
-  }
+  const onInvalid =
+    (select: boolean) => (errors: FieldErrors<EditOrganizationInput>) => {
+      const [key, error] = Object.entries(errors)[0] ?? [];
+      if (!key) return;
+      if (select) sectionsRef.current?.selectSection(sectionFor(key));
+      toast.error('Please fix the highlighted fields', {
+        description:
+          typeof error?.message === 'string' ? error.message : undefined,
+      });
+    };
 
   const unit: SettingsFormUnit = {
     id: 'org-profile',
     isDirty: form.formState.isDirty,
-    save: async () => {
-      let ok = false;
-      await form.handleSubmit(async (data) => {
-        ok = await onSubmit(data);
-      }, onInvalid)();
-      return ok;
-    },
+    save: (opts) =>
+      submitForm(form, onSubmit, onInvalid(opts?.select !== false)),
     discard: () => form.reset(valuesFrom(organization)),
   };
   const wrap = (children: ReactNode) => (

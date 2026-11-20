@@ -260,6 +260,45 @@ describe('useOrgEventDefaultsSections ready check', () => {
   });
 });
 
+describe('useOrgEventDefaultsSections scoping and load errors', () => {
+  it('resolves invalid fields within its own sections only', async () => {
+    const original = sectionsRef.current;
+    const lookup = vi.fn((_field: string, within?: readonly string[]) =>
+      within ? within[0] : 'general',
+    );
+    (sectionsRef as { current: unknown }).current = {
+      selectSection,
+      sectionOfField: lookup,
+    };
+    try {
+      renderHarness();
+      await ready();
+      fireEvent.click(screen.getByTestId(IDS.toggle));
+      fireEvent.click(screen.getByTestId(IDS.settingsTrigger));
+      fireEvent.change(await screen.findByTestId(IDS.close), {
+        target: { value: '999' },
+      });
+      expect(await save()).toBe(false);
+      expect(lookup).toHaveBeenCalledWith(
+        expect.any(String),
+        sectionValues.map((s) => s.value),
+      );
+      expect(selectSection).toHaveBeenCalledWith('defaults-event');
+      expect(selectSection).not.toHaveBeenCalledWith('general');
+    } finally {
+      (sectionsRef as { current: unknown }).current = original;
+    }
+  });
+
+  it('shows the load error instead of a skeleton when the query fails', async () => {
+    vi.mocked(api.getOrgEventDefaults).mockRejectedValueOnce(new Error('nope'));
+    renderHarness();
+    const errors = await screen.findAllByTestId('org-defaults-error');
+    expect(errors).toHaveLength(5);
+    expect(errors[0]).toHaveTextContent(/nope|Failed to load event defaults/);
+  });
+});
+
 describe('useOrgEventDefaultsSections discord', () => {
   it('saves the stored start mention and role mentions unchanged', async () => {
     renderHarness();

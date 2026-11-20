@@ -15,7 +15,10 @@ import type {
   SettingsDialogHandle,
   SettingsSection,
 } from '~/components/patterns/SettingsDialog';
-import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
+import {
+  submitForm,
+  type SettingsFormUnit,
+} from '~/components/patterns/settingsSaveBar';
 import {
   DraftSettingsFormSchema,
   draftSettingsFormToEventFields,
@@ -40,6 +43,7 @@ import {
 } from '~/components/ui/select';
 import { Skeleton } from '~/components/ui/skeleton';
 import { useUpdateOrgDefaultsMutation } from '~/hooks/useEvent';
+import { extractApiError } from '~/lib/apiError';
 import { DiscordConfigSection } from './DiscordConfigSection';
 import {
   discordResetValues,
@@ -76,13 +80,15 @@ type DefaultsTab = Extract<
   'event' | 'tournament' | 'lobby' | 'discord' | 'ready'
 >;
 
-const TABS: DefaultsTab[] = [
+const TABS: readonly DefaultsTab[] = [
   'event',
   'tournament',
   'lobby',
   'discord',
   'ready',
 ];
+
+const DEFAULTS_SECTIONS = TABS.map((t) => `defaults-${t}`);
 
 const orgDefaultsSchema = z
   .object({
@@ -156,7 +162,11 @@ export function useOrgEventDefaultsSections(
 ): { sections: SettingsSection[]; unit: SettingsFormUnit } {
   const mutation = useUpdateOrgDefaultsMutation(organizationId);
 
-  const { data: defaults } = useQuery({
+  const {
+    data: defaults,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ['org-event-defaults', organizationId],
     queryFn: () => getOrgEventDefaults(organizationId),
     enabled: enabled && !!organizationId,
@@ -190,11 +200,14 @@ export function useOrgEventDefaultsSections(
   }, [defaults, enabled, form]);
 
   const sectionFor = (field: string): string => {
-    const mapped = sectionsRef.current?.sectionOfField(field);
+    const mapped = sectionsRef.current?.sectionOfField(
+      field,
+      DEFAULTS_SECTIONS,
+    );
     if (mapped) return mapped;
-    const fallback = `defaults-${eventTabForField(field)}`;
-    return TABS.some((t) => `defaults-${t}` === fallback)
-      ? fallback
+    const tab = eventTabForField(field);
+    return (TABS as readonly string[]).includes(tab)
+      ? `defaults-${tab}`
       : 'defaults-event';
   };
 
@@ -232,37 +245,44 @@ export function useOrgEventDefaultsSections(
     }
   }
 
-  function onInvalid(errors: FieldErrors<OrgDefaultsFormInput>) {
-    const [key, error] = Object.entries(errors)[0] ?? [];
-    if (!key) return;
-    sectionsRef.current?.selectSection(sectionFor(key));
-    toast.error('Please fix the highlighted fields', {
-      description:
-        typeof error?.message === 'string' ? error.message : undefined,
-    });
-  }
+  const onInvalid =
+    (select: boolean) => (errors: FieldErrors<OrgDefaultsFormInput>) => {
+      const [key, error] = Object.entries(errors)[0] ?? [];
+      if (!key) return;
+      if (select) sectionsRef.current?.selectSection(sectionFor(key));
+      toast.error('Please fix the highlighted fields', {
+        description:
+          typeof error?.message === 'string' ? error.message : undefined,
+      });
+    };
 
   const unit: SettingsFormUnit = {
     id: 'org-event-defaults',
     isDirty: form.formState.isDirty,
-    save: async () => {
-      let ok = false;
-      await form.handleSubmit(async (data) => {
-        ok = await onSubmit(data);
-      }, onInvalid)();
-      return ok;
-    },
+    save: (opts) =>
+      submitForm(form, onSubmit, onInvalid(opts?.select !== false)),
     discard: () => form.reset(defaults ? valuesFrom(defaults) : FORM_DEFAULTS),
   };
 
-  const wrap = (children: ReactNode) =>
-    defaults && hydrated ? (
+  const wrap = (children: ReactNode) => {
+    if (isError) {
+      return (
+        <p
+          className="text-sm text-destructive"
+          data-testid="org-defaults-error"
+        >
+          {extractApiError(error) ?? 'Failed to load event defaults'}
+        </p>
+      );
+    }
+    return defaults && hydrated ? (
       <Form {...form}>
         <div className="flex flex-col gap-4">{children}</div>
       </Form>
     ) : (
       <Skeleton className="h-40 w-full" />
     );
+  };
 
   const content: Record<DefaultsTab, ReactNode> = {
     event: wrap(
