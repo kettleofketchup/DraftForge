@@ -131,57 +131,8 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "tournament create/update applies draft options",
         ),
         "app/consumers.py": BackEdge(
-            frozenset(
-                {
-                    "BaseDraftConsumer",
-                    "CAPTAIN_CHANNEL_TTL",
-                    "TEAM_TICK_DRIVER",
-                    "TickDriver",
-                    "build_draft_state",
-                    "captain_conn_key",
-                    "captain_is_fresh",
-                    "emit_event",
-                    "recent_draft_events",
-                    "team_payload",
-                }
-            ),
-            "TEMP slice2: DraftConsumer moves to draft in Task 5; "
-            "recent_draft_events stays permanently for TournamentConsumer",
-        ),
-        "app/functions/draft_picks.py": BackEdge(
-            frozenset(
-                {
-                    "activate_round",
-                    "advance_after_pick",
-                    "assign_next_shuffle_captain",
-                    "atomic_sharing_draft_state",
-                    "broadcast_event_after_commit",
-                    "evaluate_client_pick_time",
-                    "record_pick_timing",
-                    "start_team_tick_broadcaster_after_commit",
-                }
-            ),
-            "TEMP slice2: draft_picks moves to draft in Task 5",
-        ),
-        "app/functions/teamdraft_views.py": BackEdge(
-            frozenset(
-                {
-                    "RESUME_COUNTDOWN_SECONDS",
-                    "activate_round",
-                    "atomic_sharing_draft_state",
-                    "emit_event",
-                    "seed_missing_reserve_pools",
-                    "start_draft",
-                    "start_team_tick_broadcaster_after_commit",
-                    "team_for_round",
-                    "team_payload",
-                }
-            ),
-            "TEMP slice2: teamdraft_views moves to draft in Task 5",
-        ),
-        "app/functions/tournament.py": BackEdge(
-            frozenset({"NoEligibleCaptains", "TeamsReferenced", "reset_draft_teams"}),
-            "TEMP slice2: the draft setup views move to draft in Task 5",
+            frozenset({"recent_draft_events"}),
+            "TournamentConsumer replays a tournament's recent team-draft events",
         ),
         "app/models.py": BackEdge(
             frozenset(

@@ -15,19 +15,19 @@ from django.test import SimpleTestCase, TransactionTestCase
 from django.urls import re_path
 
 from app import consumer_db as consumer_db_module
-from app import consumers
 from app.channel_layers import (
     CancelSafeChannelLock,
     LoopSafeRedisChannelLayer,
     PerLoopChannelLock,
 )
 from app.consumer_db import CONSUMER_DB_THREADS, consumer_db
-from app.consumers import DraftConsumer
 from app.models import Draft, Game, Team, Tournament
 from app.tests.ws_helpers import read_until_type
 from draft.consumers import base as consumers_base
 from draft.consumers import hero as hero_consumers
+from draft.consumers import team as team_consumers
 from draft.consumers.hero import HeroDraftConsumer
+from draft.consumers.team import DraftConsumer
 from draft.models import DraftTeam, HeroDraft
 from draft.tasks.draft_tick import get_redis_client
 from draft.tasks.team_tick import captain_conn_key
@@ -133,7 +133,7 @@ class ConsumerDbIsolationTests(TransactionTestCase):
         blocked = _team_draft("ISO-D1", self.cap_a)
         other = _team_draft("ISO-D2", self.cap_b)
         gate = Gate()
-        real_emit = consumers.emit_event
+        real_emit = team_consumers.emit_event
 
         def emit(draft: Draft, *args: Any, **kwargs: Any) -> Any:
             if draft.pk == blocked.pk and args[0] == "captain_connected":
@@ -141,7 +141,7 @@ class ConsumerDbIsolationTests(TransactionTestCase):
             return real_emit(draft, *args, **kwargs)
 
         try:
-            with patch("app.consumers.emit_event", new=emit):
+            with patch("draft.consumers.team.emit_event", new=emit):
                 unblocked, elapsed = asyncio.run(
                     self._blocked_captain_vs_spectator(
                         gate, f"/api/draft/{blocked.pk}/", f"/api/draft/{other.pk}/"
@@ -184,7 +184,7 @@ class ConsumerDbIsolationTests(TransactionTestCase):
         draft = _team_draft("ISO-ORDER", self.cap_a)
         team = Team.objects.get(tournament__draft=draft)
         gate = Gate()
-        real_payload = consumers.team_payload
+        real_payload = team_consumers.team_payload
 
         def payload(t: Team) -> dict[str, Any]:
             if not gate.entered.is_set():
@@ -212,7 +212,7 @@ class ConsumerDbIsolationTests(TransactionTestCase):
         key = captain_conn_key(draft.pk, self.cap_a.pk)
         r.set(key, 1)
         try:
-            with patch("app.consumers.team_payload", new=payload):
+            with patch("draft.consumers.team.team_payload", new=payload):
                 asyncio.run(scenario())
         finally:
             r.delete(key)

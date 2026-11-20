@@ -16,7 +16,7 @@ from draft.services import team_broadcast as broadcast
 
 BROADCAST_CALL_SITES: tuple[str, ...] = (
     "draft.services.team",
-    "app.functions.draft_picks",
+    "draft.views.team_picks",
     "draft.services.shuffle",
 )
 

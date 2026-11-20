@@ -1,4 +1,4 @@
-"""Public hero draft HTTP routes, mounted at the root URLconf with full paths."""
+"""Public hero and team draft HTTP routes, mounted at the root URLconf with full paths."""
 
 from django.urls import URLPattern, path
 
@@ -17,6 +17,19 @@ from draft.views.hero import (
     set_ready,
 )
 from draft.views.hero_ssr import HeroDraftSSRView
+from draft.views.team import (
+    teamdraft_pause,
+    teamdraft_resume,
+    teamdraft_set_ready,
+    teamdraft_start,
+)
+from draft.views.team_api import DraftCreateView, DraftRoundCreateView
+from draft.views.team_picks import pick_player_for_round, undo_last_pick
+from draft.views.team_setup import (
+    generate_draft_rounds,
+    get_draft_style_mmrs,
+    rebuild_team,
+)
 
 urlpatterns: list[URLPattern] = [
     path(
@@ -76,4 +89,17 @@ urlpatterns: list[URLPattern] = [
     path(
         "api/herodraft/<int:pk>/ssr/", HeroDraftSSRView.as_view(), name="herodraft_ssr"
     ),
+    path("api/draft/get-style-mmrs", get_draft_style_mmrs, name="get-draft-style-mmrs"),
+    path("api/draft/register", DraftCreateView.as_view()),
+    path("api/draftround/register", DraftRoundCreateView.as_view()),
+    path("api/tournaments/init-draft", generate_draft_rounds, name="init-draft"),
+    path("api/tournaments/draft-rebuild", rebuild_team, name="draft-rebuild"),
+    path("api/tournaments/pick_player", pick_player_for_round, name="pick_player"),
+    path("api/tournaments/undo-pick", undo_last_pick, name="undo-pick"),
+    path(
+        "api/draft/<int:draft_pk>/ready/", teamdraft_set_ready, name="teamdraft_ready"
+    ),
+    path("api/draft/<int:draft_pk>/start/", teamdraft_start, name="teamdraft_start"),
+    path("api/draft/<int:draft_pk>/pause/", teamdraft_pause, name="teamdraft_pause"),
+    path("api/draft/<int:draft_pk>/resume/", teamdraft_resume, name="teamdraft_resume"),
 ]

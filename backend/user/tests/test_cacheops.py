@@ -101,6 +101,8 @@ SCAN_TARGETS = [
     REPO_ROOT / "backend" / "app" / "views_main.py",
     REPO_ROOT / "backend" / "app" / "functions" / "tournament.py",
     REPO_ROOT / "backend" / "app" / "user_cache.py",
+    REPO_ROOT / "backend" / "draft" / "views" / "team_setup.py",
+    REPO_ROOT / "backend" / "draft" / "views" / "team_api.py",
 ]
 
 

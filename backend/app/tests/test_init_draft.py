@@ -483,7 +483,7 @@ class InitDraftEndpointTests(TestCase):
         self.assertEqual(draft.snake_first_pick_mmr, 3000 + 2500)
 
     def test_reset_logs_removed_count(self) -> None:
-        with patch("app.functions.tournament.log") as log:
+        with patch("draft.views.team_setup.log") as log:
             resp = self.post()
 
         self.assertEqual(resp.status_code, 201)
@@ -533,7 +533,7 @@ class InitDraftEndpointTests(TestCase):
         Draft.objects.create(tournament=self.tournament, draft_style="shuffle")
         order = MagicMock()
         with (
-            patch("app.functions.tournament.notify_draft_started") as notify,
+            patch("draft.views.team_setup.notify_draft_started") as notify,
             patch("app.cache_utils.invalidate_obj") as invalidate,
             patch("draft.services.team_broadcast.broadcast_event") as broadcast,
         ):
@@ -570,7 +570,7 @@ class InitDraftEndpointTests(TestCase):
         client = APIClient(raise_request_exception=True)
         client.force_authenticate(user=self.admin)
         with (
-            patch("app.functions.tournament.notify_draft_started") as notify,
+            patch("draft.views.team_setup.notify_draft_started") as notify,
             patch.object(Draft, "build_rounds", side_effect=RuntimeError("boom")),
             self.captureOnCommitCallbacks(execute=False) as callbacks,
         ):
@@ -618,7 +618,7 @@ class InitDraftEndpointTests(TestCase):
         self.team_a.captain = self.cap_a
         self.team_a.save()
         game = Game.objects.create(tournament=self.tournament, radiant_team=self.team_a)
-        with patch("app.functions.tournament.notify_draft_started") as notify:
+        with patch("draft.views.team_setup.notify_draft_started") as notify:
             with self.captureOnCommitCallbacks(execute=False) as callbacks:
                 resp = self.post(REBUILD_URL)
             notify.assert_not_called()

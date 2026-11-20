@@ -16,7 +16,7 @@ from django.db import DEFAULT_DB_ALIAS, connection, connections, transaction
 from django.db.backends.base.base import BaseDatabaseWrapper
 
 from app.models import Draft
-from app.serializers import DraftEventSerializer
+from draft.serializers.team import DraftEventSerializer
 from draft.services.team_state import build_draft_state
 from telemetry.logging import get_logger
 

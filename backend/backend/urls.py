@@ -4,25 +4,9 @@ from django.views.generic.base import RedirectView
 from rest_framework import routers
 
 from app import views_main as app_views
-from app.functions.draft_picks import pick_player_for_round, undo_last_pick
-from app.functions.teamdraft_views import (
-    teamdraft_pause,
-    teamdraft_resume,
-    teamdraft_set_ready,
-    teamdraft_start,
-)
-from app.functions.tournament import (
-    create_team_from_captain,
-    generate_draft_rounds,
-    get_draft_style_mmrs,
-    rebuild_team,
-)
+from app.functions.tournament import create_team_from_captain
 from app.functions.user import profile_update
 from app.views import (
-    DraftCreateView,
-    DraftRoundCreateView,
-    DraftRoundView,
-    DraftView,
     GameCreateView,
     GameView,
     TeamCreateView,
@@ -94,6 +78,7 @@ from app.views.ssr import (
 )
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
+from draft.views.team_api import DraftRoundView, DraftView
 from events.views import fire_event_task, get_event_task_schedule
 from org.views import ClaimRequestViewSet
 from org.views_features import org_features, org_promoters, remove_org_promoter
@@ -178,40 +163,11 @@ urlpatterns = [
     path("api/team/register", TeamCreateView.as_view()),
     path("api/game/register", GameCreateView.as_view()),
     path("api/logout", app_views.logout),
-    path("api/draft/get-style-mmrs", get_draft_style_mmrs, name="get-draft-style-mmrs"),
-    path("api/draft/register", DraftCreateView.as_view()),
-    path("api/draftround/register", DraftRoundCreateView.as_view()),
     path(
         "api/tournaments/create-team-from-captain",
         create_team_from_captain,
         name="create-team-from-captain",
     ),
-    path(
-        "api/tournaments/init-draft",
-        generate_draft_rounds,
-        name="init-draft",
-    ),
-    path(
-        "api/tournaments/draft-rebuild",
-        rebuild_team,
-        name="draft-rebuild",
-    ),
-    path(
-        "api/tournaments/pick_player",
-        pick_player_for_round,
-        name="pick_player",
-    ),
-    path(
-        "api/tournaments/undo-pick",
-        undo_last_pick,
-        name="undo-pick",
-    ),
-    path(
-        "api/draft/<int:draft_pk>/ready/", teamdraft_set_ready, name="teamdraft_ready"
-    ),
-    path("api/draft/<int:draft_pk>/start/", teamdraft_start, name="teamdraft_start"),
-    path("api/draft/<int:draft_pk>/pause/", teamdraft_pause, name="teamdraft_pause"),
-    path("api/draft/<int:draft_pk>/resume/", teamdraft_resume, name="teamdraft_resume"),
     path("api/avatars/refresh/", app_views.refresh_all_avatars, name="refresh-avatars"),
     path("api/profile_update", profile_update, name="profile_update"),
     path("api/jokes/tangoes/", get_tangoes, name="get-tangoes"),
@@ -220,7 +176,7 @@ urlpatterns = [
     path("api/bracket/", include("bracket.urls")),
     path("api/discord/", include("discordbot.urls")),
     path("api/events/", include("events.urls")),
-    # HeroDraft (Captain's Mode) endpoints
+    # Hero and team draft endpoints
     path("", include("draft.urls")),
     # dota_lobby in-game lobby for a game (lobby app)
     path("api/games/<int:game_pk>/lobby/", include("lobby.urls")),

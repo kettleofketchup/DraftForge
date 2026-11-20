@@ -4,6 +4,7 @@ import asyncio
 import threading
 import time
 from datetime import timedelta
+from typing import Any
 from unittest.mock import PropertyMock, patch
 
 import redis
@@ -15,14 +16,16 @@ from channels.testing import WebsocketCommunicator
 from django.db import connection, transaction
 from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
-from django.urls import re_path, resolve, reverse
+from django.urls import ResolverMatch, re_path, resolve, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory
 
-from app.consumers import DraftConsumer
 from app.models import Draft, DraftEvent, DraftOptions, Team, TeamDraftState
 from app.tests.teamdraft_fixtures import TimedDraftFixture
 from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
+from backend import asgi
+from discordbot.activity_auth import ActivitySocketMiddleware
+from draft.consumers.team import DraftConsumer
 from draft.services import team as teamdraft
 from draft.tasks import draft_tick
 from draft.tasks import team_tick as teamdraft_tick
@@ -260,6 +263,112 @@ class EndpointTestBase(TestCase):
             return self.post(user or self.fx.staff, path)
 
 
+EXPECTED_API_ROOT_KEYS: frozenset[str] = frozenset(
+    {
+        "claim-requests",
+        "draftrounds",
+        "drafts",
+        "games",
+        "leagues",
+        "organizations",
+        "teams",
+        "tournaments",
+        "tournaments-basic",
+        "tournaments-list",
+        "users",
+    }
+)
+
+TEAM_HTTP_ROUTES: tuple[tuple[str, str, str | None, str], ...] = (
+    (
+        "/api/draft/get-style-mmrs",
+        "draft.views.team_setup",
+        "get-draft-style-mmrs",
+        "get_draft_style_mmrs",
+    ),
+    ("/api/draft/register", "draft.views.team_api", None, "DraftCreateView"),
+    ("/api/draftround/register", "draft.views.team_api", None, "DraftRoundCreateView"),
+    (
+        "/api/tournaments/init-draft",
+        "draft.views.team_setup",
+        "init-draft",
+        "generate_draft_rounds",
+    ),
+    (
+        "/api/tournaments/draft-rebuild",
+        "draft.views.team_setup",
+        "draft-rebuild",
+        "rebuild_team",
+    ),
+    (
+        "/api/tournaments/pick_player",
+        "draft.views.team_picks",
+        "pick_player",
+        "pick_player_for_round",
+    ),
+    (
+        "/api/tournaments/undo-pick",
+        "draft.views.team_picks",
+        "undo-pick",
+        "undo_last_pick",
+    ),
+    (
+        "/api/draft/1/ready/",
+        "draft.views.team",
+        "teamdraft_ready",
+        "teamdraft_set_ready",
+    ),
+    ("/api/draft/1/start/", "draft.views.team", "teamdraft_start", "teamdraft_start"),
+    ("/api/draft/1/pause/", "draft.views.team", "teamdraft_pause", "teamdraft_pause"),
+    (
+        "/api/draft/1/resume/",
+        "draft.views.team",
+        "teamdraft_resume",
+        "teamdraft_resume",
+    ),
+    ("/api/drafts/", "draft.views.team_api", "drafts-list", "DraftView"),
+    ("/api/drafts/1/", "draft.views.team_api", "drafts-detail", "DraftView"),
+    ("/api/drafts.json", "draft.views.team_api", "drafts-list", "DraftView"),
+    ("/api/drafts/1.json", "draft.views.team_api", "drafts-detail", "DraftView"),
+    ("/api/draftrounds/", "draft.views.team_api", "draftrounds-list", "DraftRoundView"),
+    (
+        "/api/draftrounds/1/",
+        "draft.views.team_api",
+        "draftrounds-detail",
+        "DraftRoundView",
+    ),
+    (
+        "/api/draftrounds.json",
+        "draft.views.team_api",
+        "draftrounds-list",
+        "DraftRoundView",
+    ),
+    (
+        "/api/draftrounds/1.json",
+        "draft.views.team_api",
+        "draftrounds-detail",
+        "DraftRoundView",
+    ),
+)
+
+
+def _websocket_route(path: str) -> Any:
+    router: Any = asgi.application.application_mapping["websocket"]
+    while not isinstance(router, URLRouter):
+        router = getattr(router, "inner", None) or router.application
+    for route in router.routes:
+        if route.pattern.match(path):
+            return route.callback
+    return None
+
+
+def _view_target(match: ResolverMatch) -> tuple[str, str]:
+    view = getattr(match.func, "cls", None) or getattr(match.func, "view_class", None)
+    if view is not None:
+        return view.__module__, view.__name__
+    return match.func.__module__, match.func.__name__
+
+
 class RouteResolutionTests(TestCase):
     def test_hero_and_team_routes_resolve_to_their_own_views(self):
         for path in (
@@ -268,18 +377,36 @@ class RouteResolutionTests(TestCase):
             "/api/herodraft/1/resume/",
         ):
             self.assertEqual(resolve(path).func.__module__, "draft.views.hero", path)
-        for path, name in (
-            ("ready", "teamdraft_set_ready"),
-            ("start", "teamdraft_start"),
-            ("pause", "teamdraft_pause"),
-            ("resume", "teamdraft_resume"),
-        ):
-            func = resolve(f"/api/draft/1/{path}/").func
-            self.assertEqual(
-                (func.__module__, func.cls.__name__),
-                ("app.functions.teamdraft_views", name),
-                path,
-            )
+
+    def test_team_http_routes_resolve_with_unchanged_names(self) -> None:
+        for path, module, url_name, view in TEAM_HTTP_ROUTES:
+            match = resolve(path)
+            self.assertEqual(_view_target(match), (module, view), path)
+            self.assertEqual(match.url_name, url_name, path)
+
+    def test_team_draft_sockets_route_to_draft_consumer(self) -> None:
+        plain = _websocket_route("api/draft/1/")
+        self.assertEqual(
+            (plain.consumer_class.__module__, plain.consumer_class.__name__),
+            ("draft.consumers.team", "DraftConsumer"),
+        )
+        activity = _websocket_route("api/discord/activity/team-draft/1/")
+        self.assertIsInstance(activity, ActivitySocketMiddleware)
+        self.assertEqual(activity.kind, "team")
+        self.assertEqual(
+            (
+                activity.app.consumer_class.__module__,
+                activity.app.consumer_class.__name__,
+            ),
+            ("draft.consumers.team", "DraftConsumer"),
+        )
+        tournament = _websocket_route("api/tournament/1/")
+        self.assertEqual(tournament.consumer_class.__module__, "app.consumers")
+
+    def test_api_root_lists_draft_routers(self) -> None:
+        response = APIClient().get("/api/", HTTP_ACCEPT="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(frozenset(response.json()), EXPECTED_API_ROOT_KEYS)
 
     def test_moved_and_interleaved_routes_resolve(self) -> None:
         self.assertEqual(
@@ -635,7 +762,7 @@ class PickTimingTests(TestCase):
     def test_client_picked_at_within_window_is_honoured(self):
         early = (self.rnd.started_at + timedelta(milliseconds=500)).isoformat()
         with patch(
-            "app.functions.draft_picks.timezone.now",
+            "draft.views.team_picks.timezone.now",
             return_value=self.rnd.started_at + timedelta(seconds=1),
         ):
             with self.captureOnCommitCallbacks(execute=True):

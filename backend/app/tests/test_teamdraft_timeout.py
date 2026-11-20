@@ -536,7 +536,7 @@ class ShufflePickTimeoutOrderingTests(TransactionTestCase):
             return False
 
         with patch(
-            "app.functions.draft_picks.can_edit_tournament", side_effect=skip_then_deny
+            "draft.views.team_picks.can_edit_tournament", side_effect=skip_then_deny
         ):
             r = self.fx.pick(self.rnd, captain_a)
         self.assertEqual((r.status_code, r.data["code"]), (409, "not_active_round"))

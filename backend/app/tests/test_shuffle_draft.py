@@ -16,6 +16,7 @@ from app.models import (
     Team,
     Tournament,
 )
+from draft.serializers.team import DraftSerializer
 from org.models import OrgUser
 
 
@@ -1095,8 +1096,6 @@ class DraftRestartFuzzTest(TestCase):
         )
 
         # 9. Serialized draft_rounds are in pick_number order
-        from app.serializers import DraftSerializer
-
         serialized = DraftSerializer(draft).data
         serialized_pick_numbers = [r["pick_number"] for r in serialized["draft_rounds"]]
         self.assertEqual(

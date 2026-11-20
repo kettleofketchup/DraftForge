@@ -130,7 +130,8 @@ logging.basicConfig(
 if _log_level != "DEBUG":
     logging.getLogger("app.models").setLevel(logging.INFO)
     logging.getLogger("app.functions.tournament").setLevel(logging.INFO)
-    logging.getLogger("app.functions.draft_picks").setLevel(logging.INFO)
+    logging.getLogger("draft.views.team_picks").setLevel(logging.INFO)
+    logging.getLogger("draft.views.team_setup").setLevel(logging.INFO)
 
 
 # Application definition

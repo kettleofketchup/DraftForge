@@ -3,17 +3,22 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.test import TestCase
+from rest_framework.test import APIRequestFactory
 
 from app.models import (
     CustomUser,
     Draft,
     DraftEvent,
     DraftOptions,
+    DraftRound,
     PositionsModel,
     Team,
     Tournament,
 )
-from app.serializers import DraftEventSerializer
+from draft.serializers.team import DraftEventSerializer
+from draft.services.shuffle import assign_next_shuffle_captain, build_shuffle_rounds
+from draft.services.team_broadcast import broadcast_event
+from draft.views.team_picks import pick_player_for_round, undo_last_pick
 
 
 class DraftEventModelTest(TestCase):
@@ -200,8 +205,6 @@ class ShuffleDraftEventIntegrationTest(TestCase):
     @patch("draft.services.team_broadcast.broadcast_event")
     def test_build_shuffle_rounds_creates_draft_started_event(self, mock_broadcast):
         """Building shuffle rounds creates a draft_started event, broadcast on commit."""
-        from draft.services.shuffle import build_shuffle_rounds
-
         with self.captureOnCommitCallbacks(execute=True):
             build_shuffle_rounds(self.draft)
 
@@ -218,11 +221,6 @@ class ShuffleDraftEventIntegrationTest(TestCase):
         self, mock_broadcast
     ):
         """Assigning next captain creates a captain_assigned event."""
-        from draft.services.shuffle import (
-            assign_next_shuffle_captain,
-            build_shuffle_rounds,
-        )
-
         build_shuffle_rounds(self.draft)
 
         # Clear events from build to isolate test
@@ -287,8 +285,6 @@ class TournamentEventIntegrationTest(TestCase):
         )
 
         # Create draft round
-        from app.models import DraftRound
-
         self.draft_round = DraftRound.objects.create(
             draft=self.draft,
             captain=self.captain,
@@ -298,10 +294,6 @@ class TournamentEventIntegrationTest(TestCase):
     @patch("draft.services.team_broadcast.broadcast_event")
     def test_pick_player_for_round_creates_player_picked_event(self, mock_broadcast):
         """Picking a player creates a player_picked event."""
-        from rest_framework.test import APIRequestFactory
-
-        from app.functions.draft_picks import pick_player_for_round
-
         factory = APIRequestFactory()
         request = factory.post(
             "/api/pick/",
@@ -329,10 +321,6 @@ class TournamentEventIntegrationTest(TestCase):
     @patch("draft.services.team_broadcast.broadcast_event")
     def test_undo_last_pick_creates_pick_undone_event(self, mock_broadcast):
         """Undoing a pick creates a pick_undone event."""
-        from rest_framework.test import APIRequestFactory
-
-        from app.functions.draft_picks import pick_player_for_round, undo_last_pick
-
         factory = APIRequestFactory()
 
         # First make a pick
@@ -394,8 +382,6 @@ class BroadcastEventTest(TestCase):
     @patch("draft.services.team_broadcast.get_channel_layer")
     def test_broadcast_event_sends_to_draft_group(self, mock_get_channel_layer):
         """Broadcast sends event to draft channel group."""
-        from draft.services.team_broadcast import broadcast_event
-
         mock_channel_layer = MagicMock()
         mock_channel_layer.group_send = AsyncMock()
         mock_get_channel_layer.return_value = mock_channel_layer
@@ -416,8 +402,6 @@ class BroadcastEventTest(TestCase):
     @patch("draft.services.team_broadcast.get_channel_layer")
     def test_broadcast_event_sends_to_tournament_group(self, mock_get_channel_layer):
         """Broadcast sends event to tournament channel group."""
-        from draft.services.team_broadcast import broadcast_event
-
         mock_channel_layer = MagicMock()
         mock_channel_layer.group_send = AsyncMock()
         mock_get_channel_layer.return_value = mock_channel_layer
