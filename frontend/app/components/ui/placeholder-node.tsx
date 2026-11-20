@@ -49,7 +49,7 @@ export const PlaceholderNode = forwardRef<HTMLDivElement, PlaceholderNodeProps>(
     return (
       <BaseNode
         ref={ref}
-        className="w-[150px] border-dashed border-gray-400 bg-card p-2 text-center text-gray-400 shadow-none"
+        className="w-[150px] border-dashed border-muted-foreground bg-card p-2 text-center text-muted-foreground shadow-none"
         onClick={handleClick}
       >
         {children}
