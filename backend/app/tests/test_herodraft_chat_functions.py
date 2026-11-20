@@ -1,22 +1,36 @@
+import ast
+import random
 import re
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any
+from unittest import mock
 
+import redis
 from django.contrib.auth.models import AnonymousUser
 from django.db import connection
 from django.db.models import Q
-from django.test import TestCase, TransactionTestCase
+from django.test import SimpleTestCase, TestCase, TransactionTestCase
 from django.utils import timezone
 from structlog.testing import capture_logs
 
+from app.functions import herodraft, herodraft_chat, heroes
 from app.functions.herodraft import new_herodraft_for_game
 from app.functions.herodraft_chat import (
+    RATE_LIMIT_MAX,
+    RATE_LIMIT_WINDOW_S,
     SPECTATOR,
+    ChatError,
     ChatViewer,
+    PostResult,
+    check_rate_limit,
     close_membership,
     normalize_chat_text,
     open_membership,
     parse_composer,
+    post_suggestion,
+    post_text,
+    rate_limit_key,
     resolve_chat_viewer,
     serialize_message,
     team_group_name,
@@ -28,6 +42,8 @@ from app.models import (
     HeroDraft,
     HeroDraftChatMembership,
     HeroDraftChatMessage,
+    HeroDraftRound,
+    HeroDraftState,
     League,
     Organization,
     Team,
@@ -536,3 +552,349 @@ class TeamGroupNameTest(TestCase):
         name = team_group_name(2_147_483_647, 2_147_483_647)
         self.assertRegex(name, r"^[a-zA-Z\d\-_.]+$")
         self.assertLess(len(name), 100)
+
+
+class PostingFixture(ChatFixture):
+    def viewer(self, user: CustomUser) -> ChatViewer:
+        return resolve_chat_viewer(self.draft.pk, user)
+
+    def set_state(self, state: str) -> None:
+        self.draft.state = state
+        self.draft.save()
+
+    def assert_code(self, code: str, fn: Any, *args: Any) -> None:
+        with self.assertRaises(ChatError) as ctx:
+            fn(*args)
+        self.assertEqual(ctx.exception.code, code)
+        self.assertEqual(HeroDraftChatMessage.objects.count(), 0)
+
+
+class PostTextTest(PostingFixture):
+    def post(self, user: CustomUser, raw: str) -> PostResult:
+        return post_text(self.draft.pk, user, raw, self.viewer(user))
+
+    def test_team_text_persists_on_own_team(self) -> None:
+        result = self.post(self.mem_a, "  push mid ")
+        row = HeroDraftChatMessage.objects.get()
+        self.assertEqual(row.channel, Channel.TEAM)
+        self.assertEqual(row.team_id, self.team_a.pk)
+        self.assertEqual(row.sender_id, self.mem_a.pk)
+        self.assertEqual(row.kind, Kind.TEXT)
+        self.assertEqual(row.body, "push mid")
+        self.assertIsNone(row.hero_id)
+        self.assertEqual(result.channel, "team")
+        self.assertEqual(result.team_id, self.team_a.pk)
+        self.assertEqual(result.viewer.team_id, self.team_a.pk)
+        self.assertEqual(result.message, serialize_message(row))
+
+    def test_captain_of_b_posts_to_b(self) -> None:
+        self.post(self.cap_b, "hi")
+        self.assertEqual(HeroDraftChatMessage.objects.get().team_id, self.team_b.pk)
+
+    def test_all_prefix_routes_to_all(self) -> None:
+        result = self.post(self.cap_a, "/all gl")
+        row = HeroDraftChatMessage.objects.get()
+        self.assertEqual(row.channel, Channel.ALL)
+        self.assertIsNone(row.team_id)
+        self.assertEqual(row.body, "gl")
+        self.assertEqual(result.channel, "all")
+        self.assertIsNone(result.team_id)
+        self.assertEqual(result.message["channel"], "all")
+
+    def test_empty_bodies(self) -> None:
+        for raw in ("", "/all", "   ", "/ALL \t ", "\x00\x07"):
+            with self.subTest(raw=raw):
+                self.assert_code("empty", self.post, self.mem_a, raw)
+
+    def test_too_long(self) -> None:
+        self.assert_code("too_long", self.post, self.mem_a, "x" * 501)
+        self.assert_code("too_long", self.post, self.mem_a, "/all " + "x" * 501)
+
+    def test_non_string_body_bad_request(self) -> None:
+        for raw in (None, 5, ["hi"], {"body": "hi"}):
+            with self.subTest(raw=raw):
+                self.assert_code("bad_request", self.post, self.mem_a, raw)
+
+    def test_500_chars_accepted(self) -> None:
+        self.post(self.mem_a, "x" * 500)
+        self.assertEqual(len(HeroDraftChatMessage.objects.get().body), 500)
+
+    def test_all_prefix_not_counted_in_length(self) -> None:
+        result = self.post(self.mem_a, "/all " + "x" * 500)
+        self.assertEqual(result.channel, "all")
+        self.assertEqual(HeroDraftChatMessage.objects.get().body, "x" * 500)
+
+    def test_spectators_cannot_post(self) -> None:
+        for user in (
+            self.outsider,
+            self.superuser,
+            self.staff,
+            self.org_admin,
+            self.league_staff,
+            self.dropin,
+            self.left,
+        ):
+            for raw in ("hi", "/all hi"):
+                with self.subTest(user=user.username, raw=raw):
+                    self.assert_code("not_participant", self.post, user, raw)
+
+    def test_anonymous_spectator_cannot_post(self) -> None:
+        self.assert_code(
+            "not_participant", post_text, self.draft.pk, self.outsider, "hi", SPECTATOR
+        )
+
+    def test_viewer_for_another_user_rejected(self) -> None:
+        self.assert_code(
+            "not_participant",
+            post_text,
+            self.draft.pk,
+            self.mem_b,
+            "hi",
+            self.viewer(self.mem_a),
+        )
+
+    def test_ambiguous_checked_before_not_participant(self) -> None:
+        for raw in ("hi", "/all hi", ""):
+            with self.subTest(raw=raw):
+                self.assert_code("ambiguous_team", self.post, self.both, raw)
+
+    def test_terminal_states_closed(self) -> None:
+        for state in (HeroDraftState.COMPLETED, HeroDraftState.ABANDONED):
+            with self.subTest(state=state):
+                self.set_state(state)
+                self.assert_code("draft_closed", self.post, self.mem_a, "hi")
+                self.assert_code("draft_closed", self.post, self.mem_a, "/all hi")
+
+    def test_non_terminal_states_accepted(self) -> None:
+        states = (
+            HeroDraftState.WAITING_FOR_CAPTAINS,
+            HeroDraftState.ROLLING,
+            HeroDraftState.CHOOSING,
+            HeroDraftState.DRAFTING,
+            HeroDraftState.PAUSED,
+            HeroDraftState.RESUMING,
+        )
+        for state in states:
+            with self.subTest(state=state):
+                self.set_state(state)
+                self.post(self.mem_a, f"in {state}")
+        self.assertEqual(HeroDraftChatMessage.objects.count(), len(states))
+
+    def test_state_read_bypasses_stale_instance(self) -> None:
+        HeroDraft.objects.filter(pk=self.draft.pk).update(
+            state=HeroDraftState.COMPLETED
+        )
+        self.assert_code("draft_closed", self.post, self.mem_a, "hi")
+
+
+class PostSuggestionTest(PostingFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.set_state(HeroDraftState.DRAFTING)
+
+    def suggest(self, user: CustomUser, kind: str, hero_id: object) -> PostResult:
+        return post_suggestion(self.draft.pk, user, kind, hero_id, self.viewer(user))
+
+    def use_hero(self, hero_id: int, action: str) -> None:
+        HeroDraftRound.objects.create(
+            draft=self.draft,
+            draft_team=self.draft.draft_teams.first(),
+            round_number=HeroDraftRound.objects.filter(draft=self.draft).count() + 1,
+            action_type=action,
+            hero_id=hero_id,
+            state="completed",
+        )
+
+    def test_suggestion_persists_on_team(self) -> None:
+        for kind in (Kind.SUGGEST_PICK, Kind.SUGGEST_BAN):
+            with self.subTest(kind=kind):
+                result = self.suggest(self.mem_a, kind, 74)
+                row = HeroDraftChatMessage.objects.get(public_id=result.message["id"])
+                self.assertEqual(row.kind, kind)
+                self.assertEqual(row.hero_id, 74)
+                self.assertEqual(row.body, "")
+                self.assertEqual(row.channel, Channel.TEAM)
+                self.assertEqual(row.team_id, self.team_a.pk)
+                self.assertEqual(result.channel, "team")
+                self.assertEqual(result.team_id, self.team_a.pk)
+
+    def test_picked_or_banned_hero_unavailable(self) -> None:
+        self.use_hero(74, "pick")
+        self.use_hero(1, "ban")
+        for hero_id in (74, 1):
+            with self.subTest(hero_id=hero_id):
+                self.assert_code(
+                    "hero_unavailable",
+                    self.suggest,
+                    self.mem_a,
+                    Kind.SUGGEST_BAN,
+                    hero_id,
+                )
+
+    def test_bad_hero_ids(self) -> None:
+        for hero_id in (0, 999, -1, "74", None, True, 74.0, [74]):
+            with self.subTest(hero_id=hero_id):
+                self.assert_code(
+                    "hero_unavailable",
+                    self.suggest,
+                    self.mem_a,
+                    Kind.SUGGEST_PICK,
+                    hero_id,
+                )
+
+    def test_bad_kind(self) -> None:
+        for kind in ("text", "x", "", None, ["suggest_pick"], {"k": 1}):
+            with self.subTest(kind=kind):
+                self.assert_code("bad_request", self.suggest, self.mem_a, kind, 74)
+
+    def test_non_drafting_states_inactive(self) -> None:
+        for state in (
+            HeroDraftState.WAITING_FOR_CAPTAINS,
+            HeroDraftState.ROLLING,
+            HeroDraftState.CHOOSING,
+            HeroDraftState.PAUSED,
+            HeroDraftState.RESUMING,
+        ):
+            with self.subTest(state=state):
+                self.set_state(state)
+                self.assert_code(
+                    "draft_inactive", self.suggest, self.mem_a, Kind.SUGGEST_PICK, 74
+                )
+
+    def test_terminal_states_closed(self) -> None:
+        for state in (HeroDraftState.COMPLETED, HeroDraftState.ABANDONED):
+            with self.subTest(state=state):
+                self.set_state(state)
+                self.assert_code(
+                    "draft_closed", self.suggest, self.mem_a, Kind.SUGGEST_PICK, 74
+                )
+
+    def test_spectator_cannot_suggest(self) -> None:
+        for user in (self.outsider, self.superuser, self.org_admin):
+            with self.subTest(user=user.username):
+                self.assert_code(
+                    "not_participant", self.suggest, user, Kind.SUGGEST_PICK, 74
+                )
+
+    def test_ambiguous_cannot_suggest(self) -> None:
+        self.assert_code(
+            "ambiguous_team", self.suggest, self.both, Kind.SUGGEST_PICK, 74
+        )
+
+
+class RateLimitTest(SimpleTestCase):
+    def setUp(self) -> None:
+        self.draft_id = random.randint(10**8, 10**9)
+        self.user_id = random.randint(10**8, 10**9)
+        self.key = rate_limit_key(self.draft_id, self.user_id)
+        self.redis = herodraft_chat.get_redis_client()
+        self.redis.delete(self.key)
+
+    def tearDown(self) -> None:
+        self.redis.delete(self.key)
+
+    def test_limits(self) -> None:
+        self.assertEqual(RATE_LIMIT_MAX, 8)
+        self.assertEqual(RATE_LIMIT_WINDOW_S, 10)
+
+    def test_ninth_call_rate_limited(self) -> None:
+        for _ in range(RATE_LIMIT_MAX):
+            check_rate_limit(self.draft_id, self.user_id)
+        with self.assertRaises(ChatError) as ctx:
+            check_rate_limit(self.draft_id, self.user_id)
+        self.assertEqual(ctx.exception.code, "rate_limited")
+
+    def test_users_and_drafts_isolated(self) -> None:
+        for _ in range(RATE_LIMIT_MAX):
+            check_rate_limit(self.draft_id, self.user_id)
+        others = [
+            rate_limit_key(self.draft_id, self.user_id + 1),
+            rate_limit_key(self.draft_id + 1, self.user_id),
+        ]
+        try:
+            check_rate_limit(self.draft_id, self.user_id + 1)
+            check_rate_limit(self.draft_id + 1, self.user_id)
+        finally:
+            self.redis.delete(*others)
+
+    def test_ttl_set_once_and_never_extended(self) -> None:
+        check_rate_limit(self.draft_id, self.user_id)
+        first = self.redis.ttl(self.key)
+        self.assertGreaterEqual(first, 1)
+        self.assertLessEqual(first, RATE_LIMIT_WINDOW_S)
+        for _ in range(11):
+            try:
+                check_rate_limit(self.draft_id, self.user_id)
+            except ChatError:
+                pass
+            self.assertGreater(self.redis.ttl(self.key), 0)
+        self.assertLessEqual(self.redis.ttl(self.key), first)
+        self.assertEqual(int(self.redis.get(self.key)), 12)
+
+    def test_redis_unavailable_fails_closed(self) -> None:
+        with (
+            mock.patch.object(
+                herodraft_chat,
+                "get_redis_client",
+                side_effect=redis.ConnectionError("down"),
+            ),
+            capture_logs() as logs,
+            self.assertRaises(ChatError) as ctx,
+        ):
+            check_rate_limit(self.draft_id, self.user_id)
+        self.assertEqual(ctx.exception.code, "rate_limited")
+        events = [
+            e
+            for e in logs
+            if e["event"] == "herodraft_chat_rate_limit_redis_unavailable"
+        ]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["system"], "herodraft")
+        self.assertEqual(events[0]["subsystem"], "chat")
+
+    def test_pipeline_error_fails_closed(self) -> None:
+        client = mock.Mock()
+        client.pipeline.return_value.execute.side_effect = redis.TimeoutError("slow")
+        with (
+            mock.patch.object(herodraft_chat, "get_redis_client", return_value=client),
+            capture_logs() as logs,
+            self.assertRaises(ChatError) as ctx,
+        ):
+            check_rate_limit(self.draft_id, self.user_id)
+        self.assertEqual(ctx.exception.code, "rate_limited")
+        self.assertTrue(
+            any(
+                e["event"] == "herodraft_chat_rate_limit_redis_unavailable"
+                for e in logs
+            )
+        )
+        client.pipeline.assert_called_once_with(transaction=True)
+
+
+class HeroesModuleIsLeafTest(SimpleTestCase):
+    FORBIDDEN = "app.functions.herodraft"
+
+    def imports(self, path: Path) -> set[str]:
+        names: set[str] = set()
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Import):
+                names.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names.add(node.module)
+                names.update(f"{node.module}.{alias.name}" for alias in node.names)
+        return names
+
+    def test_heroes_module_is_leaf(self) -> None:
+        functions = Path(herodraft_chat.__file__).resolve().parent
+        for name in ("heroes.py", "herodraft_chat.py"):
+            with self.subTest(module=name):
+                imported = self.imports(functions / name)
+                self.assertNotIn(self.FORBIDDEN, imported)
+        self.assertLessEqual(
+            {m for m in self.imports(functions / "heroes.py") if m.startswith("app")},
+            {"app.models", "app.models.HeroDraft"},
+        )
+
+    def test_herodraft_reexports_moved_names(self) -> None:
+        self.assertIs(herodraft.get_available_heroes, heroes.get_available_heroes)
+        self.assertIs(herodraft.ALL_HERO_IDS, heroes.ALL_HERO_IDS)

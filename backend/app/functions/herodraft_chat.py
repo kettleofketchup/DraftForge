@@ -1,22 +1,28 @@
-"""HeroDraft chat rules: viewer resolution, tenure, parsing and visibility."""
+"""HeroDraft chat rules: viewer resolution, tenure, parsing, posting and visibility."""
 
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
+import redis
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from app.functions.heroes import get_available_heroes
 from app.models import (
     CustomUser,
     DraftTeam,
+    HeroDraft,
     HeroDraftChatMembership,
     HeroDraftChatMessage,
+    HeroDraftState,
     Team,
 )
+from app.redis_client import get_redis_client
+from app.redis_keys import namespaced_key
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -24,7 +30,28 @@ log = get_logger(__name__)
 ChatRole = Literal["member", "spectator", "ambiguous"]
 ChatChannel = Literal["team", "all"]
 
+ChatErrorCode = Literal[
+    "not_participant",
+    "ambiguous_team",
+    "empty",
+    "too_long",
+    "rate_limited",
+    "draft_closed",
+    "draft_inactive",
+    "hero_unavailable",
+    "bad_request",
+    "unavailable",
+]
+
 HISTORY_LIMIT = 100
+MAX_BODY_LENGTH = 500
+RATE_LIMIT_MAX = 8
+RATE_LIMIT_WINDOW_S = 10
+
+_CLOSED_STATES = frozenset({HeroDraftState.COMPLETED, HeroDraftState.ABANDONED})
+_SUGGESTION_KINDS = frozenset(
+    {HeroDraftChatMessage.Kind.SUGGEST_PICK, HeroDraftChatMessage.Kind.SUGGEST_BAN}
+)
 
 _NEWLINES = re.compile(r"[\r\n]")
 _CONTROL = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f]")
@@ -227,3 +254,135 @@ def visible_messages(
     )
     rows.reverse()
     return [serialize_message(m) for m in rows]
+
+
+class ChatError(Exception):
+    def __init__(self, code: ChatErrorCode) -> None:
+        super().__init__(code)
+        self.code: ChatErrorCode = code
+
+
+@dataclass(frozen=True)
+class PostResult:
+    viewer: ChatViewer
+    channel: ChatChannel
+    team_id: int | None
+    message: dict[str, Any]
+
+
+def rate_limit_key(draft_id: int, user_id: int) -> str:
+    return namespaced_key(f"herodraft:chat:rate:{draft_id}:{user_id}")
+
+
+def check_rate_limit(draft_id: int, user_id: int) -> None:
+    key = rate_limit_key(draft_id, user_id)
+    try:
+        pipe = get_redis_client().pipeline(transaction=True)
+        pipe.set(key, 0, ex=RATE_LIMIT_WINDOW_S, nx=True)
+        pipe.incr(key)
+        _, count = pipe.execute()
+    except redis.RedisError:
+        log.warning(
+            "herodraft_chat_rate_limit_redis_unavailable",
+            system="herodraft",
+            subsystem="chat",
+            draft_id=draft_id,
+            user_id=user_id,
+            exc_info=True,
+        )
+        raise ChatError("rate_limited") from None
+    if int(count) > RATE_LIMIT_MAX:
+        log.info(
+            "herodraft_chat_rate_limited",
+            system="herodraft",
+            subsystem="chat",
+            draft_id=draft_id,
+            user_id=user_id,
+        )
+        raise ChatError("rate_limited")
+
+
+def authorize_post(viewer: ChatViewer) -> None:
+    if viewer.role == "ambiguous":
+        raise ChatError("ambiguous_team")
+    if viewer.role != "member" or viewer.team_id is None:
+        raise ChatError("not_participant")
+
+
+def _authorize_sender(user: CustomUser, viewer: ChatViewer) -> None:
+    authorize_post(viewer)
+    if user.pk is None or viewer.user_id != user.pk:
+        raise ChatError("not_participant")
+
+
+def _open_draft(draft_id: int) -> HeroDraft:
+    draft = HeroDraft.objects.nocache().filter(pk=draft_id).first()
+    if draft is None or draft.state in _CLOSED_STATES:
+        raise ChatError("draft_closed")
+    return draft
+
+
+def _persist(
+    draft_id: int,
+    user: CustomUser,
+    viewer: ChatViewer,
+    channel: ChatChannel,
+    kind: str,
+    body: str,
+    hero_id: int | None,
+) -> PostResult:
+    team_id = viewer.team_id if channel == "team" else None
+    msg = HeroDraftChatMessage.objects.create(
+        draft_id=draft_id,
+        channel=channel,
+        team_id=team_id,
+        sender=user,
+        kind=kind,
+        hero_id=hero_id,
+        body=body,
+    )
+    return PostResult(
+        viewer=viewer,
+        channel=channel,
+        team_id=team_id,
+        message=serialize_message(msg),
+    )
+
+
+def post_text(
+    draft_id: int, user: CustomUser, raw: object, viewer: ChatViewer
+) -> PostResult:
+    _authorize_sender(user, viewer)
+    _open_draft(draft_id)
+    if not isinstance(raw, str):
+        raise ChatError("bad_request")
+    channel, body = parse_composer(raw)
+    if not body:
+        raise ChatError("empty")
+    if len(body) > MAX_BODY_LENGTH:
+        raise ChatError("too_long")
+    return _persist(
+        draft_id, user, viewer, channel, HeroDraftChatMessage.Kind.TEXT, body, None
+    )
+
+
+def post_suggestion(
+    draft_id: int,
+    user: CustomUser,
+    kind: object,
+    hero_id: object,
+    viewer: ChatViewer,
+) -> PostResult:
+    _authorize_sender(user, viewer)
+    draft = _open_draft(draft_id)
+    if draft.state != HeroDraftState.DRAFTING:
+        raise ChatError("draft_inactive")
+    if not isinstance(kind, str) or kind not in _SUGGESTION_KINDS:
+        raise ChatError("bad_request")
+    if (
+        not isinstance(hero_id, int)
+        or isinstance(hero_id, bool)
+        or hero_id not in get_available_heroes(draft)
+    ):
+        raise ChatError("hero_unavailable")
+    return _persist(draft_id, user, viewer, "team", kind, "", hero_id)

@@ -21,6 +21,7 @@ from django.test import SimpleTestCase, override_settings
 
 import backend.settings
 from app.consumers import DraftConsumer, HeroDraftConsumer
+from app.functions import herodraft_chat
 from app.redis_keys import namespaced_key
 from app.tasks import draft_tick, teamdraft_tick
 from app.tasks.herodraft_tick import (
@@ -348,6 +349,23 @@ class CeleryEagerUnderTestsTests(SimpleTestCase):
     def test_active_celery_app_is_eager(self) -> None:
         self.assertIs(celery_app.conf.task_always_eager, True)
         self.assertIs(celery_app.conf.task_eager_propagates, True)
+
+
+@override_settings(REDIS_KEY_SCOPE="")
+class HeroDraftChatRateLimitKeyTests(SimpleTestCase):
+    @override_settings(REDIS_KEY_NAMESPACE="")
+    def test_production_key_format(self) -> None:
+        self.assertEqual(herodraft_chat.rate_limit_key(3, 4), "herodraft:chat:rate:3:4")
+
+    @override_settings(REDIS_KEY_NAMESPACE="ns:")
+    def test_key_is_namespaced(self) -> None:
+        self.assertEqual(
+            herodraft_chat.rate_limit_key(3, 4),
+            namespaced_key("herodraft:chat:rate:3:4"),
+        )
+        self.assertEqual(
+            herodraft_chat.rate_limit_key(3, 4), "ns:herodraft:chat:rate:3:4"
+        )
 
 
 @override_settings(REDIS_KEY_SCOPE="")
