@@ -7,6 +7,7 @@ import logging
 import random
 
 from cacheops import invalidate_obj
+from django.contrib.auth import login
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
@@ -126,7 +127,7 @@ def createTestSuperUser() -> tuple[CustomUser, bool]:
     Get or create admin test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=ADMIN_USER.pk).first()
@@ -156,7 +157,7 @@ def createTestStaffUser() -> tuple[CustomUser, bool]:
     Get or create staff test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=STAFF_USER.pk).first()
@@ -181,15 +182,12 @@ def createTestStaffUser() -> tuple[CustomUser, bool]:
     return user, True
 
 
-from django.contrib.auth import login
-
-
 def createTestUser() -> tuple[CustomUser, bool]:
     """
     Get or create regular test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=REGULAR_USER.pk).first()
@@ -229,7 +227,7 @@ def createClaimableTestUser() -> tuple[CustomUser, bool]:
     This simulates a user manually added by an org admin with just their Steam ID.
     The claim feature allows a logged-in user to merge this profile into their own.
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=CLAIMABLE_USER.pk).first()
@@ -263,7 +261,7 @@ def createUserClaimerTestUser() -> tuple[CustomUser, bool]:
     - NO Steam ID (will claim a profile that has one)
     - Used to test the claim/merge flow
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=USER_CLAIMER.pk).first()
@@ -293,7 +291,7 @@ def createOrgAdminTestUser() -> tuple[CustomUser, bool]:
     Get or create org admin test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=ORG_ADMIN_USER.pk).first()
@@ -323,7 +321,7 @@ def createOrgMemberTestUser() -> tuple[CustomUser, bool]:
     Get or create org member test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     user = CustomUser.objects.filter(pk=ORG_MEMBER_USER.pk).first()
     if user:
@@ -351,7 +349,7 @@ def createOrgStaffTestUser() -> tuple[CustomUser, bool]:
     Get or create org staff test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=ORG_STAFF_USER.pk).first()
@@ -381,7 +379,7 @@ def createLeagueAdminTestUser() -> tuple[CustomUser, bool]:
     Get or create league admin test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=LEAGUE_ADMIN_USER.pk).first()
@@ -411,7 +409,7 @@ def createLeagueStaffTestUser() -> tuple[CustomUser, bool]:
     Get or create league staff test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=LEAGUE_STAFF_USER.pk).first()
@@ -439,7 +437,7 @@ def createLeagueStaffTestUser() -> tuple[CustomUser, bool]:
 # get-or-create-with-PK pattern, so we share one helper instead of
 # copying five identical functions.
 def _create_or_get_auth_matrix_user(user_data) -> tuple[CustomUser, bool]:
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     user = CustomUser.objects.filter(pk=user_data.pk).first()
     if user:
@@ -1081,7 +1079,6 @@ def create_claimable_user(request):
     unique_id = str(uuid.uuid4())[:8]
     username = request.data.get("username", f"claimable_{unique_id}")
     nickname = request.data.get("nickname", f"Claimable User {unique_id}")
-    mmr = request.data.get("mmr", random.randint(2000, 6000))
 
     # Create user without Discord or Steam
     user = CustomUser.objects.create(
