@@ -1,7 +1,16 @@
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { initDraftRounds } from '~/components/api/api';
+import type {
+  DraftResetConflict,
+  DraftResetReport,
+} from '~/components/api/types';
 import type { DraftRoundType, TournamentType } from '~/index';
+import {
+  draftWsSelectors,
+  useDraftWebSocketStore,
+} from '~/store/draftWebSocketStore';
+import type { WebSocketDraftState } from '~/types/draftEvent';
 import { draftResetSummary, initDraftHook } from '../initDraftHook';
 
 vi.mock('~/components/api/api', () => ({ initDraftRounds: vi.fn() }));
@@ -21,7 +30,20 @@ const referencesError = {
     data: {
       error: 'Teams are used by games or other records.',
       code: 'draft_reset_has_references',
-      references: { 'app.Game.radiant_team': 2 },
+      references: {
+        'app.Game.radiant_team': 2,
+        'app.Game.dire_team': 2,
+        'app.Game.winning_team': 2,
+      },
+      usage: [
+        {
+          model: 'app.Game',
+          label: 'game',
+          label_plural: 'games',
+          count: 2,
+          teams: [{ pk: 1, name: 'Team A' }],
+        },
+      ],
     },
   },
 };
@@ -41,9 +63,11 @@ const initialized = {
 const mockedInit = vi.mocked(initDraftRounds);
 
 function run(
-  confirmForce: (references: Record<string, number>) => Promise<boolean>,
+  confirmForce: (conflict: DraftResetConflict) => Promise<boolean>,
+  onReport?: (report: DraftResetReport) => void,
 ) {
   return initDraftHook({
+    onReport,
     tournament: { pk: 7 } as TournamentType,
     setTournament: vi.fn(),
     setDraft: vi.fn(),
@@ -66,7 +90,10 @@ describe('initDraftHook', () => {
 
     await run(confirmForce);
 
-    expect(confirmForce).toHaveBeenCalledWith({ 'app.Game.radiant_team': 2 });
+    expect(confirmForce).toHaveBeenCalledWith({
+      references: referencesError.response.data.references,
+      usage: referencesError.response.data.usage,
+    });
     expect(mockedInit).toHaveBeenCalledTimes(2);
     expect(mockedInit.mock.calls[0][0]).not.toHaveProperty('force');
     expect(mockedInit.mock.calls[1][0]).toMatchObject({
@@ -78,6 +105,70 @@ describe('initDraftHook', () => {
       'Draft initialized. 4 teams reset to captains, 1 dropped.',
       expect.anything(),
     );
+  });
+
+  it('hands the report on when teams were dropped or kept', async () => {
+    mockedInit.mockResolvedValueOnce(initialized as unknown as TournamentType);
+    const onReport = vi.fn();
+
+    await run(vi.fn(), onReport);
+
+    expect(onReport).toHaveBeenCalledWith(initialized.draft_reset);
+  });
+
+  it('does not open a summary when every team was simply reset', async () => {
+    mockedInit.mockResolvedValueOnce({
+      ...initialized,
+      draft_reset: { ...initialized.draft_reset, dropped_teams: [] },
+    } as unknown as TournamentType);
+    const onReport = vi.fn();
+
+    await run(vi.fn(), onReport);
+
+    expect(onReport).not.toHaveBeenCalled();
+  });
+
+  it('leaves the success toast up: no dismiss after it is shown', async () => {
+    mockedInit.mockResolvedValueOnce(initialized as unknown as TournamentType);
+
+    await run(vi.fn());
+
+    expect(toast.success).toHaveBeenCalledOnce();
+    expect(vi.mocked(toast.success).mock.calls[0][1]).toMatchObject({
+      id: 'toast-id',
+    });
+    expect(toast.dismiss).not.toHaveBeenCalled();
+  });
+
+  it('drops a completed WebSocket snapshot the restart replaced', async () => {
+    useDraftWebSocketStore.setState({
+      draftState: {
+        pk: 3,
+        state: 'completed',
+        draft_rounds: [{ pk: 1, choice: 9 }],
+      } as unknown as WebSocketDraftState,
+    });
+    mockedInit.mockResolvedValueOnce(initialized as unknown as TournamentType);
+
+    await run(vi.fn());
+
+    const ws = useDraftWebSocketStore.getState();
+    expect(ws.draftState).toBeNull();
+    expect(draftWsSelectors.isDraftCompleted(ws)).toBe(false);
+  });
+
+  it('keeps a WebSocket snapshot that already has the new rounds', async () => {
+    const fresh = {
+      pk: 3,
+      state: 'drafting',
+      draft_rounds: [{ pk: 11 }],
+    } as unknown as WebSocketDraftState;
+    useDraftWebSocketStore.setState({ draftState: fresh });
+    mockedInit.mockResolvedValueOnce(initialized as unknown as TournamentType);
+
+    await run(vi.fn());
+
+    expect(useDraftWebSocketStore.getState().draftState).toBe(fresh);
   });
 
   it('stops without an error toast when the references are declined', async () => {

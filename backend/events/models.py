@@ -36,6 +36,7 @@ from events.constants import (  # noqa: F401 — re-exported for backward compat
     SignupOpenMode,
     SignupStatus,
     SignupType,
+    StartMentionScope,
 )
 from events.exceptions import ImmutableFieldError, LedgerAppendOnlyError
 from events.ready_check_constants import (
@@ -331,6 +332,21 @@ class DiscordEventConfigMixin(models.Model):
         default=list,
         blank=True,
         help_text="List of Discord role IDs to @ mention in the signup post",
+    )
+    discord_start_mention = models.BooleanField(
+        default=False,
+        help_text="Mention signed-up members on the signup post before the event starts",
+    )
+    discord_start_mention_minutes = models.IntegerField(
+        default=15,
+        validators=[MinValueValidator(1)],
+        help_text="Minutes before event to mention signed-up members",
+    )
+    discord_start_mention_scope = models.CharField(
+        max_length=16,
+        choices=StartMentionScope.choices,
+        default=StartMentionScope.ALL_ACTIVE,
+        help_text="Which signed-up members to mention",
     )
     discord_require_rank_screenshot = models.BooleanField(
         default=False,
@@ -653,8 +669,15 @@ class EventSignup(models.Model):
         max_length=20, choices=SignupStatus.choices, default=SignupStatus.RSVP
     )
     waitlist_position = models.IntegerField(null=True, blank=True)
-    # events.eligibility.Unmet codes from the last requirements check.
+    # events.eligibility.ReasonCode codes from the last requirements check.
     unmet_requirements = models.JSONField(default=list, blank=True)
+    # Reason.as_dict() for each code in unmet_requirements.
+    eligibility_reasons = models.JSONField(
+        default=list,
+        blank=True,
+        db_default=models.Value([], output_field=models.JSONField()),
+    )
+    eligibility_checked_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     signed_up_at = models.DateTimeField(db_default=Now())

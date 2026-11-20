@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { CalendarIcon, Settings2, Trophy } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm, type FieldErrors } from 'react-hook-form';
 import { useLocation } from 'react-router';
 import { toast } from 'sonner';
@@ -14,16 +14,18 @@ import { BracketTypeField } from '~/components/events/form/fields/BracketTypeFie
 import { TimezoneField } from '~/components/events/form/fields/TimezoneField';
 import { LobbyConfigSection } from '~/components/events/LobbyConfigSection';
 import type { LeagueType } from '~/components/league/schemas';
-import { FormTabsList } from '~/components/patterns/FormTabsList';
+import {
+  SettingsDialog,
+  type SettingsDialogHandle,
+  type SettingsSection,
+} from '~/components/patterns/SettingsDialog';
 import { DraftSettingsSection } from '~/components/teamdraft/DraftSettingsSection';
 import {
   draftSettingsFormToPatch,
   draftSettingsToFormInput,
 } from '~/components/teamdraft/schemas';
 import { Button } from '~/components/ui/button';
-import { CancelButton, SubmitButton } from '~/components/ui/buttons';
 import { Calendar } from '~/components/ui/calendar';
-import { DialogClose } from '~/components/ui/dialog';
 import {
   Form,
   FormControl,
@@ -38,7 +40,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '~/components/ui/popover';
-import { ScrollArea } from '~/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -46,7 +47,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { Tabs, TabsContent } from '~/components/ui/tabs';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { TOURNAMENT_TIMEZONES } from '~/lib/timezones';
@@ -135,16 +135,36 @@ export function refreshAfterSave({
 
 interface Props {
   tourn: TournamentClassType;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description?: string;
   onSuccess?: () => void;
   canEdit?: boolean;
+  /** Sections shown after the form's own, such as the Discord activity log. */
+  extraSections?: SettingsSection[];
+  'data-testid'?: string;
 }
+
+const FORM_SECTIONS: { value: FormTab; label: string; icon: typeof Trophy }[] =
+  [
+    { value: 'general', label: 'General', icon: Trophy },
+    { value: 'config', label: 'Config', icon: Settings2 },
+    { value: 'discord', label: 'Discord', icon: DiscordIcon as typeof Trophy },
+  ];
 
 type LeagueOption = LeagueType & { organization?: { pk: number } | null };
 
 export const TournamentEditForm: React.FC<Props> = ({
   tourn,
+  open,
+  onOpenChange,
+  title,
+  description,
   onSuccess,
   canEdit,
+  extraSections = [],
+  'data-testid': dataTestId,
 }) => {
   const queryClient = useQueryClient();
   const { pathname } = useLocation();
@@ -156,7 +176,7 @@ export const TournamentEditForm: React.FC<Props> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [tab, setTab] = useState<FormTab>('general');
+  const sections = useRef<SettingsDialogHandle<string>>(null);
 
   const isEditing = !!tourn?.pk;
   const sourceEvent = tourn?.source_event
@@ -179,6 +199,30 @@ export const TournamentEditForm: React.FC<Props> = ({
       ? tourn.league.pk
       : (tourn?.league ?? null);
 
+  const defaultValues = (): CreateTournamentInput => ({
+    name: tourn?.name || '',
+    tournament_type:
+      (tourn?.tournament_type as TournamentTypeValue) || 'double_elimination',
+    date_played: combineDateAndTime(initialDateTime.date, initialDateTime.time),
+    timezone:
+      (tourn as unknown as { timezone?: string })?.timezone ||
+      'America/New_York',
+    league: leagueDefault,
+    auto_create_hero_drafts: tourn?.auto_create_hero_drafts ?? false,
+    discord_send_draft_link: tourn?.discord_send_draft_link ?? false,
+    discord_send_herodraft_link: tourn?.discord_send_herodraft_link ?? false,
+    dota_lobby_mode: tourn?.dota_lobby_mode ?? 'off',
+    dota_lobby_launch: tourn?.dota_lobby_launch ?? 'manual',
+    dota_lobby_region: tourn?.dota_lobby_region ?? '',
+    discord_send_lobby_info: tourn?.discord_send_lobby_info ?? false,
+    game_type: tourn?.game_type ?? 1,
+    game_mode: tourn?.game_mode ?? 'normal',
+    lobby_steam_league_id: tourn?.lobby_steam_league_id ?? null,
+    captains_draft_time: tourn?.captains_draft_time ?? 10,
+    custom_game_name: tourn?.custom_game_name ?? '',
+    ...draftSettingsToFormInput(tourn?.draft_options),
+  });
+
   const form = useForm<CreateTournamentInput>({
     // Cast: zodResolver's TFieldValues generic resolves to `unknown` when
     // the schema uses z.coerce, so RHF's inferred Resolver doesn't unify
@@ -187,33 +231,25 @@ export const TournamentEditForm: React.FC<Props> = ({
     resolver: zodResolver(
       CreateTournamentSchema,
     ) as unknown as import('react-hook-form').Resolver<CreateTournamentInput>,
-    defaultValues: {
-      name: tourn?.name || '',
-      tournament_type:
-        (tourn?.tournament_type as TournamentTypeValue) || 'double_elimination',
-      date_played: combineDateAndTime(
-        initialDateTime.date,
-        initialDateTime.time,
-      ),
-      timezone:
-        (tourn as unknown as { timezone?: string })?.timezone ||
-        'America/New_York',
-      league: leagueDefault,
-      auto_create_hero_drafts: tourn?.auto_create_hero_drafts ?? false,
-      discord_send_draft_link: tourn?.discord_send_draft_link ?? false,
-      discord_send_herodraft_link: tourn?.discord_send_herodraft_link ?? false,
-      dota_lobby_mode: tourn?.dota_lobby_mode ?? 'off',
-      dota_lobby_launch: tourn?.dota_lobby_launch ?? 'manual',
-      dota_lobby_region: tourn?.dota_lobby_region ?? '',
-      discord_send_lobby_info: tourn?.discord_send_lobby_info ?? false,
-      game_type: tourn?.game_type ?? 1,
-      game_mode: tourn?.game_mode ?? 'normal',
-      lobby_steam_league_id: tourn?.lobby_steam_league_id ?? null,
-      captains_draft_time: tourn?.captains_draft_time ?? 10,
-      custom_game_name: tourn?.custom_game_name ?? '',
-      ...draftSettingsToFormInput(tourn?.draft_options),
-    },
+    defaultValues: defaultValues(),
   });
+
+  // The dialog stays mounted between openings; start each one from the
+  // tournament's current values, as the old remounting dialog did.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      const fresh = extractDateAndTime(tourn?.date_played);
+      setSelectedDate(fresh.date);
+      setSelectedTime(fresh.time);
+    }
+  }
+  useEffect(() => {
+    if (open) form.reset(defaultValues());
+    // Reset only on opening; defaultValues reads the latest tourn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Update date_played when date or time changes
   useEffect(() => {
@@ -239,13 +275,13 @@ export const TournamentEditForm: React.FC<Props> = ({
   });
 
   const allowed = isEditing ? !!canEdit : canCreateTournament(currentUser);
-  if (!allowed) {
-    return (
-      <div className="text-destructive p-4">
-        You do not have permission to edit tournaments.
-      </div>
-    );
-  }
+
+  // Where the field renders, else its default tab, else General.
+  const tabFor = (field: string): string =>
+    sections.current?.sectionOfField(field) ?? tabForField(field);
+  const errorKeys = Object.keys(form.formState.errors).filter(
+    (k) => k !== 'root',
+  );
 
   async function onSubmit(data: CreateTournamentInput) {
     if (isSubmitting) return;
@@ -305,7 +341,7 @@ export const TournamentEditForm: React.FC<Props> = ({
         fieldErrors.forEach(({ field, message }) =>
           form.setError(field, { message }),
         );
-        setTab(tabForField(fieldErrors[0].field));
+        sections.current?.selectSection(tabFor(fieldErrors[0].field));
         toast.error(title, { description: fieldErrors[0].message });
       } else {
         const errorMessage =
@@ -322,258 +358,259 @@ export const TournamentEditForm: React.FC<Props> = ({
   function onInvalid(errors: FieldErrors<CreateTournamentInput>) {
     const [key, error] = Object.entries(errors)[0] ?? [];
     if (!key) return;
-    setTab(tabForField(key));
+    sections.current?.selectSection(tabFor(key));
     toast.error('Please fix the highlighted fields', {
       description:
         typeof error?.message === 'string' ? error.message : undefined,
     });
   }
 
+  const content: Record<FormTab, React.ReactNode> = {
+    general: (
+      <>
+        {/* Tournament Name */}
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Tournament Name</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="Enter tournament name"
+                  data-testid="tournament-name-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <BracketTypeField
+          control={form.control}
+          label="Tournament Type"
+          description={null}
+          placeholder="Select tournament type"
+          triggerTestId="tournament-type-select"
+          itemTestIds={{
+            single_elimination: 'tournament-type-single',
+            double_elimination: 'tournament-type-double',
+            swiss: 'tournament-type-swiss',
+          }}
+          optionLabels={{ swiss: 'Swiss System' }}
+          order={['single_elimination', 'double_elimination', 'swiss']}
+        />
+
+        {/* Date & Time Picker */}
+        <FormField
+          control={form.control}
+          name="date_played"
+          render={({ field }) => (
+            <FormItem className="flex flex-col">
+              <FormLabel>Tournament Date & Time</FormLabel>
+              <div className="flex flex-wrap gap-2">
+                {/* Date Picker */}
+                <Popover
+                  open={calendarOpen}
+                  onOpenChange={setCalendarOpen}
+                  modal={true}
+                >
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          'pl-3 text-left font-normal',
+                          !selectedDate && 'text-muted-foreground',
+                        )}
+                        data-testid="tournament-date-picker"
+                      >
+                        {selectedDate ? (
+                          format(localDate(selectedDate), 'PPP')
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={
+                        selectedDate ? localDate(selectedDate) : undefined
+                      }
+                      onSelect={(date) => {
+                        if (date) {
+                          setSelectedDate(format(date, 'yyyy-MM-dd'));
+                        }
+                        setCalendarOpen(false);
+                      }}
+                      data-testid="tournament-calendar"
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                {/* Time Picker */}
+                <Input
+                  type="time"
+                  value={selectedTime}
+                  onChange={(e) => setSelectedTime(e.target.value)}
+                  className="w-fit"
+                  data-testid="tournament-time-picker"
+                />
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <TimezoneField
+          control={form.control}
+          showIcon
+          description="The timezone in which the tournament will be played"
+          triggerTestId="tournament-timezone-select"
+          itemTestIdPrefix="tournament-timezone-"
+          timezones={TOURNAMENT_TIMEZONES}
+          formatLabel={(tz) =>
+            tz === 'UTC' ? 'UTC' : `${formatTimezoneLabel(tz)} (${tz})`
+          }
+        />
+
+        {/* League Picker */}
+        <FormField
+          control={form.control}
+          name="league"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>League (Optional)</FormLabel>
+              <Select
+                onValueChange={(value) => {
+                  const leagueId =
+                    value === 'none' ? null : parseInt(value, 10);
+                  field.onChange(leagueId);
+                  if (leagueId) {
+                    const selectedLeague = leagueOptions.find(
+                      (l) => l.pk === leagueId,
+                    );
+                    if (selectedLeague?.timezone) {
+                      form.setValue('timezone', selectedLeague.timezone);
+                    }
+                  }
+                }}
+                value={field.value?.toString() || 'none'}
+                disabled={leagueLocked}
+              >
+                <FormControl>
+                  <SelectTrigger
+                    className="w-full"
+                    data-testid="tournament-league-select"
+                  >
+                    <SelectValue placeholder="Select a league" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {allowNone && (
+                    <SelectItem
+                      value="none"
+                      data-testid="tournament-league-none"
+                    >
+                      No League
+                    </SelectItem>
+                  )}
+                  {leagueOptions.map((league) => (
+                    <SelectItem
+                      key={league.pk}
+                      value={league.pk?.toString() || ''}
+                      data-testid={`tournament-league-${league.pk}`}
+                    >
+                      {league.name}
+                      {league.organization_name && (
+                        <span className="text-muted-foreground ml-2">
+                          ({league.organization_name})
+                        </span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </>
+    ),
+    config: (
+      <>
+        <LobbyConfigSection control={form.control} watch={form.watch} />
+        <TournamentConfigSection control={form.control} />
+        <DraftSettingsSection
+          control={form.control}
+          showDraftType={false}
+          showTimeoutAction={false}
+        />
+        <DotaLobbyConfigSection
+          control={form.control}
+          sourceEvent={sourceEvent}
+        />
+      </>
+    ),
+    discord: (
+      <>
+        <DiscordTournamentConfigSection control={form.control} />
+      </>
+    ),
+  };
+
+  const formSections: SettingsSection[] = allowed
+    ? FORM_SECTIONS.map((section) => ({
+        ...section,
+        content: content[section.value],
+        invalid: errorKeys.some((k) => tabFor(k) === section.value),
+      }))
+    : [
+        {
+          value: 'general',
+          label: 'General',
+          icon: Trophy,
+          content: (
+            <p className="text-destructive p-4">
+              You do not have permission to edit tournaments.
+            </p>
+          ),
+        },
+      ];
+
   return (
     <Form {...form}>
-      <form
+      <SettingsDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title={title}
+        description={description}
+        submitLabel={
+          isSubmitting
+            ? isEditing
+              ? 'Saving...'
+              : 'Creating...'
+            : isEditing
+              ? 'Save Changes'
+              : 'Create Tournament'
+        }
+        isSubmitting={isSubmitting}
         onSubmit={form.handleSubmit(onSubmit, onInvalid)}
-        className="flex min-h-0 flex-1 flex-col"
-        data-testid="tournament-form"
-      >
-        <ScrollArea className="-mx-6 min-h-0 flex-1 px-6">
-          <Tabs
-            value={tab}
-            onValueChange={(v) => setTab(v as FormTab)}
-            className="gap-4 p-1"
-          >
-            <FormTabsList
-              className="sticky top-0 z-10 bg-background"
-              testIdPrefix="tournament-form"
-              tabs={[
-                { value: 'general', label: 'General', icon: Trophy },
-                { value: 'config', label: 'Config', icon: Settings2 },
-                { value: 'discord', label: 'Discord', icon: DiscordIcon },
-              ]}
-            />
-
-            <TabsContent
-              value="general"
-              className="mx-auto flex w-full max-w-4xl flex-col gap-4"
-            >
-              {/* Tournament Name */}
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tournament Name</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Enter tournament name"
-                        data-testid="tournament-name-input"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <BracketTypeField
-                control={form.control}
-                label="Tournament Type"
-                description={null}
-                placeholder="Select tournament type"
-                triggerTestId="tournament-type-select"
-                itemTestIds={{
-                  single_elimination: 'tournament-type-single',
-                  double_elimination: 'tournament-type-double',
-                  swiss: 'tournament-type-swiss',
-                }}
-                optionLabels={{ swiss: 'Swiss System' }}
-                order={['single_elimination', 'double_elimination', 'swiss']}
-              />
-
-              {/* Date & Time Picker */}
-              <FormField
-                control={form.control}
-                name="date_played"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Tournament Date & Time</FormLabel>
-                    <div className="flex flex-wrap gap-2">
-                      {/* Date Picker */}
-                      <Popover
-                        open={calendarOpen}
-                        onOpenChange={setCalendarOpen}
-                        modal={true}
-                      >
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                'pl-3 text-left font-normal',
-                                !selectedDate && 'text-muted-foreground',
-                              )}
-                              data-testid="tournament-date-picker"
-                            >
-                              {selectedDate ? (
-                                format(localDate(selectedDate), 'PPP')
-                              ) : (
-                                <span>Pick a date</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={
-                              selectedDate ? localDate(selectedDate) : undefined
-                            }
-                            onSelect={(date) => {
-                              if (date) {
-                                setSelectedDate(format(date, 'yyyy-MM-dd'));
-                              }
-                              setCalendarOpen(false);
-                            }}
-                            data-testid="tournament-calendar"
-                          />
-                        </PopoverContent>
-                      </Popover>
-
-                      {/* Time Picker */}
-                      <Input
-                        type="time"
-                        value={selectedTime}
-                        onChange={(e) => setSelectedTime(e.target.value)}
-                        className="w-fit"
-                        data-testid="tournament-time-picker"
-                      />
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <TimezoneField
-                control={form.control}
-                showIcon
-                description="The timezone in which the tournament will be played"
-                triggerTestId="tournament-timezone-select"
-                itemTestIdPrefix="tournament-timezone-"
-                timezones={TOURNAMENT_TIMEZONES}
-                formatLabel={(tz) =>
-                  tz === 'UTC' ? 'UTC' : `${formatTimezoneLabel(tz)} (${tz})`
-                }
-              />
-
-              {/* League Picker */}
-              <FormField
-                control={form.control}
-                name="league"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>League (Optional)</FormLabel>
-                    <Select
-                      onValueChange={(value) => {
-                        const leagueId =
-                          value === 'none' ? null : parseInt(value, 10);
-                        field.onChange(leagueId);
-                        if (leagueId) {
-                          const selectedLeague = leagueOptions.find(
-                            (l) => l.pk === leagueId,
-                          );
-                          if (selectedLeague?.timezone) {
-                            form.setValue('timezone', selectedLeague.timezone);
-                          }
-                        }
-                      }}
-                      value={field.value?.toString() || 'none'}
-                      disabled={leagueLocked}
-                    >
-                      <FormControl>
-                        <SelectTrigger
-                          className="w-full"
-                          data-testid="tournament-league-select"
-                        >
-                          <SelectValue placeholder="Select a league" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {allowNone && (
-                          <SelectItem
-                            value="none"
-                            data-testid="tournament-league-none"
-                          >
-                            No League
-                          </SelectItem>
-                        )}
-                        {leagueOptions.map((league) => (
-                          <SelectItem
-                            key={league.pk}
-                            value={league.pk?.toString() || ''}
-                            data-testid={`tournament-league-${league.pk}`}
-                          >
-                            {league.name}
-                            {league.organization_name && (
-                              <span className="text-muted-foreground ml-2">
-                                ({league.organization_name})
-                              </span>
-                            )}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </TabsContent>
-
-            <TabsContent
-              value="config"
-              className="mx-auto flex w-full max-w-4xl flex-col gap-4"
-            >
-              <LobbyConfigSection control={form.control} watch={form.watch} />
-              <TournamentConfigSection control={form.control} />
-              <DraftSettingsSection
-                control={form.control}
-                showDraftType={false}
-                showTimeoutAction={false}
-              />
-              <DotaLobbyConfigSection
-                control={form.control}
-                sourceEvent={sourceEvent}
-              />
-            </TabsContent>
-
-            <TabsContent
-              value="discord"
-              className="mx-auto flex w-full max-w-4xl flex-col gap-4"
-            >
-              <DiscordTournamentConfigSection control={form.control} />
-            </TabsContent>
-          </Tabs>
-        </ScrollArea>
-
-        <div className="flex flex-none flex-row justify-end gap-2 pt-4">
-          <DialogClose asChild>
-            <CancelButton
-              type="button"
-              disabled={isSubmitting}
-              data-testid="tournament-cancel-button"
-            >
-              Cancel
-            </CancelButton>
-          </DialogClose>
-          <SubmitButton
-            loading={isSubmitting}
-            loadingText={isEditing ? 'Saving...' : 'Creating...'}
-            data-testid="tournament-submit-button"
-          >
-            {isEditing ? 'Save Changes' : 'Create Tournament'}
-          </SubmitButton>
-        </div>
-      </form>
+        showFooter={allowed}
+        // Opening should not pop the search keyboard on phones; / and Ctrl/Cmd+K reach it.
+        autoFocus={false}
+        sectionRef={sections}
+        testIdPrefix="tournament-form"
+        data-testid={dataTestId}
+        formTestId="tournament-form"
+        submitTestId="tournament-submit-button"
+        cancelTestId="tournament-cancel-button"
+        sections={[...formSections, ...extraSections]}
+      />
     </Form>
   );
 };
