@@ -130,9 +130,13 @@ def run(tmp_path: Path) -> Runner:
         stub = bin_dir / name
         stub.write_text(RECORDER.format(log=str(log)))
         stub.chmod(0o755)
+    # A present test DB keeps test::up/upd's ensure-db off docker and populate.
+    test_db = tmp_path / "test.db.sqlite3"
+    test_db.write_bytes(b"x")
     env = {
         **os.environ,
         "DF_JUST_PYTHON": str(bin_dir / "python"),
+        "DF_TEST_DB_FILE": str(test_db),
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
     }
     for key in (

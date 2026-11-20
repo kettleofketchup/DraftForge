@@ -10,6 +10,8 @@ in_env := quote(root / "scripts/in-env.sh")
 slots := quote(python) + " -m scripts.slots --root " + quote(root)
 compose := in_env + " - . " + slots + " compose"
 slots_py := "cd " + quote(root) + " && " + slots
+# The file ensure-db checks; the slot guard tests point it at a temp file
+test_db := env("DF_TEST_DB_FILE", root / "backend/test.db.sqlite3")
 
 mod pw 'pw.just'
 mod backend 'backend.just'
@@ -22,7 +24,7 @@ mod populate 'populate.just'
 ensure-db:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [[ -s {{quote(root / "backend/test.db.sqlite3")}} ]]; then
+    if [[ -s {{quote(test_db)}} ]]; then
         exit 0
     fi
     echo "backend/test.db.sqlite3 is missing or empty; providing it from the cached test-db image..."
