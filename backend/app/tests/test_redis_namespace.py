@@ -20,19 +20,20 @@ from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
 import backend.settings
-from app.consumers import DraftConsumer, HeroDraftConsumer
-from app.functions import herodraft_chat
+from app.consumers import DraftConsumer
 from app.redis_keys import namespaced_key
 from app.tasks import draft_tick, teamdraft_tick
-from app.tasks.herodraft_tick import (
-    captain_heartbeat_key,
-    conn_count_key,
-    tick_lock_key,
-)
 from app.tests.test_consumers_base import ConcreteDraftConsumer
 from config.celery import app as celery_app
 from discordbot.activity_intent import intent_key
 from discordbot.utils import _acquire_rate_limit_token, rate_limit_key
+from draft.consumers.hero import HeroDraftConsumer
+from draft.services import hero_chat
+from draft.tasks.hero_tick import (
+    captain_heartbeat_key,
+    conn_count_key,
+    tick_lock_key,
+)
 from tests.cache import flush_run_cache
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -355,17 +356,15 @@ class CeleryEagerUnderTestsTests(SimpleTestCase):
 class HeroDraftChatRateLimitKeyTests(SimpleTestCase):
     @override_settings(REDIS_KEY_NAMESPACE="")
     def test_production_key_format(self) -> None:
-        self.assertEqual(herodraft_chat.rate_limit_key(3, 4), "herodraft:chat:rate:3:4")
+        self.assertEqual(hero_chat.rate_limit_key(3, 4), "herodraft:chat:rate:3:4")
 
     @override_settings(REDIS_KEY_NAMESPACE="ns:")
     def test_key_is_namespaced(self) -> None:
         self.assertEqual(
-            herodraft_chat.rate_limit_key(3, 4),
+            hero_chat.rate_limit_key(3, 4),
             namespaced_key("herodraft:chat:rate:3:4"),
         )
-        self.assertEqual(
-            herodraft_chat.rate_limit_key(3, 4), "ns:herodraft:chat:rate:3:4"
-        )
+        self.assertEqual(hero_chat.rate_limit_key(3, 4), "ns:herodraft:chat:rate:3:4")
 
 
 @override_settings(REDIS_KEY_SCOPE="")

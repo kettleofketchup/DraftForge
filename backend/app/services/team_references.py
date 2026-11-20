@@ -8,15 +8,16 @@ from typing import TypedDict
 from django.db import models
 from django.db.models import Q, QuerySet
 
-from app.models import DraftTeam, HeroDraft, Team
+from app.models import Team
+from draft.models import DraftTeam, HeroDraft
 
 _COUNTED_ON_DELETE = (models.CASCADE, models.SET_NULL)
 # Audit rows outlive the team (SET_NULL); chat dies with it. Neither blocks a reset or delete.
 _EXCLUDED_KEYS = frozenset(
     {
         "app.TeamLog.team",
-        "app.HeroDraftChatMessage.team",
-        "app.HeroDraftChatMembership.team",
+        "draft.HeroDraftChatMessage.team",
+        "draft.HeroDraftChatMembership.team",
     }
 )
 
@@ -62,9 +63,9 @@ _ROLLUPS: dict[type[models.Model], tuple[str, type[models.Model]]] = {
 
 _LABELS: dict[str, tuple[str, str]] = {
     "app.Game": ("game", "games"),
-    "app.HeroDraft": ("HeroDraft", "HeroDrafts"),
     "app.Tournament": ("tournament result", "tournament results"),
     "bracket.BracketSlot": ("bracket slot", "bracket slots"),
+    "draft.HeroDraft": ("HeroDraft", "HeroDrafts"),
     "lobby.GameLobby": ("lobby", "lobbies"),
 }
 

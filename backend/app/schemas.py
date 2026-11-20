@@ -102,7 +102,7 @@ class GameWithoutHeroDraftSchema(BaseModel):
 
 
 class AutoHeroDraftGameSchema(GameWithoutHeroDraftSchema):
-    """Validates: list_auto_herodraft_games() (app/views/internal.py)"""
+    """Validates: list_auto_herodraft_games() (draft/views/hero_internal.py)"""
 
     tournament_id: int
     discord_send_herodraft_link: bool = False

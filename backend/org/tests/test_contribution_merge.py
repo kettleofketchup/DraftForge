@@ -11,17 +11,16 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.discord_accounts import merge_discord_accounts
-from app.functions.herodraft import new_herodraft_for_game
 from app.models import (
     CustomUser,
     Game,
-    HeroDraftChatMembership,
-    HeroDraftChatMessage,
     Organization,
     ProfileClaimRequest,
     Team,
     Tournament,
 )
+from draft.models import HeroDraftChatMembership, HeroDraftChatMessage
+from draft.services.hero import new_herodraft_for_game
 from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind

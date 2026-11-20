@@ -8,14 +8,9 @@ from django.db.models import Count
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from app.models import (
-    CustomUser,
-    HeroDraftChatMembership,
-    HeroDraftChatMessage,
-    Organization,
-    OrgLog,
-)
+from app.models import CustomUser, Organization, OrgLog
 from app.permissions_org import is_org_role_holder
+from draft.models import HeroDraftChatMembership, HeroDraftChatMessage
 from events.constants import EventState
 from events.models import Event
 from events.services import resolve_or_create_org_user

@@ -13,6 +13,7 @@ import { useState, type ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SAVE_STUCK_MS } from '~/components/patterns/settingsSaveBar';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { UserType } from '~/components/user/types';
 import { createI18nInstance } from '~/i18n/config';
@@ -222,7 +223,11 @@ function UrlHarness(): ReactNode {
           }}
         />
       ) : (
-        <div data-testid="closed" />
+        <button
+          type="button"
+          data-testid="closed"
+          onClick={() => param.openSettings()}
+        />
       )}
     </>
   );
@@ -356,7 +361,7 @@ describe('OrgSettingsDialog', () => {
 
   it('profile save refetch keeps a dirty event-defaults form dirty', async () => {
     mutateAsync.mockRejectedValue(new Error('boom'));
-    const { rerenderWith } = renderDialog();
+    renderDialog();
     await defaultsLoaded();
 
     editBoth();
@@ -367,9 +372,20 @@ describe('OrgSettingsDialog', () => {
     );
     expect(toastWarning).toHaveBeenCalledTimes(1);
 
-    rerenderWith({ ...ORG, name: 'Renamed' } as OrganizationType);
+    const fetches = vi.mocked(api.getOrgEventDefaults).mock.calls.length;
+    vi.mocked(api.getOrgEventDefaults).mockResolvedValueOnce({
+      ...defaults,
+      max_players: 30,
+    } as unknown as Awaited<ReturnType<typeof api.getOrgEventDefaults>>);
+    await act(() =>
+      client.invalidateQueries({ queryKey: ['org-event-defaults', 7] }),
+    );
+    await waitFor(() =>
+      expect(vi.mocked(api.getOrgEventDefaults).mock.calls.length).toBe(
+        fetches + 1,
+      ),
+    );
 
-    expect(screen.getByTestId('org-name-input')).toHaveValue('Renamed');
     expect(screen.getByTestId('org-defaults-max-players-input')).toHaveValue(
       12,
     );
@@ -495,6 +511,36 @@ describe('OrgSettingsDialog', () => {
     );
   });
 
+  it('closing is allowed again once a save has hung past the timeout', async () => {
+    updateOrganization.mockImplementation(() => new Promise<object>(() => {}));
+    renderDialog();
+    await defaultsLoaded();
+    fireEvent.change(screen.getByTestId('org-name-input'), {
+      target: { value: 'Renamed' },
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(await screen.findByTestId('org-settings-save'));
+      await waitFor(() => expect(updateOrganization).toHaveBeenCalled());
+
+      await act(() => vi.advanceTimersByTimeAsync(SAVE_STUCK_MS - 500));
+      fireEvent.click(screen.getByTestId('dialog-close-button'));
+      expect(screen.queryByText('Discard unsaved changes?')).toBeNull();
+      expect(screen.queryByText('Still saving…')).toBeNull();
+
+      await act(() => vi.advanceTimersByTimeAsync(1000));
+      expect(screen.getByText('Still saving…')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('dialog-close-button'));
+      expect(
+        await screen.findByText('Discard unsaved changes?'),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('org-settings-discard-confirm'));
+      await waitFor(() => expect(onOpenChangeSpy).toHaveBeenCalledWith(false));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   describe('lazy loading', () => {
     it('opening on General fetches neither defaults nor staff settings', async () => {
       renderDialog();
@@ -586,6 +632,23 @@ describe('OrgSettingsDialog', () => {
       await waitFor(() => expect(screen.getByTestId('closed')).toBeVisible());
       expect(screen.queryByText('Discard unsaved changes?')).toBeNull();
       expect(url()).toBe('/org');
+    });
+
+    it('opened by our own push: Discard on close leaves history as it began', async () => {
+      const { router, ui } = wrap(<UrlHarness />, ['/start', '/org']);
+      render(ui);
+      fireEvent.click(screen.getByTestId('closed'));
+      await dirty();
+      expect(url()).toBe('/org?settings=');
+      fireEvent.click(screen.getByTestId('dialog-close-button'));
+      fireEvent.click(
+        await screen.findByTestId('org-settings-discard-confirm'),
+      );
+      await waitFor(() => expect(screen.getByTestId('closed')).toBeVisible());
+      expect(url()).toBe('/org');
+      expect(screen.queryByText('Discard unsaved changes?')).toBeNull();
+      await act(() => router.navigate(-1));
+      expect(url()).toBe('/start');
     });
 
     it('Back with no edits is not blocked', async () => {

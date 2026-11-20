@@ -3,10 +3,10 @@
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from app.functions.herodraft_chat import delete_team_chat
 from app.models import CustomUser, Team, Tournament
 from app.serializers import TournamentUserSerializer
 from app.services.team_references import TeamUsage, team_references, team_usage
+from draft.services.hero_chat import delete_team_chat
 
 
 class IneligibleReason(StrEnum):

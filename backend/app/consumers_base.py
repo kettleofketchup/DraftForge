@@ -48,7 +48,6 @@ from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode
 
 from app.tasks import draft_tick
-from app.tasks import herodraft_tick as legacy_tick  # late lookup keeps patches working
 from app.tasks.draft_tick import (
     CAPTAIN_CHANNEL_TTL,
     HEARTBEAT_TTL,
@@ -180,7 +179,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
     # --- Redis helpers ---
 
     def _redis(self) -> redis.Redis:
-        return legacy_tick.get_redis_client()
+        return draft_tick.get_redis_client()
 
     def _heartbeat_key(self, draft_id: int, user_id: int) -> str:
         return heartbeat_key(self.get_redis_prefix(), draft_id, user_id)
@@ -364,9 +363,14 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         try:
             driver = self.get_tick_driver()
             if driver is None:
-                legacy_tick.start_tick_broadcaster(self.draft_id)
-            else:
-                draft_tick.start_tick_broadcaster(driver, self.draft_id)
+                log.debug(
+                    "tick_broadcaster_no_driver",
+                    system="websocket",
+                    subsystem="heartbeat",
+                    draft_id=self.draft_id,
+                )
+                return
+            draft_tick.start_tick_broadcaster(driver, self.draft_id)
         except Exception as e:
             log.warning(
                 "tick_broadcaster_start_failed",

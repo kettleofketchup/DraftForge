@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
@@ -337,6 +344,36 @@ describe('SettingsDialog', () => {
       expect(groups[1]).toHaveTextContent('New Event Defaults');
       expect(groups[1].contains(navItem('c'))).toBe(true);
       expect(groups[0].contains(navItem('c'))).toBe(false);
+    });
+
+    it('puts each group in a labelled role=group and no loose text in the tablist', () => {
+      render(<Harness items={grouped} />);
+      const tablist = screen.getByRole('tablist');
+      const groups = within(tablist).getAllByRole('group');
+      expect(groups).toHaveLength(2);
+      expect(groups.map((g) => g.parentElement)).toEqual([tablist, tablist]);
+      expect(tablist.children).toHaveLength(2);
+      for (const node of Array.from(tablist.childNodes)) {
+        expect(node.nodeType).toBe(Node.ELEMENT_NODE);
+      }
+      expect(
+        groups.map((g) =>
+          document
+            .getElementById(g.getAttribute('aria-labelledby') ?? '')
+            ?.textContent?.trim(),
+        ),
+      ).toEqual(['Organization', 'New Event Defaults']);
+      expect(within(groups[0]).getAllByRole('tab')).toHaveLength(2);
+      expect(within(groups[1]).getAllByRole('tab')).toHaveLength(1);
+    });
+
+    it('ArrowDown from the last tab of one group focuses the first tab of the next', async () => {
+      render(<Harness items={grouped} />);
+      navItem('b')?.focus();
+      fireEvent.keyDown(navItem('b') as HTMLElement, { key: 'ArrowDown' });
+      await waitFor(() => expect(navItem('c')).toHaveFocus());
+      fireEvent.keyDown(navItem('c') as HTMLElement, { key: 'ArrowUp' });
+      await waitFor(() => expect(navItem('b')).toHaveFocus());
     });
 
     it('search hit names the group for grouped sections', () => {

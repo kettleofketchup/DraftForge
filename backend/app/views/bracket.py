@@ -9,7 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import Game, HeroDraft, Team, Tournament
+from app.models import Game, Team, Tournament
 from app.permissions_org import IsTournamentStaff
 from app.serializers import (
     TEAM_USER_INDEX,
@@ -18,6 +18,7 @@ from app.serializers import (
     BracketSaveSerializer,
     build_team_user_index,
 )
+from draft.models import HeroDraft
 from lobby.models import GameLobby
 from telemetry.logging import get_logger
 
@@ -81,13 +82,13 @@ def get_bracket(request: Request, tournament_id: int) -> Response:
 
 @api_view(["POST"])
 @permission_classes([IsTournamentStaff])
-def generate_bracket(request, tournament_id):
+def generate_bracket(request: Request, tournament_id: int) -> Response:
     """Generate bracket structure from tournament teams.
 
     Requires league staff access to the tournament's league.
     """
     try:
-        tournament = Tournament.objects.get(pk=tournament_id)
+        Tournament.objects.get(pk=tournament_id)
     except Tournament.DoesNotExist:
         return Response(
             {"error": "Tournament not found", "code": "tournament_not_found"},
@@ -126,7 +127,7 @@ def generate_bracket(request, tournament_id):
 @api_view(["POST"])
 @permission_classes([IsTournamentStaff])
 @transaction.atomic
-def save_bracket(request, tournament_id):
+def save_bracket(request: Request, tournament_id: int) -> Response:
     """Save bracket structure to database.
 
     Requires league staff access to the tournament's league.
@@ -324,7 +325,7 @@ def save_bracket(request, tournament_id):
     return Response({"tournamentId": tournament_id, "matches": result_serializer.data})
 
 
-def calculate_placement(game):
+def calculate_placement(game: Game) -> int | None:
     """
     Calculate placement for a team eliminated from this game.
 
@@ -621,7 +622,7 @@ def advance_winner(request: Request, game_id: int) -> Response:
 
 @api_view(["PATCH"])
 @permission_classes([IsTournamentStaff])
-def set_team_placement(request, tournament_id, team_id):
+def set_team_placement(request: Request, tournament_id: int, team_id: int) -> Response:
     """Manually set or clear a team's tournament placement.
 
     Requires league staff access.

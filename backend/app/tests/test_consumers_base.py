@@ -15,10 +15,11 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
 
-from app.consumers import HeroDraftConsumer
+from app import consumers_base
 from app.consumers_base import BaseDraftConsumer
-from app.tasks.draft_tick import heartbeat_key
-from app.tasks.herodraft_tick import HeroDraftTickDriver
+from app.tasks.draft_tick import TickDriver, heartbeat_key
+from draft.consumers.hero import HeroDraftConsumer
+from draft.tasks.hero_tick import HERO_TICK_DRIVER, HeroDraftTickDriver
 
 
 class ConcreteDraftConsumer(BaseDraftConsumer):
@@ -180,7 +181,7 @@ class TestSpanInstrumentation(SimpleTestCase):
 
     def test_handle_heartbeat_emits_span_with_conn_id(self):
         """ws.heartbeat span carries ws.conn_id + ws.draft_id + user.id."""
-        with mock.patch("app.tasks.herodraft_tick.get_redis_client") as mock_get_redis:
+        with mock.patch("app.tasks.draft_tick.get_redis_client") as mock_get_redis:
             mock_get_redis.return_value = mock.MagicMock()
             asyncio.run(self.consumer.handle_heartbeat())
 
@@ -256,7 +257,7 @@ class TestSpanInstrumentation(SimpleTestCase):
         """
 
         async def run():
-            with mock.patch("app.tasks.herodraft_tick.get_redis_client") as g:
+            with mock.patch("app.tasks.draft_tick.get_redis_client") as g:
                 g.return_value = mock.MagicMock()
                 async with self.consumer.traced_message("heartbeat"):
                     await self.consumer.handle_heartbeat()
@@ -283,7 +284,7 @@ class TestSpanInstrumentation(SimpleTestCase):
 
 @override_settings(REDIS_KEY_NAMESPACE="")
 class TestBaseHooks(SimpleTestCase):
-    """Non-abstract hooks added for the team draft (spec §1)."""
+    """Non-abstract hooks added for the team draft."""
 
     def test_new_hooks_are_not_abstract(self):
         for name in (
@@ -405,20 +406,38 @@ class TestHeroTickWantedFollowsState(SimpleTestCase):
         self.assertTrue(consumer._tick_wanted)
 
 
+class TestNoDriverStartsNoBroadcaster(SimpleTestCase):
+    def test_no_driver_starts_neither_hero_nor_shared_broadcaster(self) -> None:
+        consumer = ConcreteDraftConsumer()
+        consumer.draft_id = 7
+        with (
+            mock.patch("draft.tasks.hero_tick.start_tick_broadcaster") as hero,
+            mock.patch("app.tasks.draft_tick.start_tick_broadcaster") as shared,
+        ):
+            consumer._start_tick_broadcaster()
+        hero.assert_not_called()
+        shared.assert_not_called()
+
+    def test_consumers_base_has_no_hero_tick_import(self) -> None:
+        self.assertFalse(hasattr(consumers_base, "legacy_tick"))
+
+
 class TestTickStartRunsOffTheSyncThread(SimpleTestCase):
     def test_start_does_not_queue_on_the_thread_sensitive_executor(self):
         consumer = HeroDraftConsumer()
         consumer.draft_id = 5
         ran_on: list[threading.Thread] = []
+        drivers: list[TickDriver] = []
 
-        def record(_draft_id: int) -> bool:
+        def record(driver: TickDriver, _draft_id: int) -> bool:
+            drivers.append(driver)
             ran_on.append(threading.current_thread())
             return False
 
         async def go() -> threading.Thread:
             sensitive = await sync_to_async(threading.current_thread)()
             with mock.patch(
-                "app.tasks.herodraft_tick.start_tick_broadcaster", side_effect=record
+                "app.tasks.draft_tick.start_tick_broadcaster", side_effect=record
             ):
                 await consumer._maybe_start_tick_broadcaster()
             return sensitive
@@ -426,6 +445,7 @@ class TestTickStartRunsOffTheSyncThread(SimpleTestCase):
         sensitive = async_to_sync(go)()
         self.assertEqual(len(ran_on), 1)
         self.assertIsNot(ran_on[0], sensitive)
+        self.assertIs(drivers[0], HERO_TICK_DRIVER)
 
 
 class TestExtraGroupsDiscard(SimpleTestCase):

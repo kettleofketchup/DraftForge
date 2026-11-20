@@ -12,7 +12,7 @@ from channels.db import database_sync_to_async
 from django.test import SimpleTestCase, TransactionTestCase, override_settings
 from structlog.testing import capture_logs
 
-from app.tasks import draft_tick, herodraft_tick
+from app.tasks import draft_tick
 from app.tasks.draft_tick import (
     TickDriver,
     captain_channel_key,
@@ -25,6 +25,7 @@ from app.tasks.draft_tick import (
     lock_key,
     touch_connection,
 )
+from draft.tasks import hero_tick
 
 
 @override_settings(REDIS_KEY_NAMESPACE="")
@@ -335,37 +336,37 @@ class TickThreadContextTests(TransactionTestCase):
 class HeroDriverAliasTests(SimpleTestCase):
     def test_active_tick_tasks_is_the_hero_registry(self) -> None:
         self.assertIs(
-            herodraft_tick._active_tick_tasks, draft_tick.registry_for("herodraft")
+            hero_tick._active_tick_tasks, draft_tick.registry_for("herodraft")
         )
-        self.assertIs(herodraft_tick._lock, draft_tick._lock)
+        self.assertIs(hero_tick._lock, draft_tick._lock)
 
     def test_hero_driver_satisfies_protocol_with_hero_prefix(self) -> None:
-        self.assertIsInstance(herodraft_tick.HERO_TICK_DRIVER, TickDriver)
-        self.assertEqual(herodraft_tick.HeroDraftTickDriver.prefix, "herodraft")
-        self.assertEqual(herodraft_tick.HeroDraftTickDriver.system, "herodraft")
+        self.assertIsInstance(hero_tick.HERO_TICK_DRIVER, TickDriver)
+        self.assertEqual(hero_tick.HeroDraftTickDriver.prefix, "herodraft")
+        self.assertEqual(hero_tick.HeroDraftTickDriver.system, "herodraft")
 
     @override_settings(REDIS_KEY_NAMESPACE="")
     def test_hero_constants_still_exported(self) -> None:
         self.assertEqual(
-            herodraft_tick.CONN_COUNT_KEY.format(draft_id=3),
+            hero_tick.CONN_COUNT_KEY.format(draft_id=3),
             conn_count_key("herodraft", 3),
         )
         self.assertEqual(
-            herodraft_tick.LOCK_KEY.format(draft_id=3), lock_key("herodraft", 3)
+            hero_tick.LOCK_KEY.format(draft_id=3), lock_key("herodraft", 3)
         )
         self.assertEqual(
-            herodraft_tick.CAPTAIN_HEARTBEAT_KEY.format(draft_id=3, user_id=4),
+            hero_tick.CAPTAIN_HEARTBEAT_KEY.format(draft_id=3, user_id=4),
             heartbeat_key("herodraft", 3, 4),
         )
-        self.assertIs(herodraft_tick.get_redis_client, get_redis_client)
+        self.assertFalse(hasattr(hero_tick, "get_redis_client"))
 
     @patch(
-        "app.tasks.herodraft_tick.should_continue_ticking",
+        "draft.tasks.hero_tick.should_continue_ticking",
         return_value=(False, "patched"),
     )
     def test_driver_should_continue_is_patchable_at_module_level(self, mocked) -> None:
         self.assertEqual(
-            herodraft_tick.HERO_TICK_DRIVER.should_continue(5), (False, "patched")
+            hero_tick.HERO_TICK_DRIVER.should_continue(5), (False, "patched")
         )
         mocked.assert_called_once()
 

@@ -14,8 +14,8 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from app.functions.herodraft_chat import reset_draft_chat
 from common.utils import isTestEnvironment
+from draft.services.hero_chat import reset_draft_chat
 
 # Demo tournament names (must match populate.py)
 DEMO_TOURNAMENTS = {
@@ -341,7 +341,8 @@ def get_demo_tournament(request, key: str):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     from app.models import Draft, Tournament
-    from app.serializers import HeroDraftSerializer, TournamentSerializer
+    from app.serializers import TournamentSerializer
+    from draft.serializers.hero import HeroDraftSerializer
 
     tournament_name = DEMO_TOURNAMENTS.get(key)
     if not tournament_name:

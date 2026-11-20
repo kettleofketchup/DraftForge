@@ -22,7 +22,8 @@ from django.db import transaction
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 
-from app.models import Game, HeroDraft
+from app.models import Game
+from draft.models import HeroDraft
 from lobby import broadcast, services
 from lobby.models import GameLobby
 from telemetry.logging import get_logger
@@ -107,7 +108,7 @@ def lobby_on_game_saved(
     transaction.on_commit(lambda: create_dota_lobby.delay(game_pk, trigger="auto"))
 
 
-@receiver(post_save, sender="app.HeroDraft", dispatch_uid="lobby_herodraft_saved")
+@receiver(post_save, sender="draft.HeroDraft", dispatch_uid="lobby_herodraft_saved")
 def lobby_on_herodraft_saved(
     sender: type, instance: HeroDraft, raw: bool = False, **kwargs: object
 ) -> None:

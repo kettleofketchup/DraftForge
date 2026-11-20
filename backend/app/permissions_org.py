@@ -6,14 +6,16 @@ from typing import Any
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import Exists, OuterRef, Q
 from rest_framework import permissions, serializers
+from rest_framework.request import Request
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, Game, League, Organization, Tournament
+from draft.models import HeroDraft
 from league.models import LeagueUser
 from org.features import FeatureKey, org_has_feature
 from org.models import OrgUser
 
 
-def is_org_owner(user, obj):
+def is_org_owner(user: CustomUser | AnonymousUser, obj: Any) -> bool:
     """Check if user is the org owner.
 
     Args:
@@ -29,7 +31,7 @@ def is_org_owner(user, obj):
     return organization.owner_id == user.pk
 
 
-def has_org_admin_access(user, obj):
+def has_org_admin_access(user: CustomUser | AnonymousUser, obj: Any) -> bool:
     """Check if user is a site admin, org owner, or org admin.
 
     Site admin = ``is_staff || is_superuser`` (matches the frontend
@@ -53,7 +55,7 @@ def has_org_admin_access(user, obj):
     )
 
 
-def has_org_staff_access(user, obj):
+def has_org_staff_access(user: CustomUser | AnonymousUser, obj: Any) -> bool:
     """Check if user has staff access to org (owner, admin, or staff).
 
     Args:
@@ -197,7 +199,7 @@ def can_view_org_members_from_payload(
     return can_view_org_members(user, data["pk"])
 
 
-def has_league_admin_access(user, league):
+def has_league_admin_access(user: CustomUser | AnonymousUser, league: League) -> bool:
     """Check if user is league admin, admin of any linked org, or site admin."""
     if not user.is_authenticated:
         return False
@@ -219,7 +221,7 @@ def has_league_admin_access(user, league):
     return False
 
 
-def has_league_staff_access(user, league):
+def has_league_staff_access(user: CustomUser | AnonymousUser, league: League) -> bool:
     """Check if user has staff access to league."""
     if not user.is_authenticated:
         return False
@@ -239,7 +241,7 @@ def has_league_staff_access(user, league):
     return False
 
 
-def has_event_staff_access(user, event):
+def has_event_staff_access(user: CustomUser | AnonymousUser | None, event: Any) -> bool:
     """Org staff for event.organization, or league staff for event.tournament_league."""
     if not user or not getattr(user, "is_authenticated", False):
         return False
@@ -292,62 +294,64 @@ def can_view_league_members_from_payload(
 class IsOrgOwner(permissions.BasePermission):
     """Permission check for organization owner access."""
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         """Allow authenticated users to proceed to object-level check."""
         return request.user and request.user.is_authenticated
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: object, obj: Any) -> bool:
         return is_org_owner(request.user, obj) or request.user.is_superuser
 
 
 class IsOrgAdmin(permissions.BasePermission):
     """Permission check for organization admin access."""
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         """Allow authenticated users to proceed to object-level check."""
         return request.user and request.user.is_authenticated
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: object, obj: Any) -> bool:
         return has_org_admin_access(request.user, obj)
 
 
 class IsOrgStaff(permissions.BasePermission):
     """Permission check for organization staff access (includes admins)."""
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         """Allow authenticated users to proceed to object-level check."""
         return request.user and request.user.is_authenticated
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: object, obj: Any) -> bool:
         return has_org_staff_access(request.user, obj)
 
 
 class IsLeagueAdmin(permissions.BasePermission):
     """Permission check for league admin access."""
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         """Allow authenticated users to proceed to object-level check."""
         return request.user and request.user.is_authenticated
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: object, obj: Any) -> bool:
         return has_league_admin_access(request.user, obj)
 
 
 class IsLeagueStaff(permissions.BasePermission):
     """Permission check for league staff access."""
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         """Allow authenticated users to proceed to object-level check."""
         return request.user and request.user.is_authenticated
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: object, obj: Any) -> bool:
         return has_league_staff_access(request.user, obj)
 
 
 # Tournament and Game level permission helpers
 
 
-def can_edit_tournament(user, tournament):
+def can_edit_tournament(
+    user: CustomUser | AnonymousUser, tournament: Tournament
+) -> bool:
     """
     Check if user can edit a tournament.
 
@@ -445,7 +449,7 @@ def request_user(context: Mapping[str, Any]) -> CustomUser | AnonymousUser:
     return getattr(request, "user", None) or AnonymousUser()
 
 
-def can_manage_game(user, game):
+def can_manage_game(user: CustomUser | AnonymousUser, game: Game) -> bool:
     """
     Check if user can manage a game (declare winner, link steam match).
 
@@ -481,11 +485,11 @@ class CanEditTournament(permissions.BasePermission):
 
     message = "You do not have permission to edit this tournament."
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         """Allow authenticated users to proceed to object-level check."""
         return request.user and request.user.is_authenticated
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: object, obj: Any) -> bool:
         return can_edit_tournament(request.user, obj)
 
 
@@ -494,11 +498,11 @@ class CanEditTeam(permissions.BasePermission):
 
     message = "You do not have permission to edit this team."
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         """Allow authenticated users to proceed to object-level check."""
         return request.user and request.user.is_authenticated
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: object, obj: Any) -> bool:
         # Team belongs to a tournament
         if obj.tournament:
             return can_edit_tournament(request.user, obj.tournament)
@@ -510,11 +514,11 @@ class CanEditDraft(permissions.BasePermission):
 
     message = "You do not have permission to edit this draft."
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         """Allow authenticated users to proceed to object-level check."""
         return request.user and request.user.is_authenticated
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: object, obj: Any) -> bool:
         # Draft belongs to a tournament
         if obj.tournament:
             return can_edit_tournament(request.user, obj.tournament)
@@ -526,11 +530,11 @@ class CanEditDraftRound(permissions.BasePermission):
 
     message = "You do not have permission to edit this draft round."
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         """Allow authenticated users to proceed to object-level check."""
         return request.user and request.user.is_authenticated
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: object, obj: Any) -> bool:
         # DraftRound belongs to Draft which belongs to Tournament
         if obj.draft and obj.draft.tournament:
             return can_edit_tournament(request.user, obj.draft.tournament)
@@ -542,11 +546,11 @@ class CanManageGame(permissions.BasePermission):
 
     message = "You do not have permission to manage this game."
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         """Allow authenticated users to proceed to object-level check."""
         return request.user and request.user.is_authenticated
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: object, obj: Any) -> bool:
         return can_manage_game(request.user, obj)
 
 
@@ -559,13 +563,10 @@ class IsTournamentStaff(permissions.BasePermission):
 
     message = "You do not have permission to modify this tournament."
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         """Check tournament staff access."""
         if not request.user or not request.user.is_authenticated:
             return False
-
-        # Import here to avoid circular imports
-        from app.models import Game, HeroDraft, Tournament
 
         tournament = None
 

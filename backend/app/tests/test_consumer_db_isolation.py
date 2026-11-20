@@ -20,12 +20,15 @@ from app.channel_layers import (
     LoopSafeRedisChannelLayer,
     PerLoopChannelLock,
 )
-from app.consumers import DraftConsumer, HeroDraftConsumer
+from app.consumers import DraftConsumer
 from app.consumers_base import consumer_db
-from app.models import Draft, DraftTeam, Game, HeroDraft, Team, Tournament
+from app.models import Draft, Game, Team, Tournament
 from app.tasks.draft_tick import get_redis_client
 from app.tasks.teamdraft_tick import captain_conn_key
 from app.tests.ws_helpers import read_until_type
+from draft.consumers import hero as hero_consumers
+from draft.consumers.hero import HeroDraftConsumer
+from draft.models import DraftTeam, HeroDraft
 
 User = get_user_model()
 
@@ -155,14 +158,14 @@ class ConsumerDbIsolationTests(TransactionTestCase):
         blocked = _hero_draft("ISO-H1", self.cap_a, self.cap_b)
         other = _hero_draft("ISO-H2", self.cap_b, self.cap_c)
         gate = Gate()
-        real_broadcast = consumers.broadcast_herodraft_state
+        real_broadcast = hero_consumers.broadcast_herodraft_state
 
         def broadcast(draft: HeroDraft, event_type: str, **kwargs: Any) -> Any:
             if draft.id == blocked.id and event_type == "captain_connected":
                 gate.hold()
             return real_broadcast(draft, event_type, **kwargs)
 
-        with patch("app.consumers.broadcast_herodraft_state", new=broadcast):
+        with patch("draft.consumers.hero.broadcast_herodraft_state", new=broadcast):
             unblocked, elapsed = asyncio.run(
                 self._blocked_captain_vs_spectator(
                     gate,

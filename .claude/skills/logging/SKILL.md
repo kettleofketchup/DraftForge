@@ -27,9 +27,9 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 
 | system | subsystem | tags | Where | What |
 |--------|-----------|------|-------|------|
-| `herodraft` | `connection` | — | `consumers.py` | WS connect/disconnect, captain state (kicks now under websocket/connection) |
-| `herodraft` | `heartbeat` | — | `herodraft_tick.py` | Heartbeat staleness checks, heartbeat-triggered pauses |
-| `herodraft` | `timer` | — | `herodraft_tick.py` (driver) + `draft_tick.py` (loop) | Tick loop lifecycle, tick broadcast, timeout auto-pick, resume |
+| `herodraft` | `connection` | — | `draft/consumers/hero.py` | WS connect/disconnect, captain state (kicks now under websocket/connection) |
+| `herodraft` | `heartbeat` | — | `draft/tasks/hero_tick.py` | Heartbeat staleness checks, heartbeat-triggered pauses |
+| `herodraft` | `timer` | — | `draft/tasks/hero_tick.py` (driver) + `app/tasks/draft_tick.py` (loop) | Tick loop lifecycle, tick broadcast, timeout auto-pick, resume |
 | `websocket` | `heartbeat` | — | `consumers_base.py` | Heartbeat receive, captain register/unregister (generic WS infra) |
 | `websocket` | `connection` | — | `telemetry/websocket.py`, `consumers_base.py` | Generic WS connect/disconnect/receive instrumentation; captain kick send/failure (captain_kicked, captain_kick_failed) |
 | `websocket` | `timer` | — | `app/tasks/draft_tick.py` | Shared tick runner: connection counts (connection_count_incremented, connection_count_decremented), registry shutdown (tick_broadcasters_shutdown) |
@@ -37,7 +37,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `teamdraft` | `timer` | — | `app/tasks/teamdraft_tick.py`, `app/functions/teamdraft.py`, `app/functions/teamdraft_timeout.py`, `app/tasks/draft_tick.py` (evaluate_client_pick_time) | Team-draft tick loop, round activation, pick timing, timeout skip; client pick-time rejects (pick_time_naive_datetime, pick_time_in_future, pick_time_too_old) |
 | `teamdraft` | `heartbeat` | — | `app/tasks/teamdraft_tick.py` | Active-captain heartbeat staleness → auto-pause |
 | `teamdraft` | `view` | — | `app/functions/teamdraft_views.py` | ready/start/pause/resume HTTP actions |
-| `herodraft` | `view` | — | `app/functions/herodraft_views.py` | HeroDraft HTTP actions: create, roll, choice/pick submit, abandon, reset |
+| `herodraft` | `view` | — | `draft/views/hero.py` | HeroDraft HTTP actions: create, roll, choice/pick submit, abandon, reset |
 | `celery` | `task` | — | `telemetry/celery.py` | Generic Celery task lifecycle bookends (started/completed/failed) |
 | `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
 | `events` | `scheduling` | — | `events/tasks.py`, `events/management/` | Event generation, signup opening, repeaters |
@@ -52,14 +52,14 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `discord` | `dispatch` | `["events","signup"]` | `events/discord/dispatch.py`, `events/signup_post_lock.py` (mark/clear pending) | `notify_*` dispatch visibility (queued vs skipped); threads `interaction_id` to Celery |
 | `discord` | `celery` | `["events","signup"]` | `events/tasks.py` (Discord-dispatching tasks), `events/signup_post_lock.py` (acquire/release lock) | `celery_task_started/finished/failed/retry` bookend logs |
 | `cache` | `invalidate` | — | `app/cache_utils.py` | Per-object cacheops invalidation fired from `transaction.on_commit` |
-| `websocket` | `broadcast` | — | `app/broadcast.py` | Draft / herodraft event + state broadcast to channel groups (`kind` field distinguishes draft/herodraft/herodraft_state) |
+| `websocket` | `broadcast` | — | `app/broadcast.py`, `draft/services/hero_broadcast.py` | Draft / herodraft event + state broadcast to channel groups (`kind` field distinguishes draft/herodraft/herodraft_state) |
 | `auth` | `internal` | — | `app/auth.py` | Internal-service auth (X-Internal-Token): IP-allowlist rejects, invalid-token failures |
 | `auth` | `social` | — | `app/pipelines.py` | Discord OAuth social-auth pipeline: account reclaim/merge, username matching |
 | `auth` | `merge` | — | `app/discord_accounts.py` | Discord account de-dup / merge |
 | `tournament` | `draft`, `registration`, `user` | — | `app/models.py`, `app/functions/tournament.py` | Draft build/pick/rebuild, captain/team registration, per-user avatar refresh |
 | `api` | `serializer`, `routing`, `main`, `csv_import`, `joke` | — | `app/serializers.py`, `app/views*.py`, `app/views/csv_import.py`, `backend/urls.py` | DRF serializer mutations, view cache-miss, CSV import, env/routing |
 | `user` | `functions` | — | `app/functions/user.py` | Profile-update request/validate/apply |
-| `app` | `signals` | — | `app/signals.py` | Model signal handlers (org/league user create, herodraft cleanup) |
+| `app` | `signals` | — | `app/signals.py`, `draft/signals.py` | Model signal handlers (org/league user create, herodraft cleanup) |
 | `internal_client` | `http` | — | `app/internal_client/` (`transport.py` and per-domain modules) | Internal HTTP client errors and JSON-parse failures |
 | `discord` | `bot`, `utils`, `views`, `channels`, `roles`, `users` | — | `discordbot/**` | Bot lifecycle, message utils, slash views, channel/role/user services |
 | `events` | `tasks`, `services`, `views`, `dispatch` | — | `events/**` | Event task lifecycle, signup services, manual fire, tournament-link dispatch |

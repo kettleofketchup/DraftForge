@@ -73,7 +73,7 @@ export function OrgSettingsDialog({
     ...registry.flatMap((r) => (r.unit ? [r.unit] : [])),
     defaults.unit,
   ];
-  const { isDirty, isSaving, saveAll, discardAll, saveBar } =
+  const { isDirty, isSaving, isSaveStuck, saveAll, discardAll, saveBar } =
     useSettingsSaveBar(units, {
       testIdPrefix: 'org-settings',
     });
@@ -129,7 +129,7 @@ export function OrgSettingsDialog({
   ];
 
   const handleOpenChange = (next: boolean): void => {
-    if (!next && isSaving) return;
+    if (!next && isSaving && !isSaveStuck) return;
     if (!next && isDirty) setConfirmOpen(true);
     else onOpenChange(next);
   };

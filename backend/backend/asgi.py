@@ -27,13 +27,21 @@ init_telemetry()
 install_thread_dump_handler()
 
 # Import routing after Django and telemetry are initialized
-from app.routing import websocket_urlpatterns  # noqa: E402
+import app.routing  # noqa: E402
+import draft.routing  # noqa: E402
 
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
         "websocket": AllowedHostsOriginValidator(
-            AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
+            AuthMiddlewareStack(
+                URLRouter(
+                    [
+                        *app.routing.websocket_urlpatterns,
+                        *draft.routing.websocket_urlpatterns,
+                    ]
+                )
+            )
         ),
     }
 )

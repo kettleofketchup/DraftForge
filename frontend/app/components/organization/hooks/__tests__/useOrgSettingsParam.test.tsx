@@ -151,7 +151,30 @@ describe('useOrgSettingsParam', () => {
     expect(result.current.param.open).toBe(false);
   });
 
-  it('close replaces history', () => {
+  it('close after our own openSettings goes back so history ends as it began', () => {
+    const { result } = setup('/start');
+    act(() => result.current.navigate('/organizations/7?tab=events'));
+    act(() => result.current.param.openSettings());
+    act(() => result.current.param.setSection('admins'));
+    act(() => result.current.param.close());
+    expect(result.current.navigationType).toBe('POP');
+    expect(result.current.location.search).toBe('?tab=events');
+    act(() => result.current.navigate(-1));
+    expect(result.current.location.pathname).toBe('/start');
+  });
+
+  it('close after Back then reopen goes back once, not twice', () => {
+    const { result } = setup('/start');
+    act(() => result.current.navigate('/organizations/7'));
+    act(() => result.current.param.openSettings());
+    act(() => result.current.navigate(-1));
+    act(() => result.current.param.openSettings());
+    act(() => result.current.param.close());
+    expect(result.current.location.pathname).toBe('/organizations/7');
+    expect(result.current.param.open).toBe(false);
+  });
+
+  it('close replaces history for a deep link', () => {
     const { result } = setup('/organizations/7?settings=admins');
     act(() => result.current.param.close());
     expect(result.current.navigationType).toBe('REPLACE');

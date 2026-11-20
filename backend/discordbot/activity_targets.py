@@ -2,7 +2,8 @@
 
 from django.conf import settings
 
-from app.models import Draft, HeroDraft
+from app.models import Draft
+from draft.models import HeroDraft
 
 
 def draft_tournament_id(draft: HeroDraft | Draft) -> int | None:

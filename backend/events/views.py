@@ -35,12 +35,13 @@ from rest_framework.utils.serializer_helpers import ReturnDict, ReturnList
 from rest_framework.views import APIView
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, Game, HeroDraft, Organization, OrgLog
+from app.models import CustomUser, Game, Organization, OrgLog
 from app.permissions_org import (
     has_event_staff_access,
     has_org_admin_access,
     has_org_staff_access,
 )
+from draft.models import HeroDraft
 from events.admission import ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event

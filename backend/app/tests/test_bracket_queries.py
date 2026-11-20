@@ -12,16 +12,9 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from app.models import (
-    CustomUser,
-    Game,
-    HeroDraft,
-    League,
-    Organization,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, Game, League, Organization, Team, Tournament
 from app.serializers import BracketGameSerializer
+from draft.models import HeroDraft
 from league.models import LeagueUser
 from lobby.models import GameLobby
 from org.models import OrgUser

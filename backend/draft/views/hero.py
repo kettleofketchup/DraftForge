@@ -1,0 +1,832 @@
+"""API views for Captain's Mode hero draft."""
+
+from datetime import timedelta
+
+from django.contrib.auth.models import AnonymousUser
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+
+from app.models import CustomUser, Game, Team
+from app.permissions_org import IsTournamentStaff, can_edit_tournament
+from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
+from draft.serializers.hero import HeroDraftEventSerializer, HeroDraftSerializer
+from draft.services.hero import (
+    get_available_heroes,
+    new_herodraft_for_game,
+    submit_choice,
+    submit_pick,
+    trigger_roll,
+)
+from draft.services.hero_broadcast import broadcast_herodraft_event
+from draft.tasks import hero_tick
+from events.discord.tournament_dispatch import notify_herodraft_created
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
+
+
+def _get_draft_with_prefetch(draft_pk: int) -> HeroDraft:
+    """Get a draft with all related data prefetched for serialization."""
+    return HeroDraft.objects.prefetch_related(
+        "draft_teams__tournament_team__captain",
+        "draft_teams__tournament_team__members",
+        "rounds",
+    ).get(pk=draft_pk)
+
+
+def _get_draft_team_for_user(
+    draft: HeroDraft, user: CustomUser | AnonymousUser
+) -> DraftTeam | None:
+    """Get the DraftTeam for a user in this draft, if they are a captain."""
+    for draft_team in draft.draft_teams.all():
+        if draft_team.captain and draft_team.captain.pk == user.pk:
+            return draft_team
+    return None
+
+
+def _user_is_captain_in_draft(
+    draft: HeroDraft, user: CustomUser | AnonymousUser
+) -> bool:
+    """Check if the user is a captain in this draft."""
+    return _get_draft_team_for_user(draft, user) is not None
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_herodraft(request: Request, game_pk: int) -> Response:
+    """
+    Create a new hero draft for a game.
+
+    The game must have both radiant_team and dire_team assigned.
+    Creates the HeroDraft and two DraftTeam objects.
+
+    Returns:
+        201: Created draft data
+        400: Game already has a draft or missing teams
+        404: Game not found
+    """
+    game = get_object_or_404(Game, pk=game_pk)
+
+    # Check if draft already exists - return existing draft instead of error
+    if hasattr(game, "herodraft"):
+        draft = _get_draft_with_prefetch(game.herodraft.pk)
+        return Response(HeroDraftSerializer(draft).data, status=status.HTTP_200_OK)
+
+    # If teams not assigned to game but provided in request, assign them
+    radiant_team_id = request.data.get("radiant_team_id")
+    dire_team_id = request.data.get("dire_team_id")
+
+    if not game.radiant_team and radiant_team_id:
+        try:
+            game.radiant_team = Team.objects.get(pk=radiant_team_id)
+        except Team.DoesNotExist:
+            return Response(
+                {"error": f"Radiant team with id {radiant_team_id} not found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    if not game.dire_team and dire_team_id:
+        try:
+            game.dire_team = Team.objects.get(pk=dire_team_id)
+        except Team.DoesNotExist:
+            return Response(
+                {"error": f"Dire team with id {dire_team_id} not found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    # Save game if teams were updated
+    if radiant_team_id or dire_team_id:
+        game.save()
+
+    # Check game has both teams
+    if not game.radiant_team or not game.dire_team:
+        return Response(
+            {"error": "Game must have both radiant and dire teams assigned"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Check both teams have captains
+    if not game.radiant_team.captain or not game.dire_team.captain:
+        return Response(
+            {"error": "Both teams must have captains assigned"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Create the draft
+    draft = new_herodraft_for_game(game)
+
+    log.info(
+        "herodraft_created",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        game_id=game.pk,
+    )
+
+    # Create event
+    HeroDraftEvent.objects.create(
+        draft=draft,
+        event_type="captain_connected",
+        metadata={"created_by": request.user.pk},
+    )
+
+    broadcast_herodraft_event(draft, "draft_created")
+
+    # Notify Discord if tournament has discord_send_herodraft_link enabled
+    if game.tournament:
+        notify_herodraft_created(game.tournament, draft, game)
+
+    # Refetch with prefetch for proper serialization
+    draft = _get_draft_with_prefetch(draft.pk)
+    return Response(HeroDraftSerializer(draft).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_herodraft(request: Request, draft_pk: int) -> Response:
+    """
+    Get the current state of a hero draft.
+
+    This endpoint is public to allow spectators to view live drafts.
+
+    Returns:
+        200: Draft data
+        404: Draft not found
+    """
+    try:
+        draft = _get_draft_with_prefetch(draft_pk)
+    except HeroDraft.DoesNotExist:
+        return Response({"error": "Draft not found"}, status=404)
+    return Response(HeroDraftSerializer(draft).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def set_ready(request: Request, draft_pk: int) -> Response:
+    """
+    Mark a captain as ready.
+
+    The user must be a captain in this draft.
+    When both captains are ready, the draft state transitions to "rolling".
+
+    Returns:
+        200: Updated draft data
+        403: User is not a captain in this draft
+        404: Draft not found
+        400: Invalid state for this operation
+    """
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+
+    if draft.state != HeroDraftState.WAITING_FOR_CAPTAINS:
+        return Response(
+            {"error": f"Cannot set ready in state '{draft.state}'"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    draft_team = _get_draft_team_for_user(draft, request.user)
+    if not draft_team:
+        return Response(
+            {"error": "You are not a captain in this draft"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    draft_team.is_ready = True
+    draft_team.is_connected = True
+    draft_team.save()
+
+    HeroDraftEvent.objects.create(
+        draft=draft,
+        event_type="captain_ready",
+        draft_team=draft_team,
+        metadata={"captain_id": request.user.pk},
+    )
+
+    # Check if both teams are ready
+    all_ready = all(t.is_ready for t in draft.draft_teams.all())
+    if all_ready:
+        draft.state = HeroDraftState.ROLLING
+        draft.save()
+        log.info(
+            "herodraft_state_rolling",
+            system="herodraft",
+            subsystem="view",
+            draft_id=draft.pk,
+        )
+
+    broadcast_herodraft_event(draft, "captain_ready", draft_team)
+
+    draft = _get_draft_with_prefetch(draft.pk)
+    return Response(HeroDraftSerializer(draft).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def do_trigger_roll(request: Request, draft_pk: int) -> Response:
+    """
+    Trigger the coin flip to determine who chooses first.
+
+    The draft must be in "rolling" state.
+    The user must be a captain in this draft.
+
+    Returns:
+        200: Updated draft data with roll winner
+        403: User is not a captain in this draft
+        404: Draft not found
+        400: Invalid state for this operation
+    """
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+
+    if draft.state != HeroDraftState.ROLLING:
+        return Response(
+            {"error": f"Cannot trigger roll in state '{draft.state}'"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    draft_team = _get_draft_team_for_user(draft, request.user)
+    if not draft_team:
+        return Response(
+            {"error": "You are not a captain in this draft"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Perform the roll
+    winner = trigger_roll(draft, draft_team)
+
+    log.info(
+        "herodraft_roll_triggered",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        draft_team_id=draft_team.pk,
+        winner_team_id=winner.pk,
+    )
+
+    broadcast_herodraft_event(draft, "roll_result", winner)
+
+    # Refetch with prefetch for proper serialization
+    draft = _get_draft_with_prefetch(draft.pk)
+    return Response(HeroDraftSerializer(draft).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def do_submit_choice(request: Request, draft_pk: int) -> Response:
+    """
+    Submit a choice for pick order or side.
+
+    The roll winner chooses first (pick_order or side).
+    The other team gets the remaining choice.
+
+    Request body:
+        choice_type: "pick_order" or "side"
+        value: "first"/"second" for pick_order, "radiant"/"dire" for side
+
+    Returns:
+        200: Updated draft data
+        403: User is not a captain or not their turn to choose
+        404: Draft not found
+        400: Invalid state, choice type, or value
+    """
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+
+    if draft.state != HeroDraftState.CHOOSING:
+        return Response(
+            {"error": f"Cannot submit choice in state '{draft.state}'"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    draft_team = _get_draft_team_for_user(draft, request.user)
+    if not draft_team:
+        return Response(
+            {"error": "You are not a captain in this draft"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    choice_type = request.data.get("choice_type")
+    value = request.data.get("value")
+
+    # Validate choice_type
+    if choice_type not in ["pick_order", "side"]:
+        return Response(
+            {"error": "choice_type must be 'pick_order' or 'side'"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Validate value based on choice_type
+    if choice_type == "pick_order" and value not in ["first", "second"]:
+        return Response(
+            {"error": "value must be 'first' or 'second' for pick_order"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if choice_type == "side" and value not in ["radiant", "dire"]:
+        return Response(
+            {"error": "value must be 'radiant' or 'dire' for side"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Determine who can make which choice
+    # Roll winner chooses first - they pick either pick_order or side
+    # The other team then gets the remaining choice
+    is_roll_winner = draft.roll_winner and draft.roll_winner.pk == draft_team.pk
+
+    # Check if choice is already made
+    if choice_type == "pick_order":
+        if draft_team.is_first_pick is not None:
+            return Response(
+                {"error": "Pick order already chosen"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    elif choice_type == "side":
+        if draft_team.is_radiant is not None:
+            return Response(
+                {"error": "Side already chosen"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+    # Roll winner must make first choice
+    if is_roll_winner:
+        # Roll winner makes first choice (either pick_order or side)
+        pass
+    else:
+        # Non-winner can only choose if winner already made a choice
+        # Safety check: roll_winner should exist if we're in choosing state
+        if not draft.roll_winner:
+            return Response(
+                {"error": "Roll winner not set"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        winner_made_choice = (
+            draft.roll_winner.is_first_pick is not None
+            or draft.roll_winner.is_radiant is not None
+        )
+        if not winner_made_choice:
+            return Response(
+                {"error": "Roll winner must choose first"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+    submit_choice(draft, draft_team, choice_type, value)
+
+    log.info(
+        "herodraft_choice_submitted",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        draft_team_id=draft_team.pk,
+        choice_type=choice_type,
+        value=value,
+    )
+
+    broadcast_herodraft_event(draft, "choice_made", draft_team)
+
+    # Refetch with prefetch for proper serialization
+    draft = _get_draft_with_prefetch(draft.pk)
+
+    # Start tick broadcaster if draft just entered drafting state
+    if draft.state == HeroDraftState.DRAFTING:
+        hero_tick.start_tick_broadcaster(draft.id)
+
+    return Response(HeroDraftSerializer(draft).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def do_submit_pick(request: Request, draft_pk: int) -> Response:
+    """
+    Submit a hero pick or ban for the current round.
+
+    Request body:
+        hero_id: int — The hero ID to pick/ban
+        client_picked_at: str (ISO 8601, optional) — client's Date.now() at
+            confirm. Used to credit network latency when within 2s of server now.
+
+    Returns:
+        200: Updated draft data
+        403: User is not a captain or not their turn
+        404: Draft not found
+        400: Invalid state, hero already picked, or invalid hero
+    """
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+
+    if draft.state != HeroDraftState.DRAFTING:
+        return Response(
+            {"error": f"Cannot submit pick in state '{draft.state}'"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    draft_team = _get_draft_team_for_user(draft, request.user)
+    if not draft_team:
+        return Response(
+            {"error": "You are not a captain in this draft"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    hero_id = request.data.get("hero_id")
+    if hero_id is None:
+        return Response(
+            {"error": "hero_id is required"}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        hero_id = int(hero_id)
+    except (ValueError, TypeError):
+        return Response(
+            {"error": "hero_id must be an integer"}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Optional — submit_pick degrades to server-receive time if missing.
+    # `parse_datetime` returns None for malformed input (doesn't raise) and
+    # can return a naive datetime when the string omits a tz offset;
+    # subtracting a naive value from `timezone.now()` raises TypeError, so
+    # reject both up front.
+    client_picked_at = None
+    raw = request.data.get("client_picked_at")
+    if isinstance(raw, str) and raw:
+        parsed = parse_datetime(raw)
+        if parsed is not None and parsed.tzinfo is not None:
+            client_picked_at = parsed
+
+    # Check hero is available
+    available = get_available_heroes(draft)
+    if hero_id not in available:
+        return Response(
+            {"error": "Hero is not available (already picked or banned)"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        completed_round = submit_pick(
+            draft, draft_team, hero_id, client_picked_at=client_picked_at
+        )
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    log.info(
+        "herodraft_pick_submitted",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        draft_team_id=draft_team.pk,
+        hero_id=hero_id,
+        round_number=completed_round.round_number,
+    )
+
+    # Include hero_id and action_type in metadata for the toast notification
+    broadcast_herodraft_event(
+        draft,
+        "hero_selected",
+        draft_team,
+        metadata={
+            "hero_id": hero_id,
+            "action_type": completed_round.action_type,
+            "round_number": completed_round.round_number,
+        },
+    )
+
+    # Refetch with prefetch for proper serialization
+    draft = _get_draft_with_prefetch(draft.pk)
+    return Response(HeroDraftSerializer(draft).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_events(request: Request, draft_pk: int) -> Response:
+    """
+    List all events for a hero draft.
+
+    Returns:
+        200: List of events
+        404: Draft not found
+    """
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+    events = draft.events.all()
+    return Response(HeroDraftEventSerializer(events, many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_available_heroes(request: Request, draft_pk: int) -> Response:
+    """
+    List all heroes that are still available (not picked or banned).
+
+    Returns:
+        200: List of available hero IDs
+        404: Draft not found
+    """
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+    available = get_available_heroes(draft)
+    return Response({"available_heroes": available})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def abandon_draft(request: Request, draft_pk: int) -> Response:
+    """
+    Abandon a hero draft.
+
+    Can be called by tournament staff or a captain in the draft.
+    Transitions the draft to "abandoned" state.
+
+    Returns:
+        200: Updated draft data
+        403: User is not authorized to abandon this draft
+        404: Draft not found
+        400: Draft already completed or abandoned
+    """
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+
+    # Check if draft is already in a terminal state
+    if draft.state in (HeroDraftState.COMPLETED, HeroDraftState.ABANDONED):
+        return Response(
+            {"error": f"Cannot abandon draft in state '{draft.state}'"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Check authorization: must be tournament staff or captain in this draft
+    is_captain = _user_is_captain_in_draft(draft, request.user)
+    is_staff = False
+    if draft.game and draft.game.tournament:
+        is_staff = can_edit_tournament(request.user, draft.game.tournament)
+
+    if not is_captain and not is_staff:
+        return Response(
+            {"error": "You are not authorized to abandon this draft"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Transition to abandoned state
+    draft.state = HeroDraftState.ABANDONED
+    draft.save()
+
+    log.info(
+        "herodraft_abandoned",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+        is_staff=is_staff,
+    )
+
+    # Create event for audit trail
+    HeroDraftEvent.objects.create(
+        draft=draft,
+        event_type="draft_abandoned",
+        metadata={"abandoned_by": request.user.pk, "was_staff": is_staff},
+    )
+
+    broadcast_herodraft_event(draft, "draft_abandoned")
+
+    draft = _get_draft_with_prefetch(draft.pk)
+    return Response(HeroDraftSerializer(draft).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsTournamentStaff])
+def reset_draft(request: Request, draft_pk: int) -> Response:
+    """
+    Reset a hero draft back to waiting_for_captains state.
+
+    Requires tournament staff access.
+    Deletes all rounds and events, resets team states.
+
+    Returns:
+        200: Reset draft data
+        403: User is not tournament staff
+        404: Draft not found
+    """
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+
+    # Delete all rounds
+    draft.rounds.all().delete()
+
+    # Delete all events
+    draft.events.all().delete()
+
+    reserve = draft.snapshot_timer_options(draft.game.tournament)
+    for team in draft.draft_teams.all():
+        team.is_ready = False
+        team.is_connected = False
+        team.is_first_pick = None
+        team.is_radiant = None
+        team.reserve_time_remaining = reserve
+        team.save()
+
+    # Reset draft state
+    draft.state = HeroDraftState.WAITING_FOR_CAPTAINS
+    draft.roll_winner = None
+    draft.paused_at = None
+    draft.is_manual_pause = False
+    draft.save()
+
+    log.info(
+        "herodraft_reset",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+    )
+
+    # Create event for audit trail
+    HeroDraftEvent.objects.create(
+        draft=draft,
+        event_type="draft_reset",
+        metadata={"reset_by": request.user.pk},
+    )
+
+    broadcast_herodraft_event(draft, "draft_reset")
+
+    draft = _get_draft_with_prefetch(draft.pk)
+    return Response(HeroDraftSerializer(draft).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def pause_draft(request: Request, draft_pk: int) -> Response:
+    """
+    Manually pause a hero draft.
+
+    Can be called by a captain in the draft or tournament staff.
+    Transitions the draft to "paused" state with is_manual_pause=True.
+
+    Returns:
+        200: Updated draft data
+        403: User is not authorized to pause this draft
+        404: Draft not found
+        400: Invalid state for this operation
+    """
+    # Authorize against an unlocked read first so we can return 403/404 without
+    # holding a row lock. State mutation runs under select_for_update below.
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+    is_captain = _user_is_captain_in_draft(draft, request.user)
+    is_staff = False
+    if draft.game and draft.game.tournament:
+        is_staff = can_edit_tournament(request.user, draft.game.tournament)
+    if not is_captain and not is_staff:
+        return Response(
+            {"error": "You are not authorized to pause this draft"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    draft_team = _get_draft_team_for_user(draft, request.user) if is_captain else None
+
+    with transaction.atomic():
+        draft = HeroDraft.objects.select_for_update().get(pk=draft_pk)
+
+        # Re-check inside the lock: concurrent resume / heartbeat-stale pause
+        # could have flipped state between the unlocked read and here.
+        if draft.state != HeroDraftState.DRAFTING:
+            return Response(
+                {"error": f"Cannot pause draft in state '{draft.state}'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        prev_state = draft.state
+        draft.state = HeroDraftState.PAUSED
+        draft.paused_at = timezone.now()
+        draft.is_manual_pause = True
+        draft.save()
+
+        log.info(
+            "draft_paused",
+            system="herodraft",
+            subsystem="state",
+            draft_id=draft.id,
+            from_state=prev_state,
+            paused_by_user_id=request.user.pk,
+            is_captain=is_captain,
+            is_staff=is_staff,
+            paused_at=draft.paused_at.isoformat(),
+        )
+
+        HeroDraftEvent.objects.create(
+            draft=draft,
+            event_type="draft_paused",
+            draft_team=draft_team,
+            metadata={
+                "reason": "manual",
+                "paused_by": request.user.pk,
+                "paused_by_username": request.user.username,
+                "is_captain": is_captain,
+                "is_staff": is_staff,
+            },
+        )
+
+    broadcast_herodraft_event(draft, "draft_paused", draft_team)
+
+    draft = _get_draft_with_prefetch(draft.pk)
+    return Response(HeroDraftSerializer(draft).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def resume_draft(request: Request, draft_pk: int) -> Response:
+    """
+    Resume a manually paused hero draft.
+
+    Can be called by a captain in the draft or tournament staff.
+    Transitions the draft to "resuming" state (3-second countdown).
+
+    Returns:
+        200: Updated draft data
+        403: User is not authorized to resume this draft
+        404: Draft not found
+        400: Invalid state for this operation
+    """
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+    is_captain = _user_is_captain_in_draft(draft, request.user)
+    is_staff = False
+    if draft.game and draft.game.tournament:
+        is_staff = can_edit_tournament(request.user, draft.game.tournament)
+    if not is_captain and not is_staff:
+        return Response(
+            {"error": "You are not authorized to resume this draft"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    draft_team = _get_draft_team_for_user(draft, request.user) if is_captain else None
+
+    pause_duration_s = None
+    adjustment_s = None
+    adjusted_round_number = None
+
+    with transaction.atomic():
+        draft = HeroDraft.objects.select_for_update().get(pk=draft_pk)
+
+        if draft.state != HeroDraftState.PAUSED:
+            return Response(
+                {"error": f"Cannot resume draft in state '{draft.state}'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Lock the active round too so check_timeout can't race against the
+        # started_at adjustment below.
+        if draft.paused_at:
+            pause_duration = timezone.now() - draft.paused_at
+            pause_duration_s = round(pause_duration.total_seconds(), 3)
+            current_round = (
+                draft.rounds.select_for_update().filter(state="active").first()
+            )
+            if current_round and current_round.started_at:
+                total_adjustment = pause_duration + timedelta(seconds=3)
+                current_round.started_at += total_adjustment
+                current_round.save(update_fields=["started_at"])
+                adjustment_s = round(total_adjustment.total_seconds(), 3)
+                adjusted_round_number = current_round.round_number
+                log.info(
+                    "round_started_at_adjusted",
+                    system="herodraft",
+                    subsystem="timing",
+                    draft_id=draft.id,
+                    round_number=current_round.round_number,
+                    pause_duration_s=pause_duration_s,
+                    total_adjustment_s=adjustment_s,
+                    new_started_at=current_round.started_at.isoformat(),
+                )
+
+        prev_state = draft.state
+        draft.state = HeroDraftState.RESUMING
+        draft.resuming_until = timezone.now() + timedelta(seconds=3)
+        draft.paused_at = None
+        draft.is_manual_pause = False
+        draft.save()
+
+        log.info(
+            "draft_resumed",
+            system="herodraft",
+            subsystem="state",
+            draft_id=draft.id,
+            from_state=prev_state,
+            resumed_by_user_id=request.user.pk,
+            is_captain=is_captain,
+            is_staff=is_staff,
+            resuming_until=draft.resuming_until.isoformat(),
+            pause_duration_s=pause_duration_s,
+            round_started_at_adjustment_s=adjustment_s,
+            adjusted_round_number=adjusted_round_number,
+        )
+
+        HeroDraftEvent.objects.create(
+            draft=draft,
+            event_type="resume_countdown",
+            draft_team=draft_team,
+            metadata={
+                "countdown_seconds": 3,
+                "reason": "manual",
+                "resumed_by": request.user.pk,
+                "resumed_by_username": request.user.username,
+                "is_captain": is_captain,
+                "is_staff": is_staff,
+            },
+        )
+
+    broadcast_herodraft_event(draft, "resume_countdown", draft_team)
+
+    # Start tick broadcaster to handle RESUMING → DRAFTING transition
+    hero_tick.start_tick_broadcaster(draft.pk)
+
+    draft = _get_draft_with_prefetch(draft.pk)
+    return Response(HeroDraftSerializer(draft).data)

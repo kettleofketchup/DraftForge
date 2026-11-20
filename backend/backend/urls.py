@@ -5,20 +5,6 @@ from rest_framework import routers
 
 from app import views_main as app_views
 from app.functions.draft_picks import pick_player_for_round, undo_last_pick
-from app.functions.herodraft_views import (
-    abandon_draft,
-    create_herodraft,
-    do_submit_choice,
-    do_submit_pick,
-    do_trigger_roll,
-    get_herodraft,
-    list_available_heroes,
-    list_events,
-    pause_draft,
-    reset_draft,
-    resume_draft,
-    set_ready,
-)
 from app.functions.teamdraft_views import (
     teamdraft_pause,
     teamdraft_resume,
@@ -74,7 +60,6 @@ from app.views.internal import (
     create_discord_event_log,
     create_discord_message_log,
     create_event_dm,
-    create_herodraft_for_game,
     create_or_update_announcement,
     create_or_update_signup_message,
     create_tournament_log,
@@ -90,7 +75,6 @@ from app.views.internal import (
     get_sync_discord_state,
     get_tournament_for_task,
     get_tournament_participants,
-    list_auto_herodraft_games,
     list_users_for_avatar_check,
     search_message_logs,
     sweep_stale_discord_leases,
@@ -103,7 +87,6 @@ from app.views.internal import (
 )
 from app.views.ssr import (
     EventSSRView,
-    HeroDraftSSRView,
     LeagueSSRView,
     OrganizationSSRView,
     TournamentSSRView,
@@ -186,7 +169,7 @@ urlpatterns = [
         app_views.steam_account_id_lookup,
         name="steam_account_id_lookup",
     ),
-    # User profile (Task 1 — see backend/user/urls.py)
+    # User profile (see backend/user/urls.py)
     path("api/users/", include("user.urls")),
     path("api/", include(router.urls)),
     path("api/current_user", current_user),
@@ -239,62 +222,9 @@ urlpatterns = [
     path("api/discord/", include("discordbot.urls")),
     path("api/events/", include("events.urls")),
     # HeroDraft (Captain's Mode) endpoints
-    path(
-        "api/games/<int:game_pk>/create-herodraft/",
-        create_herodraft,
-        name="create_herodraft",
-    ),
+    path("", include("draft.urls")),
     # dota_lobby in-game lobby for a game (lobby app)
     path("api/games/<int:game_pk>/lobby/", include("lobby.urls")),
-    path("api/herodraft/<int:draft_pk>/", get_herodraft, name="get_herodraft"),
-    path(
-        "api/herodraft/<int:draft_pk>/set-ready/", set_ready, name="herodraft_set_ready"
-    ),
-    path(
-        "api/herodraft/<int:draft_pk>/trigger-roll/",
-        do_trigger_roll,
-        name="herodraft_trigger_roll",
-    ),
-    path(
-        "api/herodraft/<int:draft_pk>/submit-choice/",
-        do_submit_choice,
-        name="herodraft_submit_choice",
-    ),
-    path(
-        "api/herodraft/<int:draft_pk>/submit-pick/",
-        do_submit_pick,
-        name="herodraft_submit_pick",
-    ),
-    path(
-        "api/herodraft/<int:draft_pk>/list-events/",
-        list_events,
-        name="herodraft_list_events",
-    ),
-    path(
-        "api/herodraft/<int:draft_pk>/list-available-heroes/",
-        list_available_heroes,
-        name="herodraft_list_available_heroes",
-    ),
-    path(
-        "api/herodraft/<int:draft_pk>/abandon/",
-        abandon_draft,
-        name="herodraft_abandon",
-    ),
-    path(
-        "api/herodraft/<int:draft_pk>/reset/",
-        reset_draft,
-        name="herodraft_reset",
-    ),
-    path(
-        "api/herodraft/<int:draft_pk>/pause/",
-        pause_draft,
-        name="herodraft_pause",
-    ),
-    path(
-        "api/herodraft/<int:draft_pk>/resume/",
-        resume_draft,
-        name="herodraft_resume",
-    ),
     # Admin Team Management - Organization
     path(
         "api/organizations/<int:org_id>/admins/",
@@ -442,9 +372,6 @@ urlpatterns = [
     ),
     path("api/leagues/<int:pk>/ssr/", LeagueSSRView.as_view(), name="league_ssr"),
     path("api/events/<int:pk>/ssr/", EventSSRView.as_view(), name="event_ssr"),
-    path(
-        "api/herodraft/<int:pk>/ssr/", HeroDraftSSRView.as_view(), name="herodraft_ssr"
-    ),
     path("api/users/<int:pk>/ssr/", UserSSRView.as_view(), name="user_ssr"),
 ]
 
@@ -507,10 +434,7 @@ urlpatterns += [
     path("api/internal/scheduled-events/due/", get_due_scheduled_events),
     path("api/internal/events/<int:event_id>/full/", get_event_for_task),
     # Tournament endpoints
-    path(
-        "api/internal/tournaments/auto-herodraft-games/",
-        list_auto_herodraft_games,
-    ),
+    path("", include("draft.internal_urls")),
     path(
         "api/internal/tournaments/<int:tournament_id>/full/",
         get_tournament_for_task,
@@ -522,10 +446,6 @@ urlpatterns += [
     path(
         "api/internal/games/<int:game_id>/participants/",
         get_match_participants,
-    ),
-    path(
-        "api/internal/games/<int:game_id>/create-herodraft/",
-        create_herodraft_for_game,
     ),
     # User avatar management
     path("api/internal/users/avatar-check/", list_users_for_avatar_check),
