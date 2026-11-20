@@ -27,6 +27,7 @@ from discordbot.test_utils import (
     get_message_reactions,
     get_test_bot_tokens,
 )
+from org.models import Organization
 
 SKIP_REASON = "DISCORD_BOT_TOKEN not configured"
 HAS_TOKEN = bool(getattr(settings, "DISCORD_BOT_TOKEN", ""))
@@ -332,7 +333,6 @@ class RealEventAnnouncementTaskTest(TestCase):
         from app.models import CustomUser, PositionsModel
         from events.constants import EventState
         from events.models import Event
-        from org.models import Organization
 
         org = Organization.objects.create(
             name="Discord Integration Test Org",
@@ -418,7 +418,6 @@ class MultiUserReactionTest(TestCase):
         from events.constants import EventState
         from events.models import Event
         from events.tasks import send_event_announcement
-        from org.models import Organization
 
         org = Organization.objects.create(
             name="Multi-User Test Org",

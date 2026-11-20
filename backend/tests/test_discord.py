@@ -20,6 +20,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from common.utils import isTestEnvironment
+from org.models import Organization
 from tests.data.users import TOURNAMENT_USERS
 
 log = logging.getLogger(__name__)
@@ -84,8 +85,6 @@ def seed_discord_members(request, org_id: int):
     """
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
-
-    from org.models import Organization
 
     try:
         org = Organization.objects.get(pk=org_id)

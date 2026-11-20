@@ -4,6 +4,8 @@ Demo tournament population functions for video recording.
 
 import random
 
+from org.models import Organization
+
 from .constants import DTX_STEAM_LEAGUE_ID, TOURNAMENT_USERS
 from .utils import (
     REAL_TOURNAMENT_USERS,
@@ -410,7 +412,6 @@ def populate_demo_csv_org(force=False):
     Admin user is added as org admin so the demo can create tournaments.
     """
     from app.models import CustomUser, League
-    from org.models import Organization
     from tests.data.leagues import DEMO_CSV_LEAGUE
     from tests.data.organizations import DEMO_CSV_ORG
     from tests.data.users import ADMIN_USER

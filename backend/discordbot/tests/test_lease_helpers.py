@@ -16,6 +16,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from discordbot.models import DiscordMessageLog
+from org.models import Organization
 
 CLAIM_PAYLOAD = dict(channel_id="ch_1", embed_data={"title": "test"})
 INTERNAL_TOKEN = "test-internal-token"
@@ -156,7 +157,6 @@ class ClearEventSignupStateEndpointTest(TestCase):
             DiscordMessageLog,
         )
         from events.models import Event
-        from org.models import Organization
 
         org = Organization.objects.create(name=f"Clear Test Org {event_id}")
         Event.objects.create(

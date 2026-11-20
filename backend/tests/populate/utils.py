@@ -266,7 +266,6 @@ REAL_TOURNAMENT_USERS = {
 
 def get_or_create_demo_user(username, user_data, organization=None):
     """Get or create a user for demo tournaments with real position data."""
-    from org.models import Organization
 
     steam_account_id = user_data.get("steam_id")  # 32-bit Friend ID
     pos_data = user_data.get("positions", {})

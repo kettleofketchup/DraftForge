@@ -24,6 +24,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
+from org.models import Organization
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -79,7 +80,6 @@ def list_discord_guild_ids(request: Request) -> Response:
     Used by batched avatar refresh to know which guilds to call
     `get_discord_members_data` against.
     """
-    from org.models import Organization
 
     # Organization has Meta.ordering — leaving it in the queryset would
     # add the ordering columns to the SELECT and defeat .distinct().

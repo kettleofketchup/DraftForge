@@ -3,6 +3,8 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from org.models import Organization
+
 
 class SSREndpointTests(TestCase):
     """Test that SSR endpoints return lightweight data without auth."""
@@ -29,7 +31,6 @@ class SSREndpointTests(TestCase):
 
     def test_league_ssr_returns_200(self):
         from app.models import League
-        from org.models import Organization
 
         org = Organization.objects.create(name="Test Org")
         league = League.objects.create(
@@ -44,7 +45,6 @@ class SSREndpointTests(TestCase):
         from django.utils import timezone
 
         from events.models import Event
-        from org.models import Organization
 
         org = Organization.objects.create(name="Test Org")
         event = Event.objects.create(
@@ -74,7 +74,6 @@ class SSREndpointTests(TestCase):
         from django.utils import timezone
 
         from app.models import League, Tournament
-        from org.models import Organization
 
         org = Organization.objects.create(
             name="Big Org", logo="https://example.com/logo.png"
@@ -113,7 +112,6 @@ class SSREndpointTests(TestCase):
         from django.utils import timezone
 
         from app.models import CustomUser, Tournament
-        from org.models import Organization
 
         client = APIClient()
         org = Organization.objects.create(name="Pub Org")
