@@ -4,13 +4,9 @@
  * API functions for user, auth, profile, and search operations.
  */
 
-import type {
-  GuildMembers,
-  UsersType,
-  UserType,
-} from '~/index';
-import { getLogger } from '~/lib/logger';
 import type { SteamAccountIdHolder } from '~/components/user/userCard/steamAccountIdConflict';
+import type { GuildMembers, UsersType, UserType } from '~/index';
+import { getLogger } from '~/lib/logger';
 import axios from './axios';
 
 const log = getLogger('api');
@@ -37,9 +33,7 @@ export async function fetchUser(pk: number): Promise<UserType> {
   return response.data as UserType;
 }
 
-export async function fetchUsersBulk(
-  pks: number[],
-): Promise<UserType[]> {
+export async function fetchUsersBulk(pks: number[]): Promise<UserType[]> {
   const response = await axios.post<UserType[]>(`/users/bulk/`, {
     pks,
   });
@@ -87,14 +81,18 @@ export async function UpdateProfile(
  * @param targetUserId - The ID of the user profile to claim (must not have Steam ID)
  * @returns The updated current user with merged data
  */
-export async function claimUserProfile(targetUserId: number): Promise<UserType> {
+export async function claimUserProfile(
+  targetUserId: number,
+): Promise<UserType> {
   const response = await axios.post<UserType>(`/users/${targetUserId}/claim/`);
   return response.data;
 }
 
 // Utility
 export async function refreshAvatars(): Promise<void> {
-  axios.post(`/avatars/refresh/`);
+  axios.post(`/avatars/refresh/`).catch((error: unknown) => {
+    log.debug('Avatar refresh request failed', error);
+  });
 }
 
 export interface SearchUserResult extends UserType {
@@ -110,7 +108,9 @@ export async function searchUsers(
   const params: Record<string, string | number> = { q: query };
   if (orgId) params.org_id = orgId;
   if (leagueId) params.league_id = leagueId;
-  const response = await axios.get<SearchUserResult[]>('/users/search/', { params });
+  const response = await axios.get<SearchUserResult[]>('/users/search/', {
+    params,
+  });
   return response.data;
 }
 

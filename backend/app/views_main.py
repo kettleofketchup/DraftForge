@@ -1,24 +1,16 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, ClassVar, Protocol, cast
 
 from cacheops import cached_as
-from django.contrib.auth import login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import BooleanField, Case, Count, Q, QuerySet, Value, When
-from django.http import (
-    Http404,
-    HttpRequest,
-    HttpResponse,
-    HttpResponseBadRequest,
-    HttpResponseRedirect,
-)
+from django.http import Http404, HttpRequest, HttpResponseRedirect
 from django.shortcuts import redirect
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
@@ -35,8 +27,7 @@ from rest_framework.permissions import (
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
-from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
-from social_django.utils import load_strategy, psa
+from social_django.utils import load_strategy
 
 from app import tournament_buckets
 from app.cache_utils import invalidate_after_commit
@@ -234,23 +225,6 @@ def require_city(request: HttpRequest) -> dict[str, Any]:
         "partial_backend_name": partial.backend,
         "partial_token": partial_token,
     }
-
-
-@psa("social:complete")
-def ajax_auth(request: HttpRequest, backend: str) -> HttpResponse:
-    if isinstance(request.backend, BaseOAuth1):
-        token = {
-            "oauth_token": request.REQUEST.get("access_token"),
-            "oauth_token_secret": request.REQUEST.get("access_token_secret"),
-        }
-    elif isinstance(request.backend, BaseOAuth2):
-        token = request.REQUEST.get("access_token")
-    else:
-        raise HttpResponseBadRequest("Wrong backend type")
-    user = request.backend.do_auth(token, ajax=True)
-    login(request, user)
-    data = {"id": user.id, "username": user.username}
-    return HttpResponse(json.dumps(data), mimetype="application/json")
 
 
 @permission_classes((IsStaff,))
@@ -2175,20 +2149,16 @@ def refresh_all_avatars(request: Request) -> Response:
     org) and updates avatars in bulk. See `app.tasks.avatar_refresh
     .refresh_avatars_batched`.
 
-    Rate-limited to once per hour.
+    Public on purpose: every users-list page view fires it, so avatars stay
+    fresh for everyone. One shared cache key caps it at one task per hour no
+    matter who calls or how often. `cache.add` is an atomic set-if-absent, so
+    concurrent callers can't both win and double-queue the task.
     """
-    cache_key = "avatar_refresh_last_run"
-    last_run = cache.get(cache_key)
-
-    if last_run and (timezone.now() - last_run < timedelta(hours=1)):
+    if not cache.add("avatar_refresh_last_run", timezone.now(), timeout=3600):
         return Response(
             {"message": "Avatar refresh can only be run once per hour."},
             status=status.HTTP_200_OK,
         )
-
-    # Set the cache key BEFORE dispatch so a second caller arriving during
-    # task execution short-circuits instead of queueing another task.
-    cache.set(cache_key, timezone.now(), timeout=3600)
 
     from app.tasks.avatar_refresh import refresh_avatars_batched
 
