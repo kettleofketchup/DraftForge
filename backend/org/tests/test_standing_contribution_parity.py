@@ -29,9 +29,9 @@ QUERIES: dict[str, int] = {
     "patch_name": 20,
     "staff_edit": 39,
     "staff_noop": 25,
-    "merge_discord": 152,
-    "merge_claim": 129,
-    "delete_user": 88,
+    "merge_discord": 156,
+    "merge_claim": 131,
+    "delete_user": 90,
     "leaderboard": 8,
     "member": 10,
 }
