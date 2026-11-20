@@ -35,7 +35,7 @@ from org.conduct.enforcement import (
     tier_for_score,
 )
 from org.conduct.finalize import finalize_event_outcomes
-from org.conduct.gate import GATE_OFF, ConductGate
+from org.conduct.gate import GATE_OFF, ConductGate, conduct_gate
 from org.conduct.scoring import MemberScore
 from org.conduct.services import set_outcomes, update_conduct_settings
 from org.models_conduct import AttendanceOutcome, OrgConductSettings
@@ -766,6 +766,37 @@ class BackOfLineTest(ConductTestCase):
         self.assertEqual(flagged.status, SignupStatus.PENDING_APPROVAL)
         self.assertEqual(flagged.unmet_requirements, [CODE])
         self.assertEqual(self.reload(clean).status, SignupStatus.WAITLISTED)
+
+    def test_block_tier_promoted_to_pending_with_code(self) -> None:
+        self.enable(block_enabled=True, back_of_line_enabled=True)
+        event = self.make_event(max_players=2, auto_approve=True)
+        seated = [process_rsvp(event, self.make_user()) for _ in range(2)]
+        blocked, clean = (
+            EventSignup.objects.create(
+                event=event,
+                user=user,
+                status=SignupStatus.WAITLISTED,
+                waitlist_position=position,
+            )
+            for position, user in enumerate(
+                (self.flagged_member(), self.make_user()), start=1
+            )
+        )
+        tiers = _tiers(conduct_gate(self.org.pk), [blocked.user_id])
+        self.assertEqual(tiers[blocked.user_id], Tier.BLOCK)
+
+        cancel_signup(seated[0])
+
+        self.assertEqual(self.reload(clean).status, SignupStatus.APPROVED)
+        self.assertEqual(self.reload(blocked).status, SignupStatus.WAITLISTED)
+
+        cancel_signup(seated[1])
+        blocked = self.reload(blocked)
+
+        self.assertEqual(blocked.status, SignupStatus.PENDING_APPROVAL)
+        self.assertEqual(blocked.unmet_requirements, [CODE])
+        self.assertEqual(blocked.eligibility_reasons[0]["severity"], "needs_approval")
+        self.assertIsNone(blocked.waitlist_position)
 
     def test_deferred_path_promotion_side_effects(self) -> None:
         self.enable(back_of_line_enabled=True, require_approval_enabled=True)
