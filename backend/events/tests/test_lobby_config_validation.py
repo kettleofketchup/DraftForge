@@ -43,6 +43,8 @@ class EventLobbyConfigValidationTests(EventTestCase):
         self.defaults = OrgEventDefaults.objects.create(organization=self.org)
         self.client = APIClient()
         self.client.force_authenticate(self.org_staff)
+        self.admin_client = APIClient()
+        self.admin_client.force_authenticate(self.admin)
 
     def write(self, target: str, data: dict[str, object]) -> Response:
         if target == "event":
@@ -54,7 +56,7 @@ class EventLobbyConfigValidationTests(EventTestCase):
                 f"/api/events/repeaters/{self.repeater.pk}/", data, format="json"
             )
         if target == "defaults":
-            return self.client.patch(
+            return self.admin_client.patch(
                 f"/api/events/defaults/{self.defaults.pk}/", data, format="json"
             )
         return self.client.post(

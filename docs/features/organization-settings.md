@@ -48,8 +48,9 @@ site admins. Org staff and members do not see the button, so org staff can no lo
 event defaults in the UI. A viewer without access who opens a `?settings=` link
 has the parameter removed once their permissions load, and the modal does not open.
 
-The org settings API (`/api/organizations/<id>/settings/`) enforces the same rule. The event
-defaults API (`PATCH /api/events/defaults/<id>/`) still accepts org staff.
+The org settings API (`/api/organizations/<id>/settings/`) and the event defaults API
+(`PATCH /api/events/defaults/<id>/`) enforce the same rule. Org staff can still read the
+event defaults, because new events are pre-filled from them.
 
 | Actor | View (GET) | Save (PATCH) |
 |---|---|---|
