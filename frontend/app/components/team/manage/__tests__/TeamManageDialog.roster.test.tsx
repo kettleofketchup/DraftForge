@@ -324,6 +324,21 @@ describe('TeamManageDialog history tab', () => {
     });
   });
 
+  it('keeps the history scroller inside a single shrinkable grid column', async () => {
+    routeGets(axiosMock, { team: managedTeam, history: historyPage });
+    renderDialog();
+    const dialog = screen.getByTestId('team-manage-dialog');
+    expect(dialog).toHaveClass('grid-cols-1');
+    openTab('team-manage-tab-history');
+    await screen.findAllByTestId('team-history-row');
+    expect(within(dialog).getByRole('tablist').parentElement).toHaveClass(
+      'min-w-0',
+    );
+    const scroll = within(dialog).getByTestId('team-history-scroll');
+    expect(scroll).toHaveAttribute('role', 'region');
+    expect(scroll).toHaveAttribute('aria-label', 'Team history');
+  });
+
   it('requests the next server page from the pager', async () => {
     routeGets(axiosMock, {
       team: managedTeam,

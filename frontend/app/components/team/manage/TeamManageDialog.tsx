@@ -271,7 +271,7 @@ export function TeamManageDialog({
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
           data-testid="team-manage-dialog"
-          className="max-h-[90vh] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-2xl"
+          className="max-h-[90vh] max-w-[calc(100%-2rem)] grid-cols-1 overflow-y-auto sm:max-w-2xl"
         >
           <DialogHeader>
             <DialogTitle>
@@ -281,7 +281,7 @@ export function TeamManageDialog({
               Every change needs a reason and is recorded in the team history.
             </DialogDescription>
           </DialogHeader>
-          <Tabs value={tab} onValueChange={setTab}>
+          <Tabs value={tab} onValueChange={setTab} className="min-w-0">
             <TabsList>
               <TabsTrigger value="roster" data-testid="team-manage-tab-roster">
                 Roster
