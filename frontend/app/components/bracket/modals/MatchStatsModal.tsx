@@ -245,7 +245,7 @@ export function MatchStatsModal({
                 </Badge>
               )}
               {match.status === 'live' && (
-                <Badge className="bg-red-500" data-testid="match-status-live">
+                <Badge className="bg-live" data-testid="match-status-live">
                   LIVE
                 </Badge>
               )}
@@ -274,7 +274,7 @@ export function MatchStatsModal({
                   <SecondaryButton
                     className={cn(
                       'flex-1',
-                      lobbyWinnerSlot === 'radiant' && 'ring-2 ring-yellow-500',
+                      lobbyWinnerSlot === 'radiant' && 'ring-2 ring-warning',
                     )}
                     onClick={() => handleSetWinner('radiant')}
                     disabled={persistMatchResult.isPending}
@@ -292,7 +292,7 @@ export function MatchStatsModal({
                   <SecondaryButton
                     className={cn(
                       'flex-1',
-                      lobbyWinnerSlot === 'dire' && 'ring-2 ring-yellow-500',
+                      lobbyWinnerSlot === 'dire' && 'ring-2 ring-warning',
                     )}
                     onClick={() => handleSetWinner('dire')}
                     disabled={persistMatchResult.isPending}
@@ -522,7 +522,7 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
     <div
       className={cn(
         'text-center p-3 sm:p-4 rounded-lg min-w-0',
-        isWinner ? 'bg-green-500/10 ring-2 ring-green-500' : 'bg-muted/50',
+        isWinner ? 'bg-success/10 ring-2 ring-success' : 'bg-muted/50',
       )}
     >
       <UserAvatar
@@ -534,7 +534,7 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
       <p
         className={cn(
           'font-medium text-sm sm:text-base truncate',
-          isWinner && 'text-green-500',
+          isWinner && 'text-success',
         )}
         title={displayName}
       >
@@ -543,16 +543,13 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
       <p className="text-xs text-muted-foreground">{label}</p>
       {score !== undefined && (
         <p
-          className={cn(
-            'text-2xl font-bold mt-1',
-            isWinner && 'text-green-500',
-          )}
+          className={cn('text-2xl font-bold mt-1', isWinner && 'text-success')}
         >
           {score}
         </p>
       )}
       {isWinner && (
-        <span className="text-xs sm:text-sm text-green-500">Winner</span>
+        <span className="text-xs sm:text-sm text-success">Winner</span>
       )}
     </div>
   );

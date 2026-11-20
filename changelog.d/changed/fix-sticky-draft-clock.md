@@ -1,0 +1,1 @@
+- Team draft: on tall desktop windows the available-players list scrolls on its own, so the pick clock, pick order and drafting team stay in view; on shorter or narrower windows the pick clock stays pinned to the top while the page scrolls.

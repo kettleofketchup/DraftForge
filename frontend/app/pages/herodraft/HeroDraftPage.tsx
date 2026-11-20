@@ -55,7 +55,7 @@ export const HeroDraftPage: React.FC = () => {
   if (loading) {
     return (
       <div
-        className="min-h-screen bg-gray-900 flex items-center justify-center"
+        className="min-h-screen bg-background flex items-center justify-center"
         data-testid="herodraft-loading"
       >
         <div className="text-white text-lg">Loading draft...</div>
@@ -65,8 +65,8 @@ export const HeroDraftPage: React.FC = () => {
 
   if (error || !draft) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-red-500 text-lg">{error || 'Draft not found'}</div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-error text-lg">{error || 'Draft not found'}</div>
       </div>
     );
   }

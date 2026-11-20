@@ -48,21 +48,21 @@ interface BrandDropdownMenuProps {
 
 // hover: + focus: both set — shadcn item base carries focus:bg-accent that races merge order.
 const variantStyles = {
-  default: 'text-foreground hover:bg-violet-500/20 focus:bg-violet-500/20',
+  default: 'text-foreground hover:bg-selection/20 focus:bg-selection/20',
   primary:
-    'text-primary font-medium [&_svg]:text-primary hover:bg-violet-500/20 focus:bg-violet-500/20',
-  edit: 'text-emerald-300 font-medium [&_svg]:text-emerald-300 hover:bg-emerald-500/20 focus:bg-emerald-500/20',
+    'text-primary font-medium [&_svg]:text-primary hover:bg-selection/20 focus:bg-selection/20',
+  edit: 'text-success font-medium [&_svg]:text-success hover:bg-success/20 focus:bg-success/20',
   success:
-    'text-success font-medium [&_svg]:text-success hover:bg-emerald-500/20 focus:bg-emerald-500/20',
+    'text-success font-medium [&_svg]:text-success hover:bg-success/20 focus:bg-success/20',
   destructive:
-    'text-error font-medium [&_svg]:text-error hover:bg-red-500/20 focus:bg-red-500/20',
+    'text-error font-medium [&_svg]:text-error hover:bg-error/20 focus:bg-error/20',
 } as const;
 
 // Reuse shared button lift recipes so trigger matches its sibling standalone button at rest.
 const triggerVariants = {
   primary: `${buttonLift} ${buttonDisabled} ${brandGradient} ${brandGlowLift} ${brandLabelOnGradient} border-0`,
   secondary: `${buttonLift} ${buttonDisabled} ${brandSecondary}`,
-  admin: `${buttonLift} ${buttonDisabled} ${brandErrorBg} text-foreground hover:brightness-110 shadow-red-950/40`,
+  admin: `${buttonLift} ${buttonDisabled} ${brandErrorBg} text-foreground hover:brightness-110 shadow-error/10`,
 } as const;
 
 /**

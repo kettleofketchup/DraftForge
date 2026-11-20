@@ -16,24 +16,25 @@ The fix has three pieces, each documented below: a **registry** (single source o
 
 ## Registry pattern
 
-`backend/events/scheduling/registry.py` holds a `REMINDERS` list of `ScheduledReminder` dataclass entries. Each entry declares the reminder's celery task name, which `Event` boolean gates it, which integer field controls "fire N hours before", which states it's eligible in, and the `DiscordMessageLog.source` value used for dedup.
+`backend/events/scheduling/registry.py` holds a `REMINDERS` list of `ScheduledReminder` dataclass entries. Each entry declares the reminder's celery task name, which `Event` boolean gates it, which integer field controls the lead time (`hours_field` for "fire N hours before" or `minutes_field` for "fire N minutes before", exactly one), which states it's eligible in, and the `DiscordMessageLog.source` value used for dedup.
 
 ```python
 @dataclass(frozen=True)
 class ScheduledReminder:
     key: str                       # e.g. "announcement"
     task_name: str                 # e.g. "events.tasks.send_event_announcement"
-    hours_field: str               # Event field that controls "N hours before"
     enabled_field: str             # Event field that gates the reminder
     required_states: FrozenSet[str]
     log_source: str                # DiscordMessageLog.source for dedup
+    hours_field: str | None = None    # Event field: "N hours before"
+    minutes_field: str | None = None  # Event field: "N minutes before"
     requires_repeater: bool = False
 ```
 
 `backend/events/scheduling/fire.py` walks the registry every 30 seconds (the `check-event-reminders` beat entry in `backend/config/celery.py`). For each reminder:
 
 1. Query `get_events_list` filtered by `required_states` (and `has_repeater=true` when set).
-2. For each candidate, evaluate `now >= scheduled_at - hours`.
+2. For each candidate, evaluate `now >= scheduled_at - lead`, where `lead` comes from whichever of `hours_field` / `minutes_field` is set (`ScheduledReminder.lead_time`).
 3. Short-circuit via `check_message_log_exists(source, event_id)` — an in-process load-shedder that skips most polls.
 4. Dispatch by name: `current_app.tasks.get(reminder.task_name).delay(event_id)`.
 
@@ -51,7 +52,7 @@ Celery dispatches by string name through its task registry, not by Python refere
 2. Append a `ScheduledReminder(...)` entry to `REMINDERS`.
 3. Add the corresponding boolean + integer fields to `DiscordEventConfigMixin` (so `sync_future_events`'s field cascade picks them up automatically).
 
-The CI guardrails in `backend/events/tests/test_scheduling_registry.py` enforce that every `task_name` is registered with celery, every `enabled_field`/`hours_field` exists on the mixin, and every `log_source` is unique.
+The CI guardrails in `backend/events/tests/test_scheduling_registry.py` enforce that every `task_name` is registered with celery, every `enabled_field` and lead field (`hours_field` or `minutes_field`) exists on the mixin, each entry sets exactly one lead field, every `discord_*_hours` / `discord_*_minutes` model field is registered, and every `log_source` is unique.
 
 ---
 
@@ -149,7 +150,11 @@ Deletes performed by realign go through `services.teardown_event`, not a bare qu
 - **Backend** — `EventSerializer.validate` rejects `discord_signup_reminder=True` when `event_repeater` is `None` (`backend/events/serializers.py:336`).
 - **Frontend** — `eventSchema.superRefine` mirrors the rule client-side, and `DiscordConfigSection` hides the toggle when `isRepeater={false}` (`frontend/app/components/events/schemas.ts`, `DiscordConfigSection.tsx`).
 
-The other three reminders (`discord_announcement`, `discord_confirm_attendance`, `discord_profile_reminder`) work on both single events and series.
+The other reminders (`discord_announcement`, `discord_confirm_attendance`, `discord_profile_reminder`, `discord_start_mention`) work on both single events and series.
+
+### Start mention
+
+`discord_start_mention` (registry key `start_mention`, `minutes_field="discord_start_mention_minutes"`, default 15) runs `events.tasks.send_start_mention` in `signups_open` and `roll_call`. It mentions the members in `discord_start_mention_scope` who have a Discord ID: `main` is the seat-holding main list without Maybe RSVPs; `all_active` (default) is every signup that is not cancelled, rejected or dropped. Mentions go out as replies to the signup post (inside the thread for forum posts), at most 80 per message and 2000 characters, with `allowed_mentions={"users": [...]}` so no role or `@everyone` ping can leak. One `start_mention` lease row covers every chunk; members skipped for having no Discord ID are counted in the `start_mention_sent` log line and the lease row's `response_data`. Staff can fire it from the task schedule; a second fire returns 409.
 
 ### Off-schedule events attached to a series
 

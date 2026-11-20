@@ -156,7 +156,7 @@ export const DraftTable: React.FC<DraftTableProps> = () => {
             return (
               <TableRow
                 key={`TeamTableRow-${user.pk}`}
-                className={cn(projected?.isDoublePick && 'bg-green-950/30')}
+                className={cn(projected?.isDoublePick && 'bg-pick-surface/30')}
               >
                 <TableCell>
                   <PlayerPopover player={user}>
@@ -183,7 +183,7 @@ export const DraftTable: React.FC<DraftTableProps> = () => {
                       <span
                         className={cn(
                           projected.isDoublePick
-                            ? 'text-green-400 font-medium'
+                            ? 'text-pick font-medium'
                             : 'text-muted-foreground',
                         )}
                       >

@@ -29,7 +29,7 @@ export const FloatingDraftIndicator: React.FC = () => {
     <MotionLink
       data-testid="floating-draft-indicator"
       to={getDraftUrl(firstDraft)}
-      className="fixed bottom-6 right-6 z-50 bg-red-600 hover:bg-red-700
+      className="fixed bottom-6 right-6 z-50 bg-destructive hover:bg-destructive/90
                  text-white px-4 py-3 rounded-full shadow-lg
                  flex items-center gap-2 cursor-pointer
                  transition-colors duration-200 md:hidden"

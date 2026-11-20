@@ -87,16 +87,25 @@ describe('OverrideWarningDialog', () => {
     });
   });
 
-  it('lists each violation by rule and message', () => {
+  it('lists each violation by category label and message', () => {
     renderDialog(confirmable);
-    expect(
-      screen.getByTestId('override-violation-below_min_mmr-0'),
-    ).toHaveTextContent(
-      "staff-overrideMMR 2,400 is below Roster A's 3,000 gate",
+    const eligibility = screen.getByTestId(
+      'override-violation-below_min_mmr-0',
     );
+    expect(eligibility).toHaveTextContent(
+      "Eligibility ruleMMR 2,400 is below Roster A's 3,000 gate",
+    );
+    expect(eligibility).not.toHaveTextContent('staff-override');
     expect(
       screen.getByTestId('override-violation-team_standin_cap-1'),
-    ).toHaveTextContent('Stand-in cap 2 reached');
+    ).toHaveTextContent('Team ruleStand-in cap 2 reached');
+  });
+
+  it('labels seating violations without the rule slug', () => {
+    renderDialog(blocked);
+    const row = screen.getByTestId('override-violation-over_capacity-1');
+    expect(row).toHaveTextContent('Seating rule');
+    expect(row).not.toHaveTextContent('override-warning');
   });
 
   it('renders every row when a code repeats', () => {
@@ -171,7 +180,7 @@ describe('OverrideWarningDialog', () => {
     renderDialog(blocked, { organization: org([VIEWER]) });
     expect(screen.getByTestId('override-settings-link')).toHaveAttribute(
       'href',
-      '/organizations/7?tab=settings',
+      '/organizations/7?tab=settings&section=staff-placement',
     );
   });
 });
