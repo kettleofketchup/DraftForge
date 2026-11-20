@@ -10,7 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser
 from app.serializers import TournamentUserSerializer
 from app.steam_accounts import (
     steam_account_id_conflict_payload,
@@ -19,7 +19,7 @@ from app.steam_accounts import (
 from events.eligibility import refresh_unmet_requirements
 from league.models import LeagueUser
 from org.member_resolution import member_nick, resolve_member_user
-from org.models import OrgUser
+from org.models import Organization, OrgLog, OrgUser
 from org.permissions import (
     has_org_admin_access,
     has_org_staff_access,

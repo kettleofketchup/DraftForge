@@ -24,7 +24,7 @@ class OpsNotice(models.Model):
         UNROUTED = "unrouted", "Unrouted"
 
     organization = models.ForeignKey(
-        "app.Organization", on_delete=models.CASCADE, related_name="ops_notices"
+        "org.Organization", on_delete=models.CASCADE, related_name="ops_notices"
     )
     event = models.ForeignKey(
         "events.Event",

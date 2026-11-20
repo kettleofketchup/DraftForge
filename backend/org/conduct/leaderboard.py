@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from app.models import Organization
+from org.models import Organization
 from org.conduct.queries import member_scores
 from org.conduct.scoring import MemberScore, prior_member_score
 from org.conduct.serializers import rate

@@ -11,7 +11,8 @@ These endpoints live in the `user` app so they can grow without bloating
 `app/views/internal.py`. All require InternalServiceAuth.
 """
 
-from app.cache_utils import invalidate_model
+from typing import Any
+
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.decorators import (
@@ -19,6 +20,7 @@ from rest_framework.decorators import (
     authentication_classes,
     permission_classes,
 )
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
@@ -33,7 +35,7 @@ _perm = [IsInternalService]
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def list_discord_linked_users(request):
+def list_discord_linked_users(request: Request) -> Response:
     """Return every Discord-linked CustomUser as a flat list.
 
     Unlike list_users_for_avatar_check (which is paged for per-user
@@ -71,13 +73,13 @@ def list_discord_linked_users(request):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def list_discord_guild_ids(request):
+def list_discord_guild_ids(request: Request) -> Response:
     """Return distinct Discord guild IDs across all Organizations.
 
     Used by batched avatar refresh to know which guilds to call
     `get_discord_members_data` against.
     """
-    from app.models import Organization
+    from org.models import Organization
 
     # Organization has Meta.ordering — leaving it in the queryset would
     # add the ordering columns to the SELECT and defeat .distinct().
@@ -97,7 +99,9 @@ def list_discord_guild_ids(request):
     return Response({"guild_ids": guild_ids})
 
 
-def _validated_avatar_updates(raw):
+def _validated_avatar_updates(
+    raw: list[Any],
+) -> tuple[list[dict[str, Any]], Response | None]:
     """Return (cleaned_list, error_response) for a bulk-avatar-update body.
 
     Cleans `raw` into a flat list of `{pk: int, avatar: str|None}`.
@@ -126,7 +130,7 @@ def _validated_avatar_updates(raw):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def bulk_update_user_avatars(request):
+def bulk_update_user_avatars(request: Request) -> Response:
     """Bulk-update avatar hashes by user pk.
 
     Body: {"updates": [{"pk": <int>, "avatar": <str|null>}, ...]}
@@ -172,7 +176,9 @@ def bulk_update_user_avatars(request):
     from user.models import BaseUserProfile
 
     pks = [u["pk"] for u in cleaned]
-    bp_by_user = {bp.user_id: bp for bp in BaseUserProfile.objects.filter(user_id__in=pks)}
+    bp_by_user = {
+        bp.user_id: bp for bp in BaseUserProfile.objects.filter(user_id__in=pks)
+    }
 
     to_update = []
     affected_user_pks = []

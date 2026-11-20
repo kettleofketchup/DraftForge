@@ -5,7 +5,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import Organization
+from org.models import Organization
 from org.feature_errors import feature_locked, not_permitted
 from org.features import active_features
 from org.standing import api as standing

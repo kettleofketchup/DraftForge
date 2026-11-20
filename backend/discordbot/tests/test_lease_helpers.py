@@ -17,7 +17,6 @@ from rest_framework.test import APIClient
 
 from discordbot.models import DiscordMessageLog
 
-
 CLAIM_PAYLOAD = dict(channel_id="ch_1", embed_data={"title": "test"})
 INTERNAL_TOKEN = "test-internal-token"
 
@@ -151,13 +150,13 @@ class ClearEventSignupStateEndpointTest(TestCase):
     """
 
     def _seed_dedup_state(self, event_id):
-        from app.models import Organization
         from discordbot.models import (
             ChannelType,
             DiscordEventMsgSignup,
             DiscordMessageLog,
         )
         from events.models import Event
+        from org.models import Organization
 
         org = Organization.objects.create(name=f"Clear Test Org {event_id}")
         Event.objects.create(
@@ -199,9 +198,7 @@ class ClearEventSignupStateEndpointTest(TestCase):
         self.assertEqual(body["message_log_rows_cleared"], 1)
 
         self.assertFalse(
-            DiscordEventMsgSignup.objects.filter(
-                event_id=201, has_posted=True
-            ).exists()
+            DiscordEventMsgSignup.objects.filter(event_id=201, has_posted=True).exists()
         )
         self.assertFalse(
             DiscordMessageLog.objects.filter(

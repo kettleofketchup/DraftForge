@@ -2,9 +2,10 @@
 
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.models import EventTeam
 from events.tests.base import EventTestCase
+from org.models import Organization
 
 
 class EventTeamEventLockTests(EventTestCase):

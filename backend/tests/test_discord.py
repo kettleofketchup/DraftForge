@@ -85,7 +85,7 @@ def seed_discord_members(request, org_id: int):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from app.models import Organization
+    from org.models import Organization
 
     try:
         org = Organization.objects.get(pk=org_id)

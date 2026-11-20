@@ -6,9 +6,9 @@ from django.test import TestCase
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser
 from org.features import FeatureKey, set_org_feature
-from org.models import OrgUser
+from org.models import Organization, OrgLog, OrgUser
 from org.serializers import OrganizationSerializer
 
 

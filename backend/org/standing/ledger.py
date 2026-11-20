@@ -4,10 +4,15 @@ from typing import Literal
 
 from django.db.models import Count, Q, QuerySet, Sum
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.models import Event
 from org.membership import resolve_or_create_org_user
-from org.models import ContributionEntry, ContributionPointValue, PromoSend
+from org.models import (
+    ContributionEntry,
+    ContributionPointValue,
+    Organization,
+    PromoSend,
+)
 from org.standing.kinds import KINDS, kinds_for
 from org.standing.periods import Period
 from org.standing.types import TrackKey

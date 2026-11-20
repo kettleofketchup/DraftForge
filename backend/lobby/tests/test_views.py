@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import DotaLobbyMode, GameMode, League, Organization
+from app.models import DotaLobbyMode, GameMode, League
 from events.models import Event
 from lobby import services, states
 from lobby.client import DotaLobbyError, DotaLobbyUnavailable
@@ -21,6 +21,7 @@ from lobby.tests.helpers import (
     make_user,
 )
 from lobby.views import LobbyActionThrottle
+from org.models import Organization
 
 PRIVATE_KEYS = {"password", "players", "last_error_detail", "name", "bot"}
 

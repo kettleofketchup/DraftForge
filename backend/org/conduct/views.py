@@ -13,7 +13,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
+from org.models import Organization
 from app.permissions_tournament import has_event_staff_access
 from events.constants import SignupStatus
 from events.models import Event, EventSignup

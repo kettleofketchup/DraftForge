@@ -21,7 +21,6 @@ from app.models import (
     LeagueLog,
     LeagueMatchParticipant,
     LeagueRating,
-    OrgLog,
     PositionsModel,
     ProfileClaimRequest,
     Team,
@@ -32,7 +31,7 @@ from events.models import Event
 from events.staff import dedupe_host_helpers
 from league.models import LeagueUser
 from org.accounts import repoint_org_attribution
-from org.models import OrgUser, PromoSend
+from org.models import OrgLog, OrgUser, PromoSend
 from org.permissions import IsOrgStaff
 from org.promotion.services import demote_colliding_earning_sends
 from org.serializers import ProfileClaimRequestSerializer

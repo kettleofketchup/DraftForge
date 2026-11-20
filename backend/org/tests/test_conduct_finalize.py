@@ -5,7 +5,8 @@ from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 
-from app.models import CustomUser, OrgLog
+from app.models import CustomUser
+from org.models import OrgLog
 from events.completion import CloseResult, close_event
 from events.constants import EventState, SignupStatus
 from events.models import Event, ReadyCheck

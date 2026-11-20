@@ -1,9 +1,9 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser
 from org.features import FeatureKey, org_has_feature, set_org_feature
-from org.models import OrgFeature
+from org.models import Organization, OrgFeature, OrgLog
 
 
 def features_url(org_id: int) -> str:

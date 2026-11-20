@@ -8,12 +8,12 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, Organization
+from app.models import CustomUser, GameType
 from events.models import Event, EventState
 from events.schemas import SignupInputPatch
 from events.services import apply_signup_input, resolve_or_create_org_user
 from events.tests.base import EventTestCase
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
 

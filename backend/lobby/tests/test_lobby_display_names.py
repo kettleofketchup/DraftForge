@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, DotaLobbyMode, Game, League, Organization
+from app.models import CustomUser, DotaLobbyMode, Game, League
 from lobby import services
 from lobby.tests.helpers import (
     lobby_settings,
@@ -13,7 +13,7 @@ from lobby.tests.helpers import (
     make_user,
 )
 from lobby.views import _players
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 
 @lobby_settings

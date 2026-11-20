@@ -9,13 +9,14 @@ from django.urls import reverse
 from django.utils import timezone as tz
 from rest_framework.test import APIClient, APIRequestFactory
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events import line
 from events.constants import Commitment, EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.schemas import EventSignupSchema
 from events.serializers import EventSignupSerializer
 from events.services import cancel_signup, process_rsvp
+from org.models import Organization
 from tests.cache import flush_run_cache
 
 NEW_FIELDS = [

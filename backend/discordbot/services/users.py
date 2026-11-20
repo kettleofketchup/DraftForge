@@ -9,10 +9,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 
-from app.models import (
-    CustomUser,
-    Organization,
-)
+from app.models import CustomUser
 from app.permissions import IsStaff
 from backend import settings
 
@@ -25,6 +22,7 @@ from discordbot.services.discord_members import (  # noqa: F401
 from discordbot.services.member_names import members_from_discord_payload
 from org.activity import guild_sync_lock, release_guild_sync_lock
 from org.discord_names import apply_guild_member_names, org_ids_for_guild
+from org.models import Organization
 from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
 

@@ -7,7 +7,8 @@ from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
 from app.discord_accounts import merge_discord_accounts
-from app.models import CustomUser, Organization, ProfileClaimRequest
+from app.models import CustomUser, ProfileClaimRequest
+from org.models import Organization
 from events.constants import EventState
 from events.models import Event
 from org.conduct.constants import Outcome, OutcomeSource

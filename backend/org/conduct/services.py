@@ -6,7 +6,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser
+from org.models import OrgLog, Organization
 from events.capacity import lock_event
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from app.models import Organization
+from org.models import Organization
 from org.feature_keys import FeatureKey
 from org.features import org_has_feature
 from org.models_conduct import OrgConductSettings

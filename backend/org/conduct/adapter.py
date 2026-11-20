@@ -5,7 +5,8 @@ from typing import override
 from django.contrib.auth.models import AnonymousUser
 from django.utils import timezone
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
+from org.models import Organization
 from events.models import Event, EventSignup
 from org.conduct.capture import capture_late_cancel
 from org.conduct.eligibility import gate_for, standings

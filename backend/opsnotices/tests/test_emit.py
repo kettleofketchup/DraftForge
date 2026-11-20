@@ -16,7 +16,6 @@ from django.utils import timezone
 from pydantic import BaseModel, field_serializer, field_validator
 from structlog.testing import capture_logs
 
-from app.models import Organization
 from events.models import Event, EventRepeater
 from events.tests.base import EventTestCase
 from opsnotices import services
@@ -36,6 +35,7 @@ from opsnotices.services import (
     emit_notice,
 )
 from opsnotices.tests.types import AlertPayload, register_test_types
+from org.models import Organization
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 SENTINEL = "SENTINEL-xyz"

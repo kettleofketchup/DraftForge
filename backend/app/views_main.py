@@ -84,7 +84,7 @@ from org.membership import (
     member_organization_ids,
     viewer_member_organization_ids,
 )
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.permissions import (
     has_org_staff_access,
 )
@@ -105,7 +105,6 @@ from .models import (
     CustomUser,
     Game,
     League,
-    Organization,
     ProfileClaimRequest,
     Team,
     TeamLog,

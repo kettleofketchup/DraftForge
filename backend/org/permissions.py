@@ -8,9 +8,9 @@ from django.db.models import Exists, OuterRef, Q
 from rest_framework import permissions
 from rest_framework.request import Request
 
-from app.models import CustomUser, League, Organization
+from app.models import CustomUser, League
 from org.features import FeatureKey, org_has_feature
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 
 def is_org_owner(user: CustomUser | AnonymousUser, obj: Any) -> bool:

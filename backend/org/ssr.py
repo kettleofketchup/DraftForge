@@ -4,7 +4,7 @@ from rest_framework import serializers
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import AllowAny
 
-from app.models import Organization
+from org.models import Organization
 
 
 class OrganizationSerializerSSR(serializers.ModelSerializer):

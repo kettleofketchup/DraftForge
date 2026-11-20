@@ -7,10 +7,10 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, League, Organization
+from app.models import CustomUser, GameType, League
 from events.models import Event, EventSignup, EventState, SignupStatus
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 
 class LeagueMembersPrivacyTest(TestCase):

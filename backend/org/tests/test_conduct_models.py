@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.db import IntegrityError, transaction
 from django.utils import timezone as tz
 
-from app.models import OrgLog
+from org.models import OrgLog
 from events.serializers import EventSerializer
 from org.conduct.constants import Outcome, OutcomeSource
 from org.feature_keys import FeatureKey

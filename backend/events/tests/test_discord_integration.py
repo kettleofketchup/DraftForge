@@ -72,11 +72,19 @@ def _orm_claim_discord_message_log(
     Returns the new log PK or None if a pending/successful row already exists
     (mirrors the partial-unique-constraint behavior of the real endpoint).
     """
-    existing = DiscordMessageLog.objects.filter(
-        source=source, source_id=source_id,
-    ).filter(success__isnull=True).first() or DiscordMessageLog.objects.filter(
-        source=source, source_id=source_id, success=True,
-    ).first()
+    existing = (
+        DiscordMessageLog.objects.filter(
+            source=source,
+            source_id=source_id,
+        )
+        .filter(success__isnull=True)
+        .first()
+        or DiscordMessageLog.objects.filter(
+            source=source,
+            source_id=source_id,
+            success=True,
+        ).first()
+    )
     if existing:
         return None
     kwargs = dict(
@@ -126,7 +134,9 @@ def _orm_get_event_for_task(pk):
     from events.serializers import EventSerializer
 
     try:
-        event = Event.objects.select_related("organization", "event_repeater").get(pk=pk)
+        event = Event.objects.select_related("organization", "event_repeater").get(
+            pk=pk
+        )
     except Event.DoesNotExist:
         return None
     data = EventSerializer(event).data
@@ -319,9 +329,10 @@ class RealEventAnnouncementTaskTest(TestCase):
 
         from django.utils import timezone
 
-        from app.models import CustomUser, Organization, PositionsModel
+        from app.models import CustomUser, PositionsModel
         from events.constants import EventState
         from events.models import Event
+        from org.models import Organization
 
         org = Organization.objects.create(
             name="Discord Integration Test Org",
@@ -403,10 +414,11 @@ class MultiUserReactionTest(TestCase):
 
         from django.utils import timezone
 
-        from app.models import CustomUser, Organization, PositionsModel
+        from app.models import CustomUser, PositionsModel
         from events.constants import EventState
         from events.models import Event
         from events.tasks import send_event_announcement
+        from org.models import Organization
 
         org = Organization.objects.create(
             name="Multi-User Test Org",

@@ -4,8 +4,9 @@ from django.core.cache import cache
 from rest_framework import status
 from rest_framework.response import Response
 
-from app.models import CustomUser, Organization, PositionsModel
+from app.models import CustomUser, PositionsModel
 from discordbot.services.member_names import normalise_name
+from org.models import Organization
 
 
 def find_member(members: list[dict], discord_id: str) -> dict | None:

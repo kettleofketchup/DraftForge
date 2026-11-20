@@ -8,7 +8,8 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization, OrgLog
+from app.models import CustomUser, League
+from org.models import OrgLog, Organization
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.serializers import EventSignupSerializer

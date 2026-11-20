@@ -9,7 +9,8 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import Organization, OrgLog, Tournament
+from app.models import Tournament
+from org.models import OrgLog, Organization
 from discordbot.models import DiscordEvent
 from events.completion import close_event
 from events.constants import EventState, RepeatFrequency

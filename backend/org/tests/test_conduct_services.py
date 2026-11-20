@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from django.utils import timezone as tz
 
-from app.models import Organization, OrgLog
+from org.models import OrgLog, Organization
 from events.completion import close_event
 from events.constants import EventState, SignupStatus
 from events.models import Event

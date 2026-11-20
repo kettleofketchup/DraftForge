@@ -201,6 +201,8 @@ ORG = MovedSlice(
             ("app.views.admin_team", "_resolve_user"),
             ("app.signals", "track_org_discord_server_id"),
             ("app.signals", "reset_guild_nicknames_on_server_change"),
+            ("app.models", "Organization"),
+            ("app.models", "OrgLog"),
             *(
                 (module, name)
                 for module in ("app.permissions_org", "app.permissions_tournament")
@@ -215,9 +217,9 @@ ORG = MovedSlice(
             "app.tests.test_org_role_fields",
         }
     ),
-    model_labels=frozenset(),
-    move_migration=("app", "0110_move_organization_models_to_org"),
-    cached_labels=frozenset(),
+    model_labels=frozenset({"organization", "orglog"}),
+    move_migration=("app", "0111_move_organization_models_to_org"),
+    cached_labels=frozenset({"organization"}),
 )
 
 MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG)
@@ -329,9 +331,11 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "org's roles; leaves with the league slice",
         ),
         "app/serializers.py": BackEdge(
-            frozenset({"OrgUser", "OrgUserSerializer"}),
+            frozenset({"Organization", "OrgUser", "OrgUserSerializer"}),
             "tournament and league user serializers auto-create OrgUser rows and "
-            "embed org MMR via OrgUserSerializer",
+            "embed org MMR via OrgUserSerializer; OrganizationsSerializer, "
+            "LeagueSerializer.organization_id and UserSerializer."
+            "default_organization read Organization at class definition",
         ),
         "app/services/match_finalization.py": BackEdge(
             frozenset({"OrgUser"}),
@@ -349,10 +353,15 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"OrgUser"}),
             "tournament user auto-add creates the league org's OrgUser",
         ),
+        "app/tournament_state.py": BackEdge(
+            frozenset({"Organization"}),
+            "tournament state prefetch loads the league's Organization",
+        ),
         "app/views/admin_team.py": BackEdge(
             frozenset(
                 {
                     "OrgUser",
+                    "Organization",
                     "has_org_admin_access",
                     "has_org_staff_access",
                     "member_nick",
@@ -360,14 +369,15 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "user_name_q",
                 }
             ),
-            "user search and league/tournament member adds use org roles, the "
-            "org guild member cache and OrgUser; leaves with the league and "
-            "tournament slices",
+            "user search scopes by Organization, and league/tournament member "
+            "adds use org roles, the org guild member cache and OrgUser; leaves "
+            "with the league and tournament slices",
         ),
         "app/views/csv_import.py": BackEdge(
-            frozenset({"OrgUser", "has_org_staff_access"}),
-            "shared CSV import pipeline, including the org door, writes OrgUser "
-            "MMR; moves whole with the tournament slice",
+            frozenset({"OrgLog", "OrgUser", "Organization", "has_org_staff_access"}),
+            "shared CSV import pipeline, including the org door, resolves the "
+            "Organization, writes OrgUser MMR and OrgLog rows; moves whole with "
+            "the tournament slice",
         ),
         "app/views/internal.py": BackEdge(
             frozenset({"OrgUser"}),
@@ -377,6 +387,7 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset(
                 {
                     "OrgUser",
+                    "Organization",
                     "api",
                     "has_org_staff_access",
                     "member_access",
@@ -388,7 +399,9 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             ),
             "UserView org-staff checks, profile claims and deletion standing; "
             "TeamView feature errors and team log scope; current_user and "
-            "tournament list membership ids; LeagueView member flag",
+            "tournament list membership ids; LeagueView member flag and org "
+            "checks; tournament list, home stats and scope checks read "
+            "Organization",
         ),
     },
 }
@@ -881,6 +894,7 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("draft/models/hero.py", rels)
         self.assertIn("draft/models/team.py", rels)
         self.assertIn("org/permissions.py", rels)
+        self.assertIn("org/models.py", rels)
         self.assertNotIn(GUARD_FILE, rels)
         self.assertFalse(any("/migrations/" in rel for rel in rels))
 

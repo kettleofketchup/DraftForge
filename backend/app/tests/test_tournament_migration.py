@@ -6,10 +6,10 @@ from app.models import (
     DraftStyles,
     GameType,
     League,
-    Organization,
     PositionsModel,
     Tournament,
 )
+from org.models import Organization
 
 
 class TournamentNewFieldsTests(TestCase):
