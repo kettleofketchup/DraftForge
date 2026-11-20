@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { Button } from '~/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -7,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Button } from '~/components/ui/button';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { cn } from '~/lib/utils';
 
@@ -30,6 +30,7 @@ export interface InfoDialogProps {
   showClose?: boolean;
   /** Close button label */
   closeLabel?: string;
+  'data-testid'?: string;
 }
 
 const sizeClasses: Record<InfoDialogSize, string> = {
@@ -62,25 +63,26 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
       size = 'md',
       showClose = true,
       closeLabel = 'Close',
+      'data-testid': testId,
     },
-    ref
+    ref,
   ) => {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           ref={ref}
+          data-testid={testId}
           className={cn('max-w-[calc(100%-2rem)]', sizeClasses[size])}
         >
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription className={description ? '' : 'sr-only'}>
-              {description || (typeof title === 'string' ? `${title} dialog` : 'Dialog')}
+              {description ||
+                (typeof title === 'string' ? `${title} dialog` : 'Dialog')}
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[60vh] pr-4">
-            {children}
-          </ScrollArea>
+          <ScrollArea className="max-h-[60vh] pr-4">{children}</ScrollArea>
 
           {showClose && (
             <DialogFooter>
@@ -92,7 +94,7 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
         </DialogContent>
       </Dialog>
     );
-  }
+  },
 );
 
 InfoDialog.displayName = 'InfoDialog';

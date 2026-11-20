@@ -7,6 +7,7 @@ import logging
 import random
 
 from cacheops import invalidate_obj
+from django.contrib.auth import login
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
@@ -51,6 +52,10 @@ from tests.data.users import (
 # Populate functions for non-standard tournament resets. Top-level imports —
 # the previous lambda+__import__ form was a holdover; these are leaf modules
 # with no circular-import risk.
+from tests.helpers.team_management_fixture import (
+    TEAM_MANAGEMENT_TOURNAMENT_NAME,
+    populate_team_management_tournament,
+)
 from tests.populate.bracket import populate_bracket_unset_winner_tournament
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.utils import ensure_org_user
@@ -126,7 +131,7 @@ def createTestSuperUser() -> tuple[CustomUser, bool]:
     Get or create admin test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=ADMIN_USER.pk).first()
@@ -156,7 +161,7 @@ def createTestStaffUser() -> tuple[CustomUser, bool]:
     Get or create staff test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=STAFF_USER.pk).first()
@@ -181,15 +186,12 @@ def createTestStaffUser() -> tuple[CustomUser, bool]:
     return user, True
 
 
-from django.contrib.auth import login
-
-
 def createTestUser() -> tuple[CustomUser, bool]:
     """
     Get or create regular test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=REGULAR_USER.pk).first()
@@ -229,7 +231,7 @@ def createClaimableTestUser() -> tuple[CustomUser, bool]:
     This simulates a user manually added by an org admin with just their Steam ID.
     The claim feature allows a logged-in user to merge this profile into their own.
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=CLAIMABLE_USER.pk).first()
@@ -263,7 +265,7 @@ def createUserClaimerTestUser() -> tuple[CustomUser, bool]:
     - NO Steam ID (will claim a profile that has one)
     - Used to test the claim/merge flow
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=USER_CLAIMER.pk).first()
@@ -293,7 +295,7 @@ def createOrgAdminTestUser() -> tuple[CustomUser, bool]:
     Get or create org admin test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=ORG_ADMIN_USER.pk).first()
@@ -323,7 +325,7 @@ def createOrgMemberTestUser() -> tuple[CustomUser, bool]:
     Get or create org member test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     user = CustomUser.objects.filter(pk=ORG_MEMBER_USER.pk).first()
     if user:
@@ -351,7 +353,7 @@ def createOrgStaffTestUser() -> tuple[CustomUser, bool]:
     Get or create org staff test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=ORG_STAFF_USER.pk).first()
@@ -381,7 +383,7 @@ def createLeagueAdminTestUser() -> tuple[CustomUser, bool]:
     Get or create league admin test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=LEAGUE_ADMIN_USER.pk).first()
@@ -411,7 +413,7 @@ def createLeagueStaffTestUser() -> tuple[CustomUser, bool]:
     Get or create league staff test user.
     Uses PK from tests/data/users.py to match populate_test_auth_users().
     """
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     # Try to find by PK first (matches populated user)
     user = CustomUser.objects.filter(pk=LEAGUE_STAFF_USER.pk).first()
@@ -439,7 +441,7 @@ def createLeagueStaffTestUser() -> tuple[CustomUser, bool]:
 # get-or-create-with-PK pattern, so we share one helper instead of
 # copying five identical functions.
 def _create_or_get_auth_matrix_user(user_data) -> tuple[CustomUser, bool]:
-    assert isTestEnvironment() == True
+    assert isTestEnvironment()
 
     user = CustomUser.objects.filter(pk=user_data.pk).first()
     if user:
@@ -1011,6 +1013,7 @@ def reset_tournament_by_key(request, key: str):
     RESET_FUNCTIONS = {
         "shuffle_tie_resolution": populate_shuffle_tie_data,
         "bracket_unset_winner": populate_bracket_unset_winner_tournament,
+        "team_management": populate_team_management_tournament,
     }
 
     def clear_existing_draft_redis(name: str) -> None:
@@ -1027,6 +1030,7 @@ def reset_tournament_by_key(request, key: str):
     RESET_TOURNAMENT_NAMES = {
         "shuffle_tie_resolution": SHUFFLE_TIE_TOURNAMENT.name,
         "bracket_unset_winner": BRACKET_UNSET_WINNER_TOURNAMENT.name,
+        "team_management": TEAM_MANAGEMENT_TOURNAMENT_NAME,
     }
 
     reset_fn = RESET_FUNCTIONS.get(key)
@@ -1061,12 +1065,11 @@ def create_claimable_user(request):
     TEST ONLY: Create a user without Discord or Steam ID that can be claimed.
 
     This endpoint is used by Playwright tests to test the "Claim Profile" feature.
-    Creates a user with only username, nickname, and MMR - no discordId or steamid.
+    Creates a user with only username and nickname - no discordId or steamid.
 
     Request body (optional):
         username: str - Username for the user (default: generated)
         nickname: str - Nickname for the user (default: generated)
-        mmr: int - MMR value (default: random 2000-6000)
 
     Returns:
         200: Created user data
@@ -1081,7 +1084,6 @@ def create_claimable_user(request):
     unique_id = str(uuid.uuid4())[:8]
     username = request.data.get("username", f"claimable_{unique_id}")
     nickname = request.data.get("nickname", f"Claimable User {unique_id}")
-    mmr = request.data.get("mmr", random.randint(2000, 6000))
 
     # Create user without Discord or Steam
     user = CustomUser.objects.create(

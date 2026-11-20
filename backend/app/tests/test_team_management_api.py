@@ -819,11 +819,50 @@ class CanManageTeamTests(TeamApiFixture, TestCase):
         self.assertIs(self.detail(self.outsider, loose)["can_manage_team"], False)
         self.assertIs(self.detail(self.site_staff, loose)["can_manage_team"], False)
 
+    def test_detail_after_action_has_new_roster_and_own_flag(self) -> None:
+        self.detail(self.outsider)
+        resp = self.post("set-captain", {"user_id": self.m1.pk, "reason": "swap"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        staff_view = self.detail(self.league_staff)
+        self.assertEqual(staff_view["captain"]["pk"], self.m1.pk)
+        self.assertIs(staff_view["can_manage_team"], True)
+        outsider_view = self.detail(self.outsider)
+        self.assertEqual(outsider_view["captain"]["pk"], self.m1.pk)
+        self.assertIs(outsider_view["can_manage_team"], False)
+
     def test_retrieve_has_managed_fields(self) -> None:
         self.team.left_members.add(self.m2)
         data = self.detail(self.outsider)
         self.assertEqual(data["leadership_problems"], [])
         self.assertEqual(data["left_members"][0]["pk"], self.m2.pk)
+
+    def test_manager_gets_scope_fields(self) -> None:
+        self.other.dropin_members.add(self.outsider)
+        data = self.detail(self.league_admin)
+        self.assertEqual(data["organization_pk"], self.org.pk)
+        self.assertEqual(data["league_pk"], self.league.pk)
+        self.assertEqual(
+            data["other_team_user_pks"], sorted([self.o1.pk, self.outsider.pk])
+        )
+
+    def test_viewer_gets_no_scope_fields(self) -> None:
+        for user in (self.outsider, None):
+            data = self.detail(user)
+            for key in ("organization_pk", "league_pk", "other_team_user_pks"):
+                self.assertNotIn(key, data)
+
+    def test_scope_fields_fresh_after_other_team_changes(self) -> None:
+        self.detail(self.league_admin)
+        self.other.members.add(self.outsider)
+        data = self.detail(self.league_admin)
+        self.assertIn(self.outsider.pk, data["other_team_user_pks"])
+
+    def test_action_response_has_scope_fields(self) -> None:
+        resp = self.post("set-captain", {"user_id": self.m1.pk, "reason": "swap"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        self.assertEqual(data["organization_pk"], self.org.pk)
+        self.assertEqual(data["other_team_user_pks"], [self.o1.pk])
 
 
 class CanManageTeamCacheTests(TeamApiFixture, TransactionTestCase):

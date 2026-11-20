@@ -1,7 +1,13 @@
 import { isAxiosError, type AxiosError } from 'axios';
 import { z } from 'zod';
+import { LeadershipProblemSchema } from '~/components/team/leadershipProblemSchema';
 import { PositionSchema } from '~/components/user/schemas';
 import axios from './axios';
+
+export {
+  LeadershipProblemSchema,
+  type LeadershipProblem,
+} from '~/components/team/leadershipProblemSchema';
 
 // OrgUserSerializer / TournamentUserSerializer output; avatarUrl is null for
 // users without a discordId, so UserSchema cannot be reused here.
@@ -34,17 +40,6 @@ const ManagedTeamTournamentSchema = z.object({
   tournament_type: z.string(),
 });
 
-export const LeadershipProblemSchema = z.object({
-  field: z.enum(['captain', 'deputy_captain']),
-  code: z.enum([
-    'captain_not_member',
-    'deputy_not_member',
-    'deputy_is_captain',
-  ]),
-  message: z.string(),
-});
-export type LeadershipProblem = z.infer<typeof LeadershipProblemSchema>;
-
 export const ManagedTeamSchema = z.object({
   pk: z.number(),
   name: z.string(),
@@ -60,6 +55,10 @@ export const ManagedTeamSchema = z.object({
   placement: z.number().nullable(),
   leadership_problems: z.array(LeadershipProblemSchema),
   can_manage_team: z.boolean(),
+  // Sent only to viewers who can manage the team.
+  organization_pk: z.number().nullable().optional(),
+  league_pk: z.number().nullable().optional(),
+  other_team_user_pks: z.array(z.number()).optional(),
 });
 export type ManagedTeam = z.infer<typeof ManagedTeamSchema>;
 
@@ -144,6 +143,55 @@ export const subInTeamStandin = (teamId: number, body: TeamSubInBody) =>
 
 export const renameTeam = (teamId: number, body: TeamRenameBody) =>
   postTeamAction(teamId, 'rename', body);
+
+export async function fetchManagedTeam(teamId: number): Promise<ManagedTeam> {
+  const response = await axios.get(`/teams/${teamId}/`);
+  return ManagedTeamSchema.parse(response.data);
+}
+
+export type TeamAction =
+  | { kind: 'set_captain'; user: RosterUser }
+  | { kind: 'set_deputy'; user: RosterUser | null }
+  | {
+      kind:
+        | 'mark_dropout'
+        | 'restore_member'
+        | 'add_standin'
+        | 'remove_standin';
+      user: RosterUser;
+    }
+  | { kind: 'sub_in'; standin: RosterUser; replacing: RosterUser | null };
+export type TeamActionKind = TeamAction['kind'];
+
+export function runTeamAction(
+  teamId: number,
+  action: TeamAction,
+  body: TeamActionBody,
+): Promise<ManagedTeam> {
+  switch (action.kind) {
+    case 'set_captain':
+      return setTeamCaptain(teamId, { ...body, user_id: action.user.pk });
+    case 'set_deputy':
+      return setTeamDeputy(teamId, {
+        ...body,
+        user_id: action.user?.pk ?? null,
+      });
+    case 'mark_dropout':
+      return markTeamDropout(teamId, { ...body, user_id: action.user.pk });
+    case 'restore_member':
+      return restoreTeamMember(teamId, { ...body, user_id: action.user.pk });
+    case 'add_standin':
+      return addTeamStandin(teamId, { ...body, user_id: action.user.pk });
+    case 'remove_standin':
+      return removeTeamStandin(teamId, { ...body, user_id: action.user.pk });
+    case 'sub_in':
+      return subInTeamStandin(teamId, {
+        ...body,
+        standin_id: action.standin.pk,
+        replacing_id: action.replacing?.pk ?? null,
+      });
+  }
+}
 
 export async function fetchTeamHistory(
   teamId: number,

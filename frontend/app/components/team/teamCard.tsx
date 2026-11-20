@@ -2,15 +2,12 @@ import { motion } from 'framer-motion';
 import type { FormEvent } from 'react';
 import React, { memo, useMemo, useState } from 'react';
 import type { TeamType } from '~/components/tournament/types';
-import { useUserStore } from '~/store/userStore';
 import type { UserType } from '../user/types';
-import TeamEditModal from './teamCard/editModal';
 import { TeamTable } from './teamTable/teamTable';
 
 interface Props {
   team: TeamType;
   edit?: boolean;
-  saveFunc?: string;
   compact?: boolean;
   removeCallBack?: (e: FormEvent, user: UserType) => void;
   removeToolTip?: string;
@@ -20,13 +17,11 @@ export const TeamCard: React.FC<Props> = memo(
   ({
     team,
     edit,
-    saveFunc,
     compact,
     removeCallBack,
     removeToolTip = 'Delete the user',
   }) => {
     const [editMode, setEditMode] = useState(edit || false);
-    const currentUser: UserType = useUserStore((state) => state.currentUser);
 
     // Memoize average MMR calculation
     const averageMMR = useMemo(() => {
@@ -106,9 +101,6 @@ export const TeamCard: React.FC<Props> = memo(
         >
           <div className="flex items-center gap-2 items-center justify-center flex-grow">
             {teamHeader()}
-            {(currentUser.is_staff || currentUser.is_superuser) &&
-              saveFunc === 'save' &&
-              !compact && <TeamEditModal team={team} />}
           </div>
 
           <div className="flex mt-2 space-y-2 text-sm flex-grow">

@@ -366,6 +366,10 @@ system rows or deleted users.
 - `GET /api/teams/{id}/` adds `can_manage_team`: true when the viewer could use the
   management endpoints on this team. It is `false` for anonymous viewers and for a team
   without a tournament.
+- When `can_manage_team` is true, `GET /api/teams/{id}/` and the action responses also
+  carry `organization_pk` and `league_pk` (the tournament's, or `null`) and
+  `other_team_user_pks` (members and stand-ins of the tournament's other teams). The
+  stand-in search uses them. They are computed per request, outside the team cache.
 - Teams in the tournament payload (`GET /api/tournaments/{id}/`) also carry
   `leadership_problems`.
 - `leadership_problems` lists a captain or deputy who is not a member, or a deputy who is

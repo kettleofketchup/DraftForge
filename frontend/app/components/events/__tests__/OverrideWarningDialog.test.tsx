@@ -183,4 +183,49 @@ describe('OverrideWarningDialog', () => {
       '/organizations/7?tab=settings&section=staff-placement',
     );
   });
+
+  it('prefills defaultReason on every open', () => {
+    const base = {
+      onOpenChange: vi.fn(),
+      override: confirmable,
+      onConfirm: vi.fn(),
+      organization: org([]),
+    };
+    const { rerender } = render(
+      <MemoryRouter>
+        <OverrideWarningDialog {...base} open defaultReason="because" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('override-reason')).toHaveValue('because');
+    rerender(
+      <MemoryRouter>
+        <OverrideWarningDialog {...base} open={false} defaultReason="second" />
+      </MemoryRouter>,
+    );
+    rerender(
+      <MemoryRouter>
+        <OverrideWarningDialog {...base} open defaultReason="second" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('override-reason')).toHaveValue('second');
+  });
+
+  it('enforces minReasonLength with a length message', async () => {
+    const { onConfirm } = renderDialog(confirmable, { minReasonLength: 3 });
+    fireEvent.change(screen.getByTestId('override-reason'), {
+      target: { value: 'x' },
+    });
+    fireEvent.click(screen.getByTestId('override-confirm'));
+    expect(
+      await screen.findByText('Give a reason (at least 3 characters).'),
+    ).toBeInTheDocument();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('renders a custom reasonLabel', () => {
+    renderDialog(confirmable, { reasonLabel: 'Why change the roster?' });
+    expect(screen.getByLabelText('Why change the roster?')).toBe(
+      screen.getByTestId('override-reason'),
+    );
+  });
 });
