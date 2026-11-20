@@ -5,9 +5,27 @@ import * as React from 'react';
 import { cn } from '~/lib/utils';
 
 function Select({
+  value,
+  onValueChange,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />;
+  // Inside a <form>, Radix's native select reports '' when `value` has no
+  // matching item; no item here uses '' as a real value, so drop it.
+  const handleValueChange = React.useCallback(
+    (next: string) => {
+      if (next === '' && value) return;
+      onValueChange?.(next);
+    },
+    [value, onValueChange],
+  );
+  return (
+    <SelectPrimitive.Root
+      data-slot="select"
+      value={value}
+      onValueChange={handleValueChange}
+      {...props}
+    />
+  );
 }
 
 function SelectGroup({
