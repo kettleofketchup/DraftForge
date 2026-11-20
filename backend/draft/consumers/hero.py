@@ -148,6 +148,10 @@ class HeroDraftConsumer(BaseDraftConsumer):
         return self._fresh_chat_viewer()
 
     @consumer_db
+    def _chat_session_alive(self) -> bool:
+        return _session_alive(self.scope, self.user)
+
+    @consumer_db
     def _draft_roster_user_ids(self) -> set[int]:
         return draft_roster_user_ids(self.draft_id)
 
@@ -686,6 +690,14 @@ class HeroDraftConsumer(BaseDraftConsumer):
         if team_group_name(self.draft_id, team_id) not in self._extra_groups:
             return
         viewer = self._recently_verified_member(team_id)
+        if viewer is not None:
+            # The roster check is cached; a logout must still stop delivery at once.
+            try:
+                alive = await self._chat_session_alive()
+            except Exception:
+                alive = False
+            if not alive:
+                viewer = None
         if viewer is None:
             try:
                 viewer = await self._resolve_chat_viewer()

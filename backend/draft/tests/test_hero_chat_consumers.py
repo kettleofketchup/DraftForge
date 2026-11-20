@@ -1384,6 +1384,32 @@ class ChatDeliveryCacheTest(ChatSendFixture):
         finally:
             await self.close_all()
 
+    async def test_logout_within_cache_window_stops_delivery(self) -> None:
+        sentinel = "cache-logout-3e19"
+
+        @database_sync_to_async
+        def make_session() -> SessionStore:
+            session = SessionStore()
+            session["_auth_user_id"] = str(self.mem_a.pk)
+            session.create()
+            return session
+
+        try:
+            session = await make_session()
+            cap_a = await self.connect_as(self.cap_a)
+            mem_a, _, _ = await self.connect_with_frames(self.mem_a, session)
+            await self.send_chat(cap_a, "warm", "w")
+            await read_until_type(mem_a, "chat_message")
+            await database_sync_to_async(
+                Session.objects.filter(session_key=session.session_key).delete
+            )()
+            await self.send_chat(cap_a, sentinel, "x")
+            history = await read_history_with_role(mem_a, "spectator")
+            self.assertNotIn(sentinel, json.dumps(history))
+            await self.assert_no_chat_frame(mem_a, sentinel)
+        finally:
+            await self.close_all()
+
     async def test_cached_check_expires(self) -> None:
         clock = [1000.0]
         try:

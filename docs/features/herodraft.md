@@ -340,7 +340,7 @@ Staff get no extra chat access through the app. Team chat can only be read by ot
 
 Privacy is enforced on the server:
 
-- Team messages are sent only to the WebSocket group of that team, and each delivery is checked again against the current roster before it is sent. A socket reuses a passed check for up to 5 seconds; any roster change resync or failed check clears it.
+- Team messages are sent only to the WebSocket group of that team, and each delivery is checked again against the current roster before it is sent. A socket reuses a passed roster check for up to 5 seconds (its login session is still checked on every frame); any roster change resync or failed check clears it.
 - History (the last 100 messages you may see) is filtered per user by a database query when you connect.
 - A player only sees team messages posted after they joined the team. A player who is removed from a team stops receiving its chat straight away, and gets a fresh history without it.
 - Logging in, logging out or switching account with the draft open reconnects the socket as the new user and starts chat from scratch: the log, unread count, panel state and any error from the previous user are dropped. Closing the draft does the same.
