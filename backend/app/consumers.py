@@ -3,11 +3,15 @@ WebSocket consumers for draft event broadcasting.
 """
 
 import json
+import re
 import time
+from datetime import datetime
+from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -17,7 +21,14 @@ from app.consumers_base import BaseDraftConsumer, consumer_db
 from app.draft_state import build_draft_state, herodraft_state_queryset
 from app.functions.herodraft_chat import (
     SPECTATOR,
+    ChatError,
+    ChatErrorCode,
     ChatViewer,
+    PostResult,
+    check_rate_limit,
+    draft_roster_user_ids,
+    post_suggestion,
+    post_text,
     resolve_chat_viewer,
     team_group_name,
     visible_messages,
@@ -47,6 +58,31 @@ if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
 
 log = get_logger(__name__)
+
+_CLIENT_MSG_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+_CHAT_MESSAGE_TYPES = frozenset({"chat_send", "chat_suggest"})
+_CHAT_RESYNC_EVENTS = frozenset({"team_changed", "draft_reset"})
+
+
+def _session_alive(scope: dict[str, Any], user: Any) -> bool:
+    session = scope.get("session")
+    if session is None or user is None or not user.is_authenticated:
+        return True
+    key = session.session_key
+    if not key:
+        return False
+    store = import_module(settings.SESSION_ENGINE).SessionStore()
+    return bool(store.exists(key))
+
+
+def _created_before(message: dict[str, Any], joined_at: datetime | None) -> bool:
+    if joined_at is None:
+        return True
+    try:
+        created = datetime.fromisoformat(message["created_at"])
+    except (KeyError, TypeError, ValueError):
+        return True
+    return created < joined_at
 
 
 class DraftConsumer(BaseDraftConsumer):
@@ -473,10 +509,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     async def send_initial_messages(self, initial_state: dict | None) -> None:
         await super().send_initial_messages(initial_state)
-        try:
-            await self._chat_bootstrap()
-        except Exception as e:
-            await self._chat_bootstrap_failed(e)
+        await self._chat_resync()
 
     # --- Chat ---
 
@@ -486,9 +519,43 @@ class HeroDraftConsumer(BaseDraftConsumer):
             return user.pk
         return None
 
+    def _fresh_chat_viewer(self) -> ChatViewer:
+        if not _session_alive(self.scope, self.user):
+            return ChatViewer(
+                user_id=self._chat_user_id(),
+                team_id=None,
+                role="spectator",
+                joined_at=None,
+            )
+        return resolve_chat_viewer(self.draft_id, self.user)
+
     @consumer_db
     def _resolve_chat_viewer(self) -> ChatViewer:
-        return resolve_chat_viewer(self.draft_id, self.user)
+        return self._fresh_chat_viewer()
+
+    @consumer_db
+    def _draft_roster_user_ids(self) -> set[int]:
+        return draft_roster_user_ids(self.draft_id)
+
+    @consumer_db
+    def _post_chat(
+        self, msg_type: str, data: dict[str, Any]
+    ) -> tuple[ChatViewer, PostResult | ChatError]:
+        viewer = self._fresh_chat_viewer()
+        try:
+            if msg_type == "chat_send":
+                result = post_text(self.draft_id, self.user, data.get("body"), viewer)
+            else:
+                result = post_suggestion(
+                    self.draft_id,
+                    self.user,
+                    data.get("kind"),
+                    data.get("hero_id"),
+                    viewer,
+                )
+        except ChatError as e:
+            return viewer, e
+        return viewer, result
 
     @consumer_db
     def _chat_history_messages(self, viewer: ChatViewer) -> list[dict[str, Any]]:
@@ -497,6 +564,121 @@ class HeroDraftConsumer(BaseDraftConsumer):
     async def _chat_bootstrap(self) -> None:
         await self._apply_chat_viewer(await self._resolve_chat_viewer())
         await self._send_chat_history()
+
+    async def _chat_resync(self) -> None:
+        try:
+            await self._chat_bootstrap()
+        except Exception as e:
+            await self._chat_bootstrap_failed(e)
+
+    async def _regroup(self, viewer: ChatViewer) -> None:
+        try:
+            await self._apply_chat_viewer(viewer)
+            await self._send_chat_history()
+        except Exception as e:
+            await self._chat_bootstrap_failed(e)
+
+    @staticmethod
+    def _viewer_changed(old: ChatViewer, new: ChatViewer) -> bool:
+        return (old.role, old.team_id) != (new.role, new.team_id)
+
+    async def _send_chat_error(
+        self, code: ChatErrorCode, client_msg_id: str | None
+    ) -> None:
+        frame: dict[str, Any] = {"type": "chat_error", "code": code}
+        if client_msg_id is not None:
+            frame["client_msg_id"] = client_msg_id
+        await self.send(text_data=json.dumps(frame))
+
+    def _log_chat_rejected(self, code: ChatErrorCode, **extra: Any) -> None:
+        log.info(
+            "herodraft_chat_rejected",
+            system="herodraft",
+            subsystem="chat",
+            draft_id=self.draft_id,
+            user_id=self._chat_user_id(),
+            code=code,
+            **extra,
+        )
+
+    async def _handle_chat(self, msg_type: str, data: dict[str, Any]) -> None:
+        client_msg_id = data.get("client_msg_id")
+        if client_msg_id is not None and not (
+            isinstance(client_msg_id, str) and _CLIENT_MSG_ID.fullmatch(client_msg_id)
+        ):
+            self._log_chat_rejected("bad_request")
+            await self._send_chat_error("bad_request", None)
+            return
+        try:
+            result = await self._authorize_and_post(msg_type, data)
+            await self._publish_chat(result)
+        except ChatError as e:
+            self._log_chat_rejected(e.code)
+            await self._send_chat_error(e.code, client_msg_id)
+            return
+        except Exception as e:
+            log.error(
+                "herodraft_chat_rejected",
+                system="herodraft",
+                subsystem="chat",
+                draft_id=self.draft_id,
+                user_id=self._chat_user_id(),
+                code="unavailable",
+                error_type=type(e).__name__,
+            )
+            await self._send_chat_error("unavailable", client_msg_id)
+            return
+
+        ack: dict[str, Any] = {"type": "chat_ack", "id": result.message["id"]}
+        if client_msg_id is not None:
+            ack["client_msg_id"] = client_msg_id
+        await self.send(text_data=json.dumps(ack))
+        sent: dict[str, Any] = {
+            "draft_id": self.draft_id,
+            "user_id": self._chat_user_id(),
+            "channel": result.channel,
+            "length": len(result.message["body"]),
+        }
+        if result.channel == "all":
+            sent["kind"] = result.message["kind"]
+        log.info("herodraft_chat_sent", system="herodraft", subsystem="chat", **sent)
+
+    async def _publish_chat(self, result: PostResult) -> None:
+        if result.channel == "team" and result.team_id is not None:
+            await self.channel_layer.group_send(
+                team_group_name(self.draft_id, result.team_id),
+                {
+                    "type": "herodraft.chat_team",
+                    "team_id": result.team_id,
+                    "message": result.message,
+                },
+            )
+        else:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {"type": "herodraft.chat_all", "message": result.message},
+            )
+
+    async def _authorize_and_post(
+        self, msg_type: str, data: dict[str, Any]
+    ) -> PostResult:
+        cached = self._chat_viewer
+        user_id = self._chat_user_id()
+        if cached.role == "ambiguous":
+            raise ChatError("ambiguous_team")
+        if cached.role != "member" or user_id is None:
+            raise ChatError("not_participant")
+        await sync_to_async(check_rate_limit, thread_sensitive=False)(
+            self.draft_id, user_id
+        )
+        viewer, outcome = await self._post_chat(msg_type, data)
+        if self._viewer_changed(self._chat_viewer, viewer):
+            await self._regroup(viewer)
+        else:
+            self._chat_viewer = viewer
+        if isinstance(outcome, ChatError):
+            raise outcome
+        return outcome
 
     async def _apply_chat_viewer(self, viewer: ChatViewer) -> None:
         wanted = (
@@ -590,37 +772,42 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     # --- Receive ---
 
-    async def receive(self, text_data: str) -> None:
+    async def receive(
+        self, text_data: str | None = None, bytes_data: bytes | None = None
+    ) -> None:
         """Handle incoming WebSocket messages from clients.
 
-        Wrapped in a `ws.message` span via `traced_message` so each
-        incoming WS message appears as its own trace in Tempo with
-        `ws.message_type` set. Handler spans (e.g. `ws.heartbeat`)
-        become children of this span — Tempo shows the full waterfall
-        of "message dispatch overhead → handler work" without needing
-        to instrument every handler separately.
+        Chat frames are accepted from any socket and authorised per message;
+        everything else is processed only for captains. Each message runs in a
+        `ws.message` span via `traced_message`.
         """
-        if not self._is_captain:
-            return  # Only process messages from captains
-
+        if text_data is None:
+            return
         try:
             data = json.loads(text_data)
-            msg_type = data.get("type", "unknown")
-
-            async with self.traced_message(msg_type):
-                if msg_type == "heartbeat":
-                    await self.handle_heartbeat()
         except json.JSONDecodeError:
-            # Span deliberately NOT opened — there's no message type to
-            # tag the span with, and a `ws.message[type=unknown]` span on
-            # every byte of garbage would just pollute Tempo. Log only.
             log.warning(
                 "ws_malformed_message",
                 system="herodraft",
                 subsystem="connection",
                 draft_id=self.draft_id,
-                user_id=self.user.id,
+                user_id=getattr(self.user, "id", None),
             )
+            return
+        msg_type = data.get("type") if isinstance(data, dict) else None
+        if not isinstance(msg_type, str):
+            msg_type = "unknown"
+
+        if msg_type in _CHAT_MESSAGE_TYPES:
+            async with self.traced_message(msg_type):
+                await self._handle_chat(msg_type, data)
+            return
+
+        if not self._is_captain:
+            return
+        async with self.traced_message(msg_type):
+            if msg_type == "heartbeat":
+                await self.handle_heartbeat()
 
     # --- Captain state change (pause-on-disconnect) ---
 
@@ -804,6 +991,79 @@ class HeroDraftConsumer(BaseDraftConsumer):
             message["metadata"] = event["metadata"]
 
         await self.send(text_data=json.dumps(message))
+        if event.get("event_type") in _CHAT_RESYNC_EVENTS:
+            await self._resync_after_draft_event()
+
+    async def herodraft_chat_all(self, event: dict[str, Any]) -> None:
+        await self.send(
+            text_data=json.dumps({"type": "chat_message", "message": event["message"]})
+        )
+
+    async def herodraft_chat_team(self, event: dict[str, Any]) -> None:
+        team_id = event.get("team_id")
+        if not isinstance(team_id, int) or isinstance(team_id, bool):
+            return
+        if team_group_name(self.draft_id, team_id) not in self._extra_groups:
+            return
+        try:
+            viewer = await self._resolve_chat_viewer()
+        except Exception as e:
+            await self._chat_bootstrap_failed(e)
+            return
+        if viewer.role != "member" or viewer.team_id != team_id:
+            log.info(
+                "herodraft_chat_delivery_revoked",
+                system="herodraft",
+                subsystem="chat",
+                draft_id=self.draft_id,
+                user_id=self._chat_user_id(),
+                team_id=team_id,
+                role=viewer.role,
+            )
+            await self._regroup(viewer)
+            return
+        self._chat_viewer = viewer
+        message = event["message"]
+        if _created_before(message, viewer.joined_at):
+            return
+        await self.send(
+            text_data=json.dumps({"type": "chat_message", "message": message})
+        )
+
+    async def herodraft_chat_resync(self, event: dict[str, Any]) -> None:
+        user_id = self._chat_user_id()
+        if user_id is None:
+            return
+        team_ids = event.get("team_ids") or []
+        user_ids = event.get("user_ids") or []
+        in_team_group = any(
+            team_group_name(self.draft_id, t) in self._extra_groups
+            for t in team_ids
+            if isinstance(t, int)
+        )
+        if user_id in user_ids or in_team_group:
+            await self._chat_resync()
+
+    async def _resync_after_draft_event(self) -> None:
+        user_id = self._chat_user_id()
+        if user_id is None:
+            return
+        if not self._extra_groups:
+            try:
+                roster = await self._draft_roster_user_ids()
+            except Exception as e:
+                log.warning(
+                    "herodraft_chat_resync_roster_failed",
+                    system="herodraft",
+                    subsystem="chat",
+                    draft_id=self.draft_id,
+                    user_id=user_id,
+                    error_type=type(e).__name__,
+                )
+                return
+            if user_id not in roster:
+                return
+        await self._chat_resync()
 
     async def herodraft_tick(self, event: dict[str, Any]) -> None:
         """Forward tick anchors from the channel layer to this WS client.

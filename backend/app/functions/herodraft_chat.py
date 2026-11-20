@@ -201,6 +201,18 @@ def _team_rosters(team_ids: Iterable[int]) -> dict[int, set[int]]:
     return rosters
 
 
+def draft_roster_user_ids(draft_id: int) -> set[int]:
+    team_ids = (
+        DraftTeam.objects.nocache()
+        .filter(draft_id=draft_id)
+        .values_list("tournament_team_id", flat=True)
+    )
+    users: set[int] = set()
+    for roster in _team_rosters(list(team_ids)).values():
+        users |= roster
+    return users
+
+
 def _seed_teams(draft_id: int, team_ids: Iterable[int], joined_at: datetime) -> None:
     seeded = set(team_ids)
     if not seeded:
