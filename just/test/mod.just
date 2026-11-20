@@ -17,14 +17,26 @@ mod cicd 'cicd.just'
 mod demo 'demo.just'
 mod populate 'populate.just'
 
+# Make sure backend/test.db.sqlite3 exists and is non-empty (gitignored, so absent in a fresh worktree): pull the cached test-db image if needed, then extract it
+[private]
+ensure-db:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -s {{quote(root / "backend/test.db.sqlite3")}} ]]; then
+        exit 0
+    fi
+    echo "backend/test.db.sqlite3 is missing or empty; providing it from the cached test-db image..."
+    {{just}} docker::db::pull || echo "pull failed; building the test DB locally" >&2
+    {{just}} db::populate::all
+
 # Start this worktree's test stack in the foreground
 [group('test')]
-up:
+up: ensure-db
     {{compose}} up --remove-orphans
 
 # Start this worktree's test stack detached
 [group('test')]
-upd:
+upd: ensure-db
     {{compose}} up -d --remove-orphans
 
 [group('test')]

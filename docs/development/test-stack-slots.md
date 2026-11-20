@@ -63,6 +63,10 @@ lease older than **7 days** is reclaimed (oldest first).
 Otherwise allocation fails and lists every reservation with its owner, container count
 and lease age. `DF_SLOT=<n>` in the environment requests one specific slot.
 
+`backend/test.db.sqlite3` is gitignored, so a fresh worktree has none. `test::up` and
+`test::upd` pull the cached test-db image and extract the DB (`db::populate::all`) when the
+file is missing or empty, so the stack never starts against an empty database.
+
 Read verbs (`ps`, `logs`, `top`, `exec`, `restart`, `down`, `stop`, Playwright tasks)
 never allocate. They fail if the worktree has no slot, or if another worktree has
 taken it since (`slot N now belongs to <owner>; run just test::slot`).
