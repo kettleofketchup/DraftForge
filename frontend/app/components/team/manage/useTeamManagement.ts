@@ -1,0 +1,152 @@
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { fetchOrganization } from '~/components/api/api';
+import {
+  fetchManagedTeam,
+  fetchTeamHistory,
+  runTeamAction,
+  type ManagedTeam,
+  type TeamAction,
+  type TeamActionBody,
+  type TeamHistoryPage,
+} from '~/components/api/teamManagementAPI';
+import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
+import { useCanEditTournament } from '~/hooks/usePermissions';
+import { getLogger } from '~/lib/logger';
+import { useUserStore } from '~/store/userStore';
+
+const log = getLogger('teamManage');
+
+const HISTORY_PAGE_SIZE = 25;
+
+export const teamManageKeys = {
+  all: (teamId: number) => ['team', teamId] as const,
+  managed: (teamId: number) => ['team', teamId, 'managed'] as const,
+  history: (teamId: number, page?: number) =>
+    page === undefined
+      ? (['team', teamId, 'history'] as const)
+      : (['team', teamId, 'history', page] as const),
+};
+
+export function useManagedTeam(
+  teamId: number | null | undefined,
+  opts: { enabled: boolean },
+): UseQueryResult<ManagedTeam> {
+  return useQuery({
+    queryKey: teamManageKeys.managed(teamId ?? -1),
+    queryFn: () => fetchManagedTeam(teamId!),
+    enabled: opts.enabled && teamId != null,
+  });
+}
+
+export function useTeamHistory(
+  teamId: number,
+  page: number,
+  opts: { enabled?: boolean } = {},
+): UseQueryResult<TeamHistoryPage> {
+  return useQuery({
+    queryKey: teamManageKeys.history(teamId, page),
+    queryFn: () => fetchTeamHistory(teamId, page, HISTORY_PAGE_SIZE),
+    placeholderData: keepPreviousData,
+    enabled: opts.enabled ?? true,
+  });
+}
+
+export type TeamActionVariables = { action: TeamAction; body: TeamActionBody };
+
+// No onError: useOverrideRetry owns every rejection (409s, reason errors).
+export function useTeamActionMutation(
+  teamId: number,
+  tournamentPk: number | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ action, body }: TeamActionVariables) =>
+      runTeamAction(teamId, action, body),
+    onSuccess: (team, { action }) => {
+      queryClient.setQueryData(teamManageKeys.managed(teamId), { ...team });
+      if (tournamentPk != null) {
+        queryClient.invalidateQueries({
+          queryKey: ['tournament', tournamentPk],
+        });
+      }
+      queryClient.invalidateQueries({
+        queryKey: teamManageKeys.history(teamId),
+      });
+      log.info('Team action succeeded', { teamId, kind: action.kind });
+    },
+  });
+}
+
+/** Display-only mirror of can_edit_tournament for the store tournament. */
+export function useCanEditCurrentTournament(): boolean {
+  const tournament = useUserStore((state) => state.tournament);
+  const orgPk = tournament?.organization_pk ?? undefined;
+  // Read directly rather than via useOrganization, which writes orgStore.
+  const { data: organization } = useQuery({
+    queryKey: organizationQueryKey(orgPk ?? -1),
+    queryFn: () => fetchOrganization(orgPk!),
+    enabled: !!orgPk,
+  });
+  return useCanEditTournament(tournament?.league, organization ?? null);
+}
+
+type PkLike = { pk?: number | null } | number | null | undefined;
+
+export type RosterLike = {
+  captain?: PkLike;
+  deputy_captain?: PkLike;
+  members?: PkLike[] | null;
+  dropin_members?: PkLike[] | null;
+  left_members?: PkLike[] | null;
+};
+
+const pkOf = (user: PkLike): number | null =>
+  typeof user === 'number' ? user : (user?.pk ?? null);
+
+const sortedPks = (users: PkLike[] | null | undefined): number[] =>
+  (users ?? [])
+    .map(pkOf)
+    .filter((pk): pk is number => pk != null)
+    .sort((a, b) => a - b);
+
+export function rosterSignature(team: RosterLike): string {
+  return JSON.stringify([
+    pkOf(team.captain),
+    pkOf(team.deputy_captain),
+    sortedPks(team.members),
+    sortedPks(team.dropin_members),
+    sortedPks(team.left_members),
+  ]);
+}
+
+/** Refetch an open team's queries when the live store roster changes. */
+export function useInvalidateOnRosterChange(
+  teamId: number | null | undefined,
+  signature: string,
+): void {
+  const queryClient = useQueryClient();
+  const seen = useRef<{ teamId: number; signature: string } | null>(null);
+
+  useEffect(() => {
+    if (teamId == null) {
+      seen.current = null;
+      return;
+    }
+    const previous = seen.current;
+    seen.current = { teamId, signature };
+    if (
+      previous &&
+      previous.teamId === teamId &&
+      previous.signature !== signature
+    ) {
+      queryClient.invalidateQueries({ queryKey: teamManageKeys.all(teamId) });
+    }
+  }, [teamId, signature, queryClient]);
+}
