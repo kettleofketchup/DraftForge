@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, type ReactNode } from 'react';
+import { useForm, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 
 import {
@@ -13,7 +13,7 @@ import {
   type StaffOverridePolicy,
   type StaffPlacementFormValues,
 } from '~/components/api/orgSettingsAPI';
-import { PrimaryButton } from '~/components/ui/buttons';
+import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
 import {
   Form,
   FormControl,
@@ -65,17 +65,65 @@ export function pickFormValues(s: OrgSettings): StaffPlacementFormValues {
   };
 }
 
-export function StaffPlacementSection({
-  organizationId,
-}: {
-  organizationId: number;
-}) {
+const EMPTY_FORM: StaffPlacementFormValues = {
+  staff_override_policy: 'silent',
+  staff_override_warning_codes: [],
+};
+
+export function useStaffPlacementSection(
+  organizationId: number,
+  enabled: boolean,
+): { content: ReactNode; unit: SettingsFormUnit } {
+  const queryClient = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: orgSettingsKey(organizationId),
     queryFn: () => getOrgSettings(organizationId),
+    enabled,
+  });
+  const form = useForm<StaffPlacementFormValues>({
+    resolver: zodResolver(StaffPlacementFormSchema),
+    defaultValues: data ? pickFormValues(data) : EMPTY_FORM,
   });
 
-  return (
+  useEffect(() => {
+    if (data && !form.formState.isDirty) form.reset(pickFormValues(data));
+  }, [data, form]);
+
+  const save = async (): Promise<boolean> => {
+    let ok = false;
+    await form.handleSubmit(async (values) => {
+      const dirty = form.formState.dirtyFields;
+      const changes: Partial<StaffPlacementFormValues> = {};
+      if (dirty.staff_override_policy) {
+        changes.staff_override_policy = values.staff_override_policy;
+      }
+      if (dirty.staff_override_warning_codes) {
+        changes.staff_override_warning_codes =
+          values.staff_override_warning_codes;
+      }
+      try {
+        const saved = await patchOrgSettings(organizationId, changes);
+        queryClient.setQueryData(orgSettingsKey(organizationId), saved);
+        form.reset(pickFormValues(saved));
+        ok = true;
+      } catch (err) {
+        log.error('Failed to save org settings', { organizationId, err });
+        toast.error(extractApiError(err) ?? 'Could not save settings');
+      }
+    })();
+    return ok;
+  };
+
+  const unit: SettingsFormUnit = {
+    id: 'staff-placement',
+    isDirty: enabled && form.formState.isDirty,
+    save,
+    discard: () => {
+      if (data) form.reset(pickFormValues(data));
+    },
+  };
+
+  const content = (
     <section
       data-testid="org-settings-staff-placement"
       className="rounded-lg border border-border p-6"
@@ -101,63 +149,25 @@ export function StaffPlacementSection({
           {extractApiError(error) ?? 'Failed to load settings'}
         </p>
       )}
-      {data && (
-        <StaffPlacementForm organizationId={organizationId} settings={data} />
-      )}
+      {data && <StaffPlacementFields form={form} settings={data} />}
     </section>
   );
+
+  return { content, unit };
 }
 
-function StaffPlacementForm({
-  organizationId,
+function StaffPlacementFields({
+  form,
   settings,
 }: {
-  organizationId: number;
+  form: UseFormReturn<StaffPlacementFormValues>;
   settings: OrgSettings;
 }) {
-  const queryClient = useQueryClient();
-  const form = useForm<StaffPlacementFormValues>({
-    resolver: zodResolver(StaffPlacementFormSchema),
-    defaultValues: pickFormValues(settings),
-  });
   const allCodes = settings.available_warning_codes.map((c) => c.code);
-
-  useEffect(() => {
-    if (!form.formState.isDirty) form.reset(pickFormValues(settings));
-  }, [settings, form]);
-
-  const mutation = useMutation({
-    mutationFn: (values: Partial<StaffPlacementFormValues>) =>
-      patchOrgSettings(organizationId, values),
-    onSuccess: (saved) => {
-      queryClient.setQueryData(orgSettingsKey(organizationId), saved);
-      form.reset(pickFormValues(saved));
-      toast.success('Settings saved');
-    },
-    onError: (err) => {
-      log.error('Failed to save org settings', { organizationId, err });
-      toast.error(extractApiError(err) ?? 'Could not save settings');
-    },
-  });
-
-  const onSubmit = form.handleSubmit(async (values) => {
-    const dirty = form.formState.dirtyFields;
-    const changes: Partial<StaffPlacementFormValues> = {};
-    if (dirty.staff_override_policy) {
-      changes.staff_override_policy = values.staff_override_policy;
-    }
-    if (dirty.staff_override_warning_codes) {
-      changes.staff_override_warning_codes =
-        values.staff_override_warning_codes;
-    }
-    await mutation.mutateAsync(changes).catch(() => undefined);
-  });
-
-  const { isDirty, isSubmitting } = form.formState;
 
   return (
     <Form {...form}>
-      <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-6">
+      <div className="mt-4 flex flex-col gap-6">
         <FormField
           control={form.control}
           name="staff_override_policy"
@@ -228,16 +238,7 @@ function StaffPlacementForm({
             );
           }}
         />
-        <div>
-          <PrimaryButton
-            type="submit"
-            data-testid="org-settings-save"
-            disabled={!isDirty || isSubmitting}
-          >
-            Save
-          </PrimaryButton>
-        </div>
-      </form>
+      </div>
     </Form>
   );
 }

@@ -9,6 +9,10 @@ import {
   type SettingsDialogHandle,
   type SettingsSection,
 } from '~/components/patterns/SettingsDialog';
+import {
+  useSettingsSaveBar,
+  type SettingsFormUnit,
+} from '~/components/patterns/settingsSaveBar';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { ORG_SETTINGS_SECTIONS } from './orgSettings/sections';
 import { useOrgProfileSections } from './orgSettings/useOrgProfileSections';
@@ -29,6 +33,20 @@ export function OrgSettingsTab({
   const { visibleSectionIds } = useOrgSettingsTabAccess(organization);
   const queryClient = useQueryClient();
   const profile = useOrgProfileSections(organization, sectionsRef);
+  const registry = ORG_SETTINGS_SECTIONS.map((s) => ({
+    section: s,
+    ...s.useSection(
+      organization.pk ?? 0,
+      organization.pk != null && visibleSectionIds.includes(s.id),
+    ),
+  }));
+  const units: SettingsFormUnit[] = [
+    ...(isOrgAdmin ? [profile.unit] : []),
+    ...registry.flatMap((r) => (r.unit ? [r.unit] : [])),
+  ];
+  const { saveBar } = useSettingsSaveBar(units, {
+    testIdPrefix: 'org-profile',
+  });
 
   const pk = organization.pk;
   const sections: SettingsSection[] =
@@ -57,15 +75,15 @@ export function OrgSettingsTab({
                 },
               ]
             : []),
-          ...ORG_SETTINGS_SECTIONS.filter((s) =>
-            visibleSectionIds.includes(s.id),
-          ).map(({ id, label, icon, keywords, Component }) => ({
-            value: id,
-            label,
-            icon,
-            keywords,
-            content: <Component organizationId={pk} />,
-          })),
+          ...registry
+            .filter((r) => visibleSectionIds.includes(r.section.id))
+            .map(({ section: { id, label, icon, keywords }, content }) => ({
+              value: id,
+              label,
+              icon,
+              keywords,
+              content,
+            })),
         ];
 
   if (sections.length === 0) {
@@ -77,7 +95,7 @@ export function OrgSettingsTab({
       sections={sections}
       testIdPrefix="org-settings"
       sectionRef={sectionsRef}
-      footer={isOrgAdmin ? profile.saveBar : null}
+      footer={saveBar}
       data-testid="org-settings-tab"
     />
   );

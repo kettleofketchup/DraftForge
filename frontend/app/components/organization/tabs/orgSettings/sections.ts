@@ -1,8 +1,9 @@
 import { UserCog, type LucideIcon } from 'lucide-react';
-import type { ComponentType } from 'react';
+import type { ReactNode } from 'react';
 import type { OrganizationType } from '~/components/organization/schemas';
+import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
-import { StaffPlacementSection } from './StaffPlacementSection';
+import { useStaffPlacementSection } from './StaffPlacementSection';
 
 export interface OrgSettingsSection {
   id: string;
@@ -10,7 +11,11 @@ export interface OrgSettingsSection {
   icon: LucideIcon;
   /** Extra search terms for the settings sidebar. */
   keywords?: string[];
-  Component: ComponentType<{ organizationId: number }>;
+  group: string;
+  useSection: (
+    organizationId: number,
+    enabled: boolean,
+  ) => { content: ReactNode; unit?: SettingsFormUnit };
   useVisible: (org: OrganizationType | undefined) => boolean;
 }
 
@@ -20,7 +25,8 @@ export const ORG_SETTINGS_SECTIONS: readonly OrgSettingsSection[] = [
     label: 'Staff placement',
     icon: UserCog,
     keywords: ['staff', 'override', 'policy', 'codes'],
-    Component: StaffPlacementSection,
+    group: 'Organization',
+    useSection: useStaffPlacementSection,
     useVisible: useIsOrganizationAdmin,
   },
 ];

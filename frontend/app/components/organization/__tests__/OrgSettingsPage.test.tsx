@@ -24,7 +24,10 @@ vi.mock('../tabs/orgSettings/useOrgSettingsTabAccess', () => ({
   }),
 }));
 vi.mock('../tabs/orgSettings/StaffPlacementSection', () => ({
-  StaffPlacementSection: () => <div data-testid="staff-placement-stub" />,
+  useStaffPlacementSection: () => ({
+    content: <div data-testid="staff-placement-stub" />,
+    unit: undefined,
+  }),
 }));
 vi.mock('~/components/admin-team', () => ({
   AdminTeamSection: () => <div data-testid="admin-team-section" />,

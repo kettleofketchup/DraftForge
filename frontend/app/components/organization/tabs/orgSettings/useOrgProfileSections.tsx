@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { Building2, ScrollText, Users, type LucideIcon } from 'lucide-react';
-import { useEffect, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, type ReactNode, type RefObject } from 'react';
 import { useForm, type FieldErrors } from 'react-hook-form';
 import { toast } from 'sonner';
 import type { z } from 'zod';
@@ -18,8 +18,8 @@ import type {
   SettingsDialogHandle,
   SettingsSection,
 } from '~/components/patterns/SettingsDialog';
+import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
 import { COMMON_TIMEZONES } from '~/components/tournament/schemas';
-import { CancelButton, SubmitButton } from '~/components/ui/buttons';
 import {
   Form,
   FormControl,
@@ -81,14 +81,13 @@ function valuesFrom(
 
 /**
  * The organization's own fields (formerly the Edit Organization dialog) as
- * settings sections sharing one form, plus a save bar for unsaved changes.
+ * settings sections sharing one form, exposed as a save-bar unit.
  */
 export function useOrgProfileSections(
   organization: OrganizationType,
   sectionsRef: RefObject<SettingsDialogHandle<string> | null>,
-): { sections: SettingsSection<OrgProfileSection>[]; saveBar: ReactNode } {
+): { sections: SettingsSection<OrgProfileSection>[]; unit: SettingsFormUnit } {
   const queryClient = useQueryClient();
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
@@ -109,12 +108,10 @@ export function useOrgProfileSections(
   const sectionFor = (field: string): string =>
     sectionsRef.current?.sectionOfField(field) ?? 'general';
 
-  async function onSubmit(data: EditOrganizationInput) {
-    if (isSubmitting || !organization.pk) return;
-    setIsSubmitting(true);
+  async function onSubmit(data: EditOrganizationInput): Promise<boolean> {
+    if (!organization.pk) return false;
     try {
       await updateOrganization(organization.pk, data);
-      toast.success('Organization updated successfully');
       form.reset(data);
       queryClient.invalidateQueries({
         queryKey: organizationQueryKey(organization.pk),
@@ -122,12 +119,12 @@ export function useOrgProfileSections(
       queryClient.invalidateQueries({
         queryKey: ['discordBotStatus', organization.pk],
       });
+      return true;
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : 'Failed to update organization',
       );
-    } finally {
-      setIsSubmitting(false);
+      return false;
     }
   }
 
@@ -141,18 +138,21 @@ export function useOrgProfileSections(
     });
   }
 
-  const save = form.handleSubmit(onSubmit, onInvalid);
+  const unit: SettingsFormUnit = {
+    id: 'org-profile',
+    isDirty: form.formState.isDirty,
+    save: async () => {
+      let ok = false;
+      await form.handleSubmit(async (data) => {
+        ok = await onSubmit(data);
+      }, onInvalid)();
+      return ok;
+    },
+    discard: () => form.reset(valuesFrom(organization)),
+  };
   const wrap = (children: ReactNode) => (
     <Form {...form}>
-      <form
-        className="flex flex-col gap-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void save();
-        }}
-      >
-        {children}
-      </form>
+      <div className="flex flex-col gap-4">{children}</div>
     </Form>
   );
 
@@ -355,36 +355,11 @@ export function useOrgProfileSections(
     (value) => ({
       value,
       ...META[value],
+      group: 'Organization',
       content: content[value],
       invalid: errorKeys.some((k) => sectionFor(k) === value),
     }),
   );
 
-  const saveBar = form.formState.isDirty ? (
-    <div
-      className="sticky bottom-4 mx-auto mt-6 flex w-full max-w-4xl items-center justify-end gap-2 rounded-lg border border-border bg-background/95 p-3 shadow-lg backdrop-blur"
-      data-testid="org-profile-save-bar"
-    >
-      <span className="mr-auto text-sm text-muted-foreground">
-        Unsaved changes
-      </span>
-      <CancelButton
-        type="button"
-        disabled={isSubmitting}
-        onClick={() => form.reset(valuesFrom(organization))}
-        data-testid="org-profile-discard"
-      >
-        Discard
-      </CancelButton>
-      <SubmitButton
-        loading={isSubmitting}
-        onClick={() => void save()}
-        data-testid="org-profile-save"
-      >
-        Save changes
-      </SubmitButton>
-    </div>
-  ) : null;
-
-  return { sections, saveBar };
+  return { sections, unit };
 }
