@@ -790,6 +790,51 @@ class ConductAttendanceApiTest(ConductEventApiBase):
         self.assertIs(rows[walkin.user_id]["committed"], False)
         self.assertIsNone(rows[walkin.user_id]["signup_status"])
 
+    def test_put_expected_signup_without_org_user(self) -> None:
+        event = self.make_event()
+        legacy = CustomUser.objects.create_user(username="confc_legacy", password="x")
+        EventSignup.objects.create(
+            event=event, user=legacy, status=SignupStatus.APPROVED
+        )
+        body = self.request("staff", "get", self.url(event)).json()
+        self.assertIsNone(self.rows_by_user(body)[legacy.pk]["org_user_pk"])
+
+        response = self.put(
+            event,
+            {
+                "changes": [{"user_pk": legacy.pk, "outcome": "no_show"}],
+                "reason": "never joined",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        org_user = OrgUser.objects.get(user=legacy, organization=self.org)
+        row = AttendanceOutcome.objects.nocache().get(event=event, org_user=org_user)
+        self.assertEqual(row.outcome, Outcome.NO_SHOW)
+        legacy_row = self.rows_by_user(response.json())[legacy.pk]
+        self.assertEqual(legacy_row["org_user_pk"], org_user.pk)
+
+    def test_put_bad_batch_creates_no_org_user(self) -> None:
+        event = self.make_event()
+        legacy = CustomUser.objects.create_user(username="confc_legacy2", password="x")
+        EventSignup.objects.create(
+            event=event, user=legacy, status=SignupStatus.APPROVED
+        )
+
+        response = self.put(
+            event,
+            {
+                "changes": [
+                    {"user_pk": legacy.pk, "outcome": "no_show"},
+                    {"org_user_pk": 987654, "outcome": "attended"},
+                ],
+                "reason": "bad batch",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertFalse(OrgUser.objects.filter(user=legacy).exists())
+
     def test_put_cancelled_event_400_and_get_editable_false(self) -> None:
         event = self.make_event(
             state=EventState.CANCELLED, conduct_finalized_at=timezone.now()

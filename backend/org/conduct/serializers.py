@@ -11,7 +11,6 @@ from org.conduct.constants import (
     REASON_MIN_LENGTH,
     SETTINGS_RANGES,
     STAFF_SETTABLE,
-    Outcome,
 )
 from org.conduct.scoring import MemberScore, recency_weight
 from org.conduct.services import EDITABLE_SETTINGS_FIELDS
@@ -282,10 +281,6 @@ class AttendanceChangeSerializer(serializers.Serializer):
         if has_org_user == has_user:
             raise serializers.ValidationError(
                 "Give exactly one of org_user_pk or user_pk."
-            )
-        if has_user and attrs["outcome"] != Outcome.ATTENDED:
-            raise serializers.ValidationError(
-                {"outcome": "A walk-in can only be marked attended."}
             )
         return attrs
 

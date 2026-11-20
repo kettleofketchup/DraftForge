@@ -2,6 +2,7 @@ from datetime import timedelta
 from typing import Any
 
 from django.contrib.auth.models import AnonymousUser
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -18,9 +19,11 @@ from app.permissions_org import (
     has_event_staff_access,
     has_org_staff_access,
 )
-from events.models import Event
+from events.constants import SignupStatus
+from events.models import Event, EventSignup
+from events.services import resolve_or_create_org_user
 from org.conduct.attendance import event_attendance, event_forecast
-from org.conduct.constants import Outcome
+from org.conduct.constants import Outcome, expected_statuses
 from org.conduct.gate import get_conduct_settings
 from org.conduct.queries import member_scores
 from org.conduct.scoring import MemberScore, ScoreParams, prior_score
@@ -265,16 +268,34 @@ def _resolve_changes(
     user_pks = {c["user_pk"] for c in changes if "user_pk" in c}
     by_pk = members.filter(pk__in=org_user_pks).in_bulk()
     by_user = {ou.user_id: ou for ou in members.filter(user_id__in=user_pks)}
+    signed_up = {
+        signup.user_id: signup.user
+        for signup in EventSignup.objects.nocache()
+        .filter(
+            event_id=event.pk,
+            user_id__in=user_pks,
+            status__in=expected_statuses(event) | {SignupStatus.DROPPED},
+        )
+        .select_related("user")
+    }
     resolved: list[tuple[OrgUser, Outcome]] = []
     for change in changes:
-        org_user = (
-            by_pk.get(change["org_user_pk"])
-            if "org_user_pk" in change
-            else by_user.get(change["user_pk"])
-        )
+        outcome = Outcome(change["outcome"])
+        if "org_user_pk" in change:
+            org_user = by_pk.get(change["org_user_pk"])
+        else:
+            user_pk = change["user_pk"]
+            signup_user = signed_up.get(user_pk)
+            if signup_user is None and outcome != Outcome.ATTENDED:
+                raise ValidationError(
+                    {"outcome": "A walk-in can only be marked attended."}
+                )
+            org_user = by_user.get(user_pk)
+            if org_user is None and signup_user is not None:
+                org_user = resolve_or_create_org_user(signup_user, event.organization)
         if org_user is None:
             raise ValidationError({"changes": "member not found in this organization"})
-        resolved.append((org_user, Outcome(change["outcome"])))
+        resolved.append((org_user, outcome))
     return resolved
 
 
@@ -286,14 +307,14 @@ def conduct_event_attendance(request: Request, org_id: int, event_id: int) -> Re
     if request.method == "PUT":
         body = AttendancePutSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        changes = _resolve_changes(event, body.validated_data["changes"])
         try:
-            set_outcomes(
-                event,
-                actor=request.user,
-                changes=changes,
-                reason=body.validated_data["reason"],
-            )
+            with transaction.atomic():
+                set_outcomes(
+                    event,
+                    actor=request.user,
+                    changes=_resolve_changes(event, body.validated_data["changes"]),
+                    reason=body.validated_data["reason"],
+                )
         except ValueError as exc:
             raise ValidationError({"detail": str(exc)}) from exc
         event = Event.objects.nocache().get(pk=event.pk)
