@@ -120,7 +120,7 @@ export function UsersPage() {
 
   if (error) {
     return (
-      <div className="flex justify-center align-middle content-center pt-10 text-red-500">
+      <div className="flex justify-center align-middle content-center pt-10 text-error">
         Error: {error}
       </div>
     );

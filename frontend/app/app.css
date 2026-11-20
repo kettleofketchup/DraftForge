@@ -769,7 +769,7 @@ body {
     1px 1px 0 var(--base-400);
 }
 
-.text-outline-sm {
+@utility text-outline-sm {
   text-shadow:
     -0.5px -0.5px 0 var(--base-400),
     0.5px -0.5px 0 var(--base-400),
@@ -808,6 +808,10 @@ body {
 }
 
 .text-link:hover {
+  color: var(--secondary-hover);
+}
+
+@utility text-secondary-hover {
   color: var(--secondary-hover);
 }
 
@@ -860,7 +864,7 @@ body {
 }
 
 /* Combined: dark shadow + subtle glow */
-.shadow-elevated {
+@utility shadow-elevated {
   box-shadow:
     0 4px 6px -1px oklch(0 0 0 / 25%),
     0 2px 4px -2px oklch(0 0 0 / 20%),
@@ -875,14 +879,14 @@ body {
 }
 
 /* Hover shadow transition */
-.shadow-hover {
+@utility shadow-hover {
   transition: box-shadow 0.2s ease;
-}
 
-.shadow-hover:hover {
-  box-shadow:
-    0 10px 25px -5px oklch(0 0 0 / 30%),
-    0 0 15px var(--glow-violet);
+  &:hover {
+    box-shadow:
+      0 10px 25px -5px oklch(0 0 0 / 30%),
+      0 0 15px var(--glow-violet);
+  }
 }
 
 /* ===== HERODRAFT ANIMATIONS ===== */
