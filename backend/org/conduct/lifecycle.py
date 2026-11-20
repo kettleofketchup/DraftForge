@@ -17,7 +17,9 @@ log = get_logger(__name__)
 @transaction.atomic
 def void_event_outcomes(
     event: Event, *, now: datetime, actor: CustomUser | None
-) -> int:
+) -> int | None:
+    """Claim the event's conduct close and void its outcomes. Returns the
+    voided count, or None when an earlier close already claimed it."""
     locked = lock_event(event)
     claimed = (
         Event.objects.nocache()
@@ -25,7 +27,7 @@ def void_event_outcomes(
         .update(conduct_finalized_at=now)
     )
     if not claimed:
-        return 0
+        return None
     voided = (
         AttendanceOutcome.objects.nocache()
         .filter(event=locked)

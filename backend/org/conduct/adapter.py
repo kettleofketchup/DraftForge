@@ -94,7 +94,9 @@ class ConductTrack(TrackBase):
     ) -> TrackOutput:
         conduct_actor = actor if source in ("admin", "cancel") else None
         if cancelled:
-            claimed = void_event_outcomes(event, now=now, actor=conduct_actor) > 0
+            claimed = (
+                void_event_outcomes(event, now=now, actor=conduct_actor) is not None
+            )
         else:
             claimed = (
                 finalize_event_outcomes(event, now=now, actor=conduct_actor) is not None

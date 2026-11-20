@@ -4,7 +4,7 @@ from unittest.mock import patch
 from django.contrib.admin.sites import site
 from django.db import connection, transaction
 from django.http import HttpRequest
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
@@ -16,6 +16,7 @@ from events.constants import EventState, RepeatFrequency
 from events.models import Event, EventRepeater
 from events.reopen import reopen_event
 from events.services import cancel_event, restart_event_tournament, teardown_event
+from org.conduct.adapter import ConductTrack
 from org.conduct.constants import Outcome, OutcomeSource
 from org.conduct.lifecycle import (
     reopen_event_outcomes,
@@ -26,6 +27,8 @@ from org.models import OrgUser
 from org.models_conduct import AttendanceOutcome
 from org.models_contributions import ContributionEntry
 from org.tests.conduct_base import ConductTestCase
+
+CANCEL_CLOSE_QUERIES = 5
 
 
 class VoidOnCancelTest(ConductTestCase):
@@ -100,7 +103,7 @@ class VoidOnCancelTest(ConductTestCase):
             )
         row.refresh_from_db()
         self.assertEqual(first, 1)
-        self.assertEqual(second, 0)
+        self.assertIsNone(second)
         self.assertEqual(row.voided_at, voided_at)
         self.assertEqual(self._void_logs(), [])
 
@@ -111,6 +114,23 @@ class VoidOnCancelTest(ConductTestCase):
         row.refresh_from_db()
         self.assertEqual(voided, 1)
         self.assertIsNotNone(row.voided_at)
+
+    def test_void_without_outcomes_claims(self) -> None:
+        event = self.make_event()
+        with transaction.atomic():
+            self.assertEqual(void_event_outcomes(event, now=tz.now(), actor=None), 0)
+        event.refresh_from_db()
+        self.assertIsNotNone(event.conduct_finalized_at)
+
+    @override_settings(CACHEOPS_ENABLED=False)
+    def test_cancel_close_hook_skips_reread_when_locked(self) -> None:
+        event = self.make_event()
+        now = tz.now()
+        with transaction.atomic(), self.assertNumQueries(CANCEL_CLOSE_QUERIES):
+            ConductTrack().on_event_closed(
+                event, cancelled=True, source="auto", actor=None, now=now
+            )
+        self.assertEqual(event.conduct_finalized_at, now)
 
     def test_void_leaves_other_events_rows(self) -> None:
         event = self.make_event()
