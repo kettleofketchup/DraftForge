@@ -257,6 +257,76 @@ Rules:
 
 ---
 
+## Staff Team Management Dialog
+
+Built in #546 (epic #490) on the [team management API](../../api/endpoints.md#team-management). Staff
+fix a tournament team's roster after the draft without leaving the tournament page.
+
+### Who sees it
+
+Open a team from the tournament's Teams tab (or anywhere that opens the team modal).
+The team modal now lists the deputy, stand-ins and dropouts for everyone. Staff also
+get a **Manage team** button. The button follows the server's `can_manage_team` flag,
+so it shows for site staff, org staff, and league admins and staff of the tournament's
+league, and never for players or signed-out visitors. The server still checks every
+action.
+
+### Roster tab
+
+| Control | What it does |
+|---------|--------------|
+| Captain select | Makes another member captain. A captain who is not a member shows as "(not a member)". |
+| Deputy select | Makes another member deputy, or "No deputy" clears it. |
+| Make captain | On a member row; same as the captain select. |
+| Mark dropout | Moves a member to the dropouts. Disabled for the last member: sub in a stand-in instead. When the captain drops out, the deputy takes over. |
+| Restore | Moves a dropout back to the members. |
+| Add stand-in | Searches users (at least 3 characters). Org staff see org and league members first, with anyone else under "Not in this organization". League staff who are not org staff search without membership labels. |
+| Sub in | Moves a stand-in into the members. Pick the player they replace, who becomes a dropout, or "No one". |
+| Remove | Removes a stand-in. |
+
+Every action opens a confirm dialog that asks for a reason (3 to 500 characters). The
+reason is saved in the team's history and never written to logs. A captain change, or
+a captain dropping out, warns that ready and connected state resets for any live hero
+draft the team is in. While a change is being saved, every control is disabled.
+
+When the server refuses a change it says why and how to fix it (for example, a stand-in
+who is already on another team). A change that breaks a seating rule, such as going
+over the stand-in limit, opens the shared override warning: it names the rule, and
+staff confirm with a reason to go ahead. The acknowledged rules are stored with the
+change. If the team was deleted meanwhile (for example by regenerating teams), the
+dialogs close and a "This team no longer exists" message shows.
+
+### Leadership problems
+
+A team has a leadership problem when its captain or deputy is not a member (a "ghost"
+captain or deputy), or the deputy is also the captain. These come from the same check
+as `audit_team_leadership` (#604). Staff see them in three places:
+
+- **Teams tab:** a "Teams with leadership problems (N)" card under the tournament
+  errors, one row per affected team. **Review** opens that team.
+- **Team cards:** a "Leadership issue" badge next to the team name; its tooltip names
+  the player and the problem.
+- **Team modal and dialog:** badges beside the captain or deputy, and a banner at the
+  top of the Roster tab with a fix for each problem.
+
+| Problem | Fixes offered |
+|---------|---------------|
+| Captain is not a member | **Reseat** them as a member and keep them captain (a dropout or stand-in of this team is restored or moved), or **Choose another captain** |
+| Deputy is not a member | **Clear deputy**, or **Choose another deputy** |
+| Deputy is also the captain | **Clear deputy**, or **Choose another deputy** |
+
+Players and other viewers do not see the flags.
+
+### History tab
+
+The History tab lists the team's audit rows, 25 per page, newest first: when, who
+(or "System"), where from (web, Discord, API or system), the action, the player, the
+reason, any acknowledged override rules, and what changed (for example
+"captain: A -> B" or "members: 5 -> 4"). A player who can no longer be looked up shows
+as its id, for example "Player #12".
+
+---
+
 ## Data Location
 
 New models live in the `league` app (alongside `LeagueUser`), not in the already-large `app/models.py`:
