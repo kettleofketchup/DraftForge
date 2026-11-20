@@ -147,6 +147,42 @@
       "count": 1
     }
   },
+  "app/components/teamdraft/CompletedTeamDraftView.tsx": {
+    "draftforge/no-raw-color-strings": {
+      "count": 6
+    },
+    "shadcn/no-raw-colors": {
+      "count": 12
+    }
+  },
+  "app/components/teamdraft/buttons/DraftModerationDropdown.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 4
+    }
+  },
+  "app/components/teamdraft/buttons/draftStyleModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 16
+    }
+  },
+  "app/components/teamdraft/buttons/initDraftDialog.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/teamdraft/draftBalanceDisplay.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 8
+    }
+  },
+  "app/components/teamdraft/draftModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 8
+    }
+  },
+  "app/components/tournament/captains/draftOrder.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
   "app/components/teamdraft/TeamPositionCoverage.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 15
@@ -286,36 +322,6 @@
       "count": 6
     }
   },
-  "app/components/user/positions/icons/carry.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/user/positions/icons/hardSupportIcon.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
-  "app/components/user/positions/icons/mid.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/user/positions/icons/offlane.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/user/positions/icons/softSupport.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
-  "app/components/user/positions/index.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 28
-    }
-  },
   "app/components/user/searchUser.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 1
@@ -354,6 +360,9 @@
       "count": 2
     }
   },
+  "app/pages/herodraft/HeroDraftPage.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 3
   "app/pages/profile/forms/position.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
