@@ -1,7 +1,11 @@
+from typing import cast
+
 from django.contrib import admin
-from django.db.models import Model
+from django.db import transaction
+from django.db.models import Model, QuerySet
 from django.http import HttpRequest
 
+from app.models import CustomUser
 from events.models import (
     Event,
     EventRepeater,
@@ -12,6 +16,7 @@ from events.models import (
     ReadyCheckEntry,
     SignupLedgerEntry,
 )
+from org.standing import api as standing
 
 
 @admin.register(EventRepeater)
@@ -31,7 +36,25 @@ class EventAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["state", "organization"]
-    readonly_fields = ["state", "host", "helpers", "contributions_awarded_at"]
+    readonly_fields = [
+        "state",
+        "host",
+        "helpers",
+        "contributions_awarded_at",
+        "conduct_finalized_at",
+    ]
+
+    def delete_model(self, request: HttpRequest, obj: Event) -> None:
+        with transaction.atomic():
+            standing.on_event_deleted(obj, actor=cast(CustomUser, request.user))
+            super().delete_model(request, obj)
+
+    def delete_queryset(self, request: HttpRequest, queryset: QuerySet[Event]) -> None:
+        actor = cast(CustomUser, request.user)
+        with transaction.atomic():
+            for event in queryset:
+                standing.on_event_deleted(event, actor=actor)
+            super().delete_queryset(request, queryset)
 
 
 @admin.register(EventTeam)

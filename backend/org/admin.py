@@ -14,6 +14,7 @@ from org.settings_service import (
     normalize_warning_codes,
     update_org_settings,
 )
+from org.standing import api as standing
 
 from .models import OrgFeature, OrgSettings, OrgUser
 
@@ -57,6 +58,9 @@ class OrgFeatureAdmin(admin.ModelAdmin):
             enabled=obj.enabled,
             actor=cast(CustomUser, request.user),
             notes=obj.notes,
+        )
+        standing.on_feature_toggled(
+            row.organization_id, FeatureKey(row.feature), enabled=row.enabled
         )
         obj.pk = row.pk
         obj.refresh_from_db()

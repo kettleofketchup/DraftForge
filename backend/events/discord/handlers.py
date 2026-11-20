@@ -32,6 +32,7 @@ from events.discord._shared import (
 )
 from events.discord.providers.dota import DotaHandler
 from events.discord.providers.registry import SIGNUP_HANDLERS, get_signup_handler
+from events.ledger import SignupActor
 from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE
 from events.schemas import STALE_MODAL_MESSAGE
 from telemetry.logging import get_logger
@@ -396,7 +397,7 @@ def handle_decline_button(
         return {"action": "error", "message": "Could not create your account."}
 
     try:
-        decline_signup(event, user)
+        decline_signup(event, user, actor=SignupActor.discord(user))
     except ValueError:
         return {"action": "already_declined", "message": "You've already declined."}
 
@@ -442,7 +443,7 @@ def handle_tentative_button(
     from events.services import create_tentative_signup
 
     try:
-        signup = create_tentative_signup(event, user)
+        signup = create_tentative_signup(event, user, actor=SignupActor.discord(user))
     except ValueError as e:
         log.warning(
             "signup_rejected", system="discord", subsystem="interaction", reason=str(e)

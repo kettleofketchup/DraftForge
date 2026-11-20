@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import datetime
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from events.constants import UNMET_TRACKED_STATUSES
+from events.constants import UNMET_TRACKED_STATUSES, EventState
+from events.eligibility.checks.conduct import prime_conduct
 from events.eligibility.evaluate import evaluate_signup
 from events.eligibility.reasons import EligibilityResult
 from events.models import EventSignup
 from org.models import OrgUser
+from org.standing import restamp
+from org.standing.cache import StandingCache
 
 ELIGIBILITY_FIELDS: tuple[str, ...] = (
     "unmet_requirements",
@@ -52,9 +56,15 @@ def clear_eligibility(signup: EventSignup) -> list[str]:
     return list(ELIGIBILITY_FIELDS)
 
 
+_CLOSED_EVENT_STATES: frozenset[str] = frozenset(
+    {EventState.COMPLETED, EventState.CANCELLED}
+)
+
+
 def recheck_signup(signup: EventSignup) -> EventSignup:
     """Re-evaluate and store the signup's reasons; the status is not re-decided."""
-    fields = stamp_eligibility(signup, evaluate_signup(signup.event, signup.user))
+    result = evaluate_signup(signup.event, signup.user, for_staff_placement=True)
+    fields = stamp_eligibility(signup, result)
     signup.save(update_fields=[*fields, "updated_at"])
     invalidate_after_commit(signup, signup.event)
     return signup
@@ -65,7 +75,7 @@ def refresh_unmet_requirements(org_user: OrgUser) -> int:
     status is not re-decided. Every writer of a requirement input (game
     profiles, MMR verification) calls this after saving. Returns the number
     of rows changed."""
-    signups = (
+    signups = list(
         EventSignup.objects.nocache()
         .filter(
             user_id=org_user.user_id,
@@ -74,9 +84,43 @@ def refresh_unmet_requirements(org_user: OrgUser) -> int:
         )
         .select_related("event", "user")
     )
+    return _store_reasons(signups, org_user.organization_id)
+
+
+def refresh_members_eligibility(org_users: Iterable[OrgUser]) -> int:
+    return sum(refresh_unmet_requirements(org_user) for org_user in org_users)
+
+
+def refresh_org_eligibility(org_id: int) -> int:
+    """``refresh_unmet_requirements`` for every open signup in the org, with
+    one conduct score query; run after the org's conduct inputs change."""
+    signups = list(
+        EventSignup.objects.nocache()
+        .filter(
+            event__organization_id=org_id,
+            status__in=UNMET_TRACKED_STATUSES,
+        )
+        .exclude(event__state__in=_CLOSED_EVENT_STATES)
+        .select_related("event", "user")
+    )
+    return _store_reasons(signups, org_id)
+
+
+def _store_reasons(signups: Sequence[EventSignup], org_id: int) -> int:
+    if not signups:
+        return 0
+    now = timezone.now()
+    cache = StandingCache()
+    prime_conduct(org_id, (s.user_id for s in signups), now=now, cache=cache)
     changed: list[EventSignup] = []
     for signup in signups:
-        result = evaluate_signup(signup.event, signup.user)
+        result = evaluate_signup(
+            signup.event,
+            signup.user,
+            now=now,
+            for_staff_placement=True,
+            standing_cache=cache,
+        )
         if (
             result.codes == signup.unmet_requirements
             and result.as_dicts() == signup.eligibility_reasons
@@ -88,3 +132,6 @@ def refresh_unmet_requirements(org_user: OrgUser) -> int:
         events = {signup.event_id: signup.event for signup in changed}
         invalidate_after_commit(*changed, *events.values())
     return len(changed)
+
+
+restamp.register(refresh_org_eligibility, refresh_members_eligibility)

@@ -1533,12 +1533,21 @@ def _member_access(
 
 def _feature_access(
     user: CustomUser | AnonymousUser, data: Any, can_view: bool
-) -> dict[str, list[str] | bool]:
+) -> dict[str, Any]:
     """Active feature keys plus per-viewer flags; merged after the cache."""
     features = active_features(data["pk"])
     promotion = FeatureKey.PROMOTION.value in features
     contributions = FeatureKey.CONTRIBUTIONS.value in features
     is_admin, is_staff = org_admin_staff_from_payload(user, data)
+    tracks = standing.tracks_for(
+        data["pk"],
+        viewer=user,
+        features=features,
+        roles=standing.ViewerRoles(
+            is_admin=is_admin, is_staff=is_staff, can_view_members=can_view
+        ),
+    )
+    conduct = next((t for t in tracks if t.key == "conduct"), None)
     return {
         "features": features,
         # Must match has_org_promoter_access (the require_promoter gate).
@@ -1549,6 +1558,11 @@ def _feature_access(
         "can_view_contributions": contributions,
         "can_view_contributors": contributions and can_view,
         "can_manage_contributions": contributions and is_admin,
+        "can_view_conduct": conduct is not None and conduct.can_view_rows,
+        "can_view_own_conduct": conduct is not None and conduct.can_view_own,
+        "can_view_conduct_details": conduct is not None and is_staff,
+        "can_manage_conduct": conduct is not None and conduct.can_manage,
+        "standing_tracks": [standing.track_info_data(t) for t in tracks],
     }
 
 
