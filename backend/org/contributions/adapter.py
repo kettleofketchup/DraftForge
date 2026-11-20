@@ -8,19 +8,20 @@ from django.db.models import QuerySet
 from app.models import CustomUser, Organization
 from app.permissions_org import can_view_org_members
 from events.models import Event
+from org.contributions.kinds import EVENT_STAFF_KINDS
 from org.contributions.queries import leaderboard as contribution_leaderboard
 from org.contributions.queries import org_total
 from org.contributions.services import (
     delete_user_entries,
     reassign_member,
     repoint_ledger_attribution,
-    revoke_event_staff_entries,
     should_sync_staff,
     sync_event_staff_entries,
     user_entries,
 )
 from org.feature_keys import FeatureKey
 from org.models import OrgUser
+from org.standing import ledger
 from org.standing.base import TrackBase
 from org.standing.periods import Period
 from org.standing.types import (
@@ -87,7 +88,7 @@ class ContributionTrack(TrackBase):
     def on_event_reopened(
         self, event: Event, *, actor: CustomUser | None, now: datetime
     ) -> TrackOutput:
-        revoked = revoke_event_staff_entries(event)
+        revoked = ledger.revoke_event_kinds(event, kinds=EVENT_STAFF_KINDS)
         return TrackOutput(orglog={"revoked": revoked}, log={"revoked": revoked})
 
     @override

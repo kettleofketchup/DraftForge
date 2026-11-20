@@ -14,7 +14,7 @@ from events.models import Event
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import (
     award_entry,
-    promo_entry_exists,
+    has_promo_entry,
     revoke_promo_entry,
 )
 from org.models import PromoSend, PromoTemplate
@@ -173,7 +173,7 @@ def _promote_next_send(
         return None
     promoted.earns_points = True
     promoted.save(update_fields=["earns_points"])
-    if not promo_entry_exists(promoted):
+    if not has_promo_entry(promoted):
         _award_send(promoted, event, promoted.sender)
     return promoted
 

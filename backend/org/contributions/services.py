@@ -498,29 +498,23 @@ def repoint_ledger_attribution(drop: CustomUser, keep: CustomUser) -> int:
     )
 
 
-def revoke_event_staff_entries(event: Event) -> int:
-    return ledger.revoke_event_kinds(event, kinds=EVENT_STAFF_KINDS)
+def has_promo_entry(send: PromoSend) -> bool:
+    return ContributionEntry.objects.nocache().filter(promo_send=send).exists()
 
 
-def promo_entry_exists(promo_send: PromoSend) -> bool:
-    return ContributionEntry.objects.nocache().filter(promo_send=promo_send).exists()
-
-
-def promo_points(promo_send: PromoSend) -> int | None:
+def promo_points(send: PromoSend) -> int | None:
     return (
         ContributionEntry.objects.nocache()
-        .filter(promo_send=promo_send)
+        .filter(promo_send=send)
         .values_list("points", flat=True)
         .first()
     )
 
 
-def revoke_promo_entry(promo_send: PromoSend) -> int:
-    deleted, _ = (
-        ContributionEntry.objects.nocache().filter(promo_send=promo_send).delete()
-    )
+def revoke_promo_entry(send: PromoSend) -> int:
+    deleted, _ = ContributionEntry.objects.nocache().filter(promo_send=send).delete()
     return deleted
 
 
 def user_entries(user_pks: Collection[int]) -> QuerySet[ContributionEntry]:
-    return ContributionEntry.objects.nocache().filter(org_user__user__in=user_pks)
+    return ContributionEntry.objects.nocache().filter(org_user__user__in=list(user_pks))

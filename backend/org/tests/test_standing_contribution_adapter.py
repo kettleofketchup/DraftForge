@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
@@ -8,16 +8,22 @@ from django.utils import timezone
 from app.models import CustomUser, Organization, OrgLog
 from events.constants import EventState
 from events.models import Event
+from org.accounts import repoint_org_attribution
 from org.contributions.adapter import CONTRIBUTION
 from org.contributions.queries import leaderboard as contribution_leaderboard
 from org.contributions.queries import org_total
+from org.contributions.services import (
+    has_promo_entry,
+    promo_points,
+    revoke_promo_entry,
+)
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
-from org.models import ContributionEntry, OrgUser
+from org.models import ContributionEntry, OrgFeature, OrgUser, PromoSend, PromoTemplate
 from org.standing import api as standing
 from org.standing import registry
 from org.standing.periods import parse_period
-from org.standing.types import TrackAccess
+from org.standing.types import CloseSource, TrackAccess
 
 
 @override_settings(CACHEOPS_ENABLED=False)
@@ -38,14 +44,25 @@ class ContributionAdapterTest(TestCase):
             state=EventState.COMPLETED,
         )
 
-    def _close(self, *, cancelled: bool, source: str) -> standing.HookResult:
+    def _close(
+        self, *, cancelled: bool, source: CloseSource, now: datetime | None = None
+    ) -> standing.HookResult:
         with transaction.atomic():
             return standing.on_event_closed(
                 self.event,
                 cancelled=cancelled,
                 source=source,
-                actor=None,  # type: ignore[arg-type]
+                actor=None,
+                now=now,
             )
+
+    def _add_helpers(self, count: int) -> None:
+        for i in range(count):
+            helper = CustomUser.objects.create_user(
+                username=f"ca_helper{i}", password="x"
+            )
+            OrgUser.objects.create(user=helper, organization=self.org)
+            self.event.helpers.add(helper)
 
     def _entries(self) -> int:
         return ContributionEntry.objects.nocache().filter(event=self.event).count()
@@ -54,12 +71,15 @@ class ContributionAdapterTest(TestCase):
         self.assertEqual([t.key for t in registry.tracks()], ["contribution"])
 
     def test_close_completed_awards_and_stamps(self) -> None:
-        result = self._close(cancelled=False, source="admin")
-        self.assertEqual(result.orglog_details(), {"awarded": self._entries()})
-        self.assertGreater(self._entries(), 0)
-        self.assertIsNotNone(self.event.contributions_awarded_at)
-        self.assertIsNotNone(
-            Event.objects.nocache().get(pk=self.event.pk).contributions_awarded_at
+        self._add_helpers(2)
+        now = timezone.now()
+        result = self._close(cancelled=False, source="admin", now=now)
+        self.assertEqual(result.orglog_details(), {"awarded": 3})
+        self.assertEqual(result.log_fields(), {"awarded": True, "created": 3})
+        self.assertEqual(self._entries(), 3)
+        self.assertEqual(self.event.contributions_awarded_at, now)
+        self.assertEqual(
+            Event.objects.nocache().get(pk=self.event.pk).contributions_awarded_at, now
         )
 
     def test_close_admin_cancel_no_award(self) -> None:
@@ -72,6 +92,21 @@ class ContributionAdapterTest(TestCase):
         result = self._close(cancelled=True, source="auto")
         self.assertTrue(result.log_fields()["awarded"])
         self.assertGreater(self._entries(), 0)
+
+    def test_close_auto_cancel_with_helpers_awards(self) -> None:
+        self.event.host = None
+        self.event.save(update_fields=["host"])
+        self._add_helpers(1)
+        result = self._close(cancelled=True, source="auto")
+        self.assertEqual(result.log_fields(), {"awarded": True, "created": 1})
+        self.assertEqual(self._entries(), 1)
+
+    def test_close_auto_cancel_without_staff_no_award(self) -> None:
+        self.event.host = None
+        self.event.save(update_fields=["host"])
+        result = self._close(cancelled=True, source="auto")
+        self.assertEqual(result.log_fields(), {"awarded": False, "created": 0})
+        self.assertIsNone(self.event.contributions_awarded_at)
 
     def test_close_awards_while_feature_locked(self) -> None:
         set_org_feature(
@@ -161,3 +196,44 @@ class ContributionAdapterTest(TestCase):
         with self.assertNumQueries(0):
             access = CONTRIBUTION.access(self.org.pk, viewer=None)
         self.assertEqual(access, TrackAccess(False, False))
+
+    def test_promo_wrappers(self) -> None:
+        send = PromoSend.objects.create(
+            organization=self.org,
+            event=self.event,
+            recipient=self.host,
+            sender=self.host,
+            text="hi",
+            earns_points=True,
+        )
+        self.assertFalse(has_promo_entry(send))
+        self.assertIsNone(promo_points(send))
+        ContributionEntry.objects.create(
+            organization=self.org,
+            org_user=self.host_ou,
+            kind="promo_message",
+            points=4,
+            event=self.event,
+            promo_send=send,
+            occurred_at=timezone.now(),
+        )
+        self.assertTrue(has_promo_entry(send))
+        self.assertEqual(promo_points(send), 4)
+        self.assertEqual(revoke_promo_entry(send), 1)
+        self.assertFalse(has_promo_entry(send))
+        self.assertEqual(revoke_promo_entry(send), 0)
+
+    def test_repoint_org_attribution(self) -> None:
+        set_org_feature(
+            self.org, FeatureKey.CONTRIBUTIONS, enabled=True, actor=self.host
+        )
+        template = PromoTemplate.objects.create(
+            organization=self.org, name="Mine", body="x", created_by=self.host
+        )
+        self.assertEqual(repoint_org_attribution(self.host, self.owner), 2)
+        feature = OrgFeature.objects.nocache().get(
+            organization=self.org, feature=FeatureKey.CONTRIBUTIONS
+        )
+        self.assertEqual(feature.enabled_by_id, self.owner.pk)
+        template.refresh_from_db()
+        self.assertEqual(template.created_by_id, self.owner.pk)
