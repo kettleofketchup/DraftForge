@@ -36,9 +36,9 @@ from app.services.team_management import (
     TeamChange,
     TeamManagementError,
     _apply,
-    _other_team_user_ids,
     add_standin,
     mark_dropout,
+    other_team_user_ids,
     remove_standin,
     rename,
     restore_member,
@@ -493,9 +493,7 @@ class StandinAndRestoreTests(TeamManagementFixture, TestCase):
     def test_other_team_user_ids(self) -> None:
         self.other.dropin_members.add(self.outsider)
         self.team.dropin_members.add(self.m2)
-        self.assertEqual(
-            _other_team_user_ids(self.team), {self.o1.pk, self.outsider.pk}
-        )
+        self.assertEqual(other_team_user_ids(self.team), {self.o1.pk, self.outsider.pk})
 
     def test_standin_cap_default(self) -> None:
         self.assertEqual(standin_cap(self.team), DEFAULT_MAX_STANDINS)

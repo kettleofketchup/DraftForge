@@ -94,7 +94,7 @@ def standin_cap(team: Team) -> int:
     return cap if cap is not None else DEFAULT_MAX_STANDINS
 
 
-def _other_team_user_ids(team: Team) -> set[int]:
+def other_team_user_ids(team: Team) -> set[int]:
     if team.tournament_id is None:
         return set()
     others = Team.objects.filter(tournament_id=team.tournament_id).exclude(pk=team.pk)
@@ -616,7 +616,7 @@ def add_standin(
                 "already_on_team",
                 "This player is already on this team as a member, stand-in or dropout.",
             )
-        if user.pk in _other_team_user_ids(locked):
+        if user.pk in other_team_user_ids(locked):
             raise TeamManagementError(
                 "on_other_team",
                 "This player is on another team in this tournament. "
@@ -658,7 +658,7 @@ def restore_member(
                 "not_dropout",
                 "Only players who dropped out of this team can be restored.",
             )
-        if user.pk in _other_team_user_ids(locked):
+        if user.pk in other_team_user_ids(locked):
             raise TeamManagementError(
                 "on_other_team",
                 "This player is on another team in this tournament. "
@@ -700,7 +700,7 @@ def set_captain(
 
     def validate(locked: Team) -> list[Violation]:
         if is_reseat(locked):
-            if user.pk in _other_team_user_ids(locked):
+            if user.pk in other_team_user_ids(locked):
                 raise TeamManagementError(
                     "on_other_team",
                     "This player is on another team in this tournament. "

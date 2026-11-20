@@ -60,7 +60,7 @@ For Dota 2 the configuration includes the hosted-lobby settings (off, manual or 
 
 ### Organization Event Defaults
 
-Admins configure default settings per organization. When creating new events, the form pre-fills from these defaults — no need to re-enter Discord channels, tournament config, or approval settings each time.
+Org admins configure default settings per organization in the **New Event Defaults** sections of the [organization settings modal](organization-settings.md#the-settings-modal), opened from the cog in the organization header. Org staff who are not admins cannot edit them. When creating new events, the form pre-fills from these defaults — no need to re-enter Discord channels, tournament config, or approval settings each time.
 
 Ready check settings (Mandatory RSVP Confirmation, its timings and the start cull) can be saved as defaults too. The create form copies them, including `roll_call_enabled` and `roll_call_mode`, but never `auto_confirm`. See [Mandatory RSVP Confirmation](events/roll-call.md#mandatory-rsvp-confirmation).
 

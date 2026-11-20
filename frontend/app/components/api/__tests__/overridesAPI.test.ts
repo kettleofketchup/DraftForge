@@ -6,6 +6,7 @@ import {
   isOverrideReasonRequiredError,
   isOverrideRequiredError,
   OverrideReasonFormSchema,
+  overrideReasonFormSchema,
 } from '../overridesAPI';
 
 function axiosError(status: number, data: unknown): AxiosError {
@@ -84,5 +85,23 @@ describe('OverrideReasonFormSchema', () => {
     ).toEqual({
       reason: 'x'.repeat(500),
     });
+  });
+});
+
+describe('overrideReasonFormSchema', () => {
+  it('uses the length message above a minimum of one', () => {
+    const result = overrideReasonFormSchema(3).safeParse({ reason: ' ab ' });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toBe(
+      'Give a reason (at least 3 characters).',
+    );
+    expect(overrideReasonFormSchema(3).parse({ reason: ' abc ' })).toEqual({
+      reason: 'abc',
+    });
+  });
+
+  it('keeps the required message at a minimum of one', () => {
+    const result = overrideReasonFormSchema(1).safeParse({ reason: ' ' });
+    expect(result.error?.issues[0].message).toBe('A reason is required');
   });
 });

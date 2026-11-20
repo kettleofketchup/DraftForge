@@ -1,21 +1,55 @@
 # Organization Settings
 
 Organization settings hold org-wide policy: rules that apply to every event an
-organization runs, as opposed to per-event or per-tournament options. They live on the
-**Settings** tab of the organization page and in one `OrgSettings` row per organization.
+organization runs, as opposed to per-event or per-tournament options. They open in one
+full-screen **settings modal** on the organization page, and the policy settings live in
+one `OrgSettings` row per organization.
 The API is listed in
 [API Endpoints: Organization settings](../api/endpoints.md#organization-settings).
 
 Every setting defaults to the platform's current behaviour, so an organization that
-never opens the tab sees no change.
+never opens the modal sees no change.
+
+---
+
+## The settings modal
+
+An **Org Settings** button (cog icon) in the organization header opens the modal. The sidebar groups its sections
+(a tab strip on phones, and a search box on both phones and desktop):
+
+| Group | Sections |
+|---|---|
+| **Organization** | General, Discord, Members, Rules, Admin Team, Staff placement |
+| **New Event Defaults** | Event, Tournament, Lobby, Discord, Ready check |
+
+The **New Event Defaults** sections hold the values the create-event form pre-fills (see
+[Events: Organization Event Defaults](events.md#organization-event-defaults)). They used
+to open from a separate **Organization Event Defaults** dialog on the Events tab, which
+is gone.
+
+Editing any field shows one save bar at the bottom with **Discard** and **Save changes**. Save
+changes writes every changed section, shows a "Settings saved" toast and leaves the modal open.
+Closing the modal with unsaved edits asks "Discard unsaved changes?". A section with a
+field error is marked in the sidebar and opens on save.
+
+The open section is kept in the URL as `?settings=<section>`, so a link such as
+`/organizations/12?settings=staff-placement` opens the modal on that section. Section
+ids are `general`, `discord`, `members`, `rules`, `admins`, `staff-placement`,
+`defaults-event`, `defaults-tournament`, `defaults-lobby`, `defaults-discord` and
+`defaults-ready`. The older `?tab=settings&section=<id>` links are rewritten to
+`?settings=<id>`.
 
 ---
 
 ## Who can see and edit settings
 
-The tab, and both API methods, are limited to org admins, the org owner and site admins.
-Org staff and members do not see the tab; opening `?tab=settings` sends them to Leagues.
-Hiding the tab is a convenience only: the API enforces the same rule.
+The Org Settings button and the modal are limited to org admins, the org owner and
+site admins. Org staff and members do not see the button, so org staff can no longer edit
+event defaults in the UI. A viewer without access who opens a `?settings=` link
+has the parameter removed once their permissions load, and the modal does not open.
+
+The org settings API (`/api/organizations/<id>/settings/`) enforces the same rule. The event
+defaults API (`PATCH /api/events/defaults/<id>/`) still accepts org staff.
 
 | Actor | View (GET) | Save (PATCH) |
 |---|---|---|
@@ -127,29 +161,33 @@ populate for that PR.
 
 ### Adding a settings section
 
-The tab is a stack of independent sections. Each section has its own query, form and
-save button, and decides for itself who can see it. Register it in
-`ORG_SETTINGS_SECTIONS` in
+The modal is a stack of independent sections. Each section has its own query and form,
+reports its dirty state to the shared save bar (it has no Save button of its own), and
+decides for itself who can see it. Register it in `ORG_SETTINGS_SECTIONS` in
 `frontend/app/components/organization/tabs/orgSettings/sections.ts`:
 
 ```typescript
 {
   id: 'notification-policy',
-  Component: NotificationPolicySection,
+  label: 'Notifications',
+  icon: Bell,
+  group: 'Organization',
+  useSection: useNotificationPolicySection,
   useVisible: useCanEditNotificationPolicy,
 },
 ```
 
-- `Component` receives `{ organizationId }`.
+- `useSection(organizationId, enabled)` is a hook that returns `{ content, unit }`.
+  `content` is the section body and `unit` is its save-bar unit (dirty state, save and
+  discard). Pass `enabled` to the query so nothing is fetched for viewers who cannot
+  open the section.
 - `useVisible(org)` is a hook that returns whether the viewer can see the section. The
   list is static and every hook runs in list order on each render, so never add or
   remove entries at runtime.
 
-The tab, the mobile navigation entry and the `?tab=settings` redirect all use
-`useOrgSettingsTabAccess`, which shows the tab when at least one section is visible. A
-section with a non-admin predicate therefore needs no change to
-`routes/organization.tsx`. The section must still gate its own edit controls, and its
-endpoints must enforce the same permission.
+The Org Settings button and the `?settings=` handling use `useOrgSettingsAccess`, which allows the modal
+once access has settled and the viewer is an organization admin. The section must still gate its own edit controls,
+and its endpoints must enforce the same permission.
 
 A section can store its data somewhere other than `OrgSettings`, with its own model and
 endpoint.
@@ -190,5 +228,7 @@ database hash, so CI runs one fresh populate for that PR.
 | Serializer | `backend/org/serializers.py` (`OrgSettingsSerializer`) |
 | Django admin | `backend/org/admin.py` (`OrgSettingsAdmin`) |
 | API client and schemas | `frontend/app/components/api/orgSettingsAPI.ts` |
-| Tab, sections and access hook | `frontend/app/components/organization/tabs/OrgSettingsTab.tsx`, `tabs/orgSettings/` |
-| Tests | `backend/org/tests/test_org_settings.py`, `frontend/app/components/organization/__tests__/OrgSettingsTab.test.tsx`, `tabs/orgSettings/__tests__/`, `frontend/tests/playwright/e2e/19-org-features/06-org-settings.spec.ts` |
+| Modal | `frontend/app/components/organization/OrgSettingsDialog.tsx` (shell: `components/patterns/SettingsDialog.tsx`) |
+| Sections and access hook | `frontend/app/components/organization/tabs/orgSettings/` |
+| New event defaults sections | `frontend/app/components/events/useOrgEventDefaultsSections.tsx` |
+| Tests | `backend/org/tests/test_org_settings.py`, `frontend/app/components/organization/__tests__/OrgSettingsDialog.test.tsx`, `tabs/orgSettings/__tests__/`, `frontend/tests/playwright/e2e/19-org-features/06-org-settings.spec.ts` |

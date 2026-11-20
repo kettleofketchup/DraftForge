@@ -214,10 +214,10 @@ test.describe.serial('Events - Ready check settings (@cicd)', () => {
     await stubVoiceChannels(page);
     await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
     await page.getByTestId('org-tab-events').click();
-    await page.getByTestId('org-event-defaults-btn').click();
-    await expect(page.getByTestId('org-defaults-modal')).toBeVisible();
+    await page.getByTestId('org-settings-button').click();
+    await expect(page.getByTestId('org-settings-modal')).toBeVisible();
 
-    await openTab(page, 'org-defaults', 'ready');
+    await openTab(page, 'org-settings', 'defaults-ready');
     await page.getByTestId('ready-check-toggle').click();
     await expect(page.getByTestId('ready-check-toggle')).toBeChecked();
     await expect(page.getByTestId('ready-check-auto-confirm')).toBeDisabled();
@@ -233,8 +233,8 @@ test.describe.serial('Events - Ready check settings (@cicd)', () => {
     await page.getByTestId('ready-check-cull-enabled').click();
     await expect(page.getByTestId('ready-check-cull-enabled')).toBeChecked();
 
-    await page.getByTestId('form-dialog-submit').click();
-    await expect(page.getByTestId('org-defaults-modal')).not.toBeVisible({
+    await page.getByTestId('org-settings-save').click();
+    await expect(page.getByTestId('org-settings-save-bar')).toHaveCount(0, {
       timeout: 10000,
     });
 
@@ -254,9 +254,8 @@ test.describe.serial('Events - Ready check settings (@cicd)', () => {
     });
 
     await page.reload();
-    await page.getByTestId('org-tab-events').click();
-    await page.getByTestId('org-event-defaults-btn').click();
-    await openTab(page, 'org-defaults', 'ready');
+    await expect(page.getByTestId('org-settings-modal')).toBeVisible();
+    await openTab(page, 'org-settings', 'defaults-ready');
     await expect(page.getByTestId('ready-check-toggle')).toBeChecked();
     await page.getByTestId('ready-check-settings-trigger').click();
     await expect(page.getByTestId('ready-check-chase-minutes')).toHaveValue(
@@ -266,7 +265,7 @@ test.describe.serial('Events - Ready check settings (@cicd)', () => {
       'Main roster and fill list',
     );
     await page.keyboard.press('Escape');
-    await expect(page.getByTestId('org-defaults-modal')).not.toBeVisible();
+    await expect(page.getByTestId('org-settings-modal')).not.toBeVisible();
 
     await page.getByTestId('create-event-btn').click();
     await expect(page.getByTestId('event-name-input')).toBeVisible();
