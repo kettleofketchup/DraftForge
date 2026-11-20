@@ -41,6 +41,19 @@ const REMINDER_HOURS_OPTIONS = [
   { value: 48, label: '2 days before' },
 ];
 
+const START_MENTION_MINUTES_OPTIONS = [
+  { value: 5, label: '5 minutes before' },
+  { value: 10, label: '10 minutes before' },
+  { value: 15, label: '15 minutes before' },
+  { value: 30, label: '30 minutes before' },
+  { value: 60, label: '1 hour before' },
+];
+
+const START_MENTION_SCOPE_OPTIONS = [
+  { value: 'all_active', label: 'All active signups (incl. waitlist)' },
+  { value: 'main', label: 'Main list only' },
+];
+
 export const DiscordIcon = ({ className }: { className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -92,15 +105,17 @@ function CheckboxField({
   );
 }
 
-/** Reusable hours dropdown for reminder timing */
+/** Reusable dropdown for reminder timing */
 function HoursSelect({
   control,
   name,
   label,
+  options = REMINDER_HOURS_OPTIONS,
 }: {
   control: Control<DiscordFields>;
   name: DiscordFieldName;
   label?: string;
+  options?: { value: number; label: string }[];
 }) {
   return (
     <div className="ml-7">
@@ -115,12 +130,15 @@ function HoursSelect({
               value={field.value?.toString()}
             >
               <FormControl>
-                <SelectTrigger className="w-full">
+                <SelectTrigger
+                  className="w-full"
+                  data-testid={`discord-${name}-select`}
+                >
                   <SelectValue />
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
-                {REMINDER_HOURS_OPTIONS.map((opt) => (
+                {options.map((opt) => (
                   <SelectItem key={opt.value} value={String(opt.value)}>
                     {opt.label}
                   </SelectItem>
@@ -165,6 +183,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
     confirmAttendance,
     postSignups,
     announcement,
+    startMention,
   ] = watch([
     'discord_create_event',
     'discord_signup_reminder',
@@ -172,6 +191,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
     'discord_confirm_attendance',
     'discord_post_signups',
     'discord_announcement',
+    'discord_start_mention',
   ]);
 
   return (
@@ -310,6 +330,54 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
             control={control}
             name="discord_confirm_attendance_hours"
           />
+        )}
+      </div>
+
+      {/* Start mention */}
+      <div className="rounded-md border border-border p-3 space-y-3">
+        <CheckboxField
+          control={control}
+          name="discord_start_mention"
+          label="Mention signed-up members before start"
+          description="Reply to the signup post with an @mention of every signed-up member shortly before the event starts"
+        />
+        {startMention && (
+          <>
+            <HoursSelect
+              control={control}
+              name="discord_start_mention_minutes"
+              options={START_MENTION_MINUTES_OPTIONS}
+            />
+            <div className="ml-7">
+              <FormField
+                control={control}
+                name="discord_start_mention_scope"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Who to mention</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger
+                          className="w-full"
+                          data-testid="discord-discord_start_mention_scope-select"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {START_MENTION_SCOPE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </>
         )}
       </div>
 
