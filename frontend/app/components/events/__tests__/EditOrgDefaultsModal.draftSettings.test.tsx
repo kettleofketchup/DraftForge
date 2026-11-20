@@ -95,12 +95,18 @@ describe('EditOrgDefaultsModal tabs', () => {
       { wrapper: Wrapper },
     );
     await waitFor(() =>
-      expect(screen.getByTestId('org-defaults-tab-event')).toBeInTheDocument(),
+      expect(
+        screen.getByTestId('org-defaults-tab-defaults-event'),
+      ).toBeInTheDocument(),
     );
     for (const tab of ['tournament', 'lobby', 'discord']) {
-      expect(screen.getByTestId(`org-defaults-tab-${tab}`)).toBeInTheDocument();
+      expect(
+        screen.getByTestId(`org-defaults-tab-defaults-${tab}`),
+      ).toBeInTheDocument();
     }
-    expect(screen.queryByTestId('org-defaults-tab-approval')).toBeNull();
+    expect(
+      screen.queryByTestId('org-defaults-tab-defaults-approval'),
+    ).toBeNull();
   });
 });
 
@@ -146,7 +152,9 @@ describe('EditOrgDefaultsModal ready check', () => {
     await waitFor(() =>
       expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20),
     );
-    expect(screen.getByTestId('org-defaults-tab-ready')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('org-defaults-tab-defaults-ready'),
+    ).toBeInTheDocument();
     expect(
       screen.queryByTestId('org-defaults-auto-confirm-checkbox'),
     ).toBeNull();
