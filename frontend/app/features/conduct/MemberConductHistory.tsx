@@ -81,12 +81,11 @@ export function MemberConductHistory({
   timeZone,
 }: MemberConductHistoryProps) {
   const [offset, setOffset] = useState(0);
-  const { data, isLoading, isError, error } = useMemberConduct(
-    orgId,
-    access,
-    orgUserPk,
-    { limit: HISTORY_PAGE_SIZE, offset },
-  );
+  const { data, isLoading, isError, error, isPlaceholderData } =
+    useMemberConduct(orgId, access, orgUserPk, {
+      limit: HISTORY_PAGE_SIZE,
+      offset,
+    });
   const showDetails = access.canViewConductDetails;
 
   useEffect(() => {
@@ -180,7 +179,7 @@ export function MemberConductHistory({
               <SecondaryButton
                 size="sm"
                 className="min-h-11 sm:min-h-8"
-                disabled={offset === 0}
+                disabled={offset === 0 || isPlaceholderData}
                 onClick={() =>
                   setOffset((o) => Math.max(0, o - HISTORY_PAGE_SIZE))
                 }
@@ -191,7 +190,9 @@ export function MemberConductHistory({
               <SecondaryButton
                 size="sm"
                 className="min-h-11 sm:min-h-8"
-                disabled={data.history.length < HISTORY_PAGE_SIZE}
+                disabled={
+                  data.history.length < HISTORY_PAGE_SIZE || isPlaceholderData
+                }
                 onClick={() => setOffset((o) => o + HISTORY_PAGE_SIZE)}
                 data-testid="conduct-history-next"
               >

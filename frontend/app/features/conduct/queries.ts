@@ -55,6 +55,13 @@ export function useMemberConduct(
     queryKey: conductKeys.member(orgId, access.viewerPk, orgUserPk ?? 0, page),
     queryFn: () => getMemberConduct(orgId, orgUserPk!, page),
     enabled: canView(access) && orgUserPk != null,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === orgId &&
+      previousQuery.queryKey[2] === access.viewerPk &&
+      previousQuery.queryKey[3] === 'member' &&
+      previousQuery.queryKey[4] === orgUserPk
+        ? previous
+        : undefined,
   });
 }
 

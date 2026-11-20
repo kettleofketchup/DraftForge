@@ -16,6 +16,7 @@ import {
   useMemberConduct,
   usePutAttendance,
 } from '../queries';
+import type { MemberConduct } from '../schemas';
 
 vi.mock('../api', () => ({
   getConductLeaderboard: vi.fn(),
@@ -87,6 +88,28 @@ describe('conduct queries', () => {
       { wrapper },
     );
     expect(getMemberConduct).not.toHaveBeenCalled();
+  });
+
+  it('keeps the previous history page while the next one loads', async () => {
+    const first = { history: [], page: 0 } as unknown as MemberConduct;
+    vi.mocked(getMemberConduct)
+      .mockResolvedValueOnce(first)
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockReturnValueOnce(new Promise(() => {}));
+    const { wrapper } = setup();
+    const { result, rerender } = renderHook(
+      ({ pk, offset }: { pk: number; offset: number }) =>
+        useMemberConduct(1, access, pk, { limit: 50, offset }),
+      { wrapper, initialProps: { pk: 3, offset: 0 } },
+    );
+    await waitFor(() => expect(result.current.data).toBe(first));
+
+    rerender({ pk: 3, offset: 50 });
+    expect(result.current.data).toBe(first);
+    expect(result.current.isPlaceholderData).toBe(true);
+
+    rerender({ pk: 4, offset: 0 });
+    expect(result.current.data).toBeUndefined();
   });
 
   it('does not load settings without manage access', () => {
