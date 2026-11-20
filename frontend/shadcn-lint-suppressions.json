@@ -147,50 +147,12 @@
       "count": 1
     }
   },
-  "app/components/teamdraft/CompletedTeamDraftView.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 6
-    },
-    "shadcn/no-raw-colors": {
-      "count": 12
-    }
-  },
   "app/components/teamdraft/TeamPositionCoverage.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 15
     },
     "shadcn/no-raw-colors": {
       "count": 11
-    }
-  },
-  "app/components/teamdraft/buttons/DraftModerationDropdown.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 4
-    }
-  },
-  "app/components/teamdraft/buttons/draftStyleModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 16
-    }
-  },
-  "app/components/teamdraft/buttons/initDraftDialog.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/teamdraft/draftBalanceDisplay.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 8
-    }
-  },
-  "app/components/teamdraft/draftModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 8
-    }
-  },
-  "app/components/tournament/captains/draftOrder.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
     }
   },
   "app/components/ui/base-handle.tsx": {
