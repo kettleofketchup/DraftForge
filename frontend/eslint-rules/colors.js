@@ -109,7 +109,7 @@ export const noRawColorStrings = {
 };
 
 // Colour literals inside Tailwind arbitrary values (shadow-[..rgba(..)], bg-[#..]),
-// which neither palette rule sees. Pure black and white stay allowed, like text-white.
+// which neither palette rule sees. Black/white hex and rgb() pass, like text-white.
 const COLOR_LITERAL =
   /#[0-9a-fA-F]{3,8}\b|(?<![a-zA-Z-])(?:rgba?|hsla?|oklch|oklab|lch|lab|hwb)\([^()]*\)/g;
 const NEUTRAL_HEX =
