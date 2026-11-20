@@ -46,8 +46,8 @@ class FakeTrack(TrackBase):
     metrics = (POINTS,)
     reopen_reset_fields = ()
     output_keys: Mapping[HookName, OutputKeys] = {
-        "on_event_closed": OutputKeys(orglog=frozenset({"fake_closed"})),
-        "on_event_reopened": OutputKeys(orglog=frozenset({"fake_reopened"})),
+        "on_event_closed": OutputKeys(orglog=("fake_closed",)),
+        "on_event_reopened": OutputKeys(orglog=("fake_reopened",)),
     }
 
     def __init__(self, *, raise_on: str | None = None) -> None:
@@ -141,7 +141,13 @@ class FakeTrack(TrackBase):
         now: datetime,
     ) -> Leaderboard:
         return Leaderboard(
-            track=self.key, metric=metric, period="all", rows=[], total=1, own_row=None
+            track=self.key,
+            metric=metric,
+            period="all",
+            rows=[],
+            total=1,
+            own_row=None,
+            rows_visible=True,
         )
 
     @override
@@ -265,7 +271,7 @@ class RegistryValidationTest(TestCase):
     def test_output_key_collision(self) -> None:
         fake = FakeTrack()
         fake.output_keys = {  # type: ignore[misc]
-            "on_event_closed": OutputKeys(orglog=frozenset({"awarded"}))
+            "on_event_closed": OutputKeys(orglog=("awarded",))
         }
         with self.assertRaises(ValueError):
             validate((CONTRIBUTION, fake))

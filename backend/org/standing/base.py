@@ -1,7 +1,7 @@
 import abc
 from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
-from typing import Any, ClassVar, Protocol
+from typing import Any, ClassVar
 
 from django.db.models import QuerySet
 
@@ -14,6 +14,7 @@ from org.standing.periods import Period
 from org.standing.types import (
     EMPTY_OUTPUT,
     CloseSource,
+    HasUserId,
     HookName,
     Leaderboard,
     Metric,
@@ -22,10 +23,6 @@ from org.standing.types import (
     TrackKey,
     TrackOutput,
 )
-
-
-class HasUserId(Protocol):
-    user_id: int
 
 
 class TrackBase(abc.ABC):

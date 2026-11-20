@@ -62,11 +62,9 @@ class ContributionTrack(TrackBase):
     )
     reopen_reset_fields = ("contributions_awarded_at",)
     output_keys: Mapping[HookName, OutputKeys] = {
-        "on_event_closed": OutputKeys(
-            orglog=frozenset({"awarded"}), log=frozenset({"awarded", "created"})
-        ),
-        "on_event_reopened": OutputKeys(orglog=frozenset({"revoked"})),
-        "on_event_changed": OutputKeys(log=frozenset({"synced"})),
+        "on_event_closed": OutputKeys(orglog=("awarded",), log=("awarded", "created")),
+        "on_event_reopened": OutputKeys(orglog=("revoked",)),
+        "on_event_changed": OutputKeys(log=("synced",)),
     }
 
     @override
@@ -168,6 +166,7 @@ class ContributionTrack(TrackBase):
             rows=rows,
             total=org_total(org, period),
             own_row=None,
+            rows_visible=True,
         )
 
     @override

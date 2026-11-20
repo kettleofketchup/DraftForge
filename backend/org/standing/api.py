@@ -13,12 +13,13 @@ from org.feature_keys import FeatureKey
 from org.features import org_has_feature
 from org.models import OrgUser
 from org.standing import registry
-from org.standing.base import HasUserId, TrackBase
+from org.standing.base import TrackBase
 from org.standing.cache import StandingCache
 from org.standing.errors import FeatureLocked, UnknownMetric
 from org.standing.periods import Period
 from org.standing.types import (
     CloseSource,
+    HasUserId,
     HookResult,
     Leaderboard,
     TrackInfo,
@@ -168,7 +169,7 @@ def leaderboard(
     if chosen is None:
         raise UnknownMetric(metric)
     if not org_has_feature(org, adapter.feature):
-        raise FeatureLocked(str(adapter.feature))
+        raise FeatureLocked(adapter.key)
     info = adapter.track_info(org, viewer=viewer)
     board = adapter.leaderboard(
         org, chosen, period, viewer=viewer, now=now or timezone.now()
@@ -180,6 +181,7 @@ def leaderboard(
         rows=board.rows if info.can_view_rows else [],
         total=board.total,
         own_row=board.own_row if info.can_view_own else None,
+        rows_visible=info.can_view_rows,
     )
 
 

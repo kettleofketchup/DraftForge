@@ -1,6 +1,6 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, Protocol, runtime_checkable
 
 TrackKey = Literal["contribution", "conduct", "leadership"]
 CloseSource = Literal["admin", "auto", "cancel"]
@@ -21,8 +21,8 @@ LogValue = int | bool
 
 @dataclass(frozen=True, slots=True)
 class OutputKeys:
-    orglog: frozenset[str] = frozenset()
-    log: frozenset[str] = frozenset()
+    orglog: tuple[str, ...] = ()
+    log: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +36,7 @@ EMPTY_OUTPUT = TrackOutput()
 
 @dataclass(frozen=True, slots=True)
 class HookResult:
-    by_track: Mapping[str, TrackOutput] = field(default_factory=dict)
+    by_track: Mapping[TrackKey, TrackOutput] = field(default_factory=dict)
 
     def orglog_details(self) -> dict[str, LogValue]:
         merged: dict[str, LogValue] = {}
@@ -72,6 +72,12 @@ class TrackInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class TrackAccess:
+    can_view_rows: bool
+    can_view_own: bool
+
+
+@dataclass(frozen=True, slots=True)
 class LeaderboardRow:
     org_user_id: int
     member: Mapping[str, object]
@@ -88,3 +94,9 @@ class Leaderboard:
     rows: Sequence[LeaderboardRow]
     total: float | int | None
     own_row: LeaderboardRow | None
+    rows_visible: bool
+
+
+@runtime_checkable
+class HasUserId(Protocol):
+    user_id: int

@@ -1,19 +1,21 @@
 from collections.abc import Callable
 
+from org.standing.types import TrackKey
+
 
 class StandingCache:
-    """Per-request memo shared by promotion_order and the eligibility check."""
+    """Opaque per-request memo shared by promotion_order and the eligibility check."""
 
-    __slots__ = ("_values",)
+    __slots__ = ("_memo",)
 
     def __init__(self) -> None:
-        self._values: dict[tuple[str, str], object] = {}
+        self._memo: dict[tuple[str, str], object] = {}
 
 
-def get_or_compute[V](
-    cache: StandingCache, track: str, name: str, compute: Callable[[], V]
-) -> V:
+def memo[T](
+    cache: StandingCache, track: TrackKey, name: str, compute: Callable[[], T]
+) -> T:
     key = (track, name)
-    if key not in cache._values:
-        cache._values[key] = compute()
-    return cache._values[key]  # type: ignore[return-value]
+    if key not in cache._memo:
+        cache._memo[key] = compute()
+    return cache._memo[key]  # type: ignore[return-value]
