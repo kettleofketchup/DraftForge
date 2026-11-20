@@ -156,6 +156,106 @@ When a tournament is linked to a season, the admin can import teams:
 
 ---
 
+## Tournament Team Audit Log and Roster Service
+
+Built in #544 (epic #490). Tournament teams (`app.Team`) get an audit table and one
+service for roster changes. The staff API (#545) and the tournament team dialog (#546)
+build on it.
+
+### TeamLog
+
+`app.TeamLog` records one row per team change. It is read-only in the Django admin, not
+cached, and the app never deletes rows (the retention purge, #499, will).
+
+| Field | Description |
+|-------|-------------|
+| `team` | FK → Team, `SET_NULL`: the row outlives the team |
+| `event_team` | FK → EventTeam, `SET_NULL` (for event-team rows, #548) |
+| `team_snapshot_id` | The team's id, kept after the team is deleted; history queries use it |
+| `tournament_id`, `event_id`, `organization_id` | Snapshots, not FKs |
+| `occasion_at` | Source event end, else its start, else the tournament date (for #499) |
+| `team_name` | Name at write time |
+| `actor` | Who made the change (null for system changes) |
+| `via` | `web`, `discord`, `api` or `system` |
+| `action` | See below |
+| `target_user` | The player the change is about |
+| `reason` | Staff reason; never written to logs |
+| `override_rules` | Override codes the actor acknowledged, e.g. `["team_standin_cap"]` |
+| `details` | `before` / `after` roster snapshots (name, captain, deputy, member, stand-in and dropout ids) plus action extras |
+| `created_at` | Auto |
+
+Actions: `set_captain`, `set_deputy`, `mark_dropout`, `restore_member`, `add_standin`,
+`remove_standin`, `sub_in`, `rename`, `legacy_patch` (the old team PATCH),
+`system_succession`, `empty_team_kept`, `team_deleted` and `materialize` (reserved for
+#549).
+
+### Roster service
+
+`app/services/team_management.py` has `set_captain`, `set_deputy`, `mark_dropout`,
+`restore_member`, `add_standin`, `remove_standin`, `sub_in(standin, replacing=None)` and
+`rename`. Each takes `actor`, `via`, `reason` and `acknowledged_codes`, runs in one
+transaction, writes exactly one TeamLog row, invalidates the team, tournament and player
+caches after commit and sends `team_roster_changed` on commit. Refusals raise
+`TeamManagementError(code, message)`; the message names the fix.
+
+Rules:
+
+- The captain and deputy must be members, and the deputy is not the captain. Making a
+  stand-in captain moves them into the members first; the old captain stays a member.
+  A captain who is not on the team (a ghost captain) can be re-seated.
+- A change never adds a leadership problem, so a team with an existing problem can
+  still be repaired one step at a time.
+- A reason is required when the change affects a player other than the actor (except
+  system changes). A rename affects no player, so it needs no reason. Reasons are at
+  most 500 characters (`reason_too_long`). The API maps `reason_required` and the other
+  refusal codes to 400 (#545).
+- A dropout that would empty the team is refused; sub in a stand-in instead. Dropouts
+  stay in the tournament. When the captain drops out, the deputy takes over, then the
+  highest org MMR, then the lowest user id.
+- A stand-in cannot be on another team in the same tournament.
+- Stand-in limit: the source event's `team_max_standins`, else 2. Going over it
+  (`team_standin_cap`, rule `override-warning`) or failing the source event's eligibility
+  requirements (rule `staff-override`) needs a staff override: the actor acknowledges the
+  codes and gives a reason, and the codes are stored in `override_rules`. The override
+  check is the shared #585 contract (`events/overrides.py`); team codes are outside the
+  org's warning codes, so the staff override policy does not change them.
+- A captain change moves that captain's draft rounds in the tournament, picked and
+  unpicked, to the new captain. Rounds find their team through the captain, so leaving
+  picked rounds behind would point them at no team and break undo. When the old or new
+  captain also captains another team in the tournament the rounds cannot be told
+  apart, so none move (`draft_rounds_skipped_reason: old_captain_leads_other_team`).
+  The change also adds the new captain to the tournament if needed, resets the team's
+  draft presence, posts a `team_changed` event to a live team draft and refreshes a live
+  hero draft.
+- Subbing in a stand-in adds them to the tournament if needed (`added_to_tournament`,
+  `org_user_created`, `league_user_created` in the row). A benched stand-in is not a
+  tournament user.
+
+### Changes to existing paths
+
+- Removing the last member of a team used by bracket games or hero drafts keeps the team
+  (`empty_team_kept` row) instead of deleting it and those games. An unused team is
+  still deleted (`team_deleted` row). The kept team keeps its captain, which then shows
+  as a leadership problem (#604).
+- Captain succession after a member leaves writes a `system_succession` row. The
+  `system_succession`, `empty_team_kept` and `team_deleted` rows invalidate caches and
+  send `team_roster_changed` like service rows. Removing a regular member through the
+  signal path, a draft reset clearing stand-ins and dropouts, and team creation write
+  no row.
+- The old team PATCH (`/api/teams/{id}/`) writes a `legacy_patch` row, adds members
+  before removing them, refuses emptying a used team and returns 204 when it deletes an
+  unused one. See [API endpoints](../../api/endpoints.md#updating-a-team).
+- Current members, stand-ins and dropouts of the tournament's teams are left out of the
+  draft pool.
+- Undoing a pick refuses with 409 `pick_is_captain` when the picked player has since
+  been made captain, and clears the player's dropout entry when they were marked as a
+  dropout.
+- `draft-rebuild` on a draft with rounds refuses with 409 `team_changes_logged` when any
+  team in the tournament has a non-system audit row, since rebuilding from the picks
+  would undo those changes. A rebuild skips picks who are now dropouts.
+
+---
+
 ## Data Location
 
 New models live in the `league` app (alongside `LeagueUser`), not in the already-large `app/models.py`:
