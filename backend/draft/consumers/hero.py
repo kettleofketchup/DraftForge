@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 from django.utils import timezone
 
-from app.consumers_base import BaseDraftConsumer, consumer_db
+from app.consumer_db import consumer_db
+from app.consumers_base import BaseDraftConsumer
 from app.tasks.draft_tick import TickDriver
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 from draft.serializers.hero import HeroDraftSerializer

@@ -88,7 +88,7 @@ MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT,)
 # target app -> production file (relative to backend/) -> what it may import from that app
 ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
     "draft": {
-        "app/draft_state.py": BackEdge(
+        "app/tournament_state.py": BackEdge(
             frozenset({"HeroDraft"}),
             "tournament prefetch plan prefetches games__herodraft",
         ),

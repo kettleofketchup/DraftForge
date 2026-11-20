@@ -11,8 +11,8 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
-from app.consumers_base import BaseDraftConsumer, consumer_db
-from app.draft_state import build_draft_state
+from app.consumer_db import consumer_db
+from app.consumers_base import BaseDraftConsumer
 from app.functions.teamdraft import emit_event, team_payload
 from app.models import (
     Draft,
@@ -27,6 +27,7 @@ from app.tasks.teamdraft_tick import (
     captain_conn_key,
     captain_is_fresh,
 )
+from app.tournament_state import build_draft_state, recent_draft_events
 from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 
@@ -407,10 +408,4 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     @consumer_db
     def get_recent_events(self, tournament_id: int, limit: int = 20) -> list[dict]:
-        # Get events from the tournament's draft
-        try:
-            draft = Draft.objects.get(tournament_id=tournament_id)
-            events = DraftEvent.objects.filter(draft=draft)[:limit]
-            return DraftEventSerializer(events, many=True).data
-        except Draft.DoesNotExist:
-            return []
+        return recent_draft_events(tournament_id, limit)

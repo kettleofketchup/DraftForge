@@ -35,12 +35,10 @@ import time
 import weakref
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable
-from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 import redis
 from asgiref.sync import sync_to_async
-from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.db.models import Model
 from django.utils import timezone
@@ -69,23 +67,6 @@ tracer = trace.get_tracer(__name__)
 PING_INTERVAL = 1
 
 FALLBACK_CLEANUP_TIMEOUT_S: float = 5.0
-
-CONSUMER_DB_THREADS: int = 16
-_consumer_db_executor = ThreadPoolExecutor(
-    max_workers=CONSUMER_DB_THREADS, thread_name_prefix="ws-db"
-)
-
-
-def consumer_db[**P, R](func: Callable[P, R]) -> Callable[P, Awaitable[R]]:
-    """``database_sync_to_async`` on a pool instead of asgiref's one shared thread.
-
-    Each call gets its own connection, closed after it (CONN_MAX_AGE=0), so a
-    write waiting on SQLite's lock holds up only its own caller (#352).
-    """
-    return database_sync_to_async(
-        func, thread_sensitive=False, executor=_consumer_db_executor
-    )
-
 
 # Keyed by loop too: an asyncio.Lock binds to the first loop it waits on (#588).
 type _DraftLockKey = tuple[asyncio.AbstractEventLoop, str, int]
