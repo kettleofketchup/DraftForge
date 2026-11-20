@@ -83,7 +83,79 @@ HERO_DRAFT = MovedSlice(
     cached_labels=frozenset({"herodraft", "draftteam"}),
 )
 
-MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT,)
+TEAM_DRAFT = MovedSlice(
+    name="team-draft",
+    source_app="app",
+    new_app="draft",
+    moved=frozenset(
+        {
+            ("app.models", "TeamDraftState"),
+            ("app.models", "TimeoutAction"),
+            ("app.models", "Draft"),
+            ("app.models", "DraftRound"),
+            ("app.models", "DraftEvent"),
+            ("app.models", "DraftOptions"),
+            ("app.consumers", "DraftConsumer"),
+            ("app.consumers", "emit_event"),
+            ("app.consumers", "team_payload"),
+            ("app.consumers", "build_draft_state"),
+            ("app.consumers", "TickDriver"),
+            ("app.consumers", "TEAM_TICK_DRIVER"),
+            ("app.consumers", "captain_conn_key"),
+            ("app.consumers", "captain_is_fresh"),
+            ("app.consumers", "DraftEventSerializer"),
+            ("app.serializers", "DraftSerializer"),
+            ("app.serializers", "TournamentSerializerDraft"),
+            ("app.serializers", "DraftSerializerMMRs"),
+            ("app.serializers", "DraftRoundSerializer"),
+            ("app.serializers", "DraftEventSerializer"),
+            ("app.views_main", "DraftView"),
+            ("app.views_main", "DraftRoundView"),
+            ("app.views_main", "DraftCreateView"),
+            ("app.views_main", "DraftRoundCreateView"),
+            ("app.views", "DraftView"),
+            ("app.views", "DraftRoundView"),
+            ("app.views", "DraftCreateView"),
+            ("app.views", "DraftRoundCreateView"),
+            ("app.permissions_org", "CanEditDraft"),
+            ("app.permissions_org", "CanEditDraftRound"),
+            ("app.functions.tournament", "generate_draft_rounds"),
+            ("app.functions.tournament", "rebuild_team"),
+            ("app.functions.tournament", "get_draft_style_mmrs"),
+            ("app.functions.tournament", "CreateDraftRounds"),
+            ("app.functions.tournament", "DraftPredictMMRSerializer"),
+            ("app.functions.tournament", "_get_or_create_draft"),
+            ("app.functions.tournament", "_notify_draft_started_after_commit"),
+            ("app.functions.tournament", "reset_draft_teams"),
+            ("app.functions.tournament", "NoEligibleCaptains"),
+            ("app.functions.tournament", "TeamsReferenced"),
+            ("app.functions.tournament", "DraftSerializerMMRs"),
+            ("app.functions.tournament", "notify_draft_started"),
+        }
+    ),
+    retired_modules=frozenset(
+        {
+            "app.functions.teamdraft",
+            "app.functions.teamdraft_timeout",
+            "app.functions.teamdraft_views",
+            "app.functions.shuffle_draft",
+            "app.functions.draft_picks",
+            "app.tasks.draft_tick",
+            "app.tasks.teamdraft_tick",
+            "app.broadcast",
+            "app.draft_state",
+            "app.consumers_base",
+            "app.services.draft_reset",
+            "app.tests.teamdraft_fixtures",
+            "app.tests.ws_helpers",
+        }
+    ),
+    model_labels=frozenset({"draft", "draftround", "draftevent", "draftoptions"}),
+    move_migration=("app", "0108_move_team_draft_models_to_draft"),
+    cached_labels=frozenset({"draft", "draftoptions", "draftround"}),
+)
+
+MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT)
 
 # target app -> production file (relative to backend/) -> what it may import from that app
 ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
@@ -631,6 +703,7 @@ class AppBoundaryTests(SimpleTestCase):
         rels = {rel for _file, rel in _python_files(self.base)}
         self.assertIn("app/models.py", rels)
         self.assertIn("draft/models/hero.py", rels)
+        self.assertIn("draft/models/team.py", rels)
         self.assertNotIn(GUARD_FILE, rels)
         self.assertFalse(any("/migrations/" in rel for rel in rels))
 
