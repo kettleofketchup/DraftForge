@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from 'react';
-import { DraftModal } from '~/components/teamdraft/draftModal';
 import { SearchTeamsDropdown } from '~/components/team/searchTeams';
 import { TeamCard } from '~/components/teamdraft/CompletedTeamDraftView';
+import { DraftModal } from '~/components/teamdraft/draftModal';
 import { CaptainSelectionModal } from '~/components/tournament/captains/captainSelectionModal';
 
 import type { UserType } from '~/components/user/types';
