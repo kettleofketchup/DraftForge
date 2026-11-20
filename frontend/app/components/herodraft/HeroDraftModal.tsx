@@ -1,6 +1,12 @@
 // frontend/app/components/herodraft/HeroDraftModal.tsx
-import { ArrowLeft, Pause, Play, Send, Users } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, Pause, Play, Users } from 'lucide-react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { LoginButton } from '~/components/navbar/login';
@@ -17,7 +23,6 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog';
 import { ConfirmDialog } from '~/components/ui/dialogs';
-import { Input } from '~/components/ui/input';
 import {
   Tooltip,
   TooltipContent,
@@ -42,6 +47,7 @@ import {
   submitPick,
   triggerRoll,
 } from './api';
+import { HeroDraftChat } from './chat/HeroDraftChat';
 import { CompletedDraftView } from './CompletedDraftView';
 import { DraftPanel } from './DraftPanel';
 import { CaptainToast, HeroActionToast } from './DraftToasts';
@@ -185,6 +191,7 @@ export function HeroDraftModal({
   const wsConnect = useHeroDraftStore((state) => state.connect);
   const wsDisconnect = useHeroDraftStore((state) => state.disconnect);
   const wsReconnect = useHeroDraftStore((state) => state.reconnect);
+  const clearChatError = useHeroDraftStore((state) => state.clearChatError);
   const startHeartbeat = useHeroDraftStore((state) => state.startHeartbeat);
   const isConnected = useHeroDraftStore(heroDraftSelectors.isConnected);
   const connectionError = useHeroDraftStore((state) => state.error);
@@ -193,7 +200,6 @@ export function HeroDraftModal({
   const [confirmHeroId, setConfirmHeroId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [chatMessage, setChatMessage] = useState('');
   const [resumeCountdown, setResumeCountdown] = useState<number | null>(null);
   const [pendingChoice, setPendingChoice] = useState<{
     type: 'pick_order' | 'side';
@@ -225,6 +231,19 @@ export function HeroDraftModal({
       wsDisconnect();
     };
   }, [open, draftId, wsConnect, wsDisconnect]);
+
+  // The socket identity is fixed at the handshake; a login or logout without a
+  // reload must reconnect so the server resolves the new chat viewer.
+  const currentUserPk = currentUser?.pk;
+  const prevUserPkRef = useRef(currentUserPk);
+  useEffect(() => {
+    if (prevUserPkRef.current === currentUserPk) return;
+    prevUserPkRef.current = currentUserPk;
+    if (!open || !draftId) return;
+    wsDisconnect();
+    clearChatError();
+    wsConnect(draftId);
+  }, [currentUserPk, open, draftId, wsConnect, wsDisconnect, clearChatError]);
 
   // Handle events from WebSocket - show toasts
   useEffect(() => {
@@ -958,34 +977,7 @@ export function HeroDraftModal({
                 className="h-12 sm:h-14 md:h-16 shrink-0 border-t border-border flex items-center px-2 sm:px-4 gap-2 sm:gap-4"
                 data-testid="herodraft-bottom-toolbar"
               >
-                {/* Chat input - hidden on small screens */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="hidden md:flex flex-1 items-center gap-2">
-                      <Input
-                        placeholder="Team chat..."
-                        value={chatMessage}
-                        onChange={(e) => setChatMessage(e.target.value)}
-                        disabled
-                        className="flex-1 bg-input border-border text-white placeholder:text-muted-foreground cursor-not-allowed"
-                        data-testid="herodraft-chat-input"
-                      />
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        disabled
-                        className="shrink-0"
-                        data-testid="herodraft-chat-send"
-                      >
-                        <Send className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>Under Construction</TooltipContent>
-                </Tooltip>
-
-                {/* Spacer on small screens */}
-                <div className="flex-1 md:hidden" />
+                <HeroDraftChat draftState={draft.state} />
 
                 {/* Right side controls */}
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
@@ -1072,7 +1064,7 @@ export function HeroDraftModal({
                 return (
                   showOverlay && (
                     <div
-                      className="absolute inset-0 bg-black/70 flex items-center justify-center"
+                      className="absolute inset-x-0 top-0 bottom-12 sm:bottom-14 md:bottom-16 bg-black/70 flex items-center justify-center"
                       data-testid="herodraft-paused-overlay"
                     >
                       <div className="text-center space-y-4">
