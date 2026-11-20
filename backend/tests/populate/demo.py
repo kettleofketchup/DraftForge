@@ -27,7 +27,8 @@ def populate_demo_herodraft_tournament(force=False):
     """
     from django.utils import timezone
 
-    from app.models import DraftTeam, Game, HeroDraft, League, Team, Tournament
+    from app.models import Game, League, Team, Tournament
+    from draft.models import DraftTeam, HeroDraft
     from tests.data.tournaments import DEMO_HERODRAFT_TOURNAMENT
 
     # Use Pydantic config for tournament (single source of truth)

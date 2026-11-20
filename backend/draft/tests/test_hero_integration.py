@@ -12,9 +12,7 @@ from app.models import CustomUser, Game, Team, Tournament
 def patch_tick_start(test: TestCase) -> MagicMock:
     """Entering DRAFTING starts a real tick thread; under TestCase its reads hit
     SQLite shared-cache table locks held by the test's open transaction."""
-    patcher = patch(
-        "app.tasks.herodraft_tick.start_tick_broadcaster", return_value=True
-    )
+    patcher = patch("draft.tasks.hero_tick.start_tick_broadcaster", return_value=True)
     test.addCleanup(patcher.stop)
     return patcher.start()
 
@@ -356,6 +354,7 @@ class HeroDraftPickTest(TestCase):
     def test_submit_pick(self):
         """First pick team can submit a ban."""
         draft_id, first_pick_captain, _ = self._setup_draft_to_picking()
+        self.tick_start.assert_called()
 
         # First pick captain submits a ban (round 1 is a ban)
         self.client.force_authenticate(user=first_pick_captain)

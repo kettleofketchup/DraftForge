@@ -28,9 +28,7 @@ from app.exception_handler import exception_handler
 from app.functions.tournament import _serialize_tournament
 from app.models import (
     CustomUser,
-    DraftTeam,
     Game,
-    HeroDraft,
     League,
     Organization,
     Team,
@@ -40,7 +38,6 @@ from app.models import (
     Tournament,
 )
 from app.serializers import (
-    HeroDraftSerializer,
     ManagedTeamSerializer,
     TeamActionRequestSerializer,
     TeamDeputyRequestSerializer,
@@ -59,6 +56,8 @@ from app.services.team_signals import TeamRosterChange, team_roster_changed
 from app.tests.test_draft_state_queries import make_fixture
 from app.tests.test_team_management import TeamManagementFixture
 from app.views_main import TeamView
+from draft.models import DraftTeam, HeroDraft
+from draft.serializers.hero import HeroDraftSerializer
 from events.models import EventTeam
 from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
 from user.tests.test_cacheops_integration import _redis_reachable

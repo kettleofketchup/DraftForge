@@ -253,10 +253,8 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         await comm.disconnect()
 
     @patch("app.tasks.draft_tick.start_tick_broadcaster")
-    @patch("app.tasks.herodraft_tick.start_tick_broadcaster")
-    async def test_no_tick_broadcaster_started(self, hero_start, shared_start):
+    async def test_no_tick_broadcaster_started(self, shared_start):
         comm, _, _ = await self.connect(self.captain)
-        hero_start.assert_not_called()
         shared_start.assert_not_called()
         await comm.disconnect()
 

@@ -21,6 +21,16 @@ backend/
 │   ├── permissions.py     # DRF permissions
 │   ├── serializers.py     # DRF serializers
 │   └── views.py           # API views
+├── draft/                 # Draft app (hero draft now; team draft next)
+│   ├── models/            # hero.py: HeroDraft, DraftTeam, rounds, events
+│   ├── services/          # Hero draft logic, state queryset, broadcasts
+│   ├── tasks/             # hero_tick.py (driver for app/tasks/draft_tick.py)
+│   ├── consumers/         # HeroDraftConsumer
+│   ├── serializers/       # Hero draft serializers
+│   ├── views/             # Hero draft HTTP, SSR and internal views
+│   ├── urls.py            # Public hero draft routes
+│   ├── internal_urls.py   # Internal hero draft routes
+│   └── routing.py         # Hero draft WebSocket routes
 ├── backend/               # Django project settings
 │   ├── settings.py        # Main settings
 │   ├── urls.py            # URL routing
@@ -239,13 +249,17 @@ Django Channels provides WebSocket support for real-time features via Daphne ASG
 
 The `ProtocolTypeRouter` in `backend/asgi.py` automatically routes connections based on protocol:
 - HTTP requests → Django URL router (`backend/urls.py`)
-- WebSocket connections → Channels URL router (`app/routing.py`)
+- WebSocket connections → Channels URL router (`app/routing.py` and `draft/routing.py`, combined in `backend/asgi.py`)
 
 ```python
 # backend/app/routing.py
 websocket_urlpatterns = [
     path("api/draft/<int:draft_id>/", DraftConsumer.as_asgi()),
     path("api/tournament/<int:tournament_id>/", TournamentConsumer.as_asgi()),
+]
+
+# backend/draft/routing.py
+websocket_urlpatterns = [
     path("api/herodraft/<int:draft_id>/", HeroDraftConsumer.as_asgi()),
 ]
 ```

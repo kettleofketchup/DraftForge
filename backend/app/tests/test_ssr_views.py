@@ -103,7 +103,8 @@ class SSREndpointTests(TestCase):
     def test_herodraft_ssr_returns_200(self):
         from django.utils import timezone
 
-        from app.models import DraftTeam, Game, HeroDraft, Team, Tournament
+        from app.models import Game, Team, Tournament
+        from draft.models import DraftTeam, HeroDraft
 
         t = Tournament.objects.create(name="Draft Tourney", date_played=timezone.now())
         game = Game.objects.create(tournament=t, round=1)

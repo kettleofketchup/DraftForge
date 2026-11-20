@@ -13,9 +13,7 @@ from app.models import (
     Draft,
     DraftEvent,
     DraftOptions,
-    DraftTeam,
     Game,
-    HeroDraft,
     League,
     Organization,
     Team,
@@ -32,6 +30,7 @@ from app.services.team_references import (
     team_usage,
 )
 from bracket.models import BracketSlot, TournamentBracket
+from draft.models import DraftTeam, HeroDraft
 from league.models import LeagueUser
 from org.models import OrgUser
 from user.tests.test_cacheops_integration import _redis_reachable
@@ -144,7 +143,7 @@ class TeamResetTests(TeamResetFixture, TestCase):
             "app.Game.radiant_team",
             "app.Game.dire_team",
             "app.Game.winning_team",
-            "app.DraftTeam.tournament_team",
+            "draft.DraftTeam.tournament_team",
             "app.Tournament.winning_team",
             "bracket.BracketSlot.participant",
             "lobby.GameLobby.radiant_team",
@@ -381,7 +380,9 @@ class InitDraftEndpointTests(TestCase):
         resp = self.post()
 
         self.assertEqual(resp.status_code, 409)
-        self.assertEqual(resp.data["references"], {"app.DraftTeam.tournament_team": 1})
+        self.assertEqual(
+            resp.data["references"], {"draft.DraftTeam.tournament_team": 1}
+        )
 
     def test_ineligible_referenced_team_kept_unreferenced_deleted(self) -> None:
         outsider = self.make_user("init_outsider", 1000)
@@ -668,11 +669,11 @@ class InitDraftEndpointTests(TestCase):
 
         self.assertEqual(resp.status_code, 409)
         usage = {u["model"]: u for u in resp.data["usage"]}
-        self.assertEqual(set(usage), {"app.HeroDraft"})
-        self.assertEqual(usage["app.HeroDraft"]["count"], 1)
-        self.assertEqual(usage["app.HeroDraft"]["label"], "HeroDraft")
+        self.assertEqual(set(usage), {"draft.HeroDraft"})
+        self.assertEqual(usage["draft.HeroDraft"]["count"], 1)
+        self.assertEqual(usage["draft.HeroDraft"]["label"], "HeroDraft")
         self.assertEqual(
-            [t["name"] for t in usage["app.HeroDraft"]["teams"]], ["Team A", "Team B"]
+            [t["name"] for t in usage["draft.HeroDraft"]["teams"]], ["Team A", "Team B"]
         )
 
     def test_report_names_captain_and_kept_usage(self) -> None:

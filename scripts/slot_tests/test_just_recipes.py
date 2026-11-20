@@ -26,6 +26,8 @@ APPS = [
     "user",
     "lobby",
     "opsnotices",
+    "league",
+    "draft",
 ]
 
 pytestmark = pytest.mark.skipif(JUST is None, reason="just is not on PATH")

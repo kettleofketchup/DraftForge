@@ -2,18 +2,12 @@
 
 from unittest.mock import patch
 
-from django.test import TransactionTestCase
+from django.db.models.signals import pre_save
+from django.test import SimpleTestCase, TransactionTestCase
 from django.utils import timezone
 
-from app.models import (
-    CustomUser,
-    DraftTeam,
-    Game,
-    HeroDraft,
-    HeroDraftState,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, Game, Team, Tournament
+from draft.models import DraftTeam, HeroDraft, HeroDraftState
 
 
 class GameTeamChangeHookTests(TransactionTestCase):
@@ -43,7 +37,7 @@ class GameTeamChangeHookTests(TransactionTestCase):
 
     def failing_broadcast(self) -> object:
         return patch(
-            "app.signals._broadcast_draft_event", side_effect=RuntimeError("down")
+            "draft.signals._broadcast_draft_event", side_effect=RuntimeError("down")
         )
 
     def test_reset_saves_when_the_broadcast_hook_raises(self) -> None:
@@ -65,3 +59,13 @@ class GameTeamChangeHookTests(TransactionTestCase):
         broadcast_mock.assert_called_once()
         self.assertFalse(HeroDraft.objects.filter(pk=self.draft.pk).exists())
         self.assertIsNone(Game.objects.nocache().get(pk=self.game.pk).dire_team_id)
+
+
+class ReceiverRegistrationTests(SimpleTestCase):
+    def test_reset_receiver_has_dispatch_uid(self) -> None:
+        self.assertTrue(
+            any(
+                entry[0][0] == "draft_reset_herodraft_on_team_change"
+                for entry in pre_save.receivers
+            )
+        )

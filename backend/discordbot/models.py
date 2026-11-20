@@ -26,7 +26,7 @@ class EventTemplate(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.template_type})"
 
 
@@ -52,7 +52,7 @@ class ScheduledEvent(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.template.name} - next: {self.next_post_at}"
 
 
@@ -78,7 +78,7 @@ class RSVP(models.Model):
     class Meta:
         unique_together = ["scheduled_event", "discord_user_id"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.discord_username}: {self.status}"
 
 
@@ -146,7 +146,7 @@ class DiscordMessageLog(models.Model):
             ),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.success is None:
             state = "pending"
         elif self.success:
@@ -209,7 +209,7 @@ class DiscordEventMsgSignup(DiscordEventMsgMixin):
         verbose_name = "Discord Event Signup Message"
         verbose_name_plural = "Discord Event Signup Messages"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Signup msg for event {self.event_id} (posted={self.has_posted})"
 
 
@@ -220,7 +220,7 @@ class DiscordEventMsgAnnouncement(DiscordEventMsgMixin):
         verbose_name = "Discord Event Announcement Message"
         verbose_name_plural = "Discord Event Announcement Messages"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Announcement msg for event {self.event_id} (posted={self.has_posted})"
 
 
@@ -257,7 +257,7 @@ class DiscordEvent(models.Model):
         verbose_name = "Discord Event"
         verbose_name_plural = "Discord Events"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"DiscordEvent for event {self.event_id} (guild={self.guild_id})"
 
 
@@ -287,16 +287,16 @@ class DiscordEventDM(models.Model):
         verbose_name = "Discord Event DM"
         verbose_name_plural = "Discord Event DMs"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"DM({self.get_dm_type_display()}) → {self.org_user_id}"
 
     @property
-    def discord_user_id(self):
+    def discord_user_id(self) -> str | None:
         """Return the Discord user ID from the linked CustomUser."""
         return self.org_user.user.discordId
 
     @property
-    def can_send(self):
+    def can_send(self) -> bool:
         """Whether we can send a DM (user has a Discord ID)."""
         return bool(self.org_user.user.discordId)
 
@@ -345,7 +345,7 @@ class DiscordTournamentLog(models.Model):
         verbose_name = "Discord Tournament Log"
         verbose_name_plural = "Discord Tournament Logs"
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.success is None:
             state = "pending"
         elif self.success:
@@ -406,19 +406,19 @@ class DiscordEventLog(models.Model):
         verbose_name = "Discord Event Log"
         verbose_name_plural = "Discord Event Logs"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.action} ({'ok' if self.success else 'fail'}) for event {self.discord_event_id}"
 
     @classmethod
     def log_interaction(
         cls,
-        event_id,
-        action,
-        discord_user_id="",
-        discord_username="",
-        success=True,
-        error_message="",
-    ):
+        event_id: int,
+        action: str,
+        discord_user_id: str | int = "",
+        discord_username: str = "",
+        success: bool = True,
+        error_message: str = "",
+    ) -> "DiscordEventLog | None":
         """Log a user interaction (button click, select, modal submit)."""
         try:
             discord_event = DiscordEvent.objects.get(event_id=event_id)
@@ -437,13 +437,13 @@ class DiscordEventLog(models.Model):
     @classmethod
     def log_signup(
         cls,
-        event_id,
-        action,
-        discord_user_id="",
-        discord_username="",
-        success=True,
-        error_message="",
-    ):
+        event_id: int,
+        action: str,
+        discord_user_id: str | int = "",
+        discord_username: str = "",
+        success: bool = True,
+        error_message: str = "",
+    ) -> "DiscordEventLog | None":
         """Log a signup action (rsvp, approve, reject, confirm, etc.)."""
         try:
             discord_event = DiscordEvent.objects.get(event_id=event_id)
@@ -466,7 +466,7 @@ class DraftActivityChannel(models.Model):
     guild_id = models.CharField(max_length=20)
     channel_id = models.CharField(max_length=20, unique=True)
     draft = models.ForeignKey(
-        "app.HeroDraft", on_delete=models.CASCADE, null=True, blank=True
+        "draft.HeroDraft", on_delete=models.CASCADE, null=True, blank=True
     )
     team_draft = models.ForeignKey(
         "app.Draft", on_delete=models.CASCADE, null=True, blank=True
@@ -491,7 +491,7 @@ class DraftActivityInstance(models.Model):
     guild_id = models.CharField(max_length=20)
     channel_id = models.CharField(max_length=20)
     draft = models.ForeignKey(
-        "app.HeroDraft", on_delete=models.CASCADE, null=True, blank=True
+        "draft.HeroDraft", on_delete=models.CASCADE, null=True, blank=True
     )
     team_draft = models.ForeignKey(
         "app.Draft", on_delete=models.CASCADE, null=True, blank=True

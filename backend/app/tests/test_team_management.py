@@ -9,16 +9,13 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.draft_state import herodraft_state_queryset, tournament_state_queryset
+from app.draft_state import tournament_state_queryset
 from app.models import (
     CustomUser,
     Draft,
     DraftEvent,
     DraftRound,
-    DraftTeam,
     Game,
-    HeroDraft,
-    HeroDraftState,
     LeadershipProblem,
     League,
     Organization,
@@ -29,7 +26,7 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.serializers import HeroDraftSerializer, _users_remaining_pks
+from app.serializers import _users_remaining_pks
 from app.services import team_management
 from app.services.team_management import (
     DEFAULT_MAX_STANDINS,
@@ -48,6 +45,9 @@ from app.services.team_management import (
     sub_in,
 )
 from app.services.team_signals import TeamRosterChange, team_roster_changed
+from draft.models import DraftTeam, HeroDraft, HeroDraftState
+from draft.serializers.hero import HeroDraftSerializer
+from draft.services.hero_state import herodraft_state_queryset
 from events.eligibility import UNMET_LABELS, Unmet, unmet_codes
 from events.models import Event
 from events.overrides import (

@@ -3,20 +3,21 @@
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
-from django.test import TestCase, TransactionTestCase
+from django.test import TransactionTestCase
 from django.utils import timezone
 
-from app.functions.herodraft import build_draft_rounds, get_available_heroes
-from app.models import DraftTeam, Game, HeroDraft, HeroDraftRound, Team, Tournament
-from app.tasks.herodraft_tick import (
+from app.models import Game, Team, Tournament
+from app.tasks.draft_tick import get_redis_client
+from draft.models import DraftTeam, HeroDraft
+from draft.services.hero import build_draft_rounds, get_available_heroes
+from draft.tasks.hero_tick import (
     _active_tick_tasks,
     _lock,
     broadcast_tick,
     check_timeout,
     conn_count_key,
-    get_redis_client,
     should_continue_ticking,
     start_tick_broadcaster,
     stop_tick_broadcaster,
@@ -159,7 +160,6 @@ class TimeoutTestCase(TransactionTestCase):
         """Test reserve time is deducted correctly when grace period exceeded."""
         active_round = self.draft.rounds.filter(state="active").first()
         team = DraftTeam.objects.get(id=active_round.draft_team_id)
-        original_reserve = team.reserve_time_remaining
 
         # Set time past grace period but within reserve
         # Grace is 30000ms (30s), set to 35s ago
@@ -257,7 +257,7 @@ class TickBroadcasterTestCase(TransactionTestCase):
         # Clean up
         stop_tick_broadcaster(self.draft.id)
 
-    @patch("app.tasks.herodraft_tick.should_continue_ticking")
+    @patch("draft.tasks.hero_tick.should_continue_ticking")
     def test_start_tick_broadcaster_prevents_duplicate(self, mock_should_continue):
         """Test starting tick broadcaster twice doesn't create duplicate."""
         # Keep the loop running by returning True (will be stopped via stop_tick_broadcaster)
@@ -356,7 +356,7 @@ class BroadcastTickTestCase(TransactionTestCase):
         first_round.started_at = timezone.now()
         first_round.save()
 
-    @patch("app.tasks.herodraft_tick.get_channel_layer")
+    @patch("draft.tasks.hero_tick.get_channel_layer")
     def test_broadcast_tick_includes_team_ids(self, mock_get_channel_layer):
         """Test broadcast_tick includes team IDs in message."""
         mock_channel_layer = MagicMock()
@@ -387,7 +387,7 @@ class BroadcastTickTestCase(TransactionTestCase):
         self.assertIn("team_a_reserve_ms", message)
         self.assertIn("team_b_reserve_ms", message)
 
-    @patch("app.tasks.herodraft_tick.get_channel_layer")
+    @patch("draft.tasks.hero_tick.get_channel_layer")
     def test_broadcast_tick_no_message_when_not_drafting(self, mock_get_channel_layer):
         """Test no broadcast when draft not in drafting state."""
         mock_channel_layer = MagicMock()

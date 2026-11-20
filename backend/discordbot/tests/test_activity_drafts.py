@@ -16,10 +16,7 @@ from structlog.testing import capture_logs
 from app.models import (
     CustomUser,
     Draft,
-    DraftTeam,
     Game,
-    HeroDraft,
-    HeroDraftState,
     League,
     Organization,
     Team,
@@ -32,6 +29,7 @@ from discordbot.activity_roles import draft_role
 from discordbot.activity_views import ActivityViewsThrottle
 from discordbot.models import DraftActivityInstance
 from discordbot.tests.activity_helpers import ClearIntentsMixin
+from draft.models import DraftTeam, HeroDraft, HeroDraftState
 
 URL = "/api/discord/activity/drafts/"
 VIEWS_URL = "/api/discord/activity/views/"

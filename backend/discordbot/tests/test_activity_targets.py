@@ -7,8 +7,9 @@ from pathlib import Path
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase
 
-from app.models import Draft, Game, HeroDraft, Tournament
+from app.models import Draft, Game, Tournament
 from discordbot.activity_targets import draft_site_url, draft_tournament_id
+from draft.models import HeroDraft
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -48,7 +49,7 @@ class ActivityImportTests(SimpleTestCase):
                 sys.executable,
                 "-c",
                 "import django; django.setup(); "
-                "import discordbot.activity_targets, discordbot.urls, app.routing, "
+                "import discordbot.activity_targets, discordbot.urls, app.routing, draft.routing, "
                 "discordbot.activity_launch",
             ],
             cwd=BACKEND_DIR,

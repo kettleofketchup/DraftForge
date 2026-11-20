@@ -8,24 +8,16 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.functions.herodraft import (
+from app.models import CustomUser, DraftOptions, Game, Team, Tournament
+from app.tests.teamdraft_fixtures import TimedDraftFixture
+from draft.models import DraftTeam, HeroDraft, HeroDraftRound
+from draft.serializers.hero import HeroDraftSerializer
+from draft.services.hero import (
     build_draft_rounds,
     new_herodraft_for_game,
     submit_pick,
 )
-from app.models import (
-    CustomUser,
-    DraftOptions,
-    DraftTeam,
-    Game,
-    HeroDraft,
-    HeroDraftRound,
-    Team,
-    Tournament,
-)
-from app.serializers import HeroDraftSerializer
-from app.tasks.herodraft_tick import broadcast_tick, check_timeout
-from app.tests.teamdraft_fixtures import TimedDraftFixture
+from draft.tasks.hero_tick import broadcast_tick, check_timeout
 
 
 def make_game(prefix: str) -> Game:
@@ -184,6 +176,23 @@ class HeroDraftOptionsSnapshotTests(TestCase):
         team = DraftTeam.objects.get(pk=rnd.draft_team_id)
         self.assertEqual(team.reserve_time_remaining, 90000)
 
+    def test_timed_pick_honours_fresh_client_picked_at(self) -> None:
+        game = make_game("clientpick")
+        set_hero_options(game, hero_timer_enabled=True)
+        draft = new_herodraft_for_game(game)
+        rnd = start_drafting(draft)
+        now = timezone.now()
+        rnd.started_at = now - timedelta(milliseconds=rnd.grace_time_ms + 1900)
+        rnd.save()
+        reserve_before = DraftTeam.objects.get(
+            pk=rnd.draft_team_id
+        ).reserve_time_remaining
+        submit_pick(
+            draft, rnd.draft_team, 1, client_picked_at=now - timedelta(seconds=1)
+        )
+        team = DraftTeam.objects.get(pk=rnd.draft_team_id)
+        self.assertEqual(team.reserve_time_remaining, reserve_before)
+
 
 class HeroDraftUntimedTickTests(TransactionTestCase):
     def setUp(self) -> None:
@@ -210,7 +219,7 @@ class HeroDraftUntimedTickTests(TransactionTestCase):
         rnd.refresh_from_db()
         self.assertEqual(rnd.state, "completed")
 
-    @patch("app.tasks.herodraft_tick.get_channel_layer")
+    @patch("draft.tasks.hero_tick.get_channel_layer")
     def test_tick_carries_timer_enabled(
         self, mock_get_channel_layer: MagicMock
     ) -> None:

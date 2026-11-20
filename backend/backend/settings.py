@@ -375,8 +375,8 @@ CACHEOPS = {
     "app.draft": {"ops": "all", "timeout": 60 * 60},
     "app.draftoptions": {"ops": "all", "timeout": 60 * 60},
     "app.game": {"ops": "all", "timeout": 60 * 60},
-    "app.herodraft": {"ops": "all", "timeout": 60 * 60},
-    "app.draftteam": {"ops": "all", "timeout": 60 * 60},
+    "draft.herodraft": {"ops": "all", "timeout": 60 * 60},
+    "draft.draftteam": {"ops": "all", "timeout": 60 * 60},
     "app.draftround": {"ops": "all", "timeout": 60 * 60},
     # Organization/League membership models
     "org.orguser": {"ops": "all", "timeout": 60 * 60},
