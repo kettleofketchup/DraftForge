@@ -1,20 +1,20 @@
 import { motion } from 'framer-motion';
 import { BookOpen, Film, Image as ImageIcon, Play } from 'lucide-react';
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { cn } from '~/lib/utils';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { SecondaryButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from '~/components/ui/dialog';
 import { Item, ItemContent, ItemMedia, ItemTitle } from '~/components/ui/item';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { cn } from '~/lib/utils';
 import { VideoPlayer } from './VideoPlayer';
 
 // Video/GIF assets base path (mounted at public/assets/docs in dev, copied during build)
@@ -76,6 +76,7 @@ const LazyImage = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [deferredSrc, setDeferredSrc] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -90,9 +91,12 @@ const LazyImage = ({
         window.requestIdleCallback || ((cb) => setTimeout(cb, 50));
       idleCallbackId = scheduleLoad(
         () => {
-          if (!cancelled) setDeferredSrc(src);
+          if (!cancelled) {
+            setHasError(false);
+            setDeferredSrc(src);
+          }
         },
-        { timeout: 200 }
+        { timeout: 200 },
       ) as number;
     };
 
@@ -103,7 +107,7 @@ const LazyImage = ({
           observer.disconnect();
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
 
     observer.observe(container);
@@ -121,17 +125,30 @@ const LazyImage = ({
   return (
     <div ref={containerRef} className={cn('relative', className)}>
       {/* Loading skeleton - uses aspect-video to match typical media dimensions */}
-      {isLoading && (
+      {isLoading && !hasError && (
         <div className="aspect-video rounded-lg bg-base-300 flex items-center justify-center">
           <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
         </div>
       )}
-      {deferredSrc && (
+      {hasError && (
+        <div
+          className="aspect-video rounded-lg bg-base-300 flex items-center justify-center text-xs text-muted-foreground"
+          data-testid="lazy-image-error"
+        >
+          Preview unavailable
+        </div>
+      )}
+      {deferredSrc && !hasError && (
         <img
           src={deferredSrc}
           alt={alt}
-          className={cn('w-full h-auto object-contain rounded-lg', imgClassName, isLoading && 'opacity-0')}
+          className={cn(
+            'w-full h-auto object-contain rounded-lg',
+            imgClassName,
+            isLoading && 'opacity-0',
+          )}
           onLoad={() => setIsLoading(false)}
+          onError={() => setHasError(true)}
         />
       )}
     </div>
@@ -139,10 +156,21 @@ const LazyImage = ({
 };
 
 /** Helper component to render a grid of media items */
-const MediaGrid = ({ media, title }: { media: ModalMedia[]; title: string }) => (
-  <div className={`flex ${media.length > 1 ? 'flex-row gap-4' : 'flex-col'} max-h-[65vh] overflow-hidden`}>
+const MediaGrid = ({
+  media,
+  title,
+}: {
+  media: ModalMedia[];
+  title: string;
+}) => (
+  <div
+    className={`flex ${media.length > 1 ? 'flex-row gap-4' : 'flex-col'} max-h-[65vh] overflow-hidden`}
+  >
     {media.map((item, index) => (
-      <div key={index} className={`${media.length > 1 ? 'flex-1 min-w-0' : 'w-full'} flex flex-col`}>
+      <div
+        key={index}
+        className={`${media.length > 1 ? 'flex-1 min-w-0' : 'w-full'} flex flex-col`}
+      >
         {item.caption && (
           <div className="text-center mb-2 shrink-0">
             <span className="text-sm font-medium text-base-content/80 bg-base-200 px-3 py-1 rounded-full">
@@ -152,7 +180,12 @@ const MediaGrid = ({ media, title }: { media: ModalMedia[]; title: string }) => 
         )}
         <div className="min-h-0 flex-1">
           {item.type === 'video' ? (
-            <VideoPlayer src={item.src} autoPlay loop className="max-h-[60vh]" />
+            <VideoPlayer
+              src={item.src}
+              autoPlay
+              loop
+              className="max-h-[60vh]"
+            />
           ) : (
             <LazyImage
               src={item.src}
@@ -200,12 +233,19 @@ export const FeatureCard = ({
     });
   }, [modalMedia]);
 
-  const hasPreview = gifSrc || (modalMedia && modalMedia.length > 0) || (quickMedia && quickMedia.length > 0);
-  const thumbnailSrc = gifSrc || (quickMedia && quickMedia[0]?.src) || (modalMedia && modalMedia[0]?.src);
+  const hasPreview =
+    gifSrc ||
+    (modalMedia && modalMedia.length > 0) ||
+    (quickMedia && quickMedia.length > 0);
+  const thumbnailSrc =
+    gifSrc ||
+    (quickMedia && quickMedia[0]?.src) ||
+    (modalMedia && modalMedia[0]?.src);
   const docsUrl = docsPath ? `${DOCS_BASE}${docsPath}` : undefined;
 
   // Build quick preview media (GIFs) - use quickMedia if provided, otherwise create from gifSrc
-  const quickPreviewMedia: ModalMedia[] = quickMedia || (gifSrc ? [{ src: gifSrc, caption: '', type: 'gif' }] : []);
+  const quickPreviewMedia: ModalMedia[] =
+    quickMedia || (gifSrc ? [{ src: gifSrc, caption: '', type: 'gif' }] : []);
 
   // Full video media
   const fullVideoMedia: ModalMedia[] = modalMedia || [];
@@ -281,7 +321,10 @@ export const FeatureCard = ({
                 {/* Overlay with play icon */}
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/50 transition-colors">
                   <div className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center">
-                    <Play className="w-6 h-6 text-primary-foreground ml-0.5" fill="currentColor" />
+                    <Play
+                      className="w-6 h-6 text-primary-foreground ml-0.5"
+                      fill="currentColor"
+                    />
                   </div>
                 </div>
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
@@ -299,11 +342,7 @@ export const FeatureCard = ({
             {/* Learn More - External docs link */}
             {docsUrl && (
               <SecondaryButton size="sm" asChild>
-                <a
-                  href={docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a href={docsUrl} target="_blank" rel="noopener noreferrer">
                   <BookOpen className="w-3 h-3 mr-1" />
                   Learn More
                 </a>
@@ -328,7 +367,9 @@ export const FeatureCard = ({
           closeButtonVariant="default"
         >
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-primary">{title}</DialogTitle>
+            <DialogTitle className="text-xl font-semibold text-primary">
+              {title}
+            </DialogTitle>
             <DialogDescription className="sr-only">
               Preview media for {title}
             </DialogDescription>
@@ -369,7 +410,10 @@ export const FeatureCard = ({
             </Tabs>
           ) : (
             /* Single content area if we only have one type */
-            <MediaGrid media={hasQuickPreview ? quickPreviewMedia : fullVideoMedia} title={title} />
+            <MediaGrid
+              media={hasQuickPreview ? quickPreviewMedia : fullVideoMedia}
+              title={title}
+            />
           )}
 
           {/* Learn More */}
