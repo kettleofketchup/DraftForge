@@ -1,7 +1,6 @@
-import { MessageSquare, X } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button } from '~/components/ui/button';
-import { SecondaryButton } from '~/components/ui/buttons';
+import { RemoveIconButton, SecondaryButton } from '~/components/ui/buttons';
 import {
   Sheet,
   SheetContent,
@@ -102,17 +101,12 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
           </span>
         )}
       </p>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
+      <RemoveIconButton
+        label="Dismiss chat error"
         onClick={clearChatError}
-        aria-label="Dismiss"
-        className="size-4 shrink-0 text-destructive hover:bg-transparent hover:text-destructive/80"
+        className="shrink-0"
         data-testid="herodraft-chat-error-dismiss"
-      >
-        <X className="size-3" />
-      </Button>
+      />
     </div>
   );
 

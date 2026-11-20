@@ -170,7 +170,12 @@ describe('HeroDraftChat composer', () => {
       },
     });
     render(<HeroDraftChat draftState="drafting" />);
-    fireEvent.click(screen.getByTestId('herodraft-chat-error-dismiss'));
+    const dismiss = screen.getByTestId('herodraft-chat-error-dismiss');
+    expect(dismiss).toBe(
+      screen.getByRole('button', { name: 'Dismiss chat error' }),
+    );
+    expect(dismiss).toHaveAttribute('type', 'button');
+    fireEvent.click(dismiss);
     expect(screen.queryByTestId('herodraft-chat-error')).toBeNull();
     expect(useHeroDraftStore.getState().chat.lastError).toBeNull();
   });
