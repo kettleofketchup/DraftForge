@@ -3,6 +3,7 @@ from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
 from typing import Any, ClassVar
 
+from django.contrib.auth.models import AnonymousUser
 from django.db.models import QuerySet
 
 from app.models import CustomUser, Organization
@@ -19,7 +20,7 @@ from org.standing.types import (
     Leaderboard,
     Metric,
     OutputKeys,
-    TrackInfo,
+    TrackAccess,
     TrackKey,
     TrackOutput,
 )
@@ -87,9 +88,9 @@ class TrackBase(abc.ABC):
         return list(candidates)
 
     @abc.abstractmethod
-    def track_info(
-        self, org: Organization, *, viewer: CustomUser | None
-    ) -> TrackInfo: ...
+    def access(
+        self, org_id: int, *, viewer: CustomUser | AnonymousUser | None
+    ) -> TrackAccess: ...
 
     @abc.abstractmethod
     def leaderboard(
@@ -98,11 +99,7 @@ class TrackBase(abc.ABC):
         metric: Metric,
         period: Period,
         *,
-        viewer: CustomUser | None,
+        viewer: CustomUser | AnonymousUser | None,
         now: datetime,
+        access: TrackAccess,
     ) -> Leaderboard: ...
-
-    @abc.abstractmethod
-    def member_standing(
-        self, org_user: OrgUser, *, viewer: CustomUser | None, now: datetime
-    ) -> Mapping[str, object]: ...

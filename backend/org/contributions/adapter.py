@@ -2,19 +2,14 @@ from collections.abc import Collection, Mapping
 from datetime import datetime
 from typing import Any, override
 
+from django.contrib.auth.models import AnonymousUser
 from django.db.models import QuerySet
 
 from app.models import CustomUser, Organization
-from app.permissions_org import can_view_org_members, has_org_admin_access
+from app.permissions_org import can_view_org_members
 from events.models import Event
-from org.contributions.queries import (
-    leaderboard as contribution_leaderboard,
-)
-from org.contributions.queries import (
-    member_monthly,
-    member_totals,
-    org_total,
-)
+from org.contributions.queries import leaderboard as contribution_leaderboard
+from org.contributions.queries import org_total
 from org.contributions.services import (
     delete_user_entries,
     reassign_member,
@@ -35,7 +30,7 @@ from org.standing.types import (
     LeaderboardRow,
     Metric,
     OutputKeys,
-    TrackInfo,
+    TrackAccess,
     TrackOutput,
 )
 
@@ -58,12 +53,11 @@ class ContributionTrack(TrackBase):
     feature = FeatureKey.CONTRIBUTIONS
     metrics = (
         Metric(key="points", label="Points", format="int", periodic=True, default=True),
-        Metric(key="entries", label="Entries", format="int", periodic=True),
     )
     reopen_reset_fields = ("contributions_awarded_at",)
     output_keys: Mapping[HookName, OutputKeys] = {
         "on_event_closed": OutputKeys(orglog=("awarded",), log=("awarded", "created")),
-        "on_event_reopened": OutputKeys(orglog=("revoked",)),
+        "on_event_reopened": OutputKeys(orglog=("revoked",), log=("revoked",)),
         "on_event_changed": OutputKeys(log=("synced",)),
     }
 
@@ -93,7 +87,8 @@ class ContributionTrack(TrackBase):
     def on_event_reopened(
         self, event: Event, *, actor: CustomUser | None, now: datetime
     ) -> TrackOutput:
-        return TrackOutput(orglog={"revoked": revoke_event_staff_entries(event)})
+        revoked = revoke_event_staff_entries(event)
+        return TrackOutput(orglog={"revoked": revoked}, log={"revoked": revoked})
 
     @override
     def on_event_changed(
@@ -126,15 +121,12 @@ class ContributionTrack(TrackBase):
         return [user_entries(user_pks)]
 
     @override
-    def track_info(self, org: Organization, *, viewer: CustomUser | None) -> TrackInfo:
-        is_member = viewer is not None and viewer.is_authenticated
-        return TrackInfo(
-            key=self.key,
-            label=self.label,
-            metrics=self.metrics,
-            can_view_rows=viewer is not None and can_view_org_members(viewer, org),
-            can_view_own=is_member,
-            can_manage=viewer is not None and has_org_admin_access(viewer, org),
+    def access(
+        self, org_id: int, *, viewer: CustomUser | AnonymousUser | None
+    ) -> TrackAccess:
+        return TrackAccess(
+            can_view_rows=viewer is not None and can_view_org_members(viewer, org_id),
+            can_view_own=bool(viewer is not None and viewer.is_authenticated),
         )
 
     @override
@@ -144,39 +136,36 @@ class ContributionTrack(TrackBase):
         metric: Metric,
         period: Period,
         *,
-        viewer: CustomUser | None,
+        viewer: CustomUser | AnonymousUser | None,
         now: datetime,
+        access: TrackAccess,
     ) -> Leaderboard:
-        rows = [
-            LeaderboardRow(
-                org_user_id=row["org_user_pk"],
-                member={k: v for k, v in row.items() if k not in ("points", "entries")},
-                value=row[metric.key],  # type: ignore[literal-required]
-                sample=row["entries"],
-                status="ranked",
-            )
-            for row in contribution_leaderboard(org, period)
-        ]
-        if metric.key == "entries":
-            rows.sort(key=lambda r: -r.value)
+        total = org_total(org, period)
+        rows = (
+            [
+                LeaderboardRow(
+                    org_user_id=row["org_user_pk"],
+                    member={
+                        k: v for k, v in row.items() if k not in ("points", "entries")
+                    },
+                    value=row["points"],
+                    sample=row["entries"],
+                    status="ranked",
+                )
+                for row in contribution_leaderboard(org, period)
+            ]
+            if access.can_view_rows
+            else []
+        )
         return Leaderboard(
             track=self.key,
             metric=metric,
             period=period.label,
             rows=rows,
-            total=org_total(org, period),
+            total=total,
             own_row=None,
-            rows_visible=True,
+            rows_visible=access.can_view_rows,
         )
-
-    @override
-    def member_standing(
-        self, org_user: OrgUser, *, viewer: CustomUser | None, now: datetime
-    ) -> Mapping[str, object]:
-        return {
-            "totals": member_totals(org_user, now=now),
-            "monthly": member_monthly(org_user, now=now),
-        }
 
 
 CONTRIBUTION = ContributionTrack()

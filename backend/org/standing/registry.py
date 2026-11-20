@@ -1,35 +1,40 @@
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
 from org.contributions.adapter import CONTRIBUTION
 from org.standing.base import TrackBase
 from org.standing.errors import UnknownTrack
 
+_MERGE_HOOKS: frozenset[str] = frozenset({"merge_members", "repoint_user"})
 
-def validate(tracks: tuple[TrackBase, ...]) -> None:
+
+def _namespace(hook: str) -> str:
+    return "merge" if hook in _MERGE_HOOKS else hook
+
+
+def validate_tracks(tracks: Sequence[TrackBase]) -> None:
     keys = [t.key for t in tracks]
     if len(set(keys)) != len(keys):
         raise ValueError(f"duplicate track key in {keys}")
+    seen: dict[tuple[str, str, str], tuple[str, str]] = {}
     for t in tracks:
-        defaults = [m for m in t.metrics if m.default]
-        if len(defaults) != 1:
+        if len([m for m in t.metrics if m.default]) != 1:
             raise ValueError(f"track {t.key!r} needs exactly one default metric")
-    seen: dict[tuple[str, str, str], str] = {}
-    for t in tracks:
         for hook, declared in t.output_keys.items():
             for channel, names in (("orglog", declared.orglog), ("log", declared.log)):
                 for name in names:
-                    slot = (hook, channel, name)
+                    slot = (_namespace(hook), channel, name)
                     if slot in seen:
+                        owner, owner_hook = seen[slot]
                         raise ValueError(
-                            f"tracks {seen[slot]!r} and {t.key!r} both declare "
-                            f"{channel} key {name!r} for {hook}"
+                            f"{channel} key {name!r} declared by {owner!r} on "
+                            f"{owner_hook} and by {t.key!r} on {hook}"
                         )
-                    seen[slot] = t.key
+                    seen[slot] = (t.key, hook)
 
 
 TRACKS: tuple[TrackBase, ...] = (CONTRIBUTION,)
-validate(TRACKS)
+validate_tracks(TRACKS)
 
 _active: tuple[TrackBase, ...] = TRACKS
 
@@ -48,7 +53,7 @@ def track(key: str) -> TrackBase:
 @contextmanager
 def override_tracks(*replacement: TrackBase) -> Iterator[None]:
     global _active
-    validate(replacement)
+    validate_tracks(replacement)
     previous = _active
     _active = replacement
     try:
