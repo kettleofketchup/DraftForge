@@ -103,6 +103,11 @@ class Commitment(models.TextChoices):
     MAYBE = "maybe", "Maybe"
 
 
+class StartMentionScope(models.TextChoices):
+    MAIN = "main", "Main list"
+    ALL_ACTIVE = "all_active", "All active signups"
+
+
 class RsvpClass(models.TextChoices):
     STANDARD = "standard", "Standard"
 

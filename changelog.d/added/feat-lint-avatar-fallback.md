@@ -1,1 +1,0 @@
-- `UserAvatar` takes a `fallbackName` for the initials when there is no user, and the design-system lint flags raw `Avatar` fallbacks for people.

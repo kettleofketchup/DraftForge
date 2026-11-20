@@ -43,7 +43,6 @@ import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import {
   ClaimsTab,
   DeleteOrganizationDangerZone,
-  EditOrganizationModal,
   OrgSettingsTab,
   useOrganization,
 } from '~/components/organization';
@@ -370,7 +369,6 @@ export default function OrganizationDetailPage() {
   const currentUser = useUserStore((state) => state.currentUser);
   const [createLeagueOpen, setCreateLeagueOpen] = useState(false);
   const [createEventOpen, setCreateEventOpen] = useState(false);
-  const [editOrgOpen, setEditOrgOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventType | null>(null);
   const [editingRepeaterId, setEditingRepeaterId] = useState<number | null>(
     null,
@@ -583,7 +581,7 @@ export default function OrganizationDetailPage() {
                 {isOrgAdmin && (
                   <PrimaryButton
                     size="sm"
-                    onClick={() => setEditOrgOpen(true)}
+                    onClick={() => setActiveTab('settings')}
                     data-testid="edit-organization-button"
                   >
                     <Pencil className="w-4 h-4 mr-2" />
@@ -941,20 +939,6 @@ export default function OrganizationDetailPage() {
           if (!open) setEditingRepeaterId(null);
         }}
       />
-
-      {organization && (
-        <EditOrganizationModal
-          open={editOrgOpen}
-          onOpenChange={setEditOrgOpen}
-          organization={organization}
-          onSuccess={() => {
-            refetch();
-            queryClient.invalidateQueries({
-              queryKey: ['discordBotStatus', pk],
-            });
-          }}
-        />
-      )}
 
       {canAddMembers && pk && (
         <CSVImportModal

@@ -2,7 +2,6 @@ from django.test import TestCase
 
 from events.serializers import EventSlimSerializer
 
-
 # Fields that fire_due_reminders reads off slim payloads from get_events_list.
 # If the serializer omits any of these, getattr() returns None and the fire
 # path silently uses defaults. The CI test below catches the trap.
@@ -16,6 +15,8 @@ REMINDER_FIELDS_REQUIRED_BY_FIRE_PATH = [
     "discord_confirm_attendance_hours",
     "discord_profile_reminder",
     "discord_profile_reminder_hours",
+    "discord_start_mention",
+    "discord_start_mention_minutes",
 ]
 
 

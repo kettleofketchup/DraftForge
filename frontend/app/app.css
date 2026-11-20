@@ -596,6 +596,26 @@ body {
   }
 }
 
+/* Fades a horizontal scroller's edge while more content sits past it.
+   Set data-fade-start / data-fade-end on the scroller. */
+@utility scroll-fade-x {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--fade-start),
+    black calc(100% - var(--fade-end)),
+    transparent
+  );
+  &[data-fade-start] {
+    --fade-start: 2.5rem;
+  }
+  &[data-fade-end] {
+    --fade-end: 2.5rem;
+  }
+}
+
 /* Text color utilities for status */
 .text-error {
   color: var(--destructive);

@@ -1,6 +1,5 @@
 export { DeleteOrganizationDangerZone } from './DeleteOrganizationDangerZone';
 export { CreateOrganizationModal } from './forms/CreateOrganizationModal';
-export { EditOrganizationModal } from './forms/EditOrganizationModal';
 export { useOrganization } from './hooks/useOrganization';
 export { useOrganizations } from './hooks/useOrganizations';
 export { OrganizationCard } from './OrganizationCard';

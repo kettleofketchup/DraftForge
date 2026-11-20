@@ -1,1 +1,0 @@
-- A frontend guide for rendering people (`DisplayName`, `UserAvatar`, the org context and each lint rule), and every `draftforge/*` lint error now links to its section. Replaces the outdated avatar guide.

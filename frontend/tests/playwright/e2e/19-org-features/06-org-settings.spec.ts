@@ -30,6 +30,8 @@ test.describe('Org features: settings tab @cicd', () => {
     await visitAndWaitForHydration(page, `/organizations/${pk}?tab=settings`);
 
     await expect(page.getByTestId('org-settings-tab')).toBeVisible();
+    // Staff placement is its own section of the settings sidebar.
+    await page.getByTestId('org-settings-tab-staff-placement').click();
     const policy = page.getByTestId('org-settings-policy-select');
     await expect(policy).toHaveText('Silent');
     await policy.click();
@@ -51,6 +53,7 @@ test.describe('Org features: settings tab @cicd', () => {
 
     await page.reload();
     await expect(page.getByTestId('org-settings-tab')).toBeVisible();
+    await page.getByTestId('org-settings-tab-staff-placement').click();
     await expect(page.getByTestId('org-settings-policy-select')).toHaveText(
       'Confirm',
     );
@@ -60,6 +63,34 @@ test.describe('Org features: settings tab @cicd', () => {
     await expect(
       page.getByTestId('org-settings-code-gate_outside'),
     ).toBeChecked();
+  });
+
+  test('admin edits the organization profile on the settings page @cicd', async ({
+    page,
+  }) => {
+    const pk = data.orgs.features.pk;
+    await visitAndWaitForHydration(page, `/organizations/${pk}`);
+    // Edit lands on the Settings tab, on the General section.
+    await page.getByTestId('edit-organization-button').click();
+    await expect(page.getByTestId('org-settings-tab-general')).toHaveAttribute(
+      'data-state',
+      'active',
+    );
+
+    const description = page.getByTestId('org-description-input');
+    const text = `Profile edited ${Date.now()}`;
+    await description.fill(text);
+    const saved = page.waitForResponse(
+      (resp) =>
+        resp.request().method() === 'PATCH' &&
+        resp.url().endsWith(`/organizations/${pk}/`),
+    );
+    await page.getByTestId('org-profile-save').click();
+    expect((await saved).ok()).toBe(true);
+    await expect(page.getByTestId('org-profile-save-bar')).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.getByTestId('org-description-input')).toHaveValue(text);
   });
 
   test('staff sees no Settings tab @cicd', async ({ page, context }) => {

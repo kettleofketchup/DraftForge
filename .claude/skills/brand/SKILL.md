@@ -54,7 +54,7 @@ Activate this skill whenever:
 All of the below live in `docs/theming-guide/ai/references/` (hidden from the MkDocs nav, linked from `THEMING-GUIDE.md` `## References`):
 
 - [scope.md](../../../docs/theming-guide/ai/references/scope.md) — in-scope source trees and special cases.
-- [component-substitutions.md](../../../docs/theming-guide/ai/references/component-substitutions.md) — raw `<button>` → `<PrimaryButton>` / `<SecondaryButton>` / `<ConfirmButton>` / `<EditButton>` table; `<img>` → `<UserAvatar>`; manual breadcrumbs → `<EntityBreadcrumb>`; bare shadcn `<Select>` → `<BrandSelect>` family; structural `<Button>` exceptions.
+- [component-substitutions.md](../../../docs/theming-guide/ai/references/component-substitutions.md) — raw `<button>` → `<PrimaryButton>` / `<SecondaryButton>` / `<ConfirmButton>` / `<EditButton>` table; `<img>` → `<UserAvatar>`; manual breadcrumbs → `<EntityBreadcrumb>`; bare shadcn `<Select>` → `<BrandSelect>` family; `<input type="radio">` / per-call-site restyles → shared `<RadioGroupItem>`; structural `<Button>` exceptions.
 - [inline-styles.md](../../../docs/theming-guide/ai/references/inline-styles.md) — `style={{}}`, raw violet/slate hex, `bg-slate-*` instead of `bg-base-*`, hardcoded gradients, missing `cn()`, `space-x-*`, w-N h-N.
 - [review-checklist.md](../../../docs/theming-guide/ai/references/review-checklist.md) — single ordered checklist; the spine of a review pass.
 - [grep-recipes.md](../../../docs/theming-guide/ai/references/grep-recipes.md) — copy-paste `rg` recipes for each anti-pattern.

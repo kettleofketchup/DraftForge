@@ -14,6 +14,306 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.15.0] - 2026-11-19
+
+### Upgrading
+
+Migration `events.0027_backfill_signup_line` gives every existing signup a place in line
+and a `backfilled` signup record. Signups that the old containers create while migrations
+run have no place in line and sort last until the backfill runs again. After the release
+stack is recreated, run it once in the release stack's backend container:
+
+```bash
+docker exec <backend-container> python manage.py backfill_signup_line
+```
+
+Use `docker exec`, not `just dev::run` (that starts a container on the dev stack) or
+`just db::manage` (it disables the cache, so the command's cached signup flush does nothing).
+The command is safe to rerun.
+
+Migration `events.0029_backfill_ready_check_open_minutes` sets the new `ready_check_open_minutes` on every existing event, series and organization default to `discord_confirm_attendance_hours` × 60, capped at 1440 (rows with no hours, or under 1, keep the default of 120). `discord_confirm_attendance_hours` is kept, since the attendance reminder still reads it. Reversing the migration does nothing.
+
+The event create form now pre-fills `roll_call_enabled` and `roll_call_mode` from the organization's event defaults. Until now those defaults could only be set through the API and the form ignored them, so an organization that set them that way will see roll call on for new events. `auto_confirm` is still not inherited.
+
+After deploying, backfill Discord names once from the backend container:
+
+```bash
+docker exec <backend-container> python manage.py sync_discord_names --all
+```
+
+Run it with `docker exec`, not `just py::shell` or `py::script`: the command refuses to
+run when the cache is disabled (`DISABLE_CACHE`), since cached payloads would keep the
+old names. Use `--org <id>` to sync a single org.
+
+Rolling back is a plain redeploy of the previous image.
+
+Migration `events.0022_clear_stale_auto_hero_drafts` turns "Auto-create hero drafts" off on every tournament that isn't past and doesn't belong to an unfinished event (upcoming, signups open, roll call or in progress). This stops the new sweep from drafting, and DMing, the backlog of ready games in old tournaments. Staff can turn the setting back on for any tournament that still needs it.
+
+Starting roll call now removes approved but unconfirmed players who are not on a team from the tournament roster on every event, whatever its sign-up settings. Before this release they were only removed at tournament start.
+
+Before deploying, count the events, series and org defaults that have a non-default sign-up rule. Run this read-only command from `/app/backend` in the backend container on the production host:
+
+```
+python manage.py shell -c "from events.models import Event, EventRepeater, OrgEventDefaults as D; from events.constants import EventState as S; from django.db.models import Q; q=Q(allow_user_signups=False)|Q(roll_call_enabled=True); live=[S.UPCOMING, S.SIGNUPS_OPEN, S.ROLL_CALL]; print({'Event': Event.objects.filter(q, state__in=live).count(), 'EventRepeater': EventRepeater.objects.filter(q).count(), 'OrgEventDefaults': D.objects.filter(q).count()})"
+```
+
+It prints one count per model, for example `{'Event': 0, 'EventRepeater': 0, 'OrgEventDefaults': 0}`. The Event count covers only upcoming, signups-open and roll-call events, because the settings no longer affect finished ones. All zeros means no live event, series or org default has a non-default sign-up rule. A non-zero Event count means those events behave differently once this release is live. Where "Members can sign themselves up" is off, self sign-ups on the web and through Discord buttons and reactions are refused (organizers can still add players). Where "Mandatory RSVP Confirmation" (Ready check tab) is on, approved players stay off the tournament roster during signups: the roster self-heal and the resync after changing the setting leave them off, and reopening signups does not put them back. Series and org-default rows do not change anything themselves; they pass the setting on to events created from them. Review those rows with their organizers, and change either setting in the event, series or org-defaults form if the new behaviour is not wanted.
+
+This release has two migrations, both applied by the normal migrate step. `events.0025_eventsignup_unmet_requirements` adds `unmet_requirements` to signups (empty for existing rows; it fills in the next time a signup is checked) so staff can see why a signup is held. `org.0011_playerdotaprofile_rank_declared_at` adds `rank_declared_at` to Dota profiles and, in a data step, stamps it on every profile that already shows a rank choice (a rank status other than "never", a rank or Battle Cup screenshot, a rank medal or a Battle Cup tier). Profiles left unstamped count as undeclared, so on auto-approve events with Dota rank gates those players are held for approval (`dota_rank_undeclared`) until they pick a rank status.
+
+After deploying, run the waitlist rebalance once from `/app/backend` in the backend container. Tentative signups no longer hold seats, so open events can have free seats with players still on the waitlist. Preview first; the dry run changes nothing, prints a line for each event that has players to promote, then a total (`Would promote N signup(s).`):
+
+```
+python manage.py rebalance_event_waitlists --dry-run
+python manage.py rebalance_event_waitlists
+```
+
+The second command promotes waitlisted players into those seats on events with signups open and a player cap, refreshes their Discord signup posts and prints the total. It is idempotent, so running it again promotes nobody new.
+
+Migration `events.0030_signup_open_policy` adds the sign-up open policy (`signup_open_mode`, `signups_open_hours_before`) to events, series and org defaults. Every existing row gets manual mode and 72 hours. For series, org defaults and events with no stored `signups_open_at`, nothing opens on its own until an organizer picks "immediately" or a number of days before start; events that already have a stored `signups_open_at` keep it and still open on schedule. Migration `events.0031_backfill_signup_open_policy` then switches every upcoming event that already has a `signups_open_at` to the days-before-start mode, with the hours taken from that stored time (rounded, between 0 and 1440), so the edit form shows the schedule the event will actually follow and "Open manually" can cancel it. Both run in the normal migrate step. Once a series is switched to "immediately", the next run of the open-signups beat task opens every upcoming event that series has already generated, and their announcements and sign-up posts go out. Switching a series to "Open manually" cancels the scheduled openings of its upcoming events; edits to other series settings leave each event's own open policy and time alone.
+
+The backfill writes with `bulk_update`, which skips cache invalidation, so cached event lists can show the old policy for up to their cache lifetime. After migrating, clear the event cache from `/app/backend` in the backend container:
+
+```
+python manage.py shell -c "from cacheops import invalidate_model; from events.models import Event; invalidate_model(Event)"
+```
+
+New optional environment variables, all safe to leave unset. `REDIS_KEY_SCOPE` prefixes raw Redis keys (draft tick, Discord rate limit, activity intents and the signup post lock) for deployments that share one Redis; it defaults to empty, so existing keys keep their names. `SIGNUP_POST_DEBOUNCE_SECONDS` (default 2) and `SIGNUP_POST_LOCK_SECONDS` (default 90) set how long a Discord signup post edit waits before running and how long one edit may hold the per-event lock. `SIGNUP_POST_READ_RETRIES` (default 3) sets how many times an edit is retried when the signup list cannot be read before it is skipped. `SIGNUP_POST_RETRY_SECONDS` (default 2, at least 1) sets the wait before each of those retries and before an edit tries a held lock again. `SIGNUP_POST_BUSY_WARN_PASSES` (default 5) sets how many held-lock passes an edit makes before it logs one `signup_update_lock_stalled` warning; each pass is logged as `signup_update_lock_busy` at debug, and a skipped edit's `signup_list_unavailable` warning carries `retries_exhausted=true`. `SIGNUP_POST_DISABLED=true` turns the debounce and lock off (`DISABLE_CACHE` does too). Every process built from the backend image must get the same values: backend, celery-worker, celery-beat and discord-bot. The bot writes the Activity launch intents that the web reads and shares the Discord rate limit with the workers, so a `REDIS_KEY_SCOPE` missing on discord-bot breaks Activity launches. Put them in the shared env file (`docker/.env.release`) or, on Helm, in `env.extra` (the chart's env ConfigMap) or an `extraEnvSecrets` Secret, which every pod loads through `envFrom`. A blank `REDIS_HOST` now falls back to `redis` (or `localhost` outside a container) in the workers as it already did in the web process.
+
+Deploy the backend and celery-worker images together. Signup post edits now pass a new task argument, which a worker on the previous release rejects; the release compose stack restarts both at once, so this only matters for a partial or rolling deploy.
+
+Optionally, after deploying, run `python manage.py audit_team_leadership` from `/app/backend` in the backend container. It lists existing teams whose captain or deputy is not on the team, or whose deputy is also the captain. It is read-only.
+
+### Security
+
+- Tournament event signups no longer expose org MMR, or the new server nicknames, of
+  orgs with private members to viewers who cannot see that org's members.
+
+### Added
+
+- Events: signups now carry a place in line, commitment (main/maybe), RSVP class and an
+  original sign-up that never changes. An append-only signup ledger is added, holding one
+  starting entry per existing signup; recording signup changes will follow in a later
+  release. Existing waitlists on the website are reordered to match waitlist order
+  (Discord and promotion order). Members a staff member later moves to the waitlist keep
+  their place in line on the website until the waitlist rework lands.
+- A message registry (`backend/notifications/registry.py`) now lists every member message type DraftForge sends, with its group, audience, channels and essential/urgent flags. Its pydantic models are exported to `frontend/app/lib/notifications/messageTypes.generated.ts` as Zod schemas by `just py::gen-message-types`, and CI fails when the generated file is stale (`just py::gen-message-types --check`). Nothing sends through the registry yet (#509).
+- Backend pydantic models can now generate frontend Zod schemas: `backend/common/zod_export.py` plus `frontend/scripts/zod-from-json-schema.mjs`, built on `json-schema-to-zod` (docs: Development > Pydantic to Zod).
+- Organization admins have a new Settings tab (#518) with a staff placement policy (Silent, Confirm or Block) and the seating rules staff are warned about. It has no effect until staff placement checks ship.
+- Ready check settings on events, series and organization defaults, edited on a new Ready check tab: the Mandatory RSVP Confirmation toggle, Staff-verified or Automatic mode, who is asked, open, escalation, close and ops chase timings, a minimum-completion threshold with its action, member notices, and the start cull. The settings are stored and validated only; the ready check that uses them arrives in a later release.
+- Dropped signup status: dropped members are left out of signup counts, waitlist thresholds and tournament rosters, show with a Dropped badge, and cannot sign up again for the same event.
+- Event voice channel picker that lists a server's voice and stage channels.
+- The event page shows the roll call mode, Staff-verified or Automatic, next to the roll call summary.
+- Groundwork for staff operations notices: a registry where features declare notice
+  types, deduplicated storage with occurrence counts, staff list and resolve endpoints,
+  and an event-page table of open notices with severity/type filters, search and a
+  columns menu, shown once features start emitting notices.
+  No notice types are registered yet.
+- Backend: `docker kill -s USR1 <backend container>` dumps every thread's Python stack to the container log without restarting daphne, so a hung backend can be diagnosed in place (see Docker Architecture, "Debugging a Hung Backend").
+- Backend: requests cancelled by daphne (client disconnect, close timeout) now log a `request_cancelled` warning with method, route and duration; previously they logged nothing.
+- The Docs item in the navbar opens a menu with the documentation link and the notes from the last two releases, plus a link to a new Changelog page (`/changelog`) that lists every release. The mobile menu shows the same.
+- Each org membership now stores the member's nickname in that org's Discord server, and
+  the guild member sync can apply server nicknames and Discord global display names to
+  users and their org memberships.
+- Discord name syncs target orgs with a tournament in progress, or a tournament or event
+  from the last 3 days or the next 7.
+- Discord names stay in sync: orgs with a tournament in progress, or a tournament or
+  event in the last 3 days or the next 7, are refreshed from their Discord server every
+  30 minutes, and `sync_discord_names` backfills them on demand.
+- Discord login records the user's Discord global display name, and adding a member from
+  Discord seeds their server nickname for that org.
+- Org, league, tournament and draft payloads include each user's org server nickname and
+  Discord global display name alongside the username.
+- User search matches Discord global names, and org-scoped searches also match that
+  org's server nicknames.
+- `UserAvatar` takes a `fallbackName` for the initials when there is no user, and the design-system lint flags raw `Avatar` fallbacks for people.
+- The frontend design-system lint also catches names built into toasts, titles and other strings without `DisplayName`, explicit org arguments to `DisplayName`, payloads reshaped for `UserAvatar`, and direct calls to the name and avatar resolvers.
+- The frontend design-system lint flags person names rendered without `DisplayName` and
+  user avatars rendered with a raw `AvatarImage` instead of `UserAvatar`.
+- Roll call: staff can run the whole page from the keyboard. Arrow keys (or `j`/`k`) move a
+  highlighted cursor across every player, `1` confirms, approves or restores the highlighted
+  player, `2` removes them, and `S` opens Start Tournament. After a confirm or removal the
+  cursor moves on to the next player in the list. A key legend sits above the list.
+- Draft settings section in the Tournament, Event and Series dialogs: turn the team draft turn timer on or off and set its grace and reserve time in seconds. Event and series settings flow to the event's tournament.
+- Hero drafts have a configurable turn timer: set the grace time per pick and the reserve time per team, or turn the timer off so captains pick and ban with no time limit. A running draft keeps the settings it started with.
+- Series and org defaults can now open sign-ups manually, immediately, or a
+  chosen number of days before each event starts, and single events, one-off
+  series events and the edit form use the same setting. Choosing
+  "immediately" on a series opens every upcoming event it has already
+  generated. New single events now start from the org default (manual
+  unless the org changes it) instead of always opening sign-ups
+  immediately (#577).
+- The frontend design-system lint now catches raw Tailwind palette classes in any string, not only those that reach a `className`: lookup maps, arrays, function returns and shared style constants (`draftforge/no-raw-color-strings`). A processor drops its report when `shadcn/no-raw-colors` already flagged the same class, so each class counts once. The 227 existing hits are baselined in `frontend/shadcn-lint-suppressions.json`.
+- Domain color tokens for colors with a fixed meaning: Radiant/Dire, pick/ban, the acting turn, draft styles, the five positions, site roles, rank status, placings, presence, GPM/XPM and Discord (`text-radiant`, `bg-ban-surface/60`, `fill-pos-carry`, ...). Values live in one block of `frontend/app/app.css`; the Theming Guide's new "Domain Colors" section maps each meaning to its token. No component uses them yet; follow-up PRs move the `shadcn/no-raw-colors` baseline onto them.
+
+### Changed
+
+- Staff user search ranks the org's own members first and matches that org's Discord
+  server nicknames.
+- Names and avatars now fill in from the shared user cache and the page's organization automatically: on organization, league, tournament, event, roll call, hero draft and Activity pages a player's server nickname for that organization is shown first. Otherwise names show as before.
+- Settings search in the event dialogs (Create Event, Edit Event, one-off, Edit Repeating
+  Event, Organization Event Defaults) now also matches field descriptions and keywords,
+  finds Discord settings before that section is opened, and finds Ready check settings
+  inside their collapsed blocks, opening the block when you pick one. Ctrl/Cmd+K focuses
+  the search from anywhere in the dialog, and the arrow keys, Home and End move through
+  the results before Enter picks one. A validation error is now marked on the section that
+  actually shows the field.
+- Names the server generates now show a player's Discord server nickname for the
+  organization when one applies: "X's Team" names, lobby player lists, event signups,
+  team captains, event host and helpers, promotion messages and bot embeds. Server
+  nicknames stay hidden from viewers who cannot see a private organization's members.
+  Elsewhere names show as before.
+- The "Friend ID already assigned" message no longer shows "(@None)" for Steam-only
+  accounts, and no longer repeats the username when it is the only name.
+- Roll call: confirming, approving, removing or restoring a player now updates their row
+  straight away instead of waiting for the server, and the next player can be confirmed while
+  earlier requests are still in flight. A small spinner marks rows still saving; if the server
+  refuses, the row snaps back and a toast names the player. The event page's signup actions
+  update rows the same way and refetch once, after the last action finishes.
+- Event, series and organization-default settings now open with a category sidebar and a
+  search box: type to filter categories and jump straight to a matching setting (`/`
+  focuses the search). Phones keep the category strip, with the search above it.
+- The Event, Series, one-off and Org event defaults dialogs are now full-screen and tabbed (Event, Tournament, Lobby, Approval, Discord), sharing one set of fields with the Tournament dialog. Draft type sits with the draft timers in every dialog, the Save button stays pinned to the bottom, and on phones the tabs fit on one scrollable row and the dialogs no longer scroll sideways.
+- Tentative and waitlisted signups no longer take event seats, and one cancellation
+  now fills every seat it frees from the waitlist (#568).
+- Signup counts on the event list, the event page and the Discord scheduled event
+  drop, because tentative and waitlisted players no longer count as signed up.
+- Operators run `python manage.py rebalance_event_waitlists` once after deploying;
+  it may promote waitlisted players into seats tentative players were holding.
+- Organizers can now set the roster rule (the "Mandatory RSVP Confirmation"
+  toggle on the Ready check tab) in the create, edit, series, one-off and
+  org-defaults event forms. When it is on, players join the roster only after
+  confirming. Starting roll call
+  now removes approved but unconfirmed players who are not on a team from the
+  tournament roster straight away instead of at tournament start, and reopening
+  signups puts them back when the setting is off. The event page shows the roll
+  call as "In progress", "Confirm to join roster" or "Optional" (#569).
+- Cancelling, rejecting, demoting or unconfirming a signup still takes the
+  player off the tournament roster and their team, as before. Only the roster
+  resync on Start Roll Call and Reopen Signups leaves team members in place.
+- Auto-approve events with Dota rank gates now hold players who never declared a
+  rank for approval (`dota_rank_undeclared`), including players added by staff,
+  reinstated or promoted from the waitlist; players with a previous rank are no
+  longer held for a rank screenshot (#575).
+- Staff see why a signup is held ("At last check: ...") on pending signups, and
+  on RSVPs of manual-approval events; players see "Pending approval: ..." on
+  their own signup and get a "Signed up, pending approval" toast (#575).
+- Names the server builds (team names, lobby and Discord messages) now use the same order as the site: the org server nickname, then the Discord global name, then the site nickname, then the username.
+- Names now prefer Discord: the org server nickname, then the Discord global name, then the site nickname, then the username.
+- Start Draft and Restart Draft now reset each team to its captain in place
+  instead of deleting and recreating it. When games or other records use the
+  teams, staff get a second confirmation, and referenced teams are never
+  deleted. The success message says how many teams were reset, dropped or left
+  out of the draft (#572).
+- `POST /tournaments/draft-rebuild` on a draft with no rounds yet resets teams
+  the same way: besides cutting each roster to its captain it clears the deputy,
+  drop-in and left members, league entries, points and placement.
+- The tournament bracket loads with a fixed handful of database queries instead of
+  several per team and player (317 down to 11 for an 8-team double-elimination
+  bracket), so large brackets no longer stall the server.
+
+### Removed
+
+- The manual guild nickname field in the team edit form and the admin API. Discord sync
+  now owns server nicknames.
+
+### Fixed
+
+- The daily batched avatar refresh works again: Celery workers now receive the Discord
+  API settings they need.
+- Refresh members now refetches the member list from Discord instead of reusing the
+  cached copy, and applies the names it gets.
+- Captain name search in match suggestions and user search in the OrgUser and
+  LeagueUser admin no longer error.
+- Team draft, hero draft, bracket and match views show players by their server or Discord
+  names, including the position coverage hints, pick toasts and the team picker, and
+  captain and Steam match avatars now load the real Discord picture.
+- Event staff, roll call and signup rows, repeater subscribers, task schedules, league match captains, the contributions ledger and manual awards, promotion candidates, the admin team transfer prompt and the locked-features panel now show members by their org server nickname, then site nickname, Discord name and username, like the rest of the site.
+- Team modals and popovers, captain lists, the tournament players tab, the
+  leaderboard, user cards and the add-user and add-player pickers now show a
+  player's server nickname for the organization, or their Discord name, like
+  the rest of the site. Toasts and confirmations (adding, removing, editing or
+  deleting a player, creating a captain's team) use the same name.
+- The add-player and user search pickers also match Discord names, and the
+  Discord member picker matches server nicknames.
+- Setting a match winner in the bracket's match dialog now saves that result
+  right away, moving the winner and the loser into their next matches, so it
+  survives a page refresh without pressing the bracket's Save button. Unsetting
+  a winner also takes both teams back out of their next matches, and is refused
+  while one of those matches is already finished (#466).
+- Organization staff can now open the Claims tab from the mobile page menu; it was
+  shown on desktop but left out of the mobile menu for non-admin staff (#583).
+- Backend tests that count queries with `assertNumQueries` or `CaptureQueriesContext`
+  now see every query across test-client requests; the query stats middleware no longer
+  clears the query log at the start of each request (#586).
+- Backend consumer tests no longer fail with "bound to a different event loop" when the `app` tests run in the same process as other labels. The per-draft write lock is now kept per event loop, and the Redis channel layer no longer keeps a receive lock bound to an old loop after a waiting receive is cancelled (#588).
+- Discord HTTP calls that get a 401 (rejected bot token) now log `discord_auth_failed`.
+  The test-only Discord sync and send-notification endpoints return 503
+  `discord_auth_failed` right away instead of hanging or reporting "DMs disabled" (#589).
+- The Discord Activity is steadier around drafts: the banner names your live hero draft
+  even while the team draft is still unfinished, a team draft that starts after you open
+  the Activity loads instead of showing "Draft Not Started", leaving a draft no longer
+  flashes the leave confirmation, and opening a bracket match shows its View Draft button
+  right away. The bracket, on the website and in the Activity, keeps your zoom and pan
+  when you tap a match or a live result comes in, and shows a match's new hero draft or
+  game id without a reload.
+- Launching a draft from Discord no longer moves anyone else's Activity: everyone in an Activity can switch between the tournament's team draft, live and recently finished hero drafts and the bracket, or open the page in their browser, and the team draft Activity follows the latest pick.
+- Discord Activity logs now record every way a session ends: an open socket whose credential expires logs `activity_auth_rejected` (surface `socket`), a crashed or cancelled draft socket logs `activity_socket_closed` with reason `error` or `cancelled`, and the Activity client warns with `activity_session_ended`, `activity_socket_out_of_scope` and `activity_refresh_exhausted` when it stops reconnecting; the rollback and views endpoint docs are corrected to match.
+- Auto-create hero drafts now works for any tournament set to In Progress with the setting on, not only ones started from an event. Turning it on mid-tournament, or back on after turning it off, takes effect within about 10 seconds.
+- CSV import conflict messages now name people the way the site does, including their Discord name, instead of only the site nickname or username.
+- Turning off "Members can sign themselves up" now stops self sign-ups on the
+  web and through the Discord buttons and reactions, and hides the Sign Up and
+  Tentative buttons; organizers can still add players. The setting is editable
+  in every event, series and org-defaults form (#570).
+- The tournament list's open-signups filter no longer lists tournaments whose
+  event has self sign-up turned off.
+- A friend ID on either game profile or a linked Steam account now satisfies
+  "Require Friend ID" on the web signup, so players with a linked account are no
+  longer asked for it again; Dota and Deadlock friend IDs are validated the same
+  way on the web and in Discord (#574).
+- Saving a Dota profile, by the player or by staff, now refuses an unknown rank
+  status, a malformed friend ID or a friend ID another user already holds, with
+  a 400 error naming the problem. Resaving the ID already on the profile, or one
+  the same person uses in another organization, is still accepted.
+- Event signups now copy a profile friend ID onto the player's Steam account
+  before deciding the signup status, read it from either game profile, and log
+  a warning when the ID is already taken or unusable instead of dropping it
+  silently (#576).
+- Discord signup post edits are now debounced and run one at a time per event,
+  so a burst of signups no longer leaves the post showing an older list. When
+  the signup list cannot be read, an edit retries a few times
+  (`SIGNUP_POST_READ_RETRIES`) and then leaves the post unchanged instead of
+  emptying it; the next signup change refreshes it (#573).
+- When the signup list cannot be read, event announcements, attendance and
+  profile reminders (including a reminder fired by hand from the admin) and
+  subscriber DMs are skipped instead of sent with an empty list. They go out on
+  the next scheduler pass; a reminder fired by hand does nothing in that case.
+- Firing the hero draft DM task by hand from an event's task schedule now reaches the game's players instead of
+  silently sending nothing, and a Discord rate-limit wait that runs out no longer stops a batch of
+  tournament draft or hero draft DMs: that player is listed as failed, the rest still get the
+  link, and the notification log is completed.
+- Migrations run again after the organization settings and rank declaration changes both
+  added an `org` migration numbered 0011.
+- Tabs (event, organization, profile and the other shared tab bars) now use the same
+  border as the cards below them instead of a pale lilac outline. The active tab keeps
+  a matching transparent border, no longer turns blue-outlined on hover, and no longer
+  shows a white browser outline after a mouse click; keyboard focus shows the brand ring.
+- The team draft ready-up lobby now highlights your own captain row with a "You" badge.
+- Team drafts now pause when the captain on the clock leaves and nobody else is connected. Before, the 9-second disconnect check stopped with the last socket and the clock kept running.
+- Team API writes now reject a captain or deputy who is not on the team, and a
+  deputy who is also the captain. Approving an account claim keeps the claimed
+  account's captaincy on the claimer instead of handing it to another player,
+  and an event team can no longer be moved to a different event. A new
+  read-only `audit_team_leadership` command lists existing teams with broken
+  leadership (#571).
+- Backend requests under ASGI no longer bounce through a worker thread and back onto the event loop on every request: the telemetry, query-stats, CSRF-cookie-header, WhiteNoise, social-auth and OpenTelemetry middlewares are now async capable, so the middleware chain runs without an `async_to_sync` adapter. This removes the hop that let a cancelled slow request freeze daphne (0.14.1).
+
+### Documentation
+
+- A frontend guide for rendering people (`DisplayName`, `UserAvatar`, the org context and each lint rule), and every `draftforge/*` lint error now links to its section. Replaces the outdated avatar guide.
+- Fixed the broken links and anchors in the theming guide, its AI review references, the auth roles page and the Playwright guide. The theming guide now links to the AI reference pages instead of inlining them, and `scripts/test_docs_links.py` fails on any broken link or anchor in the docs build (#590).
+- Discord Activities docs: rolling back with `DISCORD_ACTIVITY_ENABLED` off now says what 0.14.x frames show (a "Discord session ended" badge on hero drafts, nothing but a disconnected dot on team drafts, never "Activities are turned off"), that 0.14.x team-draft frames keep polling REST into 401s, and that every frame must be reopened afterwards; the views endpoint lists its 403 `activity_out_of_scope`, 400 and 429 answers, and `activity_auth_rejected` lists its `rest`, `socket` and `views` surfaces.
+
 ## [0.14.1] - 2026-11-15
 
 ### Fixed
