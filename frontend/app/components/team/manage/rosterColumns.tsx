@@ -169,7 +169,8 @@ export interface MakeRosterColumnsOptions extends RosterActionContext {
 
 /**
  * Column defs for RosterTable. Phones show the player (MMR stacked under the
- * name), role badges and the actions menu; the MMR column appears from `sm`.
+ * name), role badges and the actions menu; the MMR column appears from `sm`,
+ * inline action buttons replace the menu from `md`.
  */
 export function makeRosterColumns({
   team,
@@ -259,12 +260,13 @@ export function makeRosterColumns({
           label={`Actions for ${DisplayName(row.original.user)}`}
           actions={rosterRowActions(row.original, ctx)}
           disabled={pending}
+          inlineFrom="md"
           data-testid={`${testIdPrefix}-actions-${row.original.user.pk}`}
         />
       ),
       meta: {
-        headClassName: 'w-16 sm:w-14',
-        cellClassName: 'w-16 text-right sm:w-14',
+        headClassName: 'w-16 sm:w-14 md:w-[22rem]',
+        cellClassName: 'w-16 text-right sm:w-14 md:w-[22rem]',
       },
     },
   };

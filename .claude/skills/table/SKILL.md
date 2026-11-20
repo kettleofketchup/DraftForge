@@ -60,9 +60,15 @@ page. Need another column? Add it to the factory's union.
 - Cell actions are brand buttons (`SecondaryButton size="sm" className="min-h-11 sm:min-h-8"`),
   call `e.stopPropagation()` so they don't fire `onRowClick`, and carry `${prefix}-<action>-<id>`.
   Inline text links in cells are exempt from the 44px floor; the row is the touch target.
-- More than one action per row, or rows whose actions differ: `DataTableRowActions` (a ⋮ menu,
-  `aria-label` "Actions for <name>", trigger `${prefix}-actions-<id>`, items
-  `${prefix}-<action>-<id>`). Keep a disabled action listed with its `hint` rather than hiding it.
+- More than one action per row, or rows whose actions differ: `DataTableRowActions`. When the
+  table has room (a wide page or full-screen dialog), pass `inlineFrom="md"`: from that breakpoint
+  the actions are inline `SecondaryButton`s (`color="red"` when destructive) in a `role="group"`,
+  and below it only a ⋮ menu renders, never both. Size the actions column for the inline buttons
+  from the breakpoint (`w-16 sm:w-14 md:w-[22rem]`). Without `inlineFrom` it is always the menu.
+  `aria-label` "Actions for <name>" and `${prefix}-actions-<id>` sit on the group or the trigger;
+  each button or item is `${prefix}-<action>-<id>`. Keep a disabled action shown with its `hint`
+  (menu text, or a tooltip plus `aria-describedby` inline) rather than hiding it. Tests switch
+  modes with `setViewportWidth` from `ui/data-table/__tests__/viewport.ts`.
   Worked example: `components/team/manage/rosterColumns.tsx`.
 - Table-level actions ("Add …") and a count go on `toolbarActions` / `toolbarStart`
   (`${prefix}-actions` bar), which works without `enableToolbar`.
@@ -78,7 +84,8 @@ page. Need another column? Add it to the factory's union.
 Per domain table: default order, a custom `columns` list, test-id prefix, row actions (only
 where allowed, disabled while pending, don't trigger row click), one header re-sort, the
 stacked mobile line, empty message. `DataTable` itself: `ui/data-table/__tests__/DataTable.test.tsx`.
-jsdom has no `matchMedia`; `useMediaQuery` returns `false`, so every breakpoint reads "small".
+jsdom has no `matchMedia`; `useMediaQuery` returns `false`, so every breakpoint reads "small"
+unless a test calls `setViewportWidth(px)` (restore it after).
 
 ## Filters (`enableToolbar`)
 

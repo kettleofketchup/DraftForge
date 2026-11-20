@@ -87,6 +87,11 @@ function rowAction(pk: number, label: string): HTMLElement {
   return screen.getByRole('menuitem', { name: new RegExp(`^${label}`) });
 }
 
+/** The selected leader's name in a select trigger, without the avatar. */
+const selectedName = (testId: string): string | null | undefined =>
+  screen.getByTestId(testId).querySelector('[data-testid="leader-option-name"]')
+    ?.textContent;
+
 const banner = () => within(screen.getByTestId('team-leadership-banner'));
 
 describe('LeadershipProblemsBanner', () => {
@@ -202,7 +207,7 @@ describe('LeadershipProblemsBanner', () => {
     expect(
       banner().getByText(`${name(people.captain)} is also the captain.`),
     ).toBeTruthy();
-    expect(screen.getByTestId('team-manage-deputy-select').textContent).toBe(
+    expect(selectedName('team-manage-deputy-select')).toBe(
       `${name(people.captain)} (also captain)`,
     );
     fireEvent.click(banner().getByRole('button', { name: 'Clear deputy' }));
@@ -244,7 +249,7 @@ describe('LeadershipProblemsBanner', () => {
 describe('leadership selects', () => {
   it('shows a ghost captain as "(not a member)"', () => {
     renderPanel(ghostCaptainTeam);
-    expect(screen.getByTestId('team-manage-captain-select').textContent).toBe(
+    expect(selectedName('team-manage-captain-select')).toBe(
       `${name(ghostCaptainTeam.captain!)} (not a member)`,
     );
   });
@@ -263,9 +268,71 @@ describe('leadership selects', () => {
     expect(icon!.parentElement).toBe(label!.parentElement);
   });
 
+  it('shows a small avatar beside the selected captain and each option', () => {
+    renderPanel(managedTeam);
+    const trigger = screen.getByTestId('team-manage-captain-select');
+    const value = trigger.querySelector('[data-slot=select-value]')!;
+    const avatar = value.querySelector('[data-testid="leader-option-avatar"]');
+    expect(avatar).not.toBeNull();
+    expect(avatar!.querySelector('.h-4.w-4')).not.toBeNull();
+    expect(selectedName('team-manage-captain-select')).toBe(
+      name(people.captain),
+    );
+    const options = within(
+      openSelect('team-manage-captain-select'),
+    ).getAllByRole('option');
+    expect(options).toHaveLength(3);
+    for (const option of options) {
+      expect(
+        option.querySelector('[data-testid="leader-option-avatar"]'),
+      ).not.toBeNull();
+    }
+    expect(
+      within(screen.getByRole('listbox')).getByRole('option', {
+        name: name(people.member),
+      }),
+    ).toBeTruthy();
+  });
+
+  it('shows avatars in the deputy select, and none on "No deputy"', () => {
+    renderPanel(managedTeam);
+    expect(
+      screen
+        .getByTestId('team-manage-deputy-select')
+        .querySelector(
+          '[data-slot=select-value] [data-testid="leader-option-avatar"]',
+        ),
+    ).not.toBeNull();
+    const listbox = openSelect('team-manage-deputy-select');
+    expect(
+      within(listbox)
+        .getByRole('option', { name: 'No deputy' })
+        .querySelector('[data-testid="leader-option-avatar"]'),
+    ).toBeNull();
+    expect(
+      within(listbox)
+        .getByRole('option', { name: name(people.member) })
+        .querySelector('[data-testid="leader-option-avatar"]'),
+    ).not.toBeNull();
+  });
+
+  it('keeps the ghost icon, avatar and truncating name on one row', () => {
+    renderPanel(ghostCaptainTeam);
+    const row = screen
+      .getByTestId('team-manage-captain-select')
+      .querySelector('[data-slot=select-value] > span')!;
+    expect(row).toHaveClass('flex', 'min-w-0', 'items-center');
+    const kids = [...row.children];
+    expect(kids[0].matches('svg.lucide-triangle-alert')).toBe(true);
+    expect(
+      kids[1].querySelector('[data-testid="leader-option-avatar"]'),
+    ).not.toBeNull();
+    expect(kids[2]).toHaveClass('truncate');
+  });
+
   it('shows a ghost deputy as "(not a member)"', () => {
     renderPanel(ghostDeputyTeam);
-    expect(screen.getByTestId('team-manage-deputy-select').textContent).toBe(
+    expect(selectedName('team-manage-deputy-select')).toBe(
       `${name(people.outsider)} (not a member)`,
     );
   });
@@ -286,7 +353,10 @@ describe('leadership selects', () => {
     renderPanel(managedTeam);
     const options = within(openSelect('team-manage-captain-select'))
       .getAllByRole('option')
-      .map((o) => o.textContent);
+      .map(
+        (o) =>
+          o.querySelector('[data-testid="leader-option-name"]')?.textContent,
+      );
     expect(options.sort()).toEqual(
       [people.captain, people.deputy, people.member].map(name).sort(),
     );

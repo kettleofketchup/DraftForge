@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '~/components/ui/brand-select';
 import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { LeadershipProblemsBanner } from './LeadershipProblemsBanner';
 import type { PendingTeamAction } from './pendingTeamAction';
 import { RosterTable } from './RosterTable';
@@ -40,11 +41,50 @@ const NO_CAPTAIN = 'none';
 const byName = (a: RosterUser, b: RosterUser): number =>
   DisplayName(a).localeCompare(DisplayName(b));
 
-function GhostItem({ user, note }: { user: RosterUser; note: string }) {
+/** Avatar and truncating name on one row; the select trigger shows it too. */
+function LeaderOption({
+  user,
+  label = DisplayName(user),
+  icon,
+}: {
+  user: RosterUser;
+  label?: string;
+  icon?: ReactNode;
+}) {
   return (
-    <BrandSelectItem value={String(user.pk)} disabled>
-      <TriangleAlert className="text-destructive" aria-hidden />
-      <span className="truncate">{`${DisplayName(user)} (${note})`}</span>
+    <span className="flex min-w-0 items-center gap-2">
+      {icon}
+      <span aria-hidden className="flex shrink-0">
+        <UserAvatar
+          user={user}
+          size="tiny"
+          data-testid="leader-option-avatar"
+        />
+      </span>
+      <span className="truncate" data-testid="leader-option-name">
+        {label}
+      </span>
+    </span>
+  );
+}
+
+function MemberItem({ user }: { user: RosterUser }) {
+  return (
+    <BrandSelectItem value={String(user.pk)} textValue={DisplayName(user)}>
+      <LeaderOption user={user} />
+    </BrandSelectItem>
+  );
+}
+
+function GhostItem({ user, note }: { user: RosterUser; note: string }) {
+  const label = `${DisplayName(user)} (${note})`;
+  return (
+    <BrandSelectItem value={String(user.pk)} textValue={label} disabled>
+      <LeaderOption
+        user={user}
+        label={label}
+        icon={<TriangleAlert className="text-destructive" aria-hidden />}
+      />
     </BrandSelectItem>
   );
 }
@@ -101,6 +141,7 @@ export function TeamRosterPanel({
             <BrandSelectTrigger
               ref={captainRef}
               data-testid="team-manage-captain-select"
+              className="max-w-64"
             >
               <SelectValue />
             </BrandSelectTrigger>
@@ -114,9 +155,7 @@ export function TeamRosterPanel({
                 <GhostItem user={captainGhost} note="not a member" />
               ) : null}
               {members.map((m) => (
-                <BrandSelectItem key={m.pk} value={String(m.pk)}>
-                  {DisplayName(m)}
-                </BrandSelectItem>
+                <MemberItem key={m.pk} user={m} />
               ))}
             </BrandSelectContent>
           </BrandSelect>
@@ -139,6 +178,7 @@ export function TeamRosterPanel({
             <BrandSelectTrigger
               ref={deputyRef}
               data-testid="team-manage-deputy-select"
+              className="max-w-64"
             >
               <SelectValue />
             </BrandSelectTrigger>
@@ -148,9 +188,7 @@ export function TeamRosterPanel({
                 <GhostItem user={deputy} note={deputyMarker} />
               ) : null}
               {deputyOptions.map((m) => (
-                <BrandSelectItem key={m.pk} value={String(m.pk)}>
-                  {DisplayName(m)}
-                </BrandSelectItem>
+                <MemberItem key={m.pk} user={m} />
               ))}
             </BrandSelectContent>
           </BrandSelect>

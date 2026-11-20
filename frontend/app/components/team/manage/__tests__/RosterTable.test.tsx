@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { ManagedTeam } from '~/components/api/teamManagementAPI';
+import { setViewportWidth } from '~/components/ui/data-table/__tests__/viewport';
 import { DisplayName } from '~/components/user/avatar';
 import type { PendingTeamAction } from '../pendingTeamAction';
 import { buildRosterRows, type RosterColumnId } from '../rosterColumns';
@@ -257,5 +258,77 @@ describe('row actions', () => {
     expect(
       screen.getByTestId(`team-roster-actions-${people.member.pk}`),
     ).toHaveAccessibleName(`Actions for ${name(people.member)}`);
+  });
+});
+
+describe('row actions by viewport', () => {
+  let restore: () => void = () => undefined;
+  afterEach(() => restore());
+
+  const inlineLabels = (pk: number): string[] =>
+    within(screen.getByTestId(`team-roster-actions-${pk}`))
+      .getAllByRole('button')
+      .map((b) => b.textContent ?? '');
+
+  it('shows inline buttons and no menu trigger from md up', () => {
+    restore = setViewportWidth(1024);
+    renderTable();
+    expect(inlineLabels(people.member.pk)).toEqual([
+      'Make captain',
+      'Make deputy',
+      'Mark dropout',
+    ]);
+    expect(inlineLabels(people.standin.pk)).toEqual([
+      'Sub in',
+      'Remove stand-in',
+    ]);
+    expect(inlineLabels(people.dropout.pk)).toEqual(['Restore']);
+    expect(
+      screen.queryAllByRole('button', { name: /^Actions for / }),
+    ).toHaveLength(0);
+  });
+
+  it('runs an inline action by its test id', () => {
+    restore = setViewportWidth(1024);
+    const spy = renderTable();
+    fireEvent.click(
+      screen.getByTestId(`team-roster-make-captain-${people.member.pk}`),
+    );
+    expect(spy.mock.calls[0][0].action.kind).toBe('set_captain');
+  });
+
+  it('keeps the last-member dropout disabled inline, with its reason', () => {
+    restore = setViewportWidth(1024);
+    const spy = renderTable(singleMemberTeam);
+    const button = screen.getByTestId(
+      `team-roster-mark-dropout-${people.captain.pk}`,
+    );
+    expect(button).toBeDisabled();
+    expect(button.parentElement).toHaveAccessibleDescription(
+      'A team needs at least one member',
+    );
+    fireEvent.click(button);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('disables the inline buttons while pending', () => {
+    restore = setViewportWidth(1024);
+    renderTable(managedTeam, { pending: true });
+    for (const b of within(
+      screen.getByTestId(`team-roster-actions-${people.member.pk}`),
+    ).getAllByRole('button')) {
+      expect(b).toBeDisabled();
+    }
+  });
+
+  it('shows only the menu below md', () => {
+    restore = setViewportWidth(390);
+    renderTable();
+    expect(
+      screen.getByTestId(`team-roster-actions-${people.member.pk}`),
+    ).toHaveAccessibleName(`Actions for ${name(people.member)}`);
+    expect(
+      screen.queryByTestId(`team-roster-make-captain-${people.member.pk}`),
+    ).toBeNull();
   });
 });

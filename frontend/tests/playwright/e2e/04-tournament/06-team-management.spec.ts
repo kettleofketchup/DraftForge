@@ -111,21 +111,43 @@ function memberRow(dialog: Locator, username: string): Locator {
   return rosterRow(dialog, 'member', username);
 }
 
-/** Picks `label` from a roster row's actions menu. */
+/** Matches DataTableRowActions `inlineFrom="md"`: inline buttons from 768 px, the menu below. */
+const INLINE_ACTIONS_MIN_WIDTH = 768;
+
+function actionsInline(page: Page): boolean {
+  return (page.viewportSize()?.width ?? 0) >= INLINE_ACTIONS_MIN_WIDTH;
+}
+
+/** Runs a roster row action: its inline button, or the menu item on phones. */
 async function rowAction(row: Locator, label: string): Promise<void> {
+  if (actionsInline(row.page())) {
+    await row
+      .getByRole('group', { name: /^Actions for / })
+      .getByRole('button', { name: label, exact: true })
+      .click();
+    return;
+  }
   await row.getByRole('button', { name: /^Actions for / }).click();
   await row.page().getByRole('menuitem', { name: label, exact: true }).click();
 }
 
-/** The warning icon and its label share one line inside `container`. */
+/** The warning icon, avatar and name share one line inside `container`, in that order. */
 async function expectIconInline(container: Locator): Promise<void> {
   const icon = await container.locator('svg').first().boundingBox();
-  const label = await container.locator('span').first().boundingBox();
-  if (!icon || !label) throw new Error('icon or label is not rendered');
-  const iconMid = icon.y + icon.height / 2;
-  expect(iconMid).toBeGreaterThan(label.y);
-  expect(iconMid).toBeLessThan(label.y + label.height);
-  expect(icon.x + icon.width).toBeLessThanOrEqual(label.x);
+  const avatar = await container
+    .getByTestId('leader-option-avatar')
+    .boundingBox();
+  const label = await container.getByTestId('leader-option-name').boundingBox();
+  if (!icon || !avatar || !label) {
+    throw new Error('icon, avatar or label is not rendered');
+  }
+  for (const box of [icon, avatar]) {
+    const mid = box.y + box.height / 2;
+    expect(mid).toBeGreaterThan(label.y);
+    expect(mid).toBeLessThan(label.y + label.height);
+  }
+  expect(icon.x + icon.width).toBeLessThanOrEqual(avatar.x);
+  expect(avatar.x + avatar.width).toBeLessThanOrEqual(label.x);
 }
 
 test.describe('Team management dialog', () => {
@@ -288,6 +310,17 @@ test.describe('Team management dialog', () => {
         body: await trigger.screenshot(),
         contentType: 'image/png',
       });
+
+      const row = memberRow(dialog, `${PREFIX}charlie_1`);
+      const menu = row.getByRole('button', { name: /^Actions for / });
+      const inline = row.getByRole('button', { name: 'Make captain' });
+      if (width >= INLINE_ACTIONS_MIN_WIDTH) {
+        await expect(inline).toBeVisible();
+        await expect(menu).toHaveCount(0);
+      } else {
+        await expect(menu).toBeVisible();
+        await expect(inline).toHaveCount(0);
+      }
 
       await trigger.click();
       const item = page
