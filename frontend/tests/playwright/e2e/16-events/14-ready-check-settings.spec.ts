@@ -214,6 +214,10 @@ test.describe.serial('Events - Ready check settings (@cicd)', () => {
     await stubVoiceChannels(page);
     await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
     await page.getByTestId('org-tab-events').click();
+    await expect(page.getByTestId('org-tab-events')).toHaveAttribute(
+      'data-state',
+      'active',
+    );
     await page.getByTestId('org-settings-button').click();
     await expect(page.getByTestId('org-settings-modal')).toBeVisible();
 
