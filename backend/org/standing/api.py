@@ -27,6 +27,7 @@ from org.standing.types import (
     Leaderboard,
     LogValue,
     OutputKeys,
+    TrackKey,
     TrackOutput,
 )
 
@@ -171,20 +172,20 @@ def merge_users(
         if drop_ou.user_id != drop.pk or keep_ou.user_id != keep.pk:
             raise ValueError("member pair does not belong to drop/keep")
     active = registry.tracks()
-    orglog: dict[str, dict[str, LogValue]] = {t.key: {} for t in active}
-    log: dict[str, dict[str, LogValue]] = {t.key: {} for t in active}
+    orglog: dict[TrackKey, dict[str, LogValue]] = {t.key: {} for t in active}
+    log: dict[TrackKey, dict[str, LogValue]] = {t.key: {} for t in active}
     for drop_ou, keep_ou in member_pairs:
         for t in active:
             out = _checked(t, "merge_members", t.merge_members(drop_ou, keep_ou))
             _fold(orglog[t.key], out.orglog)
             _fold(log[t.key], out.log)
-    by_track: dict[str, TrackOutput] = {}
+    by_track: dict[TrackKey, TrackOutput] = {}
     for t in active:
         out = _checked(t, "repoint_user", t.repoint_user(drop, keep))
         by_track[t.key] = TrackOutput(
             orglog={**orglog[t.key], **out.orglog}, log={**log[t.key], **out.log}
         )
-    return HookResult(by_track=by_track)  # type: ignore[arg-type]
+    return HookResult(by_track=by_track)
 
 
 def on_user_deleted(user: CustomUser, *, actor: CustomUser | None) -> HookResult:
