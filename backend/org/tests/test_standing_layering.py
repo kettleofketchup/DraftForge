@@ -33,6 +33,8 @@ DISPATCHERS = (
     "org.standing.registry",
     "org.contributions.adapter",
     "org.conduct.adapter",
+    "org.standing.views",
+    "org.standing.urls",
 )
 LEAF_FORBIDDEN = (
     *DISPATCHERS,
@@ -177,6 +179,15 @@ def _caller_files(package: str) -> list[Path]:
     )
 
 
+def _module_all(path: Path) -> set[str]:
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets
+        ):
+            return {ast.literal_eval(e) for e in node.value.elts}
+    return set()
+
+
 class StandingLayeringTest(SimpleTestCase):
     def test_init_is_empty(self) -> None:
         tree = ast.parse((STANDING_DIR / "__init__.py").read_text())
@@ -284,6 +295,20 @@ class StandingLayeringTest(SimpleTestCase):
             if _matches(module, "org") or _matches(module, "app")
         }
         self.assertEqual(org_imports, CONDUCT_CHECK_IMPORTS)
+
+    def test_api_never_imports_the_http_layer(self) -> None:
+        for name in _imported_modules(STANDING_DIR / "api.py"):
+            with self.subTest(imported=name):
+                self.assertFalse(
+                    _matches_any(name, ("org.standing.views", "org.standing.urls")),
+                    f"api imports {name}",
+                )
+
+    def test_api_exports_payloads_not_serializers(self) -> None:
+        exported = _module_all(STANDING_DIR / "api.py")
+        self.assertIn("tracks_payload", exported)
+        self.assertIn("ViewerRoles", exported)
+        self.assertFalse({"track_info_data", "leaderboard_data"} & exported)
 
     def test_registry_reaches_conduct_adapter(self) -> None:
         self.assertIn("org.conduct.adapter", _graph()["org.standing.registry"])

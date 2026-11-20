@@ -48,7 +48,6 @@ from org.standing.types import (
 __all__ = [
     "AccessDenied",
     "ViewerRoles",
-    "track_info_data",
     "FeatureLocked",
     "HookResult",
     "LogValue",
@@ -70,6 +69,7 @@ __all__ = [
     "reopen_reset_fields",
     "track_metrics",
     "tracks_for",
+    "tracks_payload",
     "viewer_roles",
 ]
 
@@ -291,6 +291,19 @@ def tracks_for(
         t.track_info(org_id, viewer=viewer, roles=roles)
         for t in registry.tracks()
         if t.feature.value in features
+    ]
+
+
+def tracks_payload(
+    org_id: int,
+    *,
+    viewer: CustomUser | AnonymousUser | None,
+    features: Collection[str],
+    roles: ViewerRoles,
+) -> list[dict[str, Any]]:
+    return [
+        track_info_data(info)
+        for info in tracks_for(org_id, viewer=viewer, features=features, roles=roles)
     ]
 
 

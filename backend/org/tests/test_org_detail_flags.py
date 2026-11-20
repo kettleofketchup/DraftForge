@@ -307,9 +307,70 @@ class OrgDetailConductFlagsTest(FlagsTestBase):
         self._unlock(FeatureKey.CONTRIBUTIONS)
         self.assertEqual(self._warm_query_count(self.staff), locked)
 
-    def test_conduct_unlocked_adds_at_most_two_queries_for_member(self) -> None:
+    def test_unlocked_conduct_adds_two_queries_for_member(self) -> None:
         self._unlock(FeatureKey.PROMOTION)
         self._unlock(FeatureKey.CONTRIBUTIONS)
         baseline = self._warm_query_count(self.member)
         self._unlock(FeatureKey.CONDUCT)
-        self.assertLessEqual(self._warm_query_count(self.member), baseline + 2)
+        self.assertEqual(self._warm_query_count(self.member), baseline + 2)
+
+    def test_unlocked_conduct_adds_two_queries_for_staff(self) -> None:
+        self._unlock(FeatureKey.PROMOTION)
+        self._unlock(FeatureKey.CONTRIBUTIONS)
+        baseline = self._warm_query_count(self.staff)
+        self._unlock(FeatureKey.CONDUCT)
+        self.assertEqual(self._warm_query_count(self.staff), baseline + 2)
+
+    def test_public_board_private_member_list_flags(self) -> None:
+        self._unlock(FeatureKey.CONDUCT)
+        self.org.members_private = True
+        self.org.save()
+        OrgConductSettings.objects.create(
+            organization=self.org, leaderboard_public=True
+        )
+        outsider = CustomUser.objects.create_user(
+            username="flags_outsider", password="x"
+        )
+        member = self._get(self.member)
+        self.assertIs(member["can_view_conduct"], True)
+        self.assertIs(member["can_view_own_conduct"], True)
+        for viewer in (None, outsider):
+            with self.subTest(viewer=viewer):
+                self.assertIs(self._get(viewer)["can_view_conduct"], True)
+        self.client.force_authenticate(user=self.member)
+        board = self.client.get(
+            f"/api/organizations/{self.org.pk}/standing/conduct/leaderboard/"
+        )
+        self.assertEqual(board.status_code, status.HTTP_200_OK)
+        self.assertIs(board.data["rows_visible"], False)
+        self.assertEqual(board.data["rows"], [])
+        self.assertIsNotNone(board.data["own_row"])
+
+    def test_standing_tracks_payload(self) -> None:
+        self.assertEqual(self._get(self.member)["standing_tracks"], [])
+        self._unlock(FeatureKey.CONTRIBUTIONS)
+        self._unlock(FeatureKey.CONDUCT)
+        OrgConductSettings.objects.create(
+            organization=self.org, leaderboard_public=False
+        )
+        for role, user in self._users().items():
+            with self.subTest(role=role):
+                tracks = self._get(user)["standing_tracks"]
+                self.assertEqual(
+                    [t["key"] for t in tracks], ["contribution", "conduct"]
+                )
+                self.client.force_authenticate(user=user)
+                generic = self.client.get(
+                    f"/api/organizations/{self.org.pk}/standing/tracks/"
+                )
+                self.assertEqual(tracks, generic.data["tracks"])
+        staff = self._get(self.staff)["standing_tracks"][1]
+        self.assertEqual(
+            (staff["can_view_rows"], staff["board_open"], staff["can_manage"]),
+            (True, True, False),
+        )
+        member = self._get(self.member)["standing_tracks"][1]
+        self.assertEqual(
+            (member["can_view_rows"], member["can_view_own"], member["board_open"]),
+            (False, True, False),
+        )
