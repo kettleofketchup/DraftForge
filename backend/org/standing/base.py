@@ -21,8 +21,10 @@ from org.standing.types import (
     Metric,
     OutputKeys,
     TrackAccess,
+    TrackInfo,
     TrackKey,
     TrackOutput,
+    ViewerRoles,
 )
 
 
@@ -103,3 +105,21 @@ class TrackBase(abc.ABC):
         now: datetime,
         access: TrackAccess,
     ) -> Leaderboard: ...
+
+    @abc.abstractmethod
+    def track_info(
+        self,
+        org_id: int,
+        *,
+        viewer: CustomUser | AnonymousUser | None,
+        roles: ViewerRoles,
+    ) -> TrackInfo: ...
+
+    @abc.abstractmethod
+    def member_standing(
+        self,
+        org_user: OrgUser,
+        *,
+        viewer: CustomUser | AnonymousUser | None,
+        now: datetime,
+    ) -> Mapping[str, object] | None: ...

@@ -10,7 +10,7 @@ from app.permissions_org import can_view_org_members
 from events.models import Event
 from org.contributions.kinds import EVENT_STAFF_KINDS
 from org.contributions.queries import leaderboard as contribution_leaderboard
-from org.contributions.queries import org_total
+from org.contributions.queries import member_monthly, member_totals, org_total
 from org.contributions.services import (
     delete_user_entries,
     reassign_member,
@@ -32,7 +32,9 @@ from org.standing.types import (
     Metric,
     OutputKeys,
     TrackAccess,
+    TrackInfo,
     TrackOutput,
+    ViewerRoles,
 )
 
 STAFF_FIELDS: frozenset[str] = frozenset(
@@ -129,6 +131,42 @@ class ContributionTrack(TrackBase):
             can_view_rows=viewer is not None and can_view_org_members(viewer, org_id),
             can_view_own=bool(viewer is not None and viewer.is_authenticated),
         )
+
+    @override
+    def track_info(
+        self,
+        org_id: int,
+        *,
+        viewer: CustomUser | AnonymousUser | None,
+        roles: ViewerRoles,
+    ) -> TrackInfo:
+        return TrackInfo(
+            key=self.key,
+            label=self.label,
+            metrics=self.metrics,
+            can_view_rows=roles.can_view_members,
+            can_view_own=bool(viewer is not None and viewer.is_authenticated),
+            can_manage=roles.is_admin,
+        )
+
+    @override
+    def member_standing(
+        self,
+        org_user: OrgUser,
+        *,
+        viewer: CustomUser | AnonymousUser | None,
+        now: datetime,
+    ) -> Mapping[str, object] | None:
+        if viewer is None or not viewer.is_authenticated:
+            return None
+        if org_user.user_id != viewer.pk and not can_view_org_members(
+            viewer, org_user.organization_id
+        ):
+            return None
+        return {
+            "totals": member_totals(org_user, now=now),
+            "monthly": member_monthly(org_user, now=now),
+        }
 
     @override
     def leaderboard(

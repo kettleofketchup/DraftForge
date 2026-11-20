@@ -19,6 +19,7 @@ from org.standing.base import TrackBase
 from org.standing.cache import StandingCache
 from org.standing.errors import FeatureLocked, UnknownMetric, UnknownTrack
 from org.standing.periods import Period
+from org.standing.serializers import track_info_data
 from org.standing.types import (
     CloseSource,
     HasUserId,
@@ -26,12 +27,17 @@ from org.standing.types import (
     HookResult,
     Leaderboard,
     LogValue,
+    Metric,
     OutputKeys,
+    TrackInfo,
     TrackKey,
     TrackOutput,
+    ViewerRoles,
 )
 
 __all__ = [
+    "ViewerRoles",
+    "track_info_data",
     "FeatureLocked",
     "HookResult",
     "LogValue",
@@ -40,6 +46,7 @@ __all__ = [
     "UnknownTrack",
     "deletion_blockers",
     "leaderboard",
+    "member_standing",
     "merge_users",
     "on_event_changed",
     "on_event_closed",
@@ -50,6 +57,8 @@ __all__ = [
     "on_user_deleted",
     "promotion_order",
     "reopen_reset_fields",
+    "track_metrics",
+    "tracks_for",
 ]
 
 
@@ -239,3 +248,38 @@ def leaderboard(
         own_row=board.own_row if access.can_view_own else None,
         rows_visible=access.can_view_rows,
     )
+
+
+def tracks_for(
+    org_id: int,
+    *,
+    viewer: CustomUser | AnonymousUser | None,
+    features: Collection[str],
+    roles: ViewerRoles,
+) -> list[TrackInfo]:
+    return [
+        t.track_info(org_id, viewer=viewer, roles=roles)
+        for t in registry.tracks()
+        if t.feature.value in features
+    ]
+
+
+def member_standing(
+    org_user: OrgUser,
+    *,
+    viewer: CustomUser | AnonymousUser | None,
+    now: datetime | None = None,
+) -> dict[TrackKey, Mapping[str, object]]:
+    at = now or timezone.now()
+    found: dict[TrackKey, Mapping[str, object]] = {}
+    for t in registry.tracks():
+        if not org_has_feature(org_user.organization_id, t.feature):
+            continue
+        block = t.member_standing(org_user, viewer=viewer, now=at)
+        if block is not None:
+            found[t.key] = block
+    return found
+
+
+def track_metrics(track: str) -> tuple[Metric, ...]:
+    return registry.track(track).metrics

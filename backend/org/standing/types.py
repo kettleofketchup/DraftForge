@@ -72,6 +72,13 @@ class TrackInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class ViewerRoles:
+    is_admin: bool
+    is_staff: bool
+    can_view_members: bool
+
+
+@dataclass(frozen=True, slots=True)
 class TrackAccess:
     can_view_rows: bool
     can_view_own: bool
