@@ -34,7 +34,7 @@ import { Skeleton } from '~/components/ui/skeleton';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 
-const log = getLogger('OrgSettingsTab');
+const log = getLogger('OrgSettings');
 
 const POLICY_OPTIONS: readonly {
   value: StaffOverridePolicy;

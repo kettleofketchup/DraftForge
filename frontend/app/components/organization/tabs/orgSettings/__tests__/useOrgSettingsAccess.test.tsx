@@ -1,13 +1,10 @@
 // @vitest-environment jsdom
 import { renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
-import {
-  useOrgSettingsAccess,
-  useSettingsTabRedirect,
-} from '../useOrgSettingsAccess';
+import { useOrgSettingsAccess } from '../useOrgSettingsAccess';
 
 const VIEWER = 5;
 
@@ -99,54 +96,5 @@ describe('useOrgSettingsAccess', () => {
     const result = access(org({ admin_ids: [VIEWER] }));
     expect(result.settled).toBe(false);
     expect(result.canOpen).toBe(false);
-  });
-});
-
-describe('useSettingsTabRedirect', () => {
-  type Props = {
-    tab: string;
-    settled: boolean;
-    canOpen: boolean;
-  };
-
-  function setup(initial: Props) {
-    const setActiveTab = vi.fn();
-    const hook = renderHook(
-      ({ tab, settled, canOpen }: Props) =>
-        useSettingsTabRedirect(tab, setActiveTab, { settled, canOpen }),
-      { initialProps: initial },
-    );
-    return { setActiveTab, ...hook };
-  }
-
-  it('waits until settled, then redirects a viewer who cannot view', () => {
-    const { setActiveTab, rerender } = setup({
-      tab: 'settings',
-      settled: false,
-      canOpen: false,
-    });
-    expect(setActiveTab).not.toHaveBeenCalled();
-    rerender({ tab: 'settings', settled: true, canOpen: false });
-    expect(setActiveTab).toHaveBeenCalledWith('leagues');
-  });
-
-  it('keeps the settings tab for a viewer who can view', () => {
-    const { setActiveTab, rerender } = setup({
-      tab: 'settings',
-      settled: false,
-      canOpen: false,
-    });
-    rerender({ tab: 'settings', settled: true, canOpen: true });
-    expect(setActiveTab).not.toHaveBeenCalled();
-  });
-
-  it('never redirects other tabs', () => {
-    const { setActiveTab, rerender } = setup({
-      tab: 'events',
-      settled: false,
-      canOpen: false,
-    });
-    rerender({ tab: 'events', settled: true, canOpen: false });
-    expect(setActiveTab).not.toHaveBeenCalled();
   });
 });

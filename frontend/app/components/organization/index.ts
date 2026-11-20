@@ -15,4 +15,4 @@ export type {
   OrganizationType,
   OrganizationsType,
 } from './schemas';
-export { ClaimsTab, OrgSettingsTab } from './tabs';
+export { ClaimsTab } from './tabs';

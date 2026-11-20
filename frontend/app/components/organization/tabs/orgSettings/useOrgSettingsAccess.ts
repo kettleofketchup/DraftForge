@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import type { OrganizationType } from '~/components/organization/schemas';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { useUserStore } from '~/store/userStore';
@@ -30,17 +29,4 @@ export function useOrgSettingsAccess(
     canOpen: settled && isOrgAdmin,
     visibleSectionIds,
   };
-}
-
-export function useSettingsTabRedirect(
-  activeTab: string,
-  setActiveTab: (tab: string) => void,
-  access: Pick<OrgSettingsAccess, 'canOpen' | 'settled'>,
-): void {
-  const { canOpen, settled } = access;
-  useEffect(() => {
-    if (activeTab === 'settings' && settled && !canOpen) {
-      setActiveTab('leagues');
-    }
-  }, [activeTab, settled, canOpen, setActiveTab]);
 }

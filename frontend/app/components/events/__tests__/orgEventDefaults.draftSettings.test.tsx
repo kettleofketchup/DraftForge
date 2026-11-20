@@ -65,7 +65,7 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-import { EditOrgDefaultsModal } from '../EditOrgDefaultsModal';
+import { OrgEventDefaultsHarness } from './orgEventDefaultsHarness';
 
 class ResizeObserverStub {
   observe() {}
@@ -88,12 +88,11 @@ function Wrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-describe('EditOrgDefaultsModal tabs', () => {
+describe('org event defaults tabs', () => {
   it('renders event, tournament, lobby and discord tabs without approval', async () => {
-    render(
-      <EditOrgDefaultsModal organizationId={1} open onOpenChange={() => {}} />,
-      { wrapper: Wrapper },
-    );
+    render(<OrgEventDefaultsHarness organizationId={1} />, {
+      wrapper: Wrapper,
+    });
     await waitFor(() =>
       expect(
         screen.getByTestId('org-defaults-tab-defaults-event'),
@@ -110,14 +109,13 @@ describe('EditOrgDefaultsModal tabs', () => {
   });
 });
 
-describe('EditOrgDefaultsModal draft settings', () => {
+describe('org event defaults draft settings', () => {
   beforeEach(() => mutateAsync.mockClear());
 
   it('shows saved default timers and sends edits as flat ms fields', async () => {
-    render(
-      <EditOrgDefaultsModal organizationId={1} open onOpenChange={() => {}} />,
-      { wrapper: Wrapper },
-    );
+    render(<OrgEventDefaultsHarness organizationId={1} />, {
+      wrapper: Wrapper,
+    });
     await waitFor(() =>
       expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20),
     );
@@ -141,14 +139,13 @@ describe('EditOrgDefaultsModal draft settings', () => {
   });
 });
 
-describe('EditOrgDefaultsModal ready check', () => {
+describe('org event defaults ready check', () => {
   beforeEach(() => mutateAsync.mockClear());
 
   it('moves auto-confirm into the Ready check tab and saves its keys', async () => {
-    render(
-      <EditOrgDefaultsModal organizationId={1} open onOpenChange={() => {}} />,
-      { wrapper: Wrapper },
-    );
+    render(<OrgEventDefaultsHarness organizationId={1} />, {
+      wrapper: Wrapper,
+    });
     await waitFor(() =>
       expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20),
     );
@@ -173,10 +170,9 @@ describe('EditOrgDefaultsModal ready check', () => {
   });
 
   it('turns auto-confirm off when the toggle is turned on', async () => {
-    render(
-      <EditOrgDefaultsModal organizationId={1} open onOpenChange={() => {}} />,
-      { wrapper: Wrapper },
-    );
+    render(<OrgEventDefaultsHarness organizationId={1} />, {
+      wrapper: Wrapper,
+    });
     await waitFor(() =>
       expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20),
     );
@@ -194,14 +190,13 @@ describe('EditOrgDefaultsModal ready check', () => {
   });
 });
 
-describe('EditOrgDefaultsModal discord', () => {
+describe('org event defaults discord', () => {
   beforeEach(() => mutateAsync.mockClear());
 
   it('saves the stored start mention and role mentions unchanged', async () => {
-    render(
-      <EditOrgDefaultsModal organizationId={1} open onOpenChange={() => {}} />,
-      { wrapper: Wrapper },
-    );
+    render(<OrgEventDefaultsHarness organizationId={1} />, {
+      wrapper: Wrapper,
+    });
     await waitFor(() =>
       expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20),
     );

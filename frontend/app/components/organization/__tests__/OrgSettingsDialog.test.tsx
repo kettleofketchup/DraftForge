@@ -247,7 +247,21 @@ describe('OrgSettingsDialog', () => {
       'org-settings-tab-defaults-discord',
       'org-settings-tab-defaults-ready',
     ]);
+    expect(staffPlacementEnabled).toHaveBeenCalledWith(true);
     await defaultsLoaded();
+  });
+
+  it('saving an invalid field opens and marks its section', async () => {
+    renderDialog();
+    await defaultsLoaded();
+    fireEvent.change(screen.getByTestId('org-name-input'), {
+      target: { value: '' },
+    });
+    fireEvent.mouseDown(tab('rules'), { button: 0 });
+    fireEvent.click(await screen.findByTestId('org-settings-save'));
+    await waitFor(() => expect(isActive('general')).toBe(true));
+    expect(tab('general')).toHaveAttribute('data-invalid');
+    expect(updateOrganization).not.toHaveBeenCalled();
   });
 
   it('opens on the requested section; an unknown section falls back to general', async () => {

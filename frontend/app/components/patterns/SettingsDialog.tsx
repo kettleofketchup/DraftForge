@@ -1,7 +1,6 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { Search } from 'lucide-react';
 import * as React from 'react';
-import { useSearchParams } from 'react-router';
 import {
   FormTabsList,
   InvalidDot,
@@ -126,20 +125,18 @@ interface SettingsLayoutOptions<V extends string> {
   testIdPrefix: string;
   sectionRef?: React.Ref<SettingsDialogHandle<V>>;
   searchPlaceholder?: string;
-  variant: 'dialog' | 'page';
   /** Requested section, e.g. from the URL; falls back to the first when unknown or hidden. */
   value?: string | null;
   onValueChange?: (value: V) => void;
 }
 
-/** Sidebar, search and section panels shared by SettingsDialog and SettingsPage. */
+/** Sidebar, search and section panels of SettingsDialog. */
 function useSettingsLayout<V extends string>({
   open,
   sections,
   testIdPrefix,
   sectionRef,
   searchPlaceholder = 'Search settings',
-  variant,
   value,
   onValueChange,
 }: SettingsLayoutOptions<V>) {
@@ -410,14 +407,8 @@ function useSettingsLayout<V extends string>({
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.altKey) return;
       const t = e.target as HTMLElement | null;
-      const root = searchRef.current?.closest(
-        variant === 'dialog' ? '[role="dialog"]' : '[data-settings-root]',
-      );
-      // A page has no focus trap: a key pressed with nothing focused counts too.
-      const inScope =
-        !!t &&
-        (!!root?.contains(t) || (variant === 'page' && t === document.body));
-      if (!t || !inScope) return;
+      const root = searchRef.current?.closest('[role="dialog"]');
+      if (!t || !root?.contains(t)) return;
       const commandK =
         e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey) && !e.shiftKey;
       const slash =
@@ -657,21 +648,12 @@ function useSettingsLayout<V extends string>({
       value={active}
       onValueChange={(v) => selectSection(v as V)}
       orientation={isMobile ? 'horizontal' : 'vertical'}
-      data-settings-root=""
       className={cn(
         'min-h-0 flex-1',
         isMobile ? 'flex-col gap-3' : 'flex-row gap-6',
       )}
     >
-      {isMobile ? (
-        mobileNav
-      ) : variant === 'page' ? (
-        <div className="sticky top-4 flex max-h-[calc(100svh-2rem)] self-start">
-          {desktopNav}
-        </div>
-      ) : (
-        desktopNav
-      )}
+      {isMobile ? mobileNav : desktopNav}
       {body}
     </Tabs>
   );
@@ -723,7 +705,6 @@ export function SettingsDialog<V extends string>({
     testIdPrefix,
     sectionRef,
     searchPlaceholder,
-    variant: 'dialog',
     value: section,
     onValueChange: onSectionChange,
   });
@@ -751,67 +732,5 @@ export function SettingsDialog<V extends string>({
         </>
       )}
     </FormDialog>
-  );
-}
-
-export interface SettingsPageProps<V extends string = string> {
-  sections: SettingsSection<V>[];
-  /** Nav items get `${testIdPrefix}-tab-${value}`. */
-  testIdPrefix: string;
-  /** Search param holding the selected section, so a link can open one. */
-  sectionParam?: string;
-  sectionRef?: React.Ref<SettingsDialogHandle<V>>;
-  searchPlaceholder?: string;
-  /** Rendered under the active section, e.g. a save bar. */
-  footer?: React.ReactNode;
-  className?: string;
-  'data-testid'?: string;
-}
-
-/** SettingsDialog's sidebar and search laid out on a page instead of in a dialog. */
-export function SettingsPage<V extends string>({
-  sections,
-  testIdPrefix,
-  sectionParam = 'section',
-  sectionRef,
-  searchPlaceholder,
-  footer,
-  className,
-  'data-testid': dataTestId,
-}: SettingsPageProps<V>) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const first = sections[0].value;
-  const onValueChange = React.useCallback(
-    (next: V) =>
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          if (next === first) params.delete(sectionParam);
-          else params.set(sectionParam, next);
-          return params;
-        },
-        { replace: true, preventScrollReset: true },
-      ),
-    [setSearchParams, sectionParam, first],
-  );
-  const { frame, panels } = useSettingsLayout({
-    open: true,
-    sections,
-    testIdPrefix,
-    sectionRef,
-    searchPlaceholder,
-    variant: 'page',
-    value: searchParams.get(sectionParam),
-    onValueChange,
-  });
-  return (
-    <div className={cn('flex flex-col', className)} data-testid={dataTestId}>
-      {frame(
-        <div className="min-w-0 flex-1">
-          {panels}
-          {footer}
-        </div>,
-      )}
-    </div>
   );
 }
