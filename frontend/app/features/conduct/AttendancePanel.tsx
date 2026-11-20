@@ -19,6 +19,7 @@ import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import {
+  attendanceRowKey,
   toAttendanceTableRow,
   type AttendanceTableRow,
 } from './attendanceColumns';
@@ -105,9 +106,9 @@ export function AttendancePanel({
   );
   const put = usePutAttendance(orgId, access, eventId);
 
-  const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [changes, setChanges] = useState<
-    ReadonlyMap<number, StaffSettableOutcome>
+    ReadonlyMap<string, StaffSettableOutcome>
   >(new Map());
   const [walkIns, setWalkIns] = useState<WalkInCandidate[]>([]);
   const [reasonOpen, setReasonOpen] = useState(false);
@@ -119,11 +120,9 @@ export function AttendancePanel({
   }, [isError, error, orgId, eventId]);
 
   const original = useMemo(() => {
-    const byPk = new Map<number, AttendanceRow>();
-    for (const r of data?.rows ?? []) {
-      if (r.org_user_pk != null) byPk.set(r.org_user_pk, r);
-    }
-    return byPk;
+    const byKey = new Map<string, AttendanceRow>();
+    for (const r of data?.rows ?? []) byKey.set(attendanceRowKey(r), r);
+    return byKey;
   }, [data]);
 
   const rows = useMemo<AttendanceTableRow[]>(
@@ -141,22 +140,22 @@ export function AttendancePanel({
 
   const applyChange = useCallback(
     (
-      next: Map<number, StaffSettableOutcome>,
-      pk: number,
+      next: Map<string, StaffSettableOutcome>,
+      key: string,
       outcome: StaffSettableOutcome,
     ) => {
-      const row = original.get(pk);
-      if (row && !row.virtual && row.outcome === outcome) next.delete(pk);
-      else next.set(pk, outcome);
+      const row = original.get(key);
+      if (row && !row.virtual && row.outcome === outcome) next.delete(key);
+      else next.set(key, outcome);
     },
     [original],
   );
 
   const onOutcomeChange = useCallback(
-    (pk: number, outcome: StaffSettableOutcome) =>
+    (key: string, outcome: StaffSettableOutcome) =>
       setChanges((prev) => {
         const next = new Map(prev);
-        applyChange(next, pk, outcome);
+        applyChange(next, key, outcome);
         return next;
       }),
     [applyChange],
@@ -165,16 +164,16 @@ export function AttendancePanel({
   const onBulk = (outcome: StaffSettableOutcome) =>
     setChanges((prev) => {
       const next = new Map(prev);
-      for (const pk of selected) applyChange(next, pk, outcome);
+      for (const key of selected) applyChange(next, key, outcome);
       return next;
     });
 
   const onToggle = useCallback(
-    (pk: number, checked: boolean) =>
+    (key: string, checked: boolean) =>
       setSelected((prev) => {
         const next = new Set(prev);
-        if (checked) next.add(pk);
-        else next.delete(pk);
+        if (checked) next.add(key);
+        else next.delete(key);
         return next;
       }),
     [],
@@ -188,11 +187,7 @@ export function AttendancePanel({
 
   const outcomeFor = useCallback(
     (row: AttendanceTableRow): Outcome =>
-      row.provisional
-        ? 'attended'
-        : ((row.org_user_pk != null
-            ? changes.get(row.org_user_pk)
-            : undefined) ?? row.outcome),
+      row.provisional ? 'attended' : (changes.get(row.key) ?? row.outcome),
     [changes],
   );
 
@@ -214,7 +209,13 @@ export function AttendancePanel({
   };
 
   const pendingChanges: AttendanceChange[] = [
-    ...[...changes].map(([org_user_pk, outcome]) => ({ org_user_pk, outcome })),
+    ...[...changes].flatMap(([key, outcome]): AttendanceChange[] => {
+      const row = original.get(key);
+      if (!row) return [];
+      return row.org_user_pk != null
+        ? [{ org_user_pk: row.org_user_pk, outcome }]
+        : [{ user_pk: row.member.user_pk, outcome }];
+    }),
     ...walkIns.map((u) => ({ user_pk: u.pk, outcome: 'attended' as const })),
   ];
 

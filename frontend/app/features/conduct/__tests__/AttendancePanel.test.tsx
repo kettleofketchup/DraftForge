@@ -204,6 +204,35 @@ describe('AttendancePanel', () => {
     });
   });
 
+  it('sends an expected member without an org membership by user_pk', async () => {
+    const legacy = row(14, 'dave', { virtual: true, outcome: 'pending' });
+    legacy.org_user_pk = null;
+    legacy.member = { ...legacy.member, org_user_pk: null };
+    vi.mocked(getAttendance).mockResolvedValue(
+      attendance({ rows: [row(11, 'alice'), legacy] }),
+    );
+    vi.mocked(putAttendance).mockResolvedValue(attendance());
+    renderPanel();
+    await screen.findByTestId('attendance-row-user-114');
+    fireEvent.click(screen.getByTestId('attendance-select-user-114'));
+    fireEvent.click(screen.getByTestId('attendance-bulk-no-show'));
+    expect(screen.getByTestId('attendance-outcome-user-114')).toHaveTextContent(
+      'No-show',
+    );
+    fireEvent.click(screen.getByTestId('attendance-save'));
+    await screen.findByTestId('conduct-reason-dialog');
+    fireEvent.change(screen.getByTestId('conduct-reason-input'), {
+      target: { value: 'never joined' },
+    });
+    fireEvent.click(screen.getByTestId('conduct-reason-confirm'));
+
+    await waitFor(() => expect(putAttendance).toHaveBeenCalledTimes(1));
+    expect(putAttendance).toHaveBeenCalledWith(ORG, EVENT, {
+      changes: [{ user_pk: 114, outcome: 'no_show' }],
+      reason: 'never joined',
+    });
+  });
+
   it('is read-only when the event is not editable', async () => {
     vi.mocked(getAttendance).mockResolvedValue(
       attendance({

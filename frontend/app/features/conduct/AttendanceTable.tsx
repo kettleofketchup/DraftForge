@@ -12,11 +12,11 @@ export type { AttendanceTableRow } from './attendanceColumns';
 export interface AttendanceTableProps {
   rows: AttendanceTableRow[];
   editable: boolean;
-  selected: ReadonlySet<number>;
-  onToggle: (orgUserPk: number, checked: boolean) => void;
+  selected: ReadonlySet<string>;
+  onToggle: (rowKey: string, checked: boolean) => void;
   onToggleAll: (checked: boolean) => void;
   outcomeFor: (row: AttendanceTableRow) => Outcome;
-  onOutcomeChange: (orgUserPk: number, outcome: StaffSettableOutcome) => void;
+  onOutcomeChange: (rowKey: string, outcome: StaffSettableOutcome) => void;
   onRemoveWalkIn: (userPk: number) => void;
   columns?: readonly AttendanceColumnId[];
   testIdPrefix?: string;
@@ -34,11 +34,8 @@ export function AttendanceTable({
   columns,
   testIdPrefix = 'attendance',
 }: AttendanceTableProps) {
-  const selectablePks = useMemo(
-    () =>
-      rows.flatMap((r) =>
-        r.org_user_pk != null && !r.provisional ? [r.org_user_pk] : [],
-      ),
+  const selectableKeys = useMemo(
+    () => rows.flatMap((r) => (r.provisional ? [] : [r.key])),
     [rows],
   );
   const cols = useMemo(
@@ -47,7 +44,7 @@ export function AttendanceTable({
         testIdPrefix,
         editable,
         selected,
-        selectablePks,
+        selectableKeys,
         onToggle,
         onToggleAll,
         outcomeFor,
@@ -59,7 +56,7 @@ export function AttendanceTable({
       testIdPrefix,
       editable,
       selected,
-      selectablePks,
+      selectableKeys,
       onToggle,
       onToggleAll,
       outcomeFor,

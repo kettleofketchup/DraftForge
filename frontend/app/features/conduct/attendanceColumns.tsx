@@ -43,15 +43,14 @@ export interface AttendanceTableRow extends AttendanceRow {
   provisional: boolean;
 }
 
+export function attendanceRowKey(row: AttendanceRow): string {
+  return row.org_user_pk != null
+    ? String(row.org_user_pk)
+    : `user-${row.member.user_pk}`;
+}
+
 export function toAttendanceTableRow(row: AttendanceRow): AttendanceTableRow {
-  return {
-    ...row,
-    key:
-      row.org_user_pk != null
-        ? String(row.org_user_pk)
-        : `user-${row.member.user_pk}`,
-    provisional: false,
-  };
+  return { ...row, key: attendanceRowKey(row), provisional: false };
 }
 
 export type AttendanceColumnId =
@@ -76,12 +75,12 @@ export const DEFAULT_ATTENDANCE_COLUMNS: readonly AttendanceColumnId[] = [
 export interface MakeAttendanceColumnsOptions {
   testIdPrefix: string;
   editable: boolean;
-  selected: ReadonlySet<number>;
-  selectablePks: readonly number[];
-  onToggle: (orgUserPk: number, checked: boolean) => void;
+  selected: ReadonlySet<string>;
+  selectableKeys: readonly string[];
+  onToggle: (rowKey: string, checked: boolean) => void;
   onToggleAll: (checked: boolean) => void;
   outcomeFor: (row: AttendanceTableRow) => Outcome;
-  onOutcomeChange: (orgUserPk: number, outcome: StaffSettableOutcome) => void;
+  onOutcomeChange: (rowKey: string, outcome: StaffSettableOutcome) => void;
   onRemoveWalkIn: (userPk: number) => void;
   columns?: readonly AttendanceColumnId[];
 }
@@ -125,7 +124,7 @@ export function makeAttendanceColumns({
   testIdPrefix,
   editable,
   selected,
-  selectablePks,
+  selectableKeys,
   onToggle,
   onToggleAll,
   outcomeFor,
@@ -133,9 +132,11 @@ export function makeAttendanceColumns({
   onRemoveWalkIn,
   columns = DEFAULT_ATTENDANCE_COLUMNS,
 }: MakeAttendanceColumnsOptions): AppColumnDef<AttendanceTableRow>[] {
-  const selectedCount = selectablePks.filter((pk) => selected.has(pk)).length;
+  const selectedCount = selectableKeys.filter((key) =>
+    selected.has(key),
+  ).length;
   const allSelected =
-    selectablePks.length > 0 && selectedCount === selectablePks.length;
+    selectableKeys.length > 0 && selectedCount === selectableKeys.length;
 
   const all: Record<AttendanceColumnId, AppColumnDef<AttendanceTableRow>> = {
     select: {
@@ -145,22 +146,21 @@ export function makeAttendanceColumns({
         <SelectAllCheckbox
           checked={allSelected}
           indeterminate={selectedCount > 0 && !allSelected}
-          disabled={selectablePks.length === 0}
+          disabled={selectableKeys.length === 0}
           onChange={onToggleAll}
           testId={`${testIdPrefix}-select-all`}
         />
       ),
       cell: ({ row }) => {
         const r = row.original;
-        const pk = r.org_user_pk;
-        if (pk == null || r.provisional) return null;
+        if (r.provisional) return null;
         return (
           <input
             type="checkbox"
             aria-label={`Select ${DisplayName(r.member)}`}
-            data-testid={`${testIdPrefix}-select-${pk}`}
-            checked={selected.has(pk)}
-            onChange={(e) => onToggle(pk, e.target.checked)}
+            data-testid={`${testIdPrefix}-select-${r.key}`}
+            checked={selected.has(r.key)}
+            onChange={(e) => onToggle(r.key, e.target.checked)}
             className="size-4 shrink-0 rounded border-border accent-primary"
           />
         );
@@ -224,9 +224,8 @@ export function makeAttendanceColumns({
         const r = row.original;
         const testId = `${testIdPrefix}-outcome-${r.key}`;
         const outcome = outcomeFor(r);
-        const pk = r.org_user_pk;
         const defaulted = r.virtual && outcome === 'pending';
-        if (!editable || r.provisional || pk == null) {
+        if (!editable || r.provisional) {
           return (
             <span data-testid={testId}>
               {defaulted ? (
@@ -246,7 +245,7 @@ export function makeAttendanceColumns({
           <BrandSelect
             value={isSettable(outcome) ? outcome : ''}
             onValueChange={(v) =>
-              onOutcomeChange(pk, v as StaffSettableOutcome)
+              onOutcomeChange(r.key, v as StaffSettableOutcome)
             }
           >
             <BrandSelectTrigger

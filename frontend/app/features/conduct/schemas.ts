@@ -258,9 +258,11 @@ export const AttendanceChangeSchema = z.union([
     org_user_pk: z.number().int().positive(),
     outcome: StaffSettableOutcomeSchema,
   }),
+  // A walk-in (attended only, enforced server-side) or an expected member
+  // whose row has no org_user_pk yet.
   z.object({
     user_pk: z.number().int().positive(),
-    outcome: z.literal('attended'),
+    outcome: StaffSettableOutcomeSchema,
   }),
 ]);
 export type AttendanceChange = z.infer<typeof AttendanceChangeSchema>;

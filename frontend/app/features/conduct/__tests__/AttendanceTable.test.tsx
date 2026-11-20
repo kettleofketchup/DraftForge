@@ -52,7 +52,7 @@ function props(
   return {
     rows: rows.map(toAttendanceTableRow),
     editable: true,
-    selected: new Set<number>(),
+    selected: new Set<string>(),
     onToggle: vi.fn(),
     onToggleAll: vi.fn(),
     outcomeFor: (r) => r.outcome,
@@ -105,7 +105,7 @@ describe('AttendanceTable', () => {
     const onToggleAll = vi.fn();
     render(<AttendanceTable {...props({ onToggle, onToggleAll })} />);
     fireEvent.click(screen.getByTestId('attendance-select-12'));
-    expect(onToggle).toHaveBeenCalledWith(12, true);
+    expect(onToggle).toHaveBeenCalledWith('12', true);
     fireEvent.click(screen.getByTestId('attendance-select-all'));
     expect(onToggleAll).toHaveBeenCalledWith(true);
   });
