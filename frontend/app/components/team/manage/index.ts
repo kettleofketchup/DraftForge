@@ -24,4 +24,10 @@ export {
   type SubInFormValues,
   type TeamActionFormValues,
 } from './teamActionSchema';
+export {
+  TeamHistoryTable,
+  teamLogChanges,
+  type ResolveHistoryUser,
+  type TeamHistoryTableProps,
+} from './TeamHistoryTable';
 export { TeamRosterPanel, type TeamRosterPanelProps } from './TeamRosterPanel';

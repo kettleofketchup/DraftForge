@@ -10,7 +10,10 @@ import { AxiosError, AxiosHeaders } from 'axios';
 import { MemoryRouter } from 'react-router';
 import { expect, vi } from 'vitest';
 
-import type { ManagedTeam } from '~/components/api/teamManagementAPI';
+import type {
+  ManagedTeam,
+  TeamHistoryPage,
+} from '~/components/api/teamManagementAPI';
 import type { TeamType } from '~/components/tournament/types';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import {
@@ -55,9 +58,15 @@ export function routeGets(
     team?: ManagedTeam | AxiosError;
     org?: unknown;
     search?: unknown[];
+    history?: TeamHistoryPage | AxiosError;
   },
 ): void {
   axiosMock.get.mockImplementation((url: string) => {
+    if (url === `/teams/${TEAM_ID}/history/` && routes.history) {
+      return routes.history instanceof AxiosError
+        ? Promise.reject(routes.history)
+        : Promise.resolve({ data: routes.history });
+    }
     if (url === '/users/search/' && routes.search) {
       return Promise.resolve({ data: routes.search });
     }
@@ -126,6 +135,11 @@ export async function requestRowAction(
   const row = await screen.findByTestId(rowTestId);
   fireEvent.click(within(row).getByRole('button', { name: label }));
   await screen.findByTestId('team-action-dialog');
+}
+
+/** Radix tabs activate on mouse down, not click. */
+export function openTab(testId: string): void {
+  fireEvent.mouseDown(screen.getByTestId(testId), { button: 0 });
 }
 
 export async function typeReasonAndConfirm(reason: string): Promise<void> {

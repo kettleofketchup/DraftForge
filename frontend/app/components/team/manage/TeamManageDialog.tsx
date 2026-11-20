@@ -26,13 +26,17 @@ import {
 } from '~/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { getLogger } from '~/lib/logger';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { useUserStore } from '~/store/userStore';
 import { AddStandinPicker } from './AddStandinPicker';
 import type { PendingTeamAction } from './pendingTeamAction';
+import { resolveLogUser } from './resolveLogUser';
 import { addStandinRequest } from './teamActionCopy';
 import {
   TeamActionReasonDialog,
   type TeamActionReasonValues,
 } from './TeamActionReasonDialog';
+import { TeamHistoryTable } from './TeamHistoryTable';
 import { TeamRosterPanel } from './TeamRosterPanel';
 import {
   rosterSignature,
@@ -40,6 +44,7 @@ import {
   useInvalidateOnRosterChange,
   useManagedTeam,
   useTeamActionMutation,
+  useTeamHistory,
 } from './useTeamManagement';
 
 const log = getLogger('teamManage');
@@ -105,6 +110,13 @@ export function TeamManageDialog({
   useInvalidateOnRosterChange(teamId, rosterSignature(liveTeam ?? {}));
 
   const [tab, setTab] = useState('roster');
+  const [historyPage, setHistoryPage] = useState(1);
+  const history = useTeamHistory(teamId, historyPage, {
+    enabled: open && tab === 'history',
+  });
+  const tournamentUsers = useUserStore((s) =>
+    s.tournament?.pk === tournamentPk ? s.tournament?.users : undefined,
+  );
   const [request, setRequest] = useState<PendingTeamAction | null>(null);
   const [reasonOpen, setReasonOpen] = useState(false);
   const [actionReason, setActionReason] = useState('');
@@ -135,17 +147,25 @@ export function TeamManageDialog({
   );
 
   const managedStatus = statusOf(managed.error);
+  const historyStatus = statusOf(history.error);
   const goneHandled = useRef(false);
   useEffect(() => {
     if (!open) {
       goneHandled.current = false;
+      setTab('roster');
+      setHistoryPage(1);
       return;
     }
-    if (managedStatus === 404 && !goneHandled.current) {
+    if (
+      (managedStatus === 404 || historyStatus === 404) &&
+      !goneHandled.current
+    ) {
       goneHandled.current = true;
       handleTeamGone();
     }
-  }, [open, managedStatus, handleTeamGone]);
+  }, [open, managedStatus, historyStatus, handleTeamGone]);
+
+  useEffect(() => setHistoryPage(1), [teamId]);
 
   const runAction = useCallback(
     (ack: OverrideAcknowledgement) => {
@@ -227,6 +247,16 @@ export function TeamManageDialog({
 
   const team = managed.data;
 
+  const resolveUser = useCallback(
+    (pk: number) =>
+      resolveLogUser(pk, {
+        team,
+        tournamentUsers,
+        cache: useUserCacheStore.getState(),
+      }),
+    [team, tournamentUsers],
+  );
+
   const submit = (values: TeamActionReasonValues): Promise<void> => {
     if (!request || !team) return Promise.resolve();
     const action = withReplacing(request.action, team, values.replacing_id);
@@ -299,9 +329,21 @@ export function TeamManageDialog({
               )}
             </TabsContent>
             <TabsContent value="history">
-              <p className="text-sm text-muted-foreground">
-                Team history will appear here.
-              </p>
+              {history.isError && historyStatus !== 404 ? (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    Team history could not be loaded. Try again.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <TeamHistoryTable
+                  page={history.data}
+                  resolveUser={resolveUser}
+                  loading={history.isFetching}
+                  onPrevious={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                  onNext={() => setHistoryPage((p) => p + 1)}
+                />
+              )}
             </TabsContent>
           </Tabs>
         </DialogContent>

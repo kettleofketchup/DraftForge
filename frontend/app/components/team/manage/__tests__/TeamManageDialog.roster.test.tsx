@@ -4,11 +4,12 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
-import { managedTeam } from './fixtures';
+import { historyPage, managedTeam } from './fixtures';
 import {
   axiosError,
   invalidatedKeys,
   liveTeam,
+  openTab,
   renderDialog,
   requestRowAction,
   routeGets,
@@ -295,5 +296,71 @@ describe('TeamManageDialog roster actions', () => {
     );
     await requestRowAction('team-dropout-row-5', 'Restore');
     expect(screen.getByTestId('team-action-reason')).toHaveValue('');
+  });
+});
+
+describe('TeamManageDialog history tab', () => {
+  const historyCalls = () =>
+    axiosMock.get.mock.calls.filter(
+      ([url]) => url === `/teams/${TEAM_ID}/history/`,
+    );
+
+  it('does not fetch history until the tab opens, then lists the rows', async () => {
+    routeGets(axiosMock, { team: managedTeam, history: historyPage });
+    renderDialog();
+    await screen.findByTestId('team-member-row-4');
+    expect(historyCalls()).toHaveLength(0);
+    openTab('team-manage-tab-history');
+    const rows = await screen.findAllByTestId('team-history-row');
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getByText('Added stand-in')).toBeTruthy();
+    expect(historyCalls()[0][1]).toEqual({
+      params: { page: 1, page_size: 25 },
+    });
+  });
+
+  it('requests the next server page from the pager', async () => {
+    routeGets(axiosMock, {
+      team: managedTeam,
+      history: { ...historyPage, count: 30, next: '/next' },
+    });
+    renderDialog();
+    openTab('team-manage-tab-history');
+    const next = await screen.findByTestId('team-history-next');
+    await waitFor(() => expect(next).not.toBeDisabled());
+    fireEvent.click(next);
+    await waitFor(() =>
+      expect(historyCalls().map(([, cfg]) => cfg.params.page)).toContain(2),
+    );
+  });
+
+  it('treats a 404 on the history GET as the team being gone', async () => {
+    routeGets(axiosMock, { team: managedTeam, history: axiosError(404, {}) });
+    const { invalidate, onOpenChange, onTeamGone } = renderDialog();
+    await screen.findByTestId('team-member-row-4');
+    openTab('team-manage-tab-history');
+    await waitFor(() => expect(onTeamGone).toHaveBeenCalledTimes(1));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(toastMock.error).toHaveBeenCalledWith('This team no longer exists');
+    expect(toastMock.error).toHaveBeenCalledTimes(1);
+    expect(invalidatedKeys(invalidate)).toContainEqual([
+      'tournament',
+      TOURNAMENT_PK,
+    ]);
+    expect(logger.warn).toHaveBeenCalledWith('Team action refused', {
+      teamId: TEAM_ID,
+      kind: undefined,
+      code: 'not_found',
+    });
+  });
+
+  it('shows an error line when history fails for another reason', async () => {
+    routeGets(axiosMock, { team: managedTeam, history: axiosError(500, {}) });
+    const { onTeamGone } = renderDialog();
+    openTab('team-manage-tab-history');
+    expect(
+      await screen.findByText('Team history could not be loaded. Try again.'),
+    ).toBeTruthy();
+    expect(onTeamGone).not.toHaveBeenCalled();
   });
 });
