@@ -79,10 +79,7 @@ function valuesFrom(
   };
 }
 
-/**
- * The organization's own fields (formerly the Edit Organization dialog) as
- * settings sections sharing one form, exposed as a save-bar unit.
- */
+/** The organization's own fields as settings sections sharing one form, exposed as a save-bar unit. */
 export function useOrgProfileSections(
   organization: OrganizationType,
   sectionsRef: RefObject<SettingsDialogHandle<string> | null>,
