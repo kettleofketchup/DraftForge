@@ -7,7 +7,7 @@ import {
 
 type Update = (latest: URLSearchParams) => URLSearchParams;
 
-/** `useSearchParams` whose updater starts from the browser URL; `prev` lags a navigation not yet rendered. */
+/** `useSearchParams` whose updater starts from the browser URL while on this route; `prev` lags a navigation not yet rendered. */
 export function useLatestSearchParams() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { pathname } = useLocation();
