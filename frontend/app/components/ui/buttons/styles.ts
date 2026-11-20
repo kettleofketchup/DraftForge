@@ -35,6 +35,12 @@ export const brandGlow = 'shadow-brand-glow';
 // tailwind-merge conflicts with bg-* (background-color).
 export const brandSuccessBg = '[background-image:var(--brand-success-bg)]';
 
+// Destructive / warning tints for confirm dialogs. Pair with an opaque
+// bg-background; the tint alone is translucent.
+export const brandDestructiveBg =
+  '[background-image:var(--brand-destructive-bg)]';
+export const brandWarningBg = '[background-image:var(--brand-warning-bg)]';
+
 // Brand panel surface for content blocks placed *inside* a colored dialog
 // (UserStrip, recap rows, etc.). Produces a darker, opaque-enough backdrop
 // with a subtle hairline so the inner block reads as its own panel against

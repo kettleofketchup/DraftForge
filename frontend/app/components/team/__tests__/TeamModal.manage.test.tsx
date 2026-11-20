@@ -183,6 +183,11 @@ describe('TeamModal manage entry point', () => {
     renderModal();
     const modal = await screen.findByTestId('team-modal');
     expect(
+      within(screen.getByTestId('team-modal-captain')).getByTestId(
+        'roster-status-captain',
+      ),
+    ).toBeTruthy();
+    expect(
       within(screen.getByTestId('team-modal-deputy')).getByTestId(
         'roster-status-deputy',
       ),

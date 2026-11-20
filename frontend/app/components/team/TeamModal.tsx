@@ -161,7 +161,9 @@ export const TeamModal: React.FC<TeamModalProps> = ({
           <div className="flex-1">
             <div className="font-semibold">
               {DisplayName(captain)}
-              <span className="ml-2 text-xs text-primary">(Captain)</span>
+              <span className="ml-2 inline-flex align-middle">
+                <RosterStatusBadge status="captain" />
+              </span>
               {managed.data && captainProblems.length > 0 && (
                 <span className="ml-2">
                   <LeadershipProblemBadge

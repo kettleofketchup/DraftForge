@@ -165,4 +165,20 @@ describe('DataTable', () => {
     const cells = within(screen.getByTestId('row-1')).getAllByRole('cell');
     expect(cells[0]).not.toHaveClass('whitespace-normal');
   });
+
+  it('renders toolbar content without enabling filters', () => {
+    renderTable({
+      toolbarStart: <span>3 players</span>,
+      toolbarActions: <button type="button">Add</button>,
+    });
+    const bar = screen.getByTestId('table-actions');
+    expect(within(bar).getByText('3 players')).toBeTruthy();
+    expect(within(bar).getByRole('button', { name: 'Add' })).toBeTruthy();
+    expect(screen.queryByTestId('table-toolbar')).toBeNull();
+  });
+
+  it('renders no action bar by default', () => {
+    renderTable();
+    expect(screen.queryByTestId('table-actions')).toBeNull();
+  });
 });

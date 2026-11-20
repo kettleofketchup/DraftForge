@@ -53,6 +53,8 @@ export const BrandSelectTrigger = React.forwardRef<
       'disabled:cursor-not-allowed disabled:opacity-50',
       '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4 [&_svg:not([class*="text-"])]:text-primary',
       '*:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate',
+      // Row only with an icon: a flex value can't ellipsize plain text.
+      '*:data-[slot=select-value]:has-[>svg]:flex *:data-[slot=select-value]:has-[>svg]:items-center *:data-[slot=select-value]:has-[>svg]:gap-2',
       className,
     )}
     {...props}
@@ -118,6 +120,7 @@ export const BrandSelectItem = React.forwardRef<
       'data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-selection/40 data-[state=checked]:to-accent/40 data-[state=checked]:text-white',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4',
+      '*:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2',
       className,
     )}
     {...props}

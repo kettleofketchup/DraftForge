@@ -130,8 +130,8 @@ describe('DeleteDialog', () => {
 
   it('uses destructive content styling (inherits ConfirmDialog variant)', () => {
     setup();
-    expect(screen.getByTestId('dd-content').className).toMatch(
-      /bg-error-surface/,
+    expect(screen.getByTestId('dd-content').className).toContain(
+      '[background-image:var(--brand-destructive-bg)]',
     );
   });
 

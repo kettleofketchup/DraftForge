@@ -49,6 +49,15 @@ function typeReason(value: string) {
 }
 
 describe('TeamActionReasonDialog', () => {
+  it('uses the opaque destructive surface for destructive actions', () => {
+    renderDialog({ destructive: true });
+    const content = screen.getByTestId('team-action-dialog');
+    expect(content.className.split(/\s+/)).toContain(
+      '[background-image:var(--brand-destructive-bg)]',
+    );
+    expect(content.className.split(/\s+/)).toContain('bg-background');
+  });
+
   it('renders the summary, warning and confirm text', () => {
     renderDialog({ warning: 'Ready state resets' });
     expect(screen.getByText('Make Bar captain of Team X')).toBeTruthy();

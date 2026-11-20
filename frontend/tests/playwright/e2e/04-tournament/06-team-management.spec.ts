@@ -97,10 +97,57 @@ function cardRow(
   });
 }
 
-function memberRow(dialog: Locator, username: string): Locator {
+function rosterRow(
+  dialog: Locator,
+  kind: 'member' | 'standin' | 'dropout',
+  username: string,
+): Locator {
   return dialog
-    .locator('[data-testid^="team-member-row-"]')
+    .locator(`[data-testid^="team-${kind}-row-"]`)
     .filter({ hasText: username });
+}
+
+function memberRow(dialog: Locator, username: string): Locator {
+  return rosterRow(dialog, 'member', username);
+}
+
+/** Matches DataTableRowActions `inlineFrom="md"`: inline buttons from 768 px, the menu below. */
+const INLINE_ACTIONS_MIN_WIDTH = 768;
+
+function actionsInline(page: Page): boolean {
+  return (page.viewportSize()?.width ?? 0) >= INLINE_ACTIONS_MIN_WIDTH;
+}
+
+/** Runs a roster row action: its inline button, or the menu item on phones. */
+async function rowAction(row: Locator, label: string): Promise<void> {
+  if (actionsInline(row.page())) {
+    await row
+      .getByRole('group', { name: /^Actions for / })
+      .getByRole('button', { name: label, exact: true })
+      .click();
+    return;
+  }
+  await row.getByRole('button', { name: /^Actions for / }).click();
+  await row.page().getByRole('menuitem', { name: label, exact: true }).click();
+}
+
+/** The warning icon, avatar and name share one line inside `container`, in that order. */
+async function expectIconInline(container: Locator): Promise<void> {
+  const icon = await container.locator('svg').first().boundingBox();
+  const avatar = await container
+    .getByTestId('leader-option-avatar')
+    .boundingBox();
+  const label = await container.getByTestId('leader-option-name').boundingBox();
+  if (!icon || !avatar || !label) {
+    throw new Error('icon, avatar or label is not rendered');
+  }
+  for (const box of [icon, avatar]) {
+    const mid = box.y + box.height / 2;
+    expect(mid).toBeGreaterThan(label.y);
+    expect(mid).toBeLessThan(label.y + label.height);
+  }
+  expect(icon.x + icon.width).toBeLessThanOrEqual(avatar.x);
+  expect(avatar.x + avatar.width).toBeLessThanOrEqual(label.x);
 }
 
 test.describe('Team management dialog', () => {
@@ -186,9 +233,7 @@ test.describe('Team management dialog', () => {
     await expect(alpha).toContainText(`Captain: ${PREFIX}alpha_1`);
 
     const dialog = await openManage(page, 'TM Alpha');
-    await memberRow(dialog, `${PREFIX}alpha_3`)
-      .getByRole('button', { name: 'Make captain' })
-      .click();
+    await rowAction(memberRow(dialog, `${PREFIX}alpha_3`), 'Make captain');
     await confirmAction(page, 'Captain asked to step down');
 
     await expect(
@@ -211,22 +256,12 @@ test.describe('Team management dialog', () => {
     await expect(cardRow(bravo, 'standin', standin)).toBeVisible();
 
     const dialog = await openManage(page, 'TM Bravo');
-    await memberRow(dialog, dropout)
-      .getByRole('button', { name: 'Mark dropout' })
-      .click();
+    await rowAction(memberRow(dialog, dropout), 'Mark dropout');
     await confirmAction(page, 'Left for the evening');
-    await expect(
-      dialog
-        .locator('[data-testid^="team-dropout-row-"]')
-        .filter({ hasText: dropout }),
-    ).toBeVisible();
+    await expect(rosterRow(dialog, 'dropout', dropout)).toBeVisible();
     await expect(cardRow(bravo, 'dropout', dropout)).toBeVisible();
 
-    await dialog
-      .locator('[data-testid^="team-standin-row-"]')
-      .filter({ hasText: standin })
-      .getByRole('button', { name: 'Sub in' })
-      .click();
+    await rowAction(rosterRow(dialog, 'standin', standin), 'Sub in');
     await expect(page.getByTestId('team-action-replacing')).toContainText(
       'No one',
     );
@@ -257,6 +292,48 @@ test.describe('Team management dialog', () => {
     await expect(row).toContainText(/Org Staff Tester|org_staff_tester/);
     await expect(row).toContainText(`${PREFIX}alpha_3`);
   });
+
+  for (const width of [390, 1440]) {
+    test(`@cicd ghost captain icon sits inline at ${width} px`, async ({
+      page,
+      loginOrgStaff: login,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await login();
+      await page.goto(`/tournament/${tournament.pk}/teams`);
+      await page.getByTestId('teamsTabContent').waitFor({ state: 'visible' });
+      const dialog = await openManage(page, 'TM Ghost');
+      const trigger = dialog.getByTestId('team-manage-captain-select');
+      await expect(trigger).toContainText(`${GHOST} (not a member)`);
+      await expectIconInline(trigger.locator('[data-slot="select-value"]'));
+      await testInfo.attach(`captain-trigger-${width}`, {
+        body: await trigger.screenshot(),
+        contentType: 'image/png',
+      });
+
+      const row = memberRow(dialog, `${PREFIX}charlie_1`);
+      const menu = row.getByRole('button', { name: /^Actions for / });
+      const inline = row.getByRole('button', { name: 'Make captain' });
+      if (width >= INLINE_ACTIONS_MIN_WIDTH) {
+        await expect(inline).toBeVisible();
+        await expect(menu).toHaveCount(0);
+      } else {
+        await expect(menu).toBeVisible();
+        await expect(inline).toHaveCount(0);
+      }
+
+      await trigger.click();
+      const item = page
+        .getByRole('option')
+        .filter({ hasText: `${GHOST} (not a member)` });
+      await expect(item).toBeVisible();
+      await expectIconInline(item.locator(':scope > span').last());
+      await testInfo.attach(`captain-list-${width}`, {
+        body: await page.locator('[data-slot="select-content"]').screenshot(),
+        contentType: 'image/png',
+      });
+    });
+  }
 
   test('@cicd ghost captain is fixed from the Teams-tab alert', async ({
     page,
