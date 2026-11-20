@@ -43,11 +43,13 @@ ids are `general`, `discord`, `members`, `rules`, `admins`, `staff-placement`,
 
 ## Who can see and edit settings
 
-The Org Settings button, the modal, and both API methods are limited to org admins, the org owner and
-site admins. Org staff and members do not see the button. This includes the event defaults:
-org staff can no longer edit them. A viewer without access who opens a `?settings=` link
+The Org Settings button and the modal are limited to org admins, the org owner and
+site admins. Org staff and members do not see the button, so org staff can no longer edit
+event defaults in the UI. A viewer without access who opens a `?settings=` link
 has the parameter removed once their permissions load, and the modal does not open.
-Hiding the button is a convenience only: the API enforces the same rule.
+
+The org settings API (`/api/organizations/<id>/settings/`) enforces the same rule. The event
+defaults API (`PATCH /api/events/defaults/<id>/`) still accepts org staff.
 
 | Actor | View (GET) | Save (PATCH) |
 |---|---|---|
