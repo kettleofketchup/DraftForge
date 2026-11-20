@@ -28,7 +28,7 @@ export const LiveAutoButtons: React.FC<{ isPolling: boolean }> = ({
         size="sm"
         className={cn(
           'h-7 px-2 text-xs',
-          isPolling ? 'border-green-600 text-green-400' : 'bg-muted/50',
+          isPolling ? 'border-success text-success' : 'bg-muted/50',
         )}
       >
         <Radio className={cn('h-3 w-3 mr-1', isPolling && 'animate-pulse')} />
@@ -40,9 +40,7 @@ export const LiveAutoButtons: React.FC<{ isPolling: boolean }> = ({
         size="sm"
         className={cn(
           'h-7 px-2 text-xs',
-          autoAdvance
-            ? 'bg-blue-900/50 border-blue-600 text-blue-400'
-            : 'bg-muted/50',
+          autoAdvance ? 'bg-info/15 border-info text-info' : 'bg-muted/50',
         )}
       >
         <FastForward className="h-3 w-3 mr-1" />
