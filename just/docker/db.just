@@ -41,10 +41,13 @@ build:
     cp {{quote(test_db)}} "$CTX/test.db.sqlite3"
     cp docker/Dockerfile.test-db "$CTX/Dockerfile"
 
-    docker build "$CTX" \
-        --build-arg CONTENT_HASH="$HASH" \
-        -t "{{image}}:latest" \
-        -t "{{image}}:$HASH"
+    args=(--build-arg CONTENT_HASH="$HASH" -t "{{image}}:latest" -t "{{image}}:$HASH")
+    # A docker-container buildx builder keeps the image in its cache unless loaded;
+    # podman build always stores locally and rejects --load.
+    if ! docker --version 2>/dev/null | grep -qi podman; then
+        args+=(--load)
+    fi
+    docker build "${args[@]}" "$CTX"
     echo "Built {{image}} (hash: ${HASH:0:12}...)"
 
 # Pull test-db image from GHCR (tries hash first, then latest)
