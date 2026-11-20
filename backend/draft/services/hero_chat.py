@@ -433,7 +433,8 @@ def visible_messages(
                 created_at__gte=viewer.joined_at,
             )
     rows = list(
-        HeroDraftChatMessage.objects.filter(draft_id=draft_id)
+        HeroDraftChatMessage.objects.nocache()
+        .filter(draft_id=draft_id)
         .filter(visible)
         .select_related("sender__base_profile")
         .order_by("-id")[:limit]
