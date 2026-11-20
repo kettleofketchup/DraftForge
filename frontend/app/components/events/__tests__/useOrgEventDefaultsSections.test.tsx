@@ -8,7 +8,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import type { ReactNode, RefObject } from 'react';
+import { StrictMode, type ReactNode, type RefObject } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
@@ -119,16 +119,21 @@ function Harness(): ReactNode {
   unit = u;
   sectionValues = sections;
   return (
-    <div>
+    <form>
       {sections.map((s) => (
         <section key={s.value}>{s.content}</section>
       ))}
-    </div>
+    </form>
   );
 }
 
 function renderHarness() {
-  return render(<Harness />, { wrapper: Wrapper });
+  return render(
+    <StrictMode>
+      <Harness />
+    </StrictMode>,
+    { wrapper: Wrapper },
+  );
 }
 
 async function ready() {
@@ -297,5 +302,58 @@ describe('useOrgEventDefaultsSections unit', () => {
     expect(
       screen.getByTestId('draft-settings-hero-timer-enabled'),
     ).not.toBeChecked();
+  });
+});
+
+describe('useOrgEventDefaultsSections game mode Select inside a form', () => {
+  const trigger = () => screen.getByTestId('org-defaults-game-mode-select');
+
+  function chooseGameMode(label: string) {
+    fireEvent.pointerDown(trigger(), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: 'mouse',
+    });
+    fireEvent.click(screen.getByRole('option', { name: label }));
+  }
+
+  function refetched(changes: Partial<typeof defaults>) {
+    act(() => {
+      client.setQueryData(['org-event-defaults', 1], {
+        ...defaults,
+        ...changes,
+      });
+    });
+  }
+
+  it('discard after changing the Select restores the saved value and is pristine', async () => {
+    renderHarness();
+    await ready();
+    chooseGameMode('Turbo');
+    expect(trigger()).toHaveTextContent('Turbo');
+    expect(unit.isDirty).toBe(true);
+
+    act(() => unit.discard());
+    await waitFor(() => expect(trigger()).toHaveTextContent('Normal'));
+    expect(unit.isDirty).toBe(false);
+  });
+
+  it('save then a server-normalised value is shown and not dirty', async () => {
+    renderHarness();
+    await ready();
+    chooseGameMode('Turbo');
+    expect(await save()).toBe(true);
+
+    refetched({ game_mode: 'custom' });
+    await waitFor(() => expect(trigger()).toHaveTextContent('Custom'));
+    expect(unit.isDirty).toBe(false);
+  });
+
+  it('an unedited refetch with a new server value is adopted and not dirty', async () => {
+    renderHarness();
+    await ready();
+    refetched({ game_mode: 'captains_mode' });
+    await waitFor(() => expect(trigger()).toHaveTextContent("Captain's Mode"));
+    expect(unit.isDirty).toBe(false);
   });
 });

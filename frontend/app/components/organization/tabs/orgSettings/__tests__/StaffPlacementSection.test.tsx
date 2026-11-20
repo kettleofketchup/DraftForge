@@ -73,9 +73,13 @@ function Harness({ enabled = true }: { enabled?: boolean }): ReactNode {
 async function loaded(enabled = true) {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <QueryClientProvider client={qc}>
-      <Harness enabled={enabled} />
-    </QueryClientProvider>,
+    <StrictMode>
+      <QueryClientProvider client={qc}>
+        <form>
+          <Harness enabled={enabled} />
+        </form>
+      </QueryClientProvider>
+    </StrictMode>,
   );
   return screen.findByTestId('org-settings-policy-select');
 }
@@ -257,10 +261,44 @@ describe('useStaffPlacementSection', () => {
     qc = new QueryClient();
     render(
       <QueryClientProvider client={qc}>
-        <Harness enabled={false} />
+        <form>
+          <Harness enabled={false} />
+        </form>
       </QueryClientProvider>,
     );
     expect(getOrgSettings).not.toHaveBeenCalled();
+    expect(unit.isDirty).toBe(false);
+  });
+
+  it('discard after changing the policy Select restores it and is pristine', async () => {
+    const trigger = await loaded();
+    choosePolicy('Block');
+    expect(trigger).toHaveTextContent('Block');
+    expect(unit.isDirty).toBe(true);
+
+    act(() => unit.discard());
+    await waitFor(() => expect(trigger).toHaveTextContent('Silent'));
+    expect(unit.isDirty).toBe(false);
+  });
+
+  it('save where the server returns a different policy shows it and is pristine', async () => {
+    vi.mocked(patchOrgSettings).mockResolvedValue({
+      ...SETTINGS,
+      staff_override_policy: 'confirm',
+    });
+    const trigger = await loaded();
+    choosePolicy('Block');
+    await act(async () => {
+      await unit.save();
+    });
+    await waitFor(() => expect(trigger).toHaveTextContent('Confirm'));
+    expect(unit.isDirty).toBe(false);
+  });
+
+  it('an unedited refetch with a new policy is adopted and not dirty', async () => {
+    const trigger = await loaded();
+    refetched({ staff_override_policy: 'confirm' });
+    await waitFor(() => expect(trigger).toHaveTextContent('Confirm'));
     expect(unit.isDirty).toBe(false);
   });
 });
