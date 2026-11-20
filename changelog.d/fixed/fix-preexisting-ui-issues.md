@@ -1,0 +1,2 @@
+- Home page feature cards no longer show a loading spinner forever when a preview thumbnail can't load; they show "Preview unavailable" instead.
+- Bracket match slots show the captain's avatar through the shared `UserAvatar`, so it uses the same Discord avatar and initials fallback as everywhere else.
