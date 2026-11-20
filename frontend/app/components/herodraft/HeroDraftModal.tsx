@@ -296,7 +296,7 @@ export function HeroDraftModal({
           <CaptainToast
             captain={captain}
             message="won the coin flip!"
-            messageClassName="text-yellow-400 font-semibold"
+            messageClassName="text-medal-gold font-semibold"
           />,
         );
         break;

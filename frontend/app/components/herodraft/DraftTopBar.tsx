@@ -180,9 +180,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
         <span
           className={cn(
             'text-[10px] sm:text-xs truncate max-w-[40px] sm:max-w-[56px] mt-0.5 sm:mt-1 hidden sm:block',
-            isCaptain
-              ? 'font-semibold text-yellow-400'
-              : 'text-muted-foreground',
+            isCaptain ? 'font-semibold text-captain' : 'text-muted-foreground',
           )}
           data-testid={`${testIdPrefix}-name`}
         >
@@ -272,8 +270,8 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
                 className={cn(
                   'text-xl sm:text-3xl font-black tracking-wider',
                   currentAction === 'ban'
-                    ? 'text-ban drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]'
-                    : 'text-pick drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]',
+                    ? 'text-ban drop-shadow-[0_0_10px_color-mix(in_oklab,var(--color-ban)_50%,transparent)]'
+                    : 'text-pick drop-shadow-[0_0_10px_color-mix(in_oklab,var(--color-pick)_50%,transparent)]',
                 )}
               >
                 {currentAction.toUpperCase()}
