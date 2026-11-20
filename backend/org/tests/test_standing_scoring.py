@@ -53,6 +53,10 @@ class WeightedRateTest(SimpleTestCase):
         score = weighted_rate(_obs(0.0, age_days=366), now=NOW, params=P)
         self.assertEqual((score.count, score.rate), (0, 0.85))
 
+    def test_rate_clamped(self) -> None:
+        params = replace(P, prior_strength=0.0)
+        self.assertEqual(weighted_rate(_obs(1.5), now=NOW, params=params).rate, 1.0)
+
     def test_min_count_boundary(self) -> None:
         self.assertEqual(weighted_rate(_obs(1, 1), now=NOW, params=P).status, "new")
         self.assertEqual(
@@ -84,6 +88,7 @@ class HelpersTest(SimpleTestCase):
     def test_mean_normalized(self) -> None:
         self.assertIsNone(mean_normalized([]))
         self.assertEqual(mean_normalized([0.0, 1.0]), 0.5)
+        self.assertEqual(mean_normalized([0.25, 0.75]), 0.5)
 
     def test_score5_round_trip(self) -> None:
         self.assertEqual(to_score5(0.0), 1.0)
