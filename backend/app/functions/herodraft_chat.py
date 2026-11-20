@@ -213,6 +213,26 @@ def draft_roster_user_ids(draft_id: int) -> set[int]:
     return users
 
 
+CHAT_RESYNC_EVENTS = frozenset({"team_changed", "draft_reset"})
+
+
+def chat_roster_field(draft_id: int, event_type: str | None) -> dict[str, list[int]]:
+    if event_type not in CHAT_RESYNC_EVENTS:
+        return {}
+    try:
+        return {"chat_roster": sorted(draft_roster_user_ids(draft_id))}
+    except Exception:
+        log.warning(
+            "herodraft_chat_roster_failed",
+            system="herodraft",
+            subsystem="chat",
+            draft_id=draft_id,
+            event_type=event_type,
+            exc_info=True,
+        )
+        return {}
+
+
 def _seed_teams(draft_id: int, team_ids: Iterable[int], joined_at: datetime) -> None:
     seeded = set(team_ids)
     if not seeded:

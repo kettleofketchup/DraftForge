@@ -21,6 +21,7 @@ from django.dispatch import receiver
 
 from app.cache_utils import invalidate_after_commit
 from app.functions.herodraft_chat import (
+    chat_roster_field,
     repoint_draft_memberships,
     schedule_roster_tenure,
 )
@@ -526,6 +527,7 @@ def _broadcast_draft_event(draft_pk: int, event_type: str, game_id: int) -> None
                     "game_id": game_id,
                 },
                 "timestamp": None,
+                **chat_roster_field(draft_pk, event_type),
             },
         )
     except Exception as exc:

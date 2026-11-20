@@ -16,6 +16,7 @@ from django.db import DEFAULT_DB_ALIAS, connection, connections, transaction
 from django.db.backends.base.base import BaseDatabaseWrapper
 
 from app.draft_state import build_draft_state, herodraft_state_queryset
+from app.functions.herodraft_chat import chat_roster_field
 from app.models import Draft
 from app.serializers import (
     DraftEventSerializer,
@@ -272,6 +273,7 @@ def broadcast_herodraft_event(
         "draft_team": DraftTeamSerializerFull(draft_team).data if draft_team else None,
         "metadata": metadata or {},  # Include metadata for hero_id, action_type etc
         "timestamp": event.created_at.isoformat(),
+        **chat_roster_field(draft.id, event_type),
     }
 
     # Include full draft state with prefetched members
@@ -348,6 +350,7 @@ def broadcast_herodraft_state(
     payload = {
         "type": "herodraft.event",
         "event_type": event_type,
+        **chat_roster_field(draft.id, event_type),
     }
 
     if metadata:

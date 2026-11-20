@@ -6,6 +6,7 @@ from typing import Any
 from unittest import mock
 
 from asgiref.sync import async_to_sync, sync_to_async
+from channels.auth import AuthMiddlewareStack
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
 from channels.routing import URLRouter
@@ -15,16 +16,18 @@ from django.contrib.sessions.backends.base import SessionBase
 from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sessions.models import Session
 from django.db import transaction
-from django.test import TransactionTestCase
-from django.urls import re_path
+from django.test import TransactionTestCase, override_settings
+from django.urls import path, re_path
 from django.utils import timezone
 from structlog.testing import capture_logs
 
+from app.broadcast import broadcast_herodraft_state
 from app.consumers import HeroDraftConsumer
 from app.functions.herodraft import new_herodraft_for_game
 from app.functions.herodraft_chat import (
     RATE_LIMIT_MAX,
     ChatError,
+    draft_roster_user_ids,
     rate_limit_key,
     resolve_chat_viewer,
     team_group_name,
@@ -49,6 +52,8 @@ from app.tests.ws_helpers import (
     next_non_ping_output,
     read_until_type,
 )
+from discordbot.activity_auth import ActivitySocketMiddleware, issue_activity_token
+from discordbot.models import DraftActivityChannel, DraftActivityInstance
 
 Channel = HeroDraftChatMessage.Channel
 Kind = HeroDraftChatMessage.Kind
@@ -1068,5 +1073,128 @@ class ChatDeliveryTest(ChatSendFixture):
             frame = await read_until_type(new_cap, "chat_message")
             self.assertEqual(frame["message"]["body"], post)
             await self.assert_no_chat_frame(old_cap, post)
+        finally:
+            await self.close_all()
+
+
+class ChatRosterPromotionTest(ChatSendFixture):
+    async def test_signal_less_promotion_waits_for_resync(self) -> None:
+        sentinel = "promote-91aa"
+        try:
+            comm = await self.connect_as(self.spectator)
+            await database_sync_to_async(Team.members.through.objects.create)(
+                team_id=self.team_a.pk, customuser_id=self.spectator.pk
+            )
+            reply = await self.send_chat(comm, sentinel)
+            self.assertEqual(reply["type"], "chat_error")
+            self.assertEqual(reply["code"], "not_participant")
+            self.assertEqual(self.consumer_for(self.spectator)._extra_groups, set())
+
+            await get_channel_layer().group_send(
+                f"herodraft_{self.draft.pk}",
+                {
+                    "type": "herodraft.chat_resync",
+                    "team_ids": [self.team_a.pk],
+                    "user_ids": [self.spectator.pk],
+                },
+            )
+            history = await read_history_with_role(comm, "member")
+            self.assertEqual(history["viewer"]["team_id"], self.team_a.pk)
+            self.assertEqual((await self.send_chat(comm, sentinel))["type"], "chat_ack")
+        finally:
+            await self.close_all()
+
+    async def test_draft_event_roster_avoids_per_socket_query(self) -> None:
+        try:
+            spectator = await self.connect_as(self.spectator)
+            mem_a = await self.connect_as(self.mem_a)
+            with mock.patch(
+                "app.consumers.draft_roster_user_ids", wraps=draft_roster_user_ids
+            ) as roster:
+                await database_sync_to_async(broadcast_herodraft_state)(
+                    self.draft, "team_changed"
+                )
+                await read_until_type(spectator, "herodraft_event")
+                event = await read_until_type(mem_a, "herodraft_event")
+                await read_history_with_role(mem_a, "member")
+                await self.assert_no_chat_frame(spectator)
+            roster.assert_not_called()
+            self.assertNotIn("chat_roster", event)
+        finally:
+            await self.close_all()
+
+
+@override_settings(DISCORD_ACTIVITY_ENABLED=True)
+class ChatActivitySocketTest(ChatSendFixture):
+    def activity_application(self) -> Any:
+        return AuthMiddlewareStack(
+            URLRouter(
+                [
+                    path(
+                        "api/discord/activity/draft/<int:draft_id>/",
+                        ActivitySocketMiddleware(_RecordingConsumer.as_asgi(), "hero"),
+                    )
+                ]
+            )
+        )
+
+    @database_sync_to_async
+    def activity_token(self, user: CustomUser) -> str:
+        DraftActivityChannel.objects.create(
+            guild_id="1", channel_id="chat-activity", draft=self.draft
+        )
+        instance = DraftActivityInstance.objects.create(
+            instance_id="chat-activity-instance",
+            guild_id="1",
+            channel_id="chat-activity",
+            draft=self.draft,
+        )
+        return issue_activity_token(user, instance)
+
+    async def test_activity_member_gets_team_chat(self) -> None:
+        incoming = "activity-in-5c2e"
+        outgoing = "activity-out-5c2e"
+        try:
+            token = await self.activity_token(self.mem_a)
+            comm = WebsocketCommunicator(
+                self.activity_application(),
+                f"/api/discord/activity/draft/{self.draft.pk}/",
+                subprotocols=["draftactivity", token],
+            )
+            connected, _ = await comm.connect(timeout=5)
+            self.assertTrue(connected)
+            self.comms.append(comm)
+            consumer = next(
+                c for c in _RecordingConsumer.instances if c.user.pk == self.mem_a.pk
+            )
+            self.assertIn("session", consumer.scope)
+            self.assertIn("activity", consumer.scope)
+            history = await read_until_type(comm, "chat_history")
+            self.assertEqual(history["viewer"]["role"], "member")
+            self.assertEqual(history["viewer"]["team_id"], self.team_a.pk)
+
+            cap_a = await self.connect_as(self.cap_a)
+            others = [await self.connect_as(u) for u in self.outsiders()]
+            self.assertEqual(
+                (await self.send_chat(cap_a, incoming))["type"], "chat_ack"
+            )
+            frame = await read_until_type(comm, "chat_message")
+            self.assertEqual(frame["message"]["body"], incoming)
+
+            reply = await self.send_chat(comm, outgoing, "act-1")
+            self.assertEqual(reply["type"], "chat_ack")
+            self.assertEqual(reply["client_msg_id"], "act-1")
+            bodies = [
+                (await read_until_type(cap_a, "chat_message"))["message"]["body"]
+                for _ in range(2)
+            ]
+            self.assertEqual(bodies, [incoming, outgoing])
+
+            await asyncio.gather(
+                *(
+                    self.assert_no_chat_frame(other, incoming, outgoing)
+                    for other in others
+                )
+            )
         finally:
             await self.close_all()

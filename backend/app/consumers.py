@@ -20,6 +20,7 @@ from app.cache_utils import invalidate_obj
 from app.consumers_base import BaseDraftConsumer, consumer_db
 from app.draft_state import build_draft_state, herodraft_state_queryset
 from app.functions.herodraft_chat import (
+    CHAT_RESYNC_EVENTS,
     SPECTATOR,
     ChatError,
     ChatErrorCode,
@@ -61,10 +62,11 @@ log = get_logger(__name__)
 
 _CLIENT_MSG_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _CHAT_MESSAGE_TYPES = frozenset({"chat_send", "chat_suggest"})
-_CHAT_RESYNC_EVENTS = frozenset({"team_changed", "draft_reset"})
 
 
 def _session_alive(scope: dict[str, Any], user: Any) -> bool:
+    if "activity" in scope:
+        return True
     session = scope.get("session")
     if session is None or user is None or not user.is_authenticated:
         return True
@@ -625,6 +627,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 user_id=self._chat_user_id(),
                 code="unavailable",
                 error_type=type(e).__name__,
+                exc_info=True,
             )
             await self._send_chat_error("unavailable", client_msg_id)
             return
@@ -717,6 +720,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
             draft_id=self.draft_id,
             user_id=user_id,
             error_type=type(error).__name__,
+            exc_info=True,
         )
         self._chat_viewer = ChatViewer(
             user_id=user_id, team_id=None, role="spectator", joined_at=None
@@ -735,6 +739,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 user_id=user_id,
                 stage="cleanup",
                 error_type=type(e).__name__,
+                exc_info=True,
             )
 
     # --- Connect / Disconnect ---
@@ -991,8 +996,8 @@ class HeroDraftConsumer(BaseDraftConsumer):
             message["metadata"] = event["metadata"]
 
         await self.send(text_data=json.dumps(message))
-        if event.get("event_type") in _CHAT_RESYNC_EVENTS:
-            await self._resync_after_draft_event()
+        if event.get("event_type") in CHAT_RESYNC_EVENTS:
+            await self._resync_after_draft_event(event.get("chat_roster"))
 
     async def herodraft_chat_all(self, event: dict[str, Any]) -> None:
         await self.send(
@@ -1044,13 +1049,17 @@ class HeroDraftConsumer(BaseDraftConsumer):
         if user_id in user_ids or in_team_group:
             await self._chat_resync()
 
-    async def _resync_after_draft_event(self) -> None:
+    async def _resync_after_draft_event(self, chat_roster: Any) -> None:
         user_id = self._chat_user_id()
         if user_id is None:
             return
         if not self._extra_groups:
             try:
-                roster = await self._draft_roster_user_ids()
+                roster = (
+                    chat_roster
+                    if isinstance(chat_roster, list)
+                    else await self._draft_roster_user_ids()
+                )
             except Exception as e:
                 log.warning(
                     "herodraft_chat_resync_roster_failed",
