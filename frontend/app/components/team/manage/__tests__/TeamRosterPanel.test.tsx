@@ -92,6 +92,11 @@ const selectedName = (testId: string): string | null | undefined =>
   screen.getByTestId(testId).querySelector('[data-testid="leader-option-name"]')
     ?.textContent;
 
+const problemText = (code: string): string | null | undefined =>
+  screen
+    .getByTestId(`team-leadership-banner-row-${code}`)
+    .querySelector('[data-testid="team-leadership-banner-text"]')?.textContent;
+
 const banner = () => within(screen.getByTestId('team-leadership-banner'));
 
 describe('LeadershipProblemsBanner', () => {
@@ -103,10 +108,12 @@ describe('LeadershipProblemsBanner', () => {
   it('names the ghost captain and offers a reseat', () => {
     const spy = renderPanel(ghostCaptainTeam);
     const captain = ghostCaptainTeam.captain!;
-    expect(banner().getByText('Leadership problems (1)')).toBeTruthy();
     expect(
-      banner().getByText(`${name(captain)} is not a member of this team.`),
+      banner().getByRole('heading', { name: '1 leadership problem' }),
     ).toBeTruthy();
+    expect(problemText('captain_not_member')).toBe(
+      `Captain ${name(captain)} isn't on this team's roster.`,
+    );
     fireEvent.click(
       banner().getByRole('button', {
         name: `Reseat ${name(captain)} as member`,
@@ -118,6 +125,46 @@ describe('LeadershipProblemsBanner', () => {
       summary: `Add ${name(captain)} back to the members and keep them captain`,
       confirmText: 'Reseat',
     });
+  });
+
+  it('lays out one readable row per problem on an opaque error surface', () => {
+    renderPanel({
+      ...ghostCaptainTeam,
+      deputy_captain: people.outsider,
+      leadership_problems: [
+        ...ghostCaptainTeam.leadership_problems,
+        ...ghostDeputyTeam.leadership_problems,
+      ],
+    });
+    const panel = screen.getByTestId('team-leadership-banner');
+    expect(panel).toHaveAttribute('role', 'alert');
+    expect(panel).toHaveClass('bg-error-surface', 'text-error-tint');
+    const heading = banner().getByRole('heading');
+    expect(heading).toHaveTextContent('2 leadership problems');
+    expect(heading).toHaveClass('text-base');
+    const rows = banner().getAllByRole('listitem');
+    expect(rows.map((r) => r.getAttribute('data-testid'))).toEqual([
+      'team-leadership-banner-row-captain_not_member',
+      'team-leadership-banner-row-deputy_not_member',
+    ]);
+    for (const row of rows) {
+      expect(
+        row.querySelector('[data-testid="team-leadership-banner-avatar"]'),
+      ).not.toBeNull();
+      const text = row.querySelector(
+        '[data-testid="team-leadership-banner-text"]',
+      )!;
+      expect(text).toHaveClass('text-sm');
+      const actions = row.querySelector(
+        '[data-testid="team-leadership-banner-actions"]',
+      )!;
+      expect(actions).toHaveClass('flex-col', 'sm:flex-row');
+      for (const button of within(actions as HTMLElement).getAllByRole(
+        'button',
+      )) {
+        expect(button).toHaveClass('w-full', 'min-h-11', 'sm:w-auto');
+      }
+    }
   });
 
   it('says a ghost captain who is a dropout will be restored', () => {
@@ -204,9 +251,9 @@ describe('LeadershipProblemsBanner', () => {
       ],
     };
     const spy = renderPanel(team);
-    expect(
-      banner().getByText(`${name(people.captain)} is also the captain.`),
-    ).toBeTruthy();
+    expect(problemText('deputy_is_captain')).toBe(
+      `${name(people.captain)} is both captain and deputy.`,
+    );
     expect(selectedName('team-manage-deputy-select')).toBe(
       `${name(people.captain)} (also captain)`,
     );
@@ -233,7 +280,12 @@ describe('LeadershipProblemsBanner', () => {
         onChooseDeputy={onChooseDeputy}
       />,
     );
-    expect(banner().getByText('Leadership problems (2)')).toBeTruthy();
+    expect(
+      banner().getByRole('heading', { name: '2 leadership problems' }),
+    ).toBeTruthy();
+    expect(problemText('deputy_not_member')).toBe(
+      `Deputy ${name(people.outsider)} isn't on this team's roster.`,
+    );
     fireEvent.click(
       banner().getByRole('button', { name: 'Choose another captain' }),
     );
