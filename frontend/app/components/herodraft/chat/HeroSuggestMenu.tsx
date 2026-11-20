@@ -29,6 +29,12 @@ export function HeroSuggestMenu({
   children,
 }: HeroSuggestMenuProps) {
   const [target, setTarget] = useState<SuggestTarget | null>(null);
+  // Radix stays open through a disable; without this the old menu reappears.
+  const [wasEnabled, setWasEnabled] = useState(enabled);
+  if (wasEnabled !== enabled) {
+    setWasEnabled(enabled);
+    if (!enabled) setTarget(null);
+  }
 
   const onContextMenu = (e: MouseEvent<HTMLElement>) => {
     if (!enabled) return;

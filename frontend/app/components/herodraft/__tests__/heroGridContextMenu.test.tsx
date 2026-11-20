@@ -140,6 +140,30 @@ describe('HeroGrid suggestion context menu', () => {
     expect(screen.getByTestId('herodraft-hero-list')).toBe(list);
   });
 
+  it('closes an open menu when canSuggest turns off and does not reopen it', () => {
+    const grid = (canSuggest: boolean) => (
+      <HeroGrid
+        onHeroClick={() => {}}
+        disabled={false}
+        showActionButton
+        currentAction="pick"
+        isMyTurn
+        canSuggest={canSuggest}
+      />
+    );
+    const { rerender } = render(grid(true));
+    fireEvent.contextMenu(hero(FREE_HERO));
+    expect(screen.getByRole('menu')).toBeTruthy();
+    rerender(grid(false));
+    expect(screen.queryByRole('menu')).toBeNull();
+    rerender(grid(true));
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.queryByTestId('herodraft-hero-suggest-menu')).toBeNull();
+    fireEvent.contextMenu(hero(PICKED_HERO));
+    const menu = screen.getByRole('menu');
+    expect(within(menu).getByText(getHeroName(PICKED_HERO))).toBeTruthy();
+  });
+
   it('keeps the native menu on the background when canSuggest is false', () => {
     renderGrid(false);
     expect(
