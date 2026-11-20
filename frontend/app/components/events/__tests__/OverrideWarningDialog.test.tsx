@@ -180,7 +180,7 @@ describe('OverrideWarningDialog', () => {
     renderDialog(blocked, { organization: org([VIEWER]) });
     expect(screen.getByTestId('override-settings-link')).toHaveAttribute(
       'href',
-      '/organizations/7?tab=settings&section=staff-placement',
+      '/organizations/7?settings=staff-placement',
     );
   });
 

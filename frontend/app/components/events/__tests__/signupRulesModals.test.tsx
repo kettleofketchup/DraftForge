@@ -66,8 +66,8 @@ vi.mock('sonner', () => ({
 import { CreateEventModal } from '../CreateEventModal';
 import { CreateSeriesEventModal } from '../CreateSeriesEventModal';
 import { EditEventModal } from '../EditEventModal';
-import { EditOrgDefaultsModal } from '../EditOrgDefaultsModal';
 import { EditRepeaterModal } from '../EditRepeaterModal';
+import { OrgEventDefaultsHarness } from './orgEventDefaultsHarness';
 
 const ROSTER_LABEL = 'Mandatory RSVP Confirmation';
 const SELF_SERVE_LABEL = 'Members can sign themselves up';
@@ -198,12 +198,11 @@ describe('EditRepeaterModal signup rules', () => {
   });
 });
 
-describe('EditOrgDefaultsModal signup rules', () => {
+describe('org event defaults signup rules', () => {
   it('sends the toggled flags', async () => {
-    render(
-      <EditOrgDefaultsModal organizationId={1} open onOpenChange={() => {}} />,
-      { wrapper: Wrapper },
-    );
+    render(<OrgEventDefaultsHarness organizationId={1} />, {
+      wrapper: Wrapper,
+    });
     await waitFor(() => expect(api.getOrgEventDefaults).toHaveBeenCalled());
     await screen.findByDisplayValue('Night Cup');
     await toggleRules(/^event$/i);

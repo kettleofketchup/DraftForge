@@ -53,17 +53,17 @@ async function resetOrgAdminTeam(
   }
 }
 
-/** Helper: open the org Settings tab (via Edit) on the Admin Team section. */
+/** Helper: open the org settings modal (via the cog) on the Admin Team section. */
 async function openEditOrgModal(
   page: import('@playwright/test').Page,
 ): Promise<void> {
-  const editBtn = page.locator('[data-testid="edit-organization-button"]');
+  const editBtn = page.locator('[data-testid="org-settings-button"]');
   await expect(editBtn).toBeVisible({ timeout: 5000 });
   await editBtn.click();
-  await expect(page.locator('[data-testid="org-settings-tab"]')).toBeVisible({
+  await expect(page.locator('[data-testid="org-settings-modal"]')).toBeVisible({
     timeout: 5000,
   });
-  // Edit opens the org Settings tab; the admin team is its own section there.
+  // The cog opens the settings modal; the admin team is its own section there.
   await page.getByTestId('org-settings-tab-admins').click();
 }
 
@@ -118,8 +118,10 @@ test.describe('Add Admin to Organization (@cicd)', () => {
     // Close AddUserModal
     await closeAddUserModal(page);
 
-    // Verify the settings page is still showing after closing AddUserModal
-    await expect(page.locator('[data-testid="org-settings-tab"]')).toBeVisible({
+    // Verify the settings modal is still showing after closing AddUserModal
+    await expect(
+      page.locator('[data-testid="org-settings-modal"]'),
+    ).toBeVisible({
       timeout: 3000,
     });
   });
@@ -145,8 +147,10 @@ test.describe('Add Admin to Organization (@cicd)', () => {
     // Close AddUserModal
     await closeAddUserModal(page);
 
-    // Verify the settings page is still showing
-    await expect(page.locator('[data-testid="org-settings-tab"]')).toBeVisible({
+    // Verify the settings modal is still showing
+    await expect(
+      page.locator('[data-testid="org-settings-modal"]'),
+    ).toBeVisible({
       timeout: 3000,
     });
 

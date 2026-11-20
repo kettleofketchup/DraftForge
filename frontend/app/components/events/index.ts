@@ -16,7 +16,6 @@ export { ApprovalConfigSection } from './ApprovalConfigSection';
 export { CreateEventModal } from './CreateEventModal';
 export { CreateSeriesEventModal } from './CreateSeriesEventModal';
 export { EditEventModal } from './EditEventModal';
-export { EditOrgDefaultsModal } from './EditOrgDefaultsModal';
 export { EditRepeaterModal } from './EditRepeaterModal';
 export { EventStateBadge } from './EventStateBadge';
 export { EventStrip } from './EventStrip';

@@ -1,7 +1,6 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { Search } from 'lucide-react';
 import * as React from 'react';
-import { useSearchParams } from 'react-router';
 import {
   FormTabsList,
   InvalidDot,
@@ -42,6 +41,8 @@ export interface SettingsSection<
   content: React.ReactNode;
   /** Extra search terms, for settings a search can't read from the page. */
   keywords?: string[];
+  /** Sidebar heading this section sits under; groups keep first-appearance order. */
+  group?: string;
   /** Mount on first visit, then stay mounted. */
   lazy?: boolean;
   /**
@@ -54,8 +55,12 @@ export interface SettingsSection<
 
 export interface SettingsDialogHandle<V extends string = string> {
   selectSection: (value: V) => void;
-  /** The section that renders `field` (or a collapsed block holding it), else its registered section. */
-  sectionOfField: (field: string) => V | undefined;
+  /**
+   * The section that renders `field` (or a collapsed block holding it), else its
+   * registered section. `within` limits the lookup to those section values, for
+   * field names that several forms share.
+   */
+  sectionOfField: (field: string, within?: readonly string[]) => V | undefined;
 }
 
 export interface SettingsDialogProps<V extends string = string> extends Omit<
@@ -69,6 +74,11 @@ export interface SettingsDialogProps<V extends string = string> extends Omit<
   loading?: React.ReactNode;
   sectionRef?: React.Ref<SettingsDialogHandle<V>>;
   searchPlaceholder?: string;
+  /** Rendered after the panels, inside the scroll body. */
+  footer?: React.ReactNode;
+  /** Controlled section; falls back to the first when unknown or null. */
+  section?: string | null;
+  onSectionChange?: (value: V) => void;
 }
 
 interface SearchHit<V extends string> {
@@ -119,20 +129,18 @@ interface SettingsLayoutOptions<V extends string> {
   testIdPrefix: string;
   sectionRef?: React.Ref<SettingsDialogHandle<V>>;
   searchPlaceholder?: string;
-  variant: 'dialog' | 'page';
   /** Requested section, e.g. from the URL; falls back to the first when unknown or hidden. */
   value?: string | null;
   onValueChange?: (value: V) => void;
 }
 
-/** Sidebar, search and section panels shared by SettingsDialog and SettingsPage. */
+/** Sidebar, search and section panels of SettingsDialog. */
 function useSettingsLayout<V extends string>({
   open,
   sections,
   testIdPrefix,
   sectionRef,
   searchPlaceholder = 'Search settings',
-  variant,
   value,
   onValueChange,
 }: SettingsLayoutOptions<V>) {
@@ -175,15 +183,20 @@ function useSettingsLayout<V extends string>({
   }, []);
   const sectionsRef = React.useRef(sections);
   sectionsRef.current = sections;
-  const sectionOfField = React.useCallback((field: string): V | undefined => {
-    for (const selector of [fieldRow(field), fieldBlock(field)]) {
-      for (const [value, panel] of panelEls.current) {
-        if (panel.querySelector(selector)) return value;
+  const sectionOfField = React.useCallback(
+    (field: string, within?: readonly string[]): V | undefined => {
+      const inScope = (value: string) => !within || within.includes(value);
+      for (const selector of [fieldRow(field), fieldBlock(field)]) {
+        for (const [value, panel] of panelEls.current) {
+          if (inScope(value) && panel.querySelector(selector)) return value;
+        }
       }
-    }
-    return sectionsRef.current.find((s) => s.fields && field in s.fields)
-      ?.value;
-  }, []);
+      return sectionsRef.current.find(
+        (s) => inScope(s.value) && s.fields && field in s.fields,
+      )?.value;
+    },
+    [],
+  );
   React.useImperativeHandle(
     sectionRef,
     () => ({ selectSection, sectionOfField }),
@@ -215,12 +228,25 @@ function useSettingsLayout<V extends string>({
     }
     const found: SearchHit<V>[] = [];
     const seen = new Set<string>();
+    // Scoped per section; a row registered under another section (signup rules
+    // render on Event) falls back to the field name when only one section has it.
     const registry = new Map<string, SettingsFieldInfo>();
+    const byField = new Map<string, SettingsFieldInfo[]>();
     for (const s of sections) {
       for (const [field, info] of Object.entries(s.fields ?? {})) {
-        if (!registry.has(field)) registry.set(field, info);
+        registry.set(`${s.value}:${field}`, info);
+        byField.set(field, [...(byField.get(field) ?? []), info]);
       }
     }
+    const infoFor = (
+      section: V,
+      field: string,
+    ): SettingsFieldInfo | undefined => {
+      const scoped = registry.get(`${section}:${field}`);
+      if (scoped) return scoped;
+      const all = byField.get(field);
+      return all?.length === 1 ? all[0] : undefined;
+    };
     // Every term must appear in the label, description or keywords.
     const add = (hit: SearchHit<V>, rest: string) => {
       if (matches(`${hit.label} ${rest}`, q)) found.push(hit);
@@ -240,10 +266,11 @@ function useSettingsLayout<V extends string>({
             ? row.dataset.field
             : undefined;
         if (field) {
-          if (seen.has(field)) return;
-          seen.add(field);
+          const scoped = `${s.value}:${field}`;
+          if (seen.has(scoped)) return;
+          seen.add(scoped);
         }
-        const info = field ? registry.get(field) : undefined;
+        const info = field ? infoFor(s.value, field) : undefined;
         const description = field
           ? row
               ?.querySelector('[id$="-form-item-description"]')
@@ -262,7 +289,7 @@ function useSettingsLayout<V extends string>({
     // Registered fields not rendered: inside a collapsed block, or in a lazy section not visited yet.
     for (const s of sections) {
       for (const [field, info] of Object.entries(s.fields ?? {})) {
-        if (seen.has(field)) continue;
+        if (seen.has(`${s.value}:${field}`)) continue;
         let section: V | undefined;
         let el: HTMLElement | undefined;
         for (const [value, panel] of panelEls.current) {
@@ -274,8 +301,8 @@ function useSettingsLayout<V extends string>({
           }
         }
         if (!section && s.lazy && !visited.has(s.value)) section = s.value;
-        if (!section) continue;
-        seen.add(field);
+        if (!section || seen.has(`${section}:${field}`)) continue;
+        seen.add(`${section}:${field}`);
         add(
           { key: `${section}:${field}`, section, label: info.label, el, field },
           [info.description ?? '', ...(info.keywords ?? [])].join(' '),
@@ -403,14 +430,8 @@ function useSettingsLayout<V extends string>({
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.altKey) return;
       const t = e.target as HTMLElement | null;
-      const root = searchRef.current?.closest(
-        variant === 'dialog' ? '[role="dialog"]' : '[data-settings-root]',
-      );
-      // A page has no focus trap: a key pressed with nothing focused counts too.
-      const inScope =
-        !!t &&
-        (!!root?.contains(t) || (variant === 'page' && t === document.body));
-      if (!t || !inScope) return;
+      const root = searchRef.current?.closest('[role="dialog"]');
+      if (!t || !root?.contains(t)) return;
       const commandK =
         e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey) && !e.shiftKey;
       const slash =
@@ -456,8 +477,17 @@ function useSettingsLayout<V extends string>({
     else if (firstMatch) selectSection(firstMatch.value);
   };
 
-  const sectionLabel = (value: V) =>
-    sections.find((s) => s.value === value)?.label;
+  const sectionLabel = (value: V) => {
+    const s = sections.find((x) => x.value === value);
+    return s?.group ? `${s.label} · ${s.group}` : s?.label;
+  };
+
+  const groups: { name?: string; items: SettingsSection<V>[] }[] = [];
+  for (const s of visible) {
+    let g = groups.find((x) => x.name === s.group);
+    if (!g) groups.push((g = { name: s.group, items: [] }));
+    g.items.push(s);
+  }
 
   const status = !searching
     ? ''
@@ -553,42 +583,51 @@ function useSettingsLayout<V extends string>({
       >
         <SidebarHeader>{search}</SidebarHeader>
         <SidebarContent>
-          <SidebarGroup>
-            {searching && <SidebarGroupLabel>Categories</SidebarGroupLabel>}
-            <SidebarGroupContent>
+          {searching && (
+            <SidebarGroup className="pb-0">
+              <SidebarGroupLabel>Categories</SidebarGroupLabel>
               {emptyState}
-              <TabsPrimitive.List asChild>
-                <SidebarMenu>
-                  {visible.map((s) => {
-                    const Icon = s.icon;
-                    return (
-                      <SidebarMenuItem key={s.value} role="none">
-                        <TabsPrimitive.Trigger value={s.value} asChild>
-                          <SidebarMenuButton
-                            isActive={active === s.value}
-                            data-testid={`${testIdPrefix}-tab-${s.value}`}
-                            data-invalid={s.invalid || undefined}
-                            className={cn(
-                              'cursor-pointer',
-                              searching &&
-                                !matchedSections.has(s.value) &&
-                                'opacity-60',
-                            )}
-                          >
-                            {Icon && <Icon />}
-                            <span className="min-w-0 flex-1 truncate">
-                              {s.label}
-                            </span>
-                            {s.invalid && <InvalidDot />}
-                          </SidebarMenuButton>
-                        </TabsPrimitive.Trigger>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              </TabsPrimitive.List>
-            </SidebarGroupContent>
-          </SidebarGroup>
+            </SidebarGroup>
+          )}
+          <TabsPrimitive.List asChild>
+            <div>
+              {groups.map((g) => (
+                <SidebarGroup key={g.name ?? ''}>
+                  {g.name && <SidebarGroupLabel>{g.name}</SidebarGroupLabel>}
+                  <SidebarGroupContent>
+                    <SidebarMenu role="none">
+                      {g.items.map((s) => {
+                        const Icon = s.icon;
+                        return (
+                          <SidebarMenuItem key={s.value} role="none">
+                            <TabsPrimitive.Trigger value={s.value} asChild>
+                              <SidebarMenuButton
+                                isActive={active === s.value}
+                                data-testid={`${testIdPrefix}-tab-${s.value}`}
+                                data-invalid={s.invalid || undefined}
+                                className={cn(
+                                  'cursor-pointer',
+                                  searching &&
+                                    !matchedSections.has(s.value) &&
+                                    'opacity-60',
+                                )}
+                              >
+                                {Icon && <Icon />}
+                                <span className="min-w-0 flex-1 truncate">
+                                  {s.label}
+                                </span>
+                                {s.invalid && <InvalidDot />}
+                              </SidebarMenuButton>
+                            </TabsPrimitive.Trigger>
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              ))}
+            </div>
+          </TabsPrimitive.List>
           {hitList && (
             <SidebarGroup>
               <SidebarGroupLabel>Matching settings</SidebarGroupLabel>
@@ -603,9 +642,17 @@ function useSettingsLayout<V extends string>({
   const mobileNav = (
     <div className="flex flex-col gap-3">
       {search}
-      {emptyState || (
-        <FormTabsList tabs={visible} testIdPrefix={testIdPrefix} />
-      )}
+      {emptyState ||
+        groups.map((g) => (
+          <div key={g.name ?? ''} className="flex flex-col gap-1.5">
+            {g.name && (
+              <p className="text-xs font-medium text-muted-foreground">
+                {g.name}
+              </p>
+            )}
+            <FormTabsList tabs={g.items} testIdPrefix={testIdPrefix} />
+          </div>
+        ))}
       {hitList && (
         <ScrollArea
           className="rounded-md border border-border"
@@ -624,21 +671,12 @@ function useSettingsLayout<V extends string>({
       value={active}
       onValueChange={(v) => selectSection(v as V)}
       orientation={isMobile ? 'horizontal' : 'vertical'}
-      data-settings-root=""
       className={cn(
         'min-h-0 flex-1',
         isMobile ? 'flex-col gap-3' : 'flex-row gap-6',
       )}
     >
-      {isMobile ? (
-        mobileNav
-      ) : variant === 'page' ? (
-        <div className="sticky top-4 flex max-h-[calc(100svh-2rem)] self-start">
-          {desktopNav}
-        </div>
-      ) : (
-        desktopNav
-      )}
+      {isMobile ? mobileNav : desktopNav}
       {body}
     </Tabs>
   );
@@ -678,6 +716,9 @@ export function SettingsDialog<V extends string>({
   loading,
   sectionRef,
   searchPlaceholder,
+  footer,
+  section,
+  onSectionChange,
   ...dialogProps
 }: SettingsDialogProps<V>) {
   const isLoading = loading != null && loading !== false;
@@ -687,7 +728,8 @@ export function SettingsDialog<V extends string>({
     testIdPrefix,
     sectionRef,
     searchPlaceholder,
-    variant: 'dialog',
+    value: section,
+    onValueChange: onSectionChange,
   });
 
   return (
@@ -704,69 +746,14 @@ export function SettingsDialog<V extends string>({
             : 'min-h-0 flex-1 overflow-hidden -mr-6 pr-6'
       }
     >
-      {isLoading ? loading : panels}
-    </FormDialog>
-  );
-}
-
-export interface SettingsPageProps<V extends string = string> {
-  sections: SettingsSection<V>[];
-  /** Nav items get `${testIdPrefix}-tab-${value}`. */
-  testIdPrefix: string;
-  /** Search param holding the selected section, so a link can open one. */
-  sectionParam?: string;
-  sectionRef?: React.Ref<SettingsDialogHandle<V>>;
-  searchPlaceholder?: string;
-  /** Rendered under the active section, e.g. a save bar. */
-  footer?: React.ReactNode;
-  className?: string;
-  'data-testid'?: string;
-}
-
-/** SettingsDialog's sidebar and search laid out on a page instead of in a dialog. */
-export function SettingsPage<V extends string>({
-  sections,
-  testIdPrefix,
-  sectionParam = 'section',
-  sectionRef,
-  searchPlaceholder,
-  footer,
-  className,
-  'data-testid': dataTestId,
-}: SettingsPageProps<V>) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const first = sections[0].value;
-  const onValueChange = React.useCallback(
-    (next: V) =>
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          if (next === first) params.delete(sectionParam);
-          else params.set(sectionParam, next);
-          return params;
-        },
-        { replace: true, preventScrollReset: true },
-      ),
-    [setSearchParams, sectionParam, first],
-  );
-  const { frame, panels } = useSettingsLayout({
-    open: true,
-    sections,
-    testIdPrefix,
-    sectionRef,
-    searchPlaceholder,
-    variant: 'page',
-    value: searchParams.get(sectionParam),
-    onValueChange,
-  });
-  return (
-    <div className={cn('flex flex-col', className)} data-testid={dataTestId}>
-      {frame(
-        <div className="min-w-0 flex-1">
+      {isLoading ? (
+        loading
+      ) : (
+        <>
           {panels}
           {footer}
-        </div>,
+        </>
       )}
-    </div>
+    </FormDialog>
   );
 }
