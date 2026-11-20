@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from unittest import mock
 
 from django.test import TestCase
 from django.utils import timezone
@@ -12,6 +13,7 @@ from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry, create_manual_award
 from org.features import FeatureKey, set_org_feature
 from org.models import ContributionEntry, ContributionPointValue, OrgUser
+from org.standing import api as standing
 
 ROLES = (
     "owner",
@@ -449,6 +451,15 @@ class ContributionsApiBehaviourTest(ContributionsApiBase):
         self.assertEqual(body["period"], "2026-10")
         self.assertEqual(body["total"], 7)
         self.assertEqual([r["username"] for r in body["rows"]], ["capi_target"])
+
+    def test_leaderboard_view_uses_standing(self) -> None:
+        with mock.patch(
+            "org.standing.api.leaderboard", wraps=standing.leaderboard
+        ) as spy:
+            response = self.request("admin", "get", f"{base(self.org.pk)}leaderboard/")
+        self.assertEqual(response.status_code, 200)
+        spy.assert_called_once()
+        self.assertEqual(spy.call_args.args[1:3], ("contribution", "points"))
 
     def test_leaderboard_reflects_new_award_with_cache_on(self) -> None:
         path = f"{base(self.org.pk)}leaderboard/"

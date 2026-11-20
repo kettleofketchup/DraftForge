@@ -1,8 +1,10 @@
 from django.test import TestCase
 
+import events.services
 from app.models import CustomUser, Organization
-from org.models import OrgUser
 from events.services import resolve_or_create_org_user
+from org.membership import resolve_or_create_org_user as membership_fn
+from org.models import OrgUser
 
 
 class ResolveOrCreateOrgUserTests(TestCase):
@@ -29,3 +31,6 @@ class ResolveOrCreateOrgUserTests(TestCase):
             OrgUser.objects.filter(user=self.user, organization=self.org).count(),
             1,
         )
+
+    def test_is_the_membership_function(self) -> None:
+        self.assertIs(events.services.resolve_or_create_org_user, membership_fn)

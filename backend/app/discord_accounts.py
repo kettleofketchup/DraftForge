@@ -21,13 +21,11 @@ from social_django.models import UserSocialAuth
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
-from org.contributions.services import (
-    dedupe_event_staff,
-    reassign_member,
-    repoint_user_attribution,
-)
+from events.staff import dedupe_host_helpers
+from org.accounts import repoint_org_attribution
 from org.models import OrgUser
 from org.promotion.services import demote_colliding_earning_sends
+from org.standing import api as standing
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -99,6 +97,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
         keep_org_users = {
             ou.organization_id: ou for ou in OrgUser.objects.filter(user=keep)
         }
+        pairs: list[tuple[OrgUser, OrgUser]] = []
         for drop_ou in OrgUser.objects.filter(user=drop):
             keep_ou = keep_org_users.get(drop_ou.organization_id)
             if keep_ou is not None:
@@ -106,9 +105,11 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
                     keep_ou.guild_nickname = drop_ou.guild_nickname
                     keep_ou.save(update_fields=["guild_nickname"])
                     invalidate_after_commit(keep)
-                reassign_member(drop_ou, keep_ou)
-                drop_ou.delete()
-        repoint_user_attribution(drop, keep)
+                pairs.append((drop_ou, keep_ou))
+        standing.merge_users(drop, keep, member_pairs=pairs)
+        repoint_org_attribution(drop, keep)
+        for drop_ou, _ in pairs:
+            drop_ou.delete()
         demote_colliding_earning_sends(keep, drop)
 
         for rel in drop._meta.related_objects:
@@ -142,7 +143,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             for obj in list(manager.all()):
                 _repoint(obj, field_name)
 
-        dedupe_event_staff(keep)
+        dedupe_host_helpers(keep)
 
         # Purge keep's reverse-relation caches before reading/writing through
         # them in the carryover loop. The related-objects loop above poisoned

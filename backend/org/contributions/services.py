@@ -1,34 +1,27 @@
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
 from typing import Any, Final, TypeGuard
 
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, QuerySet
 from django.utils import timezone
 
-from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, Organization, OrgLog
 from app.permissions_org import is_org_role_holder
 from events.constants import EventState
 from events.models import Event
-from events.services import resolve_or_create_org_user
 from org.contributions.kinds import (
     DEFAULT_POINTS,
     EVENT_STAFF_KINDS,
     RATED_KINDS,
     ContributionKind,
 )
-from org.contributions.periods import local_day_start_utc, local_noon_utc
-from org.contributions.points import points_for
-from org.models import (
-    ContributionEntry,
-    ContributionPointValue,
-    OrgFeature,
-    OrgUser,
-    PromoSend,
-    PromoTemplate,
-)
+from org.models import ContributionEntry, ContributionPointValue, OrgUser, PromoSend
+from org.standing import ledger
+from org.standing.ledger import points_for
+from org.standing.periods import local_day_start_utc, local_noon_utc
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -115,20 +108,16 @@ def award_entry(
 ) -> ContributionEntry:
     kind = ContributionKind(kind).value
     _check_event(org, event)
-    if points is None:
-        points = points_for(org, kind)
-    org_user = resolve_or_create_org_user(user, org)
-    entry = ContributionEntry.objects.create(
-        org_user=org_user,
-        organization=org,
+    entry = ledger.award(
+        org=org,
+        user=user,
         kind=kind,
+        occurred_at=occurred_at,
         points=points,
         event=event,
-        event_name=event.name if event is not None else "",
+        promo_send=promo_send,
         reason=reason,
         awarded_by=awarded_by,
-        occurred_at=occurred_at,
-        promo_send=promo_send,
     )
     log.info(
         "contribution_awarded",
@@ -138,7 +127,7 @@ def award_entry(
         user_id=user.pk,
         entry_id=entry.pk,
         kind=kind,
-        points=points,
+        points=entry.points,
         event_id=event.pk if event is not None else None,
         awarded_by_id=awarded_by.pk if awarded_by is not None else None,
         promo_send_id=promo_send.pk if promo_send is not None else None,
@@ -501,46 +490,31 @@ def reassign_member(drop: OrgUser, keep: OrgUser) -> int:
     return moved
 
 
-def repoint_user_attribution(drop: CustomUser, keep: CustomUser) -> int:
+def repoint_ledger_attribution(drop: CustomUser, keep: CustomUser) -> int:
+    return ContributionEntry.objects.nocache().filter(awarded_by=drop).update(
+        awarded_by=keep
+    ) + ContributionPointValue.objects.nocache().filter(updated_by=drop).update(
+        updated_by=keep
+    )
+
+
+def has_promo_entry(send: PromoSend) -> bool:
+    return ContributionEntry.objects.nocache().filter(promo_send=send).exists()
+
+
+def promo_points(send: PromoSend) -> int | None:
     return (
         ContributionEntry.objects.nocache()
-        .filter(awarded_by=drop)
-        .update(awarded_by=keep)
-        + OrgFeature.objects.nocache().filter(enabled_by=drop).update(enabled_by=keep)
-        + ContributionPointValue.objects.nocache()
-        .filter(updated_by=drop)
-        .update(updated_by=keep)
-        + PromoTemplate.objects.nocache()
-        .filter(created_by=drop)
-        .update(created_by=keep)
+        .filter(promo_send=send)
+        .values_list("points", flat=True)
+        .first()
     )
 
 
-@transaction.atomic
-def dedupe_event_staff(user: CustomUser) -> int:
-    events = list(
-        Event.objects.nocache()
-        .select_for_update(of=("self",))
-        .filter(
-            pk__in=Event.objects.nocache().filter(host=user, helpers=user).values("pk")
-        )
-        .select_related("organization")
-    )
-    synced = 0
-    for event in events:
-        event.helpers.remove(user)
-        if should_sync_staff(event):
-            sync_event_staff_entries(event)
-            synced += 1
-    if not events:
-        return 0
-    invalidate_after_commit(*events)
-    log.info(
-        "event_staff_deduped",
-        system="org",
-        subsystem="contributions",
-        user_id=user.pk,
-        event_ids=[event.pk for event in events],
-        synced=synced,
-    )
-    return len(events)
+def revoke_promo_entry(send: PromoSend) -> int:
+    deleted, _ = ContributionEntry.objects.nocache().filter(promo_send=send).delete()
+    return deleted
+
+
+def user_entries(user_pks: Collection[int]) -> QuerySet[ContributionEntry]:
+    return ContributionEntry.objects.nocache().filter(org_user__user__in=list(user_pks))

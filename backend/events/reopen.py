@@ -1,5 +1,6 @@
 import copy
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from django.db import transaction
 from django.utils import timezone
@@ -8,8 +9,7 @@ from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, OrgLog
 from events.constants import EVENT_REOPEN_TRANSITIONS, EventState
 from events.models import Event
-from org.contributions.kinds import EVENT_STAFF_KINDS
-from org.models import ContributionEntry
+from org.standing import api as standing
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -25,7 +25,7 @@ class ReopenNotPermitted(Exception):
 class ReopenResult:
     reopened: bool
     state: str
-    revoked: int
+    details: Mapping[str, standing.LogValue] = field(default_factory=dict)
 
 
 def _current_state(event: Event) -> str:
@@ -48,13 +48,14 @@ def reopen_event(event: Event, *, actor: CustomUser | None) -> ReopenResult:
         if REOPEN_TARGET in nexts
     ]
     with transaction.atomic():
+        now = timezone.now()
         current = _current_state(event)
         changed = current in reopen_from and Event.objects.nocache().filter(
             pk=event.pk, state=current
         ).update(
             state=REOPEN_TARGET,
-            contributions_awarded_at=None,
-            updated_at=timezone.now(),
+            **standing.reopen_reset_fields(),
+            updated_at=now,
         )
         if not changed:
             current = _current_state(event)
@@ -67,17 +68,12 @@ def reopen_event(event: Event, *, actor: CustomUser | None) -> ReopenResult:
                 current_state=current,
                 actor_id=actor.pk if actor is not None else None,
             )
-            return ReopenResult(reopened=False, state=current, revoked=0)
+            return ReopenResult(reopened=False, state=current)
 
-        revoked, _ = (
-            ContributionEntry.objects.nocache()
-            .filter(
-                organization_id=event.organization_id,
-                event_id=event.pk,
-                kind__in=EVENT_STAFF_KINDS,
-            )
-            .delete()
-        )
+        stale = copy.copy(event)
+        event.refresh_from_db(from_queryset=Event.objects.nocache().all())
+        result = standing.on_event_reopened(event, actor=actor, now=now)
+        details = result.orglog_details()
         OrgLog.objects.create(
             organization_id=event.organization_id,
             actor=actor,
@@ -86,11 +82,9 @@ def reopen_event(event: Event, *, actor: CustomUser | None) -> ReopenResult:
                 "event_id": event.pk,
                 "from": current,
                 "to": REOPEN_TARGET.value,
-                "revoked": revoked,
+                **details,
             },
         )
-        stale = copy.copy(event)
-        event.refresh_from_db(from_queryset=Event.objects.nocache().all())
         invalidate_after_commit(stale, event)
         event.refresh_signup_post_on_commit()
 
@@ -102,7 +96,7 @@ def reopen_event(event: Event, *, actor: CustomUser | None) -> ReopenResult:
         org_id=event.organization_id,
         from_state=current,
         new_state=REOPEN_TARGET.value,
-        revoked=revoked,
+        **result.log_fields(),
         actor_id=actor.pk if actor is not None else None,
     )
-    return ReopenResult(reopened=True, state=REOPEN_TARGET.value, revoked=revoked)
+    return ReopenResult(reopened=True, state=REOPEN_TARGET.value, details=details)

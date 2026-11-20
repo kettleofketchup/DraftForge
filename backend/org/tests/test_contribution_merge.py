@@ -14,12 +14,10 @@ from app.discord_accounts import merge_discord_accounts
 from app.models import CustomUser, Organization, ProfileClaimRequest
 from events.constants import EventState
 from events.models import Event
+from events.staff import dedupe_host_helpers
+from org.accounts import repoint_org_attribution
 from org.contributions.kinds import ContributionKind
-from org.contributions.services import (
-    dedupe_event_staff,
-    reassign_member,
-    repoint_user_attribution,
-)
+from org.contributions.services import reassign_member, repoint_ledger_attribution
 from org.feature_keys import FeatureKey
 from org.models import ContributionEntry, ContributionPointValue, OrgFeature, OrgUser
 
@@ -152,7 +150,9 @@ class RepointAttributionTest(_LedgerFixture):
             updated_by=drop,
         )
 
-        changed = repoint_user_attribution(drop, keep)
+        changed = repoint_ledger_attribution(drop, keep) + repoint_org_attribution(
+            drop, keep
+        )
 
         self.assertEqual(changed, 3)
         entry.refresh_from_db()
@@ -463,7 +463,8 @@ class DedupeEventStaffTest(_LedgerFixture):
         self._entry(ou, ContributionKind.EVENT_HOST, 10, self.event_a)
         self._entry(ou, ContributionKind.EVENT_HELPER, 5, self.event_a)
 
-        self.assertEqual(dedupe_event_staff(user), 1)
+        events = dedupe_host_helpers(user)
+        self.assertEqual(len(events), 1)
 
         self.assertFalse(
             Event.objects.nocache().get(pk=self.event_a.pk).helpers.exists()

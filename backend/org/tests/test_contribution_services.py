@@ -6,7 +6,6 @@ from django.utils import timezone
 from app.models import CustomUser, League, Organization, OrgLog
 from events.models import Event
 from org.contributions.kinds import DEFAULT_POINTS, ContributionKind
-from org.contributions.points import points_for
 from org.contributions.services import (
     POINT_VALUE_MAX,
     RescoreResult,
@@ -18,6 +17,7 @@ from org.contributions.services import (
     update_manual_award,
 )
 from org.models import ContributionEntry, ContributionPointValue, OrgUser
+from org.standing.ledger import points_for
 
 
 class ContributionServicesTest(TestCase):
