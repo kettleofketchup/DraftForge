@@ -115,8 +115,6 @@ class OrgSettingsAdmin(admin.ModelAdmin):
             actor=cast(CustomUser, request.user),
             changes={field: getattr(obj, field) for field in EDITABLE_FIELDS},
         )
-        if row.feature == FeatureKey.CONDUCT:
-            refresh_org_unmet_on_commit(row.organization_id)
         obj.pk = row.pk
         obj.refresh_from_db()
 
