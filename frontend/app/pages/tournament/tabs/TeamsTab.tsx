@@ -1,8 +1,11 @@
 import { memo, useMemo, useState } from 'react';
+import { TeamLeadershipAlert } from '~/components/team/manage/TeamLeadershipAlert';
+import { useCanEditCurrentTournament } from '~/components/team/manage/useTeamManagement';
 import { SearchTeamsDropdown } from '~/components/team/searchTeams';
 import { TeamCard } from '~/components/teamdraft/CompletedTeamDraftView';
 import { DraftModal } from '~/components/teamdraft/draftModal';
 import { CaptainSelectionModal } from '~/components/tournament/captains/captainSelectionModal';
+import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
 
 import type { UserType } from '~/components/user/types';
 import type { TeamType } from '~/index';
@@ -13,6 +16,8 @@ import { RandomizeTeamsModal } from './teams/randomTeamsModal';
 export const TeamsTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
   const [query, setQuery] = useState('');
+  const canEdit = useCanEditCurrentTournament();
+  const { openTeamModal } = useSharedPopoverActions();
 
   // Memoize filtered teams to prevent recalculation on every render
   const filteredTeams = useMemo(() => {
@@ -52,6 +57,11 @@ export const TeamsTab: React.FC = memo(() => {
   return (
     <div className="p-5 container">
       {hasErrors()}
+      <TeamLeadershipAlert
+        teams={tournament?.teams ?? []}
+        canEdit={canEdit}
+        onReview={openTeamModal}
+      />
       {teamButtonsView()}
       <div className="w-full">
         <SearchTeamsDropdown
@@ -69,6 +79,8 @@ export const TeamsTab: React.FC = memo(() => {
             key={`TeamCard-${team.pk}`}
             organizationId={tournament?.organization_pk ?? undefined}
             leaguePk={tournament?.league_pk ?? null}
+            canEdit={canEdit}
+            tournamentUsers={tournament?.users}
           />
         ))}
       </div>

@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
-import { render as rtlRender, screen } from '@testing-library/react';
+import { render as rtlRender, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { CompletedTeamDraftView } from '~/components/teamdraft/CompletedTeamDraftView';
+import {
+  CompletedTeamDraftView,
+  TeamCard,
+} from '~/components/teamdraft/CompletedTeamDraftView';
+import { TooltipProvider } from '~/components/ui/tooltip';
 import type { DraftRoundType, TeamType } from '~/index';
 import { user } from './fixtures';
 
@@ -44,5 +48,101 @@ describe('CompletedTeamDraftView', () => {
   it('renders without rounds (untimed drafts)', () => {
     render(<CompletedTeamDraftView teams={[team]} leaguePk={null} />);
     expect(screen.queryByTestId(/pick-duration-/)).toBeNull();
+  });
+});
+
+describe('TeamCard roster roles and leadership flags', () => {
+  const deputy = user(8);
+  const standin = user(60);
+  const dropout = user(61);
+  const ghost = user(99);
+  const roster = {
+    pk: 2,
+    name: 'T2',
+    captain,
+    deputy_captain: deputy,
+    members: [captain, deputy],
+    dropin_members: [standin],
+    left_members: [dropout],
+    leadership_problems: [],
+  } as unknown as TeamType;
+  const ghostTeam = {
+    ...roster,
+    captain: ghost,
+    leadership_problems: [
+      {
+        field: 'captain',
+        code: 'captain_not_member',
+        message: 'Captain is not a member',
+      },
+    ],
+  } as unknown as TeamType;
+
+  const renderCard = (t: TeamType, extra: Record<string, unknown> = {}) =>
+    rtlRender(
+      <TooltipProvider>
+        <TeamCard team={t} rank={1} leaguePk={null} {...extra} />
+      </TooltipProvider>,
+    );
+
+  it('marks the deputy, stand-ins and dropouts', () => {
+    renderCard(roster);
+    expect(
+      within(screen.getByTestId('team-card-member-8')).getByTestId(
+        'roster-status-deputy',
+      ),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByTestId('team-card-member-7')).queryByTestId(
+        'roster-status-deputy',
+      ),
+    ).toBeNull();
+    const standinRow = screen.getByTestId('team-card-standin-60');
+    expect(standinRow).toHaveTextContent('User 60');
+    expect(
+      within(standinRow).getByTestId('roster-status-standin'),
+    ).toBeTruthy();
+    const dropoutRow = screen.getByTestId('team-card-dropout-61');
+    expect(dropoutRow).toHaveTextContent('User 61');
+    expect(
+      within(dropoutRow).getByTestId('roster-status-dropout'),
+    ).toBeTruthy();
+  });
+
+  it('shows the leadership badge only when canEdit', () => {
+    const { unmount } = renderCard(ghostTeam);
+    expect(screen.queryByTestId('team-leadership-problem')).toBeNull();
+    unmount();
+    renderCard(ghostTeam, { canEdit: true });
+    expect(screen.getByTestId('team-leadership-problem')).toHaveAccessibleName(
+      /User 99 is not a member of this team\./,
+    );
+  });
+
+  it('shows no leadership badge for a healthy team even when canEdit', () => {
+    renderCard(roster, { canEdit: true });
+    expect(screen.queryByTestId('team-leadership-problem')).toBeNull();
+  });
+
+  it('resolves a {pk} stub through tournament users', () => {
+    const stubbed = {
+      ...roster,
+      dropin_members: [{ pk: 60 }],
+    } as unknown as TeamType;
+    renderCard(stubbed, { tournamentUsers: [standin] });
+    expect(screen.getByTestId('team-card-standin-60')).toHaveTextContent(
+      'User 60',
+    );
+  });
+
+  it('labels an unresolvable stub as Player #pk', () => {
+    const stubbed = {
+      ...roster,
+      left_members: [{ pk: 77 }],
+    } as unknown as TeamType;
+    renderCard(stubbed, { tournamentUsers: [standin] });
+    const row = screen.getByTestId('team-card-dropout-77');
+    expect(row).toHaveTextContent('Player #77');
+    expect(within(row).getByTestId('roster-status-dropout')).toBeTruthy();
   });
 });

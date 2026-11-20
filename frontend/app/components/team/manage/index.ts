@@ -30,4 +30,8 @@ export {
   type ResolveHistoryUser,
   type TeamHistoryTableProps,
 } from './TeamHistoryTable';
+export {
+  TeamLeadershipAlert,
+  type TeamLeadershipAlertProps,
+} from './TeamLeadershipAlert';
 export { TeamRosterPanel, type TeamRosterPanelProps } from './TeamRosterPanel';

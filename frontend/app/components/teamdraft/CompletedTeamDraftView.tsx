@@ -1,6 +1,15 @@
 // frontend/app/components/teamdraft/CompletedTeamDraftView.tsx
 import { Trophy, Users } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
+import { LeadershipProblemBadge } from '~/components/team/manage/LeadershipProblemBadge';
+import {
+  isUnresolvedLogUser,
+  resolveLogUser,
+} from '~/components/team/manage/resolveLogUser';
+import {
+  RosterStatusBadge,
+  type RosterStatus,
+} from '~/components/team/manage/RosterStatusBadge';
 import type { TeamType } from '~/components/tournament/types';
 import { Badge } from '~/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
@@ -28,32 +37,113 @@ interface TeamCardProps {
   organizationId?: number;
   leaguePk: number | null;
   rounds?: DraftRoundType[];
+  /** Shows leadership-problem flags; computed once by the caller. */
+  canEdit?: boolean;
+  /** Fallback for hydration's `{pk}` stubs. */
+  tournamentUsers?: readonly UserType[] | null;
+}
+
+type ResolvedRosterUser =
+  | { pk: number; user: UserType }
+  | { pk: number; user: null; label: string };
+
+function resolveRosterUser(
+  user: UserType,
+  tournamentUsers: readonly UserType[] | null | undefined,
+): ResolvedRosterUser | null {
+  if (user.pk == null) return null;
+  const resolved = resolveLogUser(user.pk, {
+    team: { members: [user] },
+    tournamentUsers,
+  });
+  return isUnresolvedLogUser(resolved)
+    ? { pk: user.pk, user: null, label: resolved.fallbackLabel }
+    : { pk: user.pk, user: resolved as UserType };
+}
+
+function RosterExtraRow({
+  entry,
+  status,
+  organizationId,
+  leaguePk,
+}: {
+  entry: ResolvedRosterUser;
+  status: Extract<RosterStatus, 'standin' | 'dropout'>;
+  organizationId?: number;
+  leaguePk: number | null;
+}) {
+  const testId = `team-card-${status}-${entry.pk}`;
+  const badge = <RosterStatusBadge status={status} />;
+  const muted = status === 'dropout' && 'opacity-60';
+  if (!entry.user) {
+    return (
+      <div
+        data-testid={testId}
+        className={cn(
+          'flex items-center gap-2 rounded px-2 py-1 text-sm text-muted-foreground',
+          muted,
+        )}
+      >
+        <span className="flex-1 truncate">{entry.label}</span>
+        {badge}
+      </div>
+    );
+  }
+  return (
+    <UserStrip
+      user={entry.user}
+      compact
+      showBorder={false}
+      organizationId={organizationId}
+      statsLeagueId={leaguePk}
+      className={cn('bg-base-700/30 hover:bg-base-700/50', muted)}
+      contextSlot={badge}
+      data-testid={testId}
+    />
+  );
 }
 
 // Team Members List component
 function TeamMembersList({
   members,
   captain,
+  deputy,
+  standins,
+  dropouts,
+  tournamentUsers,
   organizationId,
   leaguePk,
   rounds,
 }: {
   members: UserType[];
-  captain: UserType | undefined;
+  captain: UserType | null | undefined;
+  deputy?: UserType | null;
+  standins?: UserType[] | null;
+  dropouts?: UserType[] | null;
+  tournamentUsers?: readonly UserType[] | null;
   organizationId?: number;
   leaguePk: number | null;
   rounds?: DraftRoundType[];
 }) {
   // Sort by MMR (highest first)
   const sortedMembers = useMemo(() => {
-    return [...members].sort((a, b) => (b.mmr || 0) - (a.mmr || 0));
-  }, [members]);
+    return members
+      .map((m) => resolveRosterUser(m, tournamentUsers)?.user ?? m)
+      .sort((a, b) => (b.mmr || 0) - (a.mmr || 0));
+  }, [members, tournamentUsers]);
+  const resolveAll = (users: UserType[] | null | undefined) =>
+    (users ?? [])
+      .map((u) => resolveRosterUser(u, tournamentUsers))
+      .filter((e): e is ResolvedRosterUser => e != null);
+  const standinRows = resolveAll(standins);
+  const dropoutRows = resolveAll(dropouts);
 
   return (
     <div className="space-y-1">
       {sortedMembers.map((member) => {
         const round = rounds?.find((r) => r.choice?.pk === member.pk);
         const isCaptain = captain?.pk === member.pk;
+        const isDeputy = deputy?.pk != null && deputy.pk === member.pk;
         const hasDuration = typeof round?.pick_duration_ms === 'number';
         const hasSkips = (round?.skip_count ?? 0) > 0;
         return (
@@ -65,8 +155,9 @@ function TeamMembersList({
             organizationId={organizationId}
             statsLeagueId={leaguePk}
             className="bg-base-700/30 hover:bg-base-700/50"
+            data-testid={`team-card-member-${member.pk}`}
             contextSlot={
-              isCaptain || hasDuration || hasSkips ? (
+              isCaptain || isDeputy || hasDuration || hasSkips ? (
                 <div className="flex items-center gap-1">
                   {isCaptain && (
                     <Badge
@@ -76,6 +167,7 @@ function TeamMembersList({
                       Captain
                     </Badge>
                   )}
+                  {isDeputy && <RosterStatusBadge status="deputy" />}
                   {hasDuration && (
                     <Badge
                       variant="outline"
@@ -102,6 +194,24 @@ function TeamMembersList({
           />
         );
       })}
+      {standinRows.map((entry) => (
+        <RosterExtraRow
+          key={`standin-${entry.pk}`}
+          entry={entry}
+          status="standin"
+          organizationId={organizationId}
+          leaguePk={leaguePk}
+        />
+      ))}
+      {dropoutRows.map((entry) => (
+        <RosterExtraRow
+          key={`dropout-${entry.pk}`}
+          entry={entry}
+          status="dropout"
+          organizationId={organizationId}
+          leaguePk={leaguePk}
+        />
+      ))}
     </div>
   );
 }
@@ -112,6 +222,8 @@ function TeamCard({
   organizationId,
   leaguePk,
   rounds,
+  canEdit = false,
+  tournamentUsers,
 }: TeamCardProps) {
   const { openTeamModal } = useSharedPopoverActions();
   const captain = team.captain;
@@ -165,12 +277,20 @@ function TeamCard({
 
           {/* Team Name & Captain */}
           <div className="flex-1 min-w-0">
-            <CardTitle
-              className="text-lg text-white truncate"
-              data-testid="team-card-name"
-            >
-              {team.name}
-            </CardTitle>
+            <div className="flex items-center gap-2 min-w-0">
+              <CardTitle
+                className="text-lg text-white truncate"
+                data-testid="team-card-name"
+              >
+                {team.name}
+              </CardTitle>
+              {canEdit && !!team.leadership_problems?.length && (
+                <LeadershipProblemBadge
+                  problems={team.leadership_problems}
+                  team={team}
+                />
+              )}
+            </div>
             <p className="text-sm text-slate-400 truncate">
               Captain: {displayName}
             </p>
@@ -235,6 +355,10 @@ function TeamCard({
                 <TeamMembersList
                   members={team.members || []}
                   captain={captain}
+                  deputy={team.deputy_captain}
+                  standins={team.dropin_members}
+                  dropouts={team.left_members}
+                  tournamentUsers={tournamentUsers}
                   organizationId={organizationId}
                   leaguePk={leaguePk}
                   rounds={rounds}
@@ -245,6 +369,10 @@ function TeamCard({
             <TeamMembersList
               members={team.members || []}
               captain={captain}
+              deputy={team.deputy_captain}
+              standins={team.dropin_members}
+              dropouts={team.left_members}
+              tournamentUsers={tournamentUsers}
               organizationId={organizationId}
               leaguePk={leaguePk}
               rounds={rounds}
