@@ -173,6 +173,7 @@ function useSettingsLayout<V extends string>({
   );
   const statusId = React.useId();
   const hitIdPrefix = React.useId();
+  const groupIdPrefix = React.useId();
 
   const onValueChangeRef = React.useRef(onValueChange);
   onValueChangeRef.current = onValueChange;
@@ -591,41 +592,53 @@ function useSettingsLayout<V extends string>({
           )}
           <TabsPrimitive.List asChild>
             <div>
-              {groups.map((g) => (
-                <SidebarGroup key={g.name ?? ''}>
-                  {g.name && <SidebarGroupLabel>{g.name}</SidebarGroupLabel>}
-                  <SidebarGroupContent>
-                    <SidebarMenu role="none">
-                      {g.items.map((s) => {
-                        const Icon = s.icon;
-                        return (
-                          <SidebarMenuItem key={s.value} role="none">
-                            <TabsPrimitive.Trigger value={s.value} asChild>
-                              <SidebarMenuButton
-                                isActive={active === s.value}
-                                data-testid={`${testIdPrefix}-tab-${s.value}`}
-                                data-invalid={s.invalid || undefined}
-                                className={cn(
-                                  'cursor-pointer',
-                                  searching &&
-                                    !matchedSections.has(s.value) &&
-                                    'opacity-60',
-                                )}
-                              >
-                                {Icon && <Icon />}
-                                <span className="min-w-0 flex-1 truncate">
-                                  {s.label}
-                                </span>
-                                {s.invalid && <InvalidDot />}
-                              </SidebarMenuButton>
-                            </TabsPrimitive.Trigger>
-                          </SidebarMenuItem>
-                        );
-                      })}
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              ))}
+              {groups.map((g) => {
+                const labelId = `${groupIdPrefix}-${g.name ?? ''}`;
+                return (
+                  <SidebarGroup
+                    key={g.name ?? ''}
+                    role="group"
+                    aria-labelledby={g.name ? labelId : undefined}
+                    aria-label={g.name ? undefined : 'Settings'}
+                  >
+                    {g.name && (
+                      <SidebarGroupLabel id={labelId}>
+                        {g.name}
+                      </SidebarGroupLabel>
+                    )}
+                    <SidebarGroupContent>
+                      <SidebarMenu role="none">
+                        {g.items.map((s) => {
+                          const Icon = s.icon;
+                          return (
+                            <SidebarMenuItem key={s.value} role="none">
+                              <TabsPrimitive.Trigger value={s.value} asChild>
+                                <SidebarMenuButton
+                                  isActive={active === s.value}
+                                  data-testid={`${testIdPrefix}-tab-${s.value}`}
+                                  data-invalid={s.invalid || undefined}
+                                  className={cn(
+                                    'cursor-pointer',
+                                    searching &&
+                                      !matchedSections.has(s.value) &&
+                                      'opacity-60',
+                                  )}
+                                >
+                                  {Icon && <Icon />}
+                                  <span className="min-w-0 flex-1 truncate">
+                                    {s.label}
+                                  </span>
+                                  {s.invalid && <InvalidDot />}
+                                </SidebarMenuButton>
+                              </TabsPrimitive.Trigger>
+                            </SidebarMenuItem>
+                          );
+                        })}
+                      </SidebarMenu>
+                    </SidebarGroupContent>
+                  </SidebarGroup>
+                );
+              })}
             </div>
           </TabsPrimitive.List>
           {hitList && (
