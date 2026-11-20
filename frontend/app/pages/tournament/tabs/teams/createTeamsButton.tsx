@@ -9,10 +9,10 @@ import {
 
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
+import { SubmitButton } from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import type { UserType } from '~/components/user/types';
 import { hydrateTournament } from '~/lib/hydrateTournament';
-import { ConfirmDialog } from '~/components/ui/dialogs';
-import { SubmitButton } from '~/components/ui/buttons';
 import { useUserStore } from '~/store/userStore';
 interface CreateTeamsButtonProps {
   tournament: TournamentType;
@@ -66,9 +66,10 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
       if (submitTeam.pk) {
         await toast.promise(updateTeam(submitTeam.pk, submitTeam), {
           loading: `Updating Team ${team.name}.`,
-          success: (data: TeamType) => {
-            return `${submitTeam.name} has been updated`;
-          },
+          success: (data) =>
+            data
+              ? `${submitTeam.name} has been updated`
+              : `${submitTeam.name} had no members left and was deleted`,
           error: (err) => `Failed to update team: ${err.message}`,
         });
       } else {
@@ -83,7 +84,9 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
     }
     if (tournament.pk) {
       const rawData = await fetchTournament(tournament.pk);
-      tournament = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
+      tournament = hydrateTournament(
+        rawData as TournamentType & { _users?: Record<number, unknown> },
+      ) as TournamentType;
       setTournament(tournament);
     }
     setDialogOpen(false);

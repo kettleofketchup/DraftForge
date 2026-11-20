@@ -162,6 +162,35 @@ tournament's signups are open as defined above.
 | GET | `/api/teams/` | List teams |
 | POST | `/api/teams/` | Create team |
 | GET | `/api/teams/{id}/` | Get team |
+| PATCH / PUT | `/api/teams/{id}/` | Update team (tournament staff) |
+
+### Updating a team
+
+- A captain or deputy who is not a member, or a deputy who is also the captain, is
+  refused with 400.
+- New members are added before old ones are removed, so replacing the whole roster in
+  one request keeps the team.
+- Emptying `member_ids` on a team that bracket games or hero drafts use is refused with
+  400:
+
+    ```json
+    {"member_ids": ["This team is used by bracket games or hero drafts; remove it from those first."]}
+    ```
+
+- Emptying `member_ids` on a team nothing uses deletes the team, and the response is
+  `204 No Content` with an empty body instead of the team.
+- A change of `captain_id` moves every draft round of the old captain in that tournament
+  (picked and unpicked) to the new captain, resets the team's draft presence, and
+  refreshes a live team draft or hero draft. The `player_picked` events keep the
+  original picker. Setting the captain to `null` moves no rounds, and neither does a
+  change where the old or new captain also captains another team in the tournament.
+- Every update that changes the name, captain, deputy or roster writes one `legacy_patch`
+  row to the team audit log (`TeamLog`), with the roster before and after and the fields
+  that changed. Moving the team to another tournament also writes one, with
+  `tournament_id` in `fields_changed` and `before_tournament_id` in the details. The
+  row's name and tournament columns hold the values after the update. Updates to only
+  `draft_order`, `current_points` or `placement` write no row. Every row sends
+  `team_roster_changed`, renames included.
 
 ## Games
 
@@ -948,8 +977,9 @@ Real-time bidding via Daphne WebSocket (same pattern as HeroDraft).
 | GET | `/api/drafts/{id}/` | Get draft details |
 | PUT | `/api/drafts/{id}/` | Update draft (e.g., change style) |
 | POST | `/api/tournaments/init-draft` | Start or restart the draft for a tournament |
-| POST | `/api/tournaments/draft-rebuild` | Rebuild team rosters from the draft rounds |
+| POST | `/api/tournaments/draft-rebuild` | Rebuild team rosters from the draft rounds; `409 team_changes_logged` when staff changed a team (audit log) and rounds exist |
 | POST | `/api/tournaments/pick_player` | Pick player for draft round |
+| POST | `/api/tournaments/undo-pick` | Undo the last pick (`draft_pk`); `409 pick_is_captain` when the picked player is now the team's captain |
 
 ### Start or Restart Draft
 

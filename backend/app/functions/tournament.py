@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.display_names import user_display_name
 from app.draft_state import tournament_state_queryset
-from app.models import CustomUser, Draft, Team, Tournament
+from app.models import CustomUser, Draft, Team, TeamLog, TeamLogVia, Tournament
 from app.permissions_org import can_edit_tournament
 from app.serializers import (
     DraftSerializerMMRs,
@@ -277,6 +277,29 @@ def rebuild_team(request: Request) -> Response:
 
         # rebuild_teams runs before build_rounds so team MMR counts captains only.
         will_build_rounds = not draft.draft_rounds.exists()
+        if (
+            not will_build_rounds
+            and TeamLog.objects.nocache()
+            .filter(team__tournament=tournament)
+            .exclude(via=TeamLogVia.SYSTEM)
+            .exists()
+        ):
+            log.info(
+                "draft_rebuild_refused",
+                system="tournament",
+                subsystem="draft",
+                tournament_id=tournament.pk,
+                draft_id=draft.pk,
+                reason="team_changes_logged",
+            )
+            return Response(
+                {
+                    "code": "team_changes_logged",
+                    "error": "Staff have changed these teams; rebuilding them "
+                    "from the draft picks would undo those changes.",
+                },
+                status=409,
+            )
         draft.rebuild_teams(clear_only=will_build_rounds)
 
         if will_build_rounds:
