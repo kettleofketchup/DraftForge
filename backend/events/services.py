@@ -33,10 +33,13 @@ from events.discord import (
     notify_signup_changed,
 )
 from events.eligibility import (
+    EligibilityResult,
+    clear_eligibility,
+    eligibility_values,
+    evaluate_signup,
     refresh_unmet_requirements,
+    stamp_eligibility,
     sync_steam_account_from_profiles,
-    unmet_codes,
-    unmet_requirements,
     validate_friend_id,
 )
 from events.models import (
@@ -139,7 +142,7 @@ def _validate_screenshot_url(url: str | None) -> None:
 
 def check_requirements(event: Event, user: CustomUser) -> bool:
     """Check if user meets event confirmation requirements."""
-    return not unmet_requirements(event, user)
+    return not evaluate_signup(event, user).approval
 
 
 def resolve_or_create_org_user(
@@ -167,13 +170,13 @@ def _first_fields_carry(existing: EventSignup | None) -> dict[str, Any]:
     }
 
 
-def _decide_signup_status(event: Event, unmet: list[str]) -> SignupStatus:
+def _decide_signup_status(event: Event, result: EligibilityResult) -> SignupStatus:
     """Status for a signup taking a seat. Auto-approve events approve (or
     confirm) eligible players and hold the rest for staff; manual-approval
     events leave everyone at RSVP."""
     if not event.auto_approve:
         return SignupStatus.RSVP
-    if unmet:
+    if result.approval:
         return SignupStatus.PENDING_APPROVAL
     if event.auto_confirm:
         return SignupStatus.CONFIRMED
@@ -260,7 +263,8 @@ def _create_signup(
 
     signup_type = SignupType.TEAM if event_team else SignupType.USER
     _sync_signup_steam_account(event, user)
-    unmet = unmet_codes(event, user)
+    result = evaluate_signup(event, user)
+    eligibility = eligibility_values(result)
 
     if not has_free_seat(lock_event(event)):
         max_pos = (
@@ -276,7 +280,7 @@ def _create_signup(
             signup_type=signup_type,
             status=SignupStatus.WAITLISTED,
             waitlist_position=max_pos + 1,
-            unmet_requirements=unmet,
+            **eligibility,
             **carry,
         )
         invalidate_after_commit(event)
@@ -290,14 +294,14 @@ def _create_signup(
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
 
-    status = _decide_signup_status(event, unmet)
+    status = _decide_signup_status(event, result)
     signup = EventSignup.objects.create(
         event=event,
         user=user,
         event_team=event_team,
         signup_type=signup_type,
         status=status,
-        unmet_requirements=unmet,
+        **eligibility,
         **carry,
     )
     _roster_add_if_joins(signup)
@@ -600,15 +604,8 @@ def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> Even
 
     signup.status = SignupStatus.APPROVED
     signup.waitlist_position = None
-    signup.unmet_requirements = []
-    signup.save(
-        update_fields=[
-            "status",
-            "waitlist_position",
-            "unmet_requirements",
-            "updated_at",
-        ]
-    )
+    cleared = clear_eligibility(signup)
+    signup.save(update_fields=["status", "waitlist_position", *cleared, "updated_at"])
     _roster_add_if_joins(signup)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
@@ -699,17 +696,12 @@ def _promote_from_waitlist(event: Event) -> list[EventSignup]:
             break
         next_waitlisted.waitlist_position = None
         _sync_signup_steam_account(locked, next_waitlisted.user)
-        unmet = unmet_codes(locked, next_waitlisted.user)
-        next_waitlisted.unmet_requirements = unmet
-        next_waitlisted.status = _decide_signup_status(locked, unmet)
+        result = evaluate_signup(locked, next_waitlisted.user)
+        stamped = stamp_eligibility(next_waitlisted, result)
+        next_waitlisted.status = _decide_signup_status(locked, result)
         _roster_add_if_joins(next_waitlisted)
         next_waitlisted.save(
-            update_fields=[
-                "status",
-                "waitlist_position",
-                "unmet_requirements",
-                "updated_at",
-            ]
+            update_fields=["status", "waitlist_position", *stamped, "updated_at"]
         )
         invalidate_after_commit(next_waitlisted)
         promoted.append(next_waitlisted)
@@ -771,13 +763,13 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
         signup.status = SignupStatus.APPROVED
         signup.waitlist_position = None
         signup.commitment = Commitment.MAIN
-        signup.unmet_requirements = []
+        cleared = clear_eligibility(signup)
         signup.save(
             update_fields=[
                 "status",
                 "waitlist_position",
                 "commitment",
-                "unmet_requirements",
+                *cleared,
                 "updated_at",
             ]
         )
@@ -791,7 +783,7 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
         raise ValueError(NOT_ACCEPTING_MESSAGE)
     locked = lock_event(event)
     _sync_signup_steam_account(locked, signup.user)
-    unmet = unmet_codes(locked, signup.user)
+    result = evaluate_signup(locked, signup.user)
     if not has_free_seat(locked):
         max_pos = (
             EventSignup.objects.filter(
@@ -802,17 +794,17 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
         signup.status = SignupStatus.WAITLISTED
         signup.waitlist_position = max_pos + 1
     else:
-        signup.status = _decide_signup_status(locked, unmet)
+        signup.status = _decide_signup_status(locked, result)
         signup.waitlist_position = None
         _roster_add_if_joins(signup)
     signup.commitment = Commitment.MAIN
-    signup.unmet_requirements = unmet
+    stamped = stamp_eligibility(signup, result)
     signup.save(
         update_fields=[
             "status",
             "waitlist_position",
             "commitment",
-            "unmet_requirements",
+            *stamped,
             "updated_at",
         ]
     )
