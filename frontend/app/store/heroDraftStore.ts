@@ -80,6 +80,8 @@ interface HeroDraftState {
   searchQuery: string;
   lastEvent: HeroDraftEvent | null;
   chat: ChatState;
+  /** Pixels of the hero grid's bottom covered by the open desktop chat panel. */
+  chatPanelInset: number;
 
   // Internal tracking
   _connectionId: string | null;
@@ -106,6 +108,7 @@ interface HeroDraftState {
   sendChat: (raw: string) => string | null;
   suggestHero: (kind: HeroSuggestionKind, heroId: number) => string | null;
   setChatPanelOpen: (open: boolean) => void;
+  setChatPanelInset: (px: number) => void;
   clearChatError: () => void;
   reset: () => void;
 
@@ -128,6 +131,7 @@ const initialState = {
   searchQuery: '',
   lastEvent: null,
   chat: initialChatState,
+  chatPanelInset: 0,
   _connectionId: null,
   _unsubscribe: null,
   _currentDraftId: null,
@@ -539,11 +543,15 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
     });
   },
 
+  setChatPanelInset: (px) => {
+    if (get().chatPanelInset !== px) set({ chatPanelInset: px });
+  },
+
   clearChatError: () => set({ chat: { ...get().chat, lastError: null } }),
 
   reset: () => {
     get().disconnect();
-    set({ chat: initialChatState, _chatDraftId: null });
+    set({ chat: initialChatState, chatPanelInset: 0, _chatDraftId: null });
   },
 
   // Computed helpers

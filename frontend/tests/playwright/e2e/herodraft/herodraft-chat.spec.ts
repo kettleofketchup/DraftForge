@@ -45,6 +45,7 @@ interface ChatFrame {
 }
 
 const AVAILABLE_HERO = 1;
+const DESKTOP = { width: 1440, height: 900 };
 const BANNED_HERO = 2;
 
 async function fetchDraft(context: BrowserContext): Promise<DraftInfo> {
@@ -555,6 +556,108 @@ test.describe('@cicd HeroDraft chat', () => {
       return hit !== null && el.contains(hit);
     });
     expect(hitsResume).toBe(true);
+  });
+
+  test('closed chat previews team messages without blocking heroes', async ({
+    browser,
+  }) => {
+    test.setTimeout(120000);
+    await setUp(browser, DESKTOP);
+    const sentinel = sentinelFor('preview');
+    const page = memberA.page;
+    const lines = page.getByTestId('herodraft-chat-preview-line');
+
+    await rightClickHero(page, AVAILABLE_HERO);
+    await page.getByTestId('herodraft-hero-suggest-pick').click();
+    await expect(lines).toHaveCount(1);
+    await sendChat(captainA.page, sentinel);
+    await expect(lines).toHaveCount(2);
+    await expect(lines.nth(1)).toContainText(sentinel);
+    await expect(page.getByTestId('herodraft-chat-panel')).toHaveCount(0);
+
+    const point = await page.evaluate(() => {
+      const strip = document.querySelector(
+        '[data-testid="herodraft-chat-preview"]',
+      );
+      if (!strip) return null;
+      for (const line of strip.children) {
+        const l = line.getBoundingClientRect();
+        for (const hero of document.querySelectorAll<HTMLElement>(
+          '[data-testid^="herodraft-hero-"][data-hero-id]',
+        )) {
+          const h = hero.getBoundingClientRect();
+          const left = Math.max(l.left, h.left);
+          const right = Math.min(l.right, h.right);
+          const top = Math.max(l.top, h.top);
+          const bottom = Math.min(l.bottom, h.bottom);
+          if (right - left > 4 && bottom - top > 4) {
+            const x = (left + right) / 2;
+            const y = (top + bottom) / 2;
+            const hit = document.elementFromPoint(x, y);
+            return {
+              x,
+              y,
+              heroId: hero.dataset.heroId,
+              hitsHero: hit !== null && hero.contains(hit),
+            };
+          }
+        }
+      }
+      return null;
+    });
+    expect(point, 'a hero sits under the preview strip').not.toBeNull();
+    expect(point!.hitsHero).toBe(true);
+    await page.mouse.click(point!.x, point!.y, { button: 'right' });
+    await expect(page.getByTestId('herodraft-hero-suggest-menu')).toBeVisible();
+  });
+
+  test('open chat panel lets the grid scroll the Universal row above it', async ({
+    browser,
+  }) => {
+    test.setTimeout(120000);
+    await setUp(browser, DESKTOP);
+    const page = memberA.page;
+
+    // Stays under the 8-per-10s team limit even if an earlier test used it.
+    await openChatPanel(captainA.page);
+    for (let n = 0; n < 6; n++) {
+      await sendChat(captainA.page, sentinelFor(`fill${n}`));
+    }
+    await openChatPanel(page);
+    await expect(chatRows(page)).toHaveCount(6);
+
+    const panel = page.getByTestId('herodraft-chat-panel');
+    const list = page.getByTestId('herodraft-hero-list');
+    const universal = page
+      .getByTestId('herodraft-attr-grid-all')
+      .locator('[data-hero-id]')
+      .last();
+    const panelTop = (await panel.boundingBox())!.y;
+    await expect
+      .poll(async () => {
+        const box = (await universal.boundingBox())!;
+        return box.y + box.height;
+      })
+      .toBeGreaterThan(panelTop);
+    await expect
+      .poll(() => list.evaluate((el) => el.scrollHeight - el.clientHeight))
+      .toBeGreaterThan(0);
+
+    await list.hover({ position: { x: 600, y: 50 } });
+    await page.mouse.wheel(0, 2000);
+    await expect
+      .poll(async () => {
+        const box = (await universal.boundingBox())!;
+        return box.y + box.height;
+      })
+      .toBeLessThanOrEqual(panelTop);
+
+    const box = (await universal.boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, {
+      button: 'right',
+    });
+    await expect(page.getByTestId('herodraft-hero-suggest-menu')).toBeVisible();
+    await expect(panel).toBeVisible();
   });
 
   test('logging out stops team delivery and clears the log', async ({

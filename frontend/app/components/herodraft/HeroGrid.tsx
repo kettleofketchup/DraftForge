@@ -132,6 +132,7 @@ export function HeroGrid({
   // Select draft rounds directly for memoization
   const draftRounds = useHeroDraftStore((state) => state.draft?.rounds);
   const suggestHero = useHeroDraftStore((state) => state.suggestHero);
+  const chatInset = useHeroDraftStore((state) => state.chatPanelInset);
 
   // Auto-focus search when typing anywhere (unless in a dialog/input)
   useEffect(() => {
@@ -222,7 +223,16 @@ export function HeroGrid({
 
   const heroListEl = (
     <div
-      className="flex-1 flex flex-col p-1 min-h-0 gap-1"
+      className={cn(
+        'flex-1 flex flex-col p-1 min-h-0 gap-1',
+        chatInset > 0 && 'overflow-y-auto',
+      )}
+      // Lets rows under the open chat panel scroll up above it.
+      style={
+        chatInset > 0
+          ? { paddingBottom: chatInset, scrollPaddingBottom: chatInset }
+          : undefined
+      }
       data-testid="herodraft-hero-list"
     >
       {ATTRIBUTE_ORDER.map((attr) => {
@@ -231,7 +241,8 @@ export function HeroGrid({
           <ScrollArea
             key={attr}
             className={cn(
-              'rounded p-1.5 flex-1 min-h-0',
+              'rounded p-1.5 flex-1',
+              chatInset > 0 ? 'min-h-fit' : 'min-h-0',
               ATTRIBUTE_COLORS[attr],
             )}
             data-testid={`herodraft-attr-section-${attr}`}

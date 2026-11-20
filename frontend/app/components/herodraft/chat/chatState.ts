@@ -18,6 +18,8 @@ export interface ChatState {
   unavailable: boolean;
   /** Newest message seen before a disconnect; `{ after: null }` means none. */
   resyncAfter: { after: ChatMessage | null } | null;
+  /** Latest message pushed live (never from history); a new object each time. */
+  live: { message: ChatMessage } | null;
 }
 
 export const initialChatState: ChatState = {
@@ -29,6 +31,7 @@ export const initialChatState: ChatState = {
   panelOpen: false,
   unavailable: false,
   resyncAfter: null,
+  live: null,
 };
 
 function compareMessages(a: ChatMessage, b: ChatMessage): number {
@@ -100,6 +103,7 @@ export function applyChatMessage(
   return {
     ...s,
     messages: capped,
+    live: { message: m },
     unread: s.panelOpen || !fromOther(m, selfId) ? s.unread : s.unread + 1,
   };
 }

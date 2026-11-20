@@ -327,6 +327,19 @@ During the ban/pick phase (`drafting`), a team member can right-click a hero in 
 
 Spectators get the browser's normal right-click menu. Suggestions are not available while the draft is paused, because the pause overlay covers the grid.
 
+### Panel and preview (md and up)
+
+The chat panel opens from the toggle button or by focusing the composer; it never opens by itself. While it is open, the hero grid gets bottom padding equal to the panel's height, so every hero row can be scrolled up above the panel.
+
+While the panel is closed, new live messages show in a preview strip above the composer:
+
+- At most two lines, one per message, cut off with an ellipsis. A new line pushes out the oldest, and each line fades out after about 4.5 seconds (it disappears without fading when reduced motion is on).
+- Consecutive messages from the same sender merge into one line showing the latest text and a `×N` count.
+- The strip ignores the mouse, so heroes under it can still be clicked and right-clicked.
+- A team member only sees previews from their own team: team chat, suggestions, and all-chat messages whose sender is on their team (read from the draft's rosters). All-chat messages from the other team still count towards unread but are not previewed. Spectators see a preview of all chat.
+- Your own suggestions show in the preview as confirmation; your own text messages do not.
+- History and resyncs never preview, and there is no preview while the panel is open or below md (the bottom sheet is used there).
+
 ### Who sees what
 
 | Viewer | Own team chat | Other team's chat | All chat | Can post |
@@ -665,6 +678,8 @@ All components have `data-testid` attributes for Playwright testing:
 | `herodraft-chat-error` | Inline chat error under the composer |
 | `herodraft-chat-error-dismiss` | Dismiss button on the inline chat error |
 | `herodraft-chat-panel` | Chat panel above the toolbar (md and up) |
+| `herodraft-chat-preview` / `herodraft-chat-preview-line` | Closed-panel preview strip and its lines (md and up) |
+| `herodraft-chat-preview-count` | `×N` count on a merged preview line |
 | `herodraft-chat-sheet` | Chat bottom sheet (below md) |
 | `herodraft-chat-log` | Message list |
 | `herodraft-chat-message-{id}` | A chat message; has `data-channel`, `data-kind`, `data-hero-id` |

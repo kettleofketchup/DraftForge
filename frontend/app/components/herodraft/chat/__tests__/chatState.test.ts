@@ -64,6 +64,7 @@ describe('initialChatState', () => {
       panelOpen: false,
       unavailable: false,
       resyncAfter: null,
+      live: null,
     });
     expect(CHAT_MESSAGE_CAP).toBe(200);
   });
@@ -92,6 +93,17 @@ describe('applyChatMessage', () => {
       msg(2),
     );
     expect(ids(s)).toEqual([uuid(1), uuid(2)]);
+  });
+
+  it('marks a newly inserted message as live; history never does', () => {
+    const h = applyChatHistory(initialChatState, member, [msg(1)]);
+    expect(h.live).toBeNull();
+    const s = applyChatMessage(h, msg(2));
+    expect(s.live?.message).toEqual(msg(2));
+    const again = applyChatMessage(s, msg(3));
+    expect(again.live).not.toBe(s.live);
+    expect(applyChatHistory(again, member, [msg(4)]).live).toBe(again.live);
+    expect(resetChatOnDisconnect(again).live).toBeNull();
   });
 
   it('ignores a duplicate id without counting it as unread', () => {
