@@ -60,6 +60,7 @@ from org.models import OrgSettings, OrgUser
 from org.models_profiles import PlayerDotaProfile
 from org.settings_constants import StaffOverridePolicy
 from org.settings_service import get_org_settings
+from tests.populate.utils import ensure_org_user
 from user.tests.test_cacheops_integration import _redis_reachable
 
 
@@ -111,7 +112,7 @@ class TeamManagementFixture:
 
     def make_user(self, username: str) -> CustomUser:
         user = CustomUser.objects.create_user(username=username, password="test")
-        OrgUser.objects.create(user=user, organization=self.org, mmr=3000)
+        ensure_org_user(user, self.org, mmr=3000)
         return user
 
     def gate_event(self) -> CustomUser:
@@ -1091,9 +1092,9 @@ class DropoutTests(TeamManagementFixture, TestCase):
     def test_dropout_captain_mmr_successor_added_to_tournament(self) -> None:
         Team.objects.filter(pk=self.team.pk).update(deputy_captain=None)
         high = CustomUser.objects.create_user(username="roster_high", password="t")
-        OrgUser.objects.create(user=high, organization=self.org, mmr=9000)
+        ensure_org_user(high, self.org, mmr=9000)
         self.team.members.add(high)
-        OrgUser.objects.filter(user=self.c).update(mmr=12000)
+        ensure_org_user(self.c, self.org, mmr=12000)
         self.assertFalse(self.tournament.users.filter(pk=high.pk).exists())
 
         change = self.dropout(self.c)

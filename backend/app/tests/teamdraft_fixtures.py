@@ -11,9 +11,9 @@ from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from app.functions import teamdraft
+from app.functions.draft_picks import pick_player_for_round, undo_last_pick
 from app.functions.teamdraft_timeout import skip_turn
 from app.functions.teamdraft_views import teamdraft_pause
-from app.functions.draft_picks import pick_player_for_round, undo_last_pick
 from app.models import (
     CustomUser,
     Draft,
@@ -25,7 +25,7 @@ from app.models import (
     Team,
     Tournament,
 )
-from org.models import OrgUser
+from tests.populate.utils import ensure_org_user
 
 User = get_user_model()
 
@@ -78,7 +78,7 @@ class TimedDraftFixture:
             self.tournament.league = league
             self.tournament.save()
             for captain, mmr in zip(self.captains, captain_mmrs):
-                OrgUser.objects.create(user=captain, organization=org, mmr=mmr)
+                ensure_org_user(captain, org, mmr=mmr)
 
         self.options: DraftOptions = DraftOptions.ensure_for(
             self.tournament,

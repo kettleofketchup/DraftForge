@@ -1418,20 +1418,22 @@ class Draft(models.Model):
             if not teams:
                 return {}
 
-            from org.models import OrgUser
+            from org.mmr import (  # circular: org.mmr -> org.models
+                game_for_tournament,
+                org_mmr_map,
+            )
 
-            # Get organization for MMR lookups
             org = None
             if self.tournament.league:
                 org = self.tournament.league.organization
 
-            # Build user_pk -> OrgUser.mmr mapping
-            mmr_map = {}
+            mmr_map: dict[int, int] = {}
             if org:
-                for ou in OrgUser.objects.filter(
-                    user__in=self.tournament.users.all(), organization=org
-                ):
-                    mmr_map[ou.user_id] = ou.mmr or 0
+                mmr_map = org_mmr_map(
+                    org.pk,
+                    self.tournament.users.values_list("id", flat=True),
+                    game_for_tournament(self.tournament),
+                )
 
             # Get all available players (excluding captains) sorted by MMR desc
             all_player_ids = list(

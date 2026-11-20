@@ -130,7 +130,7 @@ class TournamentCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198012345678,
         )
-        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        ensure_org_user(user, self.org, mmr=1000)
         self.tournament.users.add(user)
 
         resp = self.client.post(
@@ -156,7 +156,7 @@ class TournamentCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198012345678,
         )
-        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        ensure_org_user(user, self.org, mmr=1000)
         self.tournament.users.add(user)
 
         resp = self.client.post(
@@ -182,7 +182,7 @@ class TournamentCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198012345678,
         )
-        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        ensure_org_user(user, self.org, mmr=1000)
         self.tournament.users.add(user)
 
         resp = self.client.post(

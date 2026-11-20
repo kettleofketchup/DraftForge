@@ -6,56 +6,34 @@ from django.db.models import QuerySet
 
 from app.broadcast import broadcast_event_after_commit
 from app.models import CustomUser, Draft, DraftEvent, DraftRound, Organization, Team
-from org.models import OrgUser
+from org.mmr import game_for_tournament, org_mmr_for, org_mmr_map
 
 # Maximum team size (captain + 4 drafted players)
 MAX_TEAM_SIZE = 5
 
 
-def get_user_org_mmr(user: CustomUser, organization: Organization) -> int:
-    """
-    Get a user's MMR from their OrgUser membership.
-
-    Args:
-        user: CustomUser model instance
-        organization: Organization model instance
-
-    Returns:
-        MMR as integer, or 0 if no OrgUser exists
-    """
-    try:
-        org_user = OrgUser.objects.get(user=user, organization=organization)
-        return org_user.mmr or 0
-    except OrgUser.DoesNotExist:
+def get_user_org_mmr(
+    user: CustomUser, organization: Organization | None, game_type: int
+) -> int:
+    """The user's org MMR for ``game_type`` in ``organization``; 0 without one."""
+    if organization is None:
         return 0
+    return org_mmr_for(organization.pk, user.pk, game_type)
 
 
 def get_team_total_mmr(team: Team, organization: Organization | None = None) -> int:
-    """
-    Calculate total MMR for a team (captain + members).
-
-    Args:
-        team: Team model instance
-        organization: Organization model instance (if None, gets from team's tournament)
-
-    Returns:
-        Total MMR as integer
-    """
-    # Get organization from team's tournament's league if not provided
-    if organization is None:
-        tournament = team.tournament
-        if tournament and tournament.league:
-            organization = tournament.league.organization
-
-    # If no organization, can't determine MMR
+    """Total org MMR (captain + members) for the game of the team's tournament."""
+    tournament = team.tournament
+    if organization is None and tournament and tournament.league:
+        organization = tournament.league.organization
     if organization is None:
         return 0
 
-    # Use OrgUser MMR
-    total = get_user_org_mmr(team.captain, organization) if team.captain else 0
-    for member in team.members.exclude(id=team.captain_id):
-        total += get_user_org_mmr(member, organization)
-    return total
+    member_ids = set(team.members.values_list("id", flat=True))
+    if team.captain_id:
+        member_ids.add(team.captain_id)
+    mmrs = org_mmr_map(organization.pk, member_ids, game_for_tournament(tournament))
+    return sum(mmrs.get(uid, 0) for uid in member_ids)
 
 
 def roll_until_winner(teams: list) -> tuple:

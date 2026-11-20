@@ -16,7 +16,7 @@ from app.models import (
     Team,
     Tournament,
 )
-from org.models import OrgUser
+from tests.populate.utils import ensure_org_user
 
 
 class GetTeamTotalMmrTest(TestCase):
@@ -47,9 +47,9 @@ class GetTeamTotalMmrTest(TestCase):
         self.tournament.league = self.league
         self.tournament.save()
 
-        OrgUser.objects.create(user=self.captain, organization=self.org, mmr=5000)
-        OrgUser.objects.create(user=self.member1, organization=self.org, mmr=4000)
-        OrgUser.objects.create(user=self.member2, organization=self.org, mmr=3500)
+        ensure_org_user(self.captain, self.org, mmr=5000)
+        ensure_org_user(self.member1, self.org, mmr=4000)
+        ensure_org_user(self.member2, self.org, mmr=3500)
 
         self.team = Team.objects.create(
             name="Test Team",
@@ -71,7 +71,7 @@ class GetTeamTotalMmrTest(TestCase):
         """Members with zero MMR contribute 0."""
         from app.functions.shuffle_draft import get_team_total_mmr
 
-        OrgUser.objects.filter(user=self.member2, organization=self.org).update(mmr=0)
+        ensure_org_user(self.member2, self.org, mmr=0)
 
         result = get_team_total_mmr(self.team)
 
@@ -96,8 +96,8 @@ class RollUntilWinnerTest(TestCase):
 
         self.captain1 = CustomUser.objects.create_user(username="cap1", password="test")
         self.captain2 = CustomUser.objects.create_user(username="cap2", password="test")
-        OrgUser.objects.create(user=self.captain1, organization=self.org, mmr=5000)
-        OrgUser.objects.create(user=self.captain2, organization=self.org, mmr=5000)
+        ensure_org_user(self.captain1, self.org, mmr=5000)
+        ensure_org_user(self.captain2, self.org, mmr=5000)
 
         self.team1 = Team.objects.create(
             name="Team 1", captain=self.captain1, tournament=self.tournament
@@ -152,9 +152,9 @@ class GetLowestMmrTeamTest(TestCase):
         self.captain1 = CustomUser.objects.create_user(username="cap1", password="test")
         self.captain2 = CustomUser.objects.create_user(username="cap2", password="test")
         self.captain3 = CustomUser.objects.create_user(username="cap3", password="test")
-        OrgUser.objects.create(user=self.captain1, organization=self.org, mmr=5000)
-        OrgUser.objects.create(user=self.captain2, organization=self.org, mmr=4000)
-        OrgUser.objects.create(user=self.captain3, organization=self.org, mmr=6000)
+        ensure_org_user(self.captain1, self.org, mmr=5000)
+        ensure_org_user(self.captain2, self.org, mmr=4000)
+        ensure_org_user(self.captain3, self.org, mmr=6000)
 
         self.team1 = Team.objects.create(
             name="Team 1", captain=self.captain1, tournament=self.tournament
@@ -187,9 +187,7 @@ class GetLowestMmrTeamTest(TestCase):
         from app.functions.shuffle_draft import get_lowest_mmr_team
 
         # Make team1 and team2 have same MMR
-        OrgUser.objects.filter(user=self.captain1, organization=self.org).update(
-            mmr=4000
-        )
+        ensure_org_user(self.captain1, self.org, mmr=4000)
 
         mock_roll.return_value = (self.team1, [[{"team_id": self.team1.id, "roll": 5}]])
 
@@ -223,7 +221,7 @@ class BuildShuffleRoundsTest(TestCase):
             captain = CustomUser.objects.create_user(
                 username=f"cap{i}", password="test"
             )
-            OrgUser.objects.create(user=captain, organization=self.org, mmr=mmr)
+            ensure_org_user(captain, self.org, mmr=mmr)
             self.captains.append(captain)
 
         # Create 4 teams
@@ -303,14 +301,14 @@ class AssignNextShuffleCaptainTest(TestCase):
         # Create 2 captains
         self.captain1 = CustomUser.objects.create_user(username="cap1", password="test")
         self.captain2 = CustomUser.objects.create_user(username="cap2", password="test")
-        OrgUser.objects.create(user=self.captain1, organization=self.org, mmr=5000)
-        OrgUser.objects.create(user=self.captain2, organization=self.org, mmr=4000)
+        ensure_org_user(self.captain1, self.org, mmr=5000)
+        ensure_org_user(self.captain2, self.org, mmr=4000)
 
         # Create player to be picked
         self.player = CustomUser.objects.create_user(
             username="player1", password="test"
         )
-        OrgUser.objects.create(user=self.player, organization=self.org, mmr=3000)
+        ensure_org_user(self.player, self.org, mmr=3000)
 
         # Create 2 teams
         self.team1 = Team.objects.create(
@@ -390,7 +388,7 @@ class DraftBuildRoundsIntegrationTest(TestCase):
             captain = CustomUser.objects.create_user(
                 username=f"cap{i}", password="test"
             )
-            OrgUser.objects.create(user=captain, organization=self.org, mmr=mmr)
+            ensure_org_user(captain, self.org, mmr=mmr)
             team = Team.objects.create(
                 name=f"Team {i}", captain=captain, tournament=self.tournament
             )
@@ -448,10 +446,10 @@ class PickPlayerForRoundShuffleTest(TestCase):
         self.player2 = CustomUser.objects.create_user(
             username="player2", password="test"
         )
-        OrgUser.objects.create(user=self.captain1, organization=self.org, mmr=5000)
-        OrgUser.objects.create(user=self.captain2, organization=self.org, mmr=4000)
-        OrgUser.objects.create(user=self.player1, organization=self.org, mmr=3000)
-        OrgUser.objects.create(user=self.player2, organization=self.org, mmr=2000)
+        ensure_org_user(self.captain1, self.org, mmr=5000)
+        ensure_org_user(self.captain2, self.org, mmr=4000)
+        ensure_org_user(self.player1, self.org, mmr=3000)
+        ensure_org_user(self.player2, self.org, mmr=2000)
 
         # Create teams
         self.team1 = Team.objects.create(
@@ -526,9 +524,9 @@ class PickAuthorizationTest(TestCase):
         self.player1 = CustomUser.objects.create_user(
             username="player1", password="test"
         )
-        OrgUser.objects.create(user=self.captain1, organization=self.org, mmr=4000)
-        OrgUser.objects.create(user=self.captain2, organization=self.org, mmr=5000)
-        OrgUser.objects.create(user=self.player1, organization=self.org, mmr=3000)
+        ensure_org_user(self.captain1, self.org, mmr=4000)
+        ensure_org_user(self.captain2, self.org, mmr=5000)
+        ensure_org_user(self.player1, self.org, mmr=3000)
 
         # Create teams
         self.team1 = Team.objects.create(
@@ -630,8 +628,8 @@ class FullTeamNotAssignedTest(TestCase):
         # Create captains - team2 has lower MMR
         self.captain1 = CustomUser.objects.create_user(username="cap1", password="test")
         self.captain2 = CustomUser.objects.create_user(username="cap2", password="test")
-        OrgUser.objects.create(user=self.captain1, organization=self.org, mmr=5000)
-        OrgUser.objects.create(user=self.captain2, organization=self.org, mmr=1000)
+        ensure_org_user(self.captain1, self.org, mmr=5000)
+        ensure_org_user(self.captain2, self.org, mmr=1000)
 
         # Create teams
         self.team1 = Team.objects.create(
@@ -649,7 +647,7 @@ class FullTeamNotAssignedTest(TestCase):
             member = CustomUser.objects.create_user(
                 username=f"team2_member{i}", password="test"
             )
-            OrgUser.objects.create(user=member, organization=self.org, mmr=1000)
+            ensure_org_user(member, self.org, mmr=1000)
             self.team2.members.add(member)
         self.tournament.users.add(self.captain1, self.captain2)
 
@@ -684,7 +682,7 @@ class FullTeamNotAssignedTest(TestCase):
             member = CustomUser.objects.create_user(
                 username=f"team1_member{i}", password="test"
             )
-            OrgUser.objects.create(user=member, organization=self.org, mmr=1000)
+            ensure_org_user(member, self.org, mmr=1000)
             self.team1.members.add(member)
 
         # Create a round without captain
@@ -720,8 +718,8 @@ class UndoClearsNextCaptainTest(TestCase):
         # Create captains
         self.captain1 = CustomUser.objects.create_user(username="cap1", password="test")
         self.captain2 = CustomUser.objects.create_user(username="cap2", password="test")
-        OrgUser.objects.create(user=self.captain1, organization=self.org, mmr=5000)
-        OrgUser.objects.create(user=self.captain2, organization=self.org, mmr=4000)
+        ensure_org_user(self.captain1, self.org, mmr=5000)
+        ensure_org_user(self.captain2, self.org, mmr=4000)
 
         # Create players (need multiple so users_remaining exists after first pick)
         self.player1 = CustomUser.objects.create_user(
@@ -730,8 +728,8 @@ class UndoClearsNextCaptainTest(TestCase):
         self.player2 = CustomUser.objects.create_user(
             username="player2", password="test"
         )
-        OrgUser.objects.create(user=self.player1, organization=self.org, mmr=3000)
-        OrgUser.objects.create(user=self.player2, organization=self.org, mmr=2500)
+        ensure_org_user(self.player1, self.org, mmr=3000)
+        ensure_org_user(self.player2, self.org, mmr=2500)
 
         # Create teams
         self.team1 = Team.objects.create(
@@ -846,11 +844,9 @@ class DraftRestartTest(TestCase):
         self.tournament.league = self.league
         self.tournament.save()
 
-        OrgUser.objects.create(user=self.captain1, organization=self.org, mmr=4000)
-        OrgUser.objects.create(user=self.captain2, organization=self.org, mmr=5000)
-        OrgUser.objects.create(
-            user=self.high_mmr_player, organization=self.org, mmr=6000
-        )
+        ensure_org_user(self.captain1, self.org, mmr=4000)
+        ensure_org_user(self.captain2, self.org, mmr=5000)
+        ensure_org_user(self.high_mmr_player, self.org, mmr=6000)
 
         self.tournament.users.add(self.captain1, self.captain2, self.high_mmr_player)
         # Note: captains property is derived from teams, not a direct field
@@ -955,7 +951,7 @@ class DraftRestartFuzzTest(TestCase):
                 username=f"fuzz_cap{i}",
                 password="test",
             )
-            OrgUser.objects.create(user=cap, organization=org, mmr=mmr_base + i * 500)
+            ensure_org_user(cap, org, mmr=mmr_base + i * 500)
             captains.append(cap)
             team = Team.objects.create(
                 name=f"Fuzz Team {i}", captain=cap, tournament=tournament
@@ -970,7 +966,7 @@ class DraftRestartFuzzTest(TestCase):
                 username=f"fuzz_player{i}",
                 password="test",
             )
-            OrgUser.objects.create(user=p, organization=org, mmr=2000 + i * 100)
+            ensure_org_user(p, org, mmr=2000 + i * 100)
             players.append(p)
             tournament.users.add(p)
 
@@ -1258,7 +1254,7 @@ class DraftRestartFuzzTest(TestCase):
         captains = []
         for i in range(3):
             cap = CustomUser.objects.create_user(username=f"eq_cap{i}", password="test")
-            OrgUser.objects.create(user=cap, organization=org, mmr=5000)
+            ensure_org_user(cap, org, mmr=5000)
             captains.append(cap)
             team = Team.objects.create(
                 name=f"Eq Team {i}", captain=cap, tournament=tournament
@@ -1270,7 +1266,7 @@ class DraftRestartFuzzTest(TestCase):
             p = CustomUser.objects.create_user(
                 username=f"eq_player{i}", password="test"
             )
-            OrgUser.objects.create(user=p, organization=org, mmr=3000)
+            ensure_org_user(p, org, mmr=3000)
             tournament.users.add(p)
 
         DraftOptions.ensure_for(tournament, timer_enabled=False)

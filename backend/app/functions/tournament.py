@@ -24,6 +24,7 @@ from app.services.draft_reset import (
 )
 from events.discord.tournament_dispatch import notify_draft_started
 from org.display_names import guild_nicknames, org_nicknames_public
+from org.models import OrgUser, OrgUserGameMmr
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile, DotaUserProfile
 
@@ -350,21 +351,21 @@ def get_draft_style_mmrs(request: Request) -> Response:
         draft = Draft.objects.get(pk=draft_pk)
     except Draft.DoesNotExist:
         return Response({"error": "Draft not found"}, status=404)
-    cache_key = f"draft_sim_pk:{request.get_full_path()}"
 
     # cached_as on CustomUser must also list BaseUserProfile/DotaUserProfile (user/tests/test_cacheops.py)
     @cached_as(
-        Draft,
+        Draft.objects.filter(pk=draft_pk),
         CustomUser,
         BaseUserProfile,
         DotaUserProfile,
         Tournament,
         Team,
-        extra=cache_key,
+        OrgUser,
+        OrgUserGameMmr,
+        extra=f"draft_style_mmrs:{draft_pk}",
         timeout=60 * 15,
     )
-    def get_data(request: Request) -> dict:
+    def get_data() -> dict:
         return DraftSerializerMMRs(draft).data
 
-    data = get_data(request)
-    return Response(data, 201)
+    return Response(get_data(), 201)
