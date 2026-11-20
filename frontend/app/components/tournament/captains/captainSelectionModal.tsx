@@ -85,8 +85,6 @@ export const CaptainSelectionModal: React.FC = () => {
         </DialogHeader>
         <ScrollArea className={`${SCROLLAREA_CSS}`}>
           <CaptainTable />
-          {/* Optional: Add a vertical scrollbar */}
-          {/* Optional: Add a horizontal scrollbar */}
           <ScrollBar orientation="vertical" />
           <ScrollBar orientation="horizontal" />
         </ScrollArea>

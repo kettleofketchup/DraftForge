@@ -4,12 +4,7 @@ import * as React from 'react';
 import { useLatestSearchParams } from '~/hooks/useLatestSearchParams';
 import { cn } from '~/lib/utils';
 
-/**
- * Hook for syncing tab state with URL search params
- * @param paramName - The URL parameter name (default: "tab")
- * @param defaultValue - The default tab value
- * @returns [activeTab, setActiveTab] - Current tab and setter that updates URL
- */
+/** Active tab synced to the `paramName` search param; selecting `defaultValue` removes it. */
 function useUrlTabs(defaultValue: string, paramName = 'tab') {
   const [searchParams, setSearchParams] = useLatestSearchParams();
 
@@ -80,24 +75,18 @@ function TabsTrigger({
         'border border-transparent outline-none',
         'transition-all duration-150 ease-out',
         'shadow-sm',
-        // Inactive state - primary tint, card border
         'data-[state=inactive]:bg-primary/15',
         'data-[state=inactive]:text-foreground',
         'data-[state=inactive]:border-border',
-        // Hover (inactive only)
         'data-[state=inactive]:hover:bg-primary/25 data-[state=inactive]:hover:border-primary/40',
         'data-[state=inactive]:hover:shadow-md data-[state=inactive]:hover:-translate-y-0.5',
-        // Active state - brand gradient
         'data-[state=active]:[background-image:var(--brand-gradient)]',
         'data-[state=active]:text-white',
         'data-[state=active]:shadow-brand-glow',
         'data-[state=active]:[text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]',
         'data-[state=active]:-translate-y-0.5',
-        // Focus styles
         'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-        // Disabled
         'disabled:pointer-events-none disabled:opacity-50',
-        // Icon styles
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
