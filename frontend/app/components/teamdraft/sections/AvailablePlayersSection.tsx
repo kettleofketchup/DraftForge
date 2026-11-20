@@ -508,7 +508,7 @@ export const AvailablePlayersSection = memo(() => {
       </div>
 
       {/* XL screens: Three columns */}
-      <div className="hidden xl:grid xl:grid-cols-3 gap-2 flex-1 min-h-0">
+      <div className="hidden xl:grid xl:grid-cols-3 xl:grid-rows-[minmax(0,1fr)] gap-2 flex-1 min-h-0">
         <ScrollArea className="h-full">
           <div className="space-y-1.5 pr-2">
             {col1.map((user) => (
@@ -554,7 +554,7 @@ export const AvailablePlayersSection = memo(() => {
       </div>
 
       {/* Medium-Large screens: Two columns */}
-      <div className="hidden md:grid xl:hidden md:grid-cols-2 gap-2 flex-1 min-h-0">
+      <div className="hidden md:grid xl:hidden md:grid-cols-2 md:grid-rows-[minmax(0,1fr)] gap-2 flex-1 min-h-0">
         <ScrollArea className="h-full">
           <div className="space-y-1.5 pr-2">
             {leftCol.map((user) => (

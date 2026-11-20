@@ -87,12 +87,12 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
       data-testid="herodraft-panel"
     >
       {/* Headers */}
-      <div className="flex shrink-0 border-b border-gray-700">
+      <div className="flex shrink-0 border-b border-border">
         <div className="flex-1 py-1 px-2 text-center">
           <h3
             className={cn(
               'text-xs font-bold',
-              leftTeam?.is_radiant ? 'text-green-400' : 'text-red-400',
+              leftTeam?.is_radiant ? 'text-radiant' : 'text-dire',
             )}
           >
             {leftTeam?.is_radiant ? 'RADIANT' : 'DIRE'}
@@ -107,7 +107,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
           <h3
             className={cn(
               'text-xs font-bold',
-              rightTeam?.is_radiant ? 'text-green-400' : 'text-red-400',
+              rightTeam?.is_radiant ? 'text-radiant' : 'text-dire',
             )}
           >
             {rightTeam?.is_radiant ? 'RADIANT' : 'DIRE'}
@@ -151,11 +151,11 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             const indicator =
               isCompleted &&
               (isBan ? (
-                <span className="text-xs sm:text-sm leading-none text-red-500 font-bold">
+                <span className="text-xs sm:text-sm leading-none text-ban font-bold">
                   ✕
                 </span>
               ) : isPick ? (
-                <span className="text-xs sm:text-sm leading-none text-green-500 font-bold">
+                <span className="text-xs sm:text-sm leading-none text-pick font-bold">
                   ✓
                 </span>
               ) : null);
@@ -191,10 +191,10 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                           octagonClip,
                           'p-[3px] transition-all',
                           isActive
-                            ? 'bg-yellow-400'
+                            ? 'bg-turn'
                             : isCompleted
-                              ? 'bg-red-500/70'
-                              : 'bg-red-900/60',
+                              ? 'bg-ban/70'
+                              : 'bg-ban-surface',
                           banSize,
                         )}
                         data-testid={`herodraft-round-${round.round_number}-hero`}
@@ -214,11 +214,11 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                                 className="w-full h-full object-cover"
                               />
                               {isCompleted && (
-                                <div className="absolute inset-0 bg-red-600/20" />
+                                <div className="absolute inset-0 bg-ban/20" />
                               )}
                             </>
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold bg-red-950/60 text-red-400 [text-shadow:0_0_4px_rgba(0,0,0,0.8)]">
+                            <div className="w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold bg-ban-surface/60 text-ban [text-shadow:0_0_4px_rgba(0,0,0,0.8)]">
                               BAN
                             </div>
                           )}
@@ -231,11 +231,11 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                       className={cn(
                         'overflow-hidden border transition-all relative',
                         isCompleted
-                          ? 'border-green-500/70'
+                          ? 'border-pick/70'
                           : isBan
-                            ? 'border-red-500/40'
-                            : 'border-green-500/40',
-                        isActive && 'border-yellow-400 border-2',
+                            ? 'border-ban/40'
+                            : 'border-pick/40',
+                        isActive && 'border-turn border-2',
                         slotWidth,
                         pickHeight,
                       )}
@@ -249,7 +249,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold bg-green-950/60 text-green-400 [text-shadow:0_0_4px_rgba(0,0,0,0.8)]">
+                        <div className="w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold bg-pick-surface/60 text-pick [text-shadow:0_0_4px_rgba(0,0,0,0.8)]">
                           PICK
                         </div>
                       )}
@@ -295,12 +295,12 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                       'absolute top-1/2 -translate-y-1/2 h-px',
                       isLeft ? 'right-1/2 left-0' : 'left-1/2 right-0',
                       isActive
-                        ? 'bg-yellow-400'
+                        ? 'bg-turn'
                         : isCompleted
                           ? isPick
-                            ? 'bg-green-500/50'
-                            : 'bg-red-500/50'
-                          : 'bg-gray-600',
+                            ? 'bg-pick/50'
+                            : 'bg-ban/50'
+                          : 'bg-border',
                     )}
                   />
                   {/* Number indicator — octagon for bans, square for picks */}
@@ -311,8 +311,8 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                       isBan ? octagonSquare : 'rounded-[2px]',
                       isActive
                         ? isBan
-                          ? 'bg-yellow-400 p-[2px] w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8'
-                          : 'bg-yellow-400 p-[2px] w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8'
+                          ? 'bg-turn p-[2px] w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8'
+                          : 'bg-turn p-[2px] w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8'
                         : 'w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7',
                     )}
                   >
@@ -322,13 +322,13 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                         isBan ? octagonSquare : 'rounded-[2px]',
                         isActive
                           ? isBan
-                            ? 'bg-red-900 text-yellow-400'
-                            : 'bg-green-900 text-yellow-400'
+                            ? 'bg-ban-surface text-turn'
+                            : 'bg-pick-surface text-turn'
                           : isBan
-                            ? 'bg-red-900 text-red-400'
+                            ? 'bg-ban-surface text-ban'
                             : isCompleted
-                              ? 'bg-green-900 text-green-400'
-                              : 'bg-green-950 text-green-500',
+                              ? 'bg-pick-surface text-pick'
+                              : 'bg-pick-surface/60 text-pick/80',
                       )}
                     >
                       {round.round_number}

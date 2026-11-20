@@ -8,7 +8,6 @@ import {
   showLobbyDot,
 } from '~/components/lobby/states';
 import type { TeamType } from '~/components/tournament/types';
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Badge } from '~/components/ui/badge';
 import { BaseHandle } from '~/components/ui/base-handle';
 import {
@@ -18,6 +17,7 @@ import {
   BaseNodeHeaderTitle,
 } from '~/components/ui/base-node';
 import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { cn } from '~/lib/utils';
 import { BracketBadge } from '../BracketBadge';
 import type { MatchNodeData } from '../types';
@@ -188,7 +188,6 @@ function TeamSlot({ team, score, isWinner, isCompleted, slot }: TeamSlotProps) {
   // Use captain's username and avatar
   const captain = team.captain;
   const displayName = captain ? DisplayName(captain) : (team.name ?? 'Unknown');
-  const avatarUrl = captain?.avatarUrl ?? captain?.avatar;
 
   return (
     <div
@@ -204,12 +203,11 @@ function TeamSlot({ team, score, isWinner, isCompleted, slot }: TeamSlotProps) {
       data-team-pk={team.pk}
     >
       {/* Captain avatar */}
-      <Avatar className="h-6 w-6">
-        <AvatarImage src={avatarUrl ?? undefined} />
-        <AvatarFallback className="text-xs">
-          {displayName.substring(0, 2).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar
+        user={captain ?? undefined}
+        fallbackName={team.name ?? 'Unknown'}
+        size="sm"
+      />
 
       {/* Captain username */}
       <span

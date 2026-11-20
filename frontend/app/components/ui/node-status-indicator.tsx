@@ -20,13 +20,13 @@ export const SpinnerLoadingIndicator = ({
 }) => {
   return (
     <div className="relative">
-      <StatusBorder className="border-blue-700/40">{children}</StatusBorder>
+      <StatusBorder className="border-info/40">{children}</StatusBorder>
 
       <div className="absolute inset-0 z-50 rounded-[7px] bg-background/50 backdrop-blur-sm" />
       <div className="absolute inset-0 z-50">
-        <span className="absolute left-[calc(50%-1.25rem)] top-[calc(50%-1.25rem)] inline-block h-10 w-10 animate-ping rounded-full bg-blue-700/20" />
+        <span className="absolute left-[calc(50%-1.25rem)] top-[calc(50%-1.25rem)] inline-block h-10 w-10 animate-ping rounded-full bg-info/20" />
 
-        <LoaderCircle className="absolute left-[calc(50%-0.75rem)] top-[calc(50%-0.75rem)] size-6 animate-spin text-blue-700" />
+        <LoaderCircle className="absolute left-[calc(50%-0.75rem)] top-[calc(50%-0.75rem)] size-6 animate-spin text-info" />
       </div>
     </div>
   );
@@ -102,11 +102,9 @@ export const NodeStatusIndicator = ({
           return <>{children}</>;
       }
     case 'success':
-      return (
-        <StatusBorder className="border-emerald-600">{children}</StatusBorder>
-      );
+      return <StatusBorder className="border-success">{children}</StatusBorder>;
     case 'error':
-      return <StatusBorder className="border-red-400">{children}</StatusBorder>;
+      return <StatusBorder className="border-error">{children}</StatusBorder>;
     default:
       return <>{children}</>;
   }

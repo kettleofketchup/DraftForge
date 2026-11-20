@@ -4,8 +4,10 @@ import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { brandButtonVariants } from './styles';
 
-export interface SubmitButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'type'> {
+export interface SubmitButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'type'
+> {
   /** Whether the button is in a loading state */
   loading?: boolean;
   /** Text to display when loading (defaults to "Submitting...") */
@@ -36,7 +38,7 @@ const SubmitButton = React.forwardRef<HTMLButtonElement, SubmitButtonProps>(
       depth = true,
       ...props
     },
-    ref
+    ref,
   ) => {
     return (
       <Button
@@ -47,8 +49,10 @@ const SubmitButton = React.forwardRef<HTMLButtonElement, SubmitButtonProps>(
           // min-h-11 keeps submit/approve actions the same 44px height as
           // ConfirmButton/CancelButton so dialog footers line up.
           'min-h-11',
-          depth ? brandButtonVariants.success : 'bg-green-600 text-white hover:bg-green-500',
-          className
+          depth
+            ? brandButtonVariants.success
+            : 'bg-success/80 text-white hover:bg-success/95',
+          className,
         )}
         {...props}
       >
@@ -62,7 +66,7 @@ const SubmitButton = React.forwardRef<HTMLButtonElement, SubmitButtonProps>(
         )}
       </Button>
     );
-  }
+  },
 );
 
 SubmitButton.displayName = 'SubmitButton';

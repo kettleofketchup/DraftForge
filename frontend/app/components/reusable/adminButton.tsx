@@ -1,5 +1,8 @@
 import { UserLock } from 'lucide-react';
-import { DestructiveButton, type DestructiveButtonProps } from '~/components/ui/buttons';
+import {
+  DestructiveButton,
+  type DestructiveButtonProps,
+} from '~/components/ui/buttons';
 import {
   Tooltip,
   TooltipContent,
@@ -38,7 +41,7 @@ export const AdminOnlyButton: React.FC<AdminOnlyButtonProps> = ({
           {buttonTxt}
         </DestructiveButton>
       </TooltipTrigger>
-      <TooltipContent className="bg-red-900 text-white rounded-lg">
+      <TooltipContent className="bg-destructive text-white rounded-lg">
         <div className="text-wrap text-center ">{tooltipTxt}</div>
       </TooltipContent>
     </Tooltip>

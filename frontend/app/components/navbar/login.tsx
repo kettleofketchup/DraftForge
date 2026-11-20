@@ -37,8 +37,8 @@ const AvatarContainer: React.FC<AvatarProps> = (props) => {
   return (
     <div
       className="relative w-12 h-12 flex-shrink-0 ring-primary ring-offset-base-100 rounded-full
-                     ring ring-offset-0 shadow-xl hover:shadow-indigo-500/5
-                       delay-150 duration-300 ease-in-out hover:bg-sky-100"
+                     ring ring-offset-0 shadow-xl hover:shadow-primary/5
+                       delay-150 duration-300 ease-in-out hover:bg-glow-sky"
     >
       {props.children}
     </div>
