@@ -1,8 +1,10 @@
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Any
 
 from cacheops import cached_as
 from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import FieldDoesNotExist
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models, transaction
 from django.db.models import (
@@ -554,6 +556,18 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
 _CONCURRENTLY_WRITTEN_EVENT_FIELDS = ["state", "contributions_awarded_at", "host"]
 
 
+def _event_field_values(event: Event, names: Iterable[str]) -> dict[str, object]:
+    values: dict[str, object] = {}
+    for name in names:
+        try:
+            field = Event._meta.get_field(name)
+        except FieldDoesNotExist:
+            continue
+        if field.concrete and not field.many_to_many:
+            values[name] = getattr(event, field.attname)
+    return values
+
+
 _SIGNUP_INTENT_COMMITMENT: dict[str, Commitment] = {
     "rsvp": Commitment.MAIN,
     "tentative": Commitment.MAYBE,
@@ -731,10 +745,8 @@ class EventViewSet(viewsets.ModelViewSet):
         previous_draft_options = event_draft_option_values(serializer.instance)
         previous_allow_user_signups = serializer.instance.allow_user_signups
         previous_roll_call_enabled = serializer.instance.roll_call_enabled
-        previous_ledger_fields = (
-            serializer.instance.scheduled_at,
-            serializer.instance.ends_at,
-            serializer.instance.name,
+        previous_values = _event_field_values(
+            serializer.instance, serializer.validated_data
         )
         with transaction.atomic():
             event = serializer.save()
@@ -742,17 +754,13 @@ class EventViewSet(viewsets.ModelViewSet):
                 from_queryset=Event.objects.nocache().select_for_update(),
                 fields=_CONCURRENTLY_WRITTEN_EVENT_FIELDS,
             )
-            changed_ledger_fields = frozenset(
+            changed_fields = frozenset(
                 name
-                for name, before in zip(
-                    ("scheduled_at", "ends_at", "name"),
-                    previous_ledger_fields,
-                    strict=True,
-                )
-                if getattr(event, name) != before
+                for name, value in _event_field_values(event, previous_values).items()
+                if value != previous_values[name]
             )
-            if changed_ledger_fields:
-                standing.on_event_changed(event, fields=changed_ledger_fields)
+            if changed_fields:
+                standing.on_event_changed(event, fields=changed_fields)
         invalidate_after_commit(event)
         if event.allow_user_signups != previous_allow_user_signups:
             transaction.on_commit(lambda: notify_signup_changed(event))

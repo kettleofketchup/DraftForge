@@ -142,9 +142,19 @@ class StandingCallSiteTest(TestCase):
             self.fake.calls[0].kwargs["fields"], frozenset({"scheduled_at"})
         )
 
-    def test_patch_other_field_skips_hook(self) -> None:
+    def test_patch_other_field_passes_changed_fields(self) -> None:
         response = self.client.patch(
             f"/api/events/{self.event.pk}/", {"description": "x"}, format="json"
+        )
+        self.assertLess(response.status_code, 300, response.content)
+        self.assertEqual(self.fake.hooks, ["on_event_changed"])
+        self.assertEqual(
+            self.fake.calls[0].kwargs["fields"], frozenset({"description"})
+        )
+
+    def test_patch_unchanged_value_skips_hook(self) -> None:
+        response = self.client.patch(
+            f"/api/events/{self.event.pk}/", {"name": self.event.name}, format="json"
         )
         self.assertLess(response.status_code, 300, response.content)
         self.assertEqual(self.fake.hooks, [])
