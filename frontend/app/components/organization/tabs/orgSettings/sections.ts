@@ -1,4 +1,4 @@
-import { UserCog, type LucideIcon } from 'lucide-react';
+import { ClipboardCheck, UserCog, type LucideIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { OrganizationType } from '~/components/organization/schemas';
 import { useOrgFeatureAccess } from '~/features/org-features';
@@ -33,6 +33,9 @@ export const ORG_SETTINGS_SECTIONS: readonly OrgSettingsSection[] = [
   },
   {
     id: 'conduct',
+    label: 'Conduct',
+    icon: ClipboardCheck,
+    keywords: ['attendance', 'no-show', 'late cancel', 'enforcement'],
     Component: ConductSection,
     useVisible: useCanManageConduct,
   },
