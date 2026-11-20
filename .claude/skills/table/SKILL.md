@@ -64,7 +64,7 @@ page. Need another column? Add it to the factory's union.
   table has room (a wide page or full-screen dialog), pass `inlineFrom="md"`: from that breakpoint
   the actions are inline `SecondaryButton`s (`color="red"` when destructive) in a `role="group"`,
   and below it only a ⋮ menu renders, never both. Size the actions column for the inline buttons
-  from the breakpoint (`w-16 sm:w-14 md:w-[22rem]`). Without `inlineFrom` it is always the menu.
+  from the breakpoint (`w-16 sm:w-14 md:w-96`). Without `inlineFrom` it is always the menu.
   `aria-label` "Actions for <name>" and `${prefix}-actions-<id>` sit on the group or the trigger;
   each button or item is `${prefix}-<action>-<id>`. Keep a disabled action shown with its `hint`
   (menu text, or a tooltip plus `aria-describedby` inline) rather than hiding it. Tests switch

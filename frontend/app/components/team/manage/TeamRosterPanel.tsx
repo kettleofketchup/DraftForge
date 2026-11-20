@@ -141,7 +141,7 @@ export function TeamRosterPanel({
             <BrandSelectTrigger
               ref={captainRef}
               data-testid="team-manage-captain-select"
-              className="max-w-64"
+              className="max-w-full sm:max-w-80"
             >
               <SelectValue />
             </BrandSelectTrigger>
@@ -178,7 +178,7 @@ export function TeamRosterPanel({
             <BrandSelectTrigger
               ref={deputyRef}
               data-testid="team-manage-deputy-select"
-              className="max-w-64"
+              className="max-w-full sm:max-w-80"
             >
               <SelectValue />
             </BrandSelectTrigger>

@@ -265,8 +265,8 @@ export function makeRosterColumns({
         />
       ),
       meta: {
-        headClassName: 'w-16 sm:w-14 md:w-[22rem]',
-        cellClassName: 'w-16 text-right sm:w-14 md:w-[22rem]',
+        headClassName: 'w-16 sm:w-14 md:w-96',
+        cellClassName: 'w-16 text-right sm:w-14 md:w-96',
       },
     },
   };

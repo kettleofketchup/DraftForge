@@ -87,7 +87,10 @@ function withReplacing(
   return { ...action, replacing };
 }
 
-/** Radix wraps viewport content in a `display: table` div, which defeats `table-fixed`. */
+/**
+ * Radix wraps viewport content in a `display: table` div, which defeats
+ * `table-fixed`; the inner `p-1` keeps focus rings inside the viewport clip.
+ */
 const TAB_SCROLL_CSS = cn(
   DIALOG_SCREEN_SCROLL_CSS,
   '[&_[data-slot=scroll-area-viewport]>div]:!block',
@@ -314,34 +317,38 @@ export function TeamManageDialog({
                 className={TAB_SCROLL_CSS}
                 data-testid="team-manage-roster-scroll"
               >
-                {team ? (
-                  <TeamRosterPanel
-                    team={team}
-                    pending={pending}
-                    error={error}
-                    onRequestAction={requestAction}
-                    addStandinSlot={
-                      <AddStandinPicker
-                        organization={organization ?? null}
-                        leaguePk={leaguePk}
-                        excludePks={rosterPks(team)}
-                        otherTeamPks={team.other_team_user_pks ?? []}
-                        disabled={pending}
-                        onPick={(user) =>
-                          requestAction(addStandinRequest(team, user))
-                        }
-                      />
-                    }
-                  />
-                ) : managed.isError && managedStatus !== 404 ? (
-                  <Alert variant="destructive">
-                    <AlertDescription>
-                      This team could not be loaded. Try again.
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Loading team…</p>
-                )}
+                <div className="p-1">
+                  {team ? (
+                    <TeamRosterPanel
+                      team={team}
+                      pending={pending}
+                      error={error}
+                      onRequestAction={requestAction}
+                      addStandinSlot={
+                        <AddStandinPicker
+                          organization={organization ?? null}
+                          leaguePk={leaguePk}
+                          excludePks={rosterPks(team)}
+                          otherTeamPks={team.other_team_user_pks ?? []}
+                          disabled={pending}
+                          onPick={(user) =>
+                            requestAction(addStandinRequest(team, user))
+                          }
+                        />
+                      }
+                    />
+                  ) : managed.isError && managedStatus !== 404 ? (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        This team could not be loaded. Try again.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Loading team…
+                    </p>
+                  )}
+                </div>
               </ScrollArea>
             </TabsContent>
             <TabsContent value="history" className="flex min-h-0 flex-col">
@@ -349,21 +356,25 @@ export function TeamManageDialog({
                 className={TAB_SCROLL_CSS}
                 data-testid="team-manage-history-scroll-area"
               >
-                {history.isError && historyStatus !== 404 ? (
-                  <Alert variant="destructive">
-                    <AlertDescription>
-                      Team history could not be loaded. Try again.
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <TeamHistoryTable
-                    page={history.data}
-                    resolveUser={resolveUser}
-                    loading={history.isFetching}
-                    onPrevious={() => setHistoryPage((p) => Math.max(1, p - 1))}
-                    onNext={() => setHistoryPage((p) => p + 1)}
-                  />
-                )}
+                <div className="p-1">
+                  {history.isError && historyStatus !== 404 ? (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        Team history could not be loaded. Try again.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <TeamHistoryTable
+                      page={history.data}
+                      resolveUser={resolveUser}
+                      loading={history.isFetching}
+                      onPrevious={() =>
+                        setHistoryPage((p) => Math.max(1, p - 1))
+                      }
+                      onNext={() => setHistoryPage((p) => p + 1)}
+                    />
+                  )}
+                </div>
               </ScrollArea>
             </TabsContent>
           </Tabs>
