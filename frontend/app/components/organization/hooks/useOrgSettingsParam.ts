@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router';
+import { useCallback, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 
 const PARAM = 'settings';
 const NAV_OPTIONS = { replace: true, preventScrollReset: true } as const;
@@ -21,9 +21,15 @@ export function useOrgSettingsParam(access: {
 }): OrgSettingsParam {
   const { settled, canOpen } = access;
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const pushed = useRef(false);
   const raw = searchParams.get(PARAM);
   const isLegacy = searchParams.get('tab') === 'settings';
   const denied = settled && !canOpen;
+
+  useEffect(() => {
+    if (raw === null) pushed.current = false;
+  }, [raw]);
 
   useEffect(() => {
     if (isLegacy) {
@@ -62,14 +68,23 @@ export function useOrgSettingsParam(access: {
   );
 
   const openSettings = useCallback(
-    (section?: string) => setParam(section ?? '', true),
+    (section?: string) => {
+      pushed.current = true;
+      setParam(section ?? '', true);
+    },
     [setParam],
   );
   const setSection = useCallback(
     (value: string) => setParam(value),
     [setParam],
   );
-  const close = useCallback(() => setParam(null), [setParam]);
+  // Pop the entry openSettings pushed so history ends as it began.
+  const close = useCallback(() => {
+    if (pushed.current) {
+      pushed.current = false;
+      void navigate(-1);
+    } else setParam(null);
+  }, [navigate, setParam]);
 
   return {
     open: raw !== null,
