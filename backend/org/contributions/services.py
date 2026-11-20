@@ -18,9 +18,9 @@ from org.contributions.kinds import (
     RATED_KINDS,
     ContributionKind,
 )
-from org.contributions.points import points_for
 from org.models import ContributionEntry, ContributionPointValue, OrgUser, PromoSend
 from org.standing import ledger
+from org.standing.ledger import points_for
 from org.standing.periods import local_day_start_utc, local_noon_utc
 from telemetry.logging import get_logger
 
@@ -108,8 +108,6 @@ def award_entry(
 ) -> ContributionEntry:
     kind = ContributionKind(kind).value
     _check_event(org, event)
-    if points is None:
-        points = points_for(org, kind)
     entry = ledger.award(
         org=org,
         user=user,
@@ -129,7 +127,7 @@ def award_entry(
         user_id=user.pk,
         entry_id=entry.pk,
         kind=kind,
-        points=points,
+        points=entry.points,
         event_id=event.pk if event is not None else None,
         awarded_by_id=awarded_by.pk if awarded_by is not None else None,
         promo_send_id=promo_send.pk if promo_send is not None else None,

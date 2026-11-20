@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import TypedDict
 
-from django.db.models import QuerySet
+from django.db.models import QuerySet, Sum
 from django.utils import timezone
 
 from app.display_names import first_name
@@ -36,7 +36,7 @@ class MemberTotals(TypedDict):
 
 
 def org_total(org: Organization, period: Period) -> int:
-    return ledger.org_total(org.pk, track="contribution", period=period)
+    return ledger.total(org.pk, track="contribution", period=period)
 
 
 def leaderboard(
@@ -66,6 +66,10 @@ def leaderboard(
             )
         )
     return rows
+
+
+def _sum(qs: QuerySet[ContributionEntry]) -> int:
+    return qs.aggregate(total=Sum("points"))["total"] or 0
 
 
 def member_entries(org_user: OrgUser, period: Period) -> QuerySet[ContributionEntry]:
@@ -113,6 +117,6 @@ def member_totals(org_user: OrgUser, *, now: datetime | None = None) -> MemberTo
     this_month = month_period(tz, local_now.year, local_now.month)
     qs = ContributionEntry.objects.nocache().filter(org_user=org_user)
     return MemberTotals(
-        all_time=ledger.total(qs),
-        this_month=ledger.total(ledger.in_period(qs, this_month)),
+        all_time=_sum(qs),
+        this_month=_sum(ledger.in_period(qs, this_month)),
     )

@@ -8,8 +8,8 @@ from django.utils import timezone
 from app.models import CustomUser, League, Organization
 from events.models import Event
 from org.contributions.kinds import DEFAULT_POINTS, ContributionKind
-from org.contributions.points import points_for
 from org.models import ContributionEntry, ContributionPointValue, OrgUser
+from org.standing.ledger import points_for
 
 
 class ContributionModelsTest(TestCase):
