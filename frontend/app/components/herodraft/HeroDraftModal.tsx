@@ -192,6 +192,7 @@ export function HeroDraftModal({
   const wsDisconnect = useHeroDraftStore((state) => state.disconnect);
   const wsReconnect = useHeroDraftStore((state) => state.reconnect);
   const clearChatError = useHeroDraftStore((state) => state.clearChatError);
+  const chatViewerRole = useHeroDraftStore((state) => state.chat.viewer?.role);
   const startHeartbeat = useHeroDraftStore((state) => state.startHeartbeat);
   const isConnected = useHeroDraftStore(heroDraftSelectors.isConnected);
   const connectionError = useHeroDraftStore((state) => state.error);
@@ -977,6 +978,10 @@ export function HeroDraftModal({
                       showActionButton={isCaptain ?? false}
                       currentAction={currentAction}
                       isMyTurn={isMyCaptainTurn}
+                      canSuggest={
+                        chatViewerRole === 'member' &&
+                        draft.state === 'drafting'
+                      }
                     />
                   </div>
 

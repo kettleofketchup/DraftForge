@@ -7,7 +7,11 @@ import { ScrollArea } from '~/components/ui/scroll-area';
 import { FastTooltip } from '~/components/ui/tooltip';
 import { heroMatchesSearch } from '~/lib/dota/heroes';
 import { cn } from '~/lib/utils';
-import { useHeroDraftStore } from '~/store/heroDraftStore';
+import {
+  type HeroSuggestionKind,
+  useHeroDraftStore,
+} from '~/store/heroDraftStore';
+import { HeroSuggestMenu } from './chat/HeroSuggestMenu';
 
 // Memoized hero button to prevent re-renders
 // IMPORTANT: Don't pass searchQuery directly - pass pre-computed booleans instead
@@ -81,6 +85,16 @@ interface HeroGridProps {
   currentAction?: 'ban' | 'pick';
   /** Whether it's the current user's turn */
   isMyTurn?: boolean;
+  canSuggest?: boolean;
+}
+
+const KEYDOWN_IGNORE_SELECTOR = '[data-herodraft-chat], [role="menu"]';
+
+function isOverlaidByOtherLayer(grid: HTMLElement | null): boolean {
+  const layers = document.querySelectorAll(
+    '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+  );
+  return Array.from(layers).some((layer) => !layer.contains(grid));
 }
 
 type HeroAttribute = 'str' | 'agi' | 'int' | 'all';
@@ -106,8 +120,10 @@ export function HeroGrid({
   showActionButton,
   currentAction,
   isMyTurn,
+  canSuggest = false,
 }: HeroGridProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   // Use selectors to prevent re-renders when unrelated state changes
   const searchQuery = useHeroDraftStore((state) => state.searchQuery);
@@ -118,6 +134,8 @@ export function HeroGrid({
   );
   // Select draft rounds directly for memoization
   const draftRounds = useHeroDraftStore((state) => state.draft?.rounds);
+  const suggestHero = useHeroDraftStore((state) => state.suggestHero);
+  const setChatPanelOpen = useHeroDraftStore((state) => state.setChatPanelOpen);
 
   // Auto-focus search when typing anywhere (unless in a dialog/input)
   useEffect(() => {
@@ -127,6 +145,13 @@ export function HeroGrid({
       if (
         activeEl instanceof HTMLInputElement ||
         activeEl instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      if (
+        (e.target instanceof Element &&
+          e.target.closest(KEYDOWN_IGNORE_SELECTOR)) ||
+        isOverlaidByOtherLayer(gridRef.current)
       ) {
         return;
       }
@@ -191,6 +216,14 @@ export function HeroGrid({
     [setSelectedHeroId, onHeroClick],
   );
 
+  const handleSuggest = useCallback(
+    (kind: HeroSuggestionKind, heroId: number) => {
+      suggestHero(kind, heroId);
+      setChatPanelOpen(true);
+    },
+    [suggestHero, setChatPanelOpen],
+  );
+
   // Determine overlay color based on current action when it's user's turn
   const actionOverlay =
     isMyTurn && currentAction
@@ -199,8 +232,59 @@ export function HeroGrid({
         : 'bg-pick-surface/80' // Dark green tint for picks
       : '';
 
+  const heroListEl = (
+    <div
+      className="flex-1 flex flex-col p-1 min-h-0 gap-1"
+      data-testid="herodraft-hero-list"
+    >
+      {ATTRIBUTE_ORDER.map((attr) => {
+        const heroesForAttr = heroList.filter((h) => h.attr === attr);
+        return (
+          <ScrollArea
+            key={attr}
+            className={cn(
+              'rounded p-1.5 flex-1 min-h-0',
+              ATTRIBUTE_COLORS[attr],
+            )}
+            data-testid={`herodraft-attr-section-${attr}`}
+          >
+            <h3
+              className="text-[10px] font-semibold mb-1 text-white/70"
+              data-testid={`herodraft-attr-label-${attr}`}
+            >
+              {ATTRIBUTE_LABELS[attr]}
+            </h3>
+            <div
+              className="flex flex-wrap content-start gap-2"
+              data-testid={`herodraft-attr-grid-${attr}`}
+            >
+              {heroesForAttr.map((hero) => {
+                const available = isHeroAvailable(hero.id);
+                const matches = matchesSearch(hero.id);
+                const hasSearchQuery = !!searchQuery;
+                return (
+                  <HeroButton
+                    key={hero.id}
+                    hero={hero}
+                    available={available}
+                    isHighlighted={matches && hasSearchQuery && available}
+                    isDimmed={!available || (!matches && hasSearchQuery)}
+                    isSelected={selectedHeroId === hero.id}
+                    disabled={disabled}
+                    onClick={handleHeroClick}
+                  />
+                );
+              })}
+            </div>
+          </ScrollArea>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div
+      ref={gridRef}
       className={cn(
         'flex flex-col h-full overflow-hidden relative',
         brandBg,
@@ -220,53 +304,13 @@ export function HeroGrid({
         />
       </div>
 
-      <div
-        className="flex-1 flex flex-col p-1 min-h-0 gap-1"
-        data-testid="herodraft-hero-list"
-      >
-        {ATTRIBUTE_ORDER.map((attr) => {
-          const heroesForAttr = heroList.filter((h) => h.attr === attr);
-          return (
-            <ScrollArea
-              key={attr}
-              className={cn(
-                'rounded p-1.5 flex-1 min-h-0',
-                ATTRIBUTE_COLORS[attr],
-              )}
-              data-testid={`herodraft-attr-section-${attr}`}
-            >
-              <h3
-                className="text-[10px] font-semibold mb-1 text-white/70"
-                data-testid={`herodraft-attr-label-${attr}`}
-              >
-                {ATTRIBUTE_LABELS[attr]}
-              </h3>
-              <div
-                className="flex flex-wrap content-start gap-2"
-                data-testid={`herodraft-attr-grid-${attr}`}
-              >
-                {heroesForAttr.map((hero) => {
-                  const available = isHeroAvailable(hero.id);
-                  const matches = matchesSearch(hero.id);
-                  const hasSearchQuery = !!searchQuery;
-                  return (
-                    <HeroButton
-                      key={hero.id}
-                      hero={hero}
-                      available={available}
-                      isHighlighted={matches && hasSearchQuery && available}
-                      isDimmed={!available || (!matches && hasSearchQuery)}
-                      isSelected={selectedHeroId === hero.id}
-                      disabled={disabled}
-                      onClick={handleHeroClick}
-                    />
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          );
-        })}
-      </div>
+      {canSuggest ? (
+        <HeroSuggestMenu onSuggest={handleSuggest}>
+          {heroListEl}
+        </HeroSuggestMenu>
+      ) : (
+        heroListEl
+      )}
     </div>
   );
 }
