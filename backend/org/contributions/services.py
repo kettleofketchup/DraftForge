@@ -503,6 +503,13 @@ def reassign_member(drop: OrgUser, keep: OrgUser) -> int:
 
 
 def repoint_user_attribution(drop: CustomUser, keep: CustomUser) -> int:
+    HeroDraftChatMembership.objects.filter(
+        user=drop,
+        left_at__isnull=True,
+        draft_id__in=HeroDraftChatMembership.objects.filter(
+            user=keep, left_at__isnull=True
+        ).values("draft_id"),
+    ).update(left_at=timezone.now())
     return (
         ContributionEntry.objects.nocache()
         .filter(awarded_by=drop)

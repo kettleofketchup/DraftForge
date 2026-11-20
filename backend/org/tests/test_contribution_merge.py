@@ -196,6 +196,41 @@ class RepointAttributionTest(_LedgerFixture):
         self.assertEqual(message.sender_id, keep.pk)
         self.assertEqual(membership.user_id, keep.pk)
 
+    def test_open_memberships_in_same_draft_do_not_collide(self) -> None:
+        drop = CustomUser.objects.create_user(username="col_drop", password="x")
+        keep = CustomUser.objects.create_user(username="col_keep", password="x")
+        tournament = Tournament.objects.create(
+            name="Collide Tournament", date_played=timezone.now()
+        )
+        radiant = Team.objects.create(name="Col R", tournament=tournament)
+        dire = Team.objects.create(name="Col D", tournament=tournament)
+        draft = new_herodraft_for_game(
+            Game.objects.create(
+                tournament=tournament, radiant_team=radiant, dire_team=dire
+            )
+        )
+        now = timezone.now()
+        drop_row = HeroDraftChatMembership.objects.create(
+            draft=draft, team=radiant, user=drop, joined_at=now
+        )
+        keep_row = HeroDraftChatMembership.objects.create(
+            draft=draft, team=dire, user=keep, joined_at=now
+        )
+
+        repoint_user_attribution(drop, keep)
+
+        drop_row.refresh_from_db()
+        keep_row.refresh_from_db()
+        self.assertEqual(drop_row.user_id, keep.pk)
+        self.assertIsNotNone(drop_row.left_at)
+        self.assertIsNone(keep_row.left_at)
+        self.assertEqual(
+            HeroDraftChatMembership.objects.filter(
+                draft=draft, user=keep, left_at__isnull=True
+            ).count(),
+            1,
+        )
+
 
 class ClaimMergeContributionsTest(_LedgerFixture):
     def setUp(self) -> None:

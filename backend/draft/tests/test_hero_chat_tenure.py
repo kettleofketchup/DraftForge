@@ -5,7 +5,7 @@ from unittest import mock
 from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from app.models import CustomUser, Game, Team, Tournament
 from app.services.draft_reset import reset_draft_teams
@@ -19,9 +19,11 @@ from draft.models import (
 from draft.services.hero import new_herodraft_for_game
 from draft.services.hero_chat import (
     ChatViewer,
+    reconcile_draft_memberships,
     resolve_chat_viewer,
     visible_messages,
 )
+from draft.views.hero import reset_draft
 from tests.test_demo import _reset_demo_herodraft
 from tests.test_herodraft import (
     _setup_draft_state,
@@ -535,3 +537,56 @@ class HeroDraftByKeyTest(TenureFixture):
         self.assertFalse(self.draft.draft_teams.filter(is_connected=True).exists())
         first_pick = self.draft.draft_teams.get(is_first_pick=True)
         self.assertEqual(active[0].draft_team_id, first_pick.pk)
+
+
+class ReopenClosedDraftTenureTest(TenureFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.staff = CustomUser.objects.create_superuser(
+            username="ct_staff", password="x"
+        )
+        HeroDraft.objects.filter(pk=self.draft.pk).update(
+            state=HeroDraftState.COMPLETED
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            self.team_a.members.remove(self.mem_a)
+        self.assertIsNotNone(self.open_row(self.mem_a))
+
+    def rejoin_and_post(self) -> None:
+        self.team_msg(self.team_a, self.cap_a, "sent-while-mem_a-off-team")
+        with self.captureOnCommitCallbacks(execute=True):
+            self.team_a.members.add(self.mem_a)
+
+    def test_staff_reset_closes_stale_tenure(self) -> None:
+        request = APIRequestFactory().post(f"/api/herodraft/{self.draft.pk}/reset/")
+        force_authenticate(request, user=self.staff)
+        response = reset_draft(request, draft_pk=self.draft.pk)
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(self.open_row(self.mem_a))
+        self.rejoin_and_post()
+        self.assertNotIn("sent-while-mem_a-off-team", self.bodies(self.mem_a))
+        self.assertIn("sent-while-mem_a-off-team", self.bodies(self.mem_a2))
+
+    def test_game_team_change_reset_closes_stale_tenure(self) -> None:
+        team_c = Team.objects.create(
+            name="CT C", tournament=self.tournament, captain=self.newbie
+        )
+        self.game.dire_team = team_c
+        self.game.save()
+        self.draft.refresh_from_db()
+        self.assertEqual(self.draft.state, HeroDraftState.WAITING_FOR_CAPTAINS)
+        self.assertIsNone(self.open_row(self.mem_a))
+        mem_a2_row = self.open_row(self.mem_a2)
+        assert mem_a2_row is not None
+        self.assertEqual(mem_a2_row.team_id, self.team_a.pk)
+        self.rejoin_and_post()
+        self.assertNotIn("sent-while-mem_a-off-team", self.bodies(self.mem_a))
+
+    def test_reconcile_closes_rows_for_departed_and_double_rostered(self) -> None:
+        self.team_b.members.add(self.mem_a2)
+        reconcile_draft_memberships(self.draft.pk)
+        self.assertIsNone(self.open_row(self.mem_a))
+        self.assertIsNone(self.open_row(self.mem_a2))
+        cap_row = self.open_row(self.cap_a)
+        assert cap_row is not None
+        self.assertEqual(cap_row.joined_at, self.draft.created_at)

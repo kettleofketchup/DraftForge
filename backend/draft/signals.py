@@ -9,6 +9,7 @@ from app.models import CustomUser, Game, Team
 from draft.models import DraftTeam, HeroDraft, HeroDraftRound, HeroDraftState
 from draft.services.hero_chat import (
     chat_roster_field,
+    reconcile_draft_memberships,
     repoint_draft_memberships,
     schedule_roster_tenure,
 )
@@ -192,6 +193,7 @@ def reset_herodraft_on_team_change(
         [prior.radiant_team_id, prior.dire_team_id],
         [instance.radiant_team_id, instance.dire_team_id],
     )
+    reconcile_draft_memberships(draft.pk)
 
     # Wipe picks/bans — they belong to the wrong captain. `draft.herodraftround`
     # is NOT in CACHEOPS so the bulk delete doesn't need cache invalidation

@@ -267,6 +267,33 @@ def reset_draft_chat(draft: HeroDraft) -> None:
         seed_draft_memberships(draft)
 
 
+def reconcile_draft_memberships(draft_id: int, at: datetime | None = None) -> None:
+    now = at or timezone.now()
+    current = set(
+        DraftTeam.objects.nocache()
+        .filter(draft_id=draft_id)
+        .values_list("tournament_team_id", flat=True)
+    )
+    owner: dict[int, int | None] = {}
+    for team_id, user_ids in _team_rosters(current).items():
+        for user_id in user_ids:
+            owner[user_id] = None if user_id in owner else team_id
+    with transaction.atomic():
+        open_rows = HeroDraftChatMembership.objects.filter(
+            draft_id=draft_id, left_at__isnull=True
+        )
+        stale = [
+            pk
+            for pk, user_id, team_id in open_rows.values_list(
+                "pk", "user_id", "team_id"
+            )
+            if owner.get(user_id) != team_id
+        ]
+        if stale:
+            HeroDraftChatMembership.objects.filter(pk__in=stale).update(left_at=now)
+        _seed_teams(draft_id, current, now)
+
+
 def delete_team_chat(team_ids: Iterable[int]) -> None:
     ids = list(team_ids)
     if not ids:
