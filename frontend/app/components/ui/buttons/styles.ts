@@ -3,14 +3,16 @@
  */
 
 // Brand gradient - single source of truth for primary action buttons
-export const brandGradient = 'bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-400 hover:to-blue-400 text-white';
+export const brandGradient =
+  '[background-image:var(--brand-gradient)] hover:brightness-110 text-white';
 
 // Stroke + halo + cyan glow for labels sitting on brand-gradient surfaces.
 export const brandLabelOnGradient =
   '[text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5),_0_0_10px_var(--glow-cyan)] [&_svg]:text-white [&_svg]:drop-shadow-[0_1px_0_rgba(0,0,0,0.65)]';
 
 // Brand secondary - supporting/contextual actions (subtle gradient + visible ring)
-export const brandSecondary = 'bg-gradient-to-r from-violet-500/30 to-blue-500/20 ring-1 ring-violet-300/60 text-violet-100 hover:from-violet-500/40 hover:to-blue-500/30';
+export const brandSecondary =
+  'bg-gradient-to-r from-selection/30 to-accent/25 ring-1 ring-primary/70 text-foreground hover:from-selection/40 hover:to-accent/40';
 
 // Brand surface background - subtle purple gradient overlay matching homepage.
 // Defined as --brand-bg in :root (app.css). Uses arbitrary property [background-image:...]
@@ -67,8 +69,10 @@ export const brandReadableDestructive =
   '!text-rose-50 font-medium tracking-[0.005em]';
 
 // Brand highlight - emerald-to-violet cyberpunk gradient for featured info (org links, stats, callouts).
-export const brandHighlight = 'bg-gradient-to-r from-emerald-900/40 to-violet-900/40 border border-emerald-500/20 hover:from-emerald-900/60 hover:to-violet-900/60';
-export const brandHighlightText = 'bg-gradient-to-r from-emerald-400 to-violet-400 bg-clip-text text-transparent';
+export const brandHighlight =
+  'bg-gradient-to-r from-success/15 to-selection/20 border border-success/20 hover:from-success/20 hover:to-selection/30';
+export const brandHighlightText =
+  'bg-gradient-to-r from-success to-primary bg-clip-text text-transparent';
 
 // Brand toxic - violet → deep-emerald cyberpunk gradient for edit
 // affordances. Same palette family as `brandHighlight` (emerald + violet)
@@ -77,16 +81,16 @@ export const brandHighlightText = 'bg-gradient-to-r from-emerald-400 to-violet-4
 // Used by <EditButton> / <EditIconButton> so every edit affordance pops
 // against the slate base without competing with the primary CTA gradient.
 export const brandToxic =
-  'bg-gradient-to-br from-violet-700 via-emerald-800 to-emerald-700 hover:from-violet-600 hover:via-emerald-700 hover:to-emerald-600 text-white';
-export const brandToxicGlowLift = 'shadow-emerald-950/60';
+  'bg-gradient-to-br from-selection/80 via-success/40 to-success/55 hover:from-selection/90 hover:via-success/55 hover:to-success/70 text-white';
+export const brandToxicGlowLift = 'shadow-success/5';
 
 // Brand error surfaces - muted deep wine/red tones for error containers.
-// Uses raw Tailwind colors (not semantic --error/--primary) because error surfaces
-// need deep wine/muted tones, not the bright accent status colors.
-export const brandErrorBg = 'bg-gradient-to-r from-red-900/40 to-violet-900/40 border border-red-500/20';
-export const brandErrorCard = 'bg-red-900/60 border border-red-500/15';
+export const brandErrorBg =
+  'bg-gradient-to-r from-error/20 to-selection/20 border border-error/20';
+export const brandErrorCard = 'bg-error/30 border border-error/15';
 // Brand error primary - lighter red for interactive error elements (buttons, close icons)
-export const brandErrorPrimary = 'bg-gradient-to-r from-red-700/80 to-violet-900/80 hover:from-red-600/80 hover:to-violet-800/80 text-white';
+export const brandErrorPrimary =
+  'bg-gradient-to-r from-destructive/60 to-selection/40 hover:from-destructive/70 hover:to-selection/50 text-white';
 
 // Base button lift — flat by design. The old chunky bevel
 // (`border-b-4 active:border-b-0 active:translate-y-1` plus per-variant
@@ -99,14 +103,22 @@ export const buttonLift =
 
 // Disabled state styling - removes lift and uses muted colors
 export const buttonDisabled =
-  'disabled:shadow-none disabled:bg-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed disabled:opacity-70';
+  'disabled:shadow-none disabled:bg-muted-foreground disabled:text-base-50 disabled:cursor-not-allowed disabled:opacity-70';
+
+// Disabled brand-gradient buttons: drop the gradient for a muted surface so the
+// label stays legible instead of dark text on violet.
+export const brandGradientDisabled =
+  'disabled:bg-none disabled:bg-base-200 disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none disabled:ring-1 disabled:ring-border disabled:[text-shadow:none] disabled:[&_svg]:text-muted-foreground disabled:[&_svg]:drop-shadow-none';
 
 // Icon styling to ensure icons inherit text color
-const iconWhite = '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]';
-const iconMuted = 'disabled:[&_svg]:text-gray-600 disabled:[&_svg]:drop-shadow-none';
+const iconWhite =
+  '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]';
+const iconMuted =
+  'disabled:[&_svg]:text-base-50 disabled:[&_svg]:drop-shadow-none';
 
 // Brand secondary opaque - for use on colored backgrounds (dialogs) where translucency bleeds
-export const brandSecondaryOpaque = 'bg-violet-950 border border-violet-400/30 text-violet-100 hover:bg-violet-900';
+export const brandSecondaryOpaque =
+  'bg-violet-950 border border-primary/30 text-foreground hover:bg-violet-900';
 
 // Brand secondary with soft-shadow lift
 export const brandSecondaryLift = `${buttonLift} ${buttonDisabled} ${brandSecondary}`;
@@ -115,19 +127,20 @@ export const brandSecondaryLift = `${buttonLift} ${buttonDisabled} ${brandSecond
 export const brandSecondaryOpaqueLift = `${buttonLift} ${buttonDisabled} ${brandSecondaryOpaque}`;
 
 // Neutral opaque - gray/slate for cancel buttons on colored dialog backgrounds
-export const brandNeutralOpaque = 'bg-slate-700 border border-slate-500/30 text-slate-100 hover:bg-slate-600';
+export const brandNeutralOpaque =
+  'bg-base-100 border border-muted-foreground/20 text-foreground hover:bg-base-50';
 export const brandNeutralOpaqueLift = `${buttonLift} ${buttonDisabled} ${brandNeutralOpaque}`;
 
 // Variant-specific styles (flat fill + lift) with disabled state
 export const brandButtonVariants = {
-  destructive: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} bg-red-600 text-white hover:bg-red-500 shadow-red-900/50`,
-  warning: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} bg-orange-500 text-white hover:bg-orange-400 shadow-orange-900/50`,
-  success: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} ${brandGradient} ${brandGlowLift}`,
+  destructive: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} bg-destructive text-white hover:bg-destructive/90 shadow-destructive/25`,
+  warning: `${buttonLift} ${buttonDisabled} ${iconMuted} [&_svg]:text-warning-foreground bg-warning text-warning-foreground hover:bg-warning/90 shadow-warning/20`,
+  success: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} ${brandGradient} ${brandGlowLift} ${brandGradientDisabled}`,
   primary: `${buttonLift} ${buttonDisabled} bg-primary text-primary-foreground hover:bg-primary/90`,
   secondary: `${brandSecondaryLift}`,
   outline: `${buttonLift} ${buttonDisabled}`,
   edit: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} ${brandToxic} ${brandToxicGlowLift}`,
-  nav: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} bg-sky-700 text-white hover:bg-sky-600 shadow-sky-900/50`,
+  nav: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} bg-accent text-white hover:brightness-110 shadow-accent/30`,
 } as const;
 
 export type BrandButtonVariant = keyof typeof brandButtonVariants;

@@ -189,7 +189,7 @@ export const PositionFormFields = ({
 
 export const PositionForm = ({ form }: PositionFormProps) => {
   return (
-    <div className="items-center content-center justify-center hover:shadow-lg hover:shadow-gray-800/50 p-4 rounded-lg w-full">
+    <div className="items-center content-center justify-center hover:shadow-lg hover:shadow-base-400/50 p-4 rounded-lg w-full">
       <div className="flex w-full">
         <h2 className="text-2xl font-bold mb-4 text-center justify-center w-full">
           Edit Positions

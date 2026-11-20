@@ -21,7 +21,8 @@ cascade automatically picks up new reminder fields.
 """
 
 from dataclasses import dataclass
-from typing import FrozenSet
+from datetime import timedelta
+from typing import Any, FrozenSet
 
 
 @dataclass(frozen=True)
@@ -32,9 +33,6 @@ class ScheduledReminder:
     task_name: str
     """Full dotted celery task name. Resolved via current_app.send_task."""
 
-    hours_field: str
-    """Name of the integer field on Event that controls 'fire N hours before'."""
-
     enabled_field: str
     """Name of the boolean field on Event that gates the reminder."""
 
@@ -44,8 +42,36 @@ class ScheduledReminder:
     log_source: str
     """DiscordMessageLog.source value used for idempotency dedup."""
 
+    hours_field: str | None = None
+    """Integer field on Event that controls 'fire N hours before'."""
+
+    minutes_field: str | None = None
+    """Integer field on Event that controls 'fire N minutes before'."""
+
     requires_repeater: bool = False
     """If True, fire path filters to events with event_repeater set."""
+
+    def __post_init__(self) -> None:
+        if (self.hours_field is None) == (self.minutes_field is None):
+            raise ValueError(
+                f"Reminder {self.key!r}: set exactly one of hours_field or minutes_field"
+            )
+
+    @property
+    def lead_field(self) -> str:
+        if self.hours_field is not None:
+            return self.hours_field
+        assert self.minutes_field is not None
+        return self.minutes_field
+
+    def lead_time(self, value: Any) -> timedelta | None:
+        """Lead time for the field's value, or None when unset or not positive."""
+        amount = value or 0
+        if amount <= 0:
+            return None
+        if self.hours_field is not None:
+            return timedelta(hours=amount)
+        return timedelta(minutes=amount)
 
 
 REMINDERS: list[ScheduledReminder] = [
@@ -81,5 +107,13 @@ REMINDERS: list[ScheduledReminder] = [
         enabled_field="discord_profile_reminder",
         required_states=frozenset({"signups_open"}),
         log_source="profile_reminder",
+    ),
+    ScheduledReminder(
+        key="start_mention",
+        task_name="events.tasks.send_start_mention",
+        minutes_field="discord_start_mention_minutes",
+        enabled_field="discord_start_mention",
+        required_states=frozenset({"signups_open", "roll_call"}),
+        log_source="start_mention",
     ),
 ]

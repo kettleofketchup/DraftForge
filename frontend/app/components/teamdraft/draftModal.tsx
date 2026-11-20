@@ -532,7 +532,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
                   setSelectedStyle(v as 'snake' | 'normal' | 'shuffle')
                 }
               >
-                <SelectTrigger className="w-full !h-auto py-3 !whitespace-normal [&_[data-slot=select-value]]:!line-clamp-none ring-1 ring-violet-400/30 border-violet-400/20 hover:ring-violet-400/50">
+                <SelectTrigger className="w-full !h-auto py-3 !whitespace-normal [&_[data-slot=select-value]]:!line-clamp-none ring-1 ring-primary/30 border-primary/20 hover:ring-primary/50">
                   <SelectValue placeholder="Select draft style" />
                 </SelectTrigger>
                 <SelectContent>
@@ -602,11 +602,17 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     }
 
     return (
-      <>
-        <LiveDraftClockBar {...timer.clockBarProps} />
-        <DraftBalanceDisplay />
-        <DraftRoundView />
-      </>
+      <div className="flex flex-col draft-split:h-full">
+        <div className="shrink-0 draft-stacked:sticky draft-stacked:z-30 draft-stacked:rounded-lg draft-stacked:bg-background draft-stacked:shadow-lg max-md:-top-2 md:-top-4">
+          <LiveDraftClockBar {...timer.clockBarProps} />
+        </div>
+        <div className="shrink-0">
+          <DraftBalanceDisplay />
+        </div>
+        <div className="flex flex-col draft-split:flex-1 draft-split:min-h-0">
+          <DraftRoundView />
+        </div>
+      </div>
     );
   };
 
@@ -699,7 +705,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
         <div className="flex flex-col h-full w-full overflow-hidden">
           {embedded && activityHeader}
           {/* Top bar: Live/Auto buttons left, Draft round centered */}
-          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
+          <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
             <LiveAutoButtons isPolling={livePolling} />
             <DraftRoundIndicator />
             {/* Spacer to balance (close button is on right) */}
@@ -714,7 +720,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
 
           {/* Footer - fixed at bottom, hidden when no draft */}
           {draft?.pk && (
-            <div className="shrink-0 border-t border-gray-800 bg-gray-900/95 backdrop-blur">
+            <div className="shrink-0 border-t border-border bg-background/95 backdrop-blur">
               {/* Mobile Footer Drawer */}
               <div className="md:hidden">
                 <Collapsible
@@ -757,7 +763,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
                     </CollapsibleTrigger>
                   </div>
                   {/* Expandable actions drawer - non-moderation actions only */}
-                  <CollapsibleContent className="border-t border-gray-800 bg-gray-800/50 p-4">
+                  <CollapsibleContent className="border-t border-border bg-muted/50 p-4">
                     <div className="flex flex-wrap gap-2 justify-center">
                       {/* Toggle between completed view and full draft when draft is complete */}
                       {isDraftCompleted && (

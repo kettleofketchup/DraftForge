@@ -106,9 +106,7 @@ export const DraftOrderButton: React.FC<{
           <BrandSelectContent>
             {Array.from({ length: getRange() }, (_, i) => (
               <Fragment key={i + 1}>
-                {i > 0 && (
-                  <SelectSeparator className="!my-0 bg-violet-400/30" />
-                )}
+                {i > 0 && <SelectSeparator className="!my-0 bg-primary/30" />}
                 <BrandSelectItem value={String(i + 1)}>{i + 1}</BrandSelectItem>
               </Fragment>
             ))}
@@ -139,9 +137,7 @@ export const DraftOrderButton: React.FC<{
           <BrandSelectContent>
             {Array.from({ length: getRange() }, (_, i) => (
               <Fragment key={i + 1}>
-                {i > 0 && (
-                  <SelectSeparator className="!my-0 bg-violet-400/30" />
-                )}
+                {i > 0 && <SelectSeparator className="!my-0 bg-primary/30" />}
                 <BrandSelectItem value={String(i + 1)}>{i + 1}</BrandSelectItem>
               </Fragment>
             ))}

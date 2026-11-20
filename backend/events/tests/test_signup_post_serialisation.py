@@ -21,6 +21,23 @@ from events.tests._internal_client_orm import DiscordTestMixin, _get_event_signu
 from events.tests.base import EventTestCase
 
 
+class FakePipeline:
+    def __init__(self, client: "FakeRedis") -> None:
+        self.client = client
+        self.calls: list[tuple[str, tuple[str, ...]]] = []
+
+    def delete(self, *keys: str) -> "FakePipeline":
+        self.calls.append(("delete", keys))
+        return self
+
+    def getdel(self, key: str) -> "FakePipeline":
+        self.calls.append(("getdel", (key,)))
+        return self
+
+    def execute(self) -> list[object]:
+        return [getattr(self.client, name)(*args) for name, args in self.calls]
+
+
 class FakeRedis:
     def __init__(self) -> None:
         self.data: dict[str, str] = {}
@@ -38,6 +55,12 @@ class FakeRedis:
 
     def delete(self, *keys: str) -> int:
         return sum(1 for key in keys if self.data.pop(key, None) is not None)
+
+    def getdel(self, key: str) -> str | None:
+        return self.data.pop(key, None)
+
+    def pipeline(self) -> FakePipeline:
+        return FakePipeline(self)
 
     def register_script(self, script: str) -> Callable[..., int]:
         def run(keys: list[str], args: list[str]) -> int:
@@ -282,3 +305,261 @@ class SignupPostSerialisationTest(DiscordTestMixin, EventTestCase):
         self.edit.assert_not_called()
         self.assertNotIn(signup_post_lock.pending_key(self.pk), self.redis.data)
         self.assertIsNotNone(signup_post_lock.acquire_lock(self.pk))
+
+    def _drain_queued_runs(self) -> None:
+        while self.apply_async.call_args_list:
+            call = self.apply_async.call_args_list.pop(0)
+            args, kwargs = call.args
+            send_signup_update(*args, **kwargs)
+
+    def _applied(self, logs: list[dict]) -> list[dict]:
+        return [e for e in logs if e["event"] == "signup_post_edit_applied"]
+
+    def test_burst_of_changes_edits_once_with_final_list(self) -> None:
+        for n in range(30):
+            self._add_signup(f"Burst{n:02d}")
+            notify_signup_changed(self.post_event)
+
+        self._drain_queued_runs()
+
+        self.assertLessEqual(self.edit.call_count, 2)
+        last_payload = json.dumps(self.edit.call_args.kwargs["embed"])
+        self.assertIn("Burst29", last_payload)
+
+    def test_edit_applied_logs_lag_from_oldest_change(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", side_effect=[1_000, 5_000]):
+            notify_signup_changed(self.post_event)
+            notify_signup_changed(self.post_event)
+
+        with (
+            patch("events.tasks.now_ms", return_value=12_500),
+            capture_logs() as logs,
+        ):
+            send_signup_update(self.pk)
+
+        [applied] = self._applied(logs)
+        self.assertEqual(applied["lag_ms"], 11_500)
+        self.assertEqual(applied["log_level"], "warning")
+        self.assertEqual(applied["system"], "discord")
+        self.assertEqual(applied["subsystem"], "celery")
+        self.assertEqual(applied["event_id"], self.pk)
+        self.assertNotIn(signup_post_lock.dirty_key(self.pk), self.redis.data)
+
+    def test_edit_applied_within_threshold_logs_info(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+
+        with (
+            patch("events.tasks.now_ms", return_value=11_000),
+            capture_logs() as logs,
+        ):
+            send_signup_update(self.pk)
+
+        [applied] = self._applied(logs)
+        self.assertEqual(applied["lag_ms"], 10_000)
+        self.assertEqual(applied["log_level"], "info")
+
+    def test_edit_without_dirty_time_logs_no_lag(self) -> None:
+        with capture_logs() as logs:
+            send_signup_update(self.pk)
+
+        [applied] = self._applied(logs)
+        self.assertIsNone(applied["lag_ms"])
+        self.assertEqual(applied["log_level"], "info")
+
+    def test_change_during_render_is_timed_by_the_trailing_run(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        self.apply_async.reset_mock()
+
+        def read_while_changing(event_id: int) -> list:
+            with patch.object(signup_post_lock, "now_ms", return_value=2_000):
+                notify_signup_changed(self.post_event)
+            return _get_event_signups_orm(event_id)
+
+        with (
+            patch(
+                "events.discord.embeds.get_event_signups",
+                side_effect=read_while_changing,
+            ),
+            patch("events.tasks.now_ms", return_value=4_000),
+            capture_logs() as first,
+        ):
+            send_signup_update(self.pk)
+        with (
+            patch("events.tasks.now_ms", return_value=4_500),
+            capture_logs() as trailing,
+        ):
+            self._drain_queued_runs()
+
+        self.assertEqual(self.edit.call_count, 2)
+        self.assertEqual(self._applied(first)[0]["lag_ms"], 3_000)
+        self.assertEqual(self._applied(trailing)[0]["lag_ms"], 2_500)
+
+    def test_read_retry_keeps_dirty_time(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+
+        with (
+            patch(
+                "events.discord.embeds.get_event_signups",
+                side_effect=InternalAPIUnavailable("signups"),
+            ),
+            patch.object(send_signup_update, "retry", side_effect=Retry()),
+            self.assertRaises(Retry),
+        ):
+            send_signup_update(self.pk)
+
+        self.assertEqual(self.redis.data[signup_post_lock.dirty_key(self.pk)], "1000")
+
+    def test_failed_edit_retries_and_keeps_dirty_time(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        self.edit.return_value = None
+
+        with (
+            patch.object(send_signup_update, "retry", side_effect=Retry()) as retry,
+            capture_logs() as logs,
+            self.assertRaises(Retry),
+        ):
+            send_signup_update(self.pk)
+
+        retry.assert_called_once_with(
+            countdown=settings.SIGNUP_POST.retry_seconds,
+            max_retries=settings.SIGNUP_POST.read_retries,
+        )
+        self.assertEqual(self._applied(logs), [])
+        self.assertEqual(self.redis.data[signup_post_lock.dirty_key(self.pk)], "1000")
+        self.assertIn(signup_post_lock.pending_key(self.pk), self.redis.data)
+        self.assertNotIn(signup_post_lock.lock_key(self.pk), self.redis.data)
+
+    def _exhaust_retries(self) -> None:
+        send_signup_update.push_request(retries=settings.SIGNUP_POST.read_retries)
+        self.addCleanup(send_signup_update.pop_request)
+
+    def _assert_dropped(self, logs: list[dict], reason: str) -> None:
+        [dropped] = [e for e in logs if e["event"] == "signup_post_edit_dropped"]
+        self.assertEqual(dropped["log_level"], "warning")
+        self.assertEqual(dropped["system"], "discord")
+        self.assertEqual(dropped["subsystem"], "celery")
+        self.assertEqual(dropped["reason"], reason)
+        self.assertEqual(dropped["attempts"], settings.SIGNUP_POST.read_retries + 1)
+        self.assertEqual(dropped["dirty_since_ms"], 1_000)
+        self.assertNotIn(signup_post_lock.dirty_key(self.pk), self.redis.data)
+        self.assertNotIn(signup_post_lock.pending_key(self.pk), self.redis.data)
+        self.assertNotIn(signup_post_lock.lock_key(self.pk), self.redis.data)
+
+    def test_failed_edit_gives_up_after_configured_retries(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        self.edit.return_value = None
+        self._exhaust_retries()
+
+        with capture_logs() as logs:
+            result = send_signup_update.run(self.pk)
+
+        self.assertTrue(result.startswith("Failed: could not edit announcement"))
+        self._assert_dropped(logs, "SignupPostEditFailed")
+
+    def test_exhausted_read_drops_dirty_time(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        self._exhaust_retries()
+
+        with (
+            patch(
+                "events.discord.embeds.get_event_signups",
+                side_effect=InternalAPIUnavailable("signups"),
+            ),
+            capture_logs() as logs,
+        ):
+            send_signup_update.run(self.pk)
+
+        self._assert_dropped(logs, "InternalAPIUnavailable")
+
+    def test_retry_skipped_when_a_newer_edit_is_queued(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        self.apply_async.reset_mock()
+
+        def change_then_fail(event_id: int) -> list:
+            with patch.object(signup_post_lock, "now_ms", return_value=2_000):
+                notify_signup_changed(self.post_event)
+            raise InternalAPIUnavailable("signups")
+
+        with (
+            patch(
+                "events.discord.embeds.get_event_signups",
+                side_effect=change_then_fail,
+            ),
+            patch.object(send_signup_update, "retry") as retry,
+        ):
+            result = send_signup_update(self.pk)
+
+        retry.assert_not_called()
+        self.apply_async.assert_called_once()
+        self.assertTrue(result.startswith("Skipped: a newer edit is queued"))
+        self.assertEqual(self.redis.data[signup_post_lock.dirty_key(self.pk)], "1000")
+
+    def _dirty_at_release(self) -> list[str | None]:
+        seen: list[str | None] = []
+        real_release = signup_post_lock.release_lock
+
+        def spy(event_id: int, token: str) -> None:
+            seen.append(self.redis.data.get(signup_post_lock.dirty_key(event_id)))
+            real_release(event_id, token)
+
+        patcher = patch("events.tasks.release_lock", side_effect=spy)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return seen
+
+    def test_read_retry_restores_dirty_time_before_releasing_lock(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        seen = self._dirty_at_release()
+
+        with (
+            patch(
+                "events.discord.embeds.get_event_signups",
+                side_effect=InternalAPIUnavailable("signups"),
+            ),
+            patch.object(send_signup_update, "retry", side_effect=Retry()),
+            self.assertRaises(Retry),
+        ):
+            send_signup_update(self.pk)
+
+        self.assertEqual(seen, ["1000"])
+
+    def test_failed_edit_restores_dirty_time_before_releasing_lock(self) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        self.edit.return_value = None
+        seen = self._dirty_at_release()
+
+        with (
+            patch.object(send_signup_update, "retry", side_effect=Retry()),
+            self.assertRaises(Retry),
+        ):
+            send_signup_update(self.pk)
+
+        self.assertEqual(seen, ["1000"])
+
+    def test_unexpected_error_restores_dirty_time_before_releasing_lock(
+        self,
+    ) -> None:
+        with patch.object(signup_post_lock, "now_ms", return_value=1_000):
+            notify_signup_changed(self.post_event)
+        seen = self._dirty_at_release()
+
+        with (
+            patch(
+                "events.discord.embeds.get_event_signups",
+                side_effect=RuntimeError("boom"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            send_signup_update(self.pk)
+
+        self.assertEqual(seen, ["1000"])
+        self.edit.assert_not_called()

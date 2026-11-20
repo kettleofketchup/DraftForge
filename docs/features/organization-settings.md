@@ -44,19 +44,18 @@ anything writes nothing.
 Staff can place a player on a roster even when the placement breaks a seating or
 commitment rule. The **Staff placement** section sets what happens then.
 
-!!! info "No effect yet"
-    These settings are stored and editable, but nothing reads them until staff
-    placement checks ship. Until then every policy behaves like **Silent**.
-    The check they will use is described in
-    [Staff Overrides](../development/staff-overrides.md).
+!!! info "Applies as placement screens adopt it"
+    The policy is read by the shared staff override check described in
+    [Staff Overrides](../development/staff-overrides.md). Each screen that lets
+    staff place members applies it once that screen uses the check.
 
 | Policy | Meaning |
 |---|---|
-| **Silent** (default) | Staff placements ignore seating rules (current behaviour) |
+| **Silent** (default) | Staff placements ignore seating rules |
 | **Confirm** | Staff must confirm a warning naming the broken rule |
 | **Block** | Staff placements that break seating rules are refused |
 
-**Rules staff are warned about** lists the rules the policy applies to. All of them are
+**Seating rules staff are warned about** lists the rules the policy applies to. All of them are
 ticked by default:
 
 | Code | Rule |
@@ -68,9 +67,9 @@ ticked by default:
 | `maybe_special_seat` | 'Maybe' member placed in a special seat |
 | `maybe_forced_main` | 'Maybe' member forced into a main seat |
 
-Eligibility requirements (MMR limits, a missing Steam ID and so on) are not in this list.
-Unticking a code never hides an eligibility warning; those have their own confirmation
-step whatever the policy.
+Eligibility and team rules (a missing Steam ID, MMR below the minimum, the stand-in cap
+and so on) are not in this list. They always ask staff to confirm with a reason, whatever
+the policy, and unticking a code never hides one.
 
 ---
 
