@@ -401,8 +401,8 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         """List all subscribers for this repeater."""
         repeater = self.get_object()
         # RepeaterSubscriptionSerializer reads user.nickname + user.avatar,
-        # which go through the @property on CustomUser → base_profile (T1
-        # epic). Without this prefetch the list view is N+1 cold-cache.
+        # which go through the @property on CustomUser → base_profile. Without
+        # this prefetch the list view is N+1 cold-cache.
         subs = with_user_profiles(
             RepeaterSubscription.objects.filter(event_repeater=repeater), "user"
         )
@@ -603,7 +603,6 @@ class EventViewSet(viewsets.ModelViewSet):
             qs = with_event_staff(qs)
         params = self.request.query_params
 
-        # Filter by organization
         org_id = params.get("organization")
         if org_id:
             qs = qs.filter(organization_id=org_id)
@@ -616,14 +615,12 @@ class EventViewSet(viewsets.ModelViewSet):
         elif state:
             qs = qs.filter(state=state)
 
-        # Search by name or organization name
         search = params.get("search")
         if search:
             qs = qs.filter(
                 Q(name__icontains=search) | Q(organization__name__icontains=search)
             )
 
-        # Filter by event repeater
         repeater_id = params.get("event_repeater")
         if repeater_id:
             qs = qs.filter(event_repeater_id=repeater_id)
@@ -648,7 +645,6 @@ class EventViewSet(viewsets.ModelViewSet):
                 signups_open_at__isnull=False, signups_open_at__lte=signups_due_before
             )
 
-        # Boolean filters
         has_repeater = params.get("has_repeater")
         if has_repeater == "true":
             qs = qs.filter(event_repeater__isnull=False)
@@ -657,7 +653,6 @@ class EventViewSet(viewsets.ModelViewSet):
         if has_announcement_channel == "true":
             qs = qs.filter(discord_announcement_channel_id__gt="")
 
-        # Ordering
         ordering = params.get("ordering", "-scheduled_at")
         if ordering == "closest":
             qs = qs.annotate(distance=Abs(F("scheduled_at") - Now())).order_by(
@@ -876,7 +871,6 @@ class EventViewSet(viewsets.ModelViewSet):
         """Single canonical signup endpoint accepting an intent + optional profile patch.
 
         Body: {"intent": "rsvp" | "tentative", "profile": {...}}
-        Replaces the older /rsvp/ and /tentative/ actions.
         """
         event = self.get_object()
         body = request.data or {}
@@ -1010,9 +1004,9 @@ class EventViewSet(viewsets.ModelViewSet):
     def reopen_signups(self, request: Request, pk: str | None = None) -> Response:
         """Corrective transition from ROLL_CALL back to SIGNUPS_OPEN.
 
-        Quiet: no Discord re-announcement, no signup-changed notify. The
-        roster is resynced to the signup-phase rule, so approved players come
-        back when roll_call_enabled is off.
+        Quiet: no Discord re-announcement; the signup post is edited in
+        place. The roster is resynced to the signup-phase rule, so approved
+        players come back when roll_call_enabled is off.
         """
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
@@ -1232,8 +1226,8 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self) -> QuerySet[EventSignup]:
         # EventSignupSerializer's `username` (display name) reads
         # user.nickname, and it ships user.avatar — both resolve through the
-        # CustomUser @property to base_profile (T1 epic). Without
-        # user__base_profile this is N+1 cold-cache on busy events.
+        # CustomUser @property to base_profile. Without user__base_profile this
+        # is N+1 cold-cache on busy events.
         qs = with_user_profiles(
             EventSignup.objects.select_related(
                 "event__tournament__league__organization", "event_team"
@@ -1580,7 +1574,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             entry["status"] = "disabled"
             return entry
 
-        # Determine status
         if task == "signup_reminder":
             s = (
                 "fired"
