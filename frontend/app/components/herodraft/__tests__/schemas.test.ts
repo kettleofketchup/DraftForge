@@ -113,7 +113,7 @@ describe('HeroDraftSchema', () => {
 });
 
 describe('HeroDraftWebSocketMessageSchema chat frames', () => {
-  // Exact sender shape from backend app/functions/herodraft_chat.py _sender_payload (no `avatar`).
+  // Exact sender shape from backend draft/services/hero_chat.py _sender_payload (no `avatar`).
   const sender = {
     pk: 7,
     username: null,

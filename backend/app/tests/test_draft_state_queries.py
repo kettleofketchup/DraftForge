@@ -81,7 +81,7 @@ PICK_QUERIES: int = 72
 # Upper bounds at the time of writing; the 4 == 8 team equality is the real pin.
 TOURNAMENT_RESPONSE_QUERIES: int = 23
 RESUME_ENDPOINT_QUERIES: int = 54
-# +1 for the hero draft chat tenure lookup on the roster change.
+# Includes the hero draft chat tenure lookup the roster change triggers.
 UNDO_ENDPOINT_QUERIES: int = 66
 
 

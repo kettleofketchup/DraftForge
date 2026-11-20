@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeChatText, parseChatInput } from '../parseChatInput';
 
-// Mirrors backend ParseComposerTest.PARITY in app/tests/test_herodraft_chat_functions.py.
+// Mirrors backend ParseComposerTest.PARITY in draft/tests/test_hero_chat_functions.py.
 const PARITY: [string, { channel: 'team' | 'all'; body: string }][] = [
   ['/all x', { channel: 'all', body: 'x' }],
   ['/ALL  x ', { channel: 'all', body: 'x' }],
