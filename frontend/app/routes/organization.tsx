@@ -563,20 +563,14 @@ export default function OrganizationDetailPage() {
               <div className="flex items-start justify-between mb-2">
                 <h1 className="text-3xl font-bold">{organization.name}</h1>
                 {settingsAccess.canOpen && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <SecondaryButton
-                        size="icon"
-                        className="size-9"
-                        aria-label="Organization settings"
-                        data-testid="org-settings-button"
-                        onClick={() => settingsParam.openSettings()}
-                      >
-                        <Settings className="h-4 w-4" />
-                      </SecondaryButton>
-                    </TooltipTrigger>
-                    <TooltipContent>Organization settings</TooltipContent>
-                  </Tooltip>
+                  <SecondaryButton
+                    size="sm"
+                    data-testid="org-settings-button"
+                    onClick={() => settingsParam.openSettings()}
+                  >
+                    <Settings className="h-4 w-4" />
+                    Org Settings
+                  </SecondaryButton>
                 )}
               </div>
 

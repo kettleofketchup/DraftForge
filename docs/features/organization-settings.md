@@ -14,7 +14,7 @@ never opens the modal sees no change.
 
 ## The settings modal
 
-A cog button in the organization header opens the modal. The sidebar groups its sections
+An **Org Settings** button (cog icon) in the organization header opens the modal. The sidebar groups its sections
 (a tab strip on phones, and a search box on both phones and desktop):
 
 | Group | Sections |
@@ -43,11 +43,11 @@ ids are `general`, `discord`, `members`, `rules`, `admins`, `staff-placement`,
 
 ## Who can see and edit settings
 
-The cog, the modal, and both API methods are limited to org admins, the org owner and
-site admins. Org staff and members do not see the cog. This includes the event defaults:
+The Org Settings button, the modal, and both API methods are limited to org admins, the org owner and
+site admins. Org staff and members do not see the button. This includes the event defaults:
 org staff can no longer edit them. A viewer without access who opens a `?settings=` link
 has the parameter removed once their permissions load, and the modal does not open.
-Hiding the cog is a convenience only: the API enforces the same rule.
+Hiding the button is a convenience only: the API enforces the same rule.
 
 | Actor | View (GET) | Save (PATCH) |
 |---|---|---|
@@ -183,7 +183,7 @@ decides for itself who can see it. Register it in `ORG_SETTINGS_SECTIONS` in
   list is static and every hook runs in list order on each render, so never add or
   remove entries at runtime.
 
-The cog and the `?settings=` handling use `useOrgSettingsAccess`, which allows the modal
+The Org Settings button and the `?settings=` handling use `useOrgSettingsAccess`, which allows the modal
 once access has settled and the viewer is an organization admin. The section must still gate its own edit controls,
 and its endpoints must enforce the same permission.
 
