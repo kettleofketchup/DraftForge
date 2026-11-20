@@ -1,6 +1,6 @@
-import * as React from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { CheckIcon, ChevronDownIcon } from 'lucide-react';
+import * as React from 'react';
 
 import { brandBg } from '~/components/ui/buttons';
 import {
@@ -17,10 +17,18 @@ import { cn } from '~/lib/utils';
 /** Brand-styled wrapper over shadcn Select — violet/blue gradient on trigger + popover. */
 
 export const BrandSelect = Select;
-export { SelectGroup, SelectLabel, SelectScrollDownButton, SelectScrollUpButton, SelectSeparator, SelectValue };
+export {
+  SelectGroup,
+  SelectLabel,
+  SelectScrollDownButton,
+  SelectScrollUpButton,
+  SelectSeparator,
+  SelectValue,
+};
 
-interface BrandSelectTriggerProps
-  extends React.ComponentProps<typeof SelectPrimitive.Trigger> {
+interface BrandSelectTriggerProps extends React.ComponentProps<
+  typeof SelectPrimitive.Trigger
+> {
   /** `sm` height = 32px (h-8); `default` = 36px (h-9). */
   size?: 'sm' | 'default';
 }
@@ -70,7 +78,7 @@ export const BrandSelectContent = React.forwardRef<
         // brandBg is background-image only; bg-popover supplies the solid base or page bleeds through.
         'bg-popover',
         brandBg,
-        'text-popover-foreground border border-primary/30 shadow-[0_8px_30px_-8px_var(--glow-violet,rgba(124,58,237,0.45))]',
+        'text-popover-foreground border border-primary/30 shadow-[0_8px_30px_-8px_var(--glow-violet)]',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',

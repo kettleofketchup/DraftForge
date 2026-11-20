@@ -272,8 +272,8 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
                 className={cn(
                   'text-xl sm:text-3xl font-black tracking-wider',
                   currentAction === 'ban'
-                    ? 'text-red-400 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]'
-                    : 'text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]',
+                    ? 'text-red-400 drop-shadow-[0_0_10px_color-mix(in_oklab,var(--color-ban)_50%,transparent)]'
+                    : 'text-green-400 drop-shadow-[0_0_10px_color-mix(in_oklab,var(--color-pick)_50%,transparent)]',
                 )}
               >
                 {currentAction.toUpperCase()}

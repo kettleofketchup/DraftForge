@@ -108,6 +108,70 @@ export const noRawColorStrings = {
   },
 };
 
+// Colour literals inside Tailwind arbitrary values (shadow-[..rgba(..)], bg-[#..]),
+// which neither palette rule sees. Pure black and white stay allowed, like text-white.
+const COLOR_LITERAL =
+  /#[0-9a-fA-F]{3,8}\b|(?<![a-zA-Z-])(?:rgba?|hsla?|oklch|oklab|lch|lab|hwb)\([^()]*\)/g;
+const NEUTRAL_HEX =
+  /^#(?:0{3,4}|f{3,4}|0{6}(?:[0-9a-f]{2})?|f{6}(?:[0-9a-f]{2})?)$/i;
+
+function isNeutral(literal) {
+  if (literal.startsWith('#')) return NEUTRAL_HEX.test(literal);
+  const m = /^rgba?\(([^)]*)\)$/i.exec(literal);
+  if (!m) return false;
+  const [r, g, b] = m[1]
+    .split(/[\s,_/]+/)
+    .filter(Boolean)
+    .map(Number);
+  return r === g && g === b && (r === 0 || r === 255);
+}
+
+export const noArbitraryColorLiterals = {
+  meta: {
+    type: 'problem',
+    docs: { description: 'Colour literals inside Tailwind arbitrary values' },
+    messages: {
+      literal:
+        '"{{token}}" hardcodes {{color}}. Use a theme token: var(--color-<token>), or color-mix(in_oklab,var(--color-<token>)_N%,transparent) for alpha. See docs/THEMING-GUIDE.md "Domain Colors".',
+    },
+    schema: [],
+  },
+  create(context) {
+    const { sourceCode } = context;
+    function check(node) {
+      const raw = sourceCode.getText(node);
+      const re = /\S+/g;
+      let m;
+      while ((m = re.exec(raw))) {
+        const token = m[0].replace(/^[`'"}]+|[`'"$]+$/g, '');
+        const open = token.indexOf('[');
+        if (open === -1 || token.indexOf(']', open) === -1) continue;
+        const inside = token.slice(open);
+        const color = [...inside.matchAll(COLOR_LITERAL)]
+          .map((c) => c[0])
+          .find((c) => !isNeutral(c));
+        if (!color) continue;
+        const at = node.range[0] + m.index + m[0].indexOf(token);
+        context.report({
+          node,
+          loc: {
+            start: sourceCode.getLocFromIndex(at),
+            end: sourceCode.getLocFromIndex(at + token.length),
+          },
+          messageId: 'literal',
+          data: { token, color },
+        });
+      }
+    }
+    return {
+      Literal(node) {
+        if (typeof node.value === 'string') check(node);
+      },
+      TemplateElement: check,
+    };
+  },
+};
+
 const quoted = (message) => /^"([^"]+)"/.exec(message)?.[1];
 
 // Drops a no-raw-color-strings report when shadcn/no-raw-colors already reported the

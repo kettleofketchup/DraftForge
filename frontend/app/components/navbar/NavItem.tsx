@@ -96,7 +96,7 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
           <div className="flex items-center justify-center gap-1">
             <span
               className={cn(
-                'text-xs font-bold leading-normal text-center text-outline-sm text-[#646cff]',
+                'text-xs font-bold leading-normal text-center text-outline-sm text-primary',
                 titleClassName,
               )}
             >
