@@ -4,14 +4,6 @@
       "count": 11
     }
   },
-  "app/components/bracket/nodes/MatchNode.tsx": {
-    "draftforge/no-avatar-fallback": {
-      "count": 1
-    },
-    "draftforge/use-user-avatar": {
-      "count": 1
-    }
-  },
   "app/components/events/EventStateBadge.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 3
