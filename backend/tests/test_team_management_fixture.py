@@ -1,6 +1,6 @@
-from django.test import TestCase
-from django.urls import reverse
-from rest_framework.test import APIClient
+from django.test import TestCase, override_settings
+from django.urls import resolve, reverse
+from rest_framework.test import APIClient, APIRequestFactory
 
 from app.models import League, Team, Tournament
 from tests.helpers.team_management_fixture import (
@@ -12,6 +12,7 @@ from tests.helpers.team_management_fixture import (
 )
 from tests.populate.constants import DTX_STEAM_LEAGUE_ID
 from tests.populate.organizations import populate_organizations_and_leagues
+from tests.test_auth import reset_tournament_by_key
 
 
 class TeamManagementFixtureTests(TestCase):
@@ -96,3 +97,20 @@ class TeamManagementFixtureTests(TestCase):
         League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).delete()
         with self.assertRaises(League.DoesNotExist):
             populate_team_management_tournament(force=True)
+
+    @override_settings(DEBUG=True, TEST=True, RELEASE=False)
+    def test_reset_endpoint_rebuilds_fixture(self) -> None:
+        path = reverse(
+            "test-reset-tournament", urlconf="tests.urls", args=["team_management"]
+        )
+        match = resolve(path, urlconf="tests.urls")
+        self.assertIs(match.func, reset_tournament_by_key)
+        request = APIRequestFactory().post(f"/api/tests{path}")
+        for _ in range(2):
+            resp = match.func(request, **match.kwargs)
+            self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["name"], TEAM_MANAGEMENT_TOURNAMENT_NAME)
+        self.assertEqual(
+            sorted(team["name"] for team in resp.data["teams"]),
+            ["TM Alpha", "TM Bravo", "TM Ghost"],
+        )

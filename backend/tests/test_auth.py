@@ -1065,12 +1065,11 @@ def create_claimable_user(request):
     TEST ONLY: Create a user without Discord or Steam ID that can be claimed.
 
     This endpoint is used by Playwright tests to test the "Claim Profile" feature.
-    Creates a user with only username, nickname, and MMR - no discordId or steamid.
+    Creates a user with only username and nickname - no discordId or steamid.
 
     Request body (optional):
         username: str - Username for the user (default: generated)
         nickname: str - Nickname for the user (default: generated)
-        mmr: int - MMR value (default: random 2000-6000)
 
     Returns:
         200: Created user data
