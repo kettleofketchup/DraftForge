@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -10,6 +11,7 @@ import {
 } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { UserType } from '~/components/user/types';
@@ -21,6 +23,7 @@ const updateOrganization = vi.hoisted(() => vi.fn());
 const mutateAsync = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 const toastSuccess = vi.hoisted(() => vi.fn());
+const toastWarning = vi.hoisted(() => vi.fn());
 const staffPlacementEnabled = vi.hoisted(() => vi.fn());
 
 const defaults = vi.hoisted(() => ({
@@ -90,10 +93,11 @@ vi.mock('~/components/admin-team', () => ({
   AdminTeamSection: () => <div data-testid="admin-team-section" />,
 }));
 vi.mock('sonner', () => ({
-  toast: { error: toastError, success: toastSuccess },
+  toast: { error: toastError, success: toastSuccess, warning: toastWarning },
 }));
 
 import * as api from '~/components/api/api';
+import { useOrgSettingsParam } from '../hooks/useOrgSettingsParam';
 import { OrgSettingsDialog } from '../OrgSettingsDialog';
 
 class ResizeObserverStub {
@@ -127,13 +131,17 @@ const ORG = {
 
 const onOpenChangeSpy = vi.fn();
 
+let setOrgForTest: (org: OrganizationType) => void = () => undefined;
+
 function Harness({
-  organization,
+  initialOrganization,
   initialSection = null,
 }: {
-  organization: OrganizationType;
+  initialOrganization: OrganizationType;
   initialSection?: string | null;
 }): ReactNode {
+  const [organization, setOrganization] = useState(initialOrganization);
+  setOrgForTest = setOrganization;
   const [open, setOpen] = useState(true);
   const [section, setSection] = useState<string | null>(initialSection);
   return (
@@ -160,14 +168,23 @@ function Harness({
 let client: QueryClient;
 const i18n = createI18nInstance('en');
 
-function wrap(node: ReactNode): ReactNode {
-  return (
-    <QueryClientProvider client={client}>
-      <I18nextProvider i18n={i18n}>
-        <TooltipProvider>{node}</TooltipProvider>
-      </I18nextProvider>
-    </QueryClientProvider>
-  );
+function wrap(node: ReactNode, entries = ['/org']) {
+  const router = createMemoryRouter([{ path: '*', element: node }], {
+    initialEntries: entries,
+    initialIndex: entries.length - 1,
+  });
+  return {
+    router,
+    ui: (
+      <QueryClientProvider client={client}>
+        <I18nextProvider i18n={i18n}>
+          <TooltipProvider>
+            <RouterProvider router={router} />
+          </TooltipProvider>
+        </I18nextProvider>
+      </QueryClientProvider>
+    ),
+  };
 }
 
 function renderDialog(
@@ -176,21 +193,57 @@ function renderDialog(
 ) {
   const utils = render(
     wrap(
-      <Harness organization={organization} initialSection={initialSection} />,
-    ),
+      <Harness
+        initialOrganization={organization}
+        initialSection={initialSection}
+      />,
+    ).ui,
   );
   return {
     ...utils,
-    rerenderWith: (organization: OrganizationType) =>
-      utils.rerender(wrap(<Harness organization={organization} />)),
+    rerenderWith: (next: OrganizationType) => act(() => setOrgForTest(next)),
   };
 }
+
+function UrlHarness(): ReactNode {
+  const param = useOrgSettingsParam({ settled: true, canOpen: true });
+  const location = useLocation();
+  return (
+    <>
+      <span data-testid="url">{`${location.pathname}${location.search}`}</span>
+      {param.open ? (
+        <OrgSettingsDialog
+          organization={ORG}
+          open
+          section={param.section}
+          onSectionChange={param.setSection}
+          onOpenChange={(next) => {
+            if (!next) param.close();
+          }}
+        />
+      ) : (
+        <div data-testid="closed" />
+      )}
+    </>
+  );
+}
+
+function renderUrlDialog() {
+  const { router, ui } = wrap(<UrlHarness />, [
+    '/org',
+    '/org?settings=general',
+  ]);
+  render(ui);
+  return router;
+}
+const url = () => screen.getByTestId('url').textContent;
 
 const tab = (value: string) => screen.getByTestId(`org-settings-tab-${value}`);
 const isActive = (value: string) =>
   tab(value).getAttribute('data-state') === 'active';
 
 async function defaultsLoaded() {
+  fireEvent.mouseDown(tab('defaults-event'), { button: 0 });
   await waitFor(() =>
     expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20),
   );
@@ -214,6 +267,7 @@ beforeEach(() => {
   mutateAsync.mockReset().mockResolvedValue({});
   toastError.mockReset();
   toastSuccess.mockReset();
+  toastWarning.mockReset();
   staffPlacementEnabled.mockReset();
   vi.mocked(api.getOrgEventDefaults).mockClear();
   onOpenChangeSpy.mockReset();
@@ -247,7 +301,7 @@ describe('OrgSettingsDialog', () => {
       'org-settings-tab-defaults-discord',
       'org-settings-tab-defaults-ready',
     ]);
-    expect(staffPlacementEnabled).toHaveBeenCalledWith(true);
+    expect(staffPlacementEnabled).not.toHaveBeenCalledWith(true);
     await defaultsLoaded();
   });
 
@@ -311,6 +365,7 @@ describe('OrgSettingsDialog', () => {
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith('Failed to update defaults'),
     );
+    expect(toastWarning).toHaveBeenCalledTimes(1);
 
     rerenderWith({ ...ORG, name: 'Renamed' } as OrganizationType);
 
@@ -438,5 +493,107 @@ describe('OrgSettingsDialog', () => {
     await waitFor(() =>
       expect(screen.queryByTestId('org-settings-save-bar')).toBeNull(),
     );
+  });
+
+  describe('lazy loading', () => {
+    it('opening on General fetches neither defaults nor staff settings', async () => {
+      renderDialog();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(api.getOrgEventDefaults).not.toHaveBeenCalled();
+      expect(staffPlacementEnabled).not.toHaveBeenCalledWith(true);
+    });
+
+    it('visiting a defaults section fetches the defaults', async () => {
+      renderDialog();
+      fireEvent.mouseDown(tab('defaults-event'), { button: 0 });
+      await waitFor(() => expect(api.getOrgEventDefaults).toHaveBeenCalled());
+      expect(staffPlacementEnabled).not.toHaveBeenCalledWith(true);
+    });
+
+    it('visiting staff placement enables its fetch', async () => {
+      renderDialog();
+      fireEvent.mouseDown(tab('staff-placement'), { button: 0 });
+      await waitFor(() =>
+        expect(staffPlacementEnabled).toHaveBeenCalledWith(true),
+      );
+      expect(api.getOrgEventDefaults).not.toHaveBeenCalled();
+    });
+
+    it('stays loaded after leaving the section', async () => {
+      renderDialog();
+      await defaultsLoaded();
+      fireEvent.mouseDown(tab('general'), { button: 0 });
+      editBoth();
+      expect(screen.getByTestId('org-settings-save-bar')).toBeInTheDocument();
+      expect(screen.getByTestId('org-defaults-max-players-input')).toHaveValue(
+        12,
+      );
+    });
+  });
+
+  describe('history navigation with unsaved edits', () => {
+    const dirty = async () => {
+      fireEvent.change(await screen.findByTestId('org-name-input'), {
+        target: { value: 'Renamed' },
+      });
+      await screen.findByTestId('org-settings-save-bar');
+    };
+
+    it('Back asks to discard; Cancel keeps the modal and edits', async () => {
+      const router = renderUrlDialog();
+      await dirty();
+      await act(() => router.navigate(-1));
+      expect(
+        await screen.findByText('Discard unsaved changes?'),
+      ).toBeInTheDocument();
+      expect(url()).toBe('/org?settings=general');
+
+      fireEvent.click(screen.getByTestId('org-settings-discard-cancel'));
+      await waitFor(() =>
+        expect(screen.queryByText('Discard unsaved changes?')).toBeNull(),
+      );
+      expect(screen.getByTestId('org-name-input')).toHaveValue('Renamed');
+      expect(url()).toBe('/org?settings=general');
+    });
+
+    it('Back then Discard leaves the page', async () => {
+      const router = renderUrlDialog();
+      await dirty();
+      await act(() => router.navigate(-1));
+      fireEvent.click(
+        await screen.findByTestId('org-settings-discard-confirm'),
+      );
+      await waitFor(() => expect(screen.getByTestId('closed')).toBeVisible());
+      expect(url()).toBe('/org');
+    });
+
+    it('changing only the section is not blocked', async () => {
+      renderUrlDialog();
+      await dirty();
+      fireEvent.mouseDown(tab('rules'), { button: 0 });
+      await waitFor(() => expect(url()).toBe('/org?settings=rules'));
+      expect(screen.queryByText('Discard unsaved changes?')).toBeNull();
+      expect(screen.getByTestId('org-name-input')).toHaveValue('Renamed');
+    });
+
+    it('closing with the X prompts once and Discard closes without a second prompt', async () => {
+      renderUrlDialog();
+      await dirty();
+      fireEvent.click(screen.getByTestId('dialog-close-button'));
+      fireEvent.click(
+        await screen.findByTestId('org-settings-discard-confirm'),
+      );
+      await waitFor(() => expect(screen.getByTestId('closed')).toBeVisible());
+      expect(screen.queryByText('Discard unsaved changes?')).toBeNull();
+      expect(url()).toBe('/org');
+    });
+
+    it('Back with no edits is not blocked', async () => {
+      const router = renderUrlDialog();
+      await screen.findByTestId('org-name-input');
+      await act(() => router.navigate(-1));
+      expect(screen.getByTestId('closed')).toBeVisible();
+      expect(screen.queryByText('Discard unsaved changes?')).toBeNull();
+    });
   });
 });

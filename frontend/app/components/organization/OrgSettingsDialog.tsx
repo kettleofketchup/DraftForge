@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { ShieldCheck } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useBlocker } from 'react-router';
 import { AdminTeamSection } from '~/components/admin-team';
 import { useOrgEventDefaultsSections } from '~/components/events/useOrgEventDefaultsSections';
 import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
@@ -47,11 +48,25 @@ export function OrgSettingsDialog({
   const enabled = open && pk != null && canOpen;
 
   const profile = useOrgProfileSections(organization, sectionsRef);
+  const activeId = section ?? profile.sections[0].value;
+  const [visited, setVisited] = useState<ReadonlySet<string>>(
+    () => new Set([activeId]),
+  );
+  if (!visited.has(activeId)) setVisited(new Set(visited).add(activeId));
   const registry = ORG_SETTINGS_SECTIONS.map((s) => ({
     section: s,
-    ...s.useSection(pk ?? 0, enabled && visibleSectionIds.includes(s.id)),
+    ...s.useSection(
+      pk ?? 0,
+      enabled && visibleSectionIds.includes(s.id) && visited.has(s.id),
+      sectionsRef,
+    ),
   }));
-  const defaults = useOrgEventDefaultsSections(pk ?? 0, sectionsRef, enabled);
+  const defaultsVisited = [...visited].some((v) => v.startsWith('defaults-'));
+  const defaults = useOrgEventDefaultsSections(
+    pk ?? 0,
+    sectionsRef,
+    enabled && defaultsVisited,
+  );
 
   const units: SettingsFormUnit[] = [
     profile.unit,
@@ -62,6 +77,21 @@ export function OrgSettingsDialog({
     useSettingsSaveBar(units, {
       testIdPrefix: 'org-settings',
     });
+
+  // After the user confirms a discard, the close navigation must not prompt again.
+  const allowLeave = useRef(false);
+  useEffect(() => {
+    if (isDirty) allowLeave.current = false;
+  }, [isDirty]);
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      open &&
+      isDirty &&
+      !allowLeave.current &&
+      (nextLocation.pathname !== currentLocation.pathname ||
+        !new URLSearchParams(nextLocation.search).has('settings')),
+  );
+  const blocked = blocker.state === 'blocked';
 
   if (pk == null || !canOpen) return null;
 
@@ -124,15 +154,21 @@ export function OrgSettingsDialog({
         }}
       />
       <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
+        open={confirmOpen || blocked}
+        onOpenChange={(next) => {
+          if (next) return;
+          setConfirmOpen(false);
+          if (blocked && !allowLeave.current) blocker.reset();
+        }}
         title="Discard unsaved changes?"
         description="Your unsaved organization settings will be lost."
         confirmLabel="Discard"
         variant="destructive"
         onConfirm={() => {
+          allowLeave.current = true;
           discardAll();
-          onOpenChange(false);
+          if (blocked) blocker.proceed();
+          else onOpenChange(false);
         }}
         confirmTestId="org-settings-discard-confirm"
         cancelTestId="org-settings-discard-cancel"
