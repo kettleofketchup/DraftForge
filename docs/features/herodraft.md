@@ -351,7 +351,7 @@ Privacy is enforced on the server:
 
 | Rule | Value |
 |------|-------|
-| Message length | 1-500 characters, after removing control characters and trimming (the `/all ` prefix does not count) |
+| Message length | 1-500 characters, after removing control characters and invisible format characters (bidi overrides, zero-width spaces; ZWJ and ZWNJ are kept) and trimming (the `/all ` prefix does not count) |
 | Rate limit | 8 messages per 10 seconds per user per draft, text and suggestions combined |
 | History on connect | Last 100 visible messages |
 | Messages kept in the client | 200 |
@@ -359,7 +359,7 @@ Privacy is enforced on the server:
 | Suggestions | Only while `drafting` |
 | Completed or abandoned draft | Read-only; history stays visible to the same people |
 
-Messages are plain text. Newlines become spaces, and markdown and links are not rendered.
+Messages are plain text. Newlines and Unicode line or paragraph separators become spaces, and markdown and links are not rendered.
 
 ### Error codes
 

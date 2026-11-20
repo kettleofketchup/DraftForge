@@ -1,7 +1,9 @@
 // Preview-only mirror of backend parse_composer; the server decides routing.
-const NEWLINES = /[\r\n]/g;
+const NEWLINES = /[\r\n\u2028\u2029]/g;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u0008\u000a-\u001f\u007f-\u009f]/g;
+// ZWNJ/ZWJ shape emoji and scripts; every other Cf (bidi, zero-width) goes.
+const FORMAT = /(?![\u200c\u200d])\p{Cf}/gu;
 const ALL_PREFIX = /^\/all(?:[ \t]+|$)/i;
 const LEADING_BLANKS = /^[ \t]+/;
 const TRAILING_BLANKS = /[ \t]+$/;
@@ -9,7 +11,7 @@ const TRAILING_BLANKS = /[ \t]+$/;
 export type ChatChannel = 'team' | 'all';
 
 export function normalizeChatText(raw: string): string {
-  return raw.replace(NEWLINES, ' ').replace(CONTROL, '');
+  return raw.replace(NEWLINES, ' ').replace(CONTROL, '').replace(FORMAT, '');
 }
 
 function trimBlanks(text: string): string {

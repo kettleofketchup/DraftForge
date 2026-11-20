@@ -362,6 +362,9 @@ class ParseComposerTest(TestCase):
         ("/all\u00a0x", ("team", "/all\u00a0x")),
         ("a\nb", ("team", "a b")),
         ("\x00\x07", ("team", "")),
+        ("a\u2028b\u2029c", ("team", "a b c")),
+        ("\u200b/all x", ("all", "x")),
+        ("/all\u202ex", ("team", "/allx")),
     ]
 
     def test_parity_table(self) -> None:
@@ -372,6 +375,19 @@ class ParseComposerTest(TestCase):
     def test_normalize_strips_c0_c1_and_newlines(self) -> None:
         self.assertEqual(normalize_chat_text("a\r\nb\x85c\x7fd\x9f"), "a  bcd")
         self.assertEqual(normalize_chat_text("tab\tkept"), "tab\tkept")
+
+    def test_normalize_strips_format_and_line_separators(self) -> None:
+        self.assertEqual(normalize_chat_text("a\u2028b\u2029c"), "a b c")
+        bidi = "".join(chr(c) for c in [*range(0x202A, 0x202F), *range(0x2066, 0x206A)])
+        self.assertEqual(normalize_chat_text(f"x{bidi}y"), "xy")
+        self.assertEqual(normalize_chat_text("a\u200bb\u2060c\ufeffd\u00ade"), "abcde")
+        self.assertEqual(
+            normalize_chat_text("\U0001f468\u200d\U0001f469"),
+            "\U0001f468\u200d\U0001f469",
+        )
+        self.assertEqual(
+            normalize_chat_text("\u0645\u200c\u06cc"), "\u0645\u200c\u06cc"
+        )
 
     def test_case_insensitive_prefix(self) -> None:
         self.assertEqual(parse_composer("/All gl hf"), ("all", "gl hf"))

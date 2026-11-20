@@ -1,6 +1,7 @@
 """HeroDraft chat rules: viewer resolution, tenure, parsing, posting and visibility."""
 
 import re
+import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -57,10 +58,12 @@ _SUGGESTION_KINDS = frozenset(
     {HeroDraftChatMessage.Kind.SUGGEST_PICK, HeroDraftChatMessage.Kind.SUGGEST_BAN}
 )
 
-_NEWLINES = re.compile(r"[\r\n]")
+_NEWLINES = re.compile(r"[\r\n\u2028\u2029]")
 _CONTROL = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f]")
 _ALL_PREFIX = re.compile(r"^/all(?:[ \t]+|$)", re.IGNORECASE)
 _TRIM = " \t"
+# ZWNJ/ZWJ shape emoji and scripts; every other Cf (bidi, zero-width) goes.
+_KEEP_FORMAT = frozenset({"\u200c", "\u200d"})
 
 
 @dataclass(frozen=True)
@@ -91,7 +94,10 @@ SPECTATOR = ChatViewer(user_id=None, team_id=None, role="spectator", joined_at=N
 
 
 def normalize_chat_text(raw: str) -> str:
-    return _CONTROL.sub("", _NEWLINES.sub(" ", raw))
+    text = _CONTROL.sub("", _NEWLINES.sub(" ", raw))
+    return "".join(
+        ch for ch in text if ch in _KEEP_FORMAT or unicodedata.category(ch) != "Cf"
+    )
 
 
 def parse_composer(raw: str) -> tuple[ChatChannel, str]:
