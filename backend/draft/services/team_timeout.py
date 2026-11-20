@@ -1,4 +1,4 @@
-"""Team-draft timeout actions (spec §2)."""
+"""Team-draft timeout actions."""
 
 from collections.abc import Callable
 

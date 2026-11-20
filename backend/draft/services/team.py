@@ -1,4 +1,4 @@
-"""Team-draft timer lifecycle helpers (spec §2)."""
+"""Team-draft timer lifecycle helpers."""
 
 from datetime import datetime, timedelta
 

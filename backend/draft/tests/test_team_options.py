@@ -1,4 +1,4 @@
-"""DraftOptions model, lazy creation, Draft state/clock_armed, migration state rule (spec §2)."""
+"""DraftOptions model, lazy creation, Draft state/clock_armed, migration state rule."""
 
 import importlib
 from datetime import date, timedelta

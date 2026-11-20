@@ -1,4 +1,4 @@
-"""Team-draft timer HTTP endpoints: ready, start, pause, resume (spec §2)."""
+"""Team-draft timer HTTP endpoints: ready, start, pause, resume."""
 
 from datetime import timedelta
 

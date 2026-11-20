@@ -1,4 +1,4 @@
-"""Team-draft timer lifecycle: helpers, endpoints, pick matrix, undo, auto-pause, tick payload (spec §2)."""
+"""Team-draft timer lifecycle: helpers, endpoints, pick matrix, undo, auto-pause, tick payload."""
 
 import asyncio
 import threading
