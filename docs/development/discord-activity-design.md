@@ -103,7 +103,7 @@ The bot does not move users, join voice, or auto-launch into arbitrary channels.
    malformed/expired credentials, account linking, spectators and launch callbacks.
 6. Document the local tunnel, proxy mappings, settings and manual Discord pilot.
 7. Check formatting, types, migrations and regressions; push the feature branch,
-   open a PR, request Copilot and inspect CI using the local PR lifecycle skill.
+   open a PR and inspect CI using the local PR lifecycle skill.
 
 ## Pilot acceptance
 
