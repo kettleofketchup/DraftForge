@@ -7,11 +7,12 @@ axis. Three tracks are planned:
 | Track | Status | Measures |
 |---|---|---|
 | `contribution` | Live | Points for hosting, helping, promotion and manual awards (the ledger) |
-| `conduct` | Planned | Attendance and reliability rates |
+| `conduct` | Live (backend) | Attendance outcomes and each member's show rate |
 | `leadership` | Planned | Captain and team-leadership history |
 
-Contributions are the first track. The code stays in `org/contributions/`; its
-`adapter.py` plugs it into the registry.
+Each track's code stays in its own package (`org/contributions/`, `org/conduct/`), and
+the package's `adapter.py` plugs it into the registry. Conduct is registered after
+contribution.
 
 ## Public interface
 
@@ -37,20 +38,20 @@ Each hook returns a `HookResult` holding one `TrackOutput` per track.
 track's structlog fields, so callers spread both without knowing which track wrote
 them.
 
-| Hook | Called from | Contribution track |
-|---|---|---|
-| `on_event_closed(event, *, cancelled, source, actor, now=None)` | `events.completion` | Awards host/helper points (also on an auto-cancel that had staff), stamps `contributions_awarded_at`; returns `awarded` (OrgLog, log) and `created` (log) |
-| `on_event_reopened(event, *, actor, now=None)` | `events.reopen` | Revokes host/helper points; returns `revoked` (OrgLog, log) |
-| `reopen_reset_fields()` | `events.reopen` compare-and-set | `{"contributions_awarded_at": None}`, cleared in the same `UPDATE` |
-| `on_event_deleted(event, *, actor, now=None)` | `events.services.teardown_event` | Nothing |
-| `on_event_changed(event, *, fields, now=None)` | Event PATCH (every changed model field), staff edit, host/helper dedupe after a merge | Re-syncs host/helper points once awarded when `fields` includes a time, name or staff field; returns `synced` (log) |
-| `on_signup_withdrawn(signup, *, prior_status, by_member, now=None)` | No caller yet | Nothing |
-| `on_feature_toggled(org_id, feature, *, enabled)` | No caller yet | Nothing |
-| `merge_users(drop, keep, *, member_pairs)` | Profile claim merge (`org/views.py`), Discord account merge (`app/discord_accounts.py`) | Moves ledger rows to the kept member, repoints `awarded_by`/`updated_by` |
-| `on_user_deleted(user, *, actor)` | User delete (admin and API) | Deletes the user's rows, one `delete_user_contributions` OrgLog per org |
-| `deletion_blockers(user_pks)` | `CustomUserAdmin.get_deleted_objects` | The user's ledger rows (`RESTRICT`) |
-| `promotion_order(event, candidates, *, cache)` | No caller yet (waitlist promotion) | No reordering |
-| `leaderboard(org, track, metric, period, *, viewer, now=None)` | `/contributions/leaderboard/` | Points per member for the period |
+| Hook | Called from | Contribution track | Conduct track |
+|---|---|---|---|
+| `on_event_closed(event, *, cancelled, source, actor, now=None)` | `events.completion`, `events.services.cancel_event` | Awards host/helper points (also on an auto-cancel that had staff), stamps `contributions_awarded_at`; returns `awarded` (OrgLog, log) and `created` (log) | Finalizes outcomes, or voids them when `cancelled`; sets `event.conduct_finalized_at` in memory |
+| `on_event_reopened(event, *, actor, now=None)` | `events.reopen` | Revokes host/helper points; returns `revoked` (OrgLog, log) | Deletes default and automatic outcomes, unfinalizes the rest (staff edits, late cancels); returns `attendance_reopened` (OrgLog, deleted + kept) |
+| `reopen_reset_fields()` | `events.reopen` compare-and-set | `{"contributions_awarded_at": None}`, cleared in the same `UPDATE` | `{"conduct_finalized_at": None}` |
+| `on_event_deleted(event, *, actor, now=None)` | `events.services.teardown_event`, `EventAdmin.delete_model`/`delete_queryset` | Nothing | Deletes unfinalized outcomes, voids finalized ones |
+| `on_event_changed(event, *, fields, now=None)` | Event PATCH (every changed model field), staff edit, host/helper dedupe after a merge | Re-syncs host/helper points once awarded when `fields` includes a time, name or staff field; returns `synced` (log) | Nothing |
+| `on_signup_withdrawn(signup, *, prior_status, by_member, now=None)` | `events.services.cancel_signup` and the switch to Maybe, when the member withdraws a seat-holding signup | Nothing | Captures a late cancel (or a no-show after the start) when `by_member` |
+| `on_feature_toggled(org_id, feature, *, enabled)` | Feature switch API (`org/views_features.py`), `OrgFeatureAdmin.save_model`, both inside `transaction.atomic()` | Nothing | Re-stamps the org's stored eligibility reasons on commit |
+| `merge_users(drop, keep, *, member_pairs)` | Profile claim merge (`org/views.py`), Discord account merge (`app/discord_accounts.py`) | Moves ledger rows to the kept member, repoints `awarded_by`/`updated_by` | Moves outcomes (a staff edit wins a same-event clash), repoints `set_by`/`updated_by` |
+| `on_user_deleted(user, *, actor)` | User delete (admin and API) | Deletes the user's rows, one `delete_user_contributions` OrgLog per org | Nothing (outcomes cascade with the `OrgUser`) |
+| `deletion_blockers(user_pks)` | `CustomUserAdmin.get_deleted_objects` | The user's ledger rows (`RESTRICT`) | Nothing |
+| `promotion_order(event, candidates, *, cache)` | `events.services` waitlist promotion | No reordering | With back of the line on, moves deferred members after everyone else, keeping their order |
+| `leaderboard(org, track, metric, period, *, viewer, now=None)` | `/contributions/leaderboard/`, `/standing/<track>/leaderboard/` (`/conduct/leaderboard/` reads `org/conduct/board.py` directly) | Points (or `entries`) per member for the period | Show rate per member, ranked then new; `total` is `null` |
 
 `leaderboard` raises `UnknownTrack`, `UnknownMetric`, `FeatureLocked`, or
 `AccessDenied` when the track's `access()` returns `allowed=False`. It blanks `rows`
@@ -167,24 +168,49 @@ Periods (`Period`, `parse_period`, org-timezone helpers) live in
 
 ## Conduct track
 
-`org/conduct/adapter.py` registers conduct after contribution. Its hooks wrap the
-conduct lifecycle: close finalizes (or voids when cancelled), reopen returns
-`attendance_reopened` for the OrgLog, delete tears outcomes down, a member's own
-withdrawal (`on_signup_withdrawn(by_member=True)`) captures a late cancel, merges move
-outcomes, and `promotion_order` puts back-of-line members after everyone else.
+`org/conduct/adapter.py` (`CONDUCT`) wraps the conduct lifecycle (see the hook table).
+The generic maths (`weighted_rate`, `score_groups`) comes from the shared scorer;
+`org/conduct/scoring.py` keeps only conduct's show value, forecast and member score.
+While Conduct is locked, the adapter records nothing new: finalize materializes no
+outcomes and late cancels are not captured. Maintenance (void, reopen, delete, merge)
+always runs.
+
+### Enforcement through the evaluator
 
 Enforcement is not a standing hook. It is the evaluator check
 `events/eligibility/checks/conduct.py`, the one module in `events/` that imports a
-track package (`org.conduct.eligibility`). The check reads the tier through a
-`StandingCache`, so a waitlist pass builds the gate once and scores once.
-`ensure_self_serve` refuses a self sign-up when the evaluator returns a blocking reason;
-staff placements and re-evaluations pass `for_staff_placement=True`, which turns the
-block into needs-approval.
+track package, and it imports only `org.conduct.eligibility` (plus
+`org.standing.cache`). The check reads the member's tier through a `StandingCache`, so
+a waitlist pass builds the gate once and scores once; evaluator `PRIMERS` let
+`events.eligibility.store` batch the scoring for a whole org without naming a track.
+
+| Tier | Self sign-up | Staff placement or re-evaluation (`for_staff_placement=True`) |
+|---|---|---|
+| Require approval | `needs_approval`, rule `conduct-require-approval` | Same |
+| Block | `block`, rule `conduct-block` | `needs_approval`, rule `conduct-block` |
+
+Both carry code `conduct_below_threshold` and `params={"tier": ...}`, never the show
+rate. `events.admission.ensure_self_serve` raises `SignupRefused` on any blocking
+reason and logs `signup_eligibility_refused`; admission never imports conduct.
+
+### Re-stamp slot
 
 Conduct writes that change a tier (finalize, staff edits, settings, the feature switch)
-re-stamp stored reasons through `org/standing/restamp.py`: `events.eligibility.store`
-registers `refresh_org_eligibility` and a per-member refresh there at import, and the
-adapter schedules them with `transaction.on_commit`.
+re-stamp stored reasons through `org/standing/restamp.py`, a slot that lets a track
+reach the evaluator store without importing `events.eligibility`:
+
+| Call | Does |
+|---|---|
+| `register(org_fn, member_fn)` | `events.eligibility.store` registers `refresh_org_eligibility` and the batch member refresh at import |
+| `org_on_commit(org_id)` | Re-stamps every open signup in the org after commit |
+| `member_on_commit(org_users)` | One callback for a batch of members (one gate, one scoring query) |
+| `override(org_fn, member_fn)` | Test-only context manager; tests never call `register()` |
+
+Both `*_on_commit` calls raise `RuntimeError` when nothing is registered, which would
+roll back the caller. `events/completion.py` and `events/reopen.py` import
+`events.eligibility.store` at module top, so every interpreter that can finalize or
+reopen has the slot registered (`org.tests.test_standing_import_order` checks each
+entry point in a fresh interpreter).
 
 ## Generic endpoints
 
@@ -193,6 +219,25 @@ adapter schedules them with `transaction.on_commit`.
 - `GET /api/organizations/<org_id>/standing/<track>/leaderboard/?metric=&period=`: one
   metric's board. `api.leaderboard` blanks rows and the own row from the track's access
   rule, whatever the adapter returned. Non-periodic metrics echo `period="current"`.
+
+`TrackAccess` carries two board-level flags beside the row flags. `allowed=False`
+makes `api.leaderboard` raise `AccessDenied` (the view returns `401` to anonymous
+viewers and `not_permitted` otherwise); conduct sets it when the ranking is private
+and the viewer is neither staff nor a member. `board_open` is whether the board itself
+is open to the viewer (conduct: `leaderboard_public` or org staff; contribution:
+always), and backs org detail's `can_view_conduct`.
+
+## Departures from the design
+
+| Departure | Status |
+|---|---|
+| `track_info`, `member_standing`, `api.tracks_for`, `api.member_standing` | Closed by the conduct track |
+| Contribution `entries` metric | Closed by the conduct track |
+| `tests/populate/*` rewired onto standing | Closed by the conduct track |
+| `ledger.upsert_event_entry` | Open, arrives with the leadership track |
+| Promotion wrapper named `has_promo_entry` | Stays |
+| `dedupe_host_helpers` calls `on_event_changed` itself; Event PATCH passes every changed field | Stays |
+| The internal transition endpoint and `cleanup_stale_repeater_events` change event state without the hooks | Open |
 
 ## Adding a track
 
@@ -214,8 +259,9 @@ org/standing/
   __init__.py   empty
   api.py        the interface (imports registry)
   registry.py   imports each adapter
-  base.py, types.py, cache.py, errors.py, scoring.py,
-  periods.py, kinds.py, ledger.py      leaves
+  views.py, urls.py   generic endpoints (import api)
+  base.py, types.py, cache.py, errors.py, scoring.py, serializers.py,
+  periods.py, kinds.py, ledger.py, restamp.py      leaves
 ```
 
 - `__init__.py` stays empty, so importing a leaf never loads the registry.
@@ -224,6 +270,9 @@ org/standing/
 - Nothing `registry.py` reaches imports `events.services`, `events.views`,
   `events.completion`, `events.reopen`, `events.admission` or `events.eligibility`.
 - `app/` and `events/` import only `org.standing.api` (and `org.standing.cache`).
+  `events/eligibility/store.py` may also import `org.standing.restamp`, and
+  `events/eligibility/checks/conduct.py` may import `org.conduct.eligibility`. No other
+  module in `events/` names a track or a track output key.
 
 `org.tests.test_standing_layering` checks these rules, including the transitive
 closure of the registry. `org.tests.test_standing_import_order` imports each entry

@@ -9,6 +9,14 @@ A site admin unlocks Conduct per organization, the same way as the other
 [locked features](organization-locked-features.md#unlocking-a-feature). The API is
 listed in [API Endpoints: Conduct](../api/endpoints.md#conduct), and the permission
 rules in [Roles & Permission Matrix](../dev/auth/roles.md#promoter-and-locked-features).
+Conduct is a [standing track](../development/org-standing.md#conduct-track), so its
+ranking is also served by the generic
+[standing endpoints](../api/endpoints.md#organization-standing).
+
+!!! note "Screens ship separately"
+    The backend (recording, scoring, enforcement and the API) ships first. The Conduct
+    tab, the Conduct settings section, the Attendance panel and the turnout forecast
+    card described below arrive with the conduct frontend.
 
 ---
 

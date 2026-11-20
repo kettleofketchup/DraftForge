@@ -567,6 +567,7 @@ writable:
 | `can_view_own_conduct` | Conduct unlocked and the viewer is a member of the org (has an `OrgUser`) |
 | `can_view_conduct_details` | Conduct unlocked and the viewer is org staff or above |
 | `can_manage_conduct` | Conduct unlocked and the viewer is org admin or above |
+| `standing_tracks` | The viewer's unlocked standing tracks, the same list as [`standing/tracks/`](#organization-standing) |
 
 The detail never includes feature notes, `enabled_by` or `enabled_at`. Reading the conduct
 flags never creates the org's conduct settings row.
@@ -669,7 +670,11 @@ event's league. The event must belong to the URL's org, else `404`.
 `conduct_finalized_at` on the event payload is set when the event's outcomes are
 finalized or voided; see [Events: Attendance outcomes](../features/events.md#attendance-outcomes).
 With Block enabled, `POST /api/events/{id}/signup/` refuses a blocked member with `400`
-`{"error": "Your attendance record in this organization is below what it requires for self sign-up. Ask an organizer to add you."}`.
+`{"error": "Your attendance record in this organization is below what it requires for self sign-up. Ask an organizer to add you.", "reasons": [...]}`,
+where `reasons` holds the `conduct_below_threshold` reason with `severity: "block"`,
+`rule: "conduct-block"` and `params: {"tier": "block"}` (see
+[Signup requirements](#signup-requirements)). Staff placements of the same member are
+held as pending approval instead.
 
 ### Internal
 
@@ -1565,7 +1570,20 @@ All responses follow this format:
 
 ## Organization standing
 
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/api/organizations/<org_id>/standing/tracks/` | Unlocked tracks with their metrics and the viewer's `can_view_rows`, `can_view_own`, `can_manage` |
-| GET | `/api/organizations/<org_id>/standing/<track>/leaderboard/` | `?metric=` (default metric when omitted), `?period=all\|YYYY-MM` for periodic metrics. Returns `{track, metric, period, total, rows, rows_visible, own_row}`; 404 unknown track, 400 unknown metric or period, 403 locked feature or not permitted |
+Generic reads over every standing track (`contribution`, `conduct`). Guide:
+[Org Standing](../development/org-standing.md#generic-endpoints).
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/organizations/{id}/standing/tracks/` | `{tracks: [{key, label, metrics: [{key, label, format, periodic, default}], can_view_rows, can_view_own, board_open, can_manage}]}`, one entry per unlocked track in registry order | Anyone |
+| GET | `/api/organizations/{id}/standing/{track}/leaderboard/?metric=&period=` | `{track, metric, period, total, rows: [{member, value, sample, status}], rows_visible, own_row}`. `metric` defaults to the track's default; `period` is `all` or `YYYY-MM` for periodic metrics, and non-periodic metrics return `period: "current"`. `rows` and `own_row` are blanked by the track's access rule; `total` is `null` for conduct | Per track (below) |
+
+| Track | Metrics | Rows | Own row |
+|-------|---------|------|---------|
+| `contribution` | `points` (default), `entries`; periodic | Viewers who pass `can_view_org_members` | Signed-in viewers |
+| `conduct` | `show_rate`; not periodic; `status` is `ranked` or `new` | Ranking public or org staff, and `can_view_org_members` | Org members |
+
+Unknown track is `404`; unknown metric or period is `400`; a locked feature is
+`feature_locked`. With the conduct ranking private, an anonymous viewer gets `401`, a
+non-member `not_permitted`, and a member `200` with `rows_visible: false`, `rows: []`
+and their `own_row`.

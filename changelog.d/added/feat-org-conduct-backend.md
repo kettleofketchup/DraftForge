@@ -8,3 +8,5 @@
   Organizers can still add or approve them; a blocked member added by staff waits for
   approval.
 - The feature is locked by default and a site admin unlocks it per organization.
+- New organization standing endpoints list the tracks a viewer can see and serve any
+  track's leaderboard, including contributions ranked by number of entries.
