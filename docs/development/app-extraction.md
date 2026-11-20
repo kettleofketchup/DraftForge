@@ -2,14 +2,14 @@
 
 `backend/app` started as the only Django app and still holds most of the backend. We are splitting it into domain apps one slice per PR, models included. Each PR moves one slice, and `app/` only ever gets smaller.
 
-The first slice moved the hero draft family into the new `draft` app. This page is the recipe that slice followed, written so later slices can repeat it step by step.
+The first slice moved the hero draft family into the new `draft` app, and the second moved the team draft family into the same app. This page is the recipe both followed, written so later slices can repeat it step by step.
 
 Planned slices, in order:
 
 | Slice | Source app | Target app |
 |-------|-----------|------------|
 | Hero draft (done) | `app` | `draft` |
-| Team draft (`Draft`, `DraftRound`, `DraftEvent`, `DraftOptions`, teamdraft/shuffle/draft_picks, `draft_tick`, `teamdraft_tick`) | `app` | `draft` |
+| Team draft (done: `Draft`, `DraftRound`, `DraftEvent`, `DraftOptions`, teamdraft/shuffle/draft_picks, `draft_tick`, `teamdraft_tick`) | `app` | `draft` |
 | Leagues, ratings, matches | `app` | per domain |
 | Org and league logs | `app` | per domain |
 | Bracket and tournament | `bracket` | `tournament` |
@@ -73,6 +73,16 @@ grep -rn "_meta.label" $B --include='*.py'
 
 Swap in the slice's own model and module names. The relative form (`from .models import`) matters: the hero slice missed one in `app/views_main.py` on the first pass.
 
+Two more inventories:
+
+- **Build the guard's `moved` set from the patch strings.** For each module that loses code, grep its patch targets (single- and multi-line, as above, plus `patch.object(<module>, ...)` on imported module objects). Every patched name that leaves the module goes in `moved`. A name that stays in the old module but is patched for moved code (for example a module-level `log`) cannot go in `moved`, because its definition would trip the guard. Its patch sites need a use-site retarget instead.
+- **Find other apps' migrations that name the moved models.** These must run before the source app's move migration (see "Cross-app data migrations" below). The guard enforces it, but find them before you write the dependencies:
+
+```bash
+grep -rnE "get_model\(\s*['\"]app['\"]" $B/*/migrations/*.py
+grep -rniE "['\"]app\.(draft|draftround|draftevent|draftoptions)['\"]" $B/*/migrations/*.py
+```
+
 ### 2. Create or extend the target app
 
 For a new app:
@@ -127,6 +137,8 @@ Every commit must pass `manage.py check`, the tests that touch the slice and bot
 6. **Guard entry** (step 9).
 7. **Docs and changelog** (steps 10 and 11).
 
+**Slice size.** Split a slice into stacked PRs when it has a separable shared-infrastructure move (prep and infra in one PR, domain code and models in the next), or when the diff passes roughly 60 non-test files. The team draft slice is the worked example: the prep commits plus the `draft_tick` and `consumers_base` moves form a self-contained prefix that touches no models or migrations.
+
 After each commit, run the touched-name sweep (every test module that mentions the slice):
 
 ```bash
@@ -161,8 +173,21 @@ Add a `MovedSlice` to `backend/tests/test_app_boundaries.py` and append it to `M
 - `moved`: fully qualified `(old_module, name)` pairs. Include names the old modules only imported, if tests used to patch them there (for example `("app.consumers", "broadcast_herodraft_state")`).
 - `retired_modules`: module paths that no longer exist.
 - `model_labels`: lower-case model names. The guard checks `app_label` and `db_table` for each.
+- `move_migration`: `(source_app, name)` of the source app's move migration. The guard scans every other app's migrations for references to the moved models under the source label and requires each one to be an ancestor of this migration.
+- `cached_labels`: the moved models that have a `CACHEOPS` profile. The guard checks that `"<new_app>.<label>"` is present.
 
-Update `ALLOWED_BACK_EDGES[<new_app>]` with each production file in the source app that still imports from the new app, and the names it imports. Test modules are exempt. The guard fails when a listed name is no longer imported, so the list only shrinks. Each listed name also becomes an attribute of that source-app module, so the guard blocks importing it from there (for example `from app.draft_state import HeroDraft`) in every other file.
+Do not touch `GuardSelfTests` to add a slice. They run against a synthetic fixture slice and back-edge map, not the live ones.
+
+Update `ALLOWED_BACK_EDGES[<new_app>]` with each production file in the source app that still imports from the new app. Each entry is a `BackEdge(names, reason, type_only)`. Test modules are exempt. The rules:
+
+- The list must match reality exactly. The guard fails on an unlisted file or name and on a listed name that is no longer imported.
+- Every entry carries a non-empty `reason`.
+- The list may grow, but only for class-definition-time uses or code owned by a later slice (tournament, Team). An unlisted edge the guard reports is a design question, not something to add without thought.
+- Names imported only under `if TYPE_CHECKING:` go in `type_only`. A runtime import of a `type_only` name is a violation.
+
+Each listed name also becomes an attribute of that source-app module, so the guard blocks importing it from there (for example `from app.tournament_state import HeroDraft`) in every other file.
+
+Derive the entries from the guard's own output rather than writing them by hand. Between commits, an edge that exists only until a later commit can be listed with a reason starting `TEMP`; none may be left by the guard commit.
 
 ### 10. Fix stale references
 
@@ -183,12 +208,21 @@ grep -rn "app/routing\.py\|app/urls\.py\|HeroDraftConsumer\|HeroDraftSSRView" do
 
 Match module paths, not bare names: `herodraft_tick` on its own is also the WebSocket message type, which does not change. Plans under `docs/plans/` are historical; leave them.
 
+Hard-coded path lists in code and config also name old modules and files. Grep for the old file paths, not only the dotted module names, and check each of these:
+
+- `BROADCAST_CALL_SITES` and similar module-name tuples in tests
+- `SCAN_TARGETS` in `user/tests/test_cacheops.py`
+- `RouteResolutionTests` expected modules
+- the logger-level overrides in `backend/settings.py`
+- test globs in `just/test/backend.just`
+- `.github/labeler.yml`
+
 ### 11. Verify and write the changelog
 
 Run the full verification before opening the PR:
 
 - `manage.py check`, `makemigrations --check --dry-run`, and `sqlmigrate` for each new migration (no SQL).
-- Both CI test groups.
+- Both CI test groups. Record the `app` and `rest` backend-test durations on the base branch and on the slice branch in the PR description. If the slower group grows by more than about 20%, rebalance `just ci::backend-test-labels` (for example with a third `draft` group) in that PR or a follow-up.
 - Migrate a copy of a populated pre-move database forward and back (`just docker::db::pull` gets one). Diff `sqlite_master` before and after; only `django_migrations` rows may change, and `django_content_type` must have one row per moved model.
 - The guard and the host-side script tests (`just test::slots-unit`).
 - An audit of every `mock.patch` target in the slice's tests.
@@ -225,13 +259,32 @@ python manage.py shell -c "from django.contrib.contenttypes.models import Conten
 
 For the hero draft slice that is `app_label='draft', model__in=['herodraft', 'draftteam', 'herodraftround', 'herodraftevent']`.
 
+For the team draft slice, the clean rollback is:
+
+```bash
+python manage.py migrate app 0107
+python manage.py migrate discordbot 0013
+python manage.py migrate draft 0001
+python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='draft', model__in=['draft', 'draftround', 'draftevent', 'draftoptions']).delete()"
+```
+
+Here the model name `draft` is the same as the app label. The `model__in` filter handles that correctly; it is not a typo.
+
 !!! danger "Never delete by `app_label` alone"
     `ContentType.objects.filter(app_label='<new_app>').delete()` also hits every other model in the destination app, including slices moved earlier. The delete cascades through `auth_permission`, `auth_user_user_permissions` and `auth_group_permissions`, so their real grants are wiped, and `django_admin_log.content_type` is set to NULL for their log entries. Always filter on the moved model names.
 
 **Code-only rollback** (redeploy the old image without unmigrating) also works. The old code ignores migrations it does not know, and the schema is identical. But its `post_migrate` recreates `(<source_app>, <model>)` ContentTypes next to the relabelled `(<new_app>, <model>)` rows, and permission grants stay on the new rows. To get back to one row per model, reconcile by hand. Repoint `auth_permission` (and through it `auth_user_user_permissions` and `auth_group_permissions`) and `django_admin_log` from the duplicate ContentType to the surviving one, then delete the duplicate.
 
-## Notes for the team-draft slice
+## What the team-draft slice learned
 
-- `draft/tests/test_hero_timer_options.py` imports `app.tests.teamdraft_fixtures.TimedDraftFixture`. Move that fixture into `draft/tests/` with the team-draft code and remove the test-only `draft -> app.tests` edge.
-- Add a `TEAM_DRAFT` entry to the guard. If team draft moves completely, the `ALLOWED_BACK_EDGES["draft"]` entries for `app/draft_state.py` and `app/views_main.py` should go away with it.
-- The test-db image hash covers `backend/*/models/*.py`, so any change to `draft/models/` busts the cache and CI runs a fresh populate.
+- **Cross-app data migrations need an explicit edge.** Any other app's migration that calls `apps.get_model("<source_app>", "<Moved>")` must be an ancestor of the source app's move migration. `events/0024` read `app.DraftOptions`, so `app/0108` depends on it; without that edge a fresh `migrate` can fail with `LookupError`. The guard's ancestry check (`move_migration`) now enforces this for every slice.
+- **Class-definition-time uses in the source app stay until their consumer moves.** A choices enum such as `DraftStyles`, or a serializer class attribute such as `TournamentSerializer.draft`, cannot be fixed by moving the dependency. Leave it, and record the edge as a back-edge with a reason.
+- **Method-body uses of a moved model inside a source-app model** resolve it with `self._meta.get_field("<fk>").related_model`, with a `TYPE_CHECKING` import for the annotation (`Tournament.get_draft_options`). The guard pins that import as `type_only`.
+- **Shared infrastructure moves with the slice that owns it.** Split off the parts other domains still need first: `consumer_db` went to `app/consumer_db.py` so `TournamentConsumer` and both draft consumers share one executor. Keep a module's name when many patch strings depend on it (`draft/tasks/draft_tick.py`).
+- **Keep DRF router registrations in `backend/urls.py`**, importing the viewsets from the new app, so the API root listing does not change.
+- **Logger-level overrides follow the code.** The INFO overrides in `backend/settings.py` name module loggers. When code moves, add the new logger names, and keep an old one only if that module still logs. Otherwise those INFO lines are dropped whenever `LOG_LEVEL` is above INFO, and no test notices because the test env runs at DEBUG.
+- **Tournament code that reads draft tables keeps its back-edges.** The slice 1 note expected the `app/draft_state.py` and `app/views_main.py` entries to disappear. They did not: the tournament prefetch plan (now `app/tournament_state.py`) and the `views_main` cache dependencies are tournament code that legitimately reads draft tables. They go when the tournament slice moves.
+- **Rename source-app modules whose name would attract the moved code back.** `app/draft_state.py` became `app/tournament_state.py` once the draft functions left it.
+- **Test-only cross-app edges are stated, not claimed gone.** `draft/tests` imports nothing from `app.tests`. `app/tests` imports `draft.tests.team_fixtures` and `draft.tests.ws_helpers`, the same direction as the production back-edges.
+- **Team-domain helpers stay with Team** even when draft code is their only caller. `app/services/team_references.py` stays in `app`, and `draft/services/team_reset.py` imports it forward.
+- The test-db image hash covers `backend/*/models/*.py` and every migration, so any change to `draft/models/` busts the cache and CI runs a fresh populate.

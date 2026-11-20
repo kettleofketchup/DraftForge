@@ -7,10 +7,8 @@ Draft:
           - frontend/app/components/draft/**
           - frontend/app/components/teamdraft/**
           - frontend/app/components/herodraft/**
-          - backend/app/**/shuffle_draft*
           - backend/app/**/snake_draft*
           - backend/app/**/hero_draft*
-          - backend/app/views/draft*
           - backend/draft/**
 
 Tournament:

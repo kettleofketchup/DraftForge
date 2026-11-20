@@ -10,7 +10,7 @@ CustomUser
 ├── captain_of → Team (reverse)
 ├── member_of → Team.members (M2M reverse)
 ├── tournaments → Tournament.users (M2M reverse)
-└── draft_picks → DraftRound.choice (reverse)
+└── draftrounds_choice → DraftRound.choice (reverse)
 
 Tournament
 ├── users → CustomUser (M2M)
