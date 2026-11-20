@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import uuid
 from datetime import date, timedelta
 from typing import Any
@@ -19,6 +20,12 @@ from django.db import transaction
 from django.test import TransactionTestCase, override_settings
 from django.urls import path, re_path
 from django.utils import timezone
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+    InMemorySpanExporter,
+)
 from structlog.testing import capture_logs
 
 from app.broadcast import broadcast_herodraft_state
@@ -46,6 +53,7 @@ from app.models import (
     Tournament,
 )
 from app.redis_client import get_redis_client
+from app.routing import websocket_urlpatterns
 from app.services.team_management import follow_captain
 from app.tests.ws_helpers import (
     assert_no_frame_except_ping,
@@ -1196,5 +1204,185 @@ class ChatActivitySocketTest(ChatSendFixture):
                     for other in others
                 )
             )
+        finally:
+            await self.close_all()
+
+
+class _RecordingHandler(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(level=logging.DEBUG)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+class ChatTelemetryLeakTest(ChatSendFixture):
+    exporter: InMemorySpanExporter
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.exporter = InMemorySpanExporter()
+        processor = SimpleSpanProcessor(cls.exporter)
+        provider = trace.get_tracer_provider()
+        if hasattr(provider, "add_span_processor"):
+            provider.add_span_processor(processor)
+        else:
+            provider = TracerProvider()
+            provider.add_span_processor(processor)
+            trace.set_tracer_provider(provider)
+
+    async def test_t14_logs_and_spans_carry_no_chat_content(self) -> None:
+        team_sentinel = "t14-team-9c3a7e"
+        all_sentinel = "t14-all-41d0bf"
+        hero_id = 74
+        needles = (team_sentinel, all_sentinel, "suggest_ban", "suggest_pick")
+        await self.set_state(HeroDraftState.DRAFTING)
+        handler = _RecordingHandler()
+        root = logging.getLogger()
+        old_level = root.level
+        root.addHandler(handler)
+        root.setLevel(logging.DEBUG)
+        self.exporter.clear()
+        try:
+            with capture_logs() as logs:
+                try:
+                    mem_a = await self.connect_as(self.mem_a)
+                    cap_a = await self.connect_as(self.cap_a)
+                    await self.connect_as(self.spectator)
+                    acks = [
+                        await self.send_chat(mem_a, team_sentinel, "t14-1"),
+                        await self.suggest(mem_a, Kind.SUGGEST_BAN, hero_id),
+                        await self.send_chat(mem_a, f"/all {all_sentinel}", "t14-2"),
+                    ]
+                    self.assertEqual([a["type"] for a in acks], ["chat_ack"] * 3)
+                    too_long = await self.send_chat(
+                        mem_a, team_sentinel + "x" * 500, "t14-3"
+                    )
+                    self.assertEqual(too_long["code"], "too_long")
+                    unavailable = await self.suggest(mem_a, Kind.SUGGEST_PICK, 999_999)
+                    self.assertEqual(unavailable["code"], "hero_unavailable")
+                    delivered = [
+                        (await read_until_type(cap_a, "chat_message"))["message"]
+                        for _ in range(3)
+                    ]
+                    self.assertEqual(
+                        [m["kind"] for m in delivered],
+                        ["text", "suggest_ban", "text"],
+                    )
+                finally:
+                    await self.close_all()
+        finally:
+            root.removeHandler(handler)
+            root.setLevel(old_level)
+
+        sent = [e for e in logs if e["event"] == "herodraft_chat_sent"]
+        self.assertEqual([e["channel"] for e in sent], ["team", "team", "all"])
+        self.assertEqual(
+            [e["code"] for e in logs if e["event"] == "herodraft_chat_rejected"],
+            ["too_long", "hero_unavailable"],
+        )
+        for entry in logs:
+            keys = {k.lower() for k in entry}
+            self.assertFalse(keys & {"body", "message", "text", "text_data"}, entry)
+            self.assertFalse([k for k in keys if "hero" in k], entry)
+            if entry.get("subsystem") == "chat" and entry.get("channel") != "all":
+                self.assertNotIn("kind", entry)
+            dumped = json.dumps(entry, default=str)
+            for needle in needles:
+                self.assertNotIn(needle, dumped, entry)
+
+        for record in handler.records:
+            dumped = f"{record.getMessage()} {record.__dict__!r}"
+            for needle in needles:
+                self.assertNotIn(needle, dumped)
+
+        spans = self.exporter.get_finished_spans()
+        chat_spans = [
+            s
+            for s in spans
+            if s.name == "ws.message"
+            and (s.attributes or {}).get("ws.message_type")
+            in {"chat_send", "chat_suggest"}
+        ]
+        self.assertEqual(len(chat_spans), 5)
+        for span in spans:
+            attribute_sets = [dict(span.attributes or {})] + [
+                dict(ev.attributes or {}) for ev in span.events
+            ]
+            for attrs in attribute_sets:
+                for key, value in attrs.items():
+                    self.assertNotIn("hero", key.lower(), span.name)
+                    self.assertNotIn("body", key.lower(), span.name)
+                    for needle in needles:
+                        self.assertNotIn(needle, str(value), span.name)
+
+
+@override_settings(DISCORD_ACTIVITY_ENABLED=True)
+class ChatActivityMountLeakTest(ChatSendFixture):
+    def real_application(self) -> Any:
+        return AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
+
+    @database_sync_to_async
+    def activity_tokens(self, users: list[CustomUser]) -> list[str]:
+        DraftActivityChannel.objects.create(
+            guild_id="1", channel_id="t16-activity", draft=self.draft
+        )
+        instance = DraftActivityInstance.objects.create(
+            instance_id="t16-activity-instance",
+            guild_id="1",
+            channel_id="t16-activity",
+            draft=self.draft,
+        )
+        return [issue_activity_token(u, instance) for u in users]
+
+    async def activity_connect(
+        self, token: str
+    ) -> tuple[WebsocketCommunicator, dict[str, Any]]:
+        comm = WebsocketCommunicator(
+            self.real_application(),
+            f"/api/discord/activity/draft/{self.draft.pk}/",
+            subprotocols=["draftactivity", token],
+        )
+        connected, _ = await comm.connect(timeout=5)
+        self.assertTrue(connected)
+        self.comms.append(comm)
+        return comm, await read_until_type(comm, "chat_history")
+
+    async def test_t16_activity_mount_keeps_team_chat_private(self) -> None:
+        live = "t16-live-0e8b52"
+        bodies = await self.seed_history("t16-hist-0e8b52")
+        await self.set_state(HeroDraftState.DRAFTING)
+        try:
+            spectator_token, team_b_token, team_a_token = await self.activity_tokens(
+                [self.spectator, self.mem_b, self.mem_a]
+            )
+            spectator, spectator_history = await self.activity_connect(spectator_token)
+            team_b, team_b_history = await self.activity_connect(team_b_token)
+            team_a, team_a_history = await self.activity_connect(team_a_token)
+
+            self.assertEqual(spectator_history["viewer"]["role"], "spectator")
+            self.assertEqual(team_b_history["viewer"]["team_id"], self.team_b.pk)
+            self.assertEqual(team_a_history["viewer"]["team_id"], self.team_a.pk)
+            self.assertEqual(self.bodies(spectator_history), [bodies["all"]])
+            self.assertEqual(self.bodies(team_b_history), [bodies["b"], bodies["all"]])
+            self.assertEqual(self.bodies(team_a_history), [bodies["a"], bodies["all"]])
+            for history in (spectator_history, team_b_history):
+                self.assertNotIn(bodies["a"], json.dumps(history))
+
+            cap_a = await self.connect_as(self.cap_a)
+            self.assertEqual((await self.send_chat(cap_a, live))["type"], "chat_ack")
+            self.assertEqual(
+                (await self.suggest(cap_a, Kind.SUGGEST_PICK, 74))["type"], "chat_ack"
+            )
+            received = [
+                (await read_until_type(team_a, "chat_message"))["message"]
+                for _ in range(2)
+            ]
+            self.assertEqual(received[0]["body"], live)
+            self.assertEqual(received[1]["kind"], "suggest_pick")
+            for comm in (spectator, team_b):
+                await self.assert_no_chat_frame(comm, live, "suggest_pick")
         finally:
             await self.close_all()
