@@ -170,6 +170,29 @@ describe('TeamActionReasonDialog', () => {
       });
     });
 
+    it('warns only when the captain is being replaced', () => {
+      renderDialog({
+        replacingOptions: [people.captain, people.member],
+        replacingCaptain: { pk: people.captain.pk, warning: 'Draft resets' },
+      });
+      expect(screen.queryByText('Draft resets')).toBeNull();
+      let listbox = openReplacing();
+      const captainOption = within(listbox).getByRole('option', {
+        name: `${DisplayName(people.captain)} (captain)`,
+      });
+      fireEvent.click(captainOption);
+      expect(screen.getByTestId('team-action-warning')).toHaveTextContent(
+        'Draft resets',
+      );
+      listbox = openReplacing();
+      fireEvent.click(
+        within(listbox).getByRole('option', {
+          name: DisplayName(people.member),
+        }),
+      );
+      expect(screen.queryByText('Draft resets')).toBeNull();
+    });
+
     it('sends the chosen player pk', async () => {
       const { onSubmit } = renderDialog({
         replacingOptions: options,

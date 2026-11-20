@@ -38,6 +38,7 @@ export interface TeamActionReasonDialogProps {
   destructive?: boolean;
   defaultReason?: string;
   replacingOptions?: RosterUser[];
+  replacingCaptain?: { pk: number; warning: ReactNode };
   pending: boolean;
   /** Return the request promise: the dialog stays loading until it settles. */
   onSubmit: (values: TeamActionReasonValues) => Promise<unknown>;
@@ -64,6 +65,7 @@ export function TeamActionReasonDialog({
   destructive = false,
   defaultReason = '',
   replacingOptions,
+  replacingCaptain,
   pending,
   onSubmit,
 }: TeamActionReasonDialogProps) {
@@ -73,6 +75,11 @@ export function TeamActionReasonDialog({
     mode: 'onChange',
     defaultValues: initialValues(open, defaultReason, withReplacing),
   });
+  const replacingId = form.watch('replacing_id');
+  const shownWarning =
+    replacingCaptain && replacingId === replacingCaptain.pk
+      ? replacingCaptain.warning
+      : warning;
   const inFlight = useRef<Promise<void> | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -115,9 +122,9 @@ export function TeamActionReasonDialog({
       bodyContent={
         <Form {...form}>
           <div className="flex flex-col gap-4">
-            {warning ? (
+            {shownWarning ? (
               <div className="text-sm" data-testid="team-action-warning">
-                {warning}
+                {shownWarning}
               </div>
             ) : null}
             {withReplacing ? (
@@ -146,6 +153,9 @@ export function TeamActionReasonDialog({
                         {replacingOptions.map((user) => (
                           <SelectItem key={user.pk} value={String(user.pk)}>
                             {DisplayName(user)}
+                            {user.pk === replacingCaptain?.pk
+                              ? ' (captain)'
+                              : ''}
                           </SelectItem>
                         ))}
                       </SelectContent>

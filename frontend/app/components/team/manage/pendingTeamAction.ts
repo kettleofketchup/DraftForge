@@ -11,4 +11,6 @@ export type PendingTeamAction = {
   destructive?: boolean;
   warning?: ReactNode;
   withReplacing?: boolean;
+  /** Warn when the sub-in replaces this player (the captain). */
+  replacingCaptain?: { pk: number; warning: ReactNode };
 };

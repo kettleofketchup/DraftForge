@@ -135,6 +135,14 @@ export function subInRequest(
     summary: `Sub ${DisplayName(standin)} into ${team.name}.`,
     confirmText: 'Sub in',
     withReplacing: true,
+    ...(team.captain
+      ? {
+          replacingCaptain: {
+            pk: team.captain.pk,
+            warning: CAPTAIN_CHANGE_WARNING,
+          },
+        }
+      : {}),
   };
 }
 

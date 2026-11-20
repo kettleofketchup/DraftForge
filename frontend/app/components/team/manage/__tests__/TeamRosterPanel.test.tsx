@@ -6,6 +6,7 @@ import type { ManagedTeam } from '~/components/api/teamManagementAPI';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
 import { LeadershipProblemsBanner } from '../LeadershipProblemsBanner';
+import { CAPTAIN_CHANGE_WARNING } from '../teamActionCopy';
 import { TeamRosterPanel, type PendingTeamAction } from '../TeamRosterPanel';
 import {
   ghostCaptainDropoutTeam,
@@ -389,6 +390,10 @@ describe('roster rows', () => {
       summary: `Sub ${name(people.standin)} into ${managedTeam.name}.`,
       confirmText: 'Sub in',
       withReplacing: true,
+      replacingCaptain: {
+        pk: managedTeam.captain!.pk,
+        warning: CAPTAIN_CHANGE_WARNING,
+      },
     });
   });
 
