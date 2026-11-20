@@ -55,8 +55,12 @@ export interface SettingsSection<
 
 export interface SettingsDialogHandle<V extends string = string> {
   selectSection: (value: V) => void;
-  /** The section that renders `field` (or a collapsed block holding it), else its registered section. */
-  sectionOfField: (field: string) => V | undefined;
+  /**
+   * The section that renders `field` (or a collapsed block holding it), else its
+   * registered section. `within` limits the lookup to those section values, for
+   * field names that several forms share.
+   */
+  sectionOfField: (field: string, within?: readonly string[]) => V | undefined;
 }
 
 export interface SettingsDialogProps<V extends string = string> extends Omit<
@@ -179,15 +183,20 @@ function useSettingsLayout<V extends string>({
   }, []);
   const sectionsRef = React.useRef(sections);
   sectionsRef.current = sections;
-  const sectionOfField = React.useCallback((field: string): V | undefined => {
-    for (const selector of [fieldRow(field), fieldBlock(field)]) {
-      for (const [value, panel] of panelEls.current) {
-        if (panel.querySelector(selector)) return value;
+  const sectionOfField = React.useCallback(
+    (field: string, within?: readonly string[]): V | undefined => {
+      const inScope = (value: string) => !within || within.includes(value);
+      for (const selector of [fieldRow(field), fieldBlock(field)]) {
+        for (const [value, panel] of panelEls.current) {
+          if (inScope(value) && panel.querySelector(selector)) return value;
+        }
       }
-    }
-    return sectionsRef.current.find((s) => s.fields && field in s.fields)
-      ?.value;
-  }, []);
+      return sectionsRef.current.find(
+        (s) => inScope(s.value) && s.fields && field in s.fields,
+      )?.value;
+    },
+    [],
+  );
   React.useImperativeHandle(
     sectionRef,
     () => ({ selectSection, sectionOfField }),
@@ -219,12 +228,25 @@ function useSettingsLayout<V extends string>({
     }
     const found: SearchHit<V>[] = [];
     const seen = new Set<string>();
+    // Scoped per section; a row registered under another section (signup rules
+    // render on Event) falls back to the field name when only one section has it.
     const registry = new Map<string, SettingsFieldInfo>();
+    const byField = new Map<string, SettingsFieldInfo[]>();
     for (const s of sections) {
       for (const [field, info] of Object.entries(s.fields ?? {})) {
-        if (!registry.has(field)) registry.set(field, info);
+        registry.set(`${s.value}:${field}`, info);
+        byField.set(field, [...(byField.get(field) ?? []), info]);
       }
     }
+    const infoFor = (
+      section: V,
+      field: string,
+    ): SettingsFieldInfo | undefined => {
+      const scoped = registry.get(`${section}:${field}`);
+      if (scoped) return scoped;
+      const all = byField.get(field);
+      return all?.length === 1 ? all[0] : undefined;
+    };
     // Every term must appear in the label, description or keywords.
     const add = (hit: SearchHit<V>, rest: string) => {
       if (matches(`${hit.label} ${rest}`, q)) found.push(hit);
@@ -244,10 +266,11 @@ function useSettingsLayout<V extends string>({
             ? row.dataset.field
             : undefined;
         if (field) {
-          if (seen.has(field)) return;
-          seen.add(field);
+          const scoped = `${s.value}:${field}`;
+          if (seen.has(scoped)) return;
+          seen.add(scoped);
         }
-        const info = field ? registry.get(field) : undefined;
+        const info = field ? infoFor(s.value, field) : undefined;
         const description = field
           ? row
               ?.querySelector('[id$="-form-item-description"]')
@@ -266,7 +289,7 @@ function useSettingsLayout<V extends string>({
     // Registered fields not rendered: inside a collapsed block, or in a lazy section not visited yet.
     for (const s of sections) {
       for (const [field, info] of Object.entries(s.fields ?? {})) {
-        if (seen.has(field)) continue;
+        if (seen.has(`${s.value}:${field}`)) continue;
         let section: V | undefined;
         let el: HTMLElement | undefined;
         for (const [value, panel] of panelEls.current) {
@@ -278,8 +301,8 @@ function useSettingsLayout<V extends string>({
           }
         }
         if (!section && s.lazy && !visited.has(s.value)) section = s.value;
-        if (!section) continue;
-        seen.add(field);
+        if (!section || seen.has(`${section}:${field}`)) continue;
+        seen.add(`${section}:${field}`);
         add(
           { key: `${section}:${field}`, section, label: info.label, el, field },
           [info.description ?? '', ...(info.keywords ?? [])].join(' '),

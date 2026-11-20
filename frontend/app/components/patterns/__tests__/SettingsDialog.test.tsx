@@ -161,6 +161,33 @@ describe('SettingsDialog', () => {
     expect(hitLabels()).toEqual(['Lobby region']);
   });
 
+  it('lists same-named fields from different sections separately', () => {
+    const tz = (label: string) => (
+      <div data-field="timezone">
+        <label htmlFor={label}>{label}</label>
+        <input id={label} />
+      </div>
+    );
+    render(
+      <Harness
+        items={[
+          { value: 'general', label: 'General', content: tz('Org timezone') },
+          {
+            value: 'defaults',
+            label: 'Defaults',
+            content: tz('Event timezone'),
+            fields: { timezone: { label: 'Event timezone' } },
+          },
+        ]}
+      />,
+    );
+    // Only the active panel is mounted until visited; visit both.
+    fireEvent.click(screen.getByTestId('s-tab-defaults'));
+    fireEvent.click(screen.getByTestId('s-tab-general'));
+    type('timezone');
+    expect(hitLabels().sort()).toEqual(['Event timezone', 'Org timezone']);
+  });
+
   it('jumps to a field hit: selects its category and focuses its control', async () => {
     render(<Harness />);
     type('region');
