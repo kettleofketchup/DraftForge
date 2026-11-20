@@ -30,6 +30,7 @@ export interface InfoDialogProps {
   showClose?: boolean;
   /** Close button label */
   closeLabel?: string;
+  'data-testid'?: string;
 }
 
 const sizeClasses: Record<InfoDialogSize, string> = {
@@ -62,6 +63,7 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
       size = 'md',
       showClose = true,
       closeLabel = 'Close',
+      'data-testid': testId,
     },
     ref,
   ) => {
@@ -69,6 +71,7 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           ref={ref}
+          data-testid={testId}
           className={cn('max-w-[calc(100%-2rem)]', sizeClasses[size])}
         >
           <DialogHeader>
