@@ -5,7 +5,7 @@ themselves up (staff placements are held instead)."""
 from __future__ import annotations
 
 import datetime
-from collections.abc import Iterable
+from collections.abc import Collection
 
 from events.eligibility.context import EvalContext
 from events.eligibility.reasons import Reason, ReasonCode, Rule, Severity
@@ -60,10 +60,10 @@ def check_conduct(ctx: EvalContext) -> list[Reason]:
 
 
 def prime_conduct(
+    cache: StandingCache,
     org_id: int,
-    user_ids: Iterable[int],
+    user_ids: Collection[int],
     *,
     now: datetime.datetime,
-    cache: StandingCache,
 ) -> None:
-    prime(cache, org_id, list(user_ids), now=now)
+    prime(cache, org_id, user_ids, now=now)

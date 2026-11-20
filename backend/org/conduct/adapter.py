@@ -22,11 +22,12 @@ from org.conduct.params import rate_params
 from org.conduct.queries import member_scores
 from org.conduct.scoring import MemberScore
 from org.conduct.serializers import DEFAULT_HISTORY_LIMIT, history_item, rate
-from org.conduct.services import reassign_member, refresh_org_unmet_on_commit
+from org.conduct.services import reassign_member
 from org.contributions.serializers import member_summary
 from org.feature_keys import FeatureKey
 from org.models import OrgUser
 from org.models_conduct import AttendanceOutcome, OrgConductSettings
+from org.standing import restamp
 from org.standing.base import TrackBase
 from org.standing.cache import StandingCache
 from org.standing.periods import Period
@@ -132,7 +133,7 @@ class ConductTrack(TrackBase):
 
     @override
     def on_feature_toggled(self, org_id: int, *, enabled: bool) -> None:
-        refresh_org_unmet_on_commit(org_id)
+        restamp.org_on_commit(org_id)
 
     @override
     def merge_members(self, drop: OrgUser, keep: OrgUser) -> TrackOutput:

@@ -12,6 +12,9 @@ CONTRIBUTIONS_DIR = BACKEND_DIR / "org" / "contributions"
 CONDUCT_DIR = BACKEND_DIR / "org" / "conduct"
 CONDUCT_CHECK = "events.eligibility.checks.conduct"
 CONDUCT_CHECK_IMPORTS = frozenset({"org.conduct.eligibility", "org.standing.cache"})
+CONDUCT_CHECK_TARGET = "org.conduct.eligibility"
+CONDUCT_MODELS = frozenset({"AttendanceOutcome", "OrgConductSettings"})
+FEATURE_TOGGLE_CALLERS = ("views_features.py", "admin.py")
 
 LEAVES = (
     "types",
@@ -220,8 +223,6 @@ class StandingLayeringTest(SimpleTestCase):
                             any(_matches(t, "org.contributions") for t in targets),
                             f"{module} imports {imported} {members}",
                         )
-                        if _matches(imported, "org.conduct"):
-                            self.assertEqual(module, CONDUCT_CHECK)
                         for target in targets:
                             if _matches(target, RESTAMP):
                                 self.assertEqual(module, RESTAMP_IMPORTER)
@@ -237,6 +238,25 @@ class StandingLayeringTest(SimpleTestCase):
                                 LEDGER_MODELS & set(members),
                                 f"{module} imports {members} from org.models",
                             )
+
+    def test_only_conduct_check_imports_conduct(self) -> None:
+        paths = [
+            *(path for package in ("events", "app") for path in _caller_files(package)),
+            *(BACKEND_DIR / "org" / name for name in FEATURE_TOGGLE_CALLERS),
+        ]
+        for path in paths:
+            module = _module_name(path)
+            for imported, members in _imports(path):
+                with self.subTest(module=module, imported=imported):
+                    if _matches(imported, "org.conduct"):
+                        self.assertEqual(
+                            (module, imported), (CONDUCT_CHECK, CONDUCT_CHECK_TARGET)
+                        )
+                    if imported in ("org.models", "org.models_conduct"):
+                        self.assertFalse(
+                            CONDUCT_MODELS & set(members),
+                            f"{module} imports {members} from {imported}",
+                        )
 
     def test_graph_resolves_known_edges(self) -> None:
         self.assertIn("org.standing.registry", _graph()["org.standing.api"])

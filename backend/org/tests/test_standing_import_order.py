@@ -22,6 +22,7 @@ ENTRY_POINTS = (
     "org.conduct.eligibility",
     "org.conduct.services",
     "events.eligibility.checks.conduct",
+    "events.eligibility.store",
     "events.admission",
 )
 WEB_SETTINGS = "backend.settings"

@@ -3,6 +3,7 @@ from typing import Any, cast
 
 from django import forms
 from django.contrib import admin
+from django.db import transaction
 from django.forms import ModelForm
 from django.http import HttpRequest
 
@@ -52,16 +53,17 @@ class OrgFeatureAdmin(admin.ModelAdmin):
     def save_model(
         self, request: HttpRequest, obj: OrgFeature, form: ModelForm, change: bool
     ) -> None:
-        row = set_org_feature(
-            obj.organization,
-            FeatureKey(obj.feature),
-            enabled=obj.enabled,
-            actor=cast(CustomUser, request.user),
-            notes=obj.notes,
-        )
-        standing.on_feature_toggled(
-            row.organization_id, FeatureKey(row.feature), enabled=row.enabled
-        )
+        with transaction.atomic():
+            row = set_org_feature(
+                obj.organization,
+                FeatureKey(obj.feature),
+                enabled=obj.enabled,
+                actor=cast(CustomUser, request.user),
+                notes=obj.notes,
+            )
+            standing.on_feature_toggled(
+                row.organization_id, FeatureKey(row.feature), enabled=row.enabled
+            )
         obj.pk = row.pk
         obj.refresh_from_db()
 

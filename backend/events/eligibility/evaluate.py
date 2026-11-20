@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Callable, Collection
+from typing import Protocol
 
 from django.utils import timezone
 
 from app.models import CustomUser
 from events.constants import Commitment
-from events.eligibility.checks.conduct import check_conduct
+from events.eligibility.checks.conduct import check_conduct, prime_conduct
 from events.eligibility.checks.requirements import check_event_requirements
 from events.eligibility.context import EvalContext
 from events.eligibility.reasons import EligibilityResult, Reason, ReasonCode
@@ -21,6 +22,32 @@ Check = Callable[[EvalContext], list[Reason]]
 
 # Run in order; a later check never repeats a code an earlier one reported.
 CHECKS: tuple[Check, ...] = (check_event_requirements, check_conduct)
+
+
+class Primer(Protocol):
+    def __call__(
+        self,
+        cache: StandingCache,
+        org_id: int,
+        user_ids: Collection[int],
+        *,
+        now: datetime.datetime,
+    ) -> None: ...
+
+
+PRIMERS: tuple[Primer, ...] = (prime_conduct,)
+
+
+def prime_checks(
+    cache: StandingCache,
+    org_id: int,
+    user_ids: Collection[int],
+    *,
+    now: datetime.datetime,
+) -> None:
+    """Batch-load what the checks read for ``user_ids`` into ``cache``."""
+    for primer in PRIMERS:
+        primer(cache, org_id, user_ids, now=now)
 
 
 def evaluate_signup(

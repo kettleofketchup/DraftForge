@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
 from typing import override
 
+from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -11,9 +12,10 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, Organization
 from events.constants import EventState
 from events.models import Event, EventSignup
+from org.admin import OrgFeatureAdmin
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
-from org.models import OrgUser
+from org.models import OrgFeature, OrgUser
 from org.standing import api as standing
 from org.standing.base import TrackBase
 from org.standing.cache import StandingCache
@@ -409,3 +411,68 @@ class ContributionLeaderboardCountTest(_ParityBase):
         response = self.measure(LEADERBOARD_MEMBER_QUERIES, lambda: client.get(url))
         self.assertEqual(response.status_code, 200, response.content)
         self.assertTrue(response.json()["rows_visible"])
+
+
+class FeatureToggleCallSiteTest(TestCase):
+    def setUp(self) -> None:
+        self.site_admin = CustomUser.objects.create_superuser(
+            username="ft_admin", password="x", email="ft@example.com"
+        )
+        self.org = Organization.objects.create(name="FT Org")
+        self.conduct = FakeTrack("conduct_fake", feature=FeatureKey.CONDUCT)
+        self.promo = FakeTrack("promo_fake", feature=FeatureKey.PROMOTION)
+
+    def _put(self, feature: str, enabled: bool) -> None:
+        client = APIClient()
+        client.force_authenticate(self.site_admin)
+        response = client.put(
+            reverse("org-features", args=[self.org.pk]),
+            {"feature": feature, "enabled": enabled},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def _admin_save(self, enabled: bool) -> None:
+        request = RequestFactory().post("/admin/org/orgfeature/add/")
+        request.user = self.site_admin
+        row = OrgFeature(
+            organization=self.org, feature=FeatureKey.CONDUCT, enabled=enabled
+        )
+        OrgFeatureAdmin(OrgFeature, admin.site).save_model(
+            request,
+            row,
+            form=None,
+            change=False,  # type: ignore[arg-type]
+        )
+
+    def test_features_api_toggle_calls_hook_once(self) -> None:
+        baseline = atomic_baseline()
+        with override_tracks(self.conduct, self.promo):
+            self._put("conduct", True)
+        self.assertEqual(self.conduct.hooks, ["on_feature_toggled"])
+        call = self.conduct.calls[0]
+        self.assertEqual(call.kwargs, {"org_id": self.org.pk, "enabled": True})
+        self.assertGreater(call.atomic_depth, baseline)
+        self.assertEqual(self.promo.hooks, [])
+
+    def test_feature_admin_toggle_calls_hook_once(self) -> None:
+        baseline = atomic_baseline()
+        with override_tracks(self.conduct, self.promo):
+            self._admin_save(True)
+            self._admin_save(False)
+        self.assertEqual(
+            [c.kwargs for c in self.conduct.calls],
+            [
+                {"org_id": self.org.pk, "enabled": True},
+                {"org_id": self.org.pk, "enabled": False},
+            ],
+        )
+        for call in self.conduct.calls:
+            self.assertGreater(call.atomic_depth, baseline)
+        self.assertEqual(self.promo.hooks, [])
+
+    def test_toggle_reaches_only_its_track(self) -> None:
+        with override_tracks(self.conduct, self.promo):
+            self._put("promotion", True)
+        self.assertEqual(self.promo.hooks, ["on_feature_toggled"])
+        self.assertEqual(self.conduct.hooks, [])
