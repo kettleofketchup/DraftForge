@@ -254,8 +254,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         for event in list(Event.objects.nocache().filter(helpers=target_user)):
             event.helpers.add(claimer)
             event.helpers.remove(target_user)
-        for event in dedupe_host_helpers(claimer):
-            standing.on_event_changed(event, fields=frozenset({"helpers"}))
+        dedupe_host_helpers(claimer)
         if staffed_ids:
             invalidate_after_commit(
                 *stale_events,

@@ -143,8 +143,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             for obj in list(manager.all()):
                 _repoint(obj, field_name)
 
-        for event in dedupe_host_helpers(keep):
-            standing.on_event_changed(event, fields=frozenset({"helpers"}))
+        dedupe_host_helpers(keep)
 
         # Purge keep's reverse-relation caches before reading/writing through
         # them in the carryover loop. The related-objects loop above poisoned

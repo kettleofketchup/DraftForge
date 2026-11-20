@@ -2,11 +2,15 @@ from datetime import timedelta
 
 from django.test import TestCase
 from django.utils import timezone
+from structlog.testing import capture_logs
 
 from app.models import CustomUser, Organization
 from events.models import Event
 from events.staff import dedupe_host_helpers
 from org.models import ContributionEntry, OrgUser
+from org.standing import registry
+from org.standing.registry import override_tracks
+from org.tests.standing_fakes import FakeTrack
 
 
 class DedupeHostHelpersTest(TestCase):
@@ -24,10 +28,24 @@ class DedupeHostHelpersTest(TestCase):
         self.event_a.helpers.add(self.user)
         self.event_b.helpers.add(self.user)
 
+    def _deduped_log(self, logs: list[dict[str, object]]) -> dict[str, object]:
+        return next(e for e in logs if e["event"] == "event_staff_deduped")
+
     def test_removes_user_from_helpers_where_host(self) -> None:
-        with self.assertLogs("events.staff", level="INFO") as logs:
+        with capture_logs() as logs:
             self.assertEqual(dedupe_host_helpers(self.user), [self.event_a])
-        self.assertIn("event_staff_deduped", logs.output[0])
+        self.assertEqual(
+            self._deduped_log(logs),
+            {
+                "event": "event_staff_deduped",
+                "system": "events",
+                "subsystem": "services",
+                "user_id": self.user.pk,
+                "event_ids": [self.event_a.pk],
+                "synced": 0,
+                "log_level": "info",
+            },
+        )
         self.assertFalse(self.event_a.helpers.filter(pk=self.user.pk).exists())
         self.assertTrue(self.event_b.helpers.filter(pk=self.user.pk).exists())
 
@@ -49,3 +67,19 @@ class DedupeHostHelpersTest(TestCase):
         self.assertTrue(
             ContributionEntry.objects.nocache().filter(pk=entry.pk).exists()
         )
+
+    def test_counts_synced_events(self) -> None:
+        Event.objects.filter(pk=self.event_a.pk).update(
+            contributions_awarded_at=timezone.now()
+        )
+        with capture_logs() as logs:
+            dedupe_host_helpers(self.user)
+        self.assertEqual(self._deduped_log(logs)["synced"], 1)
+
+    def test_calls_changed_hook_per_deduped_event(self) -> None:
+        fake = FakeTrack()
+        with override_tracks(*registry.TRACKS, fake), capture_logs() as logs:
+            dedupe_host_helpers(self.user)
+        self.assertEqual(fake.hooks, ["on_event_changed"])
+        self.assertEqual(fake.calls[0].kwargs["fields"], frozenset({"helpers"}))
+        self.assertEqual(self._deduped_log(logs)["fake_ran"], 1)

@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import Permission
 from django.core.management import call_command
-from django.db import transaction
 from django.db.models import Sum
 from django.test import TestCase
 from django.urls import reverse
@@ -21,7 +20,6 @@ from org.contributions.kinds import ContributionKind
 from org.contributions.services import reassign_member, repoint_ledger_attribution
 from org.feature_keys import FeatureKey
 from org.models import ContributionEntry, ContributionPointValue, OrgFeature, OrgUser
-from org.standing import api as standing
 
 
 class _LedgerFixture(TestCase):
@@ -465,10 +463,7 @@ class DedupeEventStaffTest(_LedgerFixture):
         self._entry(ou, ContributionKind.EVENT_HOST, 10, self.event_a)
         self._entry(ou, ContributionKind.EVENT_HELPER, 5, self.event_a)
 
-        with transaction.atomic():
-            events = dedupe_host_helpers(user)
-            for event in events:
-                standing.on_event_changed(event, fields=frozenset({"helpers"}))
+        events = dedupe_host_helpers(user)
         self.assertEqual(len(events), 1)
 
         self.assertFalse(
