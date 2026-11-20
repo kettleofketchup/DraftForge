@@ -12,6 +12,13 @@ export default defineConfig({
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
   build: {
     rollupOptions: {
+      // Fewer, larger chunks; without this a cold load is ~60 requests, many single icons.
+      output: {
+        experimentalMinChunkSize: 20_000,
+        manualChunks(id) {
+          if (id.includes('/node_modules/lucide-react/')) return 'icons';
+        },
+      },
       onwarn(warning, warn) {
         // Suppress sourcemap warnings from "use client" directive transformation
         // These occur because React Router's Vite plugin transforms the directive
