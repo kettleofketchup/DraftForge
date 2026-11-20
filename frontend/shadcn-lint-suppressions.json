@@ -4,58 +4,12 @@
       "count": 11
     }
   },
-  "app/components/bracket/BracketView.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/components/bracket/modals/AutoAssignModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 12
-    }
-  },
-  "app/components/bracket/modals/DotaMatchStatsModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 4
-    }
-  },
-  "app/components/bracket/modals/LinkSteamMatchModal.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 9
-    }
-  },
-  "app/components/bracket/modals/MatchStatsModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 8
-    }
-  },
-  "app/components/bracket/modals/PlayerStatsTable.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 15
-    }
-  },
-  "app/components/bracket/modals/SteamMatchCard.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
-  "app/components/bracket/nodes/HeroIconRow.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
   "app/components/bracket/nodes/MatchNode.tsx": {
     "draftforge/no-avatar-fallback": {
       "count": 1
     },
-    "draftforge/no-raw-color-strings": {
-      "count": 9
-    },
     "draftforge/use-user-avatar": {
       "count": 1
-    },
-    "shadcn/no-raw-colors": {
-      "count": 3
     }
   },
   "app/components/events/DiscordLogSection.tsx": {
@@ -92,8 +46,6 @@
     },
     "shadcn/no-raw-colors": {
       "count": 7
-    }
-  },
   "app/components/herodraft/DraftPanel.tsx": {
     "shadcn/no-raw-colors": {
       "count": 35
@@ -105,34 +57,18 @@
     }
   },
   "app/components/herodraft/DraftTopBar.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
-      "count": 11
-    }
-  },
-  "app/components/herodraft/HeroDraftHistoryModal.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 6
+      "count": 1
     }
   },
   "app/components/herodraft/HeroDraftModal.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 23
+      "count": 1
     }
   },
   "app/components/herodraft/HeroGrid.tsx": {
-    "draftforge/no-raw-color-strings": {
-      "count": 4
-    },
     "shadcn/no-raw-colors": {
-      "count": 13
-    }
-  },
-  "app/components/league/LeagueMatchCard.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 6
+      "count": 2
     }
   },
   "app/components/lobby/LobbyPanel.tsx": {
@@ -247,6 +183,12 @@
   "app/components/tournament/captains/draftOrder.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
+  "app/components/teamdraft/TeamPositionCoverage.tsx": {
+    "draftforge/no-raw-color-strings": {
+      "count": 15
+    },
+    "shadcn/no-raw-colors": {
+      "count": 11
     }
   },
   "app/components/ui/base-handle.tsx": {
@@ -421,6 +363,9 @@
   "app/pages/herodraft/HeroDraftPage.tsx": {
     "shadcn/no-raw-colors": {
       "count": 3
+  "app/pages/profile/forms/position.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
     }
   },
   "app/pages/profile/profile.tsx": {

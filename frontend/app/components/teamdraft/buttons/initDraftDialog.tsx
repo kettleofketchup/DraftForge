@@ -92,7 +92,7 @@ export const InitDraftButton: React.FC = () => {
             </Button>
           </motion.div>
         </TooltipTrigger>
-        <TooltipContent className="bg-red-900 text-white">
+        <TooltipContent className="bg-destructive text-white">
           <p>This clears the picks and resets every team to its captain.</p>
         </TooltipContent>
       </Tooltip>
