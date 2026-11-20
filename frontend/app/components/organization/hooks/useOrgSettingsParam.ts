@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 
 const PARAM = 'settings';
 const NAV_OPTIONS = { replace: true, preventScrollReset: true } as const;
+const PUSH_OPTIONS = { preventScrollReset: true } as const;
 
 export interface OrgSettingsParam {
   /** The `settings` param is present; an empty value counts as open. */
@@ -20,14 +21,12 @@ export function useOrgSettingsParam(access: {
 }): OrgSettingsParam {
   const { settled, canOpen } = access;
   const [searchParams, setSearchParams] = useSearchParams();
-  const legacyHandled = useRef(false);
   const raw = searchParams.get(PARAM);
   const isLegacy = searchParams.get('tab') === 'settings';
   const denied = settled && !canOpen;
 
   useEffect(() => {
-    if (isLegacy && !legacyHandled.current) {
-      legacyHandled.current = true;
+    if (isLegacy) {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         const section = next.get('section') ?? '';
@@ -48,19 +47,22 @@ export function useOrgSettingsParam(access: {
   }, [isLegacy, denied, raw, setSearchParams]);
 
   const setParam = useCallback(
-    (value: string | null) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        if (value === null) next.delete(PARAM);
-        else next.set(PARAM, value);
-        return next;
-      }, NAV_OPTIONS);
+    (value: string | null, push = false) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value === null) next.delete(PARAM);
+          else next.set(PARAM, value);
+          return next;
+        },
+        push ? PUSH_OPTIONS : NAV_OPTIONS,
+      );
     },
     [setSearchParams],
   );
 
   const openSettings = useCallback(
-    (section?: string) => setParam(section ?? ''),
+    (section?: string) => setParam(section ?? '', true),
     [setParam],
   );
   const setSection = useCallback(

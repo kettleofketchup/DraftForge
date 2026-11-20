@@ -58,9 +58,10 @@ export function OrgSettingsDialog({
     ...registry.flatMap((r) => (r.unit ? [r.unit] : [])),
     defaults.unit,
   ];
-  const { isDirty, saveAll, discardAll, saveBar } = useSettingsSaveBar(units, {
-    testIdPrefix: 'org-settings',
-  });
+  const { isDirty, isSaving, saveAll, discardAll, saveBar } =
+    useSettingsSaveBar(units, {
+      testIdPrefix: 'org-settings',
+    });
 
   if (pk == null || !canOpen) return null;
 
@@ -98,6 +99,7 @@ export function OrgSettingsDialog({
   ];
 
   const handleOpenChange = (next: boolean): void => {
+    if (!next && isSaving) return;
     if (!next && isDirty) setConfirmOpen(true);
     else onOpenChange(next);
   };

@@ -15,7 +15,7 @@ never opens the modal sees no change.
 ## The settings modal
 
 A cog button in the organization header opens the modal. The sidebar groups its sections
-(a tab strip on phones, and a search box on desktop):
+(a tab strip on phones, and a search box on both phones and desktop):
 
 | Group | Sections |
 |---|---|
@@ -27,8 +27,8 @@ The **New Event Defaults** sections hold the values the create-event form pre-fi
 to open from a separate **Organization Event Defaults** dialog on the Events tab, which
 is gone.
 
-Editing any field shows one save bar at the bottom with **Discard** and **Save**. Save
-writes every changed section, shows a "Settings saved" toast and leaves the modal open.
+Editing any field shows one save bar at the bottom with **Discard** and **Save changes**. Save
+changes writes every changed section, shows a "Settings saved" toast and leaves the modal open.
 Closing the modal with unsaved edits asks "Discard unsaved changes?". A section with a
 field error is marked in the sidebar and opens on save.
 
@@ -184,7 +184,7 @@ decides for itself who can see it. Register it in `ORG_SETTINGS_SECTIONS` in
   remove entries at runtime.
 
 The cog and the `?settings=` handling use `useOrgSettingsAccess`, which allows the modal
-when at least one section is visible. The section must still gate its own edit controls,
+once access has settled and the viewer is an organization admin. The section must still gate its own edit controls,
 and its endpoints must enforce the same permission.
 
 A section can store its data somewhere other than `OrgSettings`, with its own model and

@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { MemoryRouter, useLocation, useNavigationType } from 'react-router';
+import {
+  MemoryRouter,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+} from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { useOrgSettingsParam } from '../useOrgSettingsParam';
 
@@ -18,6 +23,7 @@ function setup(url: string, initial: Access = ADMIN) {
       param: useOrgSettingsParam(access),
       location: useLocation(),
       navigationType: useNavigationType(),
+      navigate: useNavigate(),
     }),
     { wrapper, initialProps: initial },
   );
@@ -129,5 +135,34 @@ describe('useOrgSettingsParam', () => {
     act(() => result.current.param.setSection('admins'));
     expect(search(result).get('settings')).toBe('admins');
     expect(result.current.navigationType).toBe('REPLACE');
+  });
+
+  it('openSettings pushes a history entry', () => {
+    const { result } = setup('/organizations/7');
+    act(() => result.current.param.openSettings());
+    expect(result.current.navigationType).toBe('PUSH');
+  });
+
+  it('Back after openSettings closes the modal on the same page', () => {
+    const { result } = setup('/organizations/7');
+    act(() => result.current.param.openSettings());
+    act(() => result.current.navigate(-1));
+    expect(result.current.location.pathname).toBe('/organizations/7');
+    expect(result.current.param.open).toBe(false);
+  });
+
+  it('close replaces history', () => {
+    const { result } = setup('/organizations/7?settings=admins');
+    act(() => result.current.param.close());
+    expect(result.current.navigationType).toBe('REPLACE');
+  });
+
+  it('rewrites a legacy URL reached by a later navigation', () => {
+    const { result } = setup('/organizations/7?tab=settings&section=admins');
+    expect(search(result).get('settings')).toBe('admins');
+    act(() => result.current.param.close());
+    act(() => result.current.navigate('/organizations/7?tab=settings'));
+    expect(search(result).has('tab')).toBe(false);
+    expect(search(result).get('settings')).toBe('');
   });
 });

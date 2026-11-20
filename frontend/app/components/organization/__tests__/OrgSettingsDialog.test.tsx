@@ -415,4 +415,28 @@ describe('OrgSettingsDialog', () => {
     expect(updateOrganization).not.toHaveBeenCalled();
     expect(mutateAsync).not.toHaveBeenCalled();
   });
+
+  it('does not close while a save is in flight', async () => {
+    let release: () => void = () => undefined;
+    updateOrganization.mockImplementation(
+      () => new Promise<object>((resolve) => (release = () => resolve({}))),
+    );
+    renderDialog();
+    await defaultsLoaded();
+    fireEvent.change(screen.getByTestId('org-name-input'), {
+      target: { value: 'Renamed' },
+    });
+    fireEvent.click(await screen.findByTestId('org-settings-save'));
+    await waitFor(() => expect(updateOrganization).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('dialog-close-button'));
+    expect(onOpenChangeSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText('Discard unsaved changes?')).toBeNull();
+    expect(screen.getByTestId('org-settings-modal')).toBeInTheDocument();
+
+    release();
+    await waitFor(() =>
+      expect(screen.queryByTestId('org-settings-save-bar')).toBeNull(),
+    );
+  });
 });
