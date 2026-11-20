@@ -1576,7 +1576,7 @@ Generic reads over every standing track (`contribution`, `conduct`). Guide:
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
 | GET | `/api/organizations/{id}/standing/tracks/` | `{tracks: [{key, label, metrics: [{key, label, format, periodic, default}], can_view_rows, can_view_own, board_open, can_manage}]}`, one entry per unlocked track in registry order | Anyone |
-| GET | `/api/organizations/{id}/standing/{track}/leaderboard/?metric=&period=` | `{track, metric, period, total, rows: [{member, value, sample, status}], rows_visible, own_row}`. `metric` defaults to the track's default; `period` is `all` or `YYYY-MM` for periodic metrics, and non-periodic metrics return `period: "current"`. `rows` and `own_row` are blanked by the track's access rule; `total` is `null` for conduct | Per track (below) |
+| GET | `/api/organizations/{id}/standing/{track}/leaderboard/?metric=&period=` | `{track, metric, period, total, rows: [{member, value, sample, status}], rows_visible, own_row}`. `metric` defaults to the track's default; `period` is `all` or `YYYY-MM` for periodic metrics, and non-periodic metrics return `period: "current"`. `rows` holds at most 100 rows. `rows` and `own_row` are blanked by the track's access rule; `total` is `null` for conduct, and conduct rows with `status: "new"` have `value: null` (the viewer's own row keeps its value) | Per track (below) |
 
 | Track | Metrics | Rows | Own row |
 |-------|---------|------|---------|

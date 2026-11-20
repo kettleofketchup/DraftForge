@@ -119,7 +119,7 @@ class TrackAccess:
 class LeaderboardRow:
     org_user_id: int
     member: Mapping[str, object]
-    value: float | int
+    value: float | int | None
     sample: int
     status: Literal["ranked", "new"]
 

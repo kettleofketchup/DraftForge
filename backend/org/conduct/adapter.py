@@ -12,7 +12,7 @@ from org.conduct.eligibility import gate_for, standings
 from org.conduct.enforcement import defer_back_of_line
 from org.conduct.finalize import finalize_event_outcomes
 from org.conduct.gate import get_conduct_settings
-from org.conduct.leaderboard import conduct_board
+from org.conduct.leaderboard import ConductBoard, conduct_board
 from org.conduct.lifecycle import (
     reopen_event_outcomes,
     teardown_event_outcomes,
@@ -20,7 +20,7 @@ from org.conduct.lifecycle import (
 )
 from org.conduct.params import rate_params
 from org.conduct.queries import member_scores
-from org.conduct.scoring import MemberScore
+from org.conduct.scoring import MemberScore, prior_member_score
 from org.conduct.serializers import DEFAULT_HISTORY_LIMIT, history_item, rate
 from org.conduct.services import reassign_member
 from org.contributions.serializers import member_summary
@@ -54,11 +54,16 @@ def _is_member(viewer: CustomUser | AnonymousUser | None, org_id: int) -> bool:
     return OrgUser.objects.filter(organization_id=org_id, user_id=viewer.pk).exists()
 
 
-def _row(org_user: OrgUser, score: MemberScore) -> LeaderboardRow:
+LEADERBOARD_LIMIT = 100
+
+
+def _row(
+    org_user: OrgUser, score: MemberScore, *, with_value: bool = True
+) -> LeaderboardRow:
     return LeaderboardRow(
         org_user_id=org_user.pk,
         member=member_summary(org_user),
-        value=rate(score.show_rate),
+        value=rate(score.show_rate) if with_value else None,
         sample=score.counted_events,
         status="new" if score.status == "new" else "ranked",
     )
@@ -237,24 +242,39 @@ class ConductTrack(TrackBase):
         now: datetime,
         access: TrackAccess,
     ) -> Leaderboard:
-        own = None
-        if access.can_view_own and viewer is not None and viewer.is_authenticated:
-            own = with_user_profiles(
-                OrgUser.objects.filter(organization=org, user_id=viewer.pk), "user"
-            ).first()
-        board = conduct_board(org, own=own, now=now, settings=get_conduct_settings(org))
+        settings = get_conduct_settings(org)
+        board = conduct_board(org, own=None, now=now, settings=settings)
         rows = [_row(m, s) for m, s, _ in board.ranked] + [
-            _row(m, s) for m, s in board.new
+            _row(m, s, with_value=False) for m, s in board.new
         ]
+        own_row = None
+        if access.can_view_own and viewer is not None and viewer.is_authenticated:
+            own_row = self._own_row(org, viewer.pk, board, settings)
         return Leaderboard(
             track=self.key,
             metric=metric,
             period="current",
-            rows=rows if access.can_view_rows else [],
+            rows=rows[:LEADERBOARD_LIMIT] if access.can_view_rows else [],
             total=None,
-            own_row=_row(board.own[0], board.own[1]) if board.own else None,
+            own_row=own_row,
             rows_visible=access.can_view_rows,
         )
+
+    @staticmethod
+    def _own_row(
+        org: Organization,
+        user_id: int,
+        board: ConductBoard,
+        settings: OrgConductSettings,
+    ) -> LeaderboardRow | None:
+        loaded = [(m, s) for m, s, _ in board.ranked] + list(board.new)
+        for org_user, score in loaded:
+            if org_user.user_id == user_id:
+                return _row(org_user, score)
+        own = with_user_profiles(
+            OrgUser.objects.filter(organization=org, user_id=user_id), "user"
+        ).first()
+        return _row(own, prior_member_score(settings)) if own is not None else None
 
 
 CONDUCT = ConductTrack()

@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth.models import AnonymousUser
 from django.test import override_settings
@@ -38,9 +39,11 @@ PUBLIC_MEMBER_LEADERBOARD_QUERIES = (
     + MEMBERSHIP_QUERIES
     + 2 * SETTINGS_READ_QUERIES
     + CAN_VIEW_MEMBERS_QUERIES
-    + OWN_ROW_QUERIES
     + SCORING_QUERIES
     + PROFILE_QUERIES
+)
+UNSCORED_MEMBER_LEADERBOARD_QUERIES = (
+    PUBLIC_MEMBER_LEADERBOARD_QUERIES + OWN_ROW_QUERIES
 )
 HISTORY_QUERIES = 1
 MEMBER_STANDING_QUERIES = SETTINGS_READ_QUERIES + SCORING_QUERIES + HISTORY_QUERIES
@@ -164,6 +167,7 @@ class ConductAdapterTest(ConductReadApiBase):
                 for row in body["rows"]
             ],
         )
+        self.assertEqual([r.value for r in new], [None])
         self.assertEqual(
             [(r.org_user_id, r.sample) for r in new],
             [
@@ -197,6 +201,61 @@ class ConductAdapterTest(ConductReadApiBase):
             board = self.board("member")
         self.assertTrue(board.rows_visible)
         self.assertIsNotNone(board.own_row)
+
+    @override_settings(CACHEOPS_ENABLED=False)
+    def test_leaderboard_budget_viewer_without_outcomes(self) -> None:
+        self.add_outcomes(self.org_users["promoter"], [Outcome.ATTENDED] * 3)
+        self.set_public(True)
+        get_conduct_settings(self.org)
+        with self.assertNumQueries(UNSCORED_MEMBER_LEADERBOARD_QUERIES):
+            board = self.board("member")
+        self.assertIsNotNone(board.own_row)
+
+    def test_new_member_rows_hide_show_rate(self) -> None:
+        self.set_public(True)
+        self.add_outcomes(self.org_users["promoter"], [Outcome.ATTENDED] * 3)
+        self.add_outcomes(self.org_users["member"], [Outcome.NO_SHOW])
+        board = self.board("promoter")
+        new = [r for r in board.rows if r.status == "new"]
+        self.assertEqual([r.org_user_id for r in new], [self.org_users["member"].pk])
+        self.assertIsNone(new[0].value)
+        response = self.request(
+            "promoter",
+            "get",
+            f"/api/organizations/{self.org.pk}/standing/conduct/leaderboard/",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        new_rows = [r for r in response.json()["rows"] if r["status"] == "new"]
+        self.assertEqual([r["value"] for r in new_rows], [None])
+
+    def test_new_member_own_row_keeps_show_rate(self) -> None:
+        self.set_public(True)
+        self.add_outcomes(self.org_users["member"], [Outcome.NO_SHOW])
+        own = self.board("member").own_row
+        assert own is not None
+        self.assertEqual(own.status, "new")
+        legacy = self.request("member", "get", f"{base(self.org.pk)}leaderboard/")
+        self.assertEqual(own.value, legacy.json()["own_row"]["show_rate"])
+
+    @override_settings(CACHEOPS_ENABLED=False)
+    def test_leaderboard_rows_capped_own_row_from_loaded(self) -> None:
+        self.set_public(True)
+        self.add_outcomes(self.org_users["promoter"], [Outcome.ATTENDED] * 3)
+        self.add_outcomes(
+            self.org_users["member"], [Outcome.ATTENDED, Outcome.NO_SHOW] * 2
+        )
+        get_conduct_settings(self.org)
+        with (
+            patch("org.conduct.adapter.LEADERBOARD_LIMIT", 1),
+            self.assertNumQueries(PUBLIC_MEMBER_LEADERBOARD_QUERIES),
+        ):
+            board = self.board("member")
+        self.assertEqual(
+            [r.org_user_id for r in board.rows], [self.org_users["promoter"].pk]
+        )
+        assert board.own_row is not None
+        self.assertEqual(board.own_row.org_user_id, self.org_users["member"].pk)
+        self.assertEqual(board.own_row.status, "ranked")
 
     def seed_history(self) -> OrgUser:
         member = self.org_users["member"]
