@@ -15,7 +15,7 @@ from django.test import SimpleTestCase, TransactionTestCase
 from django.urls import re_path
 
 from app import consumer_db as consumer_db_module
-from app import consumers, consumers_base
+from app import consumers
 from app.channel_layers import (
     CancelSafeChannelLock,
     LoopSafeRedisChannelLayer,
@@ -24,12 +24,13 @@ from app.channel_layers import (
 from app.consumer_db import CONSUMER_DB_THREADS, consumer_db
 from app.consumers import DraftConsumer
 from app.models import Draft, Game, Team, Tournament
-from app.tasks.draft_tick import get_redis_client
 from app.tasks.teamdraft_tick import captain_conn_key
 from app.tests.ws_helpers import read_until_type
+from draft.consumers import base as consumers_base
 from draft.consumers import hero as hero_consumers
 from draft.consumers.hero import HeroDraftConsumer
 from draft.models import DraftTeam, HeroDraft
+from draft.tasks.draft_tick import get_redis_client
 
 User = get_user_model()
 

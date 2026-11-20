@@ -119,6 +119,27 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"DraftTeam"}),
             "current_user lists active hero drafts the user captains",
         ),
+        "app/consumers.py": BackEdge(
+            frozenset({"BaseDraftConsumer", "CAPTAIN_CHANNEL_TTL", "TickDriver"}),
+            "TEMP slice2: DraftConsumer moves to draft in Task 5",
+        ),
+        "app/functions/draft_picks.py": BackEdge(
+            frozenset({"evaluate_client_pick_time"}),
+            "TEMP slice2: draft_picks moves to draft in Task 5",
+        ),
+        "app/tasks/teamdraft_tick.py": BackEdge(
+            frozenset(
+                {
+                    "CAPTAIN_CHANNEL_TTL",
+                    "HEARTBEAT_STALE_SECONDS",
+                    "draft_tick",
+                    "get_connection_count",
+                    "get_redis_client",
+                    "heartbeat_key",
+                }
+            ),
+            "TEMP slice2: teamdraft_tick moves to draft in Task 4",
+        ),
     },
 }
 

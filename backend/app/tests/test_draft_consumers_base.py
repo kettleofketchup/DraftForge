@@ -18,7 +18,8 @@ from django.urls import re_path
 from app.consumers import DraftConsumer
 from app.models import Draft, Team, Tournament
 from app.tasks import teamdraft_tick
-from app.tasks.draft_tick import (
+from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
+from draft.tasks.draft_tick import (
     captain_channel_key,
     conn_count_key,
     get_connection_count,
@@ -27,7 +28,6 @@ from app.tasks.draft_tick import (
     increment_connection_count,
     touch_connection,
 )
-from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 
 User = get_user_model()
 
@@ -131,7 +131,7 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         await comm2.disconnect()
 
     async def test_open_socket_reregisters_after_its_count_key_is_lost(self):
-        with patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1):
+        with patch("draft.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1):
             comm, _, _ = await self.connect(self.spectator)
             self.r.delete(conn_count_key("teamdraft", self.draft.pk))
             await asyncio.sleep(1.5)
@@ -141,7 +141,7 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
     async def test_refresh_runs_without_the_ping_loop(self):
         with (
             patch.object(DraftConsumer, "PING_ENABLED", False),
-            patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
+            patch("draft.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
         ):
             comm, _, _ = await self.connect(self.spectator)
             self.r.delete(conn_count_key("teamdraft", self.draft.pk))
@@ -153,10 +153,10 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
     async def test_refresh_registers_a_socket_whose_connect_increment_failed(self):
         with (
             patch(
-                "app.tasks.draft_tick.increment_connection_count",
+                "draft.tasks.draft_tick.increment_connection_count",
                 side_effect=redis.RedisError("down"),
             ),
-            patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
+            patch("draft.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
         ):
             comm, _, _ = await self.connect(self.spectator)
             self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 0)
@@ -180,8 +180,8 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
             patch.object(
                 DraftConsumer, "should_start_tick_broadcaster", return_value=True
             ),
-            patch("app.tasks.draft_tick.start_tick_broadcaster", side_effect=start),
-            patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", side_effect=start),
+            patch("draft.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
         ):
             comm, _, _ = await self.connect(self.spectator)
             await asyncio.sleep(0.5)
@@ -190,8 +190,8 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
 
     async def test_refresh_does_not_start_a_loop_for_an_idle_draft(self):
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster") as start,
-            patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster") as start,
+            patch("draft.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
         ):
             comm, _, _ = await self.connect(self.spectator)
             await asyncio.sleep(0.4)
@@ -238,7 +238,7 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         with (
             patch.object(DraftConsumer, "draft_tick", side_effect=RuntimeError("boom")),
             patch.object(DraftConsumer, "disconnect", hang),
-            patch("app.consumers_base.FALLBACK_CLEANUP_TIMEOUT_S", 0.2),
+            patch("draft.consumers.base.FALLBACK_CLEANUP_TIMEOUT_S", 0.2),
         ):
             await get_channel_layer().group_send(
                 f"draft_{self.draft.pk}", {"type": "draft.tick"}
@@ -252,7 +252,7 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         self.assertEqual(frame["type"], "ping")
         await comm.disconnect()
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster")
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster")
     async def test_no_tick_broadcaster_started(self, shared_start):
         comm, _, _ = await self.connect(self.captain)
         shared_start.assert_not_called()
@@ -320,9 +320,9 @@ class RefreshInFlightAtDisconnectTests(TransactionTestCase):
             await asyncio.sleep(0.2)
 
         with (
-            patch("app.tasks.draft_tick.touch_connection", new=blocked_touch),
-            patch("app.tasks.draft_tick.start_tick_broadcaster") as start,
-            patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.05),
+            patch("draft.tasks.draft_tick.touch_connection", new=blocked_touch),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster") as start,
+            patch("draft.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.05),
         ):
             asyncio.run(scenario())
         self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 0)

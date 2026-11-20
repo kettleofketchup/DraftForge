@@ -1,4 +1,4 @@
-"""Tests for the shared tick runner (app.tasks.draft_tick)."""
+"""Tests for the shared tick runner (draft.tasks.draft_tick)."""
 
 import asyncio
 import contextvars
@@ -12,8 +12,8 @@ from channels.db import database_sync_to_async
 from django.test import SimpleTestCase, TransactionTestCase, override_settings
 from structlog.testing import capture_logs
 
-from app.tasks import draft_tick
-from app.tasks.draft_tick import (
+from draft.tasks import draft_tick, hero_tick
+from draft.tasks.draft_tick import (
     TickDriver,
     captain_channel_key,
     conn_count_key,
@@ -25,7 +25,6 @@ from app.tasks.draft_tick import (
     lock_key,
     touch_connection,
 )
-from draft.tasks import hero_tick
 
 
 @override_settings(REDIS_KEY_NAMESPACE="")

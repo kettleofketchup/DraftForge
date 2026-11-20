@@ -12,7 +12,6 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
 from app.consumer_db import consumer_db
-from app.consumers_base import BaseDraftConsumer
 from app.functions.teamdraft import emit_event, team_payload
 from app.models import (
     Draft,
@@ -21,13 +20,14 @@ from app.models import (
     Tournament,
 )
 from app.serializers import DraftEventSerializer
-from app.tasks.draft_tick import CAPTAIN_CHANNEL_TTL, TickDriver
 from app.tasks.teamdraft_tick import (
     TEAM_TICK_DRIVER,
     captain_conn_key,
     captain_is_fresh,
 )
 from app.tournament_state import build_draft_state, recent_draft_events
+from draft.consumers.base import BaseDraftConsumer
+from draft.tasks.draft_tick import CAPTAIN_CHANNEL_TTL, TickDriver
 from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 

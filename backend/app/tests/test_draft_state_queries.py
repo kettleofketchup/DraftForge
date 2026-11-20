@@ -358,7 +358,7 @@ class DraftStateQueryCountTests(TestCase):
             client = APIClient()
             client.force_authenticate(fx.staff)
             with patch(
-                "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+                "draft.tasks.draft_tick.start_tick_broadcaster", return_value=True
             ):
                 counts.append(
                     self.count(
@@ -374,7 +374,7 @@ class DraftStateQueryCountTests(TestCase):
         counts = []
         for fx in (self.small, self.large):
             with patch(
-                "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+                "draft.tasks.draft_tick.start_tick_broadcaster", return_value=True
             ):
                 counts.append(self.count(lambda f=fx: self.undo_with_commit(f)))
         self.assertEqual(counts[0], counts[1])
@@ -637,7 +637,7 @@ class PickHelpers(TransactionTestCase):
         responses: list = []
         with (
             patch("app.broadcast.get_channel_layer", return_value=layer),
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
         ):
             queries = count_queries(
                 lambda: responses.append(fx.pick(active, fx.staff, player))

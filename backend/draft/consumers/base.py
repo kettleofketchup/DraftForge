@@ -45,8 +45,8 @@ from django.utils import timezone
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode
 
-from app.tasks import draft_tick
-from app.tasks.draft_tick import (
+from draft.tasks import draft_tick
+from draft.tasks.draft_tick import (
     CAPTAIN_CHANNEL_TTL,
     HEARTBEAT_TTL,
     TickDriver,

@@ -14,7 +14,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from app.models import Draft
-from app.tasks.draft_tick import (
+from app.tasks.teamdraft_tick import PREFIX, captain_conn_key
+from common.utils import isTestEnvironment
+from draft.tasks.draft_tick import (
     HEARTBEAT_STALE_SECONDS,
     captain_channel_key,
     conn_count_key,
@@ -23,8 +25,6 @@ from app.tasks.draft_tick import (
     lock_key,
     stop_tick_broadcaster,
 )
-from app.tasks.teamdraft_tick import PREFIX, captain_conn_key
-from common.utils import isTestEnvironment
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

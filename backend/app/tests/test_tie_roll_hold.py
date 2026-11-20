@@ -29,20 +29,27 @@ class NoTickThreadTestCase(TestCase):
     """Picks, skips and resume schedule the real tick broadcaster on commit; keep its thread out of tests."""
 
     def setUp(self) -> None:
-        patcher = patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+        patcher = patch(
+            "draft.tasks.draft_tick.start_tick_broadcaster", return_value=True
+        )
         self.start_tick = patcher.start()
         self.addCleanup(patcher.stop)
 
 
 def _started(fx: TimedDraftFixture) -> TimedDraftFixture:
     with patch("app.functions.shuffle_draft.roll_until_winner") as roll:
-        roll.side_effect = lambda teams: (teams[0], [[{"team_id": t.id, "roll": 6 - i} for i, t in enumerate(teams)]])
+        roll.side_effect = lambda teams: (
+            teams[0],
+            [[{"team_id": t.id, "roll": 6 - i} for i, t in enumerate(teams)]],
+        )
         fx.start()
     return fx
 
 
 class TieRollHoldAfterPickTests(NoTickThreadTestCase):
-    def _pick_first_round(self, mmrs: list[int]) -> tuple[TimedDraftFixture, DraftRound, datetime]:
+    def _pick_first_round(
+        self, mmrs: list[int]
+    ) -> tuple[TimedDraftFixture, DraftRound, datetime]:
         fx = TimedDraftFixture(style="shuffle", captain_mmrs=mmrs, prefix="hold")
         _started(fx)
         before = timezone.now()
@@ -66,7 +73,9 @@ class TieRollHoldAfterPickTests(NoTickThreadTestCase):
         self.assertEqual(started.payload["started_at"], nxt.started_at.isoformat())
 
     def test_pick_response_tie_resolution_carries_hold_ms(self):
-        fx = TimedDraftFixture(style="shuffle", captain_mmrs=TIED_AFTER_PICK, prefix="resp")
+        fx = TimedDraftFixture(
+            style="shuffle", captain_mmrs=TIED_AFTER_PICK, prefix="resp"
+        )
         _started(fx)
         with self.captureOnCommitCallbacks(execute=True):
             response: Response = fx.pick(fx.round(1), fx.staff)
@@ -92,7 +101,9 @@ class TieRollHoldAfterPickTests(NoTickThreadTestCase):
 
 
 class TieRollHoldAfterTimeoutTests(NoTickThreadTestCase):
-    def _skip_first_round(self, mmrs: list[int]) -> tuple[TimedDraftFixture, DraftRound, datetime]:
+    def _skip_first_round(
+        self, mmrs: list[int]
+    ) -> tuple[TimedDraftFixture, DraftRound, datetime]:
         fx = TimedDraftFixture(style="shuffle", captain_mmrs=mmrs, prefix="skip")
         _started(fx)
         rnd = fx.round(1)
@@ -139,7 +150,9 @@ class TieRollHoldAfterTimeoutTests(NoTickThreadTestCase):
 class TieRollHoldPauseTests(NoTickThreadTestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.fx = TimedDraftFixture(style="shuffle", captain_mmrs=TIED_AFTER_PICK, prefix="pause")
+        self.fx = TimedDraftFixture(
+            style="shuffle", captain_mmrs=TIED_AFTER_PICK, prefix="pause"
+        )
         _started(self.fx)
         with self.captureOnCommitCallbacks(execute=True):
             self.fx.pick(self.fx.round(1), self.fx.staff)
