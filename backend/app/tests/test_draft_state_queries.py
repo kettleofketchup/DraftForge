@@ -10,7 +10,7 @@ import contextvars
 import json
 import threading
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from unittest.mock import patch
 
@@ -24,14 +24,9 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app import broadcast
-from app import draft_state as draft_state_module
+from app import tournament_state as tournament_state_module
 from app.broadcast import atomic_sharing_draft_state, broadcast_event
 from app.consumers import DraftConsumer
-from app.draft_state import (
-    build_draft_state,
-    draft_state_queryset,
-    tournament_state_queryset,
-)
 from app.functions.tournament import _serialize_tournament
 from app.models import (
     CustomUser,
@@ -51,6 +46,12 @@ from app.serializers import (
     _tournament_organization,
 )
 from app.tests.teamdraft_fixtures import TimedDraftFixture
+from app.tournament_state import (
+    build_draft_state,
+    draft_state_queryset,
+    recent_draft_events,
+    tournament_state_queryset,
+)
 from app.user_cache import serialize_user_core
 from events.models import Event
 from league.models import LeagueUser
@@ -223,6 +224,27 @@ class DraftStateOutputTests(TestCase):
         self.assertIsNone(build_draft_state(10_000_000, fresh=True))
 
 
+class RecentDraftEventsTests(TestCase):
+    def test_recent_draft_events_returns_newest_first_and_limits(self) -> None:
+        fx = TimedDraftFixture()
+        events = [
+            DraftEvent.objects.create(draft=fx.draft, event_type="player_picked")
+            for _ in range(3)
+        ]
+        for offset, event in enumerate(events):
+            DraftEvent.objects.filter(pk=event.pk).update(
+                created_at=timezone.now() + timedelta(minutes=offset + 1)
+            )
+
+        recent = recent_draft_events(fx.tournament.pk, limit=2)
+
+        self.assertEqual([e["pk"] for e in recent], [events[2].pk, events[1].pk])
+
+    def test_recent_draft_events_without_draft_is_empty(self) -> None:
+        tournament = Tournament.objects.create(name="no draft", date_played=BASE.date())
+        self.assertEqual(recent_draft_events(tournament.pk), [])
+
+
 class DraftRoundTeamTests(TestCase):
     """Prefetched DraftRound.team matches the filter(...).first() lookup."""
 
@@ -338,7 +360,7 @@ class DraftStateQueryCountTests(TestCase):
             client = APIClient()
             client.force_authenticate(fx.staff)
             with patch(
-                "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+                "draft.tasks.draft_tick.start_tick_broadcaster", return_value=True
             ):
                 counts.append(
                     self.count(
@@ -354,7 +376,7 @@ class DraftStateQueryCountTests(TestCase):
         counts = []
         for fx in (self.small, self.large):
             with patch(
-                "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+                "draft.tasks.draft_tick.start_tick_broadcaster", return_value=True
             ):
                 counts.append(self.count(lambda f=fx: self.undo_with_commit(f)))
         self.assertEqual(counts[0], counts[1])
@@ -441,7 +463,7 @@ class DraftStateSnapshotTests(TransactionTestCase):
         fx = TimedDraftFixture(prefix="snap")
         user = fx.players[0]
         seen: dict[str, object] = {}
-        real = draft_state_module.build_users_dict_with_org
+        real = tournament_state_module.build_users_dict_with_org
 
         def rename() -> None:
             try:
@@ -462,7 +484,9 @@ class DraftStateSnapshotTests(TransactionTestCase):
             seen["writer"] = writer
             return real(tournament, fresh=fresh)
 
-        with patch.object(draft_state_module, "build_users_dict_with_org", mid_build):
+        with patch.object(
+            tournament_state_module, "build_users_dict_with_org", mid_build
+        ):
             state = build_draft_state(fx.draft.pk, fresh=True)
         seen["writer"].join(timeout=35)
         self.assertEqual(state["_users"][str(user.pk)]["username"], user.username)
@@ -478,7 +502,7 @@ class DraftStateSnapshotTests(TransactionTestCase):
     def test_cached_build_opens_no_transaction(self) -> None:
         fx = make_fixture(4, "snapc")
         seen: list[bool] = []
-        real = draft_state_module.build_users_dict_with_org
+        real = tournament_state_module.build_users_dict_with_org
 
         def mid_build(
             tournament: Tournament, *, fresh: bool
@@ -488,7 +512,9 @@ class DraftStateSnapshotTests(TransactionTestCase):
 
         reset_queries()
         with (
-            patch.object(draft_state_module, "build_users_dict_with_org", mid_build),
+            patch.object(
+                tournament_state_module, "build_users_dict_with_org", mid_build
+            ),
             CaptureQueriesContext(connection) as ctx,
         ):
             build_draft_state(fx.draft.pk, fresh=False)
@@ -613,7 +639,7 @@ class PickHelpers(TransactionTestCase):
         responses: list = []
         with (
             patch("app.broadcast.get_channel_layer", return_value=layer),
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
         ):
             queries = count_queries(
                 lambda: responses.append(fx.pick(active, fx.staff, player))

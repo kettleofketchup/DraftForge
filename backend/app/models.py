@@ -893,7 +893,8 @@ class Tournament(models.Model):
         return self.league.steam_league_id
 
     def get_draft_options(self, *, fresh: bool = False) -> "DraftOptions":
-        manager = DraftOptions.objects.nocache() if fresh else DraftOptions.objects
+        options_model = self._meta.get_field("draft_options").related_model
+        manager = options_model.objects.nocache() if fresh else options_model.objects
         options, _ = manager.get_or_create(tournament=self)
         return options
 

@@ -8,7 +8,6 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.display_names import user_display_name
-from app.draft_state import tournament_state_queryset
 from app.models import CustomUser, Draft, Team, TeamLog, TeamLogVia, Tournament
 from app.permissions_org import can_edit_tournament
 from app.serializers import (
@@ -22,6 +21,7 @@ from app.services.draft_reset import (
     TeamsReferenced,
     reset_draft_teams,
 )
+from app.tournament_state import tournament_state_queryset
 from events.discord.tournament_dispatch import notify_draft_started
 from org.display_names import guild_nicknames, org_nicknames_public
 from telemetry.logging import get_logger

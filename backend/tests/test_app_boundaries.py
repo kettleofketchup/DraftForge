@@ -1,10 +1,11 @@
 import ast
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 from django.apps import apps
 from django.conf import settings
+from django.db.migrations.loader import MigrationLoader
 from django.test import SimpleTestCase
 
 from config.installed_apps import MODEL_APPS
@@ -18,6 +19,15 @@ class MovedSlice:
     moved: frozenset[tuple[str, str]]
     retired_modules: frozenset[str]
     model_labels: frozenset[str]
+    move_migration: tuple[str, str]
+    cached_labels: frozenset[str]
+
+
+@dataclass(frozen=True)
+class BackEdge:
+    names: frozenset[str]
+    reason: str
+    type_only: frozenset[str] = frozenset()
 
 
 HERO_DRAFT = MovedSlice(
@@ -69,29 +79,77 @@ HERO_DRAFT = MovedSlice(
     model_labels=frozenset(
         {"herodraft", "draftteam", "herodraftround", "herodraftevent"}
     ),
+    move_migration=("app", "0108_move_hero_draft_models_to_draft"),
+    cached_labels=frozenset({"herodraft", "draftteam"}),
 )
 
 MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT,)
 
-# target app -> production file (relative to backend/) -> names it may import from that app
-ALLOWED_BACK_EDGES: dict[str, dict[str, frozenset[str]]] = {
+# target app -> production file (relative to backend/) -> what it may import from that app
+ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
     "draft": {
-        "app/discord_accounts.py": frozenset({"repoint_chat_attribution"}),
-        "app/draft_state.py": frozenset({"HeroDraft"}),
-        "app/permissions_org.py": frozenset({"HeroDraft"}),
-        "app/services/draft_reset.py": frozenset({"delete_team_chat"}),
-        "app/services/team_management.py": frozenset(
-            {
-                "DraftTeam",
-                "HeroDraft",
-                "HeroDraftState",
-                "apply_captain_tenure",
-                "broadcast_herodraft_state",
-            }
+        "app/discord_accounts.py": BackEdge(
+            frozenset({"repoint_chat_attribution"}),
+            "Discord account merge repoints hero draft chat authorship",
         ),
-        "app/services/team_references.py": frozenset({"DraftTeam", "HeroDraft"}),
-        "app/views/bracket.py": frozenset({"HeroDraft"}),
-        "app/views_main.py": frozenset({"DraftTeam"}),
+        "app/services/draft_reset.py": BackEdge(
+            frozenset({"delete_team_chat"}),
+            "tournament team reset wipes the reset teams' live hero draft chat",
+        ),
+        "app/tournament_state.py": BackEdge(
+            frozenset({"HeroDraft"}),
+            "tournament prefetch plan prefetches games__herodraft",
+        ),
+        "app/permissions_org.py": BackEdge(
+            frozenset({"HeroDraft"}),
+            "org permission check resolves a hero draft's tournament",
+        ),
+        "app/services/team_management.py": BackEdge(
+            frozenset(
+                {
+                    "DraftTeam",
+                    "HeroDraft",
+                    "HeroDraftState",
+                    "apply_captain_tenure",
+                    "broadcast_herodraft_state",
+                }
+            ),
+            "team management resets and rebroadcasts the hero drafts of a changed"
+            " team and moves chat membership with captaincy",
+        ),
+        "app/services/team_references.py": BackEdge(
+            frozenset({"DraftTeam", "HeroDraft"}),
+            "Team-domain reference counts include hero drafts",
+        ),
+        "app/views/bracket.py": BackEdge(
+            frozenset({"HeroDraft"}),
+            "bracket view prefetches each game's hero draft",
+        ),
+        "app/views_main.py": BackEdge(
+            frozenset({"DraftTeam"}),
+            "current_user lists active hero drafts the user captains",
+        ),
+        "app/consumers.py": BackEdge(
+            frozenset({"BaseDraftConsumer", "CAPTAIN_CHANNEL_TTL", "TickDriver"}),
+            "temporary: DraftConsumer moves to draft with the team draft models",
+        ),
+        "app/functions/draft_picks.py": BackEdge(
+            frozenset({"evaluate_client_pick_time"}),
+            "temporary: draft_picks moves to draft with the team draft models",
+        ),
+        "app/tasks/teamdraft_tick.py": BackEdge(
+            frozenset(
+                {
+                    "CAPTAIN_CHANNEL_TTL",
+                    "HEARTBEAT_STALE_SECONDS",
+                    "draft_tick",
+                    "get_connection_count",
+                    "get_redis_client",
+                    "heartbeat_key",
+                }
+            ),
+            "temporary: teamdraft_tick moves to draft with the team draft models",
+        ),
     },
 }
 
@@ -141,39 +199,68 @@ def _top_level_names(tree: ast.Module) -> Iterator[tuple[str, int]]:
             yield node.target.id, node.lineno
 
 
-def _imported(tree: ast.Module, path: str) -> Iterator[tuple[str, str | None, int]]:
-    """Yield (module, imported name or None for plain import, line)."""
+def _is_type_checking(test: ast.expr) -> bool:
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+        isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+    )
+
+
+def _imported(
+    tree: ast.Module, path: str
+) -> Iterator[tuple[str, str | None, int, bool]]:
+    """Yield (module, imported name or None for plain import, line, type_checking)."""
+    type_checking: set[int] = {
+        id(inner)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If) and _is_type_checking(node.test)
+        for stmt in node.body
+        for inner in ast.walk(stmt)
+    }
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                yield alias.name, None, node.lineno
+                yield alias.name, None, node.lineno, id(node) in type_checking
         elif isinstance(node, ast.ImportFrom):
             module = _resolve(node, path)
             for alias in node.names:
-                yield module, alias.name, node.lineno
+                yield module, alias.name, node.lineno, id(node) in type_checking
+
+
+def _back_edge_imports(
+    tree: ast.Module, path: str, slices: tuple[MovedSlice, ...]
+) -> dict[str, dict[str, bool]]:
+    """new_app -> imported name -> whether every import of it is TYPE_CHECKING-only."""
+    edges: dict[str, dict[str, bool]] = {}
+    if _is_test_module(path):
+        return edges
+    for s in slices:
+        if not _within(_module_of(path), s.source_app):
+            continue
+        for module, name, _line, type_checking in _imported(tree, path):
+            if _within(module, s.new_app):
+                names = edges.setdefault(s.new_app, {})
+                key = name or module
+                names[key] = names.get(key, True) and type_checking
+    return edges
 
 
 def collect_back_edges(
     source: str, path: str, slices: tuple[MovedSlice, ...] = MOVED_SLICES
 ) -> dict[str, set[str]]:
-    edges: dict[str, set[str]] = {}
     if _is_test_module(path):
-        return edges
+        return {}
     tree = ast.parse(source, filename=path)
-    for s in slices:
-        if not _within(_module_of(path), s.source_app):
-            continue
-        for module, name, _line in _imported(tree, path):
-            if _within(module, s.new_app):
-                edges.setdefault(s.new_app, set()).add(name or module)
-    return edges
+    return {
+        new_app: set(names)
+        for new_app, names in _back_edge_imports(tree, path, slices).items()
+    }
 
 
 def find_violations(
     source: str,
     path: str,
     slices: tuple[MovedSlice, ...] = MOVED_SLICES,
-    back_edges: dict[str, dict[str, frozenset[str]]] = ALLOWED_BACK_EDGES,
+    back_edges: dict[str, dict[str, BackEdge]] = ALLOWED_BACK_EDGES,
 ) -> list[str]:
     tree = ast.parse(source, filename=path)
     module_name = _module_of(path)
@@ -181,9 +268,9 @@ def find_violations(
     for s in slices:
         re_exports = {
             (_module_of(file), name)
-            for file, names in back_edges.get(s.new_app, {}).items()
+            for file, edge in back_edges.get(s.new_app, {}).items()
             if file != path
-            for name in names
+            for name in edge.names
         }
         forbidden = s.moved | re_exports
         moved_here = {name for old, name in s.moved if old == module_name}
@@ -193,7 +280,7 @@ def find_violations(
                     f"{path}:{line}: [{s.name}] {name} redefined in {module_name}"
                 )
 
-        for module, name, line in _imported(tree, path):
+        for module, name, line, _type_checking in _imported(tree, path):
             full = f"{module}.{name}" if name else module
             if name and (module, name) in forbidden:
                 found.append(f"{path}:{line}: [{s.name}] imports {name} via {module}")
@@ -217,33 +304,95 @@ def find_violations(
                     f"{path}:{node.lineno}: [{s.name}] string back-door {value!r}"
                 )
 
-    for new_app, names in collect_back_edges(source, path, slices).items():
+    for new_app, names in _back_edge_imports(tree, path, slices).items():
         allowed = back_edges.get(new_app, {}).get(path)
         if allowed is None:
             found.append(
                 f"{path}: imports {sorted(names)} from {new_app}; not in ALLOWED_BACK_EDGES"
             )
             continue
-        for name in sorted(names - allowed):
+        for name in sorted(names.keys() - allowed.names):
             found.append(
                 f"{path}: imports {name} from {new_app}; not listed in ALLOWED_BACK_EDGES"
             )
+        for name in sorted(allowed.type_only & names.keys()):
+            if not names[name]:
+                found.append(
+                    f"{path}: imports {name} from {new_app} at runtime; "
+                    "ALLOWED_BACK_EDGES allows it only under TYPE_CHECKING"
+                )
     return found
 
 
 def find_stale_back_edges(
     observed: dict[str, dict[str, set[str]]],
-    back_edges: dict[str, dict[str, frozenset[str]]] = ALLOWED_BACK_EDGES,
+    back_edges: dict[str, dict[str, BackEdge]] = ALLOWED_BACK_EDGES,
 ) -> list[str]:
     stale: list[str] = []
     for new_app, files in back_edges.items():
-        for path, names in files.items():
-            unused = names - observed.get(new_app, {}).get(path, set())
+        for path, edge in files.items():
+            unused = edge.names - observed.get(new_app, {}).get(path, set())
             stale.extend(
                 f"{path}: ALLOWED_BACK_EDGES[{new_app!r}] lists {name}, no longer imported"
                 for name in sorted(unused)
             )
     return stale
+
+
+def _migration_key(path: str) -> tuple[str, str]:
+    p = Path(path)
+    return p.parent.parent.name, p.stem
+
+
+def _references_moved_model(tree: ast.Module, s: MovedSlice) -> Iterator[int]:
+    lazy_labels = {f"{s.source_app}.{label}" for label in s.model_labels}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if node.value.casefold() in lazy_labels:
+                yield node.lineno
+        elif isinstance(node, ast.Call):
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else None
+            if isinstance(func, ast.Name):
+                name = func.id
+            if name != "get_model" or len(node.args) < 2:
+                continue
+            app_arg, model_arg = node.args[0], node.args[1]
+            if (
+                isinstance(app_arg, ast.Constant)
+                and app_arg.value == s.source_app
+                and isinstance(model_arg, ast.Constant)
+                and isinstance(model_arg.value, str)
+                and model_arg.value.casefold() in s.model_labels
+            ):
+                yield node.lineno
+
+
+def find_migration_ancestry_violations(
+    slices: tuple[MovedSlice, ...],
+    migration_files: Iterable[tuple[str, str]],
+    ancestors: Callable[[tuple[str, str]], set[tuple[str, str]]],
+) -> list[str]:
+    """migration_files: (path like "<app>/migrations/<name>.py", source)."""
+    files = list(migration_files)
+    found: list[str] = []
+    for s in slices:
+        before_move: set[tuple[str, str]] | None = None
+        for path, source in files:
+            key = _migration_key(path)
+            if key[0] in {s.source_app, s.new_app}:
+                continue
+            lines = sorted(set(_references_moved_model(ast.parse(source, path), s)))
+            if not lines:
+                continue
+            if before_move is None:
+                before_move = ancestors(s.move_migration)
+            if key not in before_move:
+                found.append(
+                    f"{path}:{lines[0]}: [{s.name}] uses {s.source_app} models moved by "
+                    f"{'.'.join(s.move_migration)} but is not its ancestor"
+                )
+    return found
 
 
 def _python_files(base: Path) -> Iterator[tuple[Path, str]]:
@@ -254,116 +403,213 @@ def _python_files(base: Path) -> Iterator[tuple[Path, str]]:
         yield file, rel
 
 
-SMALL_EDGES: dict[str, dict[str, frozenset[str]]] = {
-    "draft": {"app/draft_state.py": frozenset({"HeroDraft"})},
+def _migration_files(base: Path) -> Iterator[tuple[str, str]]:
+    for file in sorted(base.rglob("*.py")):
+        if file.parent.name == "migrations" and file.name != "__init__.py":
+            yield file.relative_to(base).as_posix(), file.read_text()
+
+
+FIXTURE_SLICE = MovedSlice(
+    name="fixture",
+    source_app="src",
+    new_app="dst",
+    moved=frozenset({("src.models", "Moved"), ("src.views", "MovedView")}),
+    retired_modules=frozenset({"src.old"}),
+    model_labels=frozenset({"moved"}),
+    move_migration=("src", "0002_move"),
+    cached_labels=frozenset({"moved"}),
+)
+
+FIXTURE_EDGES: dict[str, dict[str, BackEdge]] = {
+    "dst": {
+        "src/state.py": BackEdge(frozenset({"Moved"}), "fixture"),
+        "src/models.py": BackEdge(
+            frozenset({"Moved"}), "fixture", type_only=frozenset({"Moved"})
+        ),
+    },
 }
+
+FIXTURE_MIGRATION = ("other", "0003_x")
+FIXTURE_MIGRATION_PATH = "other/migrations/0003_x.py"
 
 
 class GuardSelfTests(SimpleTestCase):
-    def assertFlagged(self, source: str, path: str, **kwargs: object) -> None:
-        self.assertNotEqual(find_violations(source, path, **kwargs), [], source)
+    def violations(self, source: str, path: str) -> list[str]:
+        return find_violations(
+            source, path, slices=(FIXTURE_SLICE,), back_edges=FIXTURE_EDGES
+        )
 
-    def assertClean(self, source: str, path: str, **kwargs: object) -> None:
-        self.assertEqual(find_violations(source, path, **kwargs), [], source)
+    def assertFlagged(self, source: str, path: str) -> None:
+        self.assertNotEqual(self.violations(source, path), [], source)
+
+    def assertClean(self, source: str, path: str) -> None:
+        self.assertEqual(self.violations(source, path), [], source)
+
+    def ancestry(
+        self, source: str, ancestors: set[tuple[str, str]], path: str
+    ) -> list[str]:
+        return find_migration_ancestry_violations(
+            (FIXTURE_SLICE,), [(path, source)], lambda _key: ancestors
+        )
 
     def test_redefinition_in_old_module(self) -> None:
-        self.assertFlagged("class HeroDraft:\n    pass\n", "app/models.py")
-        self.assertFlagged(
-            "def _broadcast_draft_event():\n    pass\n", "app/signals.py"
-        )
-        self.assertFlagged("HERODRAFT_GUILD_NICKNAMES = {}\n", "app/serializers.py")
-        self.assertClean("class Game:\n    pass\n", "app/models.py")
-        self.assertClean("class HeroDraft:\n    pass\n", "draft/models/hero.py")
+        self.assertFlagged("class Moved:\n    pass\n", "src/models.py")
+        self.assertFlagged("def MovedView():\n    pass\n", "src/views.py")
+        self.assertFlagged("MovedView = object\n", "src/views.py")
+        self.assertClean("class Other:\n    pass\n", "src/models.py")
+        self.assertClean("class Moved:\n    pass\n", "dst/models.py")
 
     def test_absolute_import_through_old_module(self) -> None:
-        self.assertFlagged("from app.models import HeroDraft\n", "app/views_main.py")
-        self.assertClean("from draft.models import HeroDraft\n", "draft/views/hero.py")
-        self.assertClean("from app.models import Game\n", "app/views_main.py")
+        self.assertFlagged("from src.models import Moved\n", "src/views.py")
+        self.assertClean("from dst.models import Moved\n", "dst/views.py")
+        self.assertClean("from src.models import Other\n", "src/views.py")
 
     def test_relative_import_through_old_module(self) -> None:
-        self.assertFlagged("from .models import HeroDraft\n", "app/views_main.py")
-        self.assertFlagged("from ..models import DraftTeam\n", "app/views/foo.py")
-        self.assertFlagged(
-            "from .internal import create_herodraft_for_game\n", "app/views/__init__.py"
-        )
-        self.assertClean("from .models import Game\n", "app/views_main.py")
+        self.assertFlagged("from .models import Moved\n", "src/views.py")
+        self.assertFlagged("from ..models import Moved\n", "src/views/foo.py")
+        self.assertFlagged("from .views import MovedView\n", "src/__init__.py")
+        self.assertClean("from .models import Other\n", "src/views.py")
 
     def test_retired_module_import(self) -> None:
-        self.assertFlagged("import app.tasks.herodraft_tick\n", "tests/test_x.py")
-        self.assertFlagged("from app.tasks import herodraft_tick\n", "tests/test_x.py")
-        self.assertFlagged("from app.functions.herodraft import submit_pick\n", "x.py")
-        self.assertClean("from app.tasks import draft_tick\n", "tests/test_x.py")
+        self.assertFlagged("import src.old\n", "tests/test_x.py")
+        self.assertFlagged("from src import old\n", "tests/test_x.py")
+        self.assertFlagged("from src.old import thing\n", "x.py")
+        self.assertClean("from src import other\n", "tests/test_x.py")
 
     def test_patch_string_back_doors(self) -> None:
-        self.assertFlagged('patch("app.consumers.broadcast_herodraft_state")\n', "x.py")
-        self.assertFlagged('patch("app.functions.herodraft.submit_pick")\n', "x.py")
-        self.assertFlagged('ForeignKey("app.HeroDraft")\n', "x.py")
-        self.assertFlagged('apps.get_model("APP.herodraft")\n', "x.py")
-        self.assertClean(
-            'patch("draft.consumers.hero.broadcast_herodraft_state")\n', "x.py"
-        )
-        self.assertClean('ForeignKey("draft.HeroDraft")\n', "x.py")
-        self.assertClean(
-            'patch("app.tasks.draft_tick.start_tick_broadcaster")\n', "x.py"
-        )
+        self.assertFlagged('patch("src.models.Moved")\n', "x.py")
+        self.assertFlagged('patch("src.views.MovedView.get")\n', "x.py")
+        self.assertFlagged('patch("src.old.thing")\n', "x.py")
+        self.assertFlagged('ForeignKey("src.Moved")\n', "x.py")
+        self.assertFlagged('apps.get_model("SRC.moved")\n', "x.py")
+        self.assertClean('patch("dst.models.Moved")\n', "x.py")
+        self.assertClean('ForeignKey("dst.Moved")\n', "x.py")
+        self.assertClean('patch("src.models.Other")\n', "x.py")
 
     def test_back_edge_unlisted_file(self) -> None:
-        self.assertFlagged(
-            "from draft.models import HeroDraft\n",
-            "app/views/foo.py",
-            back_edges=SMALL_EDGES,
-        )
-        self.assertFlagged(
-            "import draft.models\n", "app/views/foo.py", back_edges=SMALL_EDGES
-        )
+        self.assertFlagged("from dst.models import Moved\n", "src/views/foo.py")
+        self.assertFlagged("import dst.models\n", "src/views/foo.py")
 
     def test_back_edge_listed_file_unlisted_name(self) -> None:
-        self.assertFlagged(
-            "from draft.models import DraftTeam\n",
-            "app/draft_state.py",
-            back_edges=SMALL_EDGES,
-        )
-        self.assertClean(
-            "from draft.models import HeroDraft\n",
-            "app/draft_state.py",
-            back_edges=SMALL_EDGES,
-        )
+        self.assertFlagged("from dst.models import Other\n", "src/state.py")
+        self.assertClean("from dst.models import Moved\n", "src/state.py")
 
     def test_back_edge_stale_listed_name(self) -> None:
-        observed: dict[str, dict[str, set[str]]] = {"draft": {}}
-        self.assertNotEqual(find_stale_back_edges(observed, SMALL_EDGES), [])
-        observed = {"draft": {"app/draft_state.py": {"HeroDraft"}}}
-        self.assertEqual(find_stale_back_edges(observed, SMALL_EDGES), [])
+        observed: dict[str, dict[str, set[str]]] = {"dst": {}}
+        self.assertNotEqual(find_stale_back_edges(observed, FIXTURE_EDGES), [])
+        observed = {"dst": {"src/state.py": {"Moved"}, "src/models.py": {"Moved"}}}
+        self.assertEqual(find_stale_back_edges(observed, FIXTURE_EDGES), [])
+
+    def test_collect_back_edges_reports_observed_names(self) -> None:
+        source = "from dst.models import Moved\nimport dst.views\n"
+        self.assertEqual(
+            collect_back_edges(source, "src/state.py", slices=(FIXTURE_SLICE,)),
+            {"dst": {"Moved", "dst.views"}},
+        )
+        self.assertEqual(
+            collect_back_edges(source, "src/tests/test_x.py", slices=(FIXTURE_SLICE,)),
+            {},
+        )
 
     def test_same_name_in_other_module_not_flagged(self) -> None:
-        self.assertClean(
-            "from app.internal_client import create_herodraft_for_game\n", "x.py"
-        )
-        self.assertClean(
-            'patch("app.internal_client.create_herodraft_for_game")\n', "x.py"
-        )
+        self.assertClean("from src.client import Moved\n", "x.py")
+        self.assertClean('patch("src.client.Moved")\n', "x.py")
 
     def test_back_edge_names_not_reexported(self) -> None:
-        self.assertFlagged("from app.draft_state import HeroDraft\n", "discordbot/x.py")
-        self.assertFlagged("from app.views_main import DraftTeam\n", "events/views.py")
-        self.assertFlagged(
-            "from .draft_state import HeroDraft\n", "app/x.py", back_edges=SMALL_EDGES
-        )
-        self.assertClean(
-            "from app.draft_state import build_draft_state\n", "discordbot/x.py"
-        )
-        self.assertClean(
-            "from draft.models import HeroDraft\n",
-            "app/draft_state.py",
-            back_edges=SMALL_EDGES,
-        )
+        self.assertFlagged("from src.state import Moved\n", "other/x.py")
+        self.assertFlagged("from .state import Moved\n", "src/x.py")
+        self.assertClean("from src.state import helper\n", "other/x.py")
+        self.assertClean("from dst.models import Moved\n", "src/state.py")
 
     def test_test_modules_exempt_from_back_edges(self) -> None:
-        self.assertClean("from draft.models import HeroDraft\n", "app/tests/test_x.py")
-        self.assertClean("from draft.models import HeroDraft\n", "app/test_x.py")
+        self.assertClean("from dst.models import Moved\n", "src/tests/test_x.py")
+        self.assertClean("from dst.models import Moved\n", "src/test_x.py")
 
     def test_non_source_app_files_exempt_from_back_edges(self) -> None:
-        self.assertClean("from draft.models import HeroDraft\n", "discordbot/models.py")
+        self.assertClean("from dst.models import Moved\n", "other/models.py")
+
+    def test_type_only_name_allowed_under_type_checking(self) -> None:
+        self.assertClean(
+            "from typing import TYPE_CHECKING\n"
+            "if TYPE_CHECKING:\n"
+            "    from dst.models import Moved\n",
+            "src/models.py",
+        )
+        self.assertClean(
+            "import typing\nif typing.TYPE_CHECKING:\n    from dst.models import Moved\n",
+            "src/models.py",
+        )
+
+    def test_type_only_name_flagged_at_runtime(self) -> None:
+        self.assertFlagged("from dst.models import Moved\n", "src/models.py")
+        self.assertFlagged(
+            "from typing import TYPE_CHECKING\n"
+            "if TYPE_CHECKING:\n"
+            "    from dst.models import Moved\n"
+            "else:\n"
+            "    from dst.models import Moved\n",
+            "src/models.py",
+        )
+        self.assertFlagged(
+            "from typing import TYPE_CHECKING\n"
+            "if TYPE_CHECKING:\n"
+            "    pass\n"
+            "from dst.models import Moved\n",
+            "src/models.py",
+        )
+
+    def test_back_edge_reasons_non_empty(self) -> None:
+        for new_app, files in ALLOWED_BACK_EDGES.items():
+            for path, edge in files.items():
+                with self.subTest(new_app=new_app, path=path):
+                    self.assertTrue(edge.reason.strip())
+                    self.assertTrue(edge.names)
+                    self.assertLessEqual(edge.type_only, edge.names)
+
+    def test_migration_ancestry_flags_non_ancestor(self) -> None:
+        for source in (
+            'Moved = apps.get_model("src", "Moved")\n',
+            'Moved = apps.get_model("src.Moved")\n',
+            'field = ForeignKey(to="src.moved")\n',
+        ):
+            with self.subTest(source=source):
+                self.assertNotEqual(
+                    self.ancestry(
+                        source, {("src", "0001_initial")}, FIXTURE_MIGRATION_PATH
+                    ),
+                    [],
+                )
+
+    def test_migration_ancestry_accepts_ancestor(self) -> None:
+        for source in (
+            'Moved = apps.get_model("src", "Moved")\n',
+            'Moved = apps.get_model("src.Moved")\n',
+            'field = ForeignKey(to="src.moved")\n',
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(
+                    self.ancestry(source, {FIXTURE_MIGRATION}, FIXTURE_MIGRATION_PATH),
+                    [],
+                )
+
+    def test_migration_ancestry_ignores_unrelated_and_own_apps(self) -> None:
+        self.assertEqual(
+            self.ancestry(
+                'apps.get_model("src", "Other")\n', set(), FIXTURE_MIGRATION_PATH
+            ),
+            [],
+        )
+        self.assertEqual(
+            self.ancestry(
+                'apps.get_model("dst", "Moved")\n', set(), FIXTURE_MIGRATION_PATH
+            ),
+            [],
+        )
+        for path in ("src/migrations/0003_x.py", "dst/migrations/0003_x.py"):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    self.ancestry('apps.get_model("src", "Moved")\n', set(), path), []
+                )
 
 
 class AppBoundaryTests(SimpleTestCase):
@@ -407,6 +653,23 @@ class AppBoundaryTests(SimpleTestCase):
             for label in s.model_labels:
                 with self.subTest(label=label):
                     self.assertNotIn(f"{s.source_app}.{label}", keys)
+
+    def test_new_cacheops_keys_present(self) -> None:
+        if not settings.CACHEOPS:
+            self.skipTest("CACHEOPS is empty (DISABLE_CACHE)")
+        for s in MOVED_SLICES:
+            for label in s.cached_labels:
+                with self.subTest(label=label):
+                    self.assertIn(f"{s.new_app}.{label}", settings.CACHEOPS)
+
+    def test_cross_app_migrations_precede_move(self) -> None:
+        graph = MigrationLoader(None, ignore_no_migrations=True).graph
+        files = list(_migration_files(self.base))
+        self.assertTrue(files)
+        violations = find_migration_ancestry_violations(
+            MOVED_SLICES, files, lambda key: set(graph.forwards_plan(key))
+        )
+        self.assertEqual(violations, [])
 
     def test_moved_models_keep_their_tables(self) -> None:
         for s in MOVED_SLICES:

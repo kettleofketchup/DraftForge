@@ -6,6 +6,8 @@ root := clean(source_directory() / "../..")
 image := env("DF_TEST_DB_IMAGE", "draftforge/test-db")
 registry := env("DF_TEST_DB_REGISTRY", "ghcr.io/kettleofketchup/draftforge/test-db")
 just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
+# The slot guard tests point this at a temp file
+test_db := env("DF_TEST_DB_FILE", root / "backend/test.db.sqlite3")
 
 # Output content hash for test-db sources
 [group('docker::db')]
@@ -36,13 +38,16 @@ build:
     # Build using temp context to avoid .dockerignore excluding sqlite files
     CTX=$(mktemp -d)
     trap 'rm -rf "$CTX"' EXIT
-    cp backend/test.db.sqlite3 "$CTX/"
+    cp {{quote(test_db)}} "$CTX/test.db.sqlite3"
     cp docker/Dockerfile.test-db "$CTX/Dockerfile"
 
-    docker build "$CTX" \
-        --build-arg CONTENT_HASH="$HASH" \
-        -t "{{image}}:latest" \
-        -t "{{image}}:$HASH"
+    args=(--build-arg CONTENT_HASH="$HASH" -t "{{image}}:latest" -t "{{image}}:$HASH")
+    # A docker-container buildx builder keeps the image in its cache unless loaded;
+    # podman build always stores locally and rejects --load.
+    if ! docker --version 2>/dev/null | grep -qi podman; then
+        args+=(--load)
+    fi
+    docker build "${args[@]}" "$CTX"
     echo "Built {{image}} (hash: ${HASH:0:12}...)"
 
 # Pull test-db image from GHCR (tries hash first, then latest)

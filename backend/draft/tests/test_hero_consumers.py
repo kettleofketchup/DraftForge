@@ -185,7 +185,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         is_connected = await check_disconnected()
         self.assertFalse(is_connected)
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     async def test_draft_paused_on_captain_disconnect_during_drafting(
         self, mock_start_tick
     ):
@@ -338,7 +338,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         await communicator.disconnect()
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster")
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster")
     async def test_pause_resume_timing_adjustment(self, mock_start_tick):
         """Test that pause/resume adjusts round started_at correctly."""
         # Mock tick broadcaster to avoid SQLite locking issues in tests
@@ -541,7 +541,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         await captain1_reconnect.disconnect()
         await captain2_communicator.disconnect()
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster")
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster")
     async def test_disconnect_during_resuming_does_not_pause(self, mock_start_tick):
         """
         Test that captain disconnect during RESUMING state does not trigger pause.
@@ -596,7 +596,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
             "Disconnect during RESUMING should not trigger pause (exploit prevention)",
         )
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster")
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster")
     async def test_disconnect_during_rolling_no_pause(self, mock_start_tick):
         """Test captain disconnect during ROLLING state does not trigger pause."""
         mock_start_tick.return_value = True
@@ -639,7 +639,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
             "Disconnect during ROLLING should not trigger pause",
         )
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster")
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster")
     async def test_both_captains_disconnect_only_pauses_once(self, mock_start_tick):
         """Test that both captains disconnecting during drafting only creates one pause event."""
         mock_start_tick.return_value = True
@@ -706,7 +706,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
             "Should not create additional pause event when already paused",
         )
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster")
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster")
     async def test_kicked_connection_does_not_trigger_pause(self, mock_start_tick):
         """Test that a kicked connection (replaced by new connection) does not trigger pause."""
         mock_start_tick.return_value = True
@@ -787,12 +787,12 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
                 continue
             return out
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster")
-    @patch("app.consumers_base.PING_INTERVAL", 60)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster")
+    @patch("draft.consumers.base.PING_INTERVAL", 60)
     async def test_kicked_connection_receives_kicked_frame_then_close_4000(
         self, mock_start_tick
     ):
-        """Spec §1: first socket gets {"type": "herodraft_kicked"} then close code 4000."""
+        """First socket gets {"type": "herodraft_kicked"} then close code 4000."""
         mock_start_tick.return_value = True
 
         first_comm = WebsocketCommunicator(

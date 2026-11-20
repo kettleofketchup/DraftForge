@@ -30,8 +30,8 @@ from app.models import (
     Tournament,
 )
 from app.permissions_org import can_edit_tournament
-from app.tasks.draft_tick import evaluate_client_pick_time
 from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
+from draft.tasks.draft_tick import evaluate_client_pick_time
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

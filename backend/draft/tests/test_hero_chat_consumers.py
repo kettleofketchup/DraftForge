@@ -346,7 +346,7 @@ class ChatHistoryOnConnectTest(ChatConsumerFixture):
 
     async def test_bootstrap_failure_keeps_socket(self) -> None:
         with (
-            mock.patch("app.consumers_base.PING_INTERVAL", 0.1),
+            mock.patch("draft.consumers.base.PING_INTERVAL", 0.1),
             mock.patch(
                 "draft.consumers.hero.visible_messages",
                 side_effect=RuntimeError("boom"),

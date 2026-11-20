@@ -1,4 +1,4 @@
-"""skip_turn strategies, reassign_round_captain, check_timeout guards and pick-vs-timeout ordering (spec §2)."""
+"""skip_turn strategies, reassign_round_captain, check_timeout guards and pick-vs-timeout ordering."""
 
 from datetime import timedelta
 from unittest.mock import patch
@@ -81,7 +81,7 @@ class SkipTurnSnakeTests(TestCase):
     def setUp(self):
         self.fx = TimedDraftFixture(style="snake")
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             self.fx.start()
@@ -205,7 +205,7 @@ class SkipTurnSnakeTests(TestCase):
                 self.fx.pick(self.fx.draft.active_round, self.fx.staff).status_code, 201
             )  # B picks at 1
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             self.assertEqual(self.fx.undo(self.fx.staff).status_code, 200)
@@ -289,7 +289,7 @@ class SkipTurnShuffleTests(TestCase):
     def setUp(self):
         self.fx = TimedDraftFixture(style="shuffle", captain_mmrs=CAPTAIN_MMRS)
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             self.fx.start()
@@ -360,7 +360,7 @@ class CheckTimeoutTests(TransactionTestCase):
         self.fx = TimedDraftFixture(
             style="snake", grace_time_ms=1000, reserve_time_ms=2000, prefix="to"
         )
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+        with patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.rnd = self.fx.start(now=timezone.now() - timedelta(seconds=10))
 
     def check(self):
@@ -446,7 +446,7 @@ class CheckTimeoutTests(TransactionTestCase):
         base = f"/api/draft/{self.fx.draft.pk}"
         self.assertEqual(client.post(f"{base}/pause/").status_code, 200)
         self.assertEqual(self.fx.pick(self.rnd, self.fx.staff).status_code, 201)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+        with patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.assertEqual(client.post(f"{base}/resume/").status_code, 200)
         draft = Draft.objects.get(pk=self.fx.draft.pk)
         draft.state, draft.resuming_until = TeamDraftState.DRAFTING, None
@@ -470,7 +470,7 @@ class PickTimeoutOrderingTests(TransactionTestCase):
         self.fx = TimedDraftFixture(
             style="snake", grace_time_ms=1000, reserve_time_ms=1000, prefix="cc"
         )
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+        with patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.rnd = self.fx.start(now=timezone.now() - timedelta(seconds=5))
 
     def check(self):
@@ -517,7 +517,7 @@ class ShufflePickTimeoutOrderingTests(TransactionTestCase):
             prefix="sr",
             captain_mmrs=CAPTAIN_MMRS,
         )
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+        with patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.rnd = self.fx.start(now=timezone.now() - timedelta(seconds=5))
 
     def test_skip_lands_between_auth_and_lock_then_skipped_captain_pick_is_refused(

@@ -22,7 +22,7 @@ class TournamentDetailStaleWriteTests(TransactionTestCase):
     def setUp(self) -> None:
         if not self._redis_ok:
             self.skipTest("Cacheops Redis not reachable")
-        tick = patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+        tick = patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
         tick.start()
         self.addCleanup(tick.stop)
         self.fx = TimedDraftFixture(prefix="tdcache")
@@ -46,7 +46,9 @@ class TournamentDetailStaleWriteTests(TransactionTestCase):
             if not fired:
                 fired.append(True)
                 response = self.captain.post(
-                    f"/api/draft/{self.fx.draft.pk}/ready/", {"ready": True}, format="json"
+                    f"/api/draft/{self.fx.draft.pk}/ready/",
+                    {"ready": True},
+                    format="json",
                 )
                 self.assertEqual(response.status_code, 200)
             return original(*args, **kwargs)

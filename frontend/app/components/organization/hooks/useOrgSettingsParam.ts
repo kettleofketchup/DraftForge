@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useNavigate } from 'react-router';
+import { useLatestSearchParams } from '~/hooks/useLatestSearchParams';
 
 const PARAM = 'settings';
 const NAV_OPTIONS = { replace: true, preventScrollReset: true } as const;
@@ -20,7 +21,7 @@ export function useOrgSettingsParam(access: {
   canOpen: boolean;
 }): OrgSettingsParam {
   const { settled, canOpen } = access;
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useLatestSearchParams();
   const navigate = useNavigate();
   const pushed = useRef(false);
   const raw = searchParams.get(PARAM);

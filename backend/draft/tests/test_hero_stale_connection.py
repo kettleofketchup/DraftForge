@@ -91,7 +91,7 @@ class StaleConnectionTestCase(TransactionTestCase):
             ]
         )
 
-    @patch("app.consumers_base.PING_INTERVAL", FAST_PING_INTERVAL)
+    @patch("draft.consumers.base.PING_INTERVAL", FAST_PING_INTERVAL)
     async def test_ping_loop_keeps_connection_alive_during_paused_state(self):
         """Test server sends ping messages periodically during PAUSED state.
 
@@ -139,7 +139,7 @@ class StaleConnectionTestCase(TransactionTestCase):
 
         await communicator.disconnect()
 
-    @patch("app.consumers_base.PING_INTERVAL", FAST_PING_INTERVAL)
+    @patch("draft.consumers.base.PING_INTERVAL", FAST_PING_INTERVAL)
     async def test_ping_message_format(self):
         """Test ping message is valid JSON with correct format.
 
@@ -169,7 +169,7 @@ class StaleConnectionTestCase(TransactionTestCase):
 
         await communicator.disconnect()
 
-    @patch("app.consumers_base.PING_INTERVAL", FAST_PING_INTERVAL)
+    @patch("draft.consumers.base.PING_INTERVAL", FAST_PING_INTERVAL)
     async def test_multiple_pings_arrive_periodically(self):
         """Test that multiple ping messages arrive at the expected interval.
 
@@ -199,7 +199,7 @@ class StaleConnectionTestCase(TransactionTestCase):
 
         await communicator.disconnect()
 
-    @patch("app.consumers_base.PING_INTERVAL", FAST_PING_INTERVAL)
+    @patch("draft.consumers.base.PING_INTERVAL", FAST_PING_INTERVAL)
     async def test_connection_receives_tick_messages_during_drafting(self):
         """Test connection receives tick messages during active DRAFTING state.
 
@@ -275,7 +275,7 @@ class StaleConnectionTestCase(TransactionTestCase):
 
         await communicator.disconnect()
 
-    @patch("app.consumers_base.PING_INTERVAL", FAST_PING_INTERVAL)
+    @patch("draft.consumers.base.PING_INTERVAL", FAST_PING_INTERVAL)
     async def test_ping_loop_cancelled_on_disconnect(self):
         """Test ping loop is properly cancelled when client disconnects.
 

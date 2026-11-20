@@ -5,6 +5,8 @@ set positional-arguments
 
 root := clean(source_directory() / "../..")
 just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
+# The slot guard tests point this at a temp file
+test_db := env("DF_TEST_DB_FILE", root / "backend/test.db.sqlite3")
 
 # Smart populate: builds cached image if needed, then extracts
 [group('db::populate')]
@@ -15,8 +17,8 @@ all:
 # Force fresh populate (bypasses cache): new test DB, migrate, populate_all --force
 [group('db::populate')]
 fresh:
-    rm -f {{quote(root / "backend/test.db.sqlite3")}}
-    touch {{quote(root / "backend/test.db.sqlite3")}}
+    rm -f {{quote(test_db)}}
+    touch {{quote(test_db)}}
     {{just}} db::migrate::test
     {{just}} db::manage test populate_all --force
 

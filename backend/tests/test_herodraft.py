@@ -19,13 +19,13 @@ from rest_framework.response import Response
 
 from app.models import Game
 from app.redis_keys import namespaced_key
-from app.tasks.draft_tick import get_redis_client
 from common.utils import isTestEnvironment
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero import auto_random_pick, build_draft_rounds, trigger_roll
 from draft.services.hero_broadcast import broadcast_herodraft_state
 from draft.services.hero_chat import reset_draft_chat
+from draft.tasks.draft_tick import get_redis_client
 from draft.tasks.hero_tick import captain_heartbeat_key
 from telemetry.logging import get_logger
 
