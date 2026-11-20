@@ -24,7 +24,11 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export function DiscordActivityLog({ tournamentId }: Props) {
-  const { data: logs, isLoading, isError } = useQuery({
+  const {
+    data: logs,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['tournament', tournamentId, 'discord-logs'],
     queryFn: () => fetchDiscordTournamentLogs(tournamentId),
     refetchInterval: 10_000,
@@ -32,16 +36,24 @@ export function DiscordActivityLog({ tournamentId }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12" data-testid="discord-activity-log">
+      <div
+        className="flex items-center justify-center py-12"
+        data-testid="discord-activity-log"
+      >
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
-        <span className="text-muted-foreground text-sm">Loading activity...</span>
+        <span className="text-muted-foreground text-sm">
+          Loading activity...
+        </span>
       </div>
     );
   }
 
   if (isError) {
     return (
-      <div className="text-muted-foreground p-4 text-center" data-testid="discord-activity-log">
+      <div
+        className="text-muted-foreground p-4 text-center"
+        data-testid="discord-activity-log"
+      >
         Failed to load Discord activity.
       </div>
     );
@@ -49,8 +61,11 @@ export function DiscordActivityLog({ tournamentId }: Props) {
 
   if (!logs || logs.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center border border-border rounded-lg bg-base-300/50" data-testid="discord-activity-log">
-        <DiscordIcon className="h-8 w-8 text-[#5865F2]/50 mb-3" />
+      <div
+        className="flex flex-col items-center justify-center py-12 text-center border border-border rounded-lg bg-base-300/50"
+        data-testid="discord-activity-log"
+      >
+        <DiscordIcon className="h-8 w-8 text-discord/50 mb-3" />
         <p className="text-muted-foreground text-sm">
           No Discord activity yet for this tournament.
         </p>
@@ -76,13 +91,22 @@ export function DiscordActivityLog({ tournamentId }: Props) {
           </TableHeader>
           <TableBody>
             {logs.map((log) => (
-              <TableRow key={log.id} data-testid={`discord-log-entry-${log.id}`}>
+              <TableRow
+                key={log.id}
+                data-testid={`discord-log-entry-${log.id}`}
+              >
                 <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                  {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
+                  {formatDistanceToNow(new Date(log.created_at), {
+                    addSuffix: true,
+                  })}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline" className="text-xs bg-[#5865F2]/20 text-[#5865F2] border-[#5865F2]/30">
-                    {TYPE_LABELS[log.notification_type] || log.notification_type}
+                  <Badge
+                    variant="outline"
+                    className="text-xs bg-discord/20 text-discord border-discord/30"
+                  >
+                    {TYPE_LABELS[log.notification_type] ||
+                      log.notification_type}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-sm">{log.message}</TableCell>
