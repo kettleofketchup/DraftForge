@@ -292,8 +292,8 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         icon={<BugIcon />}
         title={t('nav.report_issue')}
         subtitle={t('nav.report_issue_subtitle')}
-        className="[&_svg]:text-destructive hover:[&_svg]:text-red-400"
-        titleClassName="text-destructive hover:text-red-400"
+        className="[&_svg]:text-destructive hover:[&_svg]:text-destructive-hover"
+        titleClassName="text-destructive hover:text-destructive-hover"
         aria-label={t('aria.report_bug')}
         tier="external"
       />

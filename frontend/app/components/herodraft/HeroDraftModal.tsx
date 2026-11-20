@@ -120,12 +120,15 @@ export function KickedOverlay({
     >
       <div className="text-center space-y-4 max-w-md px-6">
         <h2
-          className="text-2xl font-bold text-orange-400"
+          className="text-2xl font-bold text-warning"
           data-testid="herodraft-kicked-title"
         >
           Session Replaced
         </h2>
-        <p className="text-gray-300" data-testid="herodraft-kicked-message">
+        <p
+          className="text-text-secondary"
+          data-testid="herodraft-kicked-message"
+        >
           Another browser tab has taken over this draft session. Refresh this
           page to take control back.
         </p>
@@ -133,7 +136,7 @@ export function KickedOverlay({
           <Button
             variant="default"
             onClick={() => window.location.reload()}
-            className="bg-orange-500 hover:bg-orange-600 text-white"
+            className="bg-warning hover:bg-warning/90 text-warning-foreground"
             data-testid="herodraft-kicked-refresh-btn"
           >
             Refresh Page
@@ -242,7 +245,7 @@ export function HeroDraftModal({
           <CaptainToast
             captain={captain}
             message="is ready"
-            messageClassName="text-blue-400 font-semibold"
+            messageClassName="text-info font-semibold"
           />,
         );
         break;
@@ -258,7 +261,7 @@ export function HeroDraftModal({
           <CaptainToast
             captain={captain}
             message={isReconnect ? 'reconnected' : 'joined'}
-            messageClassName="text-green-500 font-semibold"
+            messageClassName="text-success font-semibold"
           />,
         );
         break;
@@ -268,7 +271,7 @@ export function HeroDraftModal({
           <CaptainToast
             captain={captain}
             message="disconnected"
-            messageClassName="text-red-500 font-semibold"
+            messageClassName="text-error font-semibold"
           />,
         );
         break;
@@ -293,7 +296,7 @@ export function HeroDraftModal({
           <CaptainToast
             captain={captain}
             message="won the coin flip!"
-            messageClassName="text-yellow-400 font-semibold"
+            messageClassName="text-medal-gold font-semibold"
           />,
         );
         break;
@@ -614,7 +617,7 @@ export function HeroDraftModal({
                   draft.state === 'rolling' ||
                   draft.state === 'choosing') && (
                   <div
-                    className="shrink-0 border-b border-yellow-700/50 bg-yellow-900/30 px-3 py-2 text-center text-xs sm:text-sm text-yellow-200"
+                    className="shrink-0 border-b border-warning/50 bg-warning/10 px-3 py-2 text-center text-xs sm:text-sm text-warning"
                     data-testid="herodraft-guest-notice"
                   >
                     You're not logged in — viewing as a guest. Log in to ready
@@ -655,9 +658,7 @@ export function HeroDraftModal({
                           </p>
                           <p
                             className={
-                              team.is_ready
-                                ? 'text-green-400'
-                                : 'text-yellow-400'
+                              team.is_ready ? 'text-success' : 'text-warning'
                             }
                             data-testid={`herodraft-ready-status-${team.id}`}
                           >
@@ -907,7 +908,7 @@ export function HeroDraftModal({
                     <h2 className="text-lg font-bold text-white">
                       Mobile View Under Construction
                     </h2>
-                    <p className="text-gray-400 text-sm">
+                    <p className="text-muted-foreground text-sm">
                       The mobile draft view is coming soon. Please view this on
                       a tablet or desktop browser for now.
                     </p>
@@ -941,7 +942,7 @@ export function HeroDraftModal({
 
                   {/* Draft Panel - 50% sm/md, 42% lg, 20% xl */}
                   <div
-                    className="basis-1/2 md:basis-1/2 lg:basis-5/12 xl:basis-1/5 h-full min-w-0 overflow-auto border-l border-gray-800"
+                    className="basis-1/2 md:basis-1/2 lg:basis-5/12 xl:basis-1/5 h-full min-w-0 overflow-auto border-l border-border"
                     data-testid="herodraft-panel-container"
                   >
                     <DraftPanel
@@ -954,7 +955,7 @@ export function HeroDraftModal({
 
               {/* Bottom toolbar with chat and controls */}
               <div
-                className="h-12 sm:h-14 md:h-16 shrink-0 border-t border-gray-800 flex items-center px-2 sm:px-4 gap-2 sm:gap-4"
+                className="h-12 sm:h-14 md:h-16 shrink-0 border-t border-border flex items-center px-2 sm:px-4 gap-2 sm:gap-4"
                 data-testid="herodraft-bottom-toolbar"
               >
                 {/* Chat input - hidden on small screens */}
@@ -966,7 +967,7 @@ export function HeroDraftModal({
                         value={chatMessage}
                         onChange={(e) => setChatMessage(e.target.value)}
                         disabled
-                        className="flex-1 bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 cursor-not-allowed"
+                        className="flex-1 bg-input border-border text-white placeholder:text-muted-foreground cursor-not-allowed"
                         data-testid="herodraft-chat-input"
                       />
                       <Button
@@ -1078,7 +1079,7 @@ export function HeroDraftModal({
                         {countdownValue !== null && countdownValue > 0 ? (
                           <>
                             <h2
-                              className="text-3xl font-bold text-green-400"
+                              className="text-3xl font-bold text-success"
                               data-testid="herodraft-countdown-title"
                             >
                               Resuming in {countdownValue}...
@@ -1093,7 +1094,7 @@ export function HeroDraftModal({
                         ) : (
                           <>
                             <h2
-                              className="text-3xl font-bold text-yellow-400"
+                              className="text-3xl font-bold text-warning"
                               data-testid="herodraft-paused-title"
                             >
                               Draft Paused
@@ -1171,7 +1172,7 @@ export function HeroDraftModal({
               {/* Connection status */}
               {!isConnected && !wasKicked && (
                 <div
-                  className="absolute top-2 right-2 bg-red-500/80 text-white px-3 py-2 rounded text-sm flex items-center gap-2"
+                  className="absolute top-2 right-2 bg-destructive/80 text-white px-3 py-2 rounded text-sm flex items-center gap-2"
                   data-testid="herodraft-reconnecting"
                 >
                   <span>{connectionError || 'Reconnecting...'}</span>
@@ -1179,7 +1180,7 @@ export function HeroDraftModal({
                     variant="ghost"
                     size="sm"
                     onClick={reconnect}
-                    className="h-6 px-2 text-xs hover:bg-red-600"
+                    className="h-6 px-2 text-xs hover:bg-destructive"
                     data-testid="herodraft-reconnect-inline-btn"
                   >
                     Retry

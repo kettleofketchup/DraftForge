@@ -19,9 +19,13 @@ from app.models import (
     League,
     Organization,
     Team,
+    TeamLog,
+    TeamLogAction,
+    TeamLogVia,
     Tournament,
 )
 from app.serializers import _users_remaining_pks
+from app.services.draft_reset import reset_draft_teams
 from app.services.team_references import (
     all_reference_keys,
     team_references,
@@ -165,6 +169,33 @@ class TeamResetTests(TeamResetFixture, TestCase):
 
         self.assertEqual(refs, {"app.Game.radiant_team": 2})
         self.assertEqual(team_references(Team.objects.none()), {})
+
+    def test_teamlog_not_a_reference_key(self) -> None:
+        self.assertNotIn("app.TeamLog.team", all_reference_keys())
+
+    def test_reset_drops_audited_ineligible_team(self) -> None:
+        self.team.members.set([self.x])
+        self.team.captain = self.x
+        self.team.save()
+        outsider = self.make_user("reset_outsider")
+        audited = Team.objects.create(
+            tournament=self.tournament, name="Audited", captain=outsider
+        )
+        audited.members.add(outsider)
+        log = TeamLog.objects.create(
+            team=audited,
+            team_snapshot_id=audited.pk,
+            team_name=audited.name,
+            via=TeamLogVia.WEB,
+            action=TeamLogAction.RENAME,
+        )
+
+        report = reset_draft_teams(self.tournament, force=False)
+
+        self.assertFalse(Team.objects.filter(pk=audited.pk).exists())
+        self.assertEqual([entry["pk"] for entry in report.dropped_teams], [audited.pk])
+        log.refresh_from_db()
+        self.assertIsNone(log.team)
 
 
 class TeamResetCacheTests(TeamResetFixture, TransactionTestCase):
@@ -723,4 +754,14 @@ class TeamUsageTests(TeamResetFixture, TestCase):
 
     def test_empty(self) -> None:
         self.assertEqual(team_usage(Team.objects.none()), [])
+        self.assertEqual(team_usage([self.team]), [])
+
+    def test_teamlog_rows_are_not_usage(self) -> None:
+        TeamLog.objects.create(
+            team=self.team,
+            team_snapshot_id=self.team.pk,
+            team_name=self.team.name,
+            via=TeamLogVia.WEB,
+            action=TeamLogAction.RENAME,
+        )
         self.assertEqual(team_usage([self.team]), [])

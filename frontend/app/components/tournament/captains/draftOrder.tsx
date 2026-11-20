@@ -63,12 +63,12 @@ export const DraftOrderButton: React.FC<{
 
       success: (data) => {
         getCurrentTournament();
-        if (data.draft_order !== undefined) {
+        if (data?.draft_order !== undefined) {
           log.debug('draft_order state updated', data.draft_order);
           setDraftOrder(String(data.draft_order));
         }
         log.debug(data);
-        return `${tournament?.name} has updated the draft_order to ${data.draft_order}`;
+        return `${tournament?.name} has updated the draft_order to ${data?.draft_order}`;
       },
       error: (err) => {
         const val = err.response.data;
@@ -106,9 +106,7 @@ export const DraftOrderButton: React.FC<{
           <BrandSelectContent>
             {Array.from({ length: getRange() }, (_, i) => (
               <Fragment key={i + 1}>
-                {i > 0 && (
-                  <SelectSeparator className="!my-0 bg-violet-400/30" />
-                )}
+                {i > 0 && <SelectSeparator className="!my-0 bg-primary/30" />}
                 <BrandSelectItem value={String(i + 1)}>{i + 1}</BrandSelectItem>
               </Fragment>
             ))}
@@ -139,9 +137,7 @@ export const DraftOrderButton: React.FC<{
           <BrandSelectContent>
             {Array.from({ length: getRange() }, (_, i) => (
               <Fragment key={i + 1}>
-                {i > 0 && (
-                  <SelectSeparator className="!my-0 bg-violet-400/30" />
-                )}
+                {i > 0 && <SelectSeparator className="!my-0 bg-primary/30" />}
                 <BrandSelectItem value={String(i + 1)}>{i + 1}</BrandSelectItem>
               </Fragment>
             ))}

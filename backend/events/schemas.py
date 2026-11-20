@@ -361,8 +361,8 @@ def dota_require_screenshot(rank_status: str, cfg: "DotaModalConfig") -> bool:
 
     Called by the Dota modal follow-up (``discordbot/components/dota.py``),
     ``DotaHandler`` (``events/discord/providers/dota.py``) and the signup
-    eligibility check (``events/eligibility.py``). Pure over the transported
-    config so every process calls it.
+    eligibility check (``events/eligibility/checks/requirements.py``). Pure
+    over the transported config so every process calls it.
     """
     if rank_status == "active":
         return cfg.require_rank_screenshot

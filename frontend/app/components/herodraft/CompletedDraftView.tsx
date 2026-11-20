@@ -26,15 +26,15 @@ function TeamPicks({ team, picks, side }: TeamPicksProps) {
 
   const sideColors = {
     radiant: {
-      bg: 'bg-green-900/30',
-      border: 'border-green-500/50',
-      text: 'text-green-400',
+      bg: 'bg-radiant-surface/60',
+      border: 'border-radiant/50',
+      text: 'text-radiant',
       label: 'Radiant',
     },
     dire: {
-      bg: 'bg-red-900/30',
-      border: 'border-red-500/50',
-      text: 'text-red-400',
+      bg: 'bg-dire-surface/60',
+      border: 'border-dire/50',
+      text: 'text-dire',
       label: 'Dire',
     },
   };
@@ -54,11 +54,10 @@ function TeamPicks({ team, picks, side }: TeamPicksProps) {
       {/* Team header */}
       <div className="flex flex-col items-center mb-4 md:mb-6">
         <div
-          className="mb-2 flex rounded-full ring-2 ring-offset-2 ring-offset-gray-900"
-          style={{
-            ['--tw-ring-color' as string]:
-              side === 'radiant' ? 'rgb(34 197 94)' : 'rgb(239 68 68)',
-          }}
+          className={cn(
+            'mb-2 flex rounded-full ring-2 ring-offset-2 ring-offset-base-600',
+            side === 'radiant' ? 'ring-radiant' : 'ring-dire',
+          )}
         >
           <UserAvatar
             user={captain ?? undefined}
@@ -91,12 +90,10 @@ function TeamPicks({ team, picks, side }: TeamPicksProps) {
               <div
                 className={cn(
                   'size-12 sm:size-14 md:size-16 lg:size-20',
-                  'rounded-full bg-gradient-to-b from-slate-600 to-slate-800',
+                  'rounded-full bg-gradient-to-b from-base-50 to-base-400',
                   'border-2 shadow-lg shadow-black/50',
                   'p-0.5',
-                  side === 'radiant'
-                    ? 'border-green-500/70'
-                    : 'border-red-500/70',
+                  side === 'radiant' ? 'border-radiant/70' : 'border-dire/70',
                 )}
                 data-testid={`completed-draft-${side}-pick-${index}`}
               >
@@ -107,8 +104,8 @@ function TeamPicks({ team, picks, side }: TeamPicksProps) {
                     className="size-full rounded-full object-cover"
                   />
                 ) : (
-                  <div className="size-full rounded-full bg-gray-700 flex items-center justify-center">
-                    <span className="text-xs text-gray-400">?</span>
+                  <div className="size-full rounded-full bg-base-200 flex items-center justify-center">
+                    <span className="text-xs text-muted-foreground">?</span>
                   </div>
                 )}
               </div>

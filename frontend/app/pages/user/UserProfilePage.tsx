@@ -98,12 +98,12 @@ export function UserProfilePage() {
                 {(user.is_staff || user.is_superuser) && (
                   <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
                     {user.is_superuser && (
-                      <Badge className="bg-red-600 text-white text-xs">
+                      <Badge className="bg-role-admin text-white text-xs">
                         Admin
                       </Badge>
                     )}
                     {user.is_staff && !user.is_superuser && (
-                      <Badge className="bg-blue-600 text-white text-xs">
+                      <Badge className="bg-role-staff text-white text-xs">
                         Staff
                       </Badge>
                     )}

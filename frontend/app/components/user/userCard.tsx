@@ -177,8 +177,8 @@ export const UserCard: React.FC<Props> = memo(
         <div className="relative">
           {hasError() && (
             <span className="absolute -top-1 -right-1 flex size-3 z-10">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
-              <span className="relative inline-flex size-3 rounded-full bg-red-500" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-error opacity-75" />
+              <span className="relative inline-flex size-3 rounded-full bg-error" />
             </span>
           )}
           <UserAvatar user={user} size="xl" border="primary" />
@@ -237,10 +237,10 @@ export const UserCard: React.FC<Props> = memo(
       return (
         <div className="flex flex-col items-end">
           {organizationId && !mmr && (
-            <span className="font-semibold text-red-500">MMR: Not added</span>
+            <span className="font-semibold text-error">MMR: Not added</span>
           )}
           {!positions && (
-            <span className="font-semibold text-red-500">
+            <span className="font-semibold text-error">
               Position: Not added
             </span>
           )}
@@ -293,12 +293,12 @@ export const UserCard: React.FC<Props> = memo(
             {!compact && (user.is_staff || user.is_superuser) && (
               <CardDescription className="flex gap-1">
                 {user.is_staff && (
-                  <Badge className="bg-blue-700 text-white text-[10px] px-1.5 py-0">
+                  <Badge className="bg-role-staff text-white text-[10px] px-1.5 py-0">
                     Staff
                   </Badge>
                 )}
                 {user.is_superuser && (
-                  <Badge className="bg-red-700 text-white text-[10px] px-1.5 py-0">
+                  <Badge className="bg-role-admin text-white text-[10px] px-1.5 py-0">
                     Admin
                   </Badge>
                 )}

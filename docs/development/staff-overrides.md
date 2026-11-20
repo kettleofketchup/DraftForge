@@ -141,3 +141,10 @@ const retry = useOverrideRetry((ack) =>
   removePlayer(eventId, { user_id, reason: staffNote, ...ack }),
 );
 ```
+
+## Consumers
+
+- [Team management](../api/endpoints.md#team-management) (`/api/teams/{id}/...`): every
+  action accepts `acknowledged_codes` and records overridden codes in the team audit log.
+  Only `standins/` can answer `409` today, for the stand-in limit (`team_standin_cap`) and event
+  eligibility codes.

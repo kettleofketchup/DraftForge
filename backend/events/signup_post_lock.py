@@ -1,4 +1,4 @@
-"""Per-event pending flag and edit lock for the Discord signup post.
+"""Per-event pending flag, dirty time and edit lock for the Discord signup post.
 
 Shared by the web process (which marks a post edit pending) and the Celery
 worker (which takes the lock around an edit). Every Redis failure fails open:
@@ -6,6 +6,7 @@ the caller proceeds as if the flag was set or the lock was taken.
 """
 
 import secrets
+import time
 
 import redis
 from django.conf import settings
@@ -25,6 +26,7 @@ _RELEASE_LUA = (
     "return redis.call('del', KEYS[1]) else return 0 end"
 )
 _TAGS = ["events", "signup"]
+DIRTY_TTL_SECONDS = 3600
 
 
 def _config() -> SignupPostConfig:
@@ -37,6 +39,14 @@ def pending_key(event_id: int) -> str:
 
 def lock_key(event_id: int) -> str:
     return namespaced_key(f"events:signup_post:lock:{event_id}")
+
+
+def dirty_key(event_id: int) -> str:
+    return namespaced_key(f"events:signup_post:dirty:{event_id}")
+
+
+def now_ms() -> int:
+    return int(time.time() * 1000)
 
 
 def _unavailable(event_id: int, op: str, subsystem: str, exc: redis.RedisError) -> None:
@@ -68,13 +78,37 @@ def mark_pending(event_id: int) -> bool:
         return True
 
 
-def clear_pending(event_id: int) -> None:
+def mark_dirty(event_id: int, since_ms: int | None = None) -> None:
+    """Record when the oldest change the post does not show yet was made.
+
+    A restored ``since_ms`` overwrites a newer time, so the oldest one is kept.
+    """
     if _config().disabled:
         return
     try:
-        get_redis_client().delete(pending_key(event_id))
+        get_redis_client().set(
+            dirty_key(event_id),
+            str(now_ms() if since_ms is None else since_ms),
+            nx=since_ms is None,
+            ex=DIRTY_TTL_SECONDS,
+        )
+    except redis.RedisError as exc:
+        _unavailable(event_id, "mark_dirty", "dispatch", exc)
+
+
+def clear_pending(event_id: int) -> int | None:
+    """Clear the pending flag and return the dirty time it covered, in ms."""
+    if _config().disabled:
+        return None
+    try:
+        pipe = get_redis_client().pipeline()
+        pipe.delete(pending_key(event_id))
+        pipe.getdel(dirty_key(event_id))
+        _, since = pipe.execute()
     except redis.RedisError as exc:
         _unavailable(event_id, "clear_pending", "dispatch", exc)
+        return None
+    return int(since) if since else None
 
 
 def acquire_lock(event_id: int) -> str | None:

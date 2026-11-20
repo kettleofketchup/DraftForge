@@ -1,0 +1,2 @@
+- Teams: staff can change team captains, deputies, stand-ins and dropouts, rename teams and read a team's change history through new API endpoints, each change requiring a reason (#545).
+- Teams: team and tournament API responses now list captain or deputy problems for each team (#545).

@@ -105,9 +105,9 @@ function UserRow({
   isRemoving,
 }: UserRowProps) {
   const roleIcon = {
-    owner: <Crown className="h-4 w-4 text-yellow-500" />,
-    admin: <Shield className="h-4 w-4 text-blue-500" />,
-    staff: <User className="h-4 w-4 text-gray-500" />,
+    owner: <Crown className="h-4 w-4 text-role-owner" />,
+    admin: <Shield className="h-4 w-4 text-role-admin" />,
+    staff: <User className="h-4 w-4 text-role-staff" />,
     promoter: <Megaphone className="h-4 w-4 text-primary" />,
   };
 
@@ -128,7 +128,7 @@ function UserRow({
             variant="ghost"
             size="sm"
             onClick={onTransfer}
-            className="text-yellow-600"
+            className="text-role-owner"
             title="Transfer ownership"
           >
             Transfer
@@ -488,7 +488,7 @@ export function AdminTeamSection({
           {isOrgMode && (
             <div>
               <h4 className="font-medium mb-2 flex items-center gap-2">
-                <Crown className="h-4 w-4 text-yellow-500" />
+                <Crown className="h-4 w-4 text-role-owner" />
                 Owner
               </h4>
               {owner ? (
@@ -499,14 +499,16 @@ export function AdminTeamSection({
                   canTransfer={false}
                 />
               ) : (
-                <p className="text-sm text-gray-500 italic">No owner set</p>
+                <p className="text-sm text-muted-foreground italic">
+                  No owner set
+                </p>
               )}
             </div>
           )}
 
           {/* Inherited Organization Note (League only) */}
           {!isOrgMode && league?.organization && (
-            <div className="text-sm text-gray-500 bg-base-200 p-3 rounded-lg">
+            <div className="text-sm text-muted-foreground bg-base-200 p-3 rounded-lg">
               <p className="font-medium mb-1">Inherited permissions from:</p>
               <ul className="list-disc list-inside">
                 <li>{league.organization.name}</li>
@@ -518,7 +520,7 @@ export function AdminTeamSection({
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="font-medium flex items-center gap-2">
-                <Shield className="h-4 w-4 text-blue-500" />
+                <Shield className="h-4 w-4 text-role-admin" />
                 Admins
               </h4>
               {canManageAdmins && (
@@ -551,7 +553,9 @@ export function AdminTeamSection({
                   />
                 ))
               ) : (
-                <p className="text-sm text-gray-500 italic">No admins</p>
+                <p className="text-sm text-muted-foreground italic">
+                  No admins
+                </p>
               )}
             </div>
           </div>
@@ -560,7 +564,7 @@ export function AdminTeamSection({
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="font-medium flex items-center gap-2">
-                <User className="h-4 w-4 text-gray-500" />
+                <User className="h-4 w-4 text-role-staff" />
                 Staff
               </h4>
               {canManageStaff && (
@@ -591,7 +595,7 @@ export function AdminTeamSection({
                   />
                 ))
               ) : (
-                <p className="text-sm text-gray-500 italic">No staff</p>
+                <p className="text-sm text-muted-foreground italic">No staff</p>
               )}
             </div>
           </div>

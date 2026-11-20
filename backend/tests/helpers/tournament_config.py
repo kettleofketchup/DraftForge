@@ -187,9 +187,9 @@ class TestTournamentConfig(BaseModel):
             tournament=self._tournament,
             draft_style=self.draft_style,
         )
-        if self.draft_state == "pending":
-            # Match generate_draft_rounds: a draft about to start has captain-only teams.
-            draft.rebuild_teams(clear_only=True)
+        # Match generate_draft_rounds: a draft starts from captain-only teams, so
+        # picks never land on a player who is already on a team.
+        draft.rebuild_teams(clear_only=True)
         draft.build_rounds()
 
         if self.draft_state == "pending":

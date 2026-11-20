@@ -760,8 +760,14 @@ class OrgSettingsInertTest(SimpleTestCase):
         "staff_override_policy",
         "staff_override_warning_codes",
     )
+    # Override contract and its callers; codes outside ALL_CODES ignore the policy.
     CONTRACT: frozenset[str] = frozenset(
-        {"events/overrides.py", "events/tests/test_overrides.py"}
+        {
+            "events/overrides.py",
+            "events/tests/test_overrides.py",
+            "app/services/team_management.py",
+            "app/tests/test_team_management.py",
+        }
     )
 
     def test_policy_inert_until_524(self) -> None:

@@ -3,17 +3,23 @@ import { toast } from 'sonner';
 import {
   createTeam,
   deleteTeam,
+  fetchTeamUsage,
   fetchTournament,
   updateTeam,
 } from '~/components/api/api';
 
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
-import type { UserType } from '~/components/user/types';
-import { hydrateTournament } from '~/lib/hydrateTournament';
-import { ConfirmDialog } from '~/components/ui/dialogs';
 import { SubmitButton } from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
+import type { UserType } from '~/components/user/types';
+import { deleteTeamsInOrder, deleteTeamsMessage } from '~/lib/deleteTeams';
+import { hydrateTournament } from '~/lib/hydrateTournament';
+import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
+
+const log = getLogger('createTeamsButton');
+
 interface CreateTeamsButtonProps {
   tournament: TournamentType;
   teams: TeamType[];
@@ -31,25 +37,32 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
   const isStaff = useUserStore((state) => state.isStaff);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const deleteTeams = async () => {
-    if (!tournament.teams || tournament.teams.length === 0) {
-      return;
-    }
-    for (const team of tournament.teams) {
-      if (!team.pk) continue;
+  const refreshTournament = async () => {
+    if (!tournament.pk) return;
+    const rawData = await fetchTournament(tournament.pk);
+    tournament = hydrateTournament(
+      rawData as TournamentType & { _users?: Record<number, unknown> },
+    ) as TournamentType;
+    setTournament(tournament);
+  };
 
-      await toast.promise(deleteTeam(team.pk), {
-        loading: `Deleting Team ${team.name}.`,
-        success: () => {
-          return `${team.name}(${team.pk}) has been deleted`;
-        },
-        error: (err) => `Failed to delete team: ${err.message}`,
-      });
-    }
+  const deleteTeams = async (): Promise<boolean> => {
+    const existing = (tournament.teams ?? []).filter(
+      (team): team is TeamType & { pk: number } => !!team.pk,
+    );
+    const result = await deleteTeamsInOrder(existing, {
+      checkUsage: fetchTeamUsage,
+      remove: deleteTeam,
+    });
+    if (result.ok) return true;
+    log.error('Team regeneration stopped before creating teams', result);
+    toast.error(deleteTeamsMessage(result));
+    await refreshTournament();
+    return false;
   };
 
   const handleSubmit = async () => {
-    await deleteTeams();
+    if (!(await deleteTeams())) return;
     teams = teams.sort((a, b) => {
       if (a.name === b.name) return 0;
       if (!a.name || !b.name) return 0; // Handle undefined names
@@ -66,9 +79,10 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
       if (submitTeam.pk) {
         await toast.promise(updateTeam(submitTeam.pk, submitTeam), {
           loading: `Updating Team ${team.name}.`,
-          success: (data: TeamType) => {
-            return `${submitTeam.name} has been updated`;
-          },
+          success: (data) =>
+            data
+              ? `${submitTeam.name} has been updated`
+              : `${submitTeam.name} had no members left and was deleted`,
           error: (err) => `Failed to update team: ${err.message}`,
         });
       } else {
@@ -81,11 +95,7 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
         });
       }
     }
-    if (tournament.pk) {
-      const rawData = await fetchTournament(tournament.pk);
-      tournament = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
-      setTournament(tournament);
-    }
+    await refreshTournament();
     setDialogOpen(false);
   };
 

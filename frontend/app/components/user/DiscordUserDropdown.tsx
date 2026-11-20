@@ -100,7 +100,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
     const userAddedBadge = () => {
       if (!isUserAlreadyAdded(user)) return <></>;
       return (
-        <span className="rounded-full text-center bg-gray-900 text-sm text-red-200 p-1 ml-2">
+        <span className="rounded-full text-center bg-base-900 text-sm text-error p-1 ml-2">
           Already Added
         </span>
       );
@@ -113,8 +113,8 @@ const DiscordUserDropdown: React.FC<Props> = ({
         disabled={isUserAlreadyAdded(user)}
         className={({ focus, disabled }) =>
           `cursor-pointer select-none p-2
-       ${focus ? 'bg-purple-900 text-primary-content' : ''}
-        ${disabled ? 'opacity-50  bg-grey-100 hover:bg-gray-500' : ''}`
+       ${focus ? 'bg-selection/30 text-selection-foreground' : ''}
+        ${disabled ? 'opacity-50  bg-base-200 hover:bg-base-50' : ''}`
         }
       >
         <div className="flex items-center w-full">
@@ -129,17 +129,6 @@ const DiscordUserDropdown: React.FC<Props> = ({
               @{user.user.username}
             </span>
           </div>
-
-          {/* TODO add a quickadd button*/}
-          {/* {!isUserAlreadyAdded(user) && (
-            <Button
-              size="sm"
-              className="justify-end bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-300 disabled:text-gray-500"
-            >
-              <PlusCircleIcon color="green" />
-              <p className="text-sm"> Quick Add</p>
-            </Button>
-          )} */}
         </div>
       </ComboboxOption>
     );
@@ -166,7 +155,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
               return filteredUserComboOption(user);
             })
           ) : (
-            <div className="p-2 text-sm text-gray-500">
+            <div className="p-2 text-sm text-muted-foreground">
               {`${filteredUsers.length}`} users found. Results will show when
               less than 100 users are found.
             </div>

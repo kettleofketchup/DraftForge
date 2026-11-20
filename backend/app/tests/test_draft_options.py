@@ -605,6 +605,32 @@ class FixtureConfigTests(TestCase):
         ).create()
         self.assertEqual(t.draft.state, "completed")
 
+    def test_draft_configs_put_each_player_on_one_team(self):
+        t = TestTournamentConfig(
+            key="k7",
+            name="K7",
+            description="d",
+            draft_state="completed",
+            picks_completed=16,
+        ).create()
+        member_pks = list(
+            Team.members.through.objects.filter(team__tournament=t).values_list(
+                "customuser_id", flat=True
+            )
+        )
+        self.assertEqual(len(member_pks), 20)
+        self.assertEqual(len(member_pks), len(set(member_pks)))
+
+    def test_captain_turn_config_has_a_draft_pool(self):
+        t = TestTournamentConfig(
+            key="k8",
+            name="K8",
+            description="d",
+            draft_state="in_progress",
+            picks_completed=0,
+        ).create()
+        self.assertEqual(len(t.draft.users_remaining), 16)
+
     def test_timer_configs_build_pending_lobbies_with_per_spec_clocks(self):
         clocks = {
             "draft_timer_ready": (20000, 10000),
