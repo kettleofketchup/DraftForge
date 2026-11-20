@@ -62,9 +62,9 @@ export interface ConfirmDialogProps {
 
 // Content background styling per variant
 const contentVariantStyles = {
-  default: `bg-green-900 ${brandSuccessBg}`,
-  destructive: 'bg-red-950/95 border-red-800',
-  warning: 'bg-orange-950/95 border-warning/40',
+  default: `bg-success-surface ${brandSuccessBg}`,
+  destructive: 'bg-error-surface/95 border-error/40',
+  warning: 'bg-warning-surface/95 border-warning/40',
 };
 
 // Body text per variant — uses the tonal-harmony brand readables so the copy

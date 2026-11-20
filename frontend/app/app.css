@@ -280,6 +280,16 @@ body {
   --color-stat-gold: var(--stat-gold);
   --color-stat-xp: var(--stat-xp);
   --color-discord: var(--discord);
+  --color-captain: var(--captain);
+  --color-search-match: var(--search-match);
+  --color-success-surface: var(--success-surface);
+  --color-warning-surface: var(--warning-surface);
+  --color-error-surface: var(--error-surface);
+  --color-selection-surface: var(--selection-surface);
+  --color-success-tint: var(--success-tint);
+  --color-warning-tint: var(--warning-tint);
+  --color-error-tint: var(--error-tint);
+  --color-destructive-hover: var(--destructive-hover);
 
   /* Brand shadows */
   --shadow-brand-glow:
@@ -572,6 +582,24 @@ body {
   /* Match stats */
   --stat-gold: oklch(0.852 0.199 91.9);
   --stat-xp: oklch(0.707 0.165 254.6);
+
+  /* Captains */
+  --captain: oklch(0.795 0.184 86);
+
+  /* Search match highlight */
+  --search-match: oklch(0.792 0.209 151.7);
+
+  /* Opaque status surfaces (dialogs, toasts) and the near-white text on them */
+  --success-surface: oklch(0.266 0.065 152.9);
+  --warning-surface: oklch(0.266 0.079 36.3);
+  --error-surface: oklch(0.258 0.092 26);
+  --selection-surface: oklch(0.283 0.141 291.1);
+  --success-tint: oklch(0.979 0.021 166.1);
+  --warning-tint: oklch(0.98 0.016 73.7);
+  --error-tint: oklch(0.969 0.015 12.4);
+
+  /* Lighter destructive for hover on destructive text */
+  --destructive-hover: oklch(0.704 0.191 22.2);
 
   /* Third-party brands */
   --discord: oklch(0.585 0.204 277.1);

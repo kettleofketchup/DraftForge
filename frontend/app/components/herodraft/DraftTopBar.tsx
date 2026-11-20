@@ -180,9 +180,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
         <span
           className={cn(
             'text-[10px] sm:text-xs truncate max-w-[40px] sm:max-w-[56px] mt-0.5 sm:mt-1 hidden sm:block',
-            isCaptain
-              ? 'font-semibold text-yellow-400'
-              : 'text-muted-foreground',
+            isCaptain ? 'font-semibold text-captain' : 'text-muted-foreground',
           )}
           data-testid={`${testIdPrefix}-name`}
         >

@@ -54,11 +54,10 @@ function TeamPicks({ team, picks, side }: TeamPicksProps) {
       {/* Team header */}
       <div className="flex flex-col items-center mb-4 md:mb-6">
         <div
-          className="mb-2 flex rounded-full ring-2 ring-offset-2 ring-offset-base-600"
-          style={{
-            ['--tw-ring-color' as string]:
-              side === 'radiant' ? 'rgb(34 197 94)' : 'rgb(239 68 68)',
-          }}
+          className={cn(
+            'mb-2 flex rounded-full ring-2 ring-offset-2 ring-offset-base-600',
+            side === 'radiant' ? 'ring-radiant' : 'ring-dire',
+          )}
         >
           <UserAvatar
             user={captain ?? undefined}
