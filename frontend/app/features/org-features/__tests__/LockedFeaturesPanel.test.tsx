@@ -165,6 +165,27 @@ describe('LockedFeaturesPanel', () => {
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith('x'));
   });
 
+  it('renders a conduct row with its label', async () => {
+    setViewer({ pk: 1, username: 'admin', is_superuser: true });
+    vi.mocked(getOrgFeatures).mockResolvedValue([
+      {
+        feature: 'conduct',
+        enabled: false,
+        notes: '',
+        enabled_by: null,
+        enabled_at: null,
+      },
+      ...rows,
+    ]);
+    vi.mocked(setOrgFeature).mockResolvedValue(rows);
+    renderPanel();
+    fireEvent.click(await screen.findByTestId('locked-feature-switch-conduct'));
+    fireEvent.click(screen.getByTestId('locked-feature-save-conduct'));
+    await vi.waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('Conduct unlocked'),
+    );
+  });
+
   it('shows an inline error when the features fetch fails', async () => {
     setViewer({ pk: 1, username: 'admin', is_superuser: true });
     vi.mocked(getOrgFeatures).mockRejectedValue({
