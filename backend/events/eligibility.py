@@ -7,7 +7,7 @@ registering a ``GameRequirements`` implementation there.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from enum import StrEnum
 from typing import Protocol
 
@@ -17,11 +17,11 @@ from django.db import IntegrityError, transaction
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, GameType, Organization
-from events.constants import UNMET_TRACKED_STATUSES
+from events.constants import UNMET_TRACKED_STATUSES, EventState
 from events.models import Event, EventSignup
 from events.schemas import DotaModalConfig, dota_require_screenshot
 from org.conduct.constants import Tier
-from org.conduct.enforcement import tier_for
+from org.conduct.enforcement import tier_for, tiers_for
 from org.conduct.gate import ConductGate, conduct_gate
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
@@ -288,6 +288,7 @@ def _org_user_for(event: Event, user: CustomUser) -> OrgUser | None:
 
 
 _CONDUCT_HOLD_TIERS = frozenset({Tier.REQUIRE_APPROVAL, Tier.BLOCK})
+_CLOSED_EVENT_STATES = frozenset({EventState.COMPLETED, EventState.CANCELLED})
 
 
 def unmet_requirements(
@@ -356,9 +357,37 @@ def refresh_unmet_requirements(
     if gate is None:
         gate = conduct_gate(org_user.organization_id)
     tier = tier_for(gate, signups[0].user)
+    return _store_unmet_codes(signups, {org_user.user_id: tier})
+
+
+def refresh_org_unmet_requirements(
+    org_id: int, *, gate: ConductGate | None = None
+) -> int:
+    """``refresh_unmet_requirements`` for every open signup in the org, with
+    one conduct score query; run after the org's conduct inputs change."""
+    signups = list(
+        EventSignup.objects.nocache()
+        .filter(
+            event__organization_id=org_id,
+            status__in=UNMET_TRACKED_STATUSES,
+        )
+        .exclude(event__state__in=_CLOSED_EVENT_STATES)
+        .select_related("event", "user")
+    )
+    if not signups:
+        return 0
+    if gate is None:
+        gate = conduct_gate(org_id)
+    users = {signup.user_id: signup.user for signup in signups}
+    return _store_unmet_codes(signups, tiers_for(gate, users.values()))
+
+
+def _store_unmet_codes(signups: list[EventSignup], tiers: Mapping[int, Tier]) -> int:
     changed: list[EventSignup] = []
     for signup in signups:
-        codes = unmet_codes(signup.event, signup.user, tier=tier)
+        codes = unmet_codes(
+            signup.event, signup.user, tier=tiers.get(signup.user_id, Tier.OK)
+        )
         if codes == signup.unmet_requirements:
             continue
         signup.unmet_requirements = codes

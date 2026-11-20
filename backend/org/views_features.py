@@ -13,6 +13,7 @@ from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, Organization, OrgLog
 from app.permissions_org import is_site_admin
 from app.serializers import TournamentUserSerializer
+from org.conduct.services import refresh_org_unmet_on_commit
 from org.feature_errors import not_permitted, require_org_admin
 from org.features import FeatureKey, set_org_feature
 from org.models import OrgFeature, OrgUser
@@ -71,13 +72,16 @@ def org_features(request: Request, org_id: int) -> Response:
         serializer = OrgFeatureSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        feature = FeatureKey(data["feature"])
         set_org_feature(
             org,
-            FeatureKey(data["feature"]),
+            feature,
             enabled=data["enabled"],
             actor=request.user,
             notes=data.get("notes"),
         )
+        if feature == FeatureKey.CONDUCT:
+            refresh_org_unmet_on_commit(org.pk)
 
     return Response(_feature_rows(org))
 

@@ -9,7 +9,10 @@ from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, Organization, OrgLog
 from events.capacity import lock_event
 from events.constants import EventState, SignupStatus
-from events.eligibility import refresh_unmet_requirements
+from events.eligibility import (
+    refresh_org_unmet_requirements,
+    refresh_unmet_requirements,
+)
 from events.models import Event, EventSignup
 from org.conduct.constants import (
     EDITABLE_STATES,
@@ -45,6 +48,10 @@ EDITABLE_SETTINGS_FIELDS: tuple[str, ...] = (
     "enforce_on_new_members",
 )
 
+TIER_INPUT_FIELDS: frozenset[str] = frozenset(EDITABLE_SETTINGS_FIELDS) - {
+    "leaderboard_public"
+}
+
 
 @dataclass(frozen=True)
 class SetResult:
@@ -75,6 +82,12 @@ def refresh_unmet_on_commit(gate: ConductGate, org_users: Iterable[OrgUser]) -> 
             refresh_unmet_requirements(org_user, gate=gate)
 
     transaction.on_commit(refresh)
+
+
+def refresh_org_unmet_on_commit(org_id: int) -> None:
+    """Re-derive stored conduct codes on the org's open signups once the
+    settings or the feature switch commit (clears codes when turned off)."""
+    transaction.on_commit(lambda: refresh_org_unmet_requirements(org_id))
 
 
 def _validate_request(
@@ -327,6 +340,8 @@ def update_conduct_settings(
         row.updated_by = actor
         row.save(update_fields=[*changed_fields, "updated_by", "updated_at"])
         invalidate_after_commit(row)
+        if TIER_INPUT_FIELDS.intersection(changed_fields):
+            refresh_org_unmet_on_commit(org.pk)
         OrgLog.objects.create(
             organization=org,
             actor=actor,

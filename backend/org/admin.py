@@ -7,6 +7,7 @@ from django.forms import ModelForm
 from django.http import HttpRequest
 
 from app.models import CustomUser
+from org.conduct.services import refresh_org_unmet_on_commit
 from org.features import FeatureKey, set_org_feature
 from org.settings_service import (
     EDITABLE_FIELDS,
@@ -58,6 +59,8 @@ class OrgFeatureAdmin(admin.ModelAdmin):
             actor=cast(CustomUser, request.user),
             notes=obj.notes,
         )
+        if row.feature == FeatureKey.CONDUCT:
+            refresh_org_unmet_on_commit(row.organization_id)
         obj.pk = row.pk
         obj.refresh_from_db()
 
@@ -112,6 +115,8 @@ class OrgSettingsAdmin(admin.ModelAdmin):
             actor=cast(CustomUser, request.user),
             changes={field: getattr(obj, field) for field in EDITABLE_FIELDS},
         )
+        if row.feature == FeatureKey.CONDUCT:
+            refresh_org_unmet_on_commit(row.organization_id)
         obj.pk = row.pk
         obj.refresh_from_db()
 

@@ -38,7 +38,7 @@ from org.conduct.enforcement import (
 from org.conduct.finalize import finalize_event_outcomes
 from org.conduct.gate import GATE_OFF, ConductGate
 from org.conduct.scoring import MemberScore
-from org.conduct.services import set_outcomes
+from org.conduct.services import set_outcomes, update_conduct_settings
 from org.models_conduct import AttendanceOutcome, OrgConductSettings
 from org.models_profiles import PlayerDeadlockProfile
 from org.tests.conduct_base import ConductTestCase
@@ -358,6 +358,82 @@ class EnforcementHooksTest(ConductTestCase):
 
         open_signup.refresh_from_db()
         self.assertEqual(open_signup.unmet_requirements, [CODE])
+
+    def held_open_signup(self) -> EventSignup:
+        member = self.make_user()
+        self.no_shows(member, 4)
+        open_signup = self._open_waitlisted(member)
+        refresh_unmet_requirements(self.org_user(member))
+        open_signup.refresh_from_db()
+        self.assertEqual(open_signup.unmet_requirements, [CODE])
+        return open_signup
+
+    def test_settings_toggle_off_clears_stored_code(self) -> None:
+        self.enable(require_approval_enabled=True)
+        open_signup = self.held_open_signup()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            update_conduct_settings(
+                self.org,
+                actor=self.admin,
+                changes={"require_approval_enabled": False},
+            )
+
+        open_signup.refresh_from_db()
+        self.assertEqual(open_signup.unmet_requirements, [])
+
+    def test_settings_toggle_on_badges_open_signups(self) -> None:
+        self.enable()
+        member = self.make_user()
+        self.no_shows(member, 4)
+        open_signup = self._open_waitlisted(member)
+        closed = self.make_event(state=EventState.COMPLETED)
+        closed_signup = EventSignup.objects.create(
+            event=closed, user=member, status=SignupStatus.WAITLISTED
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            update_conduct_settings(
+                self.org, actor=self.admin, changes={"block_enabled": True}
+            )
+
+        open_signup.refresh_from_db()
+        closed_signup.refresh_from_db()
+        self.assertEqual(open_signup.unmet_requirements, [CODE])
+        self.assertEqual(closed_signup.unmet_requirements, [])
+
+    def test_leaderboard_toggle_skips_refresh(self) -> None:
+        self.enable(require_approval_enabled=True)
+
+        with (
+            patch("org.conduct.services.refresh_org_unmet_requirements") as refresh,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            update_conduct_settings(
+                self.org, actor=self.admin, changes={"leaderboard_public": True}
+            )
+
+        refresh.assert_not_called()
+
+    def test_feature_lock_clears_stored_code(self) -> None:
+        self.enable(block_enabled=True)
+        open_signup = self.held_open_signup()
+        site_admin = self.make_user()
+        site_admin.is_staff = True
+        site_admin.save()
+        client = APIClient()
+        client.force_authenticate(site_admin)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = client.put(
+                reverse("org-features", args=[self.org.pk]),
+                {"feature": "conduct", "enabled": False},
+                format="json",
+            )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        open_signup.refresh_from_db()
+        self.assertEqual(open_signup.unmet_requirements, [])
 
     def test_no_refresh_without_hold_modes(self) -> None:
         self.enable(back_of_line_enabled=True)
