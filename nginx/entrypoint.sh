@@ -1,7 +1,6 @@
 #!/bin/sh
 set -e
 
-# Create config from template
 envsubst '${NODE_ENV} ${RELEASE} ${DEBUG} ${DOMAIN} ${FRONTEND_HOST} ${FRONTEND_PORT} ${BACKEND_HOST} ${BACKEND_PORT}' < /etc/nginx/templates/default.template.conf > /etc/nginx/conf.d/default.conf
 
 # nginx resolves upstream hostnames once, at startup. When a frontend or backend
@@ -27,5 +26,4 @@ watch_upstreams() {
 
 watch_upstreams frontend backend &
 
-# Run Nginx
 exec nginx -g 'daemon off;'
