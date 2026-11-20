@@ -346,6 +346,7 @@ Privacy is enforced on the server:
 - Logging in, logging out or switching account with the draft open reconnects the socket as the new user and starts chat from scratch: the log, unread count, panel state and any error from the previous user are dropped. Closing the draft does the same.
 - Logging out with the draft open reconnects the socket as a spectator and clears the log.
 - Team chat stays private after the draft ends.
+- A forced team reset (re-initialising the tournament draft) deletes the team chat of the reset teams' drafts that are still in play. Completed and abandoned drafts keep their team chat; players the reset removed lose access to it, and anyone added to the team later only sees messages from after they joined.
 
 ### Limits
 

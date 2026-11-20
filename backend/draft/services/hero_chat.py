@@ -306,11 +306,30 @@ def reconcile_draft_memberships(draft_id: int, at: datetime | None = None) -> No
 
 
 def delete_team_chat(team_ids: Iterable[int]) -> None:
+    """Wipe team chat of drafts still in play; finished drafts keep theirs."""
     ids = list(team_ids)
     if not ids:
         return
-    HeroDraftChatMessage.objects.filter(team_id__in=ids).delete()
-    HeroDraftChatMembership.objects.filter(team_id__in=ids).delete()
+    HeroDraftChatMessage.objects.filter(team_id__in=ids).exclude(
+        draft__state__in=_CLOSED_STATES
+    ).delete()
+    HeroDraftChatMembership.objects.filter(team_id__in=ids).exclude(
+        draft__state__in=_CLOSED_STATES
+    ).delete()
+    rosters = _team_rosters(ids)
+    departed = [
+        pk
+        for pk, team_id, user_id in HeroDraftChatMembership.objects.filter(
+            team_id__in=ids,
+            left_at__isnull=True,
+            draft__state__in=_CLOSED_STATES,
+        ).values_list("pk", "team_id", "user_id")
+        if user_id not in rosters.get(team_id, set())
+    ]
+    if departed:
+        HeroDraftChatMembership.objects.filter(pk__in=departed).update(
+            left_at=timezone.now()
+        )
 
 
 def repoint_draft_memberships(

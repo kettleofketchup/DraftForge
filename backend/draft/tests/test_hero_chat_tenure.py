@@ -427,6 +427,28 @@ class ResetCleanupTest(TenureFixture):
             self.team_a.members.add(self.newbie)
         self.assertEqual(self.bodies(self.newbie), ["gg"])
 
+    def assert_closed_draft_chat_kept(self, state: str) -> None:
+        HeroDraft.objects.filter(pk=self.draft.pk).update(state=state)
+        with self.captureOnCommitCallbacks(execute=True):
+            with transaction.atomic():
+                reset_draft_teams(self.tournament, force=True)
+        self.assertEqual(self.team_rows()[0], 2)
+        for removed in (self.mem_a, self.mem_a2, self.mem_b, self.mem_b2):
+            self.assertIsNone(self.open_row(removed), removed.username)
+        self.assertEqual(self.open_row(self.cap_a).team_id, self.team_a.pk)
+        self.assertEqual(self.bodies(self.cap_a), ["a-secret", "gg"])
+        self.assertEqual(self.bodies(self.mem_a), ["gg"])
+        with self.captureOnCommitCallbacks(execute=True):
+            self.team_a.members.add(self.mem_a, self.newbie)
+        self.assertEqual(self.bodies(self.mem_a), ["gg"])
+        self.assertEqual(self.bodies(self.newbie), ["gg"])
+
+    def test_reset_keeps_completed_draft_chat_but_ends_removed_tenure(self) -> None:
+        self.assert_closed_draft_chat_kept(HeroDraftState.COMPLETED)
+
+    def test_reset_keeps_abandoned_draft_chat_but_ends_removed_tenure(self) -> None:
+        self.assert_closed_draft_chat_kept(HeroDraftState.ABANDONED)
+
     def test_reset_chat_delete_rolls_back(self) -> None:
         before = self.team_rows()
         self.assertEqual(before[0], 2)
