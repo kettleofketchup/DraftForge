@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 from django.utils import timezone
@@ -87,7 +87,7 @@ def refresh_unmet_requirements(org_user: OrgUser) -> int:
     return _store_reasons(signups, org_user.organization_id)
 
 
-def refresh_members_eligibility(org_users: Iterable[OrgUser]) -> int:
+def refresh_members_eligibility(org_users: Sequence[OrgUser]) -> int:
     return sum(refresh_unmet_requirements(org_user) for org_user in org_users)
 
 

@@ -452,7 +452,7 @@ class EnforcementHooksTest(ConductTestCase):
         self.signup(done, member, SignupStatus.APPROVED)
 
         with (
-            patch("org.standing.restamp.members_on_commit") as refresh,
+            patch("org.standing.restamp.member_on_commit") as refresh,
             self.captureOnCommitCallbacks(execute=True),
         ):
             set_outcomes(

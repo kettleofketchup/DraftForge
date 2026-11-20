@@ -44,7 +44,9 @@ EVENT_FLOWS = (
     "events.admission",
     "events.eligibility",
 )
-PUBLIC_STANDING = ("org.standing.api", "org.standing.cache", "org.standing.restamp")
+PUBLIC_STANDING = ("org.standing.api", "org.standing.cache")
+RESTAMP = "org.standing.restamp"
+RESTAMP_IMPORTER = "events.eligibility.store"
 LEDGER_MODELS = frozenset({"ContributionEntry", "ContributionPointValue"})
 SKIPPED_DIRS = frozenset({"tests", "migrations", "__pycache__"})
 
@@ -220,7 +222,9 @@ class StandingLayeringTest(SimpleTestCase):
                         if _matches(imported, "org.conduct"):
                             self.assertEqual(module, CONDUCT_CHECK)
                         for target in targets:
-                            if _matches(target, "org.standing") and target != (
+                            if _matches(target, RESTAMP):
+                                self.assertEqual(module, RESTAMP_IMPORTER)
+                            elif _matches(target, "org.standing") and target != (
                                 "org.standing"
                             ):
                                 self.assertTrue(
@@ -262,3 +266,8 @@ class StandingLayeringTest(SimpleTestCase):
 
     def test_registry_reaches_conduct_adapter(self) -> None:
         self.assertIn("org.conduct.adapter", _graph()["org.standing.registry"])
+
+    def test_finalize_and_reopen_register_the_restamp_slot(self) -> None:
+        for module in ("events.completion", "events.reopen"):
+            with self.subTest(module=module):
+                self.assertIn(RESTAMP_IMPORTER, _graph()[module])

@@ -70,7 +70,7 @@ def refresh_unmet_on_commit(gate: ConductGate, org_users: Iterable[OrgUser]) -> 
         settings.require_approval_enabled or settings.block_enabled
     ):
         return
-    restamp.members_on_commit(org_users)
+    restamp.member_on_commit(org_users)
 
 
 def refresh_org_unmet_on_commit(org_id: int) -> None:
