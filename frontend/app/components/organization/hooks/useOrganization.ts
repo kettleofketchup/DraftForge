@@ -1,10 +1,9 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchOrganization } from '~/components/api/api';
 import { useOrgStore } from '~/store/orgStore';
 
-export const organizationQueryKey = (pk: number) =>
-  ['organization', pk] as const;
+export const organizationQueryKey = (pk: number) => ['organization', pk] as const;
 
 export function useOrganization(pk: number | undefined) {
   const queryClient = useQueryClient();
