@@ -1,17 +1,17 @@
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { updateOrgUser } from '~/components/api/api';
+import type { LeagueType } from '~/components/league/schemas';
+import type { OrganizationType } from '~/components/organization/schemas';
+import type { UserClassType, UserType } from '~/components/user/types';
+import type { UserEntry } from '~/store/userCacheTypes';
 import {
   buildDefaults,
   dispatchPatch,
-  scopeToContext,
-  resolveOrgUserLink,
   resolveEditScope,
+  resolveOrgUserLink,
+  scopeToContext,
   type EditUserScope,
 } from './editUserSchema';
-import type { LeagueType } from '~/components/league/schemas';
-import type { UserClassType, UserType } from '~/components/user/types';
-import type { UserEntry } from '~/store/userCacheTypes';
-import type { OrganizationType } from '~/components/organization/schemas';
-import { updateOrgUser } from '~/components/api/api';
 
 vi.mock('~/components/api/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/components/api/api')>()),
@@ -41,17 +41,26 @@ const lg = { pk: 5, name: 'League' } as LeagueType;
 // Minimal UserEntry-shaped object (isUserEntry checks `'orgData' in user`).
 function entry(over: Partial<UserEntry> = {}): UserEntry {
   return {
-    pk: 1, username: 'u', orgData: {}, leagueData: {}, _fetchedAt: 0, ...over,
+    pk: 1,
+    username: 'u',
+    orgData: {},
+    leagueData: {},
+    _fetchedAt: 0,
+    ...over,
   } as UserEntry;
 }
 
 describe('resolveOrgUserLink', () => {
   it('returns the flat orgUserPk when present', () => {
-    expect(resolveOrgUserLink({ orgUserPk: 110 }, { organizationId: 2 })).toBe(110);
+    expect(resolveOrgUserLink({ orgUserPk: 110 }, { organizationId: 2 })).toBe(
+      110,
+    );
   });
 
   it('falls back to orgData[orgId].id for a UserEntry without a flat field', () => {
-    const u = entry({ orgData: { 2: { id: 110, mmr: 0, _fetchedAt: 0 } } });
+    const u = entry({
+      orgData: { 2: { id: 110, mmrs: { 1: 0 }, mmr: 0, _fetchedAt: 0 } },
+    });
     expect(resolveOrgUserLink(u, { organizationId: 2 })).toBe(110);
   });
 
@@ -69,53 +78,87 @@ describe('resolveEditScope', () => {
   it('no link -> global', () => {
     expect(
       resolveEditScope({ username: 'u' } as never, {
-        organizationId: 2, leagueId: 5, currentOrg: org, currentLeague: lg,
+        organizationId: 2,
+        leagueId: 5,
+        currentOrg: org,
+        currentLeague: lg,
       }),
     ).toEqual({ kind: 'global' });
   });
 
   it('flat link + leagueId matches currentLeague -> league with deterministic orgId', () => {
     expect(
-      resolveEditScope({ orgUserPk: 110 }, {
-        organizationId: 2, leagueId: 5, currentOrg: org, currentLeague: lg,
-      }),
+      resolveEditScope(
+        { orgUserPk: 110 },
+        {
+          organizationId: 2,
+          leagueId: 5,
+          currentOrg: org,
+          currentLeague: lg,
+        },
+      ),
     ).toEqual({ kind: 'league', league: lg, orgId: 2 });
   });
 
   it('flat link + currentLeague stale/absent + currentOrg present -> org', () => {
     expect(
-      resolveEditScope({ orgUserPk: 110 }, {
-        organizationId: 2, leagueId: 5, currentOrg: org, currentLeague: null,
-      }),
+      resolveEditScope(
+        { orgUserPk: 110 },
+        {
+          organizationId: 2,
+          leagueId: 5,
+          currentOrg: org,
+          currentLeague: null,
+        },
+      ),
     ).toEqual({ kind: 'org', organization: org });
   });
 
   it('flat link + neither store loaded -> global (safe degrade)', () => {
     expect(
-      resolveEditScope({ orgUserPk: 110 }, {
-        organizationId: 2, leagueId: 5, currentOrg: null, currentLeague: null,
-      }),
+      resolveEditScope(
+        { orgUserPk: 110 },
+        {
+          organizationId: 2,
+          leagueId: 5,
+          currentOrg: null,
+          currentLeague: null,
+        },
+      ),
     ).toEqual({ kind: 'global' });
   });
 
   it('UserEntry orgData-only link -> org', () => {
-    const u = entry({ orgData: { 2: { id: 110, mmr: 0, _fetchedAt: 0 } } });
+    const u = entry({
+      orgData: { 2: { id: 110, mmrs: { 1: 0 }, mmr: 0, _fetchedAt: 0 } },
+    });
     expect(
-      resolveEditScope(u, { organizationId: 2, currentOrg: org, currentLeague: null }),
+      resolveEditScope(u, {
+        organizationId: 2,
+        currentOrg: org,
+        currentLeague: null,
+      }),
     ).toEqual({ kind: 'org', organization: org });
   });
 
   it('link present but MMR is 0 -> still scope-aware (gate keys on id, not mmr)', () => {
-    const u = entry({ orgData: { 2: { id: 110, mmr: 0, _fetchedAt: 0 } } });
+    const u = entry({
+      orgData: { 2: { id: 110, mmrs: { 1: 0 }, mmr: 0, _fetchedAt: 0 } },
+    });
     expect(
       resolveEditScope(u, {
-        organizationId: 2, leagueId: 5, currentOrg: org, currentLeague: lg,
+        organizationId: 2,
+        leagueId: 5,
+        currentOrg: org,
+        currentLeague: lg,
       }),
     ).toEqual({ kind: 'league', league: lg, orgId: 2 });
   });
 
   it('/users invariant: link in orgData but NO org/league context + stale currentOrg -> global', () => {
-    const u = entry({ orgData: { 2: { id: 110, mmr: 0, _fetchedAt: 0 } } });
+    const u = entry({
+      orgData: { 2: { id: 110, mmrs: { 1: 0 }, mmr: 0, _fetchedAt: 0 } },
+    });
     expect(
       resolveEditScope(u, { currentOrg: org, currentLeague: null }),
     ).toEqual({ kind: 'global' });
@@ -123,15 +166,23 @@ describe('resolveEditScope', () => {
 
   it('flat link but no organizationId + stale currentOrg -> global', () => {
     expect(
-      resolveEditScope({ orgUserPk: 110 }, { currentOrg: org, currentLeague: null }),
+      resolveEditScope(
+        { orgUserPk: 110 },
+        { currentOrg: org, currentLeague: null },
+      ),
     ).toEqual({ kind: 'global' });
   });
 
   it('flat link + currentOrg for a different org -> global', () => {
     expect(
-      resolveEditScope({ orgUserPk: 110 }, {
-        organizationId: 3, currentOrg: org, currentLeague: null,
-      }),
+      resolveEditScope(
+        { orgUserPk: 110 },
+        {
+          organizationId: 3,
+          currentOrg: org,
+          currentLeague: null,
+        },
+      ),
     ).toEqual({ kind: 'global' });
   });
 });
@@ -160,29 +211,59 @@ describe('dispatchPatch', () => {
   });
 
   it('org scope PATCHes the OrgUser endpoint', async () => {
-    mockUpdateOrgUser.mockResolvedValue({ pk: 1, nickname: 'After' } as UserType);
+    mockUpdateOrgUser.mockResolvedValue({
+      pk: 1,
+      nickname: 'After',
+    } as UserType);
     const user = userClass();
-    await dispatchPatch(user, { kind: 'org', organization: org }, { nickname: 'After' });
-    expect(mockUpdateOrgUser).toHaveBeenCalledWith(2, 110, { nickname: 'After' });
+    await dispatchPatch(
+      user,
+      { kind: 'org', organization: org },
+      { nickname: 'After' },
+    );
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(2, 110, {
+      nickname: 'After',
+    });
   });
 
   it('league scope PATCHes through the deterministic parent orgId', async () => {
-    mockUpdateOrgUser.mockResolvedValue({ pk: 1, nickname: 'After' } as UserType);
+    mockUpdateOrgUser.mockResolvedValue({
+      pk: 1,
+      nickname: 'After',
+    } as UserType);
     const user = userClass();
-    await dispatchPatch(user, { kind: 'league', league: lg, orgId: 2 }, { nickname: 'After' });
-    expect(mockUpdateOrgUser).toHaveBeenCalledWith(2, 110, { nickname: 'After' });
+    await dispatchPatch(
+      user,
+      { kind: 'league', league: lg, orgId: 2 },
+      { nickname: 'After' },
+    );
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(2, 110, {
+      nickname: 'After',
+    });
   });
 
   it('mirrors the org response onto the instance so a reopen re-seeds fresh', async () => {
-    mockUpdateOrgUser.mockResolvedValue({ pk: 1, nickname: 'After' } as UserType);
+    mockUpdateOrgUser.mockResolvedValue({
+      pk: 1,
+      nickname: 'After',
+    } as UserType);
     const user = userClass();
-    await dispatchPatch(user, { kind: 'org', organization: org }, { nickname: 'After' });
+    await dispatchPatch(
+      user,
+      { kind: 'org', organization: org },
+      { nickname: 'After' },
+    );
     expect(user.nickname).toBe('After');
-    expect(buildDefaults(user, { kind: 'org', organization: org }).nickname).toBe('After');
+    expect(
+      buildDefaults(user, { kind: 'org', organization: org }).nickname,
+    ).toBe('After');
   });
 
   it('mirrors the league response onto the instance', async () => {
-    mockUpdateOrgUser.mockResolvedValue({ pk: 1, nickname: 'After' } as UserType);
+    mockUpdateOrgUser.mockResolvedValue({
+      pk: 1,
+      nickname: 'After',
+    } as UserType);
     const user = userClass();
     const scope: EditUserScope = { kind: 'league', league: lg, orgId: 2 };
     await dispatchPatch(user, scope, { nickname: 'After' });
@@ -191,10 +272,16 @@ describe('dispatchPatch', () => {
 
   it('keeps user.pk intact — OrgUserSerializer maps pk to the User pk', async () => {
     mockUpdateOrgUser.mockResolvedValue({
-      pk: 1, orgUserPk: 110, nickname: 'After',
+      pk: 1,
+      orgUserPk: 110,
+      nickname: 'After',
     } as UserType);
     const user = userClass();
-    await dispatchPatch(user, { kind: 'org', organization: org }, { nickname: 'After' });
+    await dispatchPatch(
+      user,
+      { kind: 'org', organization: org },
+      { nickname: 'After' },
+    );
     expect(user.pk).toBe(1);
   });
 
@@ -208,7 +295,11 @@ describe('dispatchPatch', () => {
   it('league scope without an OrgUser link throws rather than silently no-op', async () => {
     const user = userClass({ orgUserPk: undefined });
     await expect(
-      dispatchPatch(user, { kind: 'league', league: lg, orgId: 2 }, { nickname: 'After' }),
+      dispatchPatch(
+        user,
+        { kind: 'league', league: lg, orgId: 2 },
+        { nickname: 'After' },
+      ),
     ).rejects.toThrow(/OrgUser link/);
   });
 });
@@ -219,18 +310,28 @@ describe('org-less league tournament (spec 6.1)', () => {
   });
 
   it('leagueData-only link -> league scope that PATCHes via the league parent org', async () => {
-    const leagueWithOrg = { pk: 3, name: 'L3', organization: { pk: 5 } } as LeagueType;
+    const leagueWithOrg = {
+      pk: 3,
+      name: 'L3',
+      organization: { pk: 5 },
+    } as LeagueType;
     const ctx = {
       organizationId: undefined,
       leagueId: 3,
       currentOrg: { pk: 9, name: 'Stale' } as OrganizationType,
       currentLeague: leagueWithOrg,
     };
-    const u = entry({ pk: 10, leagueData: { 3: { id: 41, mmr: 0, _fetchedAt: 0 } } });
+    const u = entry({
+      pk: 10,
+      leagueData: { 3: { id: 41, mmr: 0, _fetchedAt: 0 } },
+    });
     const scope = resolveEditScope(u, ctx);
     expect(scope).toMatchObject({ kind: 'league', orgId: undefined });
 
-    vi.mocked(updateOrgUser).mockResolvedValue({ pk: 10, nickname: 'After' } as UserType);
+    vi.mocked(updateOrgUser).mockResolvedValue({
+      pk: 10,
+      nickname: 'After',
+    } as UserType);
     const user = {
       pk: 10,
       username: 'u',
