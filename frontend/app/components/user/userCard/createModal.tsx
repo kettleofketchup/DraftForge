@@ -136,7 +136,7 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
             onSelect={handleDiscordUserSelect}
           />
           <Form {...form}>
-            <UserEditForm form={form} showMmr={false} mmrLabel="MMR" />
+            <UserEditForm form={form} mmrGames={[]} />
           </Form>
         </div>
       </FormDialog>

@@ -2,7 +2,12 @@ import { TriangleAlert } from 'lucide-react';
 import React from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { lookupSteamAccountIdHolder } from '~/components/api/userAPI';
-import { getLogger } from '~/lib/logger';
+import {
+  GAME_LABEL,
+  GAME_MMR_HOTKEY,
+  mmrTestId,
+  type GameTypeValue,
+} from '~/components/game/constants';
 import {
   FormControl,
   FormField,
@@ -25,6 +30,7 @@ import {
   positionKeys,
   type PositionKey,
 } from '~/components/user/positions/positionEdit';
+import { getLogger } from '~/lib/logger';
 import type { EditUserInput } from './editUserSchema';
 import {
   describeSteamAccountIdConflict,
@@ -46,8 +52,8 @@ export const POSITION_HOTKEYS: Record<PositionKey, string> = {
 
 interface Props {
   form: UseFormReturn<EditUserInput>;
-  showMmr: boolean;
-  mmrLabel: string;
+  /** Games whose org MMR the form edits (empty in global scope). */
+  mmrGames: GameTypeValue[];
   /** pk of the user being edited — their own Friend ID is never a conflict. */
   editingUserPk?: number;
 }
@@ -252,11 +258,13 @@ function NumberField({
   fieldKey,
   label,
   hotkey,
+  testId,
 }: {
   form: UseFormReturn<EditUserInput>;
-  fieldKey: 'mmr';
+  fieldKey: `game_mmrs.${GameTypeValue}`;
   label: string;
   hotkey?: string;
+  testId: string;
 }) {
   return (
     <FormField
@@ -284,7 +292,7 @@ function NumberField({
                   field.onChange(Number.isFinite(n) ? n : raw);
                 }
               }}
-              data-testid={`edit-user-${fieldKey}`}
+              data-testid={testId}
             />
           </FormControl>
           <FormMessage />
@@ -296,17 +304,28 @@ function NumberField({
 
 export const UserEditForm: React.FC<Props> = ({
   form,
-  showMmr,
-  mmrLabel,
+  mmrGames,
   editingUserPk,
 }) => {
   // No outer <ScrollArea> — FormDialog already wraps its children in one.
   return (
     <div className="flex flex-col w-full gap-4">
-      <StringField form={form} fieldKey="nickname" label="Nickname" hotkey="N" />
-      {showMmr && (
-        <NumberField form={form} fieldKey="mmr" label={mmrLabel} hotkey="R" />
-      )}
+      <StringField
+        form={form}
+        fieldKey="nickname"
+        label="Nickname"
+        hotkey="N"
+      />
+      {mmrGames.map((g) => (
+        <NumberField
+          key={g}
+          form={form}
+          fieldKey={`game_mmrs.${g}`}
+          label={`${GAME_LABEL[g]} org MMR`}
+          hotkey={GAME_MMR_HOTKEY[g]?.toUpperCase()}
+          testId={mmrTestId(g)}
+        />
+      ))}
       <div className="bg-base-300 border border-border rounded-lg p-4">
         <h3 className="text-foreground text-center text-sm font-medium mb-3">
           Positions

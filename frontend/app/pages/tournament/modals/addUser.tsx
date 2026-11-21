@@ -1,5 +1,6 @@
 import { Suspense, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { toGameType } from '~/components/game/constants';
 import type { TournamentType } from '~/components/tournament/types';
 import { Alert, AlertDescription } from '~/components/ui/alert';
 import { SearchUserDropdown } from '~/components/user/searchUser';
@@ -46,7 +47,11 @@ export default function PlayersTab({
 
       <div className="grid gap-2 mt-4 grid-cols-2 xl:grid-cols-3 ">
         {filteredUsers?.map((user) => (
-          <UserCard user={user as User} compact={true} />
+          <UserCard
+            user={user as User}
+            compact={true}
+            gameType={toGameType(tournament.game_type)}
+          />
         ))}
       </div>
     </Suspense>

@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react';
+import type { GameTypeValue } from '~/components/game/constants';
 import { PlayerPopover } from '~/components/player';
 import type { TeamType } from '~/components/tournament/types';
 import {
@@ -24,6 +25,8 @@ interface TeamTableProps {
   useStrips?: boolean;
   /** Optional organization ID for scoped MMR display */
   organizationId?: number;
+  /** Tournament game; picks and labels the strip org MMR */
+  gameType: GameTypeValue;
 }
 
 // Custom comparison function for memo that properly detects team member changes
@@ -35,6 +38,7 @@ const teamTablePropsAreEqual = (
   if (prevProps.compact !== nextProps.compact) return false;
   if (prevProps.useStrips !== nextProps.useStrips) return false;
   if (prevProps.organizationId !== nextProps.organizationId) return false;
+  if (prevProps.gameType !== nextProps.gameType) return false;
 
   // If team reference is the same, no need to re-render
   if (prevProps.team === nextProps.team) return true;
@@ -59,7 +63,7 @@ const teamTablePropsAreEqual = (
 };
 
 export const TeamTable: React.FC<TeamTableProps> = memo(
-  ({ team, compact = false, useStrips = false, organizationId }) => {
+  ({ team, compact = false, useStrips = false, organizationId, gameType }) => {
     // Memoize sorted members to avoid mutation and recalculation
     const members = useMemo(() => {
       if (!team?.members || team.members.length === 0) return [];
@@ -98,6 +102,7 @@ export const TeamTable: React.FC<TeamTableProps> = memo(
               key={`TeamStrip-${user.pk}`}
               user={user}
               organizationId={organizationId}
+              gameType={gameType}
               data-testid={`team-member-${user.pk}`}
             />
           ))}
@@ -120,7 +125,7 @@ export const TeamTable: React.FC<TeamTableProps> = memo(
           {members.map((user: UserType, idx: number) => (
             <TableRow key={`TeamTableRow-${user.pk}`}>
               <TableCell>
-                <PlayerPopover player={user}>
+                <PlayerPopover player={user} gameType={gameType}>
                   <div className="flex items-center gap-2 hover:text-primary transition-colors">
                     <UserAvatar
                       user={user}

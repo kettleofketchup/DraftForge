@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { toGameType } from '~/components/game/constants';
 import { PlayerPopover } from '~/components/player';
 import {
   Table,
@@ -73,7 +74,10 @@ export const CaptainTable: React.FC = () => {
             {sortedUsers.map((user) => (
               <TableRow key={`TeamTableRow-${user.pk}`}>
                 <TableCell>
-                  <PlayerPopover player={user}>
+                  <PlayerPopover
+                    player={user}
+                    gameType={toGameType(tournament?.game_type)}
+                  >
                     <div className="flex items-center gap-2 hover:text-primary transition-colors">
                       <UserAvatar
                         user={user}
@@ -127,6 +131,7 @@ const CaptainStripRow: React.FC<CaptainStripRowProps> = ({
       compact
       showPositions={false}
       nameMaxLength={12}
+      gameType={toGameType(tournament?.game_type)}
       statsLeagueId={tournament?.league_pk ?? null}
       data-testid={`captain-row-${user.pk}`}
       actionSlot={

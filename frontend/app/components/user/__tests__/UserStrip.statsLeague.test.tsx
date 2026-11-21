@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { GAME_TYPE } from '~/components/game/constants';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { UserType } from '~/components/user/types';
 import type { UserEntry } from '~/store/userCacheTypes';
@@ -60,7 +61,7 @@ const entryUser: UserEntry = {
   pk: 43,
   username: 'bob',
   discordNickname: 'Bob',
-  orgData: { 5: { id: 1, mmrs: { 1: 3000 }, mmr: 3000, _fetchedAt: 0 } },
+  orgData: { 5: { id: 1, mmrs: { 1: 3000 }, _fetchedAt: 0 } },
   leagueData: { 7: { id: 2, mmr: 1700, _fetchedAt: 0 } },
   _fetchedAt: 0,
 };
@@ -90,6 +91,7 @@ describe('UserStrip statsLeagueId', () => {
     const { rerender } = render(
       wrap(
         <UserStrip
+          gameType={GAME_TYPE.DOTA2}
           user={plainUser}
           statsLeagueId={1}
           actionSlot={<span>a</span>}
@@ -102,6 +104,7 @@ describe('UserStrip statsLeagueId', () => {
     rerender(
       wrap(
         <UserStrip
+          gameType={GAME_TYPE.DOTA2}
           user={plainUser}
           statsLeagueId={1}
           actionSlot={<span>b</span>}
@@ -115,36 +118,54 @@ describe('UserStrip statsLeagueId', () => {
   it('comparator returns false when statsLeagueId changes', () => {
     expect(
       userStripPropsAreEqual(
-        { user: plainUser, statsLeagueId: 1 },
-        { user: plainUser, statsLeagueId: 2 },
+        { user: plainUser, gameType: GAME_TYPE.DOTA2, statsLeagueId: 1 },
+        { user: plainUser, gameType: GAME_TYPE.DOTA2, statsLeagueId: 2 },
       ),
     ).toBe(false);
     expect(
       userStripPropsAreEqual(
-        { user: plainUser, statsLeagueId: 1 },
-        { user: plainUser, statsLeagueId: 1 },
+        { user: plainUser, gameType: GAME_TYPE.DOTA2, statsLeagueId: 1 },
+        { user: plainUser, gameType: GAME_TYPE.DOTA2, statsLeagueId: 1 },
       ),
     ).toBe(true);
   });
 
   it('L: badge output identical with and without statsLeagueId (UserType)', () => {
-    const a = render(wrap(<UserStrip user={plainUser} />));
-    const without = leagueBadgeText(a.container);
-    a.unmount();
-    const b = render(wrap(<UserStrip user={plainUser} statsLeagueId={7} />));
-    expect(without).not.toBeNull();
-    expect(leagueBadgeText(b.container)).toBe(without);
-  });
-
-  it('L: badge output identical with and without statsLeagueId (UserEntry)', () => {
     const a = render(
-      wrap(<UserStrip user={entryUser} organizationId={5} leagueId={7} />),
+      wrap(<UserStrip gameType={GAME_TYPE.DOTA2} user={plainUser} />),
     );
     const without = leagueBadgeText(a.container);
     a.unmount();
     const b = render(
       wrap(
         <UserStrip
+          gameType={GAME_TYPE.DOTA2}
+          user={plainUser}
+          statsLeagueId={7}
+        />,
+      ),
+    );
+    expect(without).not.toBeNull();
+    expect(leagueBadgeText(b.container)).toBe(without);
+  });
+
+  it('L: badge output identical with and without statsLeagueId (UserEntry)', () => {
+    const a = render(
+      wrap(
+        <UserStrip
+          gameType={GAME_TYPE.DOTA2}
+          user={entryUser}
+          organizationId={5}
+          leagueId={7}
+        />,
+      ),
+    );
+    const without = leagueBadgeText(a.container);
+    a.unmount();
+    const b = render(
+      wrap(
+        <UserStrip
+          gameType={GAME_TYPE.DOTA2}
           user={entryUser}
           organizationId={5}
           leagueId={7}
@@ -157,12 +178,25 @@ describe('UserStrip statsLeagueId', () => {
   });
 
   it('@container only with statsLeagueId', () => {
-    const a = render(wrap(<UserStrip user={plainUser} data-testid="strip" />));
+    const a = render(
+      wrap(
+        <UserStrip
+          gameType={GAME_TYPE.DOTA2}
+          user={plainUser}
+          data-testid="strip"
+        />,
+      ),
+    );
     expect(screen.getByTestId('strip').className).not.toContain('@container');
     a.unmount();
     render(
       wrap(
-        <UserStrip user={plainUser} statsLeagueId={1} data-testid="strip" />,
+        <UserStrip
+          gameType={GAME_TYPE.DOTA2}
+          user={plainUser}
+          statsLeagueId={1}
+          data-testid="strip"
+        />,
       ),
     );
     expect(screen.getByTestId('strip').className.split(' ')).toContain(
@@ -171,13 +205,23 @@ describe('UserStrip statsLeagueId', () => {
   });
 
   it('name min-width narrows only with statsLeagueId', () => {
-    const a = render(wrap(<UserStrip user={plainUser} />));
+    const a = render(
+      wrap(<UserStrip gameType={GAME_TYPE.DOTA2} user={plainUser} />),
+    );
     const nameWithout = screen.getByText('Alice', {
       selector: '.hidden.sm\\:inline',
     }).parentElement!;
     expect(nameWithout.className).toContain('sm:min-w-[20ch]');
     a.unmount();
-    render(wrap(<UserStrip user={plainUser} statsLeagueId={1} />));
+    render(
+      wrap(
+        <UserStrip
+          gameType={GAME_TYPE.DOTA2}
+          user={plainUser}
+          statsLeagueId={1}
+        />,
+      ),
+    );
     const nameWith = screen.getByText('Alice', {
       selector: '.hidden.sm\\:inline',
     }).parentElement!;
@@ -188,7 +232,15 @@ describe('UserStrip statsLeagueId', () => {
   });
 
   it('stats column uses the default container threshold', () => {
-    render(wrap(<UserStrip user={plainUser} statsLeagueId={1} />));
+    render(
+      wrap(
+        <UserStrip
+          gameType={GAME_TYPE.DOTA2}
+          user={plainUser}
+          statsLeagueId={1}
+        />,
+      ),
+    );
     const classes = screen
       .getByTestId('strip-league-stats')
       .className.split(' ');
@@ -199,7 +251,12 @@ describe('UserStrip statsLeagueId', () => {
   it('statsBreakpoint="wide" raises the container threshold', () => {
     render(
       wrap(
-        <UserStrip user={plainUser} statsLeagueId={1} statsBreakpoint="wide" />,
+        <UserStrip
+          gameType={GAME_TYPE.DOTA2}
+          user={plainUser}
+          statsLeagueId={1}
+          statsBreakpoint="wide"
+        />,
       ),
     );
     const classes = screen
@@ -212,28 +269,46 @@ describe('UserStrip statsLeagueId', () => {
   it('propsAreEqual tracks statsBreakpoint', () => {
     expect(
       userStripPropsAreEqual(
-        { user: plainUser, statsBreakpoint: 'wide' },
-        { user: plainUser, statsBreakpoint: 'default' },
+        { user: plainUser, gameType: GAME_TYPE.DOTA2, statsBreakpoint: 'wide' },
+        {
+          user: plainUser,
+          gameType: GAME_TYPE.DOTA2,
+          statsBreakpoint: 'default',
+        },
       ),
     ).toBe(false);
   });
 
   it('column renders with showMmr={false}', () => {
     render(
-      wrap(<UserStrip user={plainUser} statsLeagueId={1} showMmr={false} />),
+      wrap(
+        <UserStrip
+          gameType={GAME_TYPE.DOTA2}
+          user={plainUser}
+          statsLeagueId={1}
+          showMmr={false}
+        />,
+      ),
     );
     expect(screen.getByTestId('strip-league-stats')).toBeTruthy();
   });
 
   it('no column without statsLeagueId', () => {
-    render(wrap(<UserStrip user={plainUser} />));
+    render(wrap(<UserStrip gameType={GAME_TYPE.DOTA2} user={plainUser} />));
     expect(screen.queryByTestId('strip-league-stats')).toBeNull();
   });
 
   it('no column for a user without a pk', () => {
     const noPk = { ...plainUser, pk: undefined } as unknown as UserType;
     render(
-      wrap(<UserStrip user={noPk} statsLeagueId={1} data-testid="strip" />),
+      wrap(
+        <UserStrip
+          gameType={GAME_TYPE.DOTA2}
+          user={noPk}
+          statsLeagueId={1}
+          data-testid="strip"
+        />,
+      ),
     );
     expect(screen.getByTestId('strip').className.split(' ')).toContain(
       '@container',
@@ -245,7 +320,12 @@ describe('UserStrip statsLeagueId', () => {
   it('statsLeagueId=0 keeps @container but renders no column', () => {
     render(
       wrap(
-        <UserStrip user={plainUser} statsLeagueId={0} data-testid="strip" />,
+        <UserStrip
+          gameType={GAME_TYPE.DOTA2}
+          user={plainUser}
+          statsLeagueId={0}
+          data-testid="strip"
+        />,
       ),
     );
     expect(screen.getByTestId('strip').className.split(' ')).toContain(

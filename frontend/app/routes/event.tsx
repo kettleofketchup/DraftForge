@@ -91,12 +91,18 @@ import {
   isRemovedSignup,
   partitionSignups,
 } from '~/components/events/signupPartitions';
+import { signupRowMmr } from '~/components/events/signupRowMmr';
 import { rollCallSummary } from '~/components/events/signupRules';
 import {
   signupHoldReason,
   signupSuccessMessage,
 } from '~/components/events/unmetRequirements';
-import type { GameTypeValue } from '~/components/game/constants';
+import {
+  GAME_LABEL,
+  isGameType,
+  toGameType,
+  type GameTypeValue,
+} from '~/components/game/constants';
 import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
@@ -146,7 +152,6 @@ import { getLogger } from '~/lib/logger';
 import { useGameTypeStore } from '~/store/gameTypeStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
-import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('EventPage');
@@ -158,7 +163,7 @@ export default function EventPage() {
 
   const { data: event, isLoading, error } = useEvent(id);
   const { data: signups } = useEventSignups(id);
-  useEventSignupUsers(signups);
+  useEventSignupUsers(signups, undefined, toGameType(event?.game_type));
   const currentUser = useUserStore((state) => state.currentUser);
 
   const [activeTab, setActiveTab] = useState(tab || 'details');
@@ -201,7 +206,7 @@ export default function EventPage() {
   const queryClient = useQueryClient();
 
   // Populate the org users cache so signup rows can read per-org MMR via the
-  // user entity adapter (UserEntry.orgData[orgId].mmr). Viewers without member
+  // user entity adapter (selectOrgMmr). Viewers without member
   // access fall back to signup.org_user_mmr.
   const eventOrgPk = event?.organization ?? null;
   const onMemberViewerChange = useCallback(() => {
@@ -707,6 +712,7 @@ export default function EventPage() {
               eventId={event.id}
               isAdmin={isAdmin}
               eventTimezone={event.timezone}
+              gameType={toGameType(event.game_type)}
             />
           </TabsContent>
         </Tabs>
@@ -844,7 +850,11 @@ function DetailsTab({
           />
           <Stat
             label="Game"
-            value={event.game_type === 1 ? 'Dota 2' : 'Deadlock'}
+            value={
+              isGameType(event.game_type)
+                ? GAME_LABEL[event.game_type]
+                : 'Unknown'
+            }
           />
         </CardContent>
       </Card>
@@ -1188,18 +1198,15 @@ function SignupsTab({
           );
 
           if (user) {
-            // Prefer the org-approved MMR via the user entity adapter
-            // (UserEntry.orgData[orgId].mmr) over self-reported dota_profile.mmr.
-            // Fall back to signup.org_user_mmr from the API if the cache is cold.
             const baseProfile = signup.dota_profile as DotaProfileData | null;
-            const orgMmr =
-              (orgId && isUserEntry(user)
-                ? user.orgData[orgId]?.mmr
-                : undefined) ??
-              signup.org_user_mmr ??
-              null;
+            const orgMmr = signupRowMmr(
+              user,
+              signup,
+              orgId,
+              toGameType(gameType),
+            );
             const stripProfile = baseProfile
-              ? { ...baseProfile, mmr: orgMmr ?? baseProfile.mmr }
+              ? { ...baseProfile, mmr: orgMmr }
               : orgMmr != null
                 ? ({
                     unverified_friend_id: null,
@@ -1224,6 +1231,7 @@ function SignupsTab({
                 data-testid={`event-signup-row-${signup.id}`}
                 user={user}
                 dotaProfile={stripProfile}
+                gameType={toGameType(gameType)}
                 selfReportedRank={signup.self_reported_rank}
                 contextSlot={statusSlot}
                 actionSlot={adminActions}
@@ -1253,6 +1261,7 @@ function SignupsTab({
       </div>
       <MmrApprovalModal
         signup={approvalSignup}
+        gameType={toGameType(gameType)}
         open={!!approvalSignup}
         onOpenChange={(open) => {
           if (!open) setApprovalSignup(null);

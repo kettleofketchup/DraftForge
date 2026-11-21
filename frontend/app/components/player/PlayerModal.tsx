@@ -3,6 +3,13 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { claimUserProfile, fetchUser } from '~/components/api/api';
+import {
+  GAME_LABEL,
+  GAME_SLUG,
+  GAME_TYPES,
+  toGameType,
+  type GameTypeValue,
+} from '~/components/game/constants';
 import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
 import { Badge } from '~/components/ui/badge';
 import {
@@ -53,10 +60,16 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
 
+  const gameType = ctx?.gameType;
+
   const editScope = React.useMemo<EditUserScope>(() => {
     // Org context: only trust currentOrg if its pk matches the popover's request.
     if (ctx?.organizationId && currentOrg?.pk === ctx.organizationId) {
-      return { kind: 'org', organization: currentOrg };
+      return {
+        kind: 'org',
+        organization: currentOrg,
+        ...(gameType != null ? { gameType } : {}),
+      };
     }
     // League context: pk-match guard. Carry the parent organization through if available.
     if (ctx?.leagueId && currentLeague?.pk === ctx.leagueId) {
@@ -67,10 +80,12 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
           currentOrg && currentLeague.organization?.pk === currentOrg.pk
             ? currentOrg
             : undefined,
+        ...(gameType != null ? { gameType } : {}),
       };
     }
     return { kind: 'global' };
   }, [
+    gameType,
     ctx?.organizationId,
     ctx?.leagueId,
     currentOrg?.pk,
@@ -98,20 +113,27 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
       ? editScope.organization.pk
       : editScope.kind === 'league'
         ? (editScope.organization?.pk ?? editScope.league.organization?.pk)
-        : undefined;
+        : (ctx?.organizationId ?? organizationId);
   const orgEntry =
     cachedUserEntry && isUserEntry(cachedUserEntry) && orgLookupPk != null
       ? cachedUserEntry.orgData[orgLookupPk]
       : undefined;
+  const orgEntryMmr = gameType != null ? orgEntry?.mmrs[gameType] : undefined;
 
   const editUser = React.useMemo(() => {
     const base = (fullUserData || player) as UserType;
     const merged =
       orgEntry !== undefined
-        ? { ...base, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
+        ? {
+            ...base,
+            orgUserPk: orgEntry.id,
+            ...(gameType != null
+              ? { mmr: orgEntryMmr, mmr_game_type: gameType }
+              : {}),
+          }
         : base;
     return new User(merged);
-  }, [fullUserData, player, orgEntry?.id, orgEntry?.mmr]);
+  }, [fullUserData, player, orgEntry?.id, orgEntryMmr, gameType]);
 
   // Can claim if: target HAS steam_account_id (manually added profile with steam identifier),
   // target has NO discordId (can't log in), and current user HAS discordId (can log in).
@@ -149,6 +171,20 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
 
   const displayPlayer = fullUserData || player;
   const playerName = DisplayName(displayPlayer);
+
+  // Context game: that game only. Org scope: every game the cache received.
+  const mmrLines: [GameTypeValue, number][] = (() => {
+    if (orgEntry) {
+      const games = gameType != null ? [gameType] : GAME_TYPES;
+      return games.flatMap((g) => {
+        const v = orgEntry.mmrs[g];
+        return v === undefined ? [] : [[g, v] as [GameTypeValue, number]];
+      });
+    }
+    const flatGame = toGameType(player.mmr_game_type ?? gameType);
+    if (!player.mmr || (gameType != null && flatGame !== gameType)) return [];
+    return [[flatGame, player.mmr]];
+  })();
 
   const handleViewFullProfile = () => {
     if (displayPlayer.pk) {
@@ -245,11 +281,12 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
               {displayPlayer.nickname}
             </div>
           )}
-          {displayPlayer.mmr && (
-            <div>
-              <span className="font-semibold">MMR:</span> {displayPlayer.mmr}
+          {mmrLines.map(([g, value]) => (
+            <div key={g} data-testid={`player-modal-org-mmr-${GAME_SLUG[g]}`}>
+              <span className="font-semibold">{GAME_LABEL[g]} org MMR:</span>{' '}
+              {value || '\u2014'}
             </div>
-          )}
+          ))}
           {/* Positions - pt-1 pl-1 accommodates the absolute positioned rank badges */}
           <div className="pt-1 pl-1">
             <RolePositions user={displayPlayer} />
