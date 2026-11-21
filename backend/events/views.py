@@ -8,15 +8,12 @@ from django.core.exceptions import FieldDoesNotExist
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models, transaction
 from django.db.models import (
-    BooleanField,
     Count,
-    Exists,
     F,
-    OuterRef,
+    Min,
     Prefetch,
     Q,
     QuerySet,
-    Value,
 )
 from django.db.models.functions import Abs, Coalesce, Now
 from django.http import QueryDict
@@ -288,30 +285,24 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     def get_queryset(self) -> QuerySet[EventRepeater]:
-        from django.db.models import Min
-
-        qs = EventRepeater.objects.select_related(
-            "organization", "tournament_league", "created_by"
-        ).annotate(
-            subscriber_count=Count("subscriptions"),
-            next_event_date=Min(
-                "events__scheduled_at",
-                filter=Q(
-                    events__state__in=[EventState.UPCOMING, EventState.SIGNUPS_OPEN]
+        # cacheops can't see the select_related org join; the views' cached_as
+        # blocks do the caching.
+        qs = (
+            EventRepeater.objects.nocache()
+            .select_related("organization", "tournament_league", "created_by")
+            .annotate(
+                subscriber_count=Count("subscriptions"),
+                next_event_date=Min(
+                    "events__scheduled_at",
+                    filter=Q(
+                        events__state__in=[
+                            EventState.UPCOMING,
+                            EventState.SIGNUPS_OPEN,
+                        ]
+                    ),
                 ),
-            ),
-        )
-        if self.request.user.is_authenticated:
-            qs = qs.annotate(
-                is_subscribed=Exists(
-                    RepeaterSubscription.objects.filter(
-                        event_repeater=OuterRef("pk"),
-                        user=self.request.user,
-                    )
-                )
             )
-        else:
-            qs = qs.annotate(is_subscribed=Value(False, output_field=BooleanField()))
+        )
         org_id = self.request.query_params.get("organization")
         if org_id:
             qs = qs.filter(organization_id=org_id)
@@ -325,7 +316,14 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"repeater_list:{request.get_full_path()}"
 
-        @cached_as(EventRepeater, Event, extra=cache_key, timeout=60 * 60)
+        @cached_as(
+            EventRepeater,
+            Event,
+            RepeaterSubscription,
+            Organization,
+            extra=cache_key,
+            timeout=60 * 60,
+        )
         def get_data() -> ReturnList:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
@@ -337,8 +335,12 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         pk = kwargs.get("pk")
         cache_key = f"repeater_detail:{pk}"
 
+        # The cached payload is shared by every user; is_subscribed is not.
         @cached_as(
             EventRepeater.objects.filter(pk=pk),
+            Event.objects.filter(event_repeater_id=pk),
+            RepeaterSubscription.objects.filter(event_repeater_id=pk),
+            Organization,
             keep_fresh=True,
             extra=cache_key,
             timeout=60 * 60,
@@ -347,7 +349,14 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             instance = self.get_object()
             return self.get_serializer(instance).data
 
-        return Response(get_data())
+        data = dict(get_data())
+        data["is_subscribed"] = (
+            request.user.is_authenticated
+            and RepeaterSubscription.objects.nocache()
+            .filter(event_repeater_id=data["id"], user=request.user)
+            .exists()
+        )
+        return Response(data)
 
     def perform_create(self, serializer: EventRepeaterSerializer) -> None:
         org = serializer.validated_data.get("organization")
