@@ -21,26 +21,37 @@ ranking is also served by the generic
 
 The organization page shows one tab per enabled standing track, so an org with
 Conduct unlocked has a **Conduct** tab next to **Contributions**. A track with more
-than one metric gets a metric switcher above its leaderboard.
+than one metric gets a metric switcher above its leaderboard. The tab is shown to
+anyone who can see the ranking or their own record; outsiders of an org with a
+private ranking get no tab, and a `?tab=conduct` link falls back to the default tab.
 
-- **Leaderboard.** Ranked members with rank, show rate and counted events, then a list
-  of new members (fewer than the minimum events). With **Public ranking** off, members
-  see only their own row and a note that the org keeps its ranking private.
-- **Member history.** Selecting a row (or your own row) opens that member's history:
-  each event with its outcome, source and weight, plus totals. Staff also see reasons
-  and who made an edit.
-- **Show rate explained.** The info button next to the ranking explains how the rate
-  is built: what counts as a show or a miss, what is left out, how older events weigh
-  less, and why new members lean on the org's baseline.
+- **Leaderboard.** Ranked members with rank, show rate and counted events. Members
+  with fewer than the minimum counted events show **New** instead of a rate and are
+  not numbered. Members with the same rate and event count share a rank.
+- **Private ranking.** With **Public ranking** off, members see the note "This
+  organization keeps its Conduct ranking private." and only their own row and history.
+- **Member history.** Your own history opens with the tab: each event with its
+  outcome, source and weight, plus totals per outcome. A new member's history says
+  why they show as New. Plain members open only their own history; org staff can open
+  any member's, and also see reasons and who made an edit.
+- **How the show rate works.** The info button next to the ranking explains how the
+  rate is built: what counts as a show or a miss, what is left out, how older events
+  weigh less, and why new members lean on the org's baseline. The formula below is the
+  reference.
 
 ### Conduct settings
 
-Org admins open **Organization Settings > Conduct**. The section holds the scoring
-parameters, the late-cancel window and weight, **Public ranking**, and the
-**Enforcement** group. Each field shows a **Default** badge or a **Reset** button. The
-three enforcement toggles are off by default and the group stays collapsed until one is
-on. Values are checked in the browser against the same ranges as the server; any error
-the server returns for a field is shown on that field and opens the section.
+Org admins open **Organization Settings > Conduct**; other roles do not see the
+section. It holds four groups: **Scoring**, **Late cancel** (window and weight),
+**Visibility** (**Public ranking**) and **Enforcement**. A field still at its default
+shows a **Default** badge; a changed one has a **Reset** button that puts the default
+back. The three enforcement toggles are off by default, and the group stays collapsed
+until one is on.
+
+Values are checked in the browser against the same ranges as the server (at most two
+decimal places, and the maximum age can't be shorter than the half-life). An error
+the server returns for a field is shown under that field and opens its group, even a
+collapsed Enforcement group; an error that belongs to no field is shown as a toast.
 
 ---
 
