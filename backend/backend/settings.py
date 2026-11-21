@@ -106,7 +106,13 @@ DEBUG = env_bool("DEBUG")
 
 # Concurrent test runs share one Redis and number their drafts from 1, so each
 # test process namespaces its channel groups, raw Redis keys and cache keys.
-RUNNING_TESTS: bool = sys.argv[1:2] == ["test"] or "pytest" in sys.modules
+# Subprocesses a test spawns inherit DF_RUNNING_TESTS: a `python -c` child would
+# otherwise run AppConfig.ready()'s FLUSHDB on the DB every parallel worker shares.
+RUNNING_TESTS: bool = (
+    sys.argv[1:2] == ["test"] or "pytest" in sys.modules or env_bool("DF_RUNNING_TESTS")
+)
+if RUNNING_TESTS:
+    os.environ["DF_RUNNING_TESTS"] = "true"
 
 
 def test_process_namespace() -> str:

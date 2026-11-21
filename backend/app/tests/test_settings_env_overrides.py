@@ -96,7 +96,10 @@ class SettingsEnvOverrideTests(SimpleTestCase):
 
     def test_slot_cookie_names_come_from_env(self) -> None:
         mod = _reload(
-            {"DF_SESSION_COOKIE_NAME": "sessionid-s4", "DF_CSRF_COOKIE_NAME": "csrftoken-s4"}
+            {
+                "DF_SESSION_COOKIE_NAME": "sessionid-s4",
+                "DF_CSRF_COOKIE_NAME": "csrftoken-s4",
+            }
         )
         self.assertEqual(mod.SESSION_COOKIE_NAME, "sessionid-s4")
         self.assertEqual(mod.CSRF_COOKIE_NAME, "csrftoken-s4")
@@ -144,7 +147,10 @@ class SettingsEnvOverrideTests(SimpleTestCase):
         self.assertEqual(mod.ALLOWED_HOSTS[-1], "draftforge-pr-1.preview.example.test")
         self.assertEqual(
             mod.CSRF_TRUSTED_ORIGINS,
-            [*DEFAULT_CSRF_TRUSTED_ORIGINS, "https://draftforge-pr-1.preview.example.test"],
+            [
+                *DEFAULT_CSRF_TRUSTED_ORIGINS,
+                "https://draftforge-pr-1.preview.example.test",
+            ],
         )
         self.assertEqual(
             mod.SECURE_PROXY_SSL_HEADER, ("HTTP_X_FORWARDED_PROTO", "https")
@@ -183,5 +189,5 @@ class TestRunnerPasswordHasherTests(SimpleTestCase):
                 sys.modules.pop("pytest", None)
                 # reload() re-executes into the old namespace; drop the stale value.
                 del backend.settings.PASSWORD_HASHERS
-                mod = _reload()
+                mod = _reload(remove=("DF_RUNNING_TESTS",))
         self.assertFalse(hasattr(mod, "PASSWORD_HASHERS"))

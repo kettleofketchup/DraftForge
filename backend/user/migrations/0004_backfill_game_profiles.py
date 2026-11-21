@@ -2,16 +2,6 @@ from django.db import migrations
 
 
 def backfill_game_profiles(apps, schema_editor):
-    # Defensive cache clear (mirrors T1 user/0002): django-redis hard-fails on
-    # Redis-down, unlike cacheops which degrades. Wrap so cold-start / broken-
-    # Redis CI doesn't fail the migration.
-    from django.core.cache import cache
-
-    try:
-        cache.clear()
-    except Exception:
-        pass
-
     CustomUser = apps.get_model("app", "CustomUser")
     BaseUserProfile = apps.get_model("user", "BaseUserProfile")
     DotaUserProfile = apps.get_model("user", "DotaUserProfile")
