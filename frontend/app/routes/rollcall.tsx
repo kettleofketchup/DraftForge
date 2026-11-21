@@ -51,7 +51,7 @@ import {
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
 import { canRestoreSignup } from '~/components/events/signupPartitions';
-import { toGameType } from '~/components/game/constants';
+import { type GameTypeValue, toGameType } from '~/components/game/constants';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -290,6 +290,7 @@ export default function RollCallPage() {
       userMap={userMap}
       isAdmin={isAdmin}
       leaguePk={event.tournament_league ?? null}
+      gameType={toGameType(event.game_type)}
       pending={pendingIds.has(signup.id)}
       focused={isAdmin && signup.id === activeId}
       onSelect={setFocusedId}
@@ -445,9 +446,9 @@ export default function RollCallPage() {
         )}
       </div>
 
-      {/* MMR approval modal — opens for Dota2 events so previously-approved MMR is shown */}
       <MmrApprovalModal
         signup={approvalSignup}
+        gameType={toGameType(event?.game_type)}
         open={!!approvalSignup}
         onOpenChange={(open) => {
           if (!open) setApprovalSignup(null);
@@ -652,6 +653,7 @@ const SignupStrip = memo(function SignupStrip({
   userMap,
   isAdmin,
   leaguePk,
+  gameType,
   pending,
   focused,
   onSelect,
@@ -665,6 +667,7 @@ const SignupStrip = memo(function SignupStrip({
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
   leaguePk: number | null;
+  gameType: GameTypeValue;
   pending: boolean;
   focused: boolean;
   onSelect: (id: number) => void;
@@ -791,6 +794,7 @@ const SignupStrip = memo(function SignupStrip({
           compact
           showPositions
           organizationId={signup.organization ?? undefined}
+          gameType={gameType}
           statsLeagueId={leaguePk}
           statsBreakpoint="wide"
           contextSlot={statusBadge}

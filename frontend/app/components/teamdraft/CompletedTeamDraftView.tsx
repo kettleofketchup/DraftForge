@@ -1,6 +1,7 @@
 // frontend/app/components/teamdraft/CompletedTeamDraftView.tsx
 import { Trophy, Users } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
+import type { GameTypeValue } from '~/components/game/constants';
 import { LeadershipProblemBadge } from '~/components/team/manage/LeadershipProblemBadge';
 import {
   isUnresolvedLogUser,
@@ -26,6 +27,7 @@ import type { DraftRoundType } from './types';
 
 interface CompletedTeamDraftViewProps {
   teams: TeamType[];
+  gameType: GameTypeValue;
   organizationId?: number;
   leaguePk: number | null;
   rounds?: DraftRoundType[];
@@ -34,6 +36,7 @@ interface CompletedTeamDraftViewProps {
 interface TeamCardProps {
   team: TeamType;
   rank: number;
+  gameType: GameTypeValue;
   organizationId?: number;
   leaguePk: number | null;
   rounds?: DraftRoundType[];
@@ -64,11 +67,13 @@ function resolveRosterUser(
 function RosterExtraRow({
   entry,
   status,
+  gameType,
   organizationId,
   leaguePk,
 }: {
   entry: ResolvedRosterUser;
   status: Extract<RosterStatus, 'standin' | 'dropout'>;
+  gameType: GameTypeValue;
   organizationId?: number;
   leaguePk: number | null;
 }) {
@@ -95,6 +100,7 @@ function RosterExtraRow({
       compact
       showBorder={false}
       organizationId={organizationId}
+      gameType={gameType}
       statsLeagueId={leaguePk}
       className={cn('bg-base-700/30 hover:bg-base-700/50', muted)}
       contextSlot={badge}
@@ -111,6 +117,7 @@ function TeamMembersList({
   standins,
   dropouts,
   tournamentUsers,
+  gameType,
   organizationId,
   leaguePk,
   rounds,
@@ -121,6 +128,7 @@ function TeamMembersList({
   standins?: UserType[] | null;
   dropouts?: UserType[] | null;
   tournamentUsers?: readonly UserType[] | null;
+  gameType: GameTypeValue;
   organizationId?: number;
   leaguePk: number | null;
   rounds?: DraftRoundType[];
@@ -153,6 +161,7 @@ function TeamMembersList({
             compact
             showBorder={false}
             organizationId={organizationId}
+            gameType={gameType}
             statsLeagueId={leaguePk}
             className="bg-base-700/30 hover:bg-base-700/50"
             data-testid={`team-card-member-${member.pk}`}
@@ -199,6 +208,7 @@ function TeamMembersList({
           key={`standin-${entry.pk}`}
           entry={entry}
           status="standin"
+          gameType={gameType}
           organizationId={organizationId}
           leaguePk={leaguePk}
         />
@@ -208,6 +218,7 @@ function TeamMembersList({
           key={`dropout-${entry.pk}`}
           entry={entry}
           status="dropout"
+          gameType={gameType}
           organizationId={organizationId}
           leaguePk={leaguePk}
         />
@@ -219,6 +230,7 @@ function TeamMembersList({
 function TeamCard({
   team,
   rank,
+  gameType,
   organizationId,
   leaguePk,
   rounds,
@@ -359,6 +371,7 @@ function TeamCard({
                   standins={team.dropin_members}
                   dropouts={team.left_members}
                   tournamentUsers={tournamentUsers}
+                  gameType={gameType}
                   organizationId={organizationId}
                   leaguePk={leaguePk}
                   rounds={rounds}
@@ -373,6 +386,7 @@ function TeamCard({
               standins={team.dropin_members}
               dropouts={team.left_members}
               tournamentUsers={tournamentUsers}
+              gameType={gameType}
               organizationId={organizationId}
               leaguePk={leaguePk}
               rounds={rounds}
@@ -389,6 +403,7 @@ export { TeamCard, TeamMembersList };
 
 export function CompletedTeamDraftView({
   teams,
+  gameType,
   organizationId,
   leaguePk,
   rounds,
@@ -438,6 +453,7 @@ export function CompletedTeamDraftView({
             key={team.pk}
             team={team}
             rank={index + 1}
+            gameType={gameType}
             organizationId={organizationId}
             leaguePk={leaguePk}
             rounds={rounds}

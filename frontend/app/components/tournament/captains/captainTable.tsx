@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { toGameType } from '~/components/game/constants';
 import { PlayerPopover } from '~/components/player';
 import {
   Table,
@@ -127,6 +128,7 @@ const CaptainStripRow: React.FC<CaptainStripRowProps> = ({
       compact
       showPositions={false}
       nameMaxLength={12}
+      gameType={toGameType(tournament?.game_type)}
       statsLeagueId={tournament?.league_pk ?? null}
       data-testid={`captain-row-${user.pk}`}
       actionSlot={

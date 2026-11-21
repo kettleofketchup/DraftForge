@@ -1,6 +1,8 @@
 import { memo, useMemo } from 'react';
 import {
-  DEFAULT_GAME_TYPE,
+  GAME_LABEL,
+  GAME_SHORT_LABEL,
+  GAME_TYPE,
   type GameTypeValue,
 } from '~/components/game/constants';
 import { PlayerPopover } from '~/components/player';
@@ -38,8 +40,8 @@ export interface UserStripProps {
   /** Optional organization ID for context-specific stats in mini profile */
   organizationId?: number;
 
-  /** Game whose org MMR a cache entry shows; defaults to Dota 2. */
-  gameType?: GameTypeValue;
+  /** Game of the surface; picks and labels the org MMR badge. */
+  gameType: GameTypeValue;
 
   /** League pk for the ticket-match stats column; independent of the L: badge */
   statsLeagueId?: number | null;
@@ -59,7 +61,7 @@ export interface UserStripProps {
   /**
    * Show MMR badges (default true). Set false in contexts where MMR is
    * irrelevant (e.g. Discord DM history, claim approval lists). When true,
-   * the Base MMR badge still auto-hides when the value is 0/undefined and
+   * the org MMR badge still auto-hides when the value is 0/undefined and
    * the League MMR badge auto-hides when the value is 0/undefined.
    */
   showMmr?: boolean;
@@ -77,6 +79,11 @@ export interface UserStripProps {
 
   /** Test ID for the component */
   'data-testid'?: string;
+}
+
+// Dota keeps the legacy "B:" text that Playwright layout probes match on.
+function orgMmrPrefix(gameType: GameTypeValue): string {
+  return gameType === GAME_TYPE.DOTA2 ? 'B:' : `${GAME_SHORT_LABEL[gameType]}:`;
 }
 
 export const userStripPropsAreEqual = (
@@ -117,7 +124,7 @@ export const UserStrip = memo(
     actionSlot,
     leagueId,
     organizationId,
-    gameType = DEFAULT_GAME_TYPE,
+    gameType,
     statsLeagueId,
     statsBreakpoint = 'default',
     compact = false,
@@ -165,8 +172,9 @@ export const UserStrip = memo(
             <Badge
               variant="outline"
               className="px-1.5 py-0 text-xs font-mono cursor-help text-white"
+              data-testid="user-strip-org-mmr"
             >
-              <span>B:</span>
+              <span>{orgMmrPrefix(gameType)}</span>
               <span className="ml-0.5 inline-block min-w-[6ch] text-right">
                 {baseMmr}
               </span>
@@ -176,12 +184,13 @@ export const UserStrip = memo(
             side="top"
             className="text-xs bg-popover text-popover-foreground"
           >
-            <p className="font-semibold text-foreground">Base MMR</p>
-            <p className="text-muted-foreground">Dota 2 ranked MMR</p>
+            <p className="font-semibold text-foreground">
+              {GAME_LABEL[gameType]} org MMR
+            </p>
           </TooltipContent>
         </Tooltip>
       ),
-      [baseMmr],
+      [baseMmr, gameType],
     );
 
     const leagueMmrBadge = useMemo(

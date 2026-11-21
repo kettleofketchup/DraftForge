@@ -1,5 +1,6 @@
 import { Award, FileText, Users } from 'lucide-react';
 
+import { GAME_TYPE } from '~/components/game/constants';
 import { Badge } from '~/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { UserStrip } from '~/components/user/UserStrip';
@@ -75,6 +76,7 @@ export const InfoTab: React.FC<Props> = ({ league }) => {
                   compact
                   leagueId={league.pk}
                   organizationId={league.organization?.pk}
+                  gameType={GAME_TYPE.DOTA2}
                   actionSlot={
                     <Badge variant="secondary" className="text-xs">
                       Admin

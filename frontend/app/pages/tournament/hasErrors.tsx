@@ -2,6 +2,7 @@ import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
+  GAME_LABEL,
   GAME_TYPE,
   toGameType,
   type GameTypeValue,
@@ -121,7 +122,7 @@ export const hasErrors = () => {
       // Check org-scoped MMR from the entity cache
       const mmr = selectOrgMmr(cached, orgId, gameType);
       if (!mmr) {
-        userIssues.push('No MMR');
+        userIssues.push(`No ${GAME_LABEL[gameType]} MMR`);
       }
       if (!cached.steam_account_id) {
         userIssues.push('No Friend ID');
@@ -148,6 +149,7 @@ export const hasErrors = () => {
   }, [
     tournament?.users,
     tournament?.game_type,
+    gameType,
     entities,
     orgId,
     leagueId,

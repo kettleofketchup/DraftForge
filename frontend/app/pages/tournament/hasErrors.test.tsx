@@ -275,3 +275,52 @@ describe('hasErrors edit user carries the scope-gating link (finding 4)', () => 
     },
   );
 });
+
+describe('hasErrors per-game MMR issue', () => {
+  beforeEach(() => {
+    captured.length = 0;
+    useOrgStore.setState({ currentOrg: null });
+    useLeagueStore.setState({ currentLeague: null });
+  });
+
+  function seed(mmrs: Record<number, number>, game_type: number) {
+    useUserCacheStore.setState({
+      entities: {
+        10: { ...entry, orgData: { 8: { id: 77, mmrs, _fetchedAt: 0 } } },
+      },
+    } as never);
+    useUserStore.setState({
+      tournament: {
+        pk: 1,
+        organization_pk: 8,
+        league_pk: 8,
+        game_type,
+        users: [10],
+      },
+    } as never);
+  }
+
+  it('Deadlock tournament flags a Dota-only member as No Deadlock MMR', () => {
+    seed({ 1: 4000 }, 2);
+    const { getByTestId } = render(<Harness />);
+    const list = getByTestId('incomplete-profiles-list');
+    expect(list.textContent).toContain('No Deadlock MMR');
+    expect(list.textContent).not.toContain('No Dota 2 MMR');
+  });
+
+  it('Deadlock tournament member with a Deadlock value has no MMR issue', () => {
+    seed({ 1: 0, 2: 2500 }, 2);
+    const { getByTestId } = render(<Harness />);
+    expect(getByTestId('incomplete-profiles-list').textContent).not.toMatch(
+      /No .*MMR/,
+    );
+  });
+
+  it('Dota tournament labels the issue with Dota 2', () => {
+    seed({ 2: 2500 }, 1);
+    const { getByTestId } = render(<Harness />);
+    expect(getByTestId('incomplete-profiles-list').textContent).toContain(
+      'No Dota 2 MMR',
+    );
+  });
+});

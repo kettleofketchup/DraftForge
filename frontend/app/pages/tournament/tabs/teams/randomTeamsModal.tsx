@@ -1,5 +1,6 @@
 import { UsersRound } from 'lucide-react';
 import React, { useState } from 'react';
+import { type GameTypeValue, toGameType } from '~/components/game/constants';
 import { TeamCard } from '~/components/team/teamCard';
 import type { TeamType } from '~/components/tournament/types';
 import {
@@ -39,9 +40,10 @@ interface Props {
 
 interface TeamsViewProps {
   teams: TeamType[];
+  gameType: GameTypeValue;
 }
 
-const TeamsView: React.FC<TeamsViewProps> = ({ teams }) => (
+const TeamsView: React.FC<TeamsViewProps> = ({ teams, gameType }) => (
   <div
     className="flex grid grid-flow-row-dense
         align-middle content-center justify-center
@@ -51,6 +53,7 @@ const TeamsView: React.FC<TeamsViewProps> = ({ teams }) => (
     {teams.map((team, idx) => (
       <TeamCard
         team={team}
+        gameType={gameType}
         key={`team-${idx}-${team.name}`}
         edit={false}
         compact={true}
@@ -130,7 +133,11 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
             </SecondaryButton>
           </div>
           <div className="overflow-y-auto max-h-[70vh] pr-2">
-            <TeamsView teams={teams} key={`teams-${tournament.pk}`} />
+            <TeamsView
+              teams={teams}
+              gameType={toGameType(tournament?.game_type)}
+              key={`teams-${tournament.pk}`}
+            />
           </div>
         </ScrollArea>
         <DialogFooter>

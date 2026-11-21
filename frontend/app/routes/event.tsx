@@ -91,6 +91,7 @@ import {
   isRemovedSignup,
   partitionSignups,
 } from '~/components/events/signupPartitions';
+import { signupRowMmr } from '~/components/events/signupRowMmr';
 import { rollCallSummary } from '~/components/events/signupRules';
 import {
   signupHoldReason,
@@ -150,9 +151,7 @@ import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { useGameTypeStore } from '~/store/gameTypeStore';
 import { useOrgStore } from '~/store/orgStore';
-import { selectOrgMmr } from '~/store/selectOrgMmr';
 import { useUserCacheStore } from '~/store/userCacheStore';
-import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('EventPage');
@@ -713,6 +712,7 @@ export default function EventPage() {
               eventId={event.id}
               isAdmin={isAdmin}
               eventTimezone={event.timezone}
+              gameType={toGameType(event.game_type)}
             />
           </TabsContent>
         </Tabs>
@@ -1198,18 +1198,15 @@ function SignupsTab({
           );
 
           if (user) {
-            // Prefer the org-approved MMR for the event's game via the user
-            // entity adapter over self-reported dota_profile.mmr.
-            // Fall back to signup.org_user_mmr from the API if the cache is cold.
             const baseProfile = signup.dota_profile as DotaProfileData | null;
-            const orgMmr =
-              (isUserEntry(user)
-                ? selectOrgMmr(user, orgId, toGameType(gameType))
-                : undefined) ??
-              signup.org_user_mmr ??
-              null;
+            const orgMmr = signupRowMmr(
+              user,
+              signup,
+              orgId,
+              toGameType(gameType),
+            );
             const stripProfile = baseProfile
-              ? { ...baseProfile, mmr: orgMmr ?? baseProfile.mmr }
+              ? { ...baseProfile, mmr: orgMmr }
               : orgMmr != null
                 ? ({
                     unverified_friend_id: null,
@@ -1262,6 +1259,7 @@ function SignupsTab({
       </div>
       <MmrApprovalModal
         signup={approvalSignup}
+        gameType={toGameType(gameType)}
         open={!!approvalSignup}
         onOpenChange={(open) => {
           if (!open) setApprovalSignup(null);
