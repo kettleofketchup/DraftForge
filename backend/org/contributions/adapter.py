@@ -20,7 +20,6 @@ from org.contributions.services import (
 )
 from org.feature_keys import FeatureKey
 from org.models import OrgUser
-from org.permissions import can_view_org_members
 from org.standing import ledger
 from org.standing.base import TrackBase
 from org.standing.periods import Period
