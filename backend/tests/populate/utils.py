@@ -18,6 +18,7 @@ from django.db.models import Q
 from app.models import CustomUser, Organization, PositionsModel
 from org.models import ContributionEntry, OrgUser, PromoSend
 
+from .avatars import apply_committed_avatars
 from .constants import (
     BRACKET_STEAM_ID_BASE,
     BRACKET_USER_COUNT,
@@ -325,6 +326,7 @@ def get_or_create_demo_user(username, user_data, organization=None):
     if organization:
         ensure_org_user(user, organization, mmr=mmr)
 
+    apply_committed_avatars([user])
     return user
 
 
@@ -356,8 +358,13 @@ def _get_discord_avatar_cache() -> dict[str, str]:
     return _discord_avatar_cache
 
 
-def fetch_discord_avatars_for_users(users):
-    """Update avatars for users using cached bulk guild member data."""
+def fetch_discord_avatars_for_users(users: Iterable[CustomUser]) -> None:
+    """Apply committed avatars, then any newer ones from the live guild fetch.
+
+    The live fetch only sets non-empty hashes, so it never wipes a committed one.
+    """
+    users = list(users)
+    apply_committed_avatars(users)
     avatar_map = _get_discord_avatar_cache()
     if not avatar_map:
         return
