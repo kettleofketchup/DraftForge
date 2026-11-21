@@ -244,12 +244,12 @@ Other branches often add the next migration number to the source app. Right befo
 **Clean rollback.** Run this before redeploying old code. Each step is state-only or a ContentType relabel, with no DDL:
 
 ```bash
-python manage.py migrate app 0106
+python manage.py migrate app 0107
 python manage.py migrate discordbot 0012
 python manage.py migrate draft zero
 ```
 
-Use the slice's own migration names.
+Use the slice's own migration names. For the hero draft slice this is no longer DDL-free: `draft zero` also unapplies `draft/0002_herodraftchat`, which drops the hero draft chat tables.
 
 These commands run with the new code, so each `migrate` fires `post_migrate`, which re-creates `(<new_app>, <model>)` ContentTypes and their permissions next to the relabelled `(<source_app>, <model>)` rows. The new rows hold no grants and no admin log entries. Delete them once the old code is running, before any later forward migrate. If you skip this, the next deploy's relabel finds the destination rows already there and skips them (`contenttype_relabel_skipped`), and every existing grant stays on the stale `<source_app>` rows. Delete only the slice's moved models, by name:
 
@@ -262,9 +262,9 @@ For the hero draft slice that is `app_label='draft', model__in=['herodraft', 'dr
 For the team draft slice, the clean rollback is:
 
 ```bash
-python manage.py migrate app 0107
+python manage.py migrate app 0108
 python manage.py migrate discordbot 0013
-python manage.py migrate draft 0001
+python manage.py migrate draft 0003
 python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='draft', model__in=['draft', 'draftround', 'draftevent', 'draftoptions']).delete()"
 ```
 

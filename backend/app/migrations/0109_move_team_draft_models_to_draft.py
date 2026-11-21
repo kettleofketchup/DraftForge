@@ -39,7 +39,7 @@ class Migration(migrations.Migration):
         ("app", "0108_move_hero_draft_models_to_draft"),
         ("contenttypes", "0002_remove_content_type_name"),
         ("discordbot", "0014_retarget_draft_activity_teamdraft"),
-        ("draft", "0002_move_team_draft_models"),
+        ("draft", "0004_move_team_draft_models"),
         ("events", "0024_backfill_event_draft_options"),
     ]
 

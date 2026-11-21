@@ -20,7 +20,7 @@ DISCORDBOT_TABLES = (
 BEFORE_MOVE = [
     ("app", "0108_move_hero_draft_models_to_draft"),
     ("discordbot", "0013_retarget_draft_activity_herodraft"),
-    ("draft", "0001_move_hero_draft_models"),
+    ("draft", "0003_backfill_herodraft_chat_memberships"),
 ]
 MOVE_MIGRATION = ("app", "0109_move_team_draft_models_to_draft")
 EVENTS_BACKFILL = ("events", "0024_backfill_event_draft_options")

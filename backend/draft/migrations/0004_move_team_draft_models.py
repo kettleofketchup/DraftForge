@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("draft", "0001_move_hero_draft_models"),
+        ("draft", "0003_backfill_herodraft_chat_memberships"),
         ("app", "0108_move_hero_draft_models_to_draft"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

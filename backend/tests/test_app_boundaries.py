@@ -164,10 +164,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"repoint_chat_attribution"}),
             "Discord account merge repoints hero draft chat authorship",
         ),
-        "app/services/draft_reset.py": BackEdge(
-            frozenset({"delete_team_chat"}),
-            "tournament team reset wipes the reset teams' live hero draft chat",
-        ),
         "app/models.py": BackEdge(
             frozenset({"DraftOptions"}),
             "TYPE_CHECKING-only return annotation for Tournament.get_draft_options",

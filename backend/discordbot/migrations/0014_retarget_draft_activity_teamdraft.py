@@ -5,7 +5,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("discordbot", "0013_retarget_draft_activity_herodraft"),
-        ("draft", "0002_move_team_draft_models"),
+        ("draft", "0004_move_team_draft_models"),
     ]
 
     operations = [
