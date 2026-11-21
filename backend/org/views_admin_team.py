@@ -73,7 +73,6 @@ def add_org_admin(request: Request, org_id: int) -> Response:
     OrgUser.objects.get_or_create(user=user, organization=org)
     invalidate_obj(org)
 
-    # Log the action
     OrgLog.objects.create(
         organization=org,
         actor=request.user,
@@ -114,7 +113,6 @@ def remove_org_admin(request: Request, org_id: int, user_id: int) -> Response:
     org.admins.remove(user)
     invalidate_obj(org)
 
-    # Log the action
     OrgLog.objects.create(
         organization=org,
         actor=request.user,
@@ -162,7 +160,6 @@ def add_org_staff(request: Request, org_id: int) -> Response:
     OrgUser.objects.get_or_create(user=user, organization=org)
     invalidate_obj(org)
 
-    # Log the action
     OrgLog.objects.create(
         organization=org,
         actor=request.user,
@@ -202,7 +199,6 @@ def remove_org_staff(request: Request, org_id: int, user_id: int) -> Response:
     org.staff.remove(user)
     invalidate_obj(org)
 
-    # Log the action
     OrgLog.objects.create(
         organization=org,
         actor=request.user,
@@ -259,7 +255,6 @@ def transfer_org_ownership(request: Request, org_id: int) -> Response:
 
     old_owner = org.owner
 
-    # Transfer ownership
     org.owner = new_owner
     org.save(update_fields=["owner"])
 
@@ -272,7 +267,6 @@ def transfer_org_ownership(request: Request, org_id: int) -> Response:
 
     invalidate_obj(org)
 
-    # Log the action
     OrgLog.objects.create(
         organization=org,
         actor=request.user,
