@@ -318,6 +318,32 @@ describe('ConductSection', () => {
     expect(patchConductSettings).not.toHaveBeenCalled();
   });
 
+  it('rejects a threshold with three decimals before calling the API', async () => {
+    await loaded();
+    fireEvent.click(screen.getByTestId('conduct-settings-enforcement-toggle'));
+    fireEvent.change(await screen.findByTestId('conduct-setting-block_below'), {
+      target: { value: '0.405' },
+    });
+    expect(await save()).toBe(false);
+    expect(
+      await screen.findByText('At most two decimal places'),
+    ).toBeInTheDocument();
+    expect(patchConductSettings).not.toHaveBeenCalled();
+  });
+
+  it('defaults show every enforcement toggle off', async () => {
+    await loaded();
+    fireEvent.click(screen.getByTestId('conduct-settings-enforcement-toggle'));
+    for (const field of [
+      'back_of_line_enabled',
+      'require_approval_enabled',
+      'block_enabled',
+    ]) {
+      const toggle = await screen.findByTestId(`conduct-setting-${field}`);
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
+    }
+  });
+
   it('does not load settings without manage access', async () => {
     vi.mocked(fetchOrganization).mockResolvedValue({
       ...ORG,

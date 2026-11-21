@@ -10,6 +10,7 @@ export const UNMET_CODES = [
   'rank_screenshot_missing',
   'battlecup_screenshot_missing',
   'below_min_mmr',
+  'conduct_below_threshold',
 ] as const;
 
 export type UnmetCode = (typeof UNMET_CODES)[number];
@@ -23,6 +24,7 @@ export const UNMET_REQUIREMENT_LABELS: Record<UnmetCode, string> = {
   rank_screenshot_missing: 'Rank screenshot missing',
   battlecup_screenshot_missing: 'Battle Cup screenshot missing',
   below_min_mmr: 'Below minimum MMR',
+  conduct_below_threshold: 'Attendance record below org threshold',
 };
 
 function isUnmetCode(code: string): code is UnmetCode {
