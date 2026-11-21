@@ -99,6 +99,7 @@ SCAN_TARGETS = [
     REPO_ROOT / "backend" / "draft" / "views" / "team_setup.py",
     REPO_ROOT / "backend" / "draft" / "views" / "team_api.py",
     REPO_ROOT / "backend" / "events" / "views.py",
+    REPO_ROOT / "backend" / "league" / "views.py",
     REPO_ROOT / "backend" / "org" / "views_organization.py",
 ]
 

@@ -335,11 +335,11 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "org_mmr_map",
                 }
             ),
-            "tournament and league user serializers auto-create OrgUser rows and "
-            "embed the context game's org MMR via org.mmr and OrgUserSerializer; "
-            "OrganizationsSerializer, "
-            "LeagueSerializer.organization_id and UserSerializer."
-            "default_organization read Organization at class definition",
+            "tournament, team and draft user serializers auto-create OrgUser rows "
+            "and embed the context game's org MMR via org.mmr and "
+            "OrgUserSerializer; OrganizationsSerializer and "
+            "UserSerializer.default_organization read Organization at class "
+            "definition",
         ),
         "app/services/team_leadership.py": BackEdge(
             frozenset({"OrgUser", "OrgUserGameMmr", "game_for_tournament"}),
@@ -363,19 +363,15 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset(
                 {
                     "OrgUser",
-                    "LEAGUE_GAME",
                     "Organization",
-                    "has_org_admin_access",
                     "has_org_staff_access",
-                    "member_nick",
-                    "org_mmr_for",
                     "resolve_member_user",
                     "user_name_q",
                 }
             ),
-            "user search scopes by Organization, and league/tournament member "
-            "adds use org roles, the org guild member cache and OrgUser; leaves "
-            "with the league and tournament slices",
+            "user search scopes by Organization, checks org staff and reports org "
+            "membership; tournament member adds resolve the user against the "
+            "league org's guild members; leaves with the tournament slice",
         ),
         "app/views/csv_import.py": BackEdge(
             frozenset(
@@ -407,7 +403,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "Organization",
                     "api",
                     "has_org_staff_access",
-                    "member_access",
                     "member_organization_ids",
                     "not_permitted",
                     "release_earning_sends",
@@ -416,9 +411,8 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             ),
             "UserView org-staff checks, profile claims and deletion standing; "
             "TeamView feature errors and team log scope; current_user and "
-            "tournament list membership ids; LeagueView member flag and org "
-            "checks; tournament list, home stats and scope checks read "
-            "Organization",
+            "tournament list membership ids; tournament list, home stats and "
+            "scope checks read Organization",
         ),
     },
 }
