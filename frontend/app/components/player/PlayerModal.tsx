@@ -15,10 +15,12 @@ import { useSharedPopover } from '~/components/ui/shared-popover-context';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
+import { hasAnyPosition } from '~/components/user/positions/hasAnyPosition';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
 import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
+import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
@@ -149,6 +151,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
 
   const displayPlayer = fullUserData || player;
   const playerName = DisplayName(displayPlayer);
+  // Same resolution RolePositions uses, so the wrapper hides exactly when it renders nothing.
+  const positions =
+    usePlayerPositions(displayPlayer.pk ?? -1) ?? displayPlayer.positions;
 
   const handleViewFullProfile = () => {
     if (displayPlayer.pk) {
@@ -251,9 +256,11 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
             </div>
           )}
           {/* Positions - pt-1 pl-1 accommodates the absolute positioned rank badges */}
-          <div className="pt-1 pl-1">
-            <RolePositions user={displayPlayer} />
-          </div>
+          {hasAnyPosition(positions) && (
+            <div className="pt-1 pl-1" data-testid="player-modal-positions">
+              <RolePositions user={displayPlayer} />
+            </div>
+          )}
           {displayPlayer.steam_account_id && (
             <div>
               <span className="font-semibold">Friend ID:</span>{' '}

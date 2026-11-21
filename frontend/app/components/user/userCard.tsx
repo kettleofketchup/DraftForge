@@ -24,10 +24,10 @@ import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemove
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
-import type { PositionsType } from '~/store/userCacheTypes';
 import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 import { RolePositions } from './positions';
+import { hasAnyPosition } from './positions/hasAnyPosition';
 import { UserRemoveButton } from './userCard/deleteButton';
 import UserEditModal from './userCard/editModal';
 import {
@@ -37,17 +37,6 @@ import {
 } from './userCard/editUserSchema';
 import { LoginAsUserButton } from './userCard/LoginAsUserButton';
 
-/** Returns true if the user has rated any role > 0. */
-function hasAnyPosition(p: PositionsType | undefined): boolean {
-  if (!p) return false;
-  return (
-    (p.carry ?? 0) > 0 ||
-    (p.mid ?? 0) > 0 ||
-    (p.offlane ?? 0) > 0 ||
-    (p.soft_support ?? 0) > 0 ||
-    (p.hard_support ?? 0) > 0
-  );
-}
 const log = getLogger('UserCard');
 
 interface Props {
