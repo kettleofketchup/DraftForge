@@ -46,7 +46,7 @@ class Organization(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="owned_organizations",
-        null=True,  # Nullable initially for migration, will be required
+        null=True,
         blank=True,
     )
     admins = models.ManyToManyField(
