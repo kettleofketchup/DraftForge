@@ -9,6 +9,7 @@ from events.constants import Commitment
 from events.models import Event
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
+from org.standing.cache import StandingCache
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +25,7 @@ class EvalContext:
     actor: CustomUser | None = None
     discord_role_ids: frozenset[str] = frozenset()
     for_staff_placement: bool = False
+    standing_cache: StandingCache | None = None
 
     @classmethod
     def load(
@@ -36,6 +38,7 @@ class EvalContext:
         actor: CustomUser | None = None,
         discord_role_ids: Collection[str] | None = None,
         for_staff_placement: bool = False,
+        standing_cache: StandingCache | None = None,
     ) -> EvalContext:
         return cls(
             event=event,
@@ -46,6 +49,7 @@ class EvalContext:
             actor=actor,
             discord_role_ids=frozenset(discord_role_ids or ()),
             for_staff_placement=for_staff_placement,
+            standing_cache=standing_cache,
         )
 
     @property

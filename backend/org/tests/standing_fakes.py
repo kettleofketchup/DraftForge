@@ -1,4 +1,4 @@
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, override
@@ -24,6 +24,7 @@ from org.standing.types import (
     OutputKeys,
     TrackAccess,
     TrackOutput,
+    ViewerRoles,
 )
 
 FAKE_POINTS = Metric(
@@ -70,6 +71,9 @@ class FakeTrack(TrackBase):
         self.raise_on: set[str] = set()
         self.order_fn: Callable[[Sequence[Any]], list[Any]] | None = None
         self.track_access = TrackAccess(can_view_rows=True, can_view_own=True)
+        self.standing_block: Callable[[OrgUser], Mapping[str, object] | None] = (
+            lambda ou: {"org_user_id": ou.pk}
+        )
         self.board_rows: tuple[LeaderboardRow, ...] = (
             LeaderboardRow(
                 org_user_id=1,
@@ -184,9 +188,24 @@ class FakeTrack(TrackBase):
 
     @override
     def access(
-        self, org_id: int, *, viewer: CustomUser | AnonymousUser | None
+        self,
+        org_id: int,
+        *,
+        viewer: CustomUser | AnonymousUser | None,
+        roles: ViewerRoles,
     ) -> TrackAccess:
         return self.track_access
+
+    @override
+    def member_standing(
+        self,
+        org_user: OrgUser,
+        *,
+        viewer: CustomUser | AnonymousUser | None,
+        roles: ViewerRoles,
+        now: datetime,
+    ) -> Mapping[str, object] | None:
+        return self.standing_block(org_user)
 
     @override
     def leaderboard(

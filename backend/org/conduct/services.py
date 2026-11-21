@@ -1,0 +1,352 @@
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from datetime import datetime
+
+from django.db import transaction
+from django.utils import timezone
+
+from app.cache_utils import invalidate_after_commit
+from app.models import CustomUser, Organization, OrgLog
+from events.capacity import lock_event
+from events.constants import EventState, SignupStatus
+from events.models import Event, EventSignup
+from org.conduct.constants import (
+    EDITABLE_STATES,
+    REASON_MAX_LENGTH,
+    REASON_MIN_LENGTH,
+    STAFF_SETTABLE,
+    Outcome,
+    OutcomeSource,
+    expected_statuses,
+)
+from org.conduct.gate import ConductGate, conduct_gate, get_conduct_settings
+from org.models import OrgUser
+from org.models_conduct import AttendanceOutcome, OrgConductSettings
+from org.standing import restamp
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
+
+EDITABLE_SETTINGS_FIELDS: tuple[str, ...] = (
+    "late_cancel_hours",
+    "late_cancel_weight",
+    "half_life_days",
+    "max_age_days",
+    "prior_show_rate",
+    "prior_strength",
+    "min_events",
+    "leaderboard_public",
+    "back_of_line_enabled",
+    "back_of_line_below",
+    "require_approval_enabled",
+    "require_approval_below",
+    "block_enabled",
+    "block_below",
+    "enforce_on_new_members",
+)
+
+TIER_INPUT_FIELDS: frozenset[str] = frozenset(EDITABLE_SETTINGS_FIELDS) - {
+    "leaderboard_public"
+}
+
+
+@dataclass(frozen=True)
+class SetResult:
+    changed: int
+    unchanged: int
+
+
+@dataclass(frozen=True)
+class _Planned:
+    org_user: OrgUser
+    outcome: Outcome
+    row: AttendanceOutcome | None
+    signup: EventSignup | None
+
+
+def refresh_unmet_on_commit(gate: ConductGate, org_users: Iterable[OrgUser]) -> None:
+    settings = gate.settings
+    if settings is None or not (
+        settings.require_approval_enabled or settings.block_enabled
+    ):
+        return
+    restamp.member_on_commit(org_users)
+
+
+def refresh_org_unmet_on_commit(org_id: int) -> None:
+    """Re-derive stored conduct reasons on the org's open signups once the
+    settings or the feature switch commit (clears them when turned off)."""
+    restamp.org_on_commit(org_id)
+
+
+def _validate_request(
+    gate: ConductGate, changes: list[tuple[OrgUser, Outcome]], reason: str
+) -> str:
+    if not gate.feature_on:
+        raise ValueError("Conduct is not enabled for this organization.")
+    cleaned = reason.strip()
+    if len(cleaned) < REASON_MIN_LENGTH:
+        raise ValueError(f"Reason must be at least {REASON_MIN_LENGTH} characters.")
+    if len(cleaned) > REASON_MAX_LENGTH:
+        raise ValueError(f"Reason must be at most {REASON_MAX_LENGTH} characters.")
+    if not changes:
+        raise ValueError("No attendance changes were given.")
+    seen: set[int] = set()
+    for org_user, outcome in changes:
+        if org_user.pk in seen:
+            raise ValueError("A member appears more than once in the changes.")
+        seen.add(org_user.pk)
+        if org_user.organization_id != gate.org_id:
+            raise ValueError("A member is not part of this organization.")
+        if outcome not in STAFF_SETTABLE:
+            raise ValueError(f"Outcome {outcome!r} cannot be set by staff.")
+    return cleaned
+
+
+def edit_block_reason(event: Event) -> str | None:
+    if event.state == EventState.CANCELLED:
+        return "This event was cancelled. Reopen and complete it to record attendance."
+    if event.state == EventState.COMPLETED:
+        if event.conduct_finalized_at is None:
+            return "Attendance was not tracked for this event."
+        return None
+    if event.state not in EDITABLE_STATES:
+        return "Attendance can only be recorded from roll call onwards."
+    return None
+
+
+def _validate_state(locked: Event) -> None:
+    reason = edit_block_reason(locked)
+    if reason is not None:
+        raise ValueError(reason)
+
+
+def _plan(locked: Event, changes: list[tuple[OrgUser, Outcome]]) -> list[_Planned]:
+    org_user_ids = [org_user.pk for org_user, _ in changes]
+    user_ids = [org_user.user_id for org_user, _ in changes]
+    rows = {
+        row.org_user_id: row
+        for row in AttendanceOutcome.objects.nocache().filter(
+            event_id=locked.pk, org_user_id__in=org_user_ids
+        )
+    }
+    signups = {
+        s.user_id: s
+        for s in EventSignup.objects.nocache().filter(
+            event_id=locked.pk, user_id__in=user_ids
+        )
+    }
+    expected = expected_statuses(locked) | {SignupStatus.DROPPED}
+    planned: list[_Planned] = []
+    for org_user, outcome in changes:
+        row = rows.get(org_user.pk)
+        signup = signups.get(org_user.user_id)
+        if signup is not None and signup.status not in expected:
+            signup = None
+        if row is None and signup is None and outcome != Outcome.ATTENDED:
+            raise ValueError(
+                "Only Attended can be recorded for a member who was not signed up."
+            )
+        planned.append(
+            _Planned(org_user=org_user, outcome=outcome, row=row, signup=signup)
+        )
+    return planned
+
+
+def _apply(
+    locked: Event,
+    item: _Planned,
+    *,
+    actor: CustomUser,
+    reason: str,
+    now: datetime,
+) -> AttendanceOutcome | None:
+    row = item.row
+    finalize = locked.conduct_finalized_at is not None
+    if row is None:
+        return AttendanceOutcome.objects.create(
+            organization_id=locked.organization_id,
+            org_user=item.org_user,
+            event=locked,
+            event_name=locked.name,
+            event_starts_at=locked.scheduled_at,
+            signup=item.signup,
+            committed=item.signup is not None,
+            outcome=item.outcome,
+            source=OutcomeSource.STAFF,
+            set_by=actor,
+            reason=reason,
+            finalized_at=now if finalize else None,
+        )
+    if row.outcome == item.outcome and row.source == OutcomeSource.STAFF:
+        return None
+    row.outcome = item.outcome
+    row.source = OutcomeSource.STAFF
+    row.set_by = actor
+    row.reason = reason
+    if finalize and row.finalized_at is None:
+        row.finalized_at = now
+    row.save(
+        update_fields=[
+            "outcome",
+            "source",
+            "set_by",
+            "reason",
+            "finalized_at",
+            "updated_at",
+        ]
+    )
+    return row
+
+
+@transaction.atomic
+def set_outcomes(
+    event: Event,
+    *,
+    actor: CustomUser,
+    changes: list[tuple[OrgUser, Outcome]],
+    reason: str,
+) -> SetResult:
+    gate = conduct_gate(event.organization_id)
+    cleaned = _validate_request(gate, changes, reason)
+    locked = lock_event(event)
+    _validate_state(locked)
+    planned = _plan(locked, changes)
+    now = timezone.now()
+    changed = 0
+    changed_members: list[OrgUser] = []
+    for item in planned:
+        old = (
+            {"outcome": item.row.outcome, "source": item.row.source}
+            if item.row is not None
+            else {
+                "outcome": Outcome.PENDING.value,
+                "source": OutcomeSource.DEFAULT.value,
+            }
+        )
+        row = _apply(locked, item, actor=actor, reason=cleaned, now=now)
+        if row is None:
+            continue
+        changed += 1
+        changed_members.append(item.org_user)
+        OrgLog.objects.create(
+            organization_id=locked.organization_id,
+            actor=actor,
+            action="set_attendance",
+            details={
+                "outcome_pk": row.pk,
+                "event_id": locked.pk,
+                "org_user_id": item.org_user.pk,
+                "old": old,
+                "new": {"outcome": row.outcome, "source": row.source},
+                "reason": cleaned,
+            },
+        )
+    result = SetResult(changed=changed, unchanged=len(planned) - changed)
+    if locked.conduct_finalized_at is not None:
+        refresh_unmet_on_commit(gate, changed_members)
+    log.info(
+        "conduct_outcomes_set",
+        system="org",
+        subsystem="conduct",
+        org_id=locked.organization_id,
+        event_id=locked.pk,
+        actor_id=actor.pk,
+        changed=result.changed,
+        unchanged=result.unchanged,
+        finalized=locked.conduct_finalized_at is not None,
+    )
+    return result
+
+
+@transaction.atomic
+def reassign_member(drop: OrgUser, keep: OrgUser) -> int:
+    if drop.organization_id != keep.organization_id:
+        raise ValueError("cannot reassign conduct across organizations")
+    if drop.pk == keep.pk:
+        return 0
+    rows = AttendanceOutcome.objects.nocache()
+    keep_rows = {
+        event_id: source
+        for event_id, source in rows.filter(
+            org_user=keep, event__isnull=False
+        ).values_list("event_id", "source")
+    }
+    discard_drop: list[int] = []
+    discard_keep: list[int] = []
+    for pk, event_id, source in rows.filter(org_user=drop).values_list(
+        "pk", "event_id", "source"
+    ):
+        if event_id is None or event_id not in keep_rows:
+            continue
+        drop_staff = source == OutcomeSource.STAFF
+        keep_staff = keep_rows[event_id] == OutcomeSource.STAFF
+        if drop_staff and not keep_staff:
+            discard_keep.append(event_id)
+        else:
+            discard_drop.append(pk)
+    rows.filter(org_user=keep, event_id__in=discard_keep).delete()
+    rows.filter(pk__in=discard_drop).delete()
+    moved = rows.filter(org_user=drop).update(org_user=keep, updated_at=timezone.now())
+    log.info(
+        "conduct_member_reassigned",
+        system="org",
+        subsystem="conduct",
+        org_id=keep.organization_id,
+        drop_org_user_id=drop.pk,
+        keep_org_user_id=keep.pk,
+        moved=moved,
+        discarded=len(discard_drop) + len(discard_keep),
+    )
+    return moved
+
+
+def update_conduct_settings(
+    org: Organization,
+    *,
+    actor: CustomUser,
+    changes: Mapping[str, object],
+) -> OrgConductSettings:
+    unknown = set(changes) - set(EDITABLE_SETTINGS_FIELDS)
+    if unknown:
+        raise ValueError(f"Unknown setting(s): {', '.join(sorted(unknown))}")
+    with transaction.atomic():
+        existing = get_conduct_settings(org, create=True)
+        row = (
+            OrgConductSettings.objects.nocache().select_for_update().get(pk=existing.pk)
+        )
+        changed_fields = [
+            field
+            for field in EDITABLE_SETTINGS_FIELDS
+            if field in changes and getattr(row, field) != changes[field]
+        ]
+        if not changed_fields:
+            return row
+        for field in changed_fields:
+            setattr(row, field, changes[field])
+        if row.max_age_days < row.half_life_days:
+            raise ValueError("Max age must be at least the half-life.")
+        row.updated_by = actor
+        row.save(update_fields=[*changed_fields, "updated_by", "updated_at"])
+        invalidate_after_commit(row)
+        if TIER_INPUT_FIELDS.intersection(changed_fields):
+            refresh_org_unmet_on_commit(org.pk)
+        OrgLog.objects.create(
+            organization=org,
+            actor=actor,
+            action="update",
+            details={"area": "conduct_settings", "changed_fields": changed_fields},
+        )
+        org_id = org.pk
+        actor_id = actor.pk
+        transaction.on_commit(
+            lambda: log.info(
+                "conduct_settings_updated",
+                system="org",
+                subsystem="conduct",
+                org_id=org_id,
+                actor_id=actor_id,
+                changed_fields=changed_fields,
+            )
+        )
+    return row

@@ -23,6 +23,10 @@ class ReasonCode(models.TextChoices):
         "Battle Cup screenshot missing",
     )
     BELOW_MIN_MMR = "below_min_mmr", "Below minimum MMR"
+    CONDUCT_BELOW_THRESHOLD = (
+        "conduct_below_threshold",
+        "Attendance record below org threshold",
+    )
 
 
 class Severity(models.TextChoices):
@@ -45,6 +49,8 @@ class Rule:
     DOTA_RANK_SCREENSHOT: Final = "dota-rank-screenshot"
     DOTA_BATTLECUP_SCREENSHOT: Final = "dota-battlecup-screenshot"
     DOTA_MIN_MMR: Final = "dota-min-mmr"
+    CONDUCT_REQUIRE_APPROVAL: Final = "conduct-require-approval"
+    CONDUCT_BLOCK: Final = "conduct-block"
 
 
 @dataclass(frozen=True, slots=True)

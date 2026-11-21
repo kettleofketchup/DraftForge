@@ -18,19 +18,33 @@ ENTRY_POINTS = (
     "events.completion",
     "events.reopen",
     "app.discord_accounts",
+    "org.conduct.adapter",
+    "org.conduct.eligibility",
+    "org.conduct.services",
+    "events.eligibility.checks.conduct",
+    "events.eligibility.store",
+    "events.admission",
+)
+WEB_SETTINGS = "backend.settings"
+RESTAMP_ENTRY_POINTS = (
+    "events.completion",
+    "events.reopen",
+    "app.views.internal",
+    "backend.urls",
 )
 
 
 class StandingImportOrderTest(SimpleTestCase):
-    def _import_first(self, module: str) -> subprocess.CompletedProcess[str]:
-        code = (
-            "import django, sys; django.setup(); "
-            f"assert {module!r} not in sys.modules, 'preloaded by setup'; "
-            f"import {module}"
-        )
+    """Some entry points (the eligibility chain) are first imported by
+    django.setup() itself through app.models; setup succeeding covers them."""
+
+    def _import_first(
+        self, module: str, then: str = "", settings: str = "config.settings_celery"
+    ) -> subprocess.CompletedProcess[str]:
+        code = f"import django; django.setup(); import {module}; {then}"
         env = {
             **os.environ,
-            "DJANGO_SETTINGS_MODULE": "config.settings_celery",
+            "DJANGO_SETTINGS_MODULE": settings,
             "DISABLE_CACHE": "true",
         }
         return subprocess.run(
@@ -46,4 +60,15 @@ class StandingImportOrderTest(SimpleTestCase):
         for module in ENTRY_POINTS:
             with self.subTest(module=module):
                 proc = self._import_first(module)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_entry_points_register_restamp(self) -> None:
+        for module in RESTAMP_ENTRY_POINTS:
+            with self.subTest(module=module):
+                proc = self._import_first(
+                    module,
+                    "from org.standing import restamp; "
+                    "assert restamp.registered(), 'restamp not registered'",
+                    settings=WEB_SETTINGS,
+                )
                 self.assertEqual(proc.returncode, 0, proc.stderr)

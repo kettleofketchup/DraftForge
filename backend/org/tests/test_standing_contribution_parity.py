@@ -31,24 +31,25 @@ from org.features import set_org_feature
 from org.models import ContributionEntry, OrgFeature, OrgUser, PromoSend, PromoTemplate
 from org.promotion.services import record_promo_send, undo_promo_send
 
-CLOSE_ADMIN_COMPLETE_QUERIES = 37
-CLOSE_AUTO_CANCEL_QUERIES = 36
-CLOSE_ADMIN_CANCEL_QUERIES = 5
-CLOSE_AUTO_CANCEL_NO_STAFF_QUERIES = 6
-REOPEN_QUERIES = 7
+# Close, reopen, merge and delete counts include the registered conduct track.
+CLOSE_ADMIN_COMPLETE_QUERIES = 46
+CLOSE_AUTO_CANCEL_QUERIES = 41
+CLOSE_ADMIN_CANCEL_QUERIES = 11
+CLOSE_AUTO_CANCEL_NO_STAFF_QUERIES = 11
+REOPEN_QUERIES = 11
 PATCH_NAME_QUERIES = 21
 PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 39
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 161
-MERGE_CLAIM_QUERIES = 145
-DELETE_API_QUERIES = 93
-DELETE_ADMIN_QUERIES = 137
-DELETE_ADMIN_CONFIRM_QUERIES = 46
+MERGE_DISCORD_QUERIES = 171
+MERGE_CLAIM_QUERIES = 155
+DELETE_API_QUERIES = 96
+DELETE_ADMIN_QUERIES = 141
+DELETE_ADMIN_CONFIRM_QUERIES = 47
 PROMO_SEND_QUERIES = 23
 PROMO_UNDO_QUERIES = 8
-PROMO_RELEASE_QUERIES = 107
+PROMO_RELEASE_QUERIES = 110
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8
@@ -297,6 +298,7 @@ class ReopenParityTest(_ParityBase):
                 "from": EventState.COMPLETED.value,
                 "to": EventState.SIGNUPS_OPEN.value,
                 "revoked": 3,
+                "attendance_reopened": 0,
             },
         )
         self.assertEqual(one_log(logs, "event_reopened")["revoked"], 3)

@@ -76,7 +76,9 @@ class ReopenEventServiceTest(ReopenTestBase):
         self.assertEqual(
             result,
             ReopenResult(
-                reopened=True, state=EventState.SIGNUPS_OPEN, details={"revoked": 3}
+                reopened=True,
+                state=EventState.SIGNUPS_OPEN,
+                details={"revoked": 3, "attendance_reopened": 0},
             ),
         )
         self.ev.refresh_from_db()
@@ -132,6 +134,7 @@ class ReopenEventServiceTest(ReopenTestBase):
                 "from": EventState.COMPLETED,
                 "to": EventState.SIGNUPS_OPEN,
                 "revoked": 3,
+                "attendance_reopened": 0,
             },
         )
 
@@ -188,7 +191,9 @@ class ReopenEventServiceTest(ReopenTestBase):
         self.assertEqual(
             raced["inner"],
             ReopenResult(
-                reopened=True, state=EventState.SIGNUPS_OPEN, details={"revoked": 3}
+                reopened=True,
+                state=EventState.SIGNUPS_OPEN,
+                details={"revoked": 3, "attendance_reopened": 0},
             ),
         )
         self.assertFalse(outer.reopened)
@@ -219,7 +224,9 @@ class ReopenEventServiceTest(ReopenTestBase):
         self.assertEqual(
             outer,
             ReopenResult(
-                reopened=True, state=EventState.SIGNUPS_OPEN, details={"revoked": 3}
+                reopened=True,
+                state=EventState.SIGNUPS_OPEN,
+                details={"revoked": 3, "attendance_reopened": 0},
             ),
         )
         self.ev.refresh_from_db()

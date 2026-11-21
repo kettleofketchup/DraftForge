@@ -44,12 +44,18 @@ from app.permissions_org import (
     has_org_staff_access,
 )
 from draft.models import Draft, HeroDraft
-from events.admission import ensure_self_serve
+from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
-from events.constants import Commitment, EventState
+from events.constants import ActorRole, Commitment, EventState
 from events.discord import notify_create_discord_event, notify_signup_changed
-from events.eligibility import evaluate_signup, has_registered_steam_id, recheck_signup
+from events.eligibility import (
+    EligibilityResult,
+    evaluate_signup,
+    has_registered_steam_id,
+    recheck_signup,
+)
+from events.ledger import SignupActor
 from events.models import (
     Event,
     EventRepeater,
@@ -74,6 +80,7 @@ from events.serializers import (
 from events.services import (
     apply_signup_input,
     approve_signup,
+    cancel_event,
     cancel_signup,
     changed_draft_option_fields,
     confirm_signup,
@@ -276,7 +283,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             EventState.ROLL_CALL,
         ]
         for event in list(instance.events.filter(state__in=active_states)):
-            teardown_event(event)
+            teardown_event(event, actor=self.request.user)
         instance.delete()
 
     def get_queryset(self) -> QuerySet[EventRepeater]:
@@ -553,7 +560,12 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         )
 
 
-_CONCURRENTLY_WRITTEN_EVENT_FIELDS = ["state", "contributions_awarded_at", "host"]
+_CONCURRENTLY_WRITTEN_EVENT_FIELDS = [
+    "state",
+    "contributions_awarded_at",
+    "conduct_finalized_at",
+    "host",
+]
 
 
 def _event_field_values(event: Event, names: Iterable[str]) -> dict[str, object]:
@@ -574,15 +586,21 @@ _SIGNUP_INTENT_COMMITMENT: dict[str, Commitment] = {
 }
 
 
+def _intent_commitment(intent: object) -> Commitment:
+    if isinstance(intent, str):
+        return _SIGNUP_INTENT_COMMITMENT.get(intent, Commitment.MAIN)
+    return Commitment.MAIN
+
+
 def _signup_refusal(
-    event: Event, user: CustomUser, intent: object, error: str
+    event: Event,
+    user: CustomUser,
+    intent: object,
+    error: str,
+    result: EligibilityResult | None = None,
 ) -> Response:
-    commitment = (
-        _SIGNUP_INTENT_COMMITMENT.get(intent, Commitment.MAIN)
-        if isinstance(intent, str)
-        else Commitment.MAIN
-    )
-    result = evaluate_signup(event, user, intent=commitment)
+    if result is None:
+        result = evaluate_signup(event, user, intent=_intent_commitment(intent))
     return Response(
         {"error": error, "reasons": result.as_dicts()},
         status=status.HTTP_400_BAD_REQUEST,
@@ -890,7 +908,9 @@ class EventViewSet(viewsets.ModelViewSet):
         body = request.data or {}
         intent = body.get("intent")
         try:
-            ensure_self_serve(event, request.user)
+            ensure_self_serve(event, request.user, intent=_intent_commitment(intent))
+        except SignupRefused as exc:
+            return _signup_refusal(event, request.user, intent, str(exc), exc.result)
         except ValueError as exc:
             return _signup_refusal(event, request.user, intent, str(exc))
 
@@ -914,7 +934,9 @@ class EventViewSet(viewsets.ModelViewSet):
                 if intent == "rsvp":
                     signup = process_rsvp(event, request.user)
                 else:
-                    signup = create_tentative_signup(event, request.user)
+                    signup = create_tentative_signup(
+                        event, request.user, actor=SignupActor.from_request(request)
+                    )
         except DjangoValidationError as exc:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
             return _signup_refusal(event, request.user, intent, msg)
@@ -1061,44 +1083,15 @@ class EventViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance: Event) -> None:
         """Clean up tournament and Discord messages before deleting event."""
-        teardown_event(instance)
+        teardown_event(instance, actor=self.request.user)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request: Request, pk: str | None = None) -> Response:
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
-        # Function-local: events.tasks imports events.services, which imports this module.
-        from discordbot.models import DiscordEvent
-        from events.tasks import delete_discord_scheduled_event
-
         try:
-            with transaction.atomic():
-                # Delete linked tournament before cancelling
-                if event.tournament:
-                    tournament = event.tournament
-                    event.tournament = None
-                    event.save(update_fields=["tournament", "updated_at"])
-                    tournament.delete()
-                event.transition_state(EventState.CANCELLED)
-                try:
-                    discord_event = event.discord_event
-                except DiscordEvent.DoesNotExist:
-                    discord_event = None
-                if discord_event is not None and discord_event.scheduled_event_id:
-                    # Clearing the id stops the 60s sync_discord_events resurrecting it.
-                    delete_discord_scheduled_event.delay(
-                        discord_event.guild_id, discord_event.scheduled_event_id
-                    )
-                    discord_event.scheduled_event_id = None
-                    discord_event.save(update_fields=["scheduled_event_id"])
-                    logger.info(
-                        "event_cancel_discord_scheduled_event_deleted",
-                        system="events",
-                        subsystem="views",
-                        event_id=event.pk,
-                        guild_id=discord_event.guild_id,
-                    )
+            cancel_event(event, actor=request.user)
             qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
@@ -1340,14 +1333,16 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"])
     def cancel_signup(self, request: Request, pk: str | None = None) -> Response:
         signup = self.get_object()
-        if signup.user != request.user and not has_event_staff_access(
-            request.user, signup.event
-        ):
+        is_staff_action = signup.user_id != request.user.pk
+        if is_staff_action and not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        actor = SignupActor.from_request(
+            request, role=ActorRole.STAFF if is_staff_action else ActorRole.MEMBER
+        )
         try:
             return Response(
                 EventSignupSerializer(
-                    cancel_signup(signup), context={"request": request}
+                    cancel_signup(signup, actor=actor), context={"request": request}
                 ).data
             )
         except ValueError as e:
@@ -1398,7 +1393,8 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                 ensure_self_serve(signup.event, request.user)
             return Response(
                 EventSignupSerializer(
-                    reinstate_signup(signup), context={"request": request}
+                    reinstate_signup(signup, for_staff_placement=is_staff),
+                    context={"request": request},
                 ).data
             )
         except ValueError as e:
