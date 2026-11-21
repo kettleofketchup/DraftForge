@@ -1,8 +1,14 @@
-import { API_URL, BASE_URL } from '../../fixtures/base-url';
-import { test, expect, chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import {
+  chromium,
+  expect,
+  test,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
+import { API_URL, BASE_URL } from '../../fixtures/base-url';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
-
 
 /**
  * Wait for server to be ready with retries.
@@ -12,7 +18,7 @@ async function waitForServerReady(
   context: BrowserContext,
   url: string,
   maxRetries = 10,
-  delayMs = 2000
+  delayMs = 2000,
 ): Promise<void> {
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -138,14 +144,14 @@ test.describe('Two Captains Full Draft', () => {
     // This uses Real Tournament 38's Winners Final: vrm.mtl vs ethan0688_
     const response = await contextA.request.get(
       `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
-      { failOnStatusCode: false, timeout: 10000 }
+      { failOnStatusCode: false, timeout: 10000 },
     );
 
     if (!response.ok()) {
       const errorText = await response.text();
       throw new Error(
         `Failed to get HeroDraft test data: ${response.status()} - ${errorText}\n` +
-        `Make sure to run 'just db::populate::all' to create test data.`
+          `Make sure to run 'just db::populate::all' to create test data.`,
       );
     }
 
@@ -154,7 +160,7 @@ test.describe('Two Captains Full Draft', () => {
     // Reset the draft to waiting state
     await contextA.request.post(
       `${API_URL}/tests/herodraft/${testInfo.pk}/reset/`,
-      { failOnStatusCode: false }
+      { failOnStatusCode: false },
     );
 
     // Extract captain info
@@ -200,8 +206,12 @@ test.describe('Two Captains Full Draft', () => {
     };
 
     console.log(`\n Draft Setup Complete:`);
-    console.log(`   Captain A: ${captainA.username} (Team: ${captainA.teamName})`);
-    console.log(`   Captain B: ${captainB.username} (Team: ${captainB.teamName})`);
+    console.log(
+      `   Captain A: ${captainA.username} (Team: ${captainA.teamName})`,
+    );
+    console.log(
+      `   Captain B: ${captainB.username} (Team: ${captainB.teamName})`,
+    );
     console.log(`   Draft ID: ${testInfo.pk}`);
     console.log(`   Game ID: ${testInfo.game?.pk || 'TBD'}`);
     console.log(`   Tournament ID: ${testInfo.game?.tournament_pk || 'TBD'}\n`);
@@ -231,7 +241,9 @@ test.describe('Two Captains Full Draft', () => {
     const draftPk = testInfo.pk;
 
     if (!tournamentPk || !gamePk) {
-      throw new Error('Tournament PK or Game PK not available - ensure populate_herodraft_test() ran successfully');
+      throw new Error(
+        'Tournament PK or Game PK not available - ensure populate_herodraft_test() ran successfully',
+      );
     }
 
     // Navigate to match page first, then click Start Draft
@@ -244,8 +256,10 @@ test.describe('Two Captains Full Draft', () => {
     // =========================================================================
     // WebSocket Debug Listeners - Set up BEFORE navigation to catch all connections
     // =========================================================================
-    const wsMessagesA: Array<{ type: string; state?: string; time: number }> = [];
-    const wsMessagesB: Array<{ type: string; state?: string; time: number }> = [];
+    const wsMessagesA: Array<{ type: string; state?: string; time: number }> =
+      [];
+    const wsMessagesB: Array<{ type: string; state?: string; time: number }> =
+      [];
     let wsConnectionA: { url: string; closed: boolean } | null = null;
     let wsConnectionB: { url: string; closed: boolean } | null = null;
 
@@ -257,18 +271,24 @@ test.describe('Two Captains Full Draft', () => {
     // (server kick when the same captain reconnects, stale-detector cycle,
     // even React StrictMode dev-time remount race) would race with the next
     // assertWebSocketsOpen() and throw spuriously.
-    captainA.page.on('websocket', ws => {
+    captainA.page.on('websocket', (ws) => {
       const conn = { url: ws.url(), closed: false };
       wsConnectionA = conn;
       console.log(`   [WS-A] Connected to: ${ws.url()}`);
-      ws.on('framereceived', frame => {
+      ws.on('framereceived', (frame) => {
         try {
           const data = JSON.parse(frame.payload as string);
-          wsMessagesA.push({ type: data.type, state: data.draft_state?.state, time: Date.now() });
-          console.log(`   [WS-A] <<< ${data.type} state=${data.draft_state?.state || 'N/A'}`);
+          wsMessagesA.push({
+            type: data.type,
+            state: data.draft_state?.state,
+            time: Date.now(),
+          });
+          console.log(
+            `   [WS-A] <<< ${data.type} state=${data.draft_state?.state || 'N/A'}`,
+          );
         } catch {}
       });
-      ws.on('framesent', frame => {
+      ws.on('framesent', (frame) => {
         try {
           const data = JSON.parse(frame.payload as string);
           console.log(`   [WS-A] >>> ${data.type || data.action || 'unknown'}`);
@@ -280,18 +300,24 @@ test.describe('Two Captains Full Draft', () => {
       });
     });
 
-    captainB.page.on('websocket', ws => {
+    captainB.page.on('websocket', (ws) => {
       const conn = { url: ws.url(), closed: false };
       wsConnectionB = conn;
       console.log(`   [WS-B] Connected to: ${ws.url()}`);
-      ws.on('framereceived', frame => {
+      ws.on('framereceived', (frame) => {
         try {
           const data = JSON.parse(frame.payload as string);
-          wsMessagesB.push({ type: data.type, state: data.draft_state?.state, time: Date.now() });
-          console.log(`   [WS-B] <<< ${data.type} state=${data.draft_state?.state || 'N/A'}`);
+          wsMessagesB.push({
+            type: data.type,
+            state: data.draft_state?.state,
+            time: Date.now(),
+          });
+          console.log(
+            `   [WS-B] <<< ${data.type} state=${data.draft_state?.state || 'N/A'}`,
+          );
         } catch {}
       });
-      ws.on('framesent', frame => {
+      ws.on('framesent', (frame) => {
         try {
           const data = JSON.parse(frame.payload as string);
           console.log(`   [WS-B] >>> ${data.type || data.action || 'unknown'}`);
@@ -408,13 +434,25 @@ test.describe('Two Captains Full Draft', () => {
     // Verify WebSocket connections were established
     // Cast through unknown because TypeScript narrows these to `null` based on the
     // initial assignment — the closures that mutate them run later at runtime.
-    const wsA = wsConnectionA as unknown as { url: string; closed: boolean } | null;
-    const wsB = wsConnectionB as unknown as { url: string; closed: boolean } | null;
-    console.log(`   Captain A WebSocket: ${wsA ? 'connected to ' + wsA.url : 'NOT CONNECTED'}`);
-    console.log(`   Captain B WebSocket: ${wsB ? 'connected to ' + wsB.url : 'NOT CONNECTED'}`);
+    const wsA = wsConnectionA as unknown as {
+      url: string;
+      closed: boolean;
+    } | null;
+    const wsB = wsConnectionB as unknown as {
+      url: string;
+      closed: boolean;
+    } | null;
+    console.log(
+      `   Captain A WebSocket: ${wsA ? 'connected to ' + wsA.url : 'NOT CONNECTED'}`,
+    );
+    console.log(
+      `   Captain B WebSocket: ${wsB ? 'connected to ' + wsB.url : 'NOT CONNECTED'}`,
+    );
 
     if (!wsConnectionA || !wsConnectionB) {
-      throw new Error('WebSocket connections not established for both captains');
+      throw new Error(
+        'WebSocket connections not established for both captains',
+      );
     }
 
     // Verify both see waiting phase
@@ -426,7 +464,9 @@ test.describe('Two Captains Full Draft', () => {
     // Debug: check current state
     const stateA = await captainA.draftPage.getCurrentState();
     const stateB = await captainB.draftPage.getCurrentState();
-    console.log(`   Current state - Captain A: ${stateA}, Captain B: ${stateB}`);
+    console.log(
+      `   Current state - Captain A: ${stateA}, Captain B: ${stateB}`,
+    );
 
     // Captain A clicks ready
     await assertCaptainsConnected('before Captain A ready');
@@ -434,9 +474,11 @@ test.describe('Two Captains Full Draft', () => {
     console.log(`   Captain A (${captainA.username}) clicked Ready`);
 
     // Wait for Captain B to see Captain A's ready status via WebSocket
-    console.log('   Waiting for Captain A ready status to propagate to Captain B...');
+    console.log(
+      '   Waiting for Captain A ready status to propagate to Captain B...',
+    );
     await expect(
-      captainB.page.locator('[data-testid^="herodraft-ready-status-"]').first()
+      captainB.page.locator('[data-testid^="herodraft-ready-status-"]').first(),
     ).toContainText('Ready', { timeout: 5000 });
     console.log('   Captain B sees Captain A is ready');
 
@@ -461,8 +503,12 @@ test.describe('Two Captains Full Draft', () => {
     await assertCaptainsConnected('after rolling transition');
     const stateAfterA = await captainA.draftPage.getCurrentState();
     const stateAfterB = await captainB.draftPage.getCurrentState();
-    console.log(`   UI State after ready - Captain A: ${stateAfterA}, Captain B: ${stateAfterB}`);
-    console.log(`   WS Messages received - Captain A: ${wsMessagesA.length}, Captain B: ${wsMessagesB.length}`);
+    console.log(
+      `   UI State after ready - Captain A: ${stateAfterA}, Captain B: ${stateAfterB}`,
+    );
+    console.log(
+      `   WS Messages received - Captain A: ${wsMessagesA.length}, Captain B: ${wsMessagesB.length}`,
+    );
 
     console.log('   Both captains ready, transitioned to rolling phase');
 
@@ -475,7 +521,10 @@ test.describe('Two Captains Full Draft', () => {
     await assertCaptainsConnected('before coin flip');
 
     // Wait for flip button to be available
-    await captainA.draftPage.flipCoinButton.waitFor({ state: 'visible', timeout: 15000 });
+    await captainA.draftPage.flipCoinButton.waitFor({
+      state: 'visible',
+      timeout: 15000,
+    });
 
     // Captain A clicks flip coin (either captain can do this)
     await captainA.draftPage.clickFlipCoin();
@@ -492,8 +541,12 @@ test.describe('Two Captains Full Draft', () => {
     await assertCaptainsConnected('after coin flip');
     const stateAfterFlipA = await captainA.draftPage.getCurrentState();
     const stateAfterFlipB = await captainB.draftPage.getCurrentState();
-    console.log(`   UI State after flip - Captain A: ${stateAfterFlipA}, Captain B: ${stateAfterFlipB}`);
-    console.log(`   WS Messages - Captain A: ${wsMessagesA.length}, Captain B: ${wsMessagesB.length}`);
+    console.log(
+      `   UI State after flip - Captain A: ${stateAfterFlipA}, Captain B: ${stateAfterFlipB}`,
+    );
+    console.log(
+      `   WS Messages - Captain A: ${wsMessagesA.length}, Captain B: ${wsMessagesB.length}`,
+    );
 
     console.log('   Both captains see choosing phase');
 
@@ -507,7 +560,7 @@ test.describe('Two Captains Full Draft', () => {
 
     // Check which captain is the winner
     const winnerChoices = captainA.page.locator(
-      '[data-testid="herodraft-winner-choices"]'
+      '[data-testid="herodraft-winner-choices"]',
     );
     const isAWinner = await winnerChoices.isVisible().catch(() => false);
 
@@ -522,7 +575,9 @@ test.describe('Two Captains Full Draft', () => {
       console.log('   Winner chose: First Pick');
 
       // Wait for loser choice to become available via WebSocket
-      const loserChoices = captainB.page.locator('[data-testid="herodraft-loser-choices"]');
+      const loserChoices = captainB.page.locator(
+        '[data-testid="herodraft-loser-choices"]',
+      );
       await loserChoices.waitFor({ state: 'visible', timeout: 10000 });
       await assertCaptainsConnected('after winner choice');
 
@@ -537,7 +592,9 @@ test.describe('Two Captains Full Draft', () => {
       console.log('   Winner chose: First Pick');
 
       // Wait for loser choice to become available via WebSocket
-      const loserChoices = captainA.page.locator('[data-testid="herodraft-loser-choices"]');
+      const loserChoices = captainA.page.locator(
+        '[data-testid="herodraft-loser-choices"]',
+      );
       await loserChoices.waitFor({ state: 'visible', timeout: 10000 });
       await assertCaptainsConnected('after winner choice');
 
@@ -557,8 +614,12 @@ test.describe('Two Captains Full Draft', () => {
     await assertCaptainsConnected('after drafting transition');
     const stateAfterChoicesA = await captainA.draftPage.getCurrentState();
     const stateAfterChoicesB = await captainB.draftPage.getCurrentState();
-    console.log(`   UI State after choices - Captain A: ${stateAfterChoicesA}, Captain B: ${stateAfterChoicesB}`);
-    console.log(`   WS Messages - Captain A: ${wsMessagesA.length}, Captain B: ${wsMessagesB.length}`);
+    console.log(
+      `   UI State after choices - Captain A: ${stateAfterChoicesA}, Captain B: ${stateAfterChoicesB}`,
+    );
+    console.log(
+      `   WS Messages - Captain A: ${wsMessagesA.length}, Captain B: ${wsMessagesB.length}`,
+    );
 
     console.log('   Choices made, transitioning to drafting phase');
 
@@ -571,45 +632,72 @@ test.describe('Two Captains Full Draft', () => {
     const startGraceA = await captainA.draftPage.getGraceTimeSeconds();
     const startReserveA = await captainA.draftPage.getTeamAReserveTimeSeconds();
     console.log(
-      `   Initial timers - Grace: ${startGraceA}s, Reserve A: ${startReserveA}s`
+      `   Initial timers - Grace: ${startGraceA}s, Reserve A: ${startReserveA}s`,
     );
 
     // Captain's Mode sequence: (is_first_pick_team, action_type)
     // This matches the backend CAPTAINS_MODE_SEQUENCE exactly (1-indexed in backend, 0-indexed here)
     const DRAFT_SEQUENCE: Array<[boolean, string]> = [
       // Ban Phase 1: F-F-S-S-F-S-S (rounds 1-7)
-      [true, 'ban'], [true, 'ban'], [false, 'ban'], [false, 'ban'],
-      [true, 'ban'], [false, 'ban'], [false, 'ban'],
+      [true, 'ban'],
+      [true, 'ban'],
+      [false, 'ban'],
+      [false, 'ban'],
+      [true, 'ban'],
+      [false, 'ban'],
+      [false, 'ban'],
       // Pick Phase 1: F-S (rounds 8-9)
-      [true, 'pick'], [false, 'pick'],
+      [true, 'pick'],
+      [false, 'pick'],
       // Ban Phase 2: F-F-S (rounds 10-12)
-      [true, 'ban'], [true, 'ban'], [false, 'ban'],
+      [true, 'ban'],
+      [true, 'ban'],
+      [false, 'ban'],
       // Pick Phase 2: S-F-F-S-S-F (rounds 13-18)
-      [false, 'pick'], [true, 'pick'], [true, 'pick'], [false, 'pick'],
-      [false, 'pick'], [true, 'pick'],
+      [false, 'pick'],
+      [true, 'pick'],
+      [true, 'pick'],
+      [false, 'pick'],
+      [false, 'pick'],
+      [true, 'pick'],
       // Ban Phase 3: F-S-F-S (rounds 19-22)
-      [true, 'ban'], [false, 'ban'], [true, 'ban'], [false, 'ban'],
+      [true, 'ban'],
+      [false, 'ban'],
+      [true, 'ban'],
+      [false, 'ban'],
       // Pick Phase 3: F-S (rounds 23-24)
-      [true, 'pick'], [false, 'pick'],
+      [true, 'pick'],
+      [false, 'pick'],
     ];
 
     // Set first pick based on who won the flip (winner chose 'first_pick')
     let firstPickCaptain: CaptainContext = flipWinnerCaptain;
-    let secondPickCaptain: CaptainContext = flipWinnerCaptain === captainA ? captainB : captainA;
+    let secondPickCaptain: CaptainContext =
+      flipWinnerCaptain === captainA ? captainB : captainA;
     let firstPickDetermined = true;
     console.log(`   First pick captain: ${firstPickCaptain.username}`);
 
     // Helper to determine which captain should pick based on round number
-    const getCurrentPicker = async (roundNum: number): Promise<CaptainContext> => {
+    const getCurrentPicker = async (
+      roundNum: number,
+    ): Promise<CaptainContext> => {
       // First try visual indicator (more reliable when visible)
-      const teamAIndicator = captainA.page.locator('[data-testid="herodraft-team-a-picking"]');
-      const teamBIndicator = captainA.page.locator('[data-testid="herodraft-team-b-picking"]');
+      const teamAIndicator = captainA.page.locator(
+        '[data-testid="herodraft-team-a-picking"]',
+      );
+      const teamBIndicator = captainA.page.locator(
+        '[data-testid="herodraft-team-b-picking"]',
+      );
 
       // Quick check for visual indicator (500ms max)
       const startTime = Date.now();
       while (Date.now() - startTime < 500) {
-        const teamAPicking = await teamAIndicator.isVisible().catch(() => false);
-        const teamBPicking = await teamBIndicator.isVisible().catch(() => false);
+        const teamAPicking = await teamAIndicator
+          .isVisible()
+          .catch(() => false);
+        const teamBPicking = await teamBIndicator
+          .isVisible()
+          .catch(() => false);
 
         if (teamAPicking || teamBPicking) {
           const visualPicker = teamAPicking ? captainA : captainB;
@@ -620,10 +708,14 @@ test.describe('Two Captains Full Draft', () => {
             firstPickCaptain = visualPicker;
             secondPickCaptain = visualPicker === captainA ? captainB : captainA;
             firstPickDetermined = true;
-            console.log(`[getCurrentPicker] Determined first pick: ${firstPickCaptain.username}`);
+            console.log(
+              `[getCurrentPicker] Determined first pick: ${firstPickCaptain.username}`,
+            );
           }
 
-          console.log(`[getCurrentPicker] Round ${roundNum}: Visual indicator - picker: ${visualPicker.username}`);
+          console.log(
+            `[getCurrentPicker] Round ${roundNum}: Visual indicator - picker: ${visualPicker.username}`,
+          );
           return visualPicker;
         }
         await captainA.page.waitForTimeout(50);
@@ -631,20 +723,52 @@ test.describe('Two Captains Full Draft', () => {
 
       // Fallback: Use draft sequence to determine picker (only works after round 1)
       if (!firstPickDetermined) {
-        throw new Error(`[getCurrentPicker] Round ${roundNum}: Cannot determine picker - visual indicator not found and first pick not yet determined`);
+        throw new Error(
+          `[getCurrentPicker] Round ${roundNum}: Cannot determine picker - visual indicator not found and first pick not yet determined`,
+        );
       }
 
       const [isFirstPickTeam] = DRAFT_SEQUENCE[roundNum - 1];
       const picker = isFirstPickTeam ? firstPickCaptain : secondPickCaptain;
-      console.log(`[getCurrentPicker] Round ${roundNum}: Sequence fallback - picker: ${picker.username}`);
+      console.log(
+        `[getCurrentPicker] Round ${roundNum}: Sequence fallback - picker: ${picker.username}`,
+      );
       return picker;
     };
 
     // Use valid Dota 2 hero IDs - note: ID 24 doesn't exist (skips from 23 to 25)
     // Captain's Mode has 24 rounds: 14 bans + 10 picks
     const heroIds = [
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-      21, 22, 23, 25, 26, 27, 28, 29, 30, 31  // Skip 24 - it doesn't exist!
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31, // Skip 24 - it doesn't exist!
     ];
     let heroIndex = 0;
 
@@ -660,7 +784,7 @@ test.describe('Two Captains Full Draft', () => {
       const action = await currentPicker.draftPage.getCurrentAction();
 
       console.log(
-        `   Round ${round}: ${currentPicker.username} will ${action} a hero...`
+        `   Round ${round}: ${currentPicker.username} will ${action} a hero...`,
       );
 
       // Current picker selects a hero
@@ -671,28 +795,42 @@ test.describe('Two Captains Full Draft', () => {
 
       // For the final round, skip completion verification - draft transitions to completed state
       if (round === maxRounds) {
-        console.log(`   Final round ${currentRound} - skipping completion check (draft will complete)`);
+        console.log(
+          `   Final round ${currentRound} - skipping completion check (draft will complete)`,
+        );
       } else {
         // Wait for round completion with actual state verification (not just timeout)
-        const roundCompletedA = captainA.page.locator(`[data-testid="herodraft-round-${currentRound}"][data-round-state="completed"]`);
-        const roundCompletedB = captainB.page.locator(`[data-testid="herodraft-round-${currentRound}"][data-round-state="completed"]`);
+        const roundCompletedA = captainA.page.locator(
+          `[data-testid="herodraft-round-${currentRound}"][data-round-state="completed"]`,
+        );
+        const roundCompletedB = captainB.page.locator(
+          `[data-testid="herodraft-round-${currentRound}"][data-round-state="completed"]`,
+        );
 
         try {
           await Promise.all([
             roundCompletedA.waitFor({ state: 'attached', timeout: 5000 }),
             roundCompletedB.waitFor({ state: 'attached', timeout: 5000 }),
           ]);
-          console.log(`   Round ${currentRound} confirmed completed on both clients`);
+          console.log(
+            `   Round ${currentRound} confirmed completed on both clients`,
+          );
         } catch (err) {
           // Gather debug info on failure
           const stateA = await captainA.draftPage.getCurrentState();
           const stateB = await captainB.draftPage.getCurrentState();
-          const roundStateA = await captainA.page.locator(`[data-testid="herodraft-round-${currentRound}"]`).getAttribute('data-round-state').catch(() => 'not-found');
-          const roundStateB = await captainB.page.locator(`[data-testid="herodraft-round-${currentRound}"]`).getAttribute('data-round-state').catch(() => 'not-found');
+          const roundStateA = await captainA.page
+            .locator(`[data-testid="herodraft-round-${currentRound}"]`)
+            .getAttribute('data-round-state')
+            .catch(() => 'not-found');
+          const roundStateB = await captainB.page
+            .locator(`[data-testid="herodraft-round-${currentRound}"]`)
+            .getAttribute('data-round-state')
+            .catch(() => 'not-found');
           throw new Error(
             `Round ${currentRound} completion timeout!\n` +
-            `  Captain A state: ${stateA}, round-${currentRound} state: ${roundStateA}\n` +
-            `  Captain B state: ${stateB}, round-${currentRound} state: ${roundStateB}`
+              `  Captain A state: ${stateA}, round-${currentRound} state: ${roundStateA}\n` +
+              `  Captain B state: ${stateB}, round-${currentRound} state: ${roundStateB}`,
           );
         }
       }
@@ -700,8 +838,12 @@ test.describe('Two Captains Full Draft', () => {
       // Wait for NEXT round to become active (except on last round)
       if (round < maxRounds) {
         const nextRoundIndex = currentRound + 1;
-        const nextRoundActiveA = captainA.page.locator(`[data-testid="herodraft-round-${nextRoundIndex}"][data-round-active="true"]`);
-        const nextRoundActiveB = captainB.page.locator(`[data-testid="herodraft-round-${nextRoundIndex}"][data-round-active="true"]`);
+        const nextRoundActiveA = captainA.page.locator(
+          `[data-testid="herodraft-round-${nextRoundIndex}"][data-round-active="true"]`,
+        );
+        const nextRoundActiveB = captainB.page.locator(
+          `[data-testid="herodraft-round-${nextRoundIndex}"][data-round-active="true"]`,
+        );
 
         try {
           await Promise.all([
@@ -711,7 +853,9 @@ test.describe('Two Captains Full Draft', () => {
           console.log(`   Round ${nextRoundIndex} is now active`);
         } catch {
           // Don't fail - the sequence fallback will handle this
-          console.log(`   Round ${nextRoundIndex} not yet active, continuing with sequence fallback`);
+          console.log(
+            `   Round ${nextRoundIndex} not yet active, continuing with sequence fallback`,
+          );
         }
       }
     }

@@ -1,5 +1,5 @@
-import type { GameType, TournamentType } from '~/index'; // Adjust the import path as necessary
 import { Alert, AlertDescription } from '~/components/ui/alert';
+import type { GameType, TournamentType } from '~/index'; // Adjust the import path as necessary
 
 export default function TeamsTab({
   tournament,
@@ -10,7 +10,9 @@ export default function TeamsTab({
     return (
       <div className="flex justify-center items-center h-screen">
         <Alert className="w-auto">
-          <AlertDescription>No teams available for this tournament.</AlertDescription>
+          <AlertDescription>
+            No teams available for this tournament.
+          </AlertDescription>
         </Alert>
       </div>
     );

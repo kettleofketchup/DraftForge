@@ -43,9 +43,9 @@ export function DeleteLeagueDialog({
       entityName={league.name}
       description={
         <>
-          This will permanently delete <strong>{league.name}</strong> and cannot be undone.
-          Tournaments, matches, and members associated with this league will lose their
-          league reference.
+          This will permanently delete <strong>{league.name}</strong> and cannot
+          be undone. Tournaments, matches, and members associated with this
+          league will lose their league reference.
         </>
       }
       isLoading={deleteMutation.isPending}

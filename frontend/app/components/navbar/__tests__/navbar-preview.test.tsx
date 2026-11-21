@@ -16,7 +16,9 @@ vi.mock('~/store/userStore', () => ({
   useUserStore: (selector: (state: { currentUser: object }) => unknown) =>
     selector({ currentUser: {} }),
 }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 
 // Siblings with their own data hooks are out of scope for this wiring test.
 vi.mock('../login', () => ({ LoginWithDiscordButton: () => null }));
@@ -36,7 +38,10 @@ function renderNavbar() {
 describe('navbar preview login wiring', () => {
   beforeEach(() => {
     // ExternalLinks fetches the GitHub star count on mount.
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('{}', { status: 200 })),
+    );
   });
 
   afterEach(() => {

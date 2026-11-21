@@ -7,16 +7,16 @@
  * server payload.
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   openEditModal,
+  readPositionField,
   saveEditModal,
   setPositionField,
-  readPositionField,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 const USER_EDIT_ORG_NAME = 'User Edit Org';
 let orgPk: number;
@@ -24,9 +24,13 @@ let orgPk: number;
 test.describe('Position dropdown persistence (@cicd)', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
-    const orgs = await (await context.request.get(`${API_URL}/organizations/`)).json();
-    const orgList = Array.isArray(orgs) ? orgs : orgs.results ?? [];
-    orgPk = orgList.find((o: { name: string }) => o.name === USER_EDIT_ORG_NAME)?.pk;
+    const orgs = await (
+      await context.request.get(`${API_URL}/organizations/`)
+    ).json();
+    const orgList = Array.isArray(orgs) ? orgs : (orgs.results ?? []);
+    orgPk = orgList.find(
+      (o: { name: string }) => o.name === USER_EDIT_ORG_NAME,
+    )?.pk;
     if (!orgPk) throw new Error('User Edit Org not found');
     await context.close();
   });
@@ -38,7 +42,9 @@ test.describe('Position dropdown persistence (@cicd)', () => {
   // Dedicated user — see USER_EDIT_USERS in backend/tests/data/users.py.
   const TARGET_USERNAME = 'edit_user_positions';
 
-  test('@cicd position changes persist in PATCH and re-render correctly', async ({ page }) => {
+  test('@cicd position changes persist in PATCH and re-render correctly', async ({
+    page,
+  }) => {
     // Use a wider viewport so the 5-column position grid (xl:grid-cols-5
     // ≥ 1280px) renders without the SelectTrigger buttons visually overlapping
     // — at the default 1280×720 viewport the modal's inner grid renders at
@@ -46,7 +52,9 @@ test.describe('Position dropdown persistence (@cicd)', () => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await page.locator('[data-testid="org-tab-users"]').click();
-    const targetCard = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
+    const targetCard = page.locator(
+      `[data-testid="usercard-${TARGET_USERNAME}"]`,
+    );
     await expect(targetCard).toBeVisible({ timeout: 10000 });
 
     // Step 1: reset carry+hard_support to 0 so the next set is guaranteed to
@@ -59,9 +67,11 @@ test.describe('Position dropdown persistence (@cicd)', () => {
     // PATCH (still leaves us in the desired baseline state).
     const resetSaveBtn = page.getByRole('button', { name: 'Save Changes' });
     await resetSaveBtn.click();
-    await expect(page.locator('[role="dialog"]')).toBeHidden({ timeout: 5000 }).catch(async () => {
-      await page.keyboard.press('Escape');
-    });
+    await expect(page.locator('[role="dialog"]'))
+      .toBeHidden({ timeout: 5000 })
+      .catch(async () => {
+        await page.keyboard.press('Escape');
+      });
 
     // Step 2: now apply the real target values and assert the PATCH body.
     await openEditModal(page, targetCard);

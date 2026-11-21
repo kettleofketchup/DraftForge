@@ -9,13 +9,17 @@ import {
   type InviteRequest,
 } from '~/components/lobby/api';
 
-export const gameLobbyKey = (gameId: number | null | undefined) => ['gameLobby', gameId] as const;
+export const gameLobbyKey = (gameId: number | null | undefined) =>
+  ['gameLobby', gameId] as const;
 
 /**
  * A game's dota_lobby lobby. The tournament websocket invalidates it on
  * `lobby_event`; the interval is the fallback when the socket is down.
  */
-export function useGameLobby(gameId: number | null | undefined, enabled = true) {
+export function useGameLobby(
+  gameId: number | null | undefined,
+  enabled = true,
+) {
   return useQuery({
     queryKey: gameLobbyKey(gameId),
     queryFn: () => getGameLobby(gameId!),
@@ -53,9 +57,13 @@ export function useCloseGameLobby(gameId: number | null | undefined) {
 }
 
 export function useInviteToGameLobby(gameId: number | null | undefined) {
-  return useLobbyMutation(gameId, (id, body: InviteRequest) => inviteToGameLobby(id, body));
+  return useLobbyMutation(gameId, (id, body: InviteRequest) =>
+    inviteToGameLobby(id, body),
+  );
 }
 
 export function useLaunchGameLobby(gameId: number | null | undefined) {
-  return useLobbyMutation(gameId, (id, force: boolean) => launchGameLobby(id, force));
+  return useLobbyMutation(gameId, (id, force: boolean) =>
+    launchGameLobby(id, force),
+  );
 }

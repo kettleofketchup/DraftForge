@@ -12,7 +12,12 @@
 
 import type { Locator, Page } from '@playwright/test';
 
-import { expect, loginAsUser, test, visitAndWaitForHydration } from '../../fixtures';
+import {
+  expect,
+  loginAsUser,
+  test,
+  visitAndWaitForHydration,
+} from '../../fixtures';
 import { CARD_SELECTOR } from '../../helpers/tournament';
 
 const DISCOVERY_MEMBER_PK = 1100;
@@ -26,7 +31,11 @@ const CONTROLS = [
   'tournaments-tab-archived',
 ];
 /** Fixed-vocabulary card values: these must never end in an ellipsis. */
-const UNTRUNCATED_VALUES = ['tournament-card-date', 'tournament-card-time', 'tournament-card-state'];
+const UNTRUNCATED_VALUES = [
+  'tournament-card-date',
+  'tournament-card-time',
+  'tournament-card-state',
+];
 
 type Tab = 'upcoming' | 'archived';
 
@@ -39,19 +48,26 @@ interface Box {
 
 async function waitForCards(page: Page, tab: Tab): Promise<Locator> {
   const panel = page.getByTestId(`tournaments-panel-${tab}`);
-  await expect(panel).toHaveAttribute('data-fetching', 'false', { timeout: 15000 });
+  await expect(panel).toHaveAttribute('data-fetching', 'false', {
+    timeout: 15000,
+  });
   const cards = panel.locator(CARD_SELECTOR);
   await expect(cards.first()).toBeVisible({ timeout: 15000 });
   return cards;
 }
 
-async function scrollAreaOverflow(page: Page): Promise<{ scrollWidth: number; clientWidth: number }> {
+async function scrollAreaOverflow(
+  page: Page,
+): Promise<{ scrollWidth: number; clientWidth: number }> {
   return page.evaluate(() => {
     const viewport = document.querySelector<HTMLElement>(
       '#outlet_root [data-slot="scroll-area-viewport"]',
     );
     if (!viewport) throw new Error('outlet scroll area viewport not found');
-    return { scrollWidth: viewport.scrollWidth, clientWidth: viewport.clientWidth };
+    return {
+      scrollWidth: viewport.scrollWidth,
+      clientWidth: viewport.clientWidth,
+    };
   });
 }
 
@@ -62,31 +78,52 @@ async function box(locator: Locator): Promise<Box> {
   });
 }
 
-async function expectNothingClipped(page: Page, tab: Tab, width: number): Promise<void> {
+async function expectNothingClipped(
+  page: Page,
+  tab: Tab,
+  width: number,
+): Promise<void> {
   const cards = await waitForCards(page, tab);
   const where = `${tab} @ ${width}px`;
 
   const idle = await scrollAreaOverflow(page);
-  expect(idle.scrollWidth, `scroll area overflows (${where})`).toBeLessThanOrEqual(idle.clientWidth);
+  expect(
+    idle.scrollWidth,
+    `scroll area overflows (${where})`,
+  ).toBeLessThanOrEqual(idle.clientWidth);
 
   for (const testId of CONTROLS) {
     const b = await box(page.getByTestId(testId));
-    expect(b.left, `${testId} clipped left (${where})`).toBeGreaterThanOrEqual(0);
-    expect(b.right, `${testId} clipped right (${where})`).toBeLessThanOrEqual(width);
+    expect(b.left, `${testId} clipped left (${where})`).toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(b.right, `${testId} clipped right (${where})`).toBeLessThanOrEqual(
+      width,
+    );
   }
 
   const search = await box(page.getByTestId('tournaments-search'));
   const boxes = await cards.evaluateAll((els) =>
     els.map((el) => {
       const r = el.getBoundingClientRect();
-      const view = el.querySelector('[data-testid^="tournament-view-"]')!.getBoundingClientRect();
+      const view = el
+        .querySelector('[data-testid^="tournament-view-"]')!
+        .getBoundingClientRect();
       let grid = el.parentElement;
-      while (grid && getComputedStyle(grid).display !== 'grid') grid = grid.parentElement;
-      const track = grid ? parseFloat(getComputedStyle(grid).gridTemplateColumns) : NaN;
+      while (grid && getComputedStyle(grid).display !== 'grid')
+        grid = grid.parentElement;
+      const track = grid
+        ? parseFloat(getComputedStyle(grid).gridTemplateColumns)
+        : NaN;
       return {
         track,
         card: { left: r.left, right: r.right, top: r.top, bottom: r.bottom },
-        view: { left: view.left, right: view.right, top: view.top, bottom: view.bottom },
+        view: {
+          left: view.left,
+          right: view.right,
+          top: view.top,
+          bottom: view.bottom,
+        },
       };
     }),
   );
@@ -94,24 +131,43 @@ async function expectNothingClipped(page: Page, tab: Tab, width: number): Promis
   // Cards fill their grid tracks, so the grid's left edge lines up with the
   // filter row instead of each card floating inside a wider column.
   const minLeft = Math.min(...boxes.map((b) => b.card.left));
-  expect(Math.abs(minLeft - search.left), `first column misaligned with search (${where})`).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(minLeft - search.left),
+    `first column misaligned with search (${where})`,
+  ).toBeLessThanOrEqual(1);
 
   for (const { card, view, track } of boxes) {
-    expect(Math.abs(card.right - card.left - track), `card narrower than its column (${where})`).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(card.right - card.left - track),
+      `card narrower than its column (${where})`,
+    ).toBeLessThanOrEqual(1);
     expect(card.left, `card clipped left (${where})`).toBeGreaterThanOrEqual(0);
-    expect(card.right, `card clipped right (${where})`).toBeLessThanOrEqual(width);
-    expect(view.left, `view button outside card (${where})`).toBeGreaterThanOrEqual(card.left);
-    expect(view.right, `view button outside card (${where})`).toBeLessThanOrEqual(card.right);
-    // The footer button keeps at least the card's side inset below it.
-    expect(card.bottom - view.bottom, `view button crowds the card bottom (${where})`).toBeGreaterThanOrEqual(
-      view.left - card.left,
+    expect(card.right, `card clipped right (${where})`).toBeLessThanOrEqual(
+      width,
     );
+    expect(
+      view.left,
+      `view button outside card (${where})`,
+    ).toBeGreaterThanOrEqual(card.left);
+    expect(
+      view.right,
+      `view button outside card (${where})`,
+    ).toBeLessThanOrEqual(card.right);
+    // The footer button keeps at least the card's side inset below it.
+    expect(
+      card.bottom - view.bottom,
+      `view button crowds the card bottom (${where})`,
+    ).toBeGreaterThanOrEqual(view.left - card.left);
   }
 
   for (const testId of UNTRUNCATED_VALUES) {
-    const clipped = await cards.getByTestId(testId).evaluateAll((els) =>
-      els.filter((el) => el.scrollWidth > el.clientWidth).map((el) => el.textContent),
-    );
+    const clipped = await cards
+      .getByTestId(testId)
+      .evaluateAll((els) =>
+        els
+          .filter((el) => el.scrollWidth > el.clientWidth)
+          .map((el) => el.textContent),
+      );
     expect(clipped, `${testId} truncated (${where})`).toEqual([]);
   }
 
@@ -125,9 +181,10 @@ async function expectNothingClipped(page: Page, tab: Tab, width: number): Promis
   await cards.nth(rightmost.i).hover();
   await expect(async () => {
     const hovered = await scrollAreaOverflow(page);
-    expect(hovered.scrollWidth, `hovered card overflows (${where})`).toBeLessThanOrEqual(
-      hovered.clientWidth,
-    );
+    expect(
+      hovered.scrollWidth,
+      `hovered card overflows (${where})`,
+    ).toBeLessThanOrEqual(hovered.clientWidth);
   }).toPass({ timeout: 3000 });
   await page.mouse.move(0, 0);
 }
@@ -141,32 +198,59 @@ async function checkWidths(page: Page, tab: Tab, path: string): Promise<void> {
 }
 
 /** The league Tournaments tab renders the same cards in its own grid. */
-async function expectLeagueTabNothingClipped(page: Page, width: number): Promise<void> {
+async function expectLeagueTabNothingClipped(
+  page: Page,
+  width: number,
+): Promise<void> {
   const where = `league tab @ ${width}px`;
   const cards = page.locator(CARD_SELECTOR);
   await expect(cards.first()).toBeVisible({ timeout: 15000 });
 
   const idle = await scrollAreaOverflow(page);
-  expect(idle.scrollWidth, `scroll area overflows (${where})`).toBeLessThanOrEqual(idle.clientWidth);
+  expect(
+    idle.scrollWidth,
+    `scroll area overflows (${where})`,
+  ).toBeLessThanOrEqual(idle.clientWidth);
 
   const boxes = await cards.evaluateAll((els) =>
     els.map((el) => {
       const r = el.getBoundingClientRect();
-      const view = el.querySelector('[data-testid^="tournament-view-"]')!.getBoundingClientRect();
+      const view = el
+        .querySelector('[data-testid^="tournament-view-"]')!
+        .getBoundingClientRect();
       return {
         card: { left: r.left, right: r.right, top: r.top, bottom: r.bottom },
-        view: { left: view.left, right: view.right, top: view.top, bottom: view.bottom },
+        view: {
+          left: view.left,
+          right: view.right,
+          top: view.top,
+          bottom: view.bottom,
+        },
       };
     }),
   );
-  expect(boxes.length, `need at least two league cards (${where})`).toBeGreaterThan(1);
+  expect(
+    boxes.length,
+    `need at least two league cards (${where})`,
+  ).toBeGreaterThan(1);
 
   for (const { card, view } of boxes) {
     expect(card.left, `card clipped left (${where})`).toBeGreaterThanOrEqual(0);
-    expect(card.right, `card clipped right (${where})`).toBeLessThanOrEqual(width);
-    expect(view.left, `view button outside card (${where})`).toBeGreaterThanOrEqual(card.left);
-    expect(view.right, `view button outside card (${where})`).toBeLessThanOrEqual(card.right);
-    expect(view.bottom, `view button outside card (${where})`).toBeLessThanOrEqual(card.bottom);
+    expect(card.right, `card clipped right (${where})`).toBeLessThanOrEqual(
+      width,
+    );
+    expect(
+      view.left,
+      `view button outside card (${where})`,
+    ).toBeGreaterThanOrEqual(card.left);
+    expect(
+      view.right,
+      `view button outside card (${where})`,
+    ).toBeLessThanOrEqual(card.right);
+    expect(
+      view.bottom,
+      `view button outside card (${where})`,
+    ).toBeLessThanOrEqual(card.bottom);
   }
 
   // Cards in a row keep the grid's gap-4 between them, the same as /tournaments.
@@ -179,7 +263,10 @@ async function expectLeagueTabNothingClipped(page: Page, width: number): Promise
     const sorted = [...row].sort((a, b) => a.left - b.left);
     for (let i = 1; i < sorted.length; i++) {
       const gap = sorted[i].left - sorted[i - 1].right;
-      expect(gap, `cards closer than the grid gap (${where})`).toBeGreaterThanOrEqual(15);
+      expect(
+        gap,
+        `cards closer than the grid gap (${where})`,
+      ).toBeGreaterThanOrEqual(15);
     }
   }
 
@@ -191,9 +278,10 @@ async function expectLeagueTabNothingClipped(page: Page, width: number): Promise
   await cards.nth(rightmost.i).hover();
   await expect(async () => {
     const hovered = await scrollAreaOverflow(page);
-    expect(hovered.scrollWidth, `hovered card overflows (${where})`).toBeLessThanOrEqual(
-      hovered.clientWidth,
-    );
+    expect(
+      hovered.scrollWidth,
+      `hovered card overflows (${where})`,
+    ).toBeLessThanOrEqual(hovered.clientWidth);
   }).toPass({ timeout: 3000 });
   await page.mouse.move(0, 0);
 }
@@ -207,7 +295,9 @@ test.describe('Tournaments - nothing is clipped', () => {
     await checkWidths(page, 'upcoming', '/tournaments');
   });
 
-  test('@cicd logged out: archived grid fits at desktop widths', async ({ page }) => {
+  test('@cicd logged out: archived grid fits at desktop widths', async ({
+    page,
+  }) => {
     await checkWidths(page, 'archived', '/tournaments?tab=archived');
   });
 
@@ -232,7 +322,10 @@ test.describe('Tournaments - nothing is clipped', () => {
   }) => {
     for (const width of [1024, ...WIDTHS]) {
       await page.setViewportSize({ width, height: 1000 });
-      await visitAndWaitForHydration(page, `/leagues/${DISCOVERY_HOME_LEAGUE_PK}/tournaments`);
+      await visitAndWaitForHydration(
+        page,
+        `/leagues/${DISCOVERY_HOME_LEAGUE_PK}/tournaments`,
+      );
       await expectLeagueTabNothingClipped(page, width);
     }
   });

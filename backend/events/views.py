@@ -114,7 +114,7 @@ from org.permissions import (
 )
 from org.standing import api as standing
 from telemetry.logging import get_logger
-from user.models import BaseUserProfile
+from user.models import BaseUserProfile, DotaUserProfile
 from user.querysets import with_user_profiles
 
 logger = get_logger(__name__)
@@ -705,9 +705,9 @@ class EventViewSet(viewsets.ModelViewSet):
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"event_list:{request.get_full_path()}"
 
-        @cached_as(Event, EventSignup, extra=cache_key, timeout=60 * 60)
+        @cached_as(Event, EventSignup, Organization, extra=cache_key, timeout=60 * 60)
         def get_data() -> ReturnList:
-            queryset = self.filter_queryset(self.get_queryset())
+            queryset = self.filter_queryset(self.get_queryset()).nocache()
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
 
@@ -722,9 +722,11 @@ class EventViewSet(viewsets.ModelViewSet):
 
         @cached_as(
             Event.objects.filter(pk=pk),
+            EventRepeater,
             EventSignup,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             OrgUser,
             OrgUserGameMmr,
             Organization,
@@ -1177,15 +1179,25 @@ class EventViewSet(viewsets.ModelViewSet):
         except DiscordEvent.DoesNotExist:
             return Response({"detail": "No Discord state for this event"}, status=404)
 
-        from discordbot.models import DiscordEventDM, DiscordEventLog, DiscordMessageLog
+        from discordbot.models import (
+            DiscordEventDM,
+            DiscordEventLog,
+            DiscordEventMsgAnnouncement,
+            DiscordEventMsgSignup,
+            DiscordMessageLog,
+        )
         from discordbot.serializers_discord_event import DiscordEventDetailSerializer
 
         @cached_as(
             DiscordEvent,
+            DiscordEventMsgSignup,
+            DiscordEventMsgAnnouncement,
             DiscordEventLog,
             DiscordEventDM,
             DiscordMessageLog,
             CustomUser,
+            BaseUserProfile,
+            DotaUserProfile,
             OrgUser,
             OrgUserGameMmr,
             Organization,

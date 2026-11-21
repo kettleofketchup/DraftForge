@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { LOBBY_STATES } from '../schemas';
 import {
   LOBBY_DOT_BASE,
   lobbyStateDot,
@@ -7,7 +8,6 @@ import {
   lobbyStateToneName,
   showLobbyDot,
 } from '../states';
-import { LOBBY_STATES } from '../schemas';
 
 describe('lobby state indicators', () => {
   it('labels every state', () => {

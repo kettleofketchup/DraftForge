@@ -6,7 +6,11 @@ export interface AnimationFrameClockOptions<T> {
   inputs: readonly unknown[];
 }
 
-export function useAnimationFrameClock<T>({ derive, isFrozen, inputs }: AnimationFrameClockOptions<T>): T {
+export function useAnimationFrameClock<T>({
+  derive,
+  isFrozen,
+  inputs,
+}: AnimationFrameClockOptions<T>): T {
   const [value, setValue] = useState<T>(() => derive());
   const deriveRef = useRef(derive);
   const frozenRef = useRef(isFrozen);

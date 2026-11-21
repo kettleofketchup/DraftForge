@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { getLogger } from '~/lib/logger';
-import { useDraftWebSocketStore, draftWsSelectors } from '~/store/draftWebSocketStore';
+import {
+  draftWsSelectors,
+  useDraftWebSocketStore,
+} from '~/store/draftWebSocketStore';
 import type { DraftRoundType, DraftType } from '../types';
 import { refreshDraftHook } from './refreshDraftHook';
 
@@ -43,7 +46,10 @@ export const useAutoRefreshDraft = ({
       return;
     }
     log.debug('Auto-refreshing draft information');
-    await refreshDraftHook({ draft: draftRef.current, setDraft: setDraftRef.current });
+    await refreshDraftHook({
+      draft: draftRef.current,
+      setDraft: setDraftRef.current,
+    });
   }, []);
 
   // Extract primitive values to avoid object reference changes triggering effect
@@ -92,7 +98,9 @@ export const useAutoRefreshDraft = ({
 
     // Only start interval if captain choice is null (waiting for pick)
     if (choiceIsNull) {
-      log.debug('WebSocket disconnected, starting fallback auto-refresh polling');
+      log.debug(
+        'WebSocket disconnected, starting fallback auto-refresh polling',
+      );
       intervalRef.current = setInterval(refresh, interval);
 
       return () => {
@@ -102,7 +110,16 @@ export const useAutoRefreshDraft = ({
         }
       };
     }
-  }, [enabled, hasCurDraftRound, hasDraft, choiceIsNull, wsConnected, isDraftCompleted, interval, refresh]);
+  }, [
+    enabled,
+    hasCurDraftRound,
+    hasDraft,
+    choiceIsNull,
+    wsConnected,
+    isDraftCompleted,
+    interval,
+    refresh,
+  ]);
 
   return { refresh };
 };

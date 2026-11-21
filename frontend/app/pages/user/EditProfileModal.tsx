@@ -1,7 +1,8 @@
+import { useSuspenseQuery } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { useSuspenseQuery } from '@tanstack/react-query';
 
+import { getUserProfile } from '~/components/api/userProfileApi';
 import {
   Dialog,
   DialogContent,
@@ -11,11 +12,10 @@ import {
 } from '~/components/ui/dialog';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { getUserProfile } from '~/components/api/userProfileApi';
 import { useUserProfileStore } from '~/store/userProfileStore';
 
-import { ProfileSkeleton } from './EditProfileModal/ProfileSkeleton';
 import { ProfileErrorFallback } from './EditProfileModal/ProfileErrorFallback';
+import { ProfileSkeleton } from './EditProfileModal/ProfileSkeleton';
 
 const BaseTab = lazy(() => import('./EditProfileModal/tabs/BaseTab'));
 const DotaTab = lazy(() => import('./EditProfileModal/tabs/DotaTab'));

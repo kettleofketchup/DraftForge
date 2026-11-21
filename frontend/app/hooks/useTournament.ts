@@ -1,6 +1,10 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchTournament, getTournaments, updateTournament } from '~/components/api/api';
-import type { TournamentType, TournamentsType } from '~/components/tournament/types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  fetchTournament,
+  getTournaments,
+  updateTournament,
+} from '~/components/api/api';
+import type { TournamentType } from '~/components/tournament/types';
 
 export function useTournament(pk: number | null) {
   return useQuery({
@@ -11,7 +15,10 @@ export function useTournament(pk: number | null) {
   });
 }
 
-export function useTournaments(filters?: { organizationId?: number; leagueId?: number }) {
+export function useTournaments(filters?: {
+  organizationId?: number;
+  leagueId?: number;
+}) {
   return useQuery({
     queryKey: ['tournaments', filters],
     queryFn: () => getTournaments(filters),

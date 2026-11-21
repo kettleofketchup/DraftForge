@@ -1,5 +1,5 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { GamesTab } from './GamesTab';
 import { PlayersTab } from './PlayersTab';
 import { TeamsTab } from './TeamsTab';
@@ -7,20 +7,22 @@ import { TeamsTab } from './TeamsTab';
 import { useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
+import { usePageNav } from '~/hooks/usePageNav';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
-import { usePageNav } from '~/hooks/usePageNav';
 
 export default function TournamentTabs() {
   const { pk } = useParams<{ pk: string }>();
   const navigate = useNavigate();
   const activeTab = useTournamentStore((state) => state.activeTab);
 
-  const handleTabChange = useCallback((tab: string) => {
-    // Navigate using URL path, which will update the store via TournamentDetailPage
-    navigate(`/tournament/${pk}/${tab}`, { replace: true });
-  }, [pk, navigate]);
-
+  const handleTabChange = useCallback(
+    (tab: string) => {
+      // Navigate using URL path, which will update the store via TournamentDetailPage
+      navigate(`/tournament/${pk}/${tab}`, { replace: true });
+    },
+    [pk, navigate],
+  );
 
   const tournament = useUserStore(useShallow((state) => state.tournament)); // Zustand setter
 
@@ -47,21 +49,20 @@ export default function TournamentTabs() {
     }
     return tournament.games.length;
   }, [tournament.games]);
-  const tabOptions = useMemo(() => [
-    { value: 'players', label: `Players (${playerCount})` },
-    { value: 'teams', label: `Teams (${teamCount})` },
-    { value: 'bracket', label: `Bracket (${gameCount})` },
-  ], [playerCount, teamCount, gameCount]);
+  const tabOptions = useMemo(
+    () => [
+      { value: 'players', label: `Players (${playerCount})` },
+      { value: 'teams', label: `Teams (${teamCount})` },
+      { value: 'bracket', label: `Bracket (${gameCount})` },
+    ],
+    [playerCount, teamCount, gameCount],
+  );
 
   // Register page-level nav tabs in the global navbar (mobile only)
   usePageNav(tabOptions, activeTab, handleTabChange);
 
   return (
-    <Tabs
-      value={activeTab}
-      onValueChange={handleTabChange}
-      className="w-full"
-    >
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
       {/* Desktop: Full tabs */}
       <ScrollArea className="hidden md:block w-full whitespace-nowrap pb-2">
         <TabsList

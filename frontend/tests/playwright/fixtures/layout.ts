@@ -122,7 +122,8 @@ export const LAYOUT_VIEWPORTS = [
   { width: 1440, height: 900 },
 ];
 
-export const KILL_ANIMATIONS = '*,*::before,*::after{animation:none!important;transition:none!important}';
+export const KILL_ANIMATIONS =
+  '*,*::before,*::after{animation:none!important;transition:none!important}';
 
 const DEFAULTS: ProbeConfig = {
   // 64 = lucide `X` at size-4 (8x8); 256 = a 16x16 escape floor.
@@ -182,13 +183,27 @@ export async function prepareLayoutProbe(page: Page): Promise<void> {
         ? realInterval(h.fn, h.ms, ...h.args)
         : realTimeout(h.fn, h.ms, ...h.args);
     };
-    const schedule = (fn: TimerHandler, ms: number | undefined, args: unknown[], repeat: boolean): number => {
+    const schedule = (
+      fn: TimerHandler,
+      ms: number | undefined,
+      args: unknown[],
+      repeat: boolean,
+    ): number => {
       if (!frozen || (ms ?? 0) < 250) {
-        return repeat ? realInterval(fn, ms, ...args) : realTimeout(fn, ms, ...args);
+        return repeat
+          ? realInterval(fn, ms, ...args)
+          : realTimeout(fn, ms, ...args);
       }
       w.__layoutDeferred! += 1;
       fake += 1;
-      held.set(fake, { fn, ms: ms ?? 0, args, repeat, real: null, cancelled: false });
+      held.set(fake, {
+        fn,
+        ms: ms ?? 0,
+        args,
+        repeat,
+        real: null,
+        cancelled: false,
+      });
       return fake;
     };
     const clear = (id: number | undefined, repeat: boolean): void => {
@@ -199,7 +214,8 @@ export async function prepareLayoutProbe(page: Page): Promise<void> {
         return;
       }
       h.cancelled = true;
-      if (h.real !== null) (h.repeat ? realClearInterval : realClearTimeout)(h.real);
+      if (h.real !== null)
+        (h.repeat ? realClearInterval : realClearTimeout)(h.real);
       held.delete(id!);
     };
 
@@ -207,8 +223,10 @@ export async function prepareLayoutProbe(page: Page): Promise<void> {
       schedule(fn, ms, a, false)) as typeof window.setTimeout;
     window.setInterval = ((fn: TimerHandler, ms?: number, ...a: unknown[]) =>
       schedule(fn, ms, a, true)) as typeof window.setInterval;
-    window.clearTimeout = ((id?: number) => clear(id, false)) as typeof window.clearTimeout;
-    window.clearInterval = ((id?: number) => clear(id, true)) as typeof window.clearInterval;
+    window.clearTimeout = ((id?: number) =>
+      clear(id, false)) as typeof window.clearTimeout;
+    window.clearInterval = ((id?: number) =>
+      clear(id, true)) as typeof window.clearInterval;
 
     w.__layoutFreeze = () => {
       frozen = true;
@@ -227,18 +245,27 @@ export async function prepareLayoutProbe(page: Page): Promise<void> {
 }
 
 /** The `base` state's collisions at the current viewport. */
-export async function collisions(page: Page, minArea = DEFAULTS.minOverlapArea): Promise<Collision[]> {
+export async function collisions(
+  page: Page,
+  minArea = DEFAULTS.minOverlapArea,
+): Promise<Collision[]> {
   const report = await sweepLayoutOnce(page, { minOverlapArea: minArea });
   return report.findings.find((f) => f.state === 'base')?.collisions ?? [];
 }
 
 /** The `base` state's clip escapes at the current viewport. */
-export async function clipEscapes(page: Page, minArea = DEFAULTS.minEscapeArea): Promise<Escape[]> {
+export async function clipEscapes(
+  page: Page,
+  minArea = DEFAULTS.minEscapeArea,
+): Promise<Escape[]> {
   const report = await sweepLayoutOnce(page, { minEscapeArea: minArea });
   return report.findings.find((f) => f.state === 'base')?.escapes ?? [];
 }
 
-export async function sweepLayoutOnce(page: Page, opts: Partial<ProbeConfig> = {}): Promise<LayoutReport> {
+export async function sweepLayoutOnce(
+  page: Page,
+  opts: Partial<ProbeConfig> = {},
+): Promise<LayoutReport> {
   return page.evaluate(layoutProbeMain, { ...DEFAULTS, ...opts });
 }
 
@@ -246,7 +273,10 @@ export async function sweepLayoutOnce(page: Page, opts: Partial<ProbeConfig> = {
  * One probe per viewport on the same document. The first viewport must match the page's
  * current size; later ones are reached with setViewportSize.
  */
-export async function sweepLayout(page: Page, opts: SweepOptions): Promise<LayoutReport[]> {
+export async function sweepLayout(
+  page: Page,
+  opts: SweepOptions,
+): Promise<LayoutReport[]> {
   const { viewports, budgetIsFatal, ...probeOpts } = opts;
   const cfg: ProbeConfig = { ...DEFAULTS, ...probeOpts };
   const out: LayoutReport[] = [];
@@ -254,9 +284,14 @@ export async function sweepLayout(page: Page, opts: SweepOptions): Promise<Layou
     const vp = viewports[i];
     if (i > 0) await page.setViewportSize(vp);
     // After a resize, wait out debounced resize/media-query handlers before measuring.
-    const report = await page.evaluate(layoutProbeMain, { ...cfg, baseQuietMs: i > 0 ? 400 : cfg.baseQuietMs });
+    const report = await page.evaluate(layoutProbeMain, {
+      ...cfg,
+      baseQuietMs: i > 0 ? 400 : cfg.baseQuietMs,
+    });
     if (budgetIsFatal && report.ledger.budgetExceededMs !== null) {
-      throw new Error(`layout probe exceeded ${cfg.budgetMs}ms at ${vp.width}x${vp.height}`);
+      throw new Error(
+        `layout probe exceeded ${cfg.budgetMs}ms at ${vp.width}x${vp.height}`,
+      );
     }
     out.push(report);
   }
@@ -269,7 +304,12 @@ function fmtRect(r: Rect): string {
 
 export function formatReports(
   reports: LayoutReport[],
-  quarantined?: Array<{ state: string; kind: string; findingKey: string; issue: string }>,
+  quarantined?: Array<{
+    state: string;
+    kind: string;
+    findingKey: string;
+    issue: string;
+  }>,
 ): string {
   const lines: string[] = [];
   if (reports.length === 0) lines.push('no layout reports were produced');
@@ -296,46 +336,61 @@ export function formatReports(
       `  ledger  unprobeable=${l.unprobeable}  unsettled=${l.statesUnsettled.length}  ` +
         `skipped=${l.statesSkipped.length}  timersDeferred=${l.timersDeferred}`,
     );
-    if (r.docOverflow > 0) lines.push(`  docOverflow  ${r.docOverflow}px wider than the viewport`);
+    if (r.docOverflow > 0)
+      lines.push(`  docOverflow  ${r.docOverflow}px wider than the viewport`);
   }
 
   if (quarantined?.length) {
     lines.push('  known (quarantined)');
-    for (const q of quarantined) lines.push(`    ${q.kind}  ${q.state}  ${q.findingKey}  (${q.issue})`);
+    for (const q of quarantined)
+      lines.push(`    ${q.kind}  ${q.state}  ${q.findingKey}  (${q.issue})`);
   }
   return lines.join('\n');
 }
 
-const KNOWN_VIEWPORTS = new Set(LAYOUT_VIEWPORTS.map((v) => `${v.width}x${v.height}`));
+const KNOWN_VIEWPORTS = new Set(
+  LAYOUT_VIEWPORTS.map((v) => `${v.width}x${v.height}`),
+);
 const KNOWN_KINDS = new Set(['collision', 'escape']);
 
 /** Reads and validates layout-known-findings.json; a bad row throws with its index and field. */
 export function loadKnownFindings(): KnownFinding[] {
   const rows: unknown = knownFindingsData;
-  if (!Array.isArray(rows)) throw new Error('layout-known-findings.json must be a JSON array');
+  if (!Array.isArray(rows))
+    throw new Error('layout-known-findings.json must be a JSON array');
 
   return rows.map((raw, i) => {
     const r = raw as Record<string, unknown>;
     const str = (field: string): string => {
       const v = r[field];
       if (typeof v !== 'string' || v.trim() === '') {
-        throw new Error(`layout-known-findings.json[${i}]: \`${field}\` must be a non-empty string`);
+        throw new Error(
+          `layout-known-findings.json[${i}]: \`${field}\` must be a non-empty string`,
+        );
       }
       return v;
     };
     if (typeof r.note !== 'string') {
-      throw new Error(`layout-known-findings.json[${i}]: \`note\` must be a string`);
+      throw new Error(
+        `layout-known-findings.json[${i}]: \`note\` must be a string`,
+      );
     }
     if (r.intermittent !== undefined && typeof r.intermittent !== 'boolean') {
-      throw new Error(`layout-known-findings.json[${i}]: \`intermittent\` must be a boolean`);
+      throw new Error(
+        `layout-known-findings.json[${i}]: \`intermittent\` must be a boolean`,
+      );
     }
     const viewport = str('viewport');
     if (!KNOWN_VIEWPORTS.has(viewport)) {
-      throw new Error(`layout-known-findings.json[${i}]: unknown \`viewport\` "${viewport}"`);
+      throw new Error(
+        `layout-known-findings.json[${i}]: unknown \`viewport\` "${viewport}"`,
+      );
     }
     const kind = str('kind');
     if (!KNOWN_KINDS.has(kind)) {
-      throw new Error(`layout-known-findings.json[${i}]: unknown \`kind\` "${kind}"`);
+      throw new Error(
+        `layout-known-findings.json[${i}]: unknown \`kind\` "${kind}"`,
+      );
     }
     return {
       route: str('route'),
@@ -396,8 +451,12 @@ export function partitionFindings(
     }
   }
 
-  const id = (k: { viewport: string; state: string; kind: string; findingKey: string }) =>
-    `${k.viewport} ${k.state} ${k.kind} ${k.findingKey}`;
+  const id = (k: {
+    viewport: string;
+    state: string;
+    kind: string;
+    findingKey: string;
+  }) => `${k.viewport} ${k.state} ${k.kind} ${k.findingKey}`;
   const seen = new Set(observed.map(id));
   const quarantined = new Set(scoped.map(id));
 

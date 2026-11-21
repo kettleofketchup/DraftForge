@@ -28,7 +28,9 @@ export function generateMeta({
   const fullTitle = `${title} | ${SITE_NAME}`;
   const desc = description || DEFAULT_DESCRIPTION;
   const isDefaultImage = !image;
-  const img = image?.startsWith('http') ? image : `${SITE_URL}${image || DEFAULT_IMAGE}`;
+  const img = image?.startsWith('http')
+    ? image
+    : `${SITE_URL}${image || DEFAULT_IMAGE}`;
   const pageUrl = url ? `${SITE_URL}${url}` : undefined;
 
   const meta: Record<string, string>[] = [
@@ -65,4 +67,4 @@ export function generateMeta({
   return meta;
 }
 
-export { SITE_NAME, SITE_URL, DEFAULT_IMAGE, DEFAULT_DESCRIPTION };
+export { DEFAULT_DESCRIPTION, DEFAULT_IMAGE, SITE_NAME, SITE_URL };

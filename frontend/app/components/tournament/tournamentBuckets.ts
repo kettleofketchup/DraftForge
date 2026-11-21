@@ -22,7 +22,9 @@ export interface DisplayState {
 }
 
 export function utcDayStart(now: Date): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
 }
 
 export function bucketCutoff(now: Date): Date {
@@ -40,7 +42,9 @@ function playedAt(t: TournamentType): Date | null {
 export function clockBucket(t: TournamentType, now: Date): TournamentBucket {
   const date = playedAt(t);
   const open = t.state === 'future' || t.state === 'in_progress';
-  return open && date !== null && date >= bucketCutoff(now) ? 'upcoming' : 'archived';
+  return open && date !== null && date >= bucketCutoff(now)
+    ? 'upcoming'
+    : 'archived';
 }
 
 export function leagueInfo(t: TournamentType): LeagueMinimal | null {
@@ -57,7 +61,9 @@ export function isTournamentLive(
   now: Date,
   bucket?: TournamentBucket,
 ): boolean {
-  return t.state === 'in_progress' && (bucket ?? clockBucket(t, now)) === 'upcoming';
+  return (
+    t.state === 'in_progress' && (bucket ?? clockBucket(t, now)) === 'upcoming'
+  );
 }
 
 export function displayState(

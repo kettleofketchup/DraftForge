@@ -2,7 +2,12 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DisplayName } from '~/index';
-import { TieRollPopup, tieRollFrame, tieRollKey, tieRollTimeline } from '../TieRollPopup';
+import {
+  TieRollPopup,
+  tieRollFrame,
+  tieRollKey,
+  tieRollTimeline,
+} from '../TieRollPopup';
 import type { TieResolution } from '../types';
 import { user } from './fixtures';
 
@@ -47,10 +52,26 @@ describe('tieRollTimeline / tieRollFrame', () => {
   });
   it('tumbles early in each round, then reveals, then shows the winner', () => {
     const t = tieRollTimeline(2, 5000);
-    expect(tieRollFrame(100, 2, t)).toEqual({ round: 0, tumbling: true, winnerShown: false });
-    expect(tieRollFrame(1000, 2, t)).toEqual({ round: 0, tumbling: false, winnerShown: false });
-    expect(tieRollFrame(1300, 2, t)).toEqual({ round: 1, tumbling: true, winnerShown: false });
-    expect(tieRollFrame(2400, 2, t)).toEqual({ round: 1, tumbling: false, winnerShown: true });
+    expect(tieRollFrame(100, 2, t)).toEqual({
+      round: 0,
+      tumbling: true,
+      winnerShown: false,
+    });
+    expect(tieRollFrame(1000, 2, t)).toEqual({
+      round: 0,
+      tumbling: false,
+      winnerShown: false,
+    });
+    expect(tieRollFrame(1300, 2, t)).toEqual({
+      round: 1,
+      tumbling: true,
+      winnerShown: false,
+    });
+    expect(tieRollFrame(2400, 2, t)).toEqual({
+      round: 1,
+      tumbling: false,
+      winnerShown: true,
+    });
   });
   it('keys the same roll identically and different picks differently', () => {
     expect(tieRollKey(tie)).toBe(tieRollKey({ ...tie }));
@@ -75,31 +96,71 @@ describe('TieRollPopup', () => {
   afterEach(() => vi.useRealTimers());
 
   it('names captains, says which pick, and has no Continue button', () => {
-    render(<TieRollPopup tie={tie} teams={teams} clockHeld onDone={vi.fn()} now={now} />);
+    render(
+      <TieRollPopup
+        tie={tie}
+        teams={teams}
+        clockHeld
+        onDone={vi.fn()}
+        now={now}
+      />,
+    );
     const popup = screen.getByTestId('tie-roll-popup');
     expect(popup).toHaveTextContent('Tie for pick #3');
-    expect(screen.getByTestId('tie-roll-row-1')).toHaveTextContent(DisplayName(user(7)));
+    expect(screen.getByTestId('tie-roll-row-1')).toHaveTextContent(
+      DisplayName(user(7)),
+    );
     expect(screen.getByTestId('tie-roll-row-3')).toHaveTextContent('T3');
     expect(screen.queryByRole('button', { name: /continue/i })).toBeNull();
   });
 
   it('reveals rolls round by round, marks the dropped team out, then the winner', () => {
-    render(<TieRollPopup tie={tie} teams={teams} clockHeld onDone={vi.fn()} now={now} />);
+    render(
+      <TieRollPopup
+        tie={tie}
+        teams={teams}
+        clockHeld
+        onDone={vi.fn()}
+        now={now}
+      />,
+    );
     advance(1000);
-    expect(screen.getByTestId('tie-roll-die-1')).toHaveAttribute('data-face', '6');
-    expect(screen.getByTestId('tie-roll-die-3')).toHaveAttribute('data-face', '2');
+    expect(screen.getByTestId('tie-roll-die-1')).toHaveAttribute(
+      'data-face',
+      '6',
+    );
+    expect(screen.getByTestId('tie-roll-die-3')).toHaveAttribute(
+      'data-face',
+      '2',
+    );
     advance(1100);
     expect(screen.getByTestId('tie-roll-row-3')).toHaveTextContent('out');
-    expect(screen.getByTestId('tie-roll-die-2')).toHaveAttribute('data-face', '5');
+    expect(screen.getByTestId('tie-roll-die-2')).toHaveAttribute(
+      'data-face',
+      '5',
+    );
     expect(screen.getByTestId('tie-roll-result')).toHaveTextContent('Rolling');
     advance(400);
-    expect(screen.getByTestId('tie-roll-result')).toHaveTextContent(`${DisplayName(user(8))} picks next`);
-    expect(screen.getByTestId('tie-roll-row-2')).toHaveAttribute('data-winner', 'true');
+    expect(screen.getByTestId('tie-roll-result')).toHaveTextContent(
+      `${DisplayName(user(8))} picks next`,
+    );
+    expect(screen.getByTestId('tie-roll-row-2')).toHaveAttribute(
+      'data-winner',
+      'true',
+    );
   });
 
   it('closes itself when the hold ends', () => {
     const onDone = vi.fn();
-    render(<TieRollPopup tie={tie} teams={teams} clockHeld onDone={onDone} now={now} />);
+    render(
+      <TieRollPopup
+        tie={tie}
+        teams={teams}
+        clockHeld
+        onDone={onDone}
+        now={now}
+      />,
+    );
     advance(4900);
     expect(onDone).not.toHaveBeenCalled();
     advance(200);
@@ -108,21 +169,55 @@ describe('TieRollPopup', () => {
 
   it('can be hidden early with the close button', () => {
     const onDone = vi.fn();
-    render(<TieRollPopup tie={tie} teams={teams} clockHeld onDone={onDone} now={now} />);
+    render(
+      <TieRollPopup
+        tie={tie}
+        teams={teams}
+        clockHeld
+        onDone={onDone}
+        now={now}
+      />,
+    );
     fireEvent.click(screen.getByTestId('tie-roll-close'));
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
   it('shows the clock countdown only when the clock is held', () => {
-    const { rerender } = render(<TieRollPopup tie={tie} teams={teams} clockHeld onDone={vi.fn()} now={now} />);
-    expect(screen.getByTestId('tie-roll-countdown')).toHaveTextContent('Clock starts in 5s');
-    rerender(<TieRollPopup tie={tie} teams={teams} clockHeld={false} onDone={vi.fn()} now={now} />);
+    const { rerender } = render(
+      <TieRollPopup
+        tie={tie}
+        teams={teams}
+        clockHeld
+        onDone={vi.fn()}
+        now={now}
+      />,
+    );
+    expect(screen.getByTestId('tie-roll-countdown')).toHaveTextContent(
+      'Clock starts in 5s',
+    );
+    rerender(
+      <TieRollPopup
+        tie={tie}
+        teams={teams}
+        clockHeld={false}
+        onDone={vi.fn()}
+        now={now}
+      />,
+    );
     expect(screen.queryByTestId('tie-roll-countdown')).toBeNull();
   });
 
   it('falls back to the default hold for payloads without hold_ms', () => {
     const onDone = vi.fn();
-    render(<TieRollPopup tie={{ ...tie, hold_ms: undefined }} teams={teams} clockHeld onDone={onDone} now={now} />);
+    render(
+      <TieRollPopup
+        tie={{ ...tie, hold_ms: undefined }}
+        teams={teams}
+        clockHeld
+        onDone={onDone}
+        now={now}
+      />,
+    );
     advance(5100);
     expect(onDone).toHaveBeenCalled();
   });

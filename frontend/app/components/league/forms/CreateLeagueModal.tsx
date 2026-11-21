@@ -83,7 +83,7 @@ export function CreateLeagueModal({
                   value={field.value ?? ''}
                   onChange={(e) =>
                     field.onChange(
-                      e.target.value ? parseInt(e.target.value, 10) : null
+                      e.target.value ? parseInt(e.target.value, 10) : null,
                     )
                   }
                 />

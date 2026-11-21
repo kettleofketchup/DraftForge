@@ -12,7 +12,9 @@ export interface DeleteOrganizationDangerZoneProps {
   organization: OrganizationType;
 }
 
-export function DeleteOrganizationDangerZone({ organization }: DeleteOrganizationDangerZoneProps) {
+export function DeleteOrganizationDangerZone({
+  organization,
+}: DeleteOrganizationDangerZoneProps) {
   const [showDelete, setShowDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const navigate = useNavigate();
@@ -41,8 +43,9 @@ export function DeleteOrganizationDangerZone({ organization }: DeleteOrganizatio
     >
       <h2 className="text-lg font-semibold text-destructive">Danger Zone</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Deleting an organization is permanent and removes all of its leagues, events, members,
-        and historical data. Only the organization owner can perform this action.
+        Deleting an organization is permanent and removes all of its leagues,
+        events, members, and historical data. Only the organization owner can
+        perform this action.
       </p>
       <div className="mt-4">
         <DestructiveButton
@@ -60,8 +63,9 @@ export function DeleteOrganizationDangerZone({ organization }: DeleteOrganizatio
         entityName={organization.name}
         description={
           <>
-            This permanently deletes <strong>{organization.name}</strong>, all of its leagues,
-            events, members, and historical data. This cannot be undone.
+            This permanently deletes <strong>{organization.name}</strong>, all
+            of its leagues, events, members, and historical data. This cannot be
+            undone.
           </>
         }
         isLoading={isDeleting}

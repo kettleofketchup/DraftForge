@@ -1,15 +1,15 @@
 import { toast } from 'sonner';
 import { PickPlayerForRound } from '~/components/api/api';
 import type { PickPlayerForRoundAPI } from '~/components/api/types';
-import type { UserType } from '~/components/user/types';
 import { DisplayName } from '~/components/user/avatar';
+import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import type { DraftRoundType, DraftType, TournamentType } from '~/index';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import { useDraftWebSocketStore } from '~/store/draftWebSocketStore';
-import type { TieResolution } from '../types';
 import { handlePickError } from '../pickErrors';
+import type { TieResolution } from '../types';
 import { refreshTournamentHook } from './refreshTournamentHook';
 const log = getLogger('PickPlayerHook');
 
@@ -85,7 +85,9 @@ export const choosePlayerHook = async ({
       />
     ),
     success: (rawData) => {
-      const data = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
+      const data = hydrateTournament(
+        rawData as TournamentType & { _users?: Record<number, unknown> },
+      ) as TournamentType;
       setTournament(data);
       if (!data.draft) {
         log.error('No draft in response');
@@ -126,7 +128,9 @@ export const choosePlayerHook = async ({
         responseData.draft?.draft_style === 'shuffle' &&
         responseData.tie_resolution
       ) {
-        useDraftWebSocketStore.getState().setPendingTieResolution(responseData.tie_resolution);
+        useDraftWebSocketStore
+          .getState()
+          .setPendingTieResolution(responseData.tie_resolution);
       }
 
       // Trigger auto-refresh after successful pick
@@ -144,9 +148,16 @@ export const choosePlayerHook = async ({
     error: (err) => {
       log.error('Failed to update captains tournament', err);
       return handlePickError(err, {
-        jumpToPickNumber: (n) => useDraftWebSocketStore.getState().jumpToPickNumber(n),
+        jumpToPickNumber: (n) =>
+          useDraftWebSocketStore.getState().jumpToPickNumber(n),
         refresh: () => {
-          void refreshTournamentHook({ tournament, setTournament, setDraft, curDraftRound, setCurDraftRound });
+          void refreshTournamentHook({
+            tournament,
+            setTournament,
+            setDraft,
+            curDraftRound,
+            setCurDraftRound,
+          });
         },
       });
     },
