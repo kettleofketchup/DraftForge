@@ -1,6 +1,6 @@
+import type { Edge, Node } from '@xyflow/react';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { useCallback } from 'react';
-import type { Node, Edge } from '@xyflow/react';
 import type { BracketMatch, MatchNodeData } from '../types';
 
 const elk = new ELK();
@@ -29,7 +29,7 @@ export function useElkLayout() {
     async <T extends Node>(
       nodes: T[],
       edges: Edge[],
-      config: LayoutConfig = {}
+      config: LayoutConfig = {},
     ): Promise<{ nodes: T[]; edges: Edge[] }> => {
       const { nodeWidth = 208, nodeHeight = 100, options = {} } = config;
 
@@ -76,7 +76,7 @@ export function useElkLayout() {
         };
       }
     },
-    []
+    [],
   );
 
   return { getLayoutedElements };
@@ -87,14 +87,16 @@ export function useElkLayout() {
  */
 export async function layoutDoubleElimination(
   matches: BracketMatch[],
-  getLayoutedElements: ReturnType<typeof useElkLayout>['getLayoutedElements']
+  getLayoutedElements: ReturnType<typeof useElkLayout>['getLayoutedElements'],
 ): Promise<{ nodes: MatchNodeType[]; edges: Edge[] }> {
   const BRACKET_GAP = 150;
 
   // Separate matches by bracket type
   const winnersMatches = matches.filter((m) => m.bracketType === 'winners');
   const losersMatches = matches.filter((m) => m.bracketType === 'losers');
-  const grandFinalsMatches = matches.filter((m) => m.bracketType === 'grand_finals');
+  const grandFinalsMatches = matches.filter(
+    (m) => m.bracketType === 'grand_finals',
+  );
 
   // Convert to nodes - spread match into MatchNodeData to satisfy index signature
   const toNodes = (matchList: BracketMatch[]): MatchNodeType[] =>

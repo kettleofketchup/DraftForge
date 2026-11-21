@@ -18,24 +18,38 @@ describe('tournamentEditContext', () => {
   });
 
   it('null org/league pks -> both undefined', () => {
-    expect(tournamentEditContext({ organization_pk: null, league_pk: null })).toEqual({
+    expect(
+      tournamentEditContext({ organization_pk: null, league_pk: null }),
+    ).toEqual({
       organizationId: undefined,
       leagueId: undefined,
     });
   });
 
   it('returns the tournament pks', () => {
-    expect(tournamentEditContext({ organization_pk: 8, league_pk: 8 })).toEqual({
-      organizationId: 8,
-      leagueId: 8,
-    });
+    expect(tournamentEditContext({ organization_pk: 8, league_pk: 8 })).toEqual(
+      {
+        organizationId: 8,
+        leagueId: 8,
+      },
+    );
   });
 
   it('never falls back to the store org/league', () => {
-    useOrgStore.setState({ currentOrg: { pk: 9, name: 'Stale' } as OrganizationType });
-    useLeagueStore.setState({ currentLeague: { pk: 9, name: 'Stale' } as LeagueType });
-    expect(tournamentEditContext({ organization_pk: null }).organizationId).toBeUndefined();
-    expect(tournamentEditContext({ organization_pk: null }).leagueId).toBeUndefined();
-    expect(tournamentEditContext({ organization_pk: 8 }).organizationId).toBe(8);
+    useOrgStore.setState({
+      currentOrg: { pk: 9, name: 'Stale' } as OrganizationType,
+    });
+    useLeagueStore.setState({
+      currentLeague: { pk: 9, name: 'Stale' } as LeagueType,
+    });
+    expect(
+      tournamentEditContext({ organization_pk: null }).organizationId,
+    ).toBeUndefined();
+    expect(
+      tournamentEditContext({ organization_pk: null }).leagueId,
+    ).toBeUndefined();
+    expect(tournamentEditContext({ organization_pk: 8 }).organizationId).toBe(
+      8,
+    );
   });
 });

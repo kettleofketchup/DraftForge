@@ -30,9 +30,9 @@ export interface DeadlockUserProfile {
 }
 // Placeholders for T3. Kept as empty objects so the type shape is stable
 // across the epic and no consumer breaks when later tickets fill them in.
-export type OrgUserProfile = Record<string, never>;        // T3 expands
-export type OrgDotaUserProfile = { positions?: never };    // T3 expands
-export type OrgDeadlockUserProfile = { rank?: never };     // T3 expands
+export type OrgUserProfile = Record<string, never>; // T3 expands
+export type OrgDotaUserProfile = { positions?: never }; // T3 expands
+export type OrgDeadlockUserProfile = { rank?: never }; // T3 expands
 
 export interface UserProfileEntry {
   pk: number;
@@ -41,10 +41,13 @@ export interface UserProfileEntry {
     dota?: DotaUserProfile;
     deadlock?: DeadlockUserProfile;
   };
-  orgProfiles: Record<number, {
-    orgUser: OrgUserProfile;
-    dota?: OrgDotaUserProfile;
-    deadlock?: OrgDeadlockUserProfile;
-  }>;
+  orgProfiles: Record<
+    number,
+    {
+      orgUser: OrgUserProfile;
+      dota?: OrgDotaUserProfile;
+      deadlock?: OrgDeadlockUserProfile;
+    }
+  >;
   _fetchedAt: number;
 }

@@ -9,15 +9,14 @@
  * and uses getTournamentByKey for a known tournament.
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   getFirstLeague,
   getTournamentByKey,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
-
+import { API_URL } from '../../fixtures/base-url';
 
 let orgPk: number;
 let leaguePk: number;
@@ -29,15 +28,19 @@ test.describe('AddUserModal Smoke Tests', () => {
 
     // Get first league (gives us both org and league PKs)
     const league = await getFirstLeague(context);
-    if (!league) throw new Error('No leagues found. Run just db::populate::all');
+    if (!league)
+      throw new Error('No leagues found. Run just db::populate::all');
     leaguePk = league.pk;
 
     // Fetch league detail to get org PK (organization is a nested object)
-    const leagueResp = await context.request.get(`${API_URL}/leagues/${leaguePk}/`);
+    const leagueResp = await context.request.get(
+      `${API_URL}/leagues/${leaguePk}/`,
+    );
     const leagueData = await leagueResp.json();
-    orgPk = typeof leagueData.organization === 'object'
-      ? leagueData.organization.pk
-      : leagueData.organization;
+    orgPk =
+      typeof leagueData.organization === 'object'
+        ? leagueData.organization.pk
+        : leagueData.organization;
 
     // Any tournament no spec resets: a reset deletes and recreates it under a
     // new pk, and 09-bracket/04 resets bracket_unset_winner in parallel.
@@ -52,7 +55,9 @@ test.describe('AddUserModal Smoke Tests', () => {
     await loginAdmin();
   });
 
-  test('@cicd smoke: org add-member modal opens and searches', async ({ page }) => {
+  test('@cicd smoke: org add-member modal opens and searches', async ({
+    page,
+  }) => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
 
     // Wait for org page to load (title appears)
@@ -80,14 +85,18 @@ test.describe('AddUserModal Smoke Tests', () => {
     await searchInput.fill('test');
 
     // Wait for search results section to render (desktop heading or empty state)
-    await expect(modal.getByRole('heading', { name: 'Site Users' })).toBeVisible({ timeout: 5000 });
+    await expect(
+      modal.getByRole('heading', { name: 'Site Users' }),
+    ).toBeVisible({ timeout: 5000 });
 
     // Close modal with Escape
     await page.keyboard.press('Escape');
     await expect(modal).not.toBeVisible();
   });
 
-  test('@cicd smoke: league add-member modal opens and searches', async ({ page }) => {
+  test('@cicd smoke: league add-member modal opens and searches', async ({
+    page,
+  }) => {
     await visitAndWaitForHydration(page, `/leagues/${leaguePk}`);
 
     // Wait for league page to load
@@ -115,18 +124,24 @@ test.describe('AddUserModal Smoke Tests', () => {
     await searchInput.fill('test');
 
     // Wait for search results section to render
-    await expect(modal.getByRole('heading', { name: 'Site Users' })).toBeVisible({ timeout: 5000 });
+    await expect(
+      modal.getByRole('heading', { name: 'Site Users' }),
+    ).toBeVisible({ timeout: 5000 });
 
     // Close modal
     await page.keyboard.press('Escape');
     await expect(modal).not.toBeVisible();
   });
 
-  test('@cicd smoke: tournament add-player modal opens and searches', async ({ page }) => {
+  test('@cicd smoke: tournament add-player modal opens and searches', async ({
+    page,
+  }) => {
     await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
 
     // Wait for tournament page to load
-    await expect(page.locator('[data-testid="tournamentDetailPage"]')).toBeVisible({ timeout: 15000 });
+    await expect(
+      page.locator('[data-testid="tournamentDetailPage"]'),
+    ).toBeVisible({ timeout: 15000 });
 
     // Should land on players tab by default
     const addBtn = page.locator('[data-testid="tournamentAddPlayerBtn"]');
@@ -145,7 +160,9 @@ test.describe('AddUserModal Smoke Tests', () => {
     await searchInput.fill('test');
 
     // Wait for search results section to render
-    await expect(modal.getByRole('heading', { name: 'Site Users' })).toBeVisible({ timeout: 5000 });
+    await expect(
+      modal.getByRole('heading', { name: 'Site Users' }),
+    ).toBeVisible({ timeout: 5000 });
 
     // Close modal
     await page.keyboard.press('Escape');

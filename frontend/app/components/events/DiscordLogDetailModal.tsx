@@ -1,7 +1,7 @@
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '~/components/ui/badge';
 import { InfoDialog } from '~/components/ui/dialogs';
-import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 
 interface DiscordLogEntry {
   id: number;
@@ -79,7 +79,9 @@ export function DiscordLogDetailModal({
           <div className="text-muted-foreground">Timestamp</div>
           <div>
             {new Date(log.created_at).toLocaleString()}{' '}
-            <span className="text-muted-foreground">({formatRelativeTime(log.created_at)})</span>
+            <span className="text-muted-foreground">
+              ({formatRelativeTime(log.created_at)})
+            </span>
           </div>
 
           {log.status_code && (
@@ -93,7 +95,9 @@ export function DiscordLogDetailModal({
             <>
               <div className="text-muted-foreground">Message ID</div>
               <div className="flex items-center gap-1">
-                <code className="text-xs bg-base-400 px-1 rounded">{log.message_id}</code>
+                <code className="text-xs bg-base-400 px-1 rounded">
+                  {log.message_id}
+                </code>
               </div>
             </>
           )}
@@ -127,7 +131,9 @@ export function DiscordLogDetailModal({
         {log.error_message && (
           <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
             <div className="text-sm font-medium text-error mb-1">Error</div>
-            <pre className="text-xs text-muted-foreground whitespace-pre-wrap">{log.error_message}</pre>
+            <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+              {log.error_message}
+            </pre>
           </div>
         )}
 
@@ -139,7 +145,11 @@ export function DiscordLogDetailModal({
               className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setShowRaw(!showRaw)}
             >
-              {showRaw ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              {showRaw ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
               Raw Response Data
             </button>
             {showRaw && (

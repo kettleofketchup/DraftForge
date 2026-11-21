@@ -26,7 +26,8 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
 const buckets = Array.from({ length: 10 }, (_, i) => ({
   min: i * 10,
@@ -121,7 +122,9 @@ function renderStats(userId: number, leaguePk = 3, controlUserId?: number) {
 async function expectSubjectEmptyAfterControlRenders() {
   await waitFor(() =>
     expect(
-      screen.getByTestId('control').querySelector('[data-testid="strip-league-stats"]'),
+      screen
+        .getByTestId('control')
+        .querySelector('[data-testid="strip-league-stats"]'),
     ).not.toBeNull(),
   );
   expect(screen.getByTestId('subject').childElementCount).toBe(0);
@@ -214,7 +217,9 @@ describe('UserStripLeagueStats', () => {
       </QueryClientProvider>,
     );
     await waitFor(() =>
-      expect(client.getQueryState(['league-player-summaries', 3])?.status).toBe('error'),
+      expect(client.getQueryState(['league-player-summaries', 3])?.status).toBe(
+        'error',
+      ),
     );
     expect(screen.queryByTestId('strip-league-stats')).toBeNull();
   });
@@ -223,9 +228,9 @@ describe('UserStripLeagueStats', () => {
     stubFetch(summaries);
     renderStats(42);
     const column = await screen.findByTestId('strip-league-stats');
-    const seps = Array.from(column.querySelectorAll('span[aria-hidden]')).filter(
-      (s) => s.textContent === ' · ',
-    );
+    const seps = Array.from(
+      column.querySelectorAll('span[aria-hidden]'),
+    ).filter((s) => s.textContent === ' · ');
     expect(seps).toHaveLength(2);
     for (const sep of seps) expect(sep.className).toContain('whitespace-pre');
   });
@@ -234,7 +239,9 @@ describe('UserStripLeagueStats', () => {
     stubFetch(summaries);
     renderStats(42);
     await screen.findByTestId('strip-league-stats');
-    const trigger = screen.getByRole('button', { name: /^League stats for User 42: Rank 12 of 84/ });
+    const trigger = screen.getByRole('button', {
+      name: /^League stats for User 42: Rank 12 of 84/,
+    });
 
     fireEvent.mouseEnter(trigger);
     expect(actions.showPlayerPopover).toHaveBeenCalledWith(

@@ -34,4 +34,6 @@ export const DeadlockProfileFormSchema = z.object({
   rank_date: z.string().nullable().optional(),
 });
 
-export type DeadlockProfileFormValues = z.infer<typeof DeadlockProfileFormSchema>;
+export type DeadlockProfileFormValues = z.infer<
+  typeof DeadlockProfileFormSchema
+>;

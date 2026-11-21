@@ -2,10 +2,23 @@ import type React from 'react';
 import { useEffect } from 'react';
 import { RecentForm } from '~/components/league-stats/RecentForm';
 import { WinRateHistogram } from '~/components/league-stats/WinRateHistogram';
-import { LeagueStatsHttpError, useUserLeagueStatsByLeague } from '~/features/leaderboard/queries';
-import { formatWinRate, toneClass, winRateTone } from '~/features/league-stats/format';
-import { useLeagueDistribution, usePlayerLeagueSummary } from '~/features/league-stats/queries';
-import type { LeagueStatsResponse, PlayerLeagueSummary as Summary } from '~/features/league-stats/schemas';
+import {
+  LeagueStatsHttpError,
+  useUserLeagueStatsByLeague,
+} from '~/features/leaderboard/queries';
+import {
+  formatWinRate,
+  toneClass,
+  winRateTone,
+} from '~/features/league-stats/format';
+import {
+  useLeagueDistribution,
+  usePlayerLeagueSummary,
+} from '~/features/league-stats/queries';
+import type {
+  LeagueStatsResponse,
+  PlayerLeagueSummary as Summary,
+} from '~/features/league-stats/schemas';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 
@@ -20,7 +33,12 @@ const Tile: React.FC<{
   valueClassName?: string;
   compact?: boolean;
 }> = ({ label, value, caption, valueClassName, compact = false }) => (
-  <div className={cn('rounded-md bg-muted/40', compact ? 'px-2 py-1.5' : 'px-3 py-2')}>
+  <div
+    className={cn(
+      'rounded-md bg-muted/40',
+      compact ? 'px-2 py-1.5' : 'px-3 py-2',
+    )}
+  >
     <div className="text-xs text-muted-foreground">{label}</div>
     <div
       className={cn(
@@ -38,7 +56,9 @@ const Tile: React.FC<{
 function streakCaption(streak: Summary['streak']): string {
   if (!streak) return 'no games yet';
   const verb = streak.result === 'W' ? 'won' : 'lost';
-  return streak.count === 1 ? `${verb} last game` : `${verb} last ${streak.count}`;
+  return streak.count === 1
+    ? `${verb} last game`
+    : `${verb} last ${streak.count}`;
 }
 
 const fmt1 = (n: number): string => n.toFixed(1);
@@ -55,14 +75,21 @@ export const PlayerLeagueSummary: React.FC<{
 }> = ({ leaguePk, userId, compact = false }) => {
   const summaryQuery = usePlayerLeagueSummary(leaguePk, userId);
   const distributionQuery = useLeagueDistribution(leaguePk);
-  const statsQuery = useUserLeagueStatsByLeague(compact ? undefined : userId, leaguePk);
+  const statsQuery = useUserLeagueStatsByLeague(
+    compact ? undefined : userId,
+    leaguePk,
+  );
 
   const summaryError = summaryQuery.error;
   const statsError = statsQuery.error;
 
   useEffect(() => {
     if (!summaryError) return;
-    log.error('league summary failed to load', { leaguePk, userId, error: summaryError });
+    log.error('league summary failed to load', {
+      leaguePk,
+      userId,
+      error: summaryError,
+    });
   }, [summaryError, leaguePk, userId]);
 
   useEffect(() => {
@@ -70,7 +97,10 @@ export const PlayerLeagueSummary: React.FC<{
     log.error('league averages failed to load', {
       leaguePk,
       userId,
-      status: statsError instanceof LeagueStatsHttpError ? statsError.status : undefined,
+      status:
+        statsError instanceof LeagueStatsHttpError
+          ? statsError.status
+          : undefined,
       error: statsError,
     });
   }, [statsError, leaguePk, userId]);
@@ -86,13 +116,17 @@ export const PlayerLeagueSummary: React.FC<{
   ) : null;
 
   if (summaryQuery.isPending) {
-    return <div className="text-sm text-muted-foreground">Loading stats...</div>;
+    return (
+      <div className="text-sm text-muted-foreground">Loading stats...</div>
+    );
   }
 
   if (summaryQuery.isError || distributionQuery.isError) {
     return (
       <div className="space-y-1">
-        <div className="text-sm text-muted-foreground">Couldn't load league stats</div>
+        <div className="text-sm text-muted-foreground">
+          Couldn't load league stats
+        </div>
         {statsQuery.isSuccess ? averages : null}
       </div>
     );
@@ -100,32 +134,53 @@ export const PlayerLeagueSummary: React.FC<{
 
   const { summary, population, minGames } = summaryQuery.data;
   if (!summary || summary.games === 0) {
-    return <div className="text-sm text-muted-foreground">No league stats available</div>;
+    return (
+      <div className="text-sm text-muted-foreground">
+        No league stats available
+      </div>
+    );
   }
 
   const ranked = summary.rank != null;
   const tone = winRateTone(summary.win_rate);
 
   return (
-    <div data-testid={compact ? 'hover-league-summary' : 'player-league-summary'} className="space-y-3">
+    <div
+      data-testid={compact ? 'hover-league-summary' : 'player-league-summary'}
+      className="space-y-3"
+    >
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Tile compact={compact}
+        <Tile
+          compact={compact}
           label="Rank"
           value={`${ranked ? `#${summary.rank}` : '—'} / ${population}`}
           caption={
-            ranked ? `top ${summary.top_percent}%` : `${summary.games}/${minGames} games to rank`
+            ranked
+              ? `top ${summary.top_percent}%`
+              : `${summary.games}/${minGames} games to rank`
           }
         />
-        <Tile compact={compact} label="Games" value={summary.games} caption="ticket games" />
-        <Tile compact={compact}
+        <Tile
+          compact={compact}
+          label="Games"
+          value={summary.games}
+          caption="ticket games"
+        />
+        <Tile
+          compact={compact}
           label="Win rate"
           value={formatWinRate(summary.win_rate)}
           valueClassName={toneClass[tone]}
           caption={`${summary.wins}–${summary.losses}`}
         />
-        <Tile compact={compact}
+        <Tile
+          compact={compact}
           label="Streak"
-          value={summary.streak ? `${summary.streak.result}${summary.streak.count}` : '—'}
+          value={
+            summary.streak
+              ? `${summary.streak.result}${summary.streak.count}`
+              : '—'
+          }
           caption={streakCaption(summary.streak)}
         />
       </div>

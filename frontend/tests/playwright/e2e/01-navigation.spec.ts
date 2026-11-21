@@ -1,7 +1,8 @@
-import { test, expect } from '../fixtures';
 import {
-  visitAndWaitForHydration,
   checkBasicAccessibility,
+  expect,
+  test,
+  visitAndWaitForHydration,
 } from '../fixtures';
 
 test.describe('Navigation and Basic Functionality', () => {
@@ -30,7 +31,7 @@ test.describe('Navigation and Basic Functionality', () => {
 
       // Check if mobile menu button is visible (mobile viewport)
       const mobileMenuButton = page.locator(
-        'button[aria-label="Open mobile menu"]'
+        'button[aria-label="Open mobile menu"]',
       );
       const isMobileMenuVisible = await mobileMenuButton
         .isVisible()
@@ -54,7 +55,9 @@ test.describe('Navigation and Basic Functionality', () => {
       } else {
         // Desktop navigation - use data-testid for reliable selection
         const routeName = route.replace(/^\//, ''); // Remove leading slash
-        const navLink = page.locator(`[data-testid="nav-link-${routeName}"]`).first();
+        const navLink = page
+          .locator(`[data-testid="nav-link-${routeName}"]`)
+          .first();
         const isVisible = await navLink.isVisible().catch(() => false);
 
         if (isVisible) {
@@ -94,7 +97,10 @@ test.describe('Navigation and Basic Functionality', () => {
     ];
 
     for (const viewport of viewports) {
-      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.setViewportSize({
+        width: viewport.width,
+        height: viewport.height,
+      });
       await visitAndWaitForHydration(page, '/');
 
       // Check that content is visible and accessible
@@ -102,7 +108,9 @@ test.describe('Navigation and Basic Functionality', () => {
 
       // Ensure no horizontal scrolling on mobile
       if (viewport.width < 768) {
-        const scrollWidth = await page.evaluate(() => document.body.scrollWidth);
+        const scrollWidth = await page.evaluate(
+          () => document.body.scrollWidth,
+        );
         expect(scrollWidth).toBeLessThanOrEqual(viewport.width + 1);
       }
     }
@@ -118,8 +126,7 @@ test.describe('Navigation and Basic Functionality', () => {
     const currentUrl = page.url();
     const baseUrl = currentUrl.split('/').slice(0, 3).join('/');
     const isValidState =
-      currentUrl.includes('/non-existent-page') ||
-      currentUrl === `${baseUrl}/`;
+      currentUrl.includes('/non-existent-page') || currentUrl === `${baseUrl}/`;
     expect(isValidState).toBe(true);
   });
 
@@ -154,7 +161,7 @@ test.describe('Navigation and Basic Functionality', () => {
     // Handle responsive navigation properly
     // Check if we're on mobile viewport (mobile menu button visible)
     const mobileMenuButton = page.locator(
-      'button[aria-label="Open mobile menu"]'
+      'button[aria-label="Open mobile menu"]',
     );
     const isMobileMenuVisible = await mobileMenuButton
       .isVisible()
@@ -172,9 +179,7 @@ test.describe('Navigation and Basic Functionality', () => {
     } else {
       // Desktop navigation flow - use data-testid for reliable selection
       const navLink = page.locator('[data-testid="nav-link-tournaments"]');
-      const isNavLinkVisible = await navLink
-        .isVisible()
-        .catch(() => false);
+      const isNavLinkVisible = await navLink.isVisible().catch(() => false);
 
       if (isNavLinkVisible) {
         await navLink.click();

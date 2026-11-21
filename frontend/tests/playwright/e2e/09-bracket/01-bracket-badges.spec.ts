@@ -13,11 +13,10 @@
  */
 
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   getTournamentByKey,
-  TournamentPage,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
 
 // Tournament PKs fetched in beforeAll
@@ -35,7 +34,10 @@ test.describe.skip('Bracket Badges (e2e)', () => {
     // Get tournament PKs by key (stable across populate changes)
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
 
-    const completedBracket = await getTournamentByKey(context, 'completed_bracket');
+    const completedBracket = await getTournamentByKey(
+      context,
+      'completed_bracket',
+    );
     const partialBracket = await getTournamentByKey(context, 'partial_bracket');
     const pendingBracket = await getTournamentByKey(context, 'pending_bracket');
 
@@ -62,7 +64,10 @@ test.describe.skip('Bracket Badges (e2e)', () => {
 
   test('should display bracket with completed games', async ({ page }) => {
     // Completed Bracket Test has all 6 games completed
-    await visitAndWaitForHydration(page, `/tournament/${completedBracketPk}/games`);
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${completedBracketPk}/games`,
+    );
 
     // Wait for the games tab to load
     const bracketTab = page.locator('[data-testid="bracketTab"]');
@@ -76,9 +81,14 @@ test.describe.skip('Bracket Badges (e2e)', () => {
   // SKIP REASON: Requires test data with specific double elimination bracket
   // structure where loser paths are configured. Test data needs badges A/B
   // positioned on winners R1 matches pointing to losers bracket.
-  test.skip('should display bracket badges on winners bracket matches', async ({ page }) => {
+  test.skip('should display bracket badges on winners bracket matches', async ({
+    page,
+  }) => {
     // Completed Bracket Test has completed bracket with badges
-    await visitAndWaitForHydration(page, `/tournament/${completedBracketPk}/games`);
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${completedBracketPk}/games`,
+    );
 
     // Wait for bracket to load
     const bracketContainer = page.locator('[data-testid="bracketContainer"]');
@@ -97,43 +107,64 @@ test.describe.skip('Bracket Badges (e2e)', () => {
   // SKIP REASON: Same as above - requires bracket with loser path badges.
   // Test data needs bracket-badge-A-left-top and bracket-badge-B-left-bottom
   // test IDs on losers bracket slots.
-  test.skip('should display corresponding badges on losers bracket slots', async ({ page }) => {
-    await visitAndWaitForHydration(page, `/tournament/${completedBracketPk}/games`);
+  test.skip('should display corresponding badges on losers bracket slots', async ({
+    page,
+  }) => {
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${completedBracketPk}/games`,
+    );
 
     const bracketContainer = page.locator('[data-testid="bracketContainer"]');
     await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
     // Losers R1 match should have badges on the left indicating where teams came from
     // Badge A on top slot (radiant team)
-    const badgeALeftTop = page.locator('[data-testid="bracket-badge-A-left-top"]');
+    const badgeALeftTop = page.locator(
+      '[data-testid="bracket-badge-A-left-top"]',
+    );
     await expect(badgeALeftTop).toBeAttached({ timeout: 10000 });
 
     // Badge B on bottom slot (dire team)
-    const badgeBLeftBottom = page.locator('[data-testid="bracket-badge-B-left-bottom"]');
+    const badgeBLeftBottom = page.locator(
+      '[data-testid="bracket-badge-B-left-bottom"]',
+    );
     await expect(badgeBLeftBottom).toBeAttached();
   });
 
   // SKIP REASON: Same as above - requires bracket with loser path badges.
   // Test verifies badge-letter-A and badge-letter-B test IDs exist with content.
-  test.skip('should show badge letters with distinct colors', async ({ page }) => {
-    await visitAndWaitForHydration(page, `/tournament/${completedBracketPk}/games`);
+  test.skip('should show badge letters with distinct colors', async ({
+    page,
+  }) => {
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${completedBracketPk}/games`,
+    );
 
     const bracketContainer = page.locator('[data-testid="bracketContainer"]');
     await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
     // Verify badge A shows letter A (use first() since there may be multiple badges)
-    const badgeLetterA = page.locator('[data-testid="bracket-badge-letter-A"]').first();
+    const badgeLetterA = page
+      .locator('[data-testid="bracket-badge-letter-A"]')
+      .first();
     await expect(badgeLetterA).toBeAttached();
     await expect(badgeLetterA).toContainText('A');
 
     // Verify badge B shows letter B (use first() since there may be multiple badges)
-    const badgeLetterB = page.locator('[data-testid="bracket-badge-letter-B"]').first();
+    const badgeLetterB = page
+      .locator('[data-testid="bracket-badge-letter-B"]')
+      .first();
     await expect(badgeLetterB).toBeAttached();
     await expect(badgeLetterB).toContainText('B');
   });
 
   test('should show Winners Bracket label', async ({ page }) => {
-    await visitAndWaitForHydration(page, `/tournament/${completedBracketPk}/games`);
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${completedBracketPk}/games`,
+    );
 
     const bracketContainer = page.locator('[data-testid="bracketContainer"]');
     await expect(bracketContainer).toBeVisible({ timeout: 15000 });
@@ -143,7 +174,10 @@ test.describe.skip('Bracket Badges (e2e)', () => {
   });
 
   test('should show Losers Bracket divider', async ({ page }) => {
-    await visitAndWaitForHydration(page, `/tournament/${completedBracketPk}/games`);
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${completedBracketPk}/games`,
+    );
 
     const bracketContainer = page.locator('[data-testid="bracketContainer"]');
     await expect(bracketContainer).toBeVisible({ timeout: 15000 });
@@ -154,7 +188,10 @@ test.describe.skip('Bracket Badges (e2e)', () => {
 
   test('should handle tournament with partial bracket', async ({ page }) => {
     // Partial Bracket Test has 2 games completed, 4 pending
-    await visitAndWaitForHydration(page, `/tournament/${partialBracketPk}/games`);
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${partialBracketPk}/games`,
+    );
 
     const bracketTab = page.locator('[data-testid="bracketTab"]');
     await expect(bracketTab).toBeVisible({ timeout: 10000 });
@@ -170,7 +207,10 @@ test.describe.skip('Bracket Badges (e2e)', () => {
 
   test('should handle tournament with no bracket games', async ({ page }) => {
     // Pending Bracket Test has 0 games completed
-    await visitAndWaitForHydration(page, `/tournament/${pendingBracketPk}/games`);
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${pendingBracketPk}/games`,
+    );
 
     const bracketTab = page.locator('[data-testid="bracketTab"]');
     await expect(bracketTab).toBeVisible({ timeout: 10000 });
@@ -180,5 +220,4 @@ test.describe.skip('Bracket Badges (e2e)', () => {
     const bracketContainer = page.locator('[data-testid="bracketContainer"]');
     await expect(bracketContainer).toBeVisible({ timeout: 15000 });
   });
-
 });

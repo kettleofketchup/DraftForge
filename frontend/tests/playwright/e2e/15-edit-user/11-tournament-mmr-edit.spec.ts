@@ -9,10 +9,16 @@
  *
  * Uses the dedicated, MMR-linked, non-admin fixture user edit_user_tourn_mmr.
  */
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test, expect, openEditModal, readEditField, fillEditField, saveEditModal, restoreUserField,
+  expect,
+  fillEditField,
+  openEditModal,
+  readEditField,
+  restoreUserField,
+  saveEditModal,
+  test,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 const USER_EDIT_LEAGUE_NAME = 'User Edit League';
 const USER_EDIT_TOURNAMENT_NAME = 'User Edit Tournament';
@@ -26,20 +32,41 @@ test.describe('Edit User MMR from Tournament Players tab (@cicd)', () => {
 
     const leaguesResp = await context.request.get(`${API_URL}/leagues/`);
     const leagues = await leaguesResp.json();
-    const leagueList = Array.isArray(leagues) ? leagues : leagues.results ?? [];
-    const editLeague = leagueList.find((l: { name: string }) => l.name === USER_EDIT_LEAGUE_NAME);
-    if (!editLeague) throw new Error(`League "${USER_EDIT_LEAGUE_NAME}" not found. Run just db::populate::all`);
+    const leagueList = Array.isArray(leagues)
+      ? leagues
+      : (leagues.results ?? []);
+    const editLeague = leagueList.find(
+      (l: { name: string }) => l.name === USER_EDIT_LEAGUE_NAME,
+    );
+    if (!editLeague)
+      throw new Error(
+        `League "${USER_EDIT_LEAGUE_NAME}" not found. Run just db::populate::all`,
+      );
 
     // Load-bearing: league-scope PATCH + league-admin permission need the parent org.
-    const leagueDetailResp = await context.request.get(`${API_URL}/leagues/${editLeague.pk}/`);
+    const leagueDetailResp = await context.request.get(
+      `${API_URL}/leagues/${editLeague.pk}/`,
+    );
     const leagueDetail = await leagueDetailResp.json();
-    expect(leagueDetail.organization?.pk, 'User Edit League must carry its parent org').toBeTruthy();
+    expect(
+      leagueDetail.organization?.pk,
+      'User Edit League must carry its parent org',
+    ).toBeTruthy();
 
-    const tournamentsResp = await context.request.get(`${API_URL}/tournaments/?league=${editLeague.pk}`);
+    const tournamentsResp = await context.request.get(
+      `${API_URL}/tournaments/?league=${editLeague.pk}`,
+    );
     const tournaments = await tournamentsResp.json();
-    const tournamentList = Array.isArray(tournaments) ? tournaments : tournaments.results ?? [];
-    const editTournament = tournamentList.find((t: { name: string }) => t.name === USER_EDIT_TOURNAMENT_NAME);
-    if (!editTournament) throw new Error(`Tournament "${USER_EDIT_TOURNAMENT_NAME}" not found. Run just db::populate::all`);
+    const tournamentList = Array.isArray(tournaments)
+      ? tournaments
+      : (tournaments.results ?? []);
+    const editTournament = tournamentList.find(
+      (t: { name: string }) => t.name === USER_EDIT_TOURNAMENT_NAME,
+    );
+    if (!editTournament)
+      throw new Error(
+        `Tournament "${USER_EDIT_TOURNAMENT_NAME}" not found. Run just db::populate::all`,
+      );
     tournamentPk = editTournament.pk;
 
     await context.close();
@@ -49,10 +76,14 @@ test.describe('Edit User MMR from Tournament Players tab (@cicd)', () => {
     await loginAdmin();
   });
 
-  test('edit pencil on a tournament player card can edit org MMR', async ({ page }) => {
+  test('edit pencil on a tournament player card can edit org MMR', async ({
+    page,
+  }) => {
     await page.goto(`/tournament/${tournamentPk}`);
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('[data-testid="tournamentDetailPage"]')).toBeVisible({ timeout: 15000 });
+    await expect(
+      page.locator('[data-testid="tournamentDetailPage"]'),
+    ).toBeVisible({ timeout: 15000 });
 
     // Players is the default tab; click only if a tab nav is present.
     const playersTab = page.locator('[data-testid="playersTab"]');
@@ -68,20 +99,26 @@ test.describe('Edit User MMR from Tournament Players tab (@cicd)', () => {
     // does not intercept pointer events on the card below.
     await page.keyboard.press('Escape');
 
-    const targetCard = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
+    const targetCard = page.locator(
+      `[data-testid="usercard-${TARGET_USERNAME}"]`,
+    );
     await expect(targetCard).toBeVisible({ timeout: 10000 });
 
     await openEditModal(page, targetCard);
 
     // THE regression signal: scope-aware edit must show the MMR field.
-    await expect(page.locator('[data-testid="edit-user-mmr"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="edit-user-mmr"]')).toBeVisible({
+      timeout: 5000,
+    });
 
     const originalMmr = await readEditField(page, 'mmr');
     const newMmr = originalMmr === '9999' ? '8888' : '9999'; // guaranteed != current so save fires
     await fillEditField(page, 'mmr', newMmr);
     await saveEditModal(page);
 
-    await expect(targetCard.getByText(newMmr).first()).toBeVisible({ timeout: 10000 });
+    await expect(targetCard.getByText(newMmr).first()).toBeVisible({
+      timeout: 10000,
+    });
 
     await restoreUserField(page, targetCard, 'mmr', originalMmr);
   });

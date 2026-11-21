@@ -12,8 +12,11 @@ import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { cn } from '~/lib/utils';
 import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import { RolePositions } from './positions';
-import { type StatsBreakpoint, UserStripLeagueStats } from './UserStripLeagueStats';
 import type { UserType } from './types';
+import {
+  type StatsBreakpoint,
+  UserStripLeagueStats,
+} from './UserStripLeagueStats';
 
 export interface UserStripProps {
   user: UserType | UserEntry;
@@ -127,7 +130,9 @@ export const UserStrip = memo(
 
     // Memoize MMR values to prevent badge re-renders
     const orgMmr = isUserEntry(user)
-      ? (organizationId ? user.orgData[organizationId]?.mmr : undefined)
+      ? organizationId
+        ? user.orgData[organizationId]?.mmr
+        : undefined
       : user.mmr;
     const baseMmr = useMemo(
       () => (orgMmr ?? 0).toLocaleString().padStart(6, '\u2007'),
@@ -135,7 +140,9 @@ export const UserStrip = memo(
     );
 
     const leagueMmrValue = isUserEntry(user)
-      ? (leagueId ? user.leagueData[leagueId]?.mmr : undefined)
+      ? leagueId
+        ? user.leagueData[leagueId]?.mmr
+        : undefined
       : (user as UserType & { league_mmr?: number }).league_mmr;
     const leagueMmr = useMemo(
       () => (leagueMmrValue ?? 0).toLocaleString().padStart(6, '\u2007'),
@@ -188,9 +195,7 @@ export const UserStrip = memo(
             className="text-xs bg-popover text-popover-foreground"
           >
             <p className="font-semibold text-foreground">League MMR</p>
-            <p className="text-muted-foreground">
-              Performance-adjusted rating
-            </p>
+            <p className="text-muted-foreground">Performance-adjusted rating</p>
           </TooltipContent>
         </Tooltip>
       ),
@@ -200,7 +205,8 @@ export const UserStrip = memo(
     // Reactive gameType-aware positions over the list-populated entity adapter
     // (fall back to the passed user.positions off-Dota / pre-cache). RolePositions
     // re-resolves internally too; subscribing here keeps the memo dep reactive.
-    const playerPositions = usePlayerPositions(user?.pk ?? -1) ?? user?.positions;
+    const playerPositions =
+      usePlayerPositions(user?.pk ?? -1) ?? user?.positions;
     const showStats = statsLeagueId != null;
 
     // Memoize positions to prevent re-renders
@@ -247,7 +253,9 @@ export const UserStrip = memo(
               style={
                 nameMaxLength == null
                   ? undefined
-                  : ({ '--name-width': `${nameMaxLength}ch` } as React.CSSProperties)
+                  : ({
+                      '--name-width': `${nameMaxLength}ch`,
+                    } as React.CSSProperties)
               }
               title={fullName.length > 12 ? fullName : undefined}
             >

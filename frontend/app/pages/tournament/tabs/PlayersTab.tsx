@@ -1,21 +1,21 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Upload } from 'lucide-react';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { addTournamentMember } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
+import { addTournamentMember } from '~/components/api/api';
 import type { TournamentType } from '~/components/tournament/types';
 import { PrimaryButton } from '~/components/ui/buttons';
-import { SearchUserDropdown } from '~/components/user/searchUser';
-import type { UserType } from '~/components/user/types';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
-import { hydrateTournament } from '~/lib/hydrateTournament';
-import { useUserStore } from '~/store/userStore';
-import { useOrgStore } from '~/store/orgStore';
-import { useLeagueStore } from '~/store/leagueStore';
+import { SearchUserDropdown } from '~/components/user/searchUser';
+import type { UserType } from '~/components/user/types';
 import { useIsLeagueStaff } from '~/hooks/usePermissions';
 import { useTournamentUsers } from '~/hooks/useTournamentUsers';
+import { hydrateTournament } from '~/lib/hydrateTournament';
+import { useLeagueStore } from '~/store/leagueStore';
+import { useOrgStore } from '~/store/orgStore';
+import { useUserStore } from '~/store/userStore';
 import { hasErrors } from '../hasErrors';
 import { tournamentEditContext } from '../tournamentEditContext';
 
@@ -48,10 +48,14 @@ export const PlayersTab: React.FC = memo(() => {
         (useUserStore.getState().tournament?.users ?? []).map((u) => u.pk),
       );
       const rawTournament = await addTournamentMember(tournament.pk, payload);
-      const hydrated = hydrateTournament(rawTournament as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
+      const hydrated = hydrateTournament(
+        rawTournament as TournamentType & { _users?: Record<number, unknown> },
+      ) as TournamentType;
       setTournament(hydrated);
       // Invalidate React Query cache so useTournament refetches
-      queryClient.invalidateQueries({ queryKey: ['tournament', tournament.pk] });
+      queryClient.invalidateQueries({
+        queryKey: ['tournament', tournament.pk],
+      });
       // Return the newly added user to satisfy AddUserModal's onAdd contract
       const addedUser = (hydrated.users ?? []).find(
         (u) => u.pk != null && !oldPks.has(u.pk),
@@ -59,16 +63,16 @@ export const PlayersTab: React.FC = memo(() => {
       if (!addedUser) throw new Error('Added user not found in response');
       return addedUser;
     },
-    [tournament?.pk, setTournament, queryClient]
+    [tournament?.pk, setTournament, queryClient],
   );
 
   const addedPkSet = useMemo(
     () => new Set(tournamentUsers.map((u) => u.pk)),
-    [tournamentUsers]
+    [tournamentUsers],
   );
   const isUserAdded = useCallback(
     (user: UserType) => user.pk != null && addedPkSet.has(user.pk),
-    [addedPkSet]
+    [addedPkSet],
   );
 
   const currentLeague = useLeagueStore((s) => s.currentLeague);
@@ -88,7 +92,9 @@ export const PlayersTab: React.FC = memo(() => {
           <SearchUserDropdown
             users={tournamentUsers}
             query={query}
-            setQuery={(val) => typeof val === 'string' ? setQuery(val) : setQuery(val(''))}
+            setQuery={(val) =>
+              typeof val === 'string' ? setQuery(val) : setQuery(val(''))
+            }
             data-testid="playerSearchDropdown"
           />
         </div>
@@ -137,7 +143,9 @@ export const PlayersTab: React.FC = memo(() => {
           }}
           onComplete={() => {
             // Invalidate React Query cache so useTournament refetches
-            queryClient.invalidateQueries({ queryKey: ['tournament', tournament.pk] });
+            queryClient.invalidateQueries({
+              queryKey: ['tournament', tournament.pk],
+            });
           }}
         />
       )}
@@ -154,7 +162,7 @@ export const PlayersTab: React.FC = memo(() => {
           }}
           onAdd={handleAddMember}
           isAdded={isUserAdded}
-                    hasDiscordServer={hasDiscordServer}
+          hasDiscordServer={hasDiscordServer}
         />
       )}
     </div>

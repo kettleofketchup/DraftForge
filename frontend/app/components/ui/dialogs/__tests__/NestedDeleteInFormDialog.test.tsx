@@ -11,7 +11,8 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
 // EditLeagueModal renders DeleteLeagueDialog inside FormDialog's children.
 // The delete dialog is portaled out of the form's DOM, but React still bubbles
@@ -21,7 +22,12 @@ function setup() {
   const onConfirm = vi.fn();
   render(
     <TooltipProvider>
-      <FormDialog open onOpenChange={vi.fn()} title="Edit League" onSubmit={onSubmit}>
+      <FormDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Edit League"
+        onSubmit={onSubmit}
+      >
         <input data-testid="league-name" defaultValue="Acme League" />
         <DeleteDialog
           open
@@ -69,7 +75,9 @@ describe('DeleteDialog nested in FormDialog', () => {
 
   it('clicking confirm deletes without submitting the outer form', () => {
     const { onConfirm, onSubmit } = setup();
-    fireEvent.change(screen.getByTestId('dd-input'), { target: { value: 'Acme League' } });
+    fireEvent.change(screen.getByTestId('dd-input'), {
+      target: { value: 'Acme League' },
+    });
     fireEvent.click(screen.getByTestId('dd-confirm'));
 
     expect(onConfirm).toHaveBeenCalledOnce();

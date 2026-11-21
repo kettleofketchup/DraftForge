@@ -1,5 +1,5 @@
-import TournamentsPage from '~/pages/tournaments/tournaments';
 import { generateMeta } from '~/lib/seo';
+import TournamentsPage from '~/pages/tournaments/tournaments';
 
 export function meta() {
   return generateMeta({

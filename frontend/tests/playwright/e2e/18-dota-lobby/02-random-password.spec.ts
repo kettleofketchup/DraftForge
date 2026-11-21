@@ -10,6 +10,7 @@ import {
   expect,
   expectLobbyState,
   getSimLobby,
+  hasSimulator,
   loginDotaLobby,
   openBracket,
   openMatchModal,
@@ -17,7 +18,6 @@ import {
   requestLobby,
   resetDotaLobbyData,
   sim,
-  hasSimulator,
   SIMULATOR_SKIP_REASON,
   test,
   waitForLobbyRow,
@@ -44,7 +44,9 @@ test.describe('Dota lobby: random event password (e2e)', () => {
     const event = data.random_event;
     const game = event.tournament.games[0];
 
-    const before = await context.request.get(`${API_URL}/events/${event.pk}/lobby-password/`);
+    const before = await context.request.get(
+      `${API_URL}/events/${event.pk}/lobby-password/`,
+    );
     expect(before.status()).toBe(200);
     const { mode, password: oldPassword } = await before.json();
     expect(mode).toBe('random');
@@ -54,7 +56,9 @@ test.describe('Dota lobby: random event password (e2e)', () => {
     await requestLobby(context, game.pk);
     const first = await waitForLobbyRow(context, game.pk);
     expect(first.password).toBe(oldPassword);
-    expect((await getSimLobby(context, first.lobby_id!)).password).toBe(oldPassword);
+    expect((await getSimLobby(context, first.lobby_id!)).password).toBe(
+      oldPassword,
+    );
 
     // Staff regenerate it.
     const regen = await postWithCsrf(
@@ -66,26 +70,41 @@ test.describe('Dota lobby: random event password (e2e)', () => {
     expect(newPassword).not.toBe(oldPassword);
 
     // The existing lobby keeps the password it was created with.
-    expect((await getSimLobby(context, first.lobby_id!)).password).toBe(oldPassword);
+    expect((await getSimLobby(context, first.lobby_id!)).password).toBe(
+      oldPassword,
+    );
     await openBracket(page, event.tournament.pk);
     const dialog = await openMatchModal(page, game.pk);
     await expectLobbyState(dialog, ['waiting', 'ready']);
-    await expect(dialog.locator('[data-testid="lobby-password"]')).toHaveText(oldPassword);
+    await expect(dialog.locator('[data-testid="lobby-password"]')).toHaveText(
+      oldPassword,
+    );
 
     // A recreated lobby uses the new one.
     await dialog.locator('[data-testid="lobby-recreate-btn"]').click();
-    const second = await waitForLobbyRow(context, game.pk, undefined, { previousId: first.id });
-    expect(second.password).toBe(newPassword);
-    expect((await getSimLobby(context, second.lobby_id!)).password).toBe(newPassword);
-    await expect(dialog.locator('[data-testid="lobby-password"]')).toHaveText(newPassword, {
-      timeout: 30_000,
+    const second = await waitForLobbyRow(context, game.pk, undefined, {
+      previousId: first.id,
     });
+    expect(second.password).toBe(newPassword);
+    expect((await getSimLobby(context, second.lobby_id!)).password).toBe(
+      newPassword,
+    );
+    await expect(dialog.locator('[data-testid="lobby-password"]')).toHaveText(
+      newPassword,
+      {
+        timeout: 30_000,
+      },
+    );
 
     // The replaced lobby is closed in dota_lobby.
     await expect
-      .poll(async () => (await sim.get(context, `lobbies/${first.lobby_id}`)).status(), {
-        timeout: 30_000,
-      })
+      .poll(
+        async () =>
+          (await sim.get(context, `lobbies/${first.lobby_id}`)).status(),
+        {
+          timeout: 30_000,
+        },
+      )
       .toBe(404);
   });
 });

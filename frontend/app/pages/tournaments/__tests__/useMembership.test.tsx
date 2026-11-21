@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import { useMembership } from '../useMembership';

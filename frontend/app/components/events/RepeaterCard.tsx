@@ -1,5 +1,5 @@
-import { useNavigate } from 'react-router';
 import { Calendar, Repeat, Users } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { Badge } from '~/components/ui/badge';
 import { FREQUENCY_LABELS } from './schemas';
 
@@ -26,7 +26,9 @@ export function RepeaterCard({ repeater }: RepeaterCardProps) {
       onClick={() => navigate(`/event-series/${repeater.id}`)}
     >
       <div className="flex items-start justify-between mb-2">
-        <h3 className="text-foreground font-semibold text-sm truncate">{repeater.name}</h3>
+        <h3 className="text-foreground font-semibold text-sm truncate">
+          {repeater.name}
+        </h3>
         <Badge
           className={
             repeater.is_active
@@ -39,7 +41,9 @@ export function RepeaterCard({ repeater }: RepeaterCardProps) {
       </div>
 
       {repeater.organization_name && (
-        <p className="text-muted-foreground text-xs mb-3">{repeater.organization_name}</p>
+        <p className="text-muted-foreground text-xs mb-3">
+          {repeater.organization_name}
+        </p>
       )}
 
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -58,7 +62,9 @@ export function RepeaterCard({ repeater }: RepeaterCardProps) {
         {repeater.next_event_date && (
           <div className="flex items-center gap-1">
             <Calendar className="h-3 w-3" />
-            <span>{new Date(repeater.next_event_date).toLocaleDateString()}</span>
+            <span>
+              {new Date(repeater.next_event_date).toLocaleDateString()}
+            </span>
           </div>
         )}
       </div>

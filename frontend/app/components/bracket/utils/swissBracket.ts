@@ -1,5 +1,5 @@
-import type { BracketMatch } from '../types';
 import type { TeamType } from '~/components/tournament/types';
+import type { BracketMatch } from '../types';
 
 /**
  * Swiss bracket configuration
@@ -38,7 +38,7 @@ export function generateSwissBracket(config: SwissConfig): SwissRound[] {
  */
 export function generateSwissPairings(
   standings: SwissStanding[],
-  previousMatches: BracketMatch[]
+  previousMatches: BracketMatch[],
 ): BracketMatch[] {
   console.warn('Swiss pairing generation not yet implemented');
   return [];
@@ -50,7 +50,7 @@ export function generateSwissPairings(
 export function calculateSwissStandings(
   currentStandings: SwissStanding[],
   completedMatches: BracketMatch[],
-  config: SwissConfig
+  config: SwissConfig,
 ): SwissStanding[] {
   console.warn('Swiss standings calculation not yet implemented');
   return currentStandings;
@@ -61,7 +61,7 @@ export function calculateSwissStandings(
  */
 export function isSwissComplete(
   standings: SwissStanding[],
-  config: SwissConfig
+  config: SwissConfig,
 ): boolean {
   const activeTeams = standings.filter((s) => s.status === 'active');
   return activeTeams.length === 0;

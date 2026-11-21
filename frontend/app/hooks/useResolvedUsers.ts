@@ -17,8 +17,9 @@ import type { UserEntry } from '~/store/userCacheTypes';
  */
 export function useResolvedUsers(pks: number[]): UserEntry[] {
   return useUserCacheStore(
-    useShallow((state) =>
-      pks.map((pk) => state.entities[pk]).filter(Boolean) as UserEntry[],
+    useShallow(
+      (state) =>
+        pks.map((pk) => state.entities[pk]).filter(Boolean) as UserEntry[],
     ),
   );
 }

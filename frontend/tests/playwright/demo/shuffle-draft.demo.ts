@@ -10,9 +10,9 @@
  */
 
 import { test } from '@playwright/test';
-import { runDraftDemo } from './draft-demo-helper';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { runDraftDemo } from './draft-demo-helper';
 
 // ESM-compatible __dirname
 const __filename = fileURLToPath(import.meta.url);

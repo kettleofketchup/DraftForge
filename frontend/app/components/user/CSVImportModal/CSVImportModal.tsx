@@ -1,6 +1,27 @@
-import { useState, useCallback, useRef } from 'react';
-import { Download, Upload, CheckCircle, XCircle, RefreshCw, AlertTriangle, UserPlus } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle,
+  Download,
+  RefreshCw,
+  Upload,
+  UserPlus,
+  XCircle,
+} from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
 
+import type {
+  CSVImportResponse,
+  CSVImportRow,
+  MMRTarget,
+} from '~/components/api/api';
+import { importCSVToOrg, importCSVToTournament } from '~/components/api/api';
+import { Button } from '~/components/ui/button';
+import {
+  CancelButton,
+  ConfirmButton,
+  PrimaryButton,
+  SecondaryButton,
+} from '~/components/ui/buttons';
 import {
   Dialog,
   DialogContent,
@@ -8,8 +29,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Button } from '~/components/ui/button';
-import { CancelButton, ConfirmButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { Label } from '~/components/ui/label';
 import {
   Select,
@@ -18,8 +37,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { importCSVToOrg, importCSVToTournament } from '~/components/api/api';
-import type { CSVImportResponse, CSVImportRow, MMRTarget } from '~/components/api/api';
 import type { UserType } from '~/components/user/types';
 import { UserStrip } from '~/components/user/UserStrip';
 
@@ -40,7 +57,9 @@ export function CSVImportModal({
   const [step, setStep] = useState<ImportStep>('upload');
   const [validatedRows, setValidatedRows] = useState<ValidatedRow[]>([]);
   const [rawRows, setRawRows] = useState<CSVRow[]>([]);
-  const [importResult, setImportResult] = useState<CSVImportResponse | null>(null);
+  const [importResult, setImportResult] = useState<CSVImportResponse | null>(
+    null,
+  );
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updateMmr, setUpdateMmr] = useState(false);
@@ -71,28 +90,27 @@ export function CSVImportModal({
     [onOpenChange, reset],
   );
 
-  const handleFileSelect = useCallback(
-    async (file: File) => {
-      setError(null);
-      try {
-        const result = await parseCSV(file);
-        if (result.errors.length > 0) {
-          setError(`CSV parse error: ${result.errors[0].message}`);
-          return;
-        }
-        if (result.data.length === 0) {
-          setError('CSV file is empty');
-          return;
-        }
-        setRawRows(result.data);
-        setValidatedRows(validateRows(result.data));
-        setStep('preview');
-      } catch (err) {
-        setError(`Failed to parse CSV: ${err instanceof Error ? err.message : 'Unknown error'}`);
+  const handleFileSelect = useCallback(async (file: File) => {
+    setError(null);
+    try {
+      const result = await parseCSV(file);
+      if (result.errors.length > 0) {
+        setError(`CSV parse error: ${result.errors[0].message}`);
+        return;
       }
-    },
-    [],
-  );
+      if (result.data.length === 0) {
+        setError('CSV file is empty');
+        return;
+      }
+      setRawRows(result.data);
+      setValidatedRows(validateRows(result.data));
+      setStep('preview');
+    } catch (err) {
+      setError(
+        `Failed to parse CSV: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
+    }
+  }, []);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -137,7 +155,11 @@ export function CSVImportModal({
 
       let result: CSVImportResponse;
       if (entityContext.tournamentId) {
-        result = await importCSVToTournament(entityContext.tournamentId, validRows, options);
+        result = await importCSVToTournament(
+          entityContext.tournamentId,
+          validRows,
+          options,
+        );
       } else if (entityContext.orgId) {
         result = await importCSVToOrg(entityContext.orgId, validRows, options);
       } else {
@@ -148,96 +170,122 @@ export function CSVImportModal({
       setStep('results');
       onComplete();
     } catch (err) {
-      setError(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setError(
+        `Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
     } finally {
       setIsImporting(false);
     }
   }, [validatedRows, entityContext, onComplete, updateMmr, mmrTarget]);
 
-  const handleResolveConflict = useCallback(async (rowNumber: number, selectedUser: UserType) => {
-    setResolvingRows((prev) => new Set(prev).add(rowNumber));
-    try {
-      // Build a single-row import using only the selected user's identifier
-      const originalRaw = sentRowMapRef.current.get(rowNumber);
-      const row: CSVImportRow = {};
-      if (selectedUser.steam_account_id) {
-        row.steam_friend_id = String(selectedUser.steam_account_id);
-      } else if (selectedUser.discordId) {
-        row.discord_id = selectedUser.discordId;
-      }
-      // Include mmr from the original CSV row
-      if (originalRaw?.mmr?.trim()) {
-        row.mmr = Number(originalRaw.mmr.trim());
-      }
-      if (originalRaw?.name?.trim()) {
-        row.name = originalRaw.name.trim();
-      }
-      if (originalRaw?.team_name?.trim()) {
-        row.team_name = originalRaw.team_name.trim();
-      }
-      if (originalRaw?.team_captain?.trim()) {
-        row.team_captain = true;
-      }
-      if (originalRaw?.positions?.trim()) {
-        row.positions = originalRaw.positions.trim();
-      }
+  const handleResolveConflict = useCallback(
+    async (rowNumber: number, selectedUser: UserType) => {
+      setResolvingRows((prev) => new Set(prev).add(rowNumber));
+      try {
+        // Build a single-row import using only the selected user's identifier
+        const originalRaw = sentRowMapRef.current.get(rowNumber);
+        const row: CSVImportRow = {};
+        if (selectedUser.steam_account_id) {
+          row.steam_friend_id = String(selectedUser.steam_account_id);
+        } else if (selectedUser.discordId) {
+          row.discord_id = selectedUser.discordId;
+        }
+        // Include mmr from the original CSV row
+        if (originalRaw?.mmr?.trim()) {
+          row.mmr = Number(originalRaw.mmr.trim());
+        }
+        if (originalRaw?.name?.trim()) {
+          row.name = originalRaw.name.trim();
+        }
+        if (originalRaw?.team_name?.trim()) {
+          row.team_name = originalRaw.team_name.trim();
+        }
+        if (originalRaw?.team_captain?.trim()) {
+          row.team_captain = true;
+        }
+        if (originalRaw?.positions?.trim()) {
+          row.positions = originalRaw.positions.trim();
+        }
 
-      const options = {
-        update_mmr: updateMmr,
-        mmr_target: mmrTarget,
-      };
+        const options = {
+          update_mmr: updateMmr,
+          mmr_target: mmrTarget,
+        };
 
-      let result: CSVImportResponse;
-      if (entityContext.tournamentId) {
-        result = await importCSVToTournament(entityContext.tournamentId, [row], options);
-      } else if (entityContext.orgId) {
-        result = await importCSVToOrg(entityContext.orgId, [row], options);
-      } else {
-        return;
-      }
+        let result: CSVImportResponse;
+        if (entityContext.tournamentId) {
+          result = await importCSVToTournament(
+            entityContext.tournamentId,
+            [row],
+            options,
+          );
+        } else if (entityContext.orgId) {
+          result = await importCSVToOrg(entityContext.orgId, [row], options);
+        } else {
+          return;
+        }
 
-      const resolved = result.results[0];
-      if (!resolved) return;
+        const resolved = result.results[0];
+        if (!resolved) return;
 
-      // Merge the resolved result back into the existing import result
-      setImportResult((prev) => {
-        if (!prev) return prev;
-        const newResults = prev.results.map((r) =>
-          r.row === rowNumber
-            ? { ...resolved, row: rowNumber }
-            : r,
+        // Merge the resolved result back into the existing import result
+        setImportResult((prev) => {
+          if (!prev) return prev;
+          const newResults = prev.results.map((r) =>
+            r.row === rowNumber ? { ...resolved, row: rowNumber } : r,
+          );
+          const newSummary = { ...prev.summary };
+          // Decrement errors since this row was an error
+          newSummary.errors = Math.max(0, newSummary.errors - 1);
+          // Increment the appropriate counter based on the resolved status
+          if (resolved.status === 'added') newSummary.added++;
+          else if (resolved.status === 'updated') newSummary.updated++;
+          else if (resolved.status === 'skipped') newSummary.skipped++;
+          else if (resolved.status === 'error') newSummary.errors++;
+          return { summary: newSummary, results: newResults };
+        });
+        onComplete();
+      } catch (err) {
+        setError(
+          `Failed to resolve conflict: ${err instanceof Error ? err.message : 'Unknown error'}`,
         );
-        const newSummary = { ...prev.summary };
-        // Decrement errors since this row was an error
-        newSummary.errors = Math.max(0, newSummary.errors - 1);
-        // Increment the appropriate counter based on the resolved status
-        if (resolved.status === 'added') newSummary.added++;
-        else if (resolved.status === 'updated') newSummary.updated++;
-        else if (resolved.status === 'skipped') newSummary.skipped++;
-        else if (resolved.status === 'error') newSummary.errors++;
-        return { summary: newSummary, results: newResults };
-      });
-      onComplete();
-    } catch (err) {
-      setError(`Failed to resolve conflict: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally {
-      setResolvingRows((prev) => {
-        const next = new Set(prev);
-        next.delete(rowNumber);
-        return next;
-      });
-    }
-  }, [entityContext, updateMmr, mmrTarget, onComplete]);
+      } finally {
+        setResolvingRows((prev) => {
+          const next = new Set(prev);
+          next.delete(rowNumber);
+          return next;
+        });
+      }
+    },
+    [entityContext, updateMmr, mmrTarget, onComplete],
+  );
 
   const downloadExampleCSV = useCallback(() => {
     const isTournament = Boolean(entityContext.tournamentId);
-    const comment = '# A steam_friend_id, discord_id, or discord_username is required. name, mmr, positions, team_name, team_captain are optional.';
-    const headers = ['steam_friend_id', 'discord_id', 'discord_username', 'name', 'mmr', 'positions'];
+    const comment =
+      '# A steam_friend_id, discord_id, or discord_username is required. name, mmr, positions, team_name, team_captain are optional.';
+    const headers = [
+      'steam_friend_id',
+      'discord_id',
+      'discord_username',
+      'name',
+      'mmr',
+      'positions',
+    ];
     if (isTournament) headers.push('team_name', 'team_captain');
 
     const rows = isTournament
       ? [
-          ['76561198012345678', '', 'player1', 'Alice', '5000', '1:3:2', 'Team A', 'true'],
+          [
+            '76561198012345678',
+            '',
+            'player1',
+            'Alice',
+            '5000',
+            '1:3:2',
+            'Team A',
+            'true',
+          ],
           ['', '123456789012345678', '', 'Bob', '4500', '4:5', 'Team B', ''],
         ]
       : [
@@ -245,7 +293,11 @@ export function CSVImportModal({
           ['', '123456789012345678', '', 'Bob', '4500', '4:5'],
         ];
 
-    const csv = [comment, headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const csv = [
+      comment,
+      headers.join(','),
+      ...rows.map((r) => r.join(',')),
+    ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -297,9 +349,12 @@ export function CSVImportModal({
               }}
             >
               <Upload className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-sm font-medium">Drop a CSV file here or click to browse</p>
+              <p className="text-sm font-medium">
+                Drop a CSV file here or click to browse
+              </p>
               <p className="text-xs text-muted-foreground mt-2">
-                All columns are optional: steam_friend_id, discord_id, discord_username, name, mmr, positions
+                All columns are optional: steam_friend_id, discord_id,
+                discord_username, name, mmr, positions
                 {entityContext.tournamentId && ', team_name, team_captain'}
               </p>
             </div>
@@ -357,9 +412,7 @@ export function CSVImportModal({
                     <tr
                       key={row.index}
                       className={
-                        row.status === 'error'
-                          ? 'bg-destructive/10'
-                          : ''
+                        row.status === 'error' ? 'bg-destructive/10' : ''
                       }
                     >
                       <td className="px-3 py-1.5 text-muted-foreground">
@@ -367,7 +420,10 @@ export function CSVImportModal({
                       </td>
                       <td className="px-3 py-1.5">
                         {row.status === 'error' && (
-                          <span className="text-destructive flex items-center gap-1" title={row.message}>
+                          <span
+                            className="text-destructive flex items-center gap-1"
+                            title={row.message}
+                          >
                             <XCircle className="h-3.5 w-3.5" />
                           </span>
                         )}
@@ -384,7 +440,9 @@ export function CSVImportModal({
                         {row.raw.steam_friend_id || '\u2014'}
                       </td>
                       <td className="px-3 py-1.5 font-mono text-xs">
-                        {row.raw.discord_username || row.raw.discord_id || '\u2014'}
+                        {row.raw.discord_username ||
+                          row.raw.discord_id ||
+                          '\u2014'}
                       </td>
                       <td className="px-3 py-1.5">{row.raw.mmr || '\u2014'}</td>
                       <td className="px-3 py-1.5 font-mono text-xs">
@@ -423,7 +481,10 @@ export function CSVImportModal({
 
                 {updateMmr && (
                   <div className="flex items-center gap-3 pl-6">
-                    <Label htmlFor="mmr-target" className="text-sm text-muted-foreground whitespace-nowrap">
+                    <Label
+                      htmlFor="mmr-target"
+                      className="text-sm text-muted-foreground whitespace-nowrap"
+                    >
                       Store MMR in:
                     </Label>
                     <Select
@@ -434,7 +495,9 @@ export function CSVImportModal({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="organization">Organization</SelectItem>
+                        <SelectItem value="organization">
+                          Organization
+                        </SelectItem>
                         {entityContext.tournamentId && (
                           <SelectItem value="league">League</SelectItem>
                         )}
@@ -446,7 +509,8 @@ export function CSVImportModal({
                 {updateMmr && (
                   <p className="text-xs text-muted-foreground pl-6 flex items-center gap-1">
                     <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
-                    Existing members will have their {mmrTarget} MMR overwritten with CSV values
+                    Existing members will have their {mmrTarget} MMR overwritten
+                    with CSV values
                   </p>
                 )}
               </div>
@@ -505,7 +569,10 @@ export function CSVImportModal({
 
             {/* Detail rows with errors/skipped/updated */}
             {importResult.results.some(
-              (r) => r.status === 'error' || r.status === 'skipped' || r.status === 'updated',
+              (r) =>
+                r.status === 'error' ||
+                r.status === 'skipped' ||
+                r.status === 'updated',
             ) && (
               <div className="overflow-auto border rounded-md max-h-[300px]">
                 <table className="w-full text-sm">
@@ -519,11 +586,21 @@ export function CSVImportModal({
                   <tbody>
                     {importResult.results
                       .filter(
-                        (r) => r.status === 'error' || r.status === 'skipped' || r.status === 'updated',
+                        (r) =>
+                          r.status === 'error' ||
+                          r.status === 'skipped' ||
+                          r.status === 'updated',
                       )
                       .map((r) => (
-                        <tr key={r.row} className={r.status === 'error' ? 'bg-destructive/5' : ''}>
-                          <td className="px-3 py-1.5 text-muted-foreground">{r.row}</td>
+                        <tr
+                          key={r.row}
+                          className={
+                            r.status === 'error' ? 'bg-destructive/5' : ''
+                          }
+                        >
+                          <td className="px-3 py-1.5 text-muted-foreground">
+                            {r.row}
+                          </td>
                           <td className="px-3 py-1.5">
                             {r.status === 'error' && (
                               <span className="text-destructive">Error</span>
@@ -539,30 +616,35 @@ export function CSVImportModal({
                           </td>
                           <td className="px-3 py-1.5">
                             <div className="text-xs">{r.reason}</div>
-                            {r.conflict_users && r.conflict_users.length > 0 && (
-                              <div className="mt-2 space-y-1">
-                                {r.conflict_users.map((u) => (
-                                  <UserStrip
-                                    key={u.pk}
-                                    user={u}
-                                    compact
-                                    showPositions={false}
-                                    actionSlot={
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-7 text-xs gap-1"
-                                        disabled={resolvingRows.has(r.row)}
-                                        onClick={() => handleResolveConflict(r.row, u)}
-                                      >
-                                        <UserPlus className="h-3.5 w-3.5" />
-                                        {resolvingRows.has(r.row) ? 'Adding...' : 'Use this instead'}
-                                      </Button>
-                                    }
-                                  />
-                                ))}
-                              </div>
-                            )}
+                            {r.conflict_users &&
+                              r.conflict_users.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {r.conflict_users.map((u) => (
+                                    <UserStrip
+                                      key={u.pk}
+                                      user={u}
+                                      compact
+                                      showPositions={false}
+                                      actionSlot={
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 text-xs gap-1"
+                                          disabled={resolvingRows.has(r.row)}
+                                          onClick={() =>
+                                            handleResolveConflict(r.row, u)
+                                          }
+                                        >
+                                          <UserPlus className="h-3.5 w-3.5" />
+                                          {resolvingRows.has(r.row)
+                                            ? 'Adding...'
+                                            : 'Use this instead'}
+                                        </Button>
+                                      }
+                                    />
+                                  ))}
+                                </div>
+                              )}
                           </td>
                         </tr>
                       ))}
@@ -572,7 +654,9 @@ export function CSVImportModal({
             )}
 
             <div className="flex justify-end">
-              <PrimaryButton onClick={() => handleOpenChange(false)}>Done</PrimaryButton>
+              <PrimaryButton onClick={() => handleOpenChange(false)}>
+                Done
+              </PrimaryButton>
             </div>
           </div>
         )}

@@ -1,7 +1,7 @@
 'use client';
 
-import { toast } from 'sonner';
 import { UserRoundPlusIcon } from 'lucide-react';
+import { toast } from 'sonner';
 export const UserToast = (title: string) => {
   const toastTitle = () => {
     return (

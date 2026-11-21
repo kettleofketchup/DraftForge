@@ -17,10 +17,10 @@
  * - csv_team_user (pk=2004, steam=76561198800000005)
  */
 
-import { API_URL } from '../../fixtures/base-url';
-import { test, expect, visitAndWaitForHydration } from '../../fixtures';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { expect, test, visitAndWaitForHydration } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,19 +41,23 @@ test.describe('CSV Import - Org (@cicd)', () => {
     // Find the dedicated CSV Import Org by name
     const orgsResp = await context.request.get(`${API_URL}/organizations/`);
     const orgs = await orgsResp.json();
-    const csvOrg = orgs.find(
-      (o: { name: string }) => o.name === CSV_ORG_NAME
-    );
-    if (!csvOrg) throw new Error(`${CSV_ORG_NAME} not found. Run just db::populate::all`);
+    const csvOrg = orgs.find((o: { name: string }) => o.name === CSV_ORG_NAME);
+    if (!csvOrg)
+      throw new Error(`${CSV_ORG_NAME} not found. Run just db::populate::all`);
     orgPk = csvOrg.pk;
 
     // Find the CSV Import Tournament
-    const tournamentsResp = await context.request.get(`${API_URL}/tournaments/`);
+    const tournamentsResp = await context.request.get(
+      `${API_URL}/tournaments/`,
+    );
     const tournaments = await tournamentsResp.json();
     const csvTournament = tournaments.find(
-      (t: { name: string }) => t.name === CSV_TOURNAMENT_NAME
+      (t: { name: string }) => t.name === CSV_TOURNAMENT_NAME,
     );
-    if (!csvTournament) throw new Error(`${CSV_TOURNAMENT_NAME} not found. Run just db::populate::all`);
+    if (!csvTournament)
+      throw new Error(
+        `${CSV_TOURNAMENT_NAME} not found. Run just db::populate::all`,
+      );
     tournamentPk = csvTournament.pk;
 
     await context.close();
@@ -61,7 +65,9 @@ test.describe('CSV Import - Org (@cicd)', () => {
 
   test.beforeEach(async ({ context, loginAdmin }) => {
     // Reset CSV import data to clean state before each test
-    const resetResp = await context.request.post(`${API_URL}/tests/csv-import/reset/`);
+    const resetResp = await context.request.post(
+      `${API_URL}/tests/csv-import/reset/`,
+    );
     if (!resetResp.ok()) {
       throw new Error(`CSV reset failed: ${resetResp.status()}`);
     }
@@ -70,13 +76,17 @@ test.describe('CSV Import - Org (@cicd)', () => {
 
   test('import button visible for admin', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}/?tab=users`);
-    await expect(page.getByTestId('org-csv-import-btn')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('org-csv-import-btn')).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test('opens modal and shows drag area', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}/?tab=users`);
     await page.getByTestId('org-csv-import-btn').click();
-    await expect(page.getByRole('heading', { name: 'Import CSV' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Import CSV' }),
+    ).toBeVisible();
     await expect(page.getByText('Drop a CSV file here')).toBeVisible();
   });
 
@@ -97,7 +107,9 @@ test.describe('CSV Import - Org (@cicd)', () => {
     await page.getByRole('button', { name: /Import 3 row/ }).click();
 
     // Results summary
-    await expect(page.getByText('Added', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Added', { exact: true })).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test('shows validation errors for bad rows', async ({ page }) => {
@@ -129,7 +141,9 @@ test.describe('CSV Import - Org (@cicd)', () => {
     await page.getByRole('button', { name: /Import 3 row/ }).click();
 
     // All 3 should be added with stubs created
-    await expect(page.getByText('Added', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Added', { exact: true })).toBeVisible({
+      timeout: 10000,
+    });
   });
 });
 
@@ -142,14 +156,16 @@ test.describe('CSV Import - Tournament', () => {
       const orgsResp = await context.request.get(`${API_URL}/organizations/`);
       const orgs = await orgsResp.json();
       const csvOrg = orgs.find(
-        (o: { name: string }) => o.name === CSV_ORG_NAME
+        (o: { name: string }) => o.name === CSV_ORG_NAME,
       );
       if (csvOrg) orgPk = csvOrg.pk;
 
-      const tournamentsResp = await context.request.get(`${API_URL}/tournaments/`);
+      const tournamentsResp = await context.request.get(
+        `${API_URL}/tournaments/`,
+      );
       const tournaments = await tournamentsResp.json();
       const csvTournament = tournaments.find(
-        (t: { name: string }) => t.name === CSV_TOURNAMENT_NAME
+        (t: { name: string }) => t.name === CSV_TOURNAMENT_NAME,
       );
       if (csvTournament) tournamentPk = csvTournament.pk;
       await context.close();
@@ -158,7 +174,9 @@ test.describe('CSV Import - Tournament', () => {
 
   test.beforeEach(async ({ context, loginAdmin }) => {
     // Reset CSV import data to clean state before each test
-    const resetResp = await context.request.post(`${API_URL}/tests/csv-import/reset/`);
+    const resetResp = await context.request.post(
+      `${API_URL}/tests/csv-import/reset/`,
+    );
     if (!resetResp.ok()) {
       throw new Error(`CSV reset failed: ${resetResp.status()}`);
     }
@@ -166,12 +184,20 @@ test.describe('CSV Import - Tournament', () => {
   });
 
   test('tournament import button visible', async ({ page }) => {
-    await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/?tab=players`);
-    await expect(page.getByTestId('tournament-csv-import-btn')).toBeVisible({ timeout: 10000 });
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${tournamentPk}/?tab=players`,
+    );
+    await expect(page.getByTestId('tournament-csv-import-btn')).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test('imports CSV with team names into tournament', async ({ page }) => {
-    await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/?tab=players`);
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${tournamentPk}/?tab=players`,
+    );
     await page.getByTestId('tournament-csv-import-btn').click();
 
     // Upload teams-import.csv (4 users with team assignments)
@@ -184,6 +210,8 @@ test.describe('CSV Import - Tournament', () => {
     await page.getByRole('button', { name: /Import 4 row/ }).click();
 
     // Results
-    await expect(page.getByText('Added', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Added', { exact: true })).toBeVisible({
+      timeout: 10000,
+    });
   });
 });

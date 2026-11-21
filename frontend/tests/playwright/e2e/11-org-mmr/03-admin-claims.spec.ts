@@ -13,7 +13,7 @@
  * 5. Verify the claim moved to the appropriate status tab
  */
 
-import { test, expect } from '../../fixtures';
+import { expect, test } from '../../fixtures';
 import { API_URL } from '../../fixtures/auth';
 
 interface ClaimRequest {
@@ -34,10 +34,18 @@ interface CreateClaimResponse {
 }
 
 // Helper to create a test claim request
-async function createClaimRequest(
-  context: { request: { post: (url: string) => Promise<{ ok: () => boolean; json: () => Promise<unknown>; text: () => Promise<string> }> } }
-): Promise<ClaimRequest> {
-  const response = await context.request.post(`${API_URL}/tests/create-claim-request/`);
+async function createClaimRequest(context: {
+  request: {
+    post: (url: string) => Promise<{
+      ok: () => boolean;
+      json: () => Promise<unknown>;
+      text: () => Promise<string>;
+    }>;
+  };
+}): Promise<ClaimRequest> {
+  const response = await context.request.post(
+    `${API_URL}/tests/create-claim-request/`,
+  );
   if (!response.ok()) {
     const body = await response.text();
     throw new Error(`Failed to create claim request: ${body}`);
@@ -47,10 +55,16 @@ async function createClaimRequest(
 }
 
 test.describe('Admin Claims Approval', () => {
-  test('org admin can approve a pending claim', async ({ page, context, loginOrgAdmin }) => {
+  test('org admin can approve a pending claim', async ({
+    page,
+    context,
+    loginOrgAdmin,
+  }) => {
     // Create pending claim request
     const claim = await createClaimRequest(context);
-    console.log(`Created claim ${claim.id} for org ${claim.organization} (${claim.organization_name})`);
+    console.log(
+      `Created claim ${claim.id} for org ${claim.organization} (${claim.organization_name})`,
+    );
 
     // Login as org admin
     await loginOrgAdmin();
@@ -62,7 +76,9 @@ test.describe('Admin Claims Approval', () => {
 
     // Verify pending tab is active and claim is visible
     await expect(page.getByTestId('claims-tab-pending')).toBeVisible();
-    await page.waitForSelector('[data-testid="claims-list"]', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="claims-list"]', {
+      timeout: 10000,
+    });
     await expect(page.getByTestId(`claim-card-${claim.id}`)).toBeVisible();
 
     // Click approve button
@@ -72,22 +88,35 @@ test.describe('Admin Claims Approval', () => {
     await page.getByTestId('confirm-approve-claim').click();
 
     // Wait for the claim card to disappear from pending (indicates approval succeeded and refetch happened)
-    await expect(page.getByTestId(`claim-card-${claim.id}`)).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId(`claim-card-${claim.id}`)).not.toBeVisible({
+      timeout: 10000,
+    });
 
     // Switch to approved tab and verify the claim is there
     await page.getByTestId('claims-tab-approved').click();
 
     // Wait for either claims-list or claims-empty to appear (tab content loaded)
-    await page.waitForSelector('[data-testid="claims-list"], [data-testid="claims-empty"]', { timeout: 10000 });
+    await page.waitForSelector(
+      '[data-testid="claims-list"], [data-testid="claims-empty"]',
+      { timeout: 10000 },
+    );
 
     // Verify the claim card is now in the approved list
-    await expect(page.getByTestId(`claim-card-${claim.id}`)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId(`claim-card-${claim.id}`)).toBeVisible({
+      timeout: 10000,
+    });
   });
 
-  test('org admin can reject a claim with reason', async ({ page, context, loginOrgAdmin }) => {
+  test('org admin can reject a claim with reason', async ({
+    page,
+    context,
+    loginOrgAdmin,
+  }) => {
     // Create pending claim request
     const claim = await createClaimRequest(context);
-    console.log(`Created claim ${claim.id} for org ${claim.organization} (${claim.organization_name})`);
+    console.log(
+      `Created claim ${claim.id} for org ${claim.organization} (${claim.organization_name})`,
+    );
 
     // Login as org admin
     await loginOrgAdmin();
@@ -98,27 +127,38 @@ test.describe('Admin Claims Approval', () => {
     await page.getByTestId('org-tab-claims').click();
 
     // Wait for claims to load
-    await page.waitForSelector('[data-testid="claims-list"]', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="claims-list"]', {
+      timeout: 10000,
+    });
 
     // Click reject button
     await page.getByTestId(`reject-claim-btn-${claim.id}`).click();
 
     // Enter rejection reason
-    await page.getByTestId('rejection-reason-input').fill('Profile already claimed by another user');
+    await page
+      .getByTestId('rejection-reason-input')
+      .fill('Profile already claimed by another user');
 
     // Confirm rejection
     await page.getByTestId('confirm-reject-claim').click();
 
     // Wait for the claim card to disappear from pending (indicates rejection succeeded and refetch happened)
-    await expect(page.getByTestId(`claim-card-${claim.id}`)).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId(`claim-card-${claim.id}`)).not.toBeVisible({
+      timeout: 10000,
+    });
 
     // Switch to rejected tab and verify the claim is there
     await page.getByTestId('claims-tab-rejected').click();
 
     // Wait for either claims-list or claims-empty to appear (tab content loaded)
-    await page.waitForSelector('[data-testid="claims-list"], [data-testid="claims-empty"]', { timeout: 10000 });
+    await page.waitForSelector(
+      '[data-testid="claims-list"], [data-testid="claims-empty"]',
+      { timeout: 10000 },
+    );
 
     // Verify the claim card is now in the rejected list
-    await expect(page.getByTestId(`claim-card-${claim.id}`)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId(`claim-card-${claim.id}`)).toBeVisible({
+      timeout: 10000,
+    });
   });
 });

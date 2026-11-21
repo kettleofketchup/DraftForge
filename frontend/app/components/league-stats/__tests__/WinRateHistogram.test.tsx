@@ -12,13 +12,18 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
 const COUNTS = [1, 0, 2, 4, 8, 12, 9, 5, 2, 1];
 
 const distribution: LeagueDistribution = {
   bucket_size: 10,
-  buckets: COUNTS.map((count, i) => ({ min: i * 10, max: (i + 1) * 10, count })),
+  buckets: COUNTS.map((count, i) => ({
+    min: i * 10,
+    max: (i + 1) * 10,
+    count,
+  })),
 };
 
 const POPULATION = COUNTS.reduce((a, b) => a + b, 0);
@@ -94,7 +99,11 @@ describe('WinRateHistogram', () => {
       highlightBucket: null,
       distribution: {
         bucket_size: 10,
-        buckets: COUNTS.map((_, i) => ({ min: i * 10, max: (i + 1) * 10, count: 0 })),
+        buckets: COUNTS.map((_, i) => ({
+          min: i * 10,
+          max: (i + 1) * 10,
+          count: 0,
+        })),
       },
     });
     const root = screen.getByTestId('win-rate-histogram');

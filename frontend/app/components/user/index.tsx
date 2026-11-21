@@ -14,9 +14,10 @@ import type {
 } from './types';
 import { User } from './user';
 import { UserCard } from './userCard';
-import { UserList, UserGridSkeleton, EmptyUsers } from './UserList';
-import { UserStrip } from './UserStrip';
 import { UserEventStrip } from './UserEventStrip';
+import { EmptyUsers, UserGridSkeleton, UserList } from './UserList';
+import { UserStrip } from './UserStrip';
+export type { DotaProfileData } from './UserEventStrip';
 export {
   ActiveDraftSchema,
   EmptyUsers,
@@ -30,7 +31,6 @@ export {
   UserSchema,
   UserStrip,
 };
-export type { DotaProfileData } from './UserEventStrip';
 export type {
   ActiveDraftType,
   GuildMember,

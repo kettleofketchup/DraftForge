@@ -9,9 +9,7 @@ import { useResolvedUsers } from './useResolvedUsers';
  */
 export function useLeagueUsers(leagueId: number): UserEntry[] {
   const pks = useLeagueStore((state) => state.leagueUserPks);
-  const loadedLeagueId = useLeagueStore(
-    (state) => state.leagueUsersLeagueId,
-  );
+  const loadedLeagueId = useLeagueStore((state) => state.leagueUsersLeagueId);
   const users = useResolvedUsers(pks);
 
   if (loadedLeagueId !== leagueId) return [];

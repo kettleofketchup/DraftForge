@@ -46,7 +46,11 @@ describe('PlayerPopoverTrigger statsLeagueId', () => {
     fireEvent.click(trigger());
     expect(actions.openPlayerModal).toHaveBeenCalledWith(
       player,
-      expect.objectContaining({ statsLeagueId: 7, leagueId: 3, organizationId: 9 }),
+      expect.objectContaining({
+        statsLeagueId: 7,
+        leagueId: 3,
+        organizationId: 9,
+      }),
     );
   });
 

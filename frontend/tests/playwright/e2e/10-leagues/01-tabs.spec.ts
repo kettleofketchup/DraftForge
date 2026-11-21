@@ -10,11 +10,11 @@
  */
 
 import {
-  test,
-  expect,
-  visitAndWaitForHydration,
   LeaguePage,
+  expect,
   getFirstLeague,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
 
 test.describe('League Page - Tab Navigation (e2e)', () => {
@@ -25,7 +25,9 @@ test.describe('League Page - Tab Navigation (e2e)', () => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const league = await getFirstLeague(context);
     if (!league) {
-      throw new Error('No leagues found in database. Run just db::populate::all first.');
+      throw new Error(
+        'No leagues found in database. Run just db::populate::all first.',
+      );
     }
     testLeagueId = league.pk;
     await context.close();
@@ -36,7 +38,9 @@ test.describe('League Page - Tab Navigation (e2e)', () => {
     await loginAdmin();
   });
 
-  test('should load the league page with info tab by default', async ({ page }) => {
+  test('should load the league page with info tab by default', async ({
+    page,
+  }) => {
     await visitAndWaitForHydration(page, `/leagues/${testLeagueId}`);
 
     const leaguePage = new LeaguePage(page);
@@ -58,7 +62,9 @@ test.describe('League Page - Tab Navigation (e2e)', () => {
     await leaguePage.clickTournamentsTab();
 
     // URL should update
-    await expect(page).toHaveURL(new RegExp(`/leagues/${testLeagueId}/tournaments`));
+    await expect(page).toHaveURL(
+      new RegExp(`/leagues/${testLeagueId}/tournaments`),
+    );
 
     // Tournaments tab should be active
     await leaguePage.assertTabActive('tournaments');
@@ -72,7 +78,9 @@ test.describe('League Page - Tab Navigation (e2e)', () => {
     await leaguePage.clickMatchesTab();
 
     // URL should update
-    await expect(page).toHaveURL(new RegExp(`/leagues/${testLeagueId}/matches`));
+    await expect(page).toHaveURL(
+      new RegExp(`/leagues/${testLeagueId}/matches`),
+    );
 
     // Matches tab should be active (use specific tab selector to avoid multiple matches)
     await leaguePage.assertTabActive('matches');
@@ -92,7 +100,10 @@ test.describe('League Page - Tab Navigation (e2e)', () => {
 
   test('should load correct tab from URL', async ({ page }) => {
     // Visit tournaments tab directly via URL
-    await visitAndWaitForHydration(page, `/leagues/${testLeagueId}/tournaments`);
+    await visitAndWaitForHydration(
+      page,
+      `/leagues/${testLeagueId}/tournaments`,
+    );
 
     const leaguePage = new LeaguePage(page);
 
