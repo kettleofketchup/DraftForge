@@ -92,6 +92,7 @@ export function TrackTab({
     });
   const Detail = panel.Detail;
   const Admin = panel.Admin;
+  const HeaderExtra = panel.HeaderExtra;
 
   return (
     <div className="flex flex-col gap-4" data-testid={`${prefix}-tab`}>
@@ -103,6 +104,7 @@ export function TrackTab({
             value={metric.key}
             onChange={setMetricKey}
           />
+          {HeaderExtra && <HeaderExtra />}
           {metric.periodic && (
             <BrandSelect value={period} onValueChange={setPeriod}>
               <BrandSelectTrigger

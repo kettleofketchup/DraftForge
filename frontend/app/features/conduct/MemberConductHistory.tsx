@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Badge } from '~/components/ui/badge';
@@ -6,18 +7,18 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
 import { formatOrgDate } from '~/features/contributions/timezone';
 import type { OrgFeatureAccess } from '~/features/org-features';
+import { formatMetricValue } from '~/features/standing/format';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
-import { ConductRateExplainer } from './ConductRateExplainer';
 import { OutcomeChip } from './OutcomeChip';
 import { useMemberConduct } from './queries';
 import {
   HISTORY_PAGE_SIZE,
   OUTCOME_LABELS,
+  SOURCE_LABELS,
   WALK_IN_LABEL,
   type ConductHistoryItem,
 } from './schemas';
-import { scoreLabel } from './scoring';
 
 const log = getLogger('MemberConductHistory');
 
@@ -28,6 +29,7 @@ export interface MemberConductHistoryProps {
   access: OrgFeatureAccess;
   orgUserPk: number;
   timeZone: string | undefined;
+  onClose: () => void;
 }
 
 function HistoryRow({
@@ -57,8 +59,21 @@ function HistoryRow({
         </div>
         <div className="text-sm text-muted-foreground">
           {formatOrgDate(item.event_starts_at, timeZone)}
+          {` · ${SOURCE_LABELS[item.source]}`}
           {` · Weight ${item.weight.toFixed(2)}`}
         </div>
+        {item.set_by && (
+          <div
+            className="text-sm text-muted-foreground"
+            data-testid="conduct-history-set-by"
+          >
+            Set by{' '}
+            {DisplayName({
+              pk: item.set_by.user_pk,
+              username: item.set_by.username,
+            })}
+          </div>
+        )}
         <div className="flex flex-wrap gap-1">
           {!item.committed && <Badge variant="outline">{WALK_IN_LABEL}</Badge>}
           {removed && <Badge variant="outline">Removed</Badge>}
@@ -78,6 +93,7 @@ export function MemberConductHistory({
   access,
   orgUserPk,
   timeZone,
+  onClose,
 }: MemberConductHistoryProps) {
   const [offset, setOffset] = useState(0);
   const { data, isLoading, isError, error, isPlaceholderData } =
@@ -90,6 +106,19 @@ export function MemberConductHistory({
     if (isError)
       log.error('member conduct failed to load', { orgId, orgUserPk, error });
   }, [isError, error, orgId, orgUserPk]);
+
+  const closeButton = (
+    <SecondaryButton
+      type="button"
+      size="icon"
+      className="size-8"
+      aria-label="Close attendance history"
+      onClick={onClose}
+      data-testid="conduct-history-close"
+    >
+      <X className="h-4 w-4" />
+    </SecondaryButton>
+  );
 
   return (
     <section
@@ -113,7 +142,13 @@ export function MemberConductHistory({
                 className="text-2xl font-bold tabular-nums"
                 data-testid="conduct-member-score"
               >
-                {scoreLabel(data)}
+                {formatMetricValue(
+                  {
+                    value: data.show_rate,
+                    status: data.status === 'new' ? 'new' : 'ranked',
+                  },
+                  'percent',
+                )}
               </div>
               <div
                 className="text-xs text-muted-foreground"
@@ -124,11 +159,14 @@ export function MemberConductHistory({
                 {data.weighted_events.toFixed(1)} after recency weighting)
               </div>
             </div>
-            <ConductRateExplainer />
+            {closeButton}
           </div>
         </div>
       ) : (
-        <h3 className="text-lg font-semibold">Attendance</h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-lg font-semibold">Attendance</h3>
+          {closeButton}
+        </div>
       )}
 
       {isLoading && (

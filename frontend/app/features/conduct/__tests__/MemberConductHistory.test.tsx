@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -23,7 +29,10 @@ const staff: OrgFeatureAccess = makeOrgFeatureAccess({
   canViewConductDetails: true,
 });
 
-function renderHistory(access: OrgFeatureAccess = self) {
+function renderHistory(
+  access: OrgFeatureAccess = self,
+  onClose: () => void = () => {},
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
@@ -36,6 +45,7 @@ function renderHistory(access: OrgFeatureAccess = self) {
       access={access}
       orgUserPk={7}
       timeZone="UTC"
+      onClose={onClose}
     />,
     { wrapper },
   );
@@ -134,17 +144,43 @@ describe('MemberConductHistory', () => {
     );
   });
 
-  it('opens the rate explainer', async () => {
+  it('shows each outcome source to the member themself', async () => {
     vi.mocked(getMemberConduct).mockResolvedValue(memberConduct());
-    renderHistory();
-    await screen.findByTestId('conduct-member-score');
-    const trigger = screen.getByRole('button', {
-      name: 'How the show rate works',
-    });
-    expect(trigger).toHaveAttribute('data-testid', 'conduct-rate-explainer');
-    fireEvent.click(trigger);
+    renderHistory(self);
+    const row = await screen.findByTestId('conduct-history-row-5');
+    expect(row).toHaveTextContent('Ready check');
     expect(
-      await screen.findByTestId('conduct-rate-explainer-content'),
-    ).toHaveTextContent(/late cancel/i);
+      within(row).queryByTestId('conduct-history-set-by'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows who set an outcome when the payload carries it', async () => {
+    vi.mocked(getMemberConduct).mockResolvedValue(
+      memberConduct({
+        history: [
+          historyItem({
+            event_id: 6,
+            outcome: 'no_show',
+            source: 'staff',
+            set_by: { user_pk: 2, username: 'admin' },
+          }),
+        ],
+      }),
+    );
+    renderHistory(staff);
+    const row = await screen.findByTestId('conduct-history-row-6');
+    expect(row).toHaveTextContent('Staff');
+    expect(within(row).getByTestId('conduct-history-set-by')).toHaveTextContent(
+      'Set by admin',
+    );
+  });
+
+  it('calls onClose from the close button', async () => {
+    vi.mocked(getMemberConduct).mockResolvedValue(memberConduct());
+    const onClose = vi.fn();
+    renderHistory(self, onClose);
+    await screen.findByTestId('conduct-member-score');
+    fireEvent.click(screen.getByTestId('conduct-history-close'));
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

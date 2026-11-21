@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -130,16 +131,19 @@ function renderTab(
       </MemoryRouter>
     </QueryClientProvider>
   );
-  return render(
-    <TrackTab
-      orgId={7}
-      track={t}
-      timeZone="UTC"
-      membersPrivate={false}
-      access={viewer}
-    />,
-    { wrapper },
-  );
+  return {
+    qc,
+    ...render(
+      <TrackTab
+        orgId={7}
+        track={t}
+        timeZone="UTC"
+        membersPrivate={false}
+        access={viewer}
+      />,
+      { wrapper },
+    ),
+  };
 }
 
 function cells(testId: string): string[] {
@@ -251,5 +255,48 @@ describe('TrackTab conduct', () => {
     expect(screen.queryByTestId('conduct-error')).toBeNull();
     expect(screen.queryByTestId('conduct-members-only')).toBeNull();
     expect(screen.queryByTestId('conduct-members-private')).toBeNull();
+  });
+
+  it('keeps the own history closed after the viewer closes it', async () => {
+    respond();
+    respondHistory();
+    const { qc } = renderTab();
+    fireEvent.click(await screen.findByTestId('conduct-history-close'));
+    expect(screen.queryByTestId('conduct-history')).toBeNull();
+    const calls = vi.mocked(getStandingLeaderboard).mock.calls.length;
+    await act(() => qc.invalidateQueries());
+    await waitFor(() =>
+      expect(
+        vi.mocked(getStandingLeaderboard).mock.calls.length,
+      ).toBeGreaterThan(calls),
+    );
+    await screen.findByTestId('conduct-row-2');
+    expect(screen.queryByTestId('conduct-history')).toBeNull();
+    fireEvent.click(screen.getByTestId('conduct-row-2'));
+    expect(await screen.findByTestId('conduct-history')).toBeInTheDocument();
+  });
+
+  it('explains the rate next to the ranking for a viewer with no own row', async () => {
+    respond({ own_row: null });
+    respondHistory();
+    renderTab(conductTrack(), makeOrgFeatureAccess({ viewerPk: 555 }));
+    await screen.findByTestId('conduct-row-1');
+    expect(screen.queryByTestId('conduct-history')).toBeNull();
+    const trigger = screen.getByRole('button', {
+      name: 'How the show rate works',
+    });
+    expect(trigger).toHaveAttribute('data-testid', 'conduct-rate-explainer');
+    fireEvent.click(trigger);
+    expect(
+      await screen.findByTestId('conduct-rate-explainer-content'),
+    ).toHaveTextContent(/late cancel/i);
+  });
+
+  it('marks a new member with a badge', async () => {
+    respond();
+    respondHistory();
+    renderTab();
+    const cell = await screen.findByTestId('conduct-row-3-value');
+    expect(cell.querySelector('[data-slot="badge"]')).toHaveTextContent('New');
   });
 });

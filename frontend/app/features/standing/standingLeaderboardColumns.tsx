@@ -1,3 +1,4 @@
+import { Badge } from '~/components/ui/badge';
 import type { AppColumnDef } from '~/components/ui/data-table';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
@@ -93,7 +94,11 @@ export function makeStandingLeaderboardColumns({
         <span
           data-testid={`${testIdPrefix}-row-${row.original.member.org_user_pk}-value`}
         >
-          {formatMetricValue(row.original, metric.format)}
+          {row.original.status === 'new' || row.original.value === null ? (
+            <Badge variant="outline">New</Badge>
+          ) : (
+            formatMetricValue(row.original, metric.format)
+          )}
         </span>
       ),
       meta: {

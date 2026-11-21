@@ -1,18 +1,17 @@
-import type { OrgFeatureAccess } from '~/features/org-features';
+import type { TrackDetailProps } from '~/features/standing/panels';
 import { MemberConductHistory } from './MemberConductHistory';
 
-export interface ConductDetailProps {
-  orgId: number;
-  orgUserPk: number;
-  timeZone: string | undefined;
-  access: OrgFeatureAccess;
-}
+export type ConductDetailProps = Pick<
+  TrackDetailProps,
+  'orgId' | 'orgUserPk' | 'timeZone' | 'access' | 'onClose'
+>;
 
 export function ConductDetail({
   orgId,
   orgUserPk,
   timeZone,
   access,
+  onClose,
 }: ConductDetailProps) {
   return (
     <MemberConductHistory
@@ -20,6 +19,7 @@ export function ConductDetail({
       access={access}
       orgUserPk={orgUserPk}
       timeZone={timeZone}
+      onClose={onClose}
     />
   );
 }

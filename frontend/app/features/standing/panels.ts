@@ -1,6 +1,7 @@
 import { Award, CalendarCheck, type LucideIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { ConductDetail } from '~/features/conduct/ConductPanels';
+import { ConductRateExplainer } from '~/features/conduct/ConductRateExplainer';
 import {
   ContributionsAdmin,
   ContributionsDetail,
@@ -38,6 +39,7 @@ export interface TrackPanelSet {
   openOwnByDefault: boolean;
   Detail: ComponentType<TrackDetailProps>;
   Admin?: ComponentType<TrackAdminProps>;
+  HeaderExtra?: ComponentType;
 }
 
 export const TRACK_PANELS: Partial<Record<TrackKey, TrackPanelSet>> = {
@@ -61,6 +63,7 @@ export const TRACK_PANELS: Partial<Record<TrackKey, TrackPanelSet>> = {
     canOpen: ({ own, access }) => own || access.canViewConductDetails,
     openOwnByDefault: true,
     Detail: ConductDetail,
+    HeaderExtra: ConductRateExplainer,
   },
 };
 
