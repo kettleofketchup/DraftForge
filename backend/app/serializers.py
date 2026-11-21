@@ -305,20 +305,6 @@ def _collect_tournament_user_pks(tournament: Tournament) -> set[int]:
 _CONTEXT_MMR_KEYS = ("orgUserPk", "guildNickname", "mmr", "league_mmr", "mmr_game_type")
 
 
-def _collect_context_mmr(
-    tournament: Tournament | None, seen_pks: set[int], *, fresh: bool = False
-) -> dict:
-    """Per-request contextual org/league overlay keyed by user pk.
-
-    Returns ``{pk: {orgUserPk, guildNickname, mmr, league_mmr, mmr_game_type}}`` for a
-    tournament whose league has an organization, else an empty dict (non-org
-    tournaments carry no MMR). Reuses OrgUserSerializer so the values and the
-    league_mmr computation are identical to the legacy path.
-    """
-    org = _tournament_organization(tournament, fresh=fresh)
-    return _collect_org_mmr(tournament, org, seen_pks, fresh=fresh)
-
-
 def _collect_org_mmr(
     tournament: Tournament | None,
     org: Organization | None,
@@ -326,6 +312,7 @@ def _collect_org_mmr(
     *,
     fresh: bool,
 ) -> dict:
+    """``{pk: {orgUserPk, guildNickname, mmr, league_mmr, mmr_game_type}}``, or {} without an org."""
     # local: org.serializers imports app.serializers
     from org.serializers import OrgUserSerializer
 
