@@ -170,7 +170,10 @@ class DotaHandler:
             pass
 
     def rank_medal_select(self, event: Event, discord_user_id: str, medal: str) -> dict:
-        """Handle an active or previous rank medal pick. Saves medal and signs up."""
+        """Save an active or previous rank medal pick and sign up.
+
+        Signup is deferred when a rank screenshot is still required.
+        """
         from events.services import apply_signup_input
 
         org_user, user = _get_org_user(event, discord_user_id)
