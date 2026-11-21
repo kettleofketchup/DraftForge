@@ -13,6 +13,7 @@ from discordbot.components import (
     BattleCupTierSelect,
     DeadlockComponents,
     DeclineButton,
+    DefaultComponents,
     DotaComponents,
     EventSignupView,
     MedalSelect,
@@ -175,6 +176,32 @@ class EventSignupModalTest(TestCase):
         async def _test():
             modal = _dota_modal(event_id=42, prefill={"unverified_friend_id": "12345"})
             self.assertEqual(_friend_id_inputs(modal), [])
+
+        run_async(_test())
+
+    def test_dota_friend_id_placeholder_mentions_dotabuff(self):
+        async def _test():
+            (field,) = _friend_id_inputs(_dota_modal(event_id=42))
+            self.assertIn("Dotabuff", field.placeholder)
+
+        run_async(_test())
+
+    def test_deadlock_friend_id_placeholder_uses_steam_wording(self):
+        async def _test():
+            (field,) = _friend_id_inputs(_deadlock_modal(event_id=42))
+            self.assertEqual(
+                field.placeholder, "Your Steam Friend Code (Friends > Add a Friend)"
+            )
+
+        run_async(_test())
+
+    def test_default_friend_id_placeholder_uses_steam_wording(self):
+        async def _test():
+            modal = DefaultComponents().build_signup_modal(
+                42, {}, {"require_steam_id": True}
+            )
+            (field,) = _friend_id_inputs(modal)
+            self.assertNotIn("Dotabuff", field.placeholder)
 
         run_async(_test())
 
