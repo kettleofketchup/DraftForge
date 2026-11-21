@@ -70,8 +70,8 @@ class PartialUserPatchTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_partial_mmr_patch_via_org_endpoint_does_not_clear_nickname(self):
-        """PATCH {mmr: 6500} must leave nickname unchanged — proves the safety property
-        the spec relies on for concurrent edits."""
+        """PATCH {mmr: 6500} must leave nickname unchanged — concurrent edits rely
+        on this."""
         url = f"/api/organizations/{self.org.pk}/users/{self.org_user.pk}/"
         resp = self.client.patch(url, {"mmr": 6500}, format="json")
         self.assertEqual(resp.status_code, 200, resp.content)

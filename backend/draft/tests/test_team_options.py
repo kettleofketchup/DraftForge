@@ -557,7 +557,7 @@ class FixtureConfigTests(TestCase):
         field = DraftOptions._meta.get_field("timer_enabled")
         with patch.object(
             field, "get_default", return_value=True
-        ):  # PR 3 flips the default; fixtures must not follow it
+        ):  # a True field default must not reach fixtures
             t = TestTournamentConfig(
                 key="k1b", name="K1b", description="d", draft_state="not_started"
             ).create()

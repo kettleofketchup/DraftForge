@@ -238,7 +238,7 @@ class FullSignupPipelineTests(TransactionTestCase):
         self.assertEqual(finished["interaction_id"], "12345")
         self.assertEqual(finished["tags_csv"], "events,signup")
 
-        # Celery dispatch fires EXACTLY ONCE per signup (Task 8 Step 7 dedupe fix)
+        # Celery dispatch fires EXACTLY ONCE per signup
         mock_apply_async.assert_called_once_with(
             (self.event.pk,),
             {"interaction_id": "12345"},

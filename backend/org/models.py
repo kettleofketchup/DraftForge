@@ -88,9 +88,7 @@ class Organization(models.Model):
 
     def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
-        # Cacheops post_save signal handles self-invalidation. This save()
-        # exists only so the orm-defined behavior matches the call shape
-        # used elsewhere; no cache work needed beyond what cacheops does.
+        # cacheops' post_save handles invalidation.
 
     def delete(self, *args: object, **kwargs: object) -> None:
         # Invalidate related leagues before deletion
