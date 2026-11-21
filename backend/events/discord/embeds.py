@@ -674,7 +674,6 @@ def _profile_requirements(event: "EmbedEvent") -> list[str]:
     requirements: list[str] = []
     if event.require_steam_id:
         requirements.append("Dota 2 Friend ID" if is_dota else "Steam Friend ID")
-    # Verified MMR is only checked on Dota.
     if event.require_mmr_verified and is_dota:
         requirements.append("Verified MMR")
     if event.require_profile_complete:
