@@ -77,8 +77,8 @@ READY_ENDPOINT_QUERIES: int = 41
 # auth, locks, the pick, timing, next-round activation and two event inserts
 # (+BEGIN/COMMIT), 18 for the one shared broadcast state behind both events,
 # 2 data_version stamps (build + reuse), BEGIN/COMMIT around the autocommit
-# build, 23 for the tournament response.
-# +2: OrgUserGameMmr prefetch in the broadcast state and the tournament response
+# build, 24 for the tournament response. The broadcast state and the tournament
+# response each include one OrgUserGameMmr prefetch.
 PICK_QUERIES: int = 73
 # The draft state plus the broadcast's data_version stamp.
 BROADCAST_EVENT_QUERIES: int = DRAFT_STATE_QUERIES + 1

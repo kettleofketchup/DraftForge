@@ -447,4 +447,9 @@ just test::pw::spec 08-shuffle-draft
 total_mmr = captain.mmr + sum(member.mmr for member in members if member != captain)
 ```
 
+`mmr` here is the member's org MMR for the **tournament's game**: Deadlock org MMR in a
+Deadlock tournament, Dota 2 org MMR otherwise. The same game drives shuffle pick order,
+snake/normal balance predictions and captain succession. A member with no value for that
+game counts as 0. See [Org MMR per game](org-mmr.md).
+
 The captain is always included, and members exclude the captain to avoid double-counting.

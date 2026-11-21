@@ -566,6 +566,55 @@ writable:
 
 The detail never includes feature notes, `enabled_by` or `enabled_at`.
 
+## Organization Members
+
+Guide: [Org MMR per game](../features/org-mmr.md).
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/organizations/{id}/users/` | Members as `OrgUserSerializer` rows with `game_mmrs` | `can_view_org_members` |
+| PATCH | `/api/organizations/{id}/users/{org_user_id}/` | Edit a member's org MMR per game and base user fields (`nickname`, `steam_account_id`, `positions`) | Org staff |
+
+**Member row** (the org users list and the PATCH response):
+
+```json
+{
+  "pk": 12,
+  "orgUserPk": 60,
+  "mmr": 4200,
+  "mmr_game_type": 1,
+  "game_mmrs": {"1": 4200, "2": 2500},
+  "league_mmr": null
+}
+```
+
+- `mmr` is the org MMR for `mmr_game_type`. On these endpoints the game is Dota 2
+  (`1`) unless the PATCH passes `?game_type=`.
+- `game_mmrs` always lists every game; `0` means not set. Only these endpoints, claim
+  requests (`target_game_mmrs`) and gated event signups (`org_user_game_mmrs`) carry
+  the per-game set. Tournament, team and draft payloads carry `mmr` + `mmr_game_type`
+  for their own game only.
+
+**PATCH body:**
+
+```json
+{"game_mmrs": {"1": 4300, "2": null}}
+```
+
+- `game_mmrs` is a partial update: only the listed games change. `null` or `0` clears a
+  game (the row is deleted).
+- Each key must be a known game id and each value an integer in 0–20000 or `null`.
+  Anything else (`true`, `"4200"`, `4200.5`, unknown keys, a list) returns
+  `400 {"error": "..."}` and writes nothing.
+- The old `{"mmr": n}` is accepted only together with `mmr_game_type`. A bare `mmr`
+  returns `400 {"error": "mmr requires mmr_game_type; reload the page"}`. `mmr` and
+  `game_mmrs` that disagree for the same game return 400.
+- `?game_type=<id>` picks the game of the response's flat `mmr` (default Dota 2).
+- A Dota 2 write sets `has_active_dota_mmr` and `dota_mmr_last_verified`, as before.
+  Each changed game logs an `OrgLog` `set_mmr` entry with `game_type`, `mmr` and
+  `source: "org_user_patch"`.
+- A body with no changes returns `400 {"error": "No valid fields to update"}`.
+
 ## Organization Settings
 
 Guide: [Organization Settings](../features/organization-settings.md).
@@ -956,11 +1005,20 @@ Bulk-import users into organizations or tournaments via pre-parsed CSV data.
     {
       "steam_friend_id": "76561198012345678",
       "discord_id": "123456789012345678",
-      "base_mmr": 5000
+      "mmr": 5000
     }
-  ]
+  ],
+  "update_mmr": false,
+  "game_type": 1
 }
 ```
+
+- `game_type` picks which game's org MMR the `mmr` column sets (default `1`, Dota 2).
+  An unknown id returns 400.
+- `mmr` must be an integer in 0–20000; anything else is a per-row error and that row's
+  MMR is not written.
+- `update_mmr: true` also overwrites the chosen game's org MMR of existing members
+  (result reason `"Deadlock MMR updated to 2500"`).
 
 **Response:**
 
@@ -1022,6 +1080,9 @@ Same request/response format as organization import. Additional per-row fields:
     - Creates Team by name if `team_name` provided and team doesn't exist
     - Groups rows with same `team_name` into the same team
     - Maximum 500 rows per import
+    - The `mmr` column sets the org MMR of the **tournament's** game; a `game_type` in
+      the body is ignored
+    - `mmr_target: "league"` returns 400 for a non-Dota tournament (league MMR is Dota 2 only)
 
 ### CSV Import Error Responses
 
