@@ -9,6 +9,7 @@ import { heroMatchesSearch } from '~/lib/dota/heroes';
 import { cn } from '~/lib/utils';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
 import { HeroSuggestMenu } from './chat/HeroSuggestMenu';
+import { isOverlaidByOtherLayer } from './keyboardLayers';
 
 // Memoized hero button to prevent re-renders
 // IMPORTANT: Don't pass searchQuery directly - pass pre-computed booleans instead
@@ -86,13 +87,6 @@ interface HeroGridProps {
 }
 
 const KEYDOWN_IGNORE_SELECTOR = '[data-herodraft-chat], [role="menu"]';
-
-function isOverlaidByOtherLayer(grid: HTMLElement | null): boolean {
-  const layers = document.querySelectorAll(
-    '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
-  );
-  return Array.from(layers).some((layer) => !layer.contains(grid));
-}
 
 type HeroAttribute = 'str' | 'agi' | 'int' | 'all';
 
