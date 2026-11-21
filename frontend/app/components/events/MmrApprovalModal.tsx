@@ -218,11 +218,13 @@ export function MmrApprovalModal({
                   {rankStatusBadge ?? 'No Dota profile'}
                 </DialogDescription>
               </div>
-              <DotabuffButton
-                steamAccountId={user?.steam_account_id}
-                responsive={false}
-                size="sm"
-              />
+              {gameType === GAME_TYPE.DOTA2 && (
+                <DotabuffButton
+                  steamAccountId={user?.steam_account_id}
+                  responsive={false}
+                  size="sm"
+                />
+              )}
             </div>
           </DialogHeader>
 
