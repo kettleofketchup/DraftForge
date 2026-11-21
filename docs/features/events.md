@@ -37,7 +37,7 @@ The signup-modal field set is selected by `game_type`. Most rank/skill fields ar
 - **Profile fields** (Dota-only): `positions` (carry/mid/offlane/soft_support/hard_support priorities 0–5), `rank_status` (active / previous / never), `rank_medal` (e.g. "Legend 4"), `battle_cup_tier` (1–8), `rank_screenshot`, `battlecup_screenshot`.
 - **Profile fields** (Deadlock-only): `rank` (free-text), `rank_date`.
 - **Profile fields** (shared): `unverified_friend_id` (mirrored to `CustomUser.steam_account_id` first-write-wins on approve).
-- **Event-config flags** (Dota-only): `allow_active_mmr`, `allow_previous_rank`, `allow_battlecup_rating`, `min_mmr`, `require_mmr_verified`, `discord_require_rank_screenshot`, `discord_require_battlecup_screenshot`.
+- **Event-config flags** (Dota-only): `allow_active_mmr`, `allow_previous_rank`, `allow_battlecup_rating`, `min_mmr`, `require_mmr_verified`, `discord_require_rank_screenshot`, `discord_require_previous_rank_screenshot`, `discord_require_battlecup_screenshot`.
 
 !!! note "Deadlock web parity"
     The web signup modal currently only renders the optional Friend ID section for Deadlock events. The full Deadlock rank/date capture lives on the Discord side today (`PlayerDeadlockProfile` direct write). Web parity is tracked as a follow-up.
@@ -128,7 +128,7 @@ Both signup paths funnel through `apply_signup_input` and write the same per-org
 | `rank_status` (Dota) | ✓ RankStatusRadioGroup | ✓ rank select | `PlayerDotaProfile.rank_status` |
 | `rank_medal` (Dota) | ✓ medal+star → joined ("Legend 4") | ✓ MedalSelect + StarSelect follow-up | `PlayerDotaProfile.rank_medal` |
 | `battle_cup_tier` (Dota) | ✓ when `rank_status="never"` | ✓ BattleCupTierSelect | `PlayerDotaProfile.battle_cup_tier` |
-| `rank_screenshot` (Dota) | ✓ URL field, validated for `.png/.jpg/.jpeg/.webp` | ✓ Discord attachment URL | `PlayerDotaProfile.rank_screenshot`. Required only when `rank_status="active"` and the event sets `discord_require_rank_screenshot`. "I had an MMR" (previous) records the rank via medal+star without a screenshot. |
+| `rank_screenshot` (Dota) | ✓ URL field, validated for `.png/.jpg/.jpeg/.webp` | ✓ Discord attachment URL | `PlayerDotaProfile.rank_screenshot`. Required when `rank_status="active"` and the event sets `discord_require_rank_screenshot`, or when `rank_status="previous"` and the event sets `discord_require_previous_rank_screenshot` (a screenshot of the last ranked MMR). Each setting applies to its own rank type only. |
 | `battlecup_screenshot` (Dota) | ✓ | ✓ | `PlayerDotaProfile.battlecup_screenshot` |
 | `deadlock_rank` | **not yet** | ✓ modal text | `PlayerDeadlockProfile.rank` |
 | `mmr` numeric (admin-only) | ✓ on approve (`mmr_override`) | ✓ on approve | `OrgUser.mmr`, `has_active_dota_mmr`, `dota_mmr_last_verified` — also emits an `OrgLog` `set_mmr` entry |

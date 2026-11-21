@@ -140,6 +140,7 @@ export function EventSignupModal({
       event.allow_previous_rank,
       event.allow_battlecup_rating,
       event.discord_require_rank_screenshot,
+      event.discord_require_previous_rank_screenshot,
       event.discord_require_battlecup_screenshot,
       profile?.unverified_friend_id != null,
       steamAccountId != null,
@@ -245,14 +246,15 @@ export function EventSignupModal({
   const showRankDetail = isDota && !!watchedRankStatus;
   const rankDetailPrefilled =
     !!profile?.rank_medal || profile?.battle_cup_tier != null;
-  // Screenshot only required for ACTIVE MMR (current rank claim must be
-  // corroborated). "I had an MMR" relies on the medal+star showing the last
-  // rank held — no current ladder screen to take.
-  const screenshotForActive =
+  // Active and previous ranks each have their own setting; both store the
+  // screenshot as rank_screenshot.
+  const screenshotForRank =
     isDota &&
-    event.discord_require_rank_screenshot &&
-    watchedRankStatus === 'active';
-  const screenshotForActivePrefilled = !!profile?.rank_screenshot;
+    ((event.discord_require_rank_screenshot &&
+      watchedRankStatus === 'active') ||
+      (event.discord_require_previous_rank_screenshot &&
+        watchedRankStatus === 'previous'));
+  const screenshotForRankPrefilled = !!profile?.rank_screenshot;
   const screenshotForBC =
     isDota &&
     event.discord_require_battlecup_screenshot &&
@@ -383,11 +385,15 @@ export function EventSignupModal({
             )}
           </section>
         )}
-        {screenshotForActive && (
+        {screenshotForRank && (
           <section className="flex flex-col gap-2">
-            {heading('MMR Screenshot')}
+            {heading(
+              watchedRankStatus === 'previous'
+                ? 'Last Ranked MMR Screenshot'
+                : 'MMR Screenshot',
+            )}
             {withPrefill(
-              screenshotForActivePrefilled,
+              screenshotForRankPrefilled,
               'On file',
               'signup-prefilled-summary-screenshot',
               <ScreenshotUrlField

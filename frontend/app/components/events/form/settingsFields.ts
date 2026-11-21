@@ -174,6 +174,12 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       label: 'Previously Ranked Players',
       description: 'Players who had a rank but are no longer active',
     },
+    discord_require_previous_rank_screenshot: {
+      label: 'Require last ranked MMR screenshot',
+      description:
+        'Player must upload a screenshot of their last ranked MMR before signup completes',
+      keywords: ['rank screenshot', 'proof', 'previous'],
+    },
     allow_battlecup_rating: {
       label: 'Battle Cup Players (Never Ranked)',
       description:

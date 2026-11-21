@@ -8,6 +8,7 @@ const baseEvent = {
   allow_previous_rank: true,
   allow_battlecup_rating: true,
   discord_require_rank_screenshot: false,
+  discord_require_previous_rank_screenshot: false,
   discord_require_battlecup_screenshot: false,
 };
 

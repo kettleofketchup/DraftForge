@@ -32,6 +32,7 @@ def _stub_event(game_type):
         game_type=game_type,
         require_steam_id=True,
         discord_require_rank_screenshot=True,
+        discord_require_previous_rank_screenshot=False,
         discord_require_battlecup_screenshot=False,
         min_mmr=3000,
         allow_active_mmr=True,

@@ -32,28 +32,35 @@ function Harness() {
 }
 
 describe('ApprovalConfigSection rank screenshot', () => {
-  it('offers the rank screenshot requirement only under Active MMR', () => {
+  it('gives active and previous ranks separate screenshot settings', () => {
     render(<Harness />);
 
     expect(
       screen.getAllByRole('checkbox', { name: /screenshot/i }),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(
       screen.getByRole('checkbox', { name: /Require MMR screenshot/ }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole('checkbox', { name: /Require rank screenshot/ }),
-    ).toBeNull();
+      screen.getByRole('checkbox', {
+        name: /Require last ranked MMR screenshot/,
+      }),
+    ).toBeTruthy();
   });
 
-  it('ticking Require MMR screenshot leaves no other box checked', () => {
+  it.each([
+    ['Require MMR screenshot', 'discord_require_rank_screenshot'],
+    [
+      'Require last ranked MMR screenshot',
+      'discord_require_previous_rank_screenshot',
+    ],
+    ['Require battle cup screenshot', 'discord_require_battlecup_screenshot'],
+  ] as const)('ticking %s ticks only its own setting', (label, field) => {
     render(<Harness />);
 
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: /Require MMR screenshot/ }),
-    );
+    fireEvent.click(screen.getByRole('checkbox', { name: new RegExp(label) }));
 
-    expect(form.getValues('discord_require_rank_screenshot')).toBe(true);
+    expect(form.getValues(field)).toBe(true);
     const checked = screen
       .getAllByRole('checkbox', { name: /screenshot/i })
       .filter((el) => (el as HTMLInputElement).checked);

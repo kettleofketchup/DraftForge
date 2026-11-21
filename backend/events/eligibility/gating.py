@@ -26,6 +26,7 @@ def gated_metrics(event: Event) -> frozenset[GatedMetric]:
         event.require_mmr_verified
         or event.min_mmr
         or event.discord_require_rank_screenshot
+        or event.discord_require_previous_rank_screenshot
     ):
         metrics.add(GatedMetric.MMR)
     if event.discord_require_battlecup_screenshot:

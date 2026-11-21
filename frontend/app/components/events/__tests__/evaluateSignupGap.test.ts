@@ -10,6 +10,7 @@ const baseEvent = {
   allow_previous_rank: true,
   allow_battlecup_rating: true,
   discord_require_rank_screenshot: false,
+  discord_require_previous_rank_screenshot: false,
   discord_require_battlecup_screenshot: false,
 };
 
@@ -60,13 +61,39 @@ describe('evaluateSignupGap', () => {
     );
   });
 
-  it('does not flag rank_screenshot for previous rank', () => {
+  it('does not flag rank_screenshot for previous rank under the active MMR setting', () => {
     const event = { ...baseEvent, discord_require_rank_screenshot: true };
     const profile = {
       ...completeProfile,
       rank_status: 'previous' as const,
       rank_screenshot: null,
     };
+    expect(evaluateSignupGap(event as never, profile as never)).toBe(
+      'complete',
+    );
+  });
+
+  it('flags rank_screenshot for previous rank when the event requires it', () => {
+    const event = {
+      ...baseEvent,
+      discord_require_previous_rank_screenshot: true,
+    };
+    const profile = {
+      ...completeProfile,
+      rank_status: 'previous' as const,
+      rank_screenshot: null,
+    };
+    expect(evaluateSignupGap(event as never, profile as never)).toEqual([
+      'rank_screenshot',
+    ]);
+  });
+
+  it('does not flag rank_screenshot for active rank under the previous rank setting', () => {
+    const event = {
+      ...baseEvent,
+      discord_require_previous_rank_screenshot: true,
+    };
+    const profile = { ...completeProfile, rank_screenshot: null };
     expect(evaluateSignupGap(event as never, profile as never)).toBe(
       'complete',
     );

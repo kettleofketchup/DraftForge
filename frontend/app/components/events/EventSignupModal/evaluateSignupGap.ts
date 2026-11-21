@@ -103,11 +103,12 @@ export function evaluateSignupGap(
     if (profile?.rank_status === 'never' && profile.battle_cup_tier == null) {
       missing.push('battle_cup_tier');
     }
-    if (
-      event.discord_require_rank_screenshot &&
-      profile?.rank_status === 'active' &&
-      !profile.rank_screenshot
-    ) {
+    const rankScreenshotRequired =
+      (event.discord_require_rank_screenshot &&
+        profile?.rank_status === 'active') ||
+      (event.discord_require_previous_rank_screenshot &&
+        profile?.rank_status === 'previous');
+    if (rankScreenshotRequired && !profile?.rank_screenshot) {
       missing.push('rank_screenshot');
     }
     if (

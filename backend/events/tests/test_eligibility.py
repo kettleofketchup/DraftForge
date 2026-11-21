@@ -185,12 +185,15 @@ class EligibilityMatrixTests(EventTestCase):
                 self.assertEqual(unmet_requirements(ev, u), expected)
 
     def test_screenshot_parity(self) -> None:
-        for rank_status, (rank_req, bc_req) in product(
-            ("active", "previous", "never"), product([True, False], [True, False])
+        for rank_status, rank_req, prev_req, bc_req in product(
+            ("active", "previous", "never"), *[[True, False]] * 3
         ):
-            with self.subTest(rank_status=rank_status, rank=rank_req, bc=bc_req):
+            with self.subTest(
+                rank_status=rank_status, rank=rank_req, prev=prev_req, bc=bc_req
+            ):
                 ev = self.make_event(
                     discord_require_rank_screenshot=rank_req,
+                    discord_require_previous_rank_screenshot=prev_req,
                     discord_require_battlecup_screenshot=bc_req,
                 )
                 u = self.make_user()

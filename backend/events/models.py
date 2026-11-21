@@ -352,6 +352,10 @@ class DiscordEventConfigMixin(models.Model):
         default=False,
         help_text="Require active ranked players to upload MMR screenshot",
     )
+    discord_require_previous_rank_screenshot = models.BooleanField(
+        default=False,
+        help_text="Require previously ranked players to upload a screenshot of their last ranked MMR",
+    )
     discord_require_battlecup_screenshot = models.BooleanField(
         default=False,
         help_text="Require never-ranked players to upload battle cup ticket screenshot",

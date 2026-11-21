@@ -289,6 +289,7 @@ export interface EventRepeaterType extends ReadyCheckSettings {
   discord_subscriber_dm?: boolean;
   discord_subscriber_dm_hours?: number;
   discord_require_rank_screenshot: boolean;
+  discord_require_previous_rank_screenshot: boolean;
   discord_require_battlecup_screenshot: boolean;
   min_mmr: number | null;
   discord_notify_new_events: boolean;
@@ -421,6 +422,7 @@ export interface OrgEventDefaultsType extends ReadyCheckSettings {
   discord_subscriber_dm?: boolean;
   discord_subscriber_dm_hours?: number;
   discord_require_rank_screenshot: boolean;
+  discord_require_previous_rank_screenshot: boolean;
   discord_require_battlecup_screenshot: boolean;
   min_mmr: number | null;
 }

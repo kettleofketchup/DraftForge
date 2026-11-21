@@ -14,12 +14,15 @@ vi.mock('~/hooks/useEvent', () => ({
   }),
 }));
 
-function renderModal(overrides: Partial<EventType>) {
+function renderModal(
+  overrides: Partial<EventType>,
+  rankStatus?: 'active' | 'previous' | 'never',
+) {
   render(
     <EventSignupModal
       event={{ ...event, ...overrides }}
       intent="rsvp"
-      profile={null}
+      profile={rankStatus ? ({ rank_status: rankStatus } as never) : null}
       steamAccountId={null}
       open
       onOpenChange={() => {}}
@@ -67,4 +70,36 @@ describe('EventSignupModal sections follow the event configuration', () => {
     expect(screen.queryByTestId('signup-friend-id')).toBeNull();
     expect(screen.getByTestId('signup-rank-status')).toBeInTheDocument();
   });
+
+  it.each([
+    ['active', { discord_require_rank_screenshot: true }, 'MMR Screenshot'],
+    [
+      'previous',
+      { discord_require_previous_rank_screenshot: true },
+      'Last Ranked MMR Screenshot',
+    ],
+  ] as const)(
+    'asks a %s rank for a screenshot when the event requires it',
+    (rankStatus, flags, heading) => {
+      renderModal({ game_type: GAME_TYPE.DOTA2, ...flags }, rankStatus);
+
+      expect(
+        screen.getByRole('heading', {
+          name: new RegExp(`\\d+\\. ${heading}$`),
+        }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['active', { discord_require_previous_rank_screenshot: true }],
+    ['previous', { discord_require_rank_screenshot: true }],
+  ] as const)(
+    "does not ask a %s rank for a screenshot under the other rank type's setting",
+    (rankStatus, flags) => {
+      renderModal({ game_type: GAME_TYPE.DOTA2, ...flags }, rankStatus);
+
+      expect(screen.queryByRole('heading', { name: /Screenshot/ })).toBeNull();
+    },
+  );
 });

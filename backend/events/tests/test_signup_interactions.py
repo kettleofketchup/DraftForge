@@ -368,12 +368,37 @@ class HandleRankMedalSelectTest(EventTestCase):
             result, {"action": "needs_screenshot", "screenshot_type": "rank"}
         )
 
-    def test_previous_rank_never_needs_screenshot(self) -> None:
+    def test_previous_rank_ignores_the_active_mmr_screenshot_setting(self) -> None:
         self.event.discord_require_rank_screenshot = True
         self.event.save()
         PlayerDotaProfile.objects.filter(org_user=self.org_user).update(
             rank_status="previous"
         )
+
+        result = handle_rank_medal_select(self.event.pk, DISCORD_ID, "Legend 3")
+
+        self.assertEqual(result["action"], "signed_up")
+
+    def test_previous_rank_needs_screenshot_when_the_event_requires_it(
+        self,
+    ) -> None:
+        self.event.discord_require_previous_rank_screenshot = True
+        self.event.save()
+        PlayerDotaProfile.objects.filter(org_user=self.org_user).update(
+            rank_status="previous"
+        )
+
+        result = handle_rank_medal_select(self.event.pk, DISCORD_ID, "Legend 3")
+
+        self.assertEqual(
+            result, {"action": "needs_screenshot", "screenshot_type": "rank"}
+        )
+
+    def test_active_rank_ignores_the_previous_rank_screenshot_setting(
+        self,
+    ) -> None:
+        self.event.discord_require_previous_rank_screenshot = True
+        self.event.save()
 
         result = handle_rank_medal_select(self.event.pk, DISCORD_ID, "Legend 3")
 

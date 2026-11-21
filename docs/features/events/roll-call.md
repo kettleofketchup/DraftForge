@@ -132,7 +132,8 @@ These event config fields control signup behavior. **Game** column flags fields 
 | `allow_previous_rank` | true | Dota | Allow signups that record a previously-held rank (no current screenshot required) |
 | `allow_battlecup_rating` | true | Dota | Allow Battle-Cup-only signups (`rank_status="never"` + tier) |
 | `min_mmr` | null | Dota | Minimum MMR threshold for auto-approval |
-| `discord_require_rank_screenshot` | false | Dota | Discord/web modal require a `.png/.jpg/.jpeg/.webp` rank screenshot for `rank_status="active"` only — "previous" rank captures the medal+star without a screenshot |
+| `discord_require_rank_screenshot` | false | Dota | Discord/web modal require a `.png/.jpg/.jpeg/.webp` rank screenshot for `rank_status="active"` only |
+| `discord_require_previous_rank_screenshot` | false | Dota | Require a screenshot of the last ranked MMR for `rank_status="previous"`; stored in the same `rank_screenshot` field |
 | `discord_require_battlecup_screenshot` | false | Dota | Require a Battle Cup screenshot for `rank_status="never"` |
 | `roll_call_mode` | `manual` | any | `manual` (shown as **Staff-verified**: staff confirm members on the roll call page) or `automatic` (members confirm themselves) |
 
