@@ -1,6 +1,7 @@
 /**
  * Approval Requirements config section for event create/edit modals.
  * Controls which rank types are allowed, screenshot requirements, and min MMR.
+ * The rank types are Dota-only: other games hide them and keep the stored values.
  *
  * Shared by the event forms; their schemas `.merge(discordConfigSchema)`, so any
  * generic T extending z.input<typeof discordConfigSchema> is accepted.
@@ -12,6 +13,7 @@
 
 import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
 import type { z } from 'zod';
+import { GAME_TYPE } from '~/components/game/constants';
 import {
   FormControl,
   FormDescription,
@@ -22,7 +24,9 @@ import {
 import { Input } from '~/components/ui/input';
 import type { discordConfigSchema } from './schemas';
 
-type ApprovalFields = z.input<typeof discordConfigSchema>;
+type ApprovalFields = z.input<typeof discordConfigSchema> & {
+  game_type: number;
+};
 
 interface ApprovalConfigSectionProps<T extends FieldValues & ApprovalFields> {
   control: Control<T>;
@@ -77,6 +81,7 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
   const control = parentControl as unknown as Control<ApprovalFields>;
   const watch = parentWatch as unknown as UseFormWatch<ApprovalFields>;
 
+  const isDota = watch('game_type') === GAME_TYPE.DOTA2;
   const allowActiveMmr = watch('allow_active_mmr');
   const allowPreviousRank = watch('allow_previous_rank');
   const allowBattlecupRating = watch('allow_battlecup_rating');
@@ -84,102 +89,104 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
   return (
     <div className="space-y-6">
       {/* Rank Type Restrictions */}
-      <div className="space-y-4">
-        <div>
-          <h4 className="text-sm font-semibold text-foreground">
-            Allowed Rank Types
-          </h4>
-          <p className="text-xs text-muted-foreground mt-1">
-            Control which Dota 2 rank categories can sign up for this event.
-          </p>
-        </div>
+      {isDota && (
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">
+              Allowed Rank Types
+            </h4>
+            <p className="text-xs text-muted-foreground mt-1">
+              Control which Dota 2 rank categories can sign up for this event.
+            </p>
+          </div>
 
-        {/* Active MMR */}
-        <div className="rounded-lg border border-border p-4 space-y-3">
-          <CheckboxField
-            control={control}
-            name="allow_active_mmr"
-            label="Active MMR Players"
-            description="Players with a current ranked medal"
-          />
-          {allowActiveMmr && (
-            <div className="ml-7 space-y-3">
-              <CheckboxField
-                control={control}
-                name="discord_require_rank_screenshot"
-                label="Require MMR screenshot"
-                description="Player must upload a screenshot before signup completes"
-              />
-              <FormField
-                control={control}
-                name="min_mmr"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm">Minimum MMR</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={20000}
-                        placeholder="No minimum"
-                        value={field.value ?? ''}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          field.onChange(v === '' ? null : parseInt(v, 10));
-                        }}
-                        className="w-40"
-                      />
-                    </FormControl>
-                    <FormDescription className="text-xs">
-                      Players below this MMR will need admin approval
-                    </FormDescription>
-                  </FormItem>
-                )}
-              />
-            </div>
-          )}
-        </div>
+          {/* Active MMR */}
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <CheckboxField
+              control={control}
+              name="allow_active_mmr"
+              label="Active MMR Players"
+              description="Players with a current ranked medal"
+            />
+            {allowActiveMmr && (
+              <div className="ml-7 space-y-3">
+                <CheckboxField
+                  control={control}
+                  name="discord_require_rank_screenshot"
+                  label="Require MMR screenshot"
+                  description="Player must upload a screenshot before signup completes"
+                />
+                <FormField
+                  control={control}
+                  name="min_mmr"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm">Minimum MMR</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={20000}
+                          placeholder="No minimum"
+                          value={field.value ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            field.onChange(v === '' ? null : parseInt(v, 10));
+                          }}
+                          className="w-40"
+                        />
+                      </FormControl>
+                      <FormDescription className="text-xs">
+                        Players below this MMR will need admin approval
+                      </FormDescription>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+          </div>
 
-        {/* Previous Rank */}
-        <div className="rounded-lg border border-border p-4 space-y-3">
-          <CheckboxField
-            control={control}
-            name="allow_previous_rank"
-            label="Previously Ranked Players"
-            description="Players who had a rank but are no longer active"
-          />
-          {allowPreviousRank && (
-            <div className="ml-7">
-              <CheckboxField
-                control={control}
-                name="discord_require_rank_screenshot"
-                label="Require rank screenshot"
-                description="Player must upload a screenshot of their previous rank"
-              />
-            </div>
-          )}
-        </div>
+          {/* Previous Rank */}
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <CheckboxField
+              control={control}
+              name="allow_previous_rank"
+              label="Previously Ranked Players"
+              description="Players who had a rank but are no longer active"
+            />
+            {allowPreviousRank && (
+              <div className="ml-7">
+                <CheckboxField
+                  control={control}
+                  name="discord_require_rank_screenshot"
+                  label="Require rank screenshot"
+                  description="Player must upload a screenshot of their previous rank"
+                />
+              </div>
+            )}
+          </div>
 
-        {/* Battle Cup (Never Ranked) */}
-        <div className="rounded-lg border border-border p-4 space-y-3">
-          <CheckboxField
-            control={control}
-            name="allow_battlecup_rating"
-            label="Battle Cup Players (Never Ranked)"
-            description="Players who have never played ranked — use battle cup tier for estimation"
-          />
-          {allowBattlecupRating && (
-            <div className="ml-7">
-              <CheckboxField
-                control={control}
-                name="discord_require_battlecup_screenshot"
-                label="Require battle cup screenshot"
-                description="Player must upload a screenshot of their battle cup ticket tier"
-              />
-            </div>
-          )}
+          {/* Battle Cup (Never Ranked) */}
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <CheckboxField
+              control={control}
+              name="allow_battlecup_rating"
+              label="Battle Cup Players (Never Ranked)"
+              description="Players who have never played ranked — use battle cup tier for estimation"
+            />
+            {allowBattlecupRating && (
+              <div className="ml-7">
+                <CheckboxField
+                  control={control}
+                  name="discord_require_battlecup_screenshot"
+                  label="Require battle cup screenshot"
+                  description="Player must upload a screenshot of their battle cup ticket tier"
+                />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* General Approval Settings */}
       <div className="space-y-4">
