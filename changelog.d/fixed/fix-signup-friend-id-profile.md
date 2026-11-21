@@ -1,0 +1,1 @@
+- Web signups for Deadlock events save your Friend ID to your Deadlock profile, as Discord signups already did, instead of your Dota 2 profile (#709).

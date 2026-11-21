@@ -9,6 +9,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, GameType, Organization
+from events.discord import handle_signup_modal_submit
 from events.models import Event, EventState
 from events.schemas import SignupInputPatch
 from events.services import apply_signup_input, resolve_or_create_org_user
@@ -419,3 +420,100 @@ class SignupViewFriendIdTests(EventTestCase):
         resp = self._post(self.make_user(), ev, "abc")
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.data["error"], "Friend ID must be digits only (max 20).")
+
+
+class FriendIdGameProfileTests(EventTestCase):
+    """The Friend ID goes to the profile of the event's game."""
+
+    def _org_user(self, user: CustomUser) -> OrgUser:
+        return OrgUser.objects.get(user=user, organization=self.org)
+
+    def _post(self, user: CustomUser, event: Event, fid: str) -> object:
+        client = APIClient()
+        client.force_authenticate(user)
+        return client.post(
+            f"/api/events/{event.pk}/signup/",
+            {"intent": "rsvp", "profile": {"unverified_friend_id": fid}},
+            format="json",
+        )
+
+    def test_deadlock_event_writes_deadlock_profile(self) -> None:
+        ev = self.make_event(game_type=GameType.DEADLOCK)
+        ou = self._org_user(self.make_user())
+        result = apply_signup_input(
+            org_user=ou,
+            event=ev,
+            patch=SignupInputPatch(unverified_friend_id="515151"),
+        )
+        self.assertIsNone(result)
+        self.assertEqual(
+            PlayerDeadlockProfile.objects.get(org_user=ou).unverified_friend_id,
+            "515151",
+        )
+        self.assertFalse(PlayerDotaProfile.objects.filter(org_user=ou).exists())
+
+    def test_deadlock_event_keeps_existing_deadlock_rank(self) -> None:
+        ev = self.make_event(game_type=GameType.DEADLOCK)
+        ou = self._org_user(self.make_user())
+        PlayerDeadlockProfile.objects.create(org_user=ou, rank="Phantom IV")
+        apply_signup_input(
+            org_user=ou,
+            event=ev,
+            patch=SignupInputPatch(unverified_friend_id="525252"),
+        )
+        profile = PlayerDeadlockProfile.objects.get(org_user=ou)
+        self.assertEqual(profile.unverified_friend_id, "525252")
+        self.assertEqual(profile.rank, "Phantom IV")
+
+    def test_dota_event_writes_dota_profile_only(self) -> None:
+        ev = self.make_event(game_type=GameType.DOTA2)
+        ou = self._org_user(self.make_user())
+        apply_signup_input(
+            org_user=ou,
+            event=ev,
+            patch=SignupInputPatch(unverified_friend_id="535353"),
+        )
+        self.assertEqual(
+            PlayerDotaProfile.objects.get(org_user=ou).unverified_friend_id, "535353"
+        )
+        self.assertFalse(PlayerDeadlockProfile.objects.filter(org_user=ou).exists())
+
+    def test_web_deadlock_signup_stores_id_on_deadlock_profile(self) -> None:
+        ev = self.make_event(game_type=GameType.DEADLOCK, require_steam_id=True)
+        u = self.make_user()
+        resp = self._post(u, ev, "545454")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["status"], "approved")
+        ou = self._org_user(u)
+        self.assertEqual(
+            PlayerDeadlockProfile.objects.get(org_user=ou).unverified_friend_id,
+            "545454",
+        )
+        self.assertFalse(PlayerDotaProfile.objects.filter(org_user=ou).exists())
+        u.refresh_from_db()
+        self.assertEqual(u.steam_account_id, 545454)
+
+    def test_web_and_discord_deadlock_signups_agree(self) -> None:
+        ev = self.make_event(game_type=GameType.DEADLOCK)
+        web_user = self.make_user()
+        discord_user = self.make_user()
+        discord_user.discordId = "100000000000000777"
+        discord_user.save()
+
+        self.assertEqual(self._post(web_user, ev, "555555").status_code, 201)
+        result = handle_signup_modal_submit(
+            event_id=ev.pk,
+            discord_user_id="100000000000000777",
+            game_type=GameType.DEADLOCK,
+            values={"unverified_friend_id": "565656", "deadlock_rank": "Ritualist"},
+        )
+        self.assertEqual(result["action"], "signed_up", result)
+
+        for user, fid in ((web_user, "555555"), (discord_user, "565656")):
+            with self.subTest(user=user.username):
+                ou = self._org_user(user)
+                self.assertEqual(
+                    PlayerDeadlockProfile.objects.get(org_user=ou).unverified_friend_id,
+                    fid,
+                )
+                self.assertFalse(PlayerDotaProfile.objects.filter(org_user=ou).exists())

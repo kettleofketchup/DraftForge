@@ -12,7 +12,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, PositionsModel, Team, Tournament
+from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
 from draft.services.team import apply_draft_options
 from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
 from events.capacity import has_free_seat, lock_event, seat_holding_statuses
@@ -73,7 +73,7 @@ from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_
 from lobby.passwords import PasswordMode, generate_password
 from org.membership import resolve_or_create_org_user
 from org.models import OrgUser
-from org.models_profiles import PlayerDotaProfile
+from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 from org.standing import api as standing
 from telemetry.logging import get_logger
 
@@ -400,15 +400,31 @@ def decline_signup(event: Event, user: CustomUser) -> EventSignup:
     return signup
 
 
+def _write_deadlock_friend_id(org_user: OrgUser, event: Event, friend_id: str) -> None:
+    profile, _ = PlayerDeadlockProfile.objects.get_or_create(org_user=org_user)
+    profile.unverified_friend_id = friend_id
+    profile.save(update_fields=["unverified_friend_id"])
+    invalidate_after_commit(profile, org_user, event)
+    log.info(
+        "signup_input_applied",
+        system="events",
+        subsystem="services",
+        set_fields=["unverified_friend_id"],
+        profile_id=profile.pk,
+        org_user_id=org_user.pk,
+    )
+
+
 def apply_signup_input(
     *, org_user: "OrgUser", event: Event, patch: "SignupInputPatch"
 ) -> "PlayerDotaProfile | None":
-    """Idempotently write any provided fields onto the OrgUser's PlayerDotaProfile.
+    """Idempotently write any provided fields onto the OrgUser's game profiles.
 
     Used by both the web `/signup/` endpoint and the Discord adapters so the
     write path is identical. Per-field branches:
       - unverified_friend_id: validate_friend_id (digits, site-wide
-        uniqueness), then write.
+        uniqueness), then write to the event's game profile
+        (PlayerDeadlockProfile for Deadlock, PlayerDotaProfile otherwise).
       - positions: priorities dict or list[int] of roles; writes pos_1..pos_5
         booleans and CustomUser.positions priorities.
       - rank_status: validated against event.allow_* flags before writing.
@@ -418,8 +434,8 @@ def apply_signup_input(
     Contract:
       - Fields not in `patch` are not touched (partial-patch semantics).
       - Multiple calls with the same `patch` are safe (idempotent).
-      - Returns the PlayerDotaProfile when `patch` had any set fields, or
-        None if `patch` was empty.
+      - Returns the PlayerDotaProfile when `patch` wrote to it, or None
+        otherwise (empty patch, or only a Friend ID on a Deadlock event).
       - Cacheops invalidation is registered via invalidate_after_commit,
         which schedules via transaction.on_commit when a transaction is
         active and fires immediately otherwise. Do NOT wrap in an outer
@@ -434,6 +450,12 @@ def apply_signup_input(
         friend_id = validate_friend_id(
             set_fields["unverified_friend_id"] or "", org_user
         )
+    if friend_id is not None and event.game_type == GameType.DEADLOCK:
+        _write_deadlock_friend_id(org_user, event, friend_id)
+        friend_id = None
+        if set_fields.keys() == {"unverified_friend_id"}:
+            refresh_unmet_requirements(org_user)
+            return None
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     if friend_id is not None:
         profile.unverified_friend_id = friend_id
