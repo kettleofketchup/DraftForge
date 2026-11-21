@@ -344,7 +344,8 @@ def gifs(
     return 1 if failed else 0
 
 
-def load_clip_window(clip: Clip) -> tuple[float, float] | None:
+def load_clip_window(clip: Clip) -> tuple[list[float], float] | None:
+    """Per-video start offsets and the clip length, from the spec's metadata."""
     metadata = DEMO_RESULTS / "videos" / clip.metadata
     if not metadata.exists():
         return None
@@ -357,7 +358,10 @@ def load_clip_window(clip: Clip) -> tuple[float, float] | None:
     if not isinstance(window, dict):
         return None
     try:
-        return float(window["start_seconds"]), float(window["duration_seconds"])
+        starts = window["starts"]
+        return [float(starts[v]) for v in clip.videos], float(
+            window["duration_seconds"]
+        )
     except (KeyError, TypeError, ValueError):
         return None
 
@@ -388,16 +392,16 @@ def clips(
             )
             print(f"  SKIPPED: {clip.output} ({reason}; record the demo first)")
             continue
-        start, length = window
+        starts, length = window
         if duration is not None:
             length = duration
         out = docs_gifs / clip.output
         print(
-            f"Clipping: {clip.output} ({length:.1f}s from {start:.1f}s, {len(videos)} views)"
+            f"Clipping: {clip.output} ({length:.1f}s from {', '.join(f'{s:.1f}s' for s in starts)})"
         )
 
         inputs: list[str] = []
-        for video in videos:
+        for video, start in zip(videos, starts, strict=True):
             inputs += ["-ss", f"{start:.2f}", "-t", f"{length:.2f}", "-i", str(video)]
         streams = "".join(f"[{i}:v]" for i in range(len(videos)))
         stack = f"{streams}hstack=inputs={len(videos)}," if len(videos) > 1 else ""

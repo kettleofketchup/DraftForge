@@ -84,4 +84,4 @@ Animated WebP clips also go to `gifs/`:
 
 - `herodraft_chat.webp` - ~5s of both captains side by side: one member per team suggests a hero and writes in team chat, each captain answers their own team, and neither sees the other's messages
 
-The herodraft spec logs in one non-captain per team (unrecorded) for this. Before the clip both captains press Enter to open chat and trade `/all` lines. The spec writes the clip window to `herodraft.demo.yaml` (`chat_clip`), and `just demo::herodraft` cuts the clip after recording. Clips are cut from `frontend/demo-results/videos/`, not the trimmed copies in `docs/assets/videos/`.
+The herodraft spec logs in one non-captain per team (unrecorded) for this. Before the clip both captains press Enter to open chat and trade `/all` lines. The spec writes the clip window to `herodraft.demo.yaml` (`chat_clip`: a start per video, since each recording starts at its own browser context, plus one duration), and `just demo::herodraft` cuts the clip after recording. Clips are cut from `frontend/demo-results/videos/`, not the trimmed copies in `docs/assets/videos/`.

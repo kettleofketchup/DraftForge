@@ -514,6 +514,8 @@ test.describe('HeroDraft with Bracket Demo', () => {
       },
     });
 
+    // Each video's clock starts at its own context; the clip aligns them.
+    const recordingStartTimeB = Date.now();
     const contextB = await browserB.newContext({
       ignoreHTTPSErrors: true,
       viewport: { width: windowSize, height: windowSize },
@@ -579,7 +581,7 @@ test.describe('HeroDraft with Bracket Demo', () => {
       },
       captain2: {
         video: 'captain2_herodraft.webm',
-        trim_start_seconds: trimStartSeconds,
+        trim_start_seconds: (contentVisibleTime - recordingStartTimeB) / 1000,
       },
       recorded_at: new Date().toISOString(),
     };
@@ -920,7 +922,9 @@ test.describe('HeroDraft with Bracket Demo', () => {
     await fs.appendFile(
       DEMO_METADATA_FILE,
       `\nchat_clip:\n` +
-        `  start_seconds: ${((chatClipStart - recordingStartTime) / 1000).toFixed(2)}\n` +
+        `  starts:\n` +
+        `    captain1_herodraft.webm: ${((chatClipStart - recordingStartTime) / 1000).toFixed(2)}\n` +
+        `    captain2_herodraft.webm: ${((chatClipStart - recordingStartTimeB) / 1000).toFixed(2)}\n` +
         `  duration_seconds: ${((chatClipEnd - chatClipStart) / 1000).toFixed(2)}\n`,
     );
 
