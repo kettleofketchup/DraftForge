@@ -16,10 +16,10 @@
  * 6. Choosing phase (winner picks order/side)
  * 7. Drafting phase (24 rounds: 14 bans + 10 picks)
  *
- * Chat: one unrecorded team member per side suggests heroes (right-click) and
- * talks in team chat; captains open chat with Enter, trade /all lines and
- * answer their own team. Timestamps land in herodraft.demo.yaml (chat_clip)
- * for `just demo::clips`.
+ * Chat: two unrecorded members per team suggest heroes (right-click) and talk
+ * in team chat before most rounds; captains open chat with Enter, trade /all
+ * lines and answer or act on their own team's suggestions. Clip windows land
+ * in herodraft.demo.yaml (chat_clip, chat_picks_clip) for `just demo::clips`.
  */
 
 import {
