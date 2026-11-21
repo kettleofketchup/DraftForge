@@ -161,6 +161,18 @@ class ApplySignupInputTests(TestCase):
         self.assertEqual(ctx.exception.code, "rank_status_disallowed")
         self.assertIn("active MMR signups", str(ctx.exception))
 
+    def test_rank_status_ignores_dota_allow_flags_on_deadlock_event(self) -> None:
+        self.event.game_type = GameType.DEADLOCK
+        self.event.allow_active_mmr = False
+        self.event.save()
+        apply_signup_input(
+            org_user=self.org_user,
+            event=self.event,
+            patch=SignupInputPatch(rank_status="active"),
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertEqual(profile.rank_status, "active")
+
     def test_rank_medal_writes(self):
         apply_signup_input(
             org_user=self.org_user,
