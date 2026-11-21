@@ -3,10 +3,10 @@ from datetime import UTC, datetime, timedelta
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League, Organization
+from app.models import CustomUser, League
 from events.models import Event
 from org.contributions.kinds import EVENT_STAFF_KINDS, ContributionKind
-from org.models import ContributionEntry, ContributionPointValue, OrgUser
+from org.models import ContributionEntry, ContributionPointValue, Organization, OrgUser
 from org.standing import ledger
 from org.standing.kinds import (
     ONCE_PER_EVENT_KINDS,

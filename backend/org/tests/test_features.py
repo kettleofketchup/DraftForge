@@ -3,14 +3,14 @@ from unittest.mock import MagicMock, patch
 from django.db import IntegrityError
 from django.test import TestCase
 
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser
 from org.features import (
     FeatureKey,
     active_features,
     org_has_feature,
     set_org_feature,
 )
-from org.models import OrgFeature
+from org.models import Organization, OrgFeature, OrgLog
 
 FEATURE_ACTIONS = ["enable_feature", "disable_feature"]
 

@@ -1,4 +1,4 @@
-Migrations `org.0014`, `org.0015` and `org.0016` move org MMR to one row per game:
+Migrations `org.0015`, `org.0016` and `org.0017` move org MMR to one row per game:
 every non-zero `OrgUser.mmr` is copied to the Dota 2 org MMR, then the `OrgUser.mmr`
 column is dropped. Values outside 0–20000 are copied as they are, and the migration
 prints a `WARNING: N OrgUser mmr values outside 0..20000 copied verbatim` line with
@@ -28,7 +28,7 @@ Rollback (Deadlock org MMR values are lost; Dota 2 values are restored to
 1. Stop the release stack:
    `scripts/in-env.sh release . .venv/bin/python -m scripts.slots --root . compose --stack release down`
 2. From this release's checkout (migrations run from the host), run
-   `just db::manage release migrate org 0013_conduct`.
+   `just db::manage release migrate org 0014_move_organization_models_from_app`.
 3. Remove the old version's cached keys so the old image cannot serve pre-upgrade
    member data. Start only Redis and delete the keys, replacing `0.15.0` with the
    version you are going back to:

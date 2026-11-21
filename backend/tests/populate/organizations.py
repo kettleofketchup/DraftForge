@@ -4,8 +4,8 @@ Organization and League population for test database.
 
 from typing import Any, Final
 
-from app.models import CustomUser, League, Organization
-from org.models import OrgUser
+from app.models import CustomUser, League
+from org.models import Organization, OrgUser
 
 from .constants import (
     DTX_LEAGUE_NAME,

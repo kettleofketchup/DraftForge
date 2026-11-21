@@ -13,7 +13,7 @@ from rest_framework.response import Response
 
 from app.models import CustomUser, Team, Tournament
 from app.permissions import IsStaff
-from app.permissions_org import CanEditTournament
+from app.permissions_tournament import CanEditTournament
 from app.serializers import _build_users_dict
 from draft.models import Draft, DraftRound
 from draft.permissions import CanEditDraft, CanEditDraftRound

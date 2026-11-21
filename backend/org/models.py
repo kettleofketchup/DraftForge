@@ -1,6 +1,8 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from app.cache_utils import invalidate_obj
 from common.game import GameType
 from org.models_conduct import (
     AttendanceOutcome,  # noqa: F401
@@ -22,6 +24,79 @@ from org.models_promotion import (
 from org.models_settings import OrgSettings  # noqa: F401
 
 
+class Organization(models.Model):
+    """Organization that owns leagues and tournaments."""
+
+    name = models.CharField(max_length=255, db_index=True)
+    description = models.TextField(blank=True, default="", max_length=10000)
+    logo = models.URLField(blank=True, default="")
+    discord_link = models.URLField(blank=True, default="")
+    discord_server_id = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        help_text="Discord server (guild) ID for fetching members",
+    )
+    rules_template = models.TextField(blank=True, default="", max_length=50000)
+    timezone = models.CharField(max_length=50, default="America/New_York")
+    members_private = models.BooleanField(
+        default=False,
+        help_text="Restrict the member list to org staff (hides it from regular members)",
+    )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="owned_organizations",
+        null=True,
+        blank=True,
+    )
+    admins = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="admin_organizations",
+        blank=True,
+    )
+    staff = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="staff_organizations",
+        blank=True,
+    )
+    promoters = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="promoter_organizations",
+        blank=True,
+    )
+    default_league = models.ForeignKey(
+        "app.League",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="default_for_organization",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "app_organization"
+        ordering = ["name"]
+        verbose_name = "Organization"
+        verbose_name_plural = "Organizations"
+        indexes = [
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        super().save(*args, **kwargs)
+        # cacheops' post_save handles invalidation.
+
+    def delete(self, *args: object, **kwargs: object) -> None:
+        for league in self.leagues.all():
+            invalidate_obj(league)
+        super().delete(*args, **kwargs)
+
+
 class OrgUser(models.Model):
     """User's membership and MMR within an organization."""
 
@@ -32,7 +107,7 @@ class OrgUser(models.Model):
         db_index=True,
     )
     organization = models.ForeignKey(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="members",
         db_index=True,
@@ -59,6 +134,78 @@ class OrgUser(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user.username} @ {self.organization.name}"
+
+
+class OrgLog(models.Model):
+    """Audit log for organization admin team changes."""
+
+    ACTION_CHOICES = [
+        ("add_admin", "Add Admin"),
+        ("remove_admin", "Remove Admin"),
+        ("add_staff", "Add Staff"),
+        ("remove_staff", "Remove Staff"),
+        ("add_member", "Add Member"),
+        ("transfer_ownership", "Transfer Ownership"),
+        ("create", "Create Organization"),
+        ("update", "Update Organization"),
+        ("delete", "Delete Organization"),
+        ("approve_claim", "Approve Profile Claim"),
+        ("reject_claim", "Reject Profile Claim"),
+        ("set_mmr", "Set MMR"),
+        ("enable_feature", "Enable Feature"),
+        ("disable_feature", "Disable Feature"),
+        ("add_promoter", "Add Promoter"),
+        ("remove_promoter", "Remove Promoter"),
+        ("set_point_value", "Set Point Value"),
+        ("rescore", "Rescore Contributions"),
+        ("award_points", "Award Points"),
+        ("edit_award", "Edit Award"),
+        ("delete_award", "Delete Award"),
+        ("complete_event", "Complete Event"),
+        ("reopen_event", "Reopen Event"),
+        ("set_event_staff", "Set Event Staff"),
+        ("delete_user_contributions", "Delete User Contributions"),
+        ("set_attendance", "Set Attendance"),
+        ("finalize_attendance", "Finalize Attendance"),
+        ("void_attendance", "Void Attendance"),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="logs",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="org_actions_performed",
+        help_text="User who performed the action",
+    )
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    target_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="org_actions_received",
+        help_text="User affected by the action (if applicable)",
+    )
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "app_orglog"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["organization", "-created_at"]),
+        ]
+        verbose_name = "Organization Log"
+        verbose_name_plural = "Organization Logs"
+
+    def __str__(self) -> str:
+        actor_name = self.actor.username if self.actor else "System"
+        return f"{actor_name} {self.action} on {self.organization.name}"
 
 
 class OrgUserGameMmr(models.Model):

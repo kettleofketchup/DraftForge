@@ -1,8 +1,8 @@
 from django.test import TestCase
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from org.mmr import game_mmrs_prefetch
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.serializers import OrgUserSerializer
 
 

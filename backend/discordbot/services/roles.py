@@ -1,14 +1,17 @@
 """Discord role listing with Redis caching."""
 
+from typing import Any
+
 import requests
 from django.conf import settings
 from django.core.cache import cache
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import Organization
-from app.permissions_org import has_org_staff_access
+from org.models import Organization
+from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -16,7 +19,7 @@ log = get_logger(__name__)
 ROLES_CACHE_TTL = 600  # 10 minutes
 
 
-def _fetch_guild_roles(guild_id):
+def _fetch_guild_roles(guild_id: str) -> list[dict[str, Any]]:
     """Fetch roles from Discord API for a guild.
 
     Returns only roles the bot can mention (below bot's highest role,
@@ -44,7 +47,7 @@ def _fetch_guild_roles(guild_id):
     ]
 
 
-def _get_roles_cached(guild_id):
+def _get_roles_cached(guild_id: str) -> list[dict[str, Any]]:
     """Get roles with Redis cache."""
     cache_key = f"discord_roles_{guild_id}"
     cached = cache.get(cache_key)
@@ -57,7 +60,7 @@ def _get_roles_cached(guild_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_discord_roles(request, pk):
+def get_discord_roles(request: Request, pk: int) -> Response:
     """List mentionable roles for an organization's Discord server.
 
     GET /api/discord/organizations/<pk>/roles/

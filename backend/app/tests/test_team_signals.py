@@ -18,7 +18,6 @@ from app.models import (
     CustomUser,
     Game,
     League,
-    Organization,
     PositionsModel,
     Team,
     TeamLog,
@@ -31,6 +30,7 @@ from app.services.team_signals import (
     team_roster_changed,
 )
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
+from org.models import Organization
 from tests.populate.utils import ensure_org_user
 
 

@@ -93,7 +93,7 @@ Tournament, team and draft payloads carry only `mmr` for their own game plus
 
 ## Upgrading
 
-Migrations `org.0014`–`0016` create the table, copy every non-zero `OrgUser.mmr` into a
+Migrations `org.0015`–`0017` create the table, copy every non-zero `OrgUser.mmr` into a
 Dota 2 row, then drop the old column. Values outside 0–20000 are copied as they are and
 the migration prints their OrgUser ids. The release needs a stop-first deploy; the
 release notes carry the exact commands and the rollback steps. Rolling back keeps the

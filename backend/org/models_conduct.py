@@ -37,7 +37,7 @@ class OrgConductSettings(models.Model):
     """Per-organization conduct settings. Read via org.conduct.gate.get_conduct_settings."""
 
     organization = models.OneToOneField(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="conduct_settings",
     )
@@ -129,7 +129,7 @@ class AttendanceOutcome(models.Model):
     """One attendance outcome per event per member."""
 
     organization = models.ForeignKey(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="attendance_outcomes",
     )

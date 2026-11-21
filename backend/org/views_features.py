@@ -10,12 +10,12 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Organization, OrgLog
-from app.permissions_org import is_site_admin
+from app.models import CustomUser
 from app.serializers import TournamentUserSerializer
 from org.feature_errors import not_permitted, require_org_admin
 from org.features import FeatureKey, set_org_feature
-from org.models import OrgFeature, OrgUser
+from org.models import Organization, OrgFeature, OrgLog, OrgUser
+from org.permissions import is_site_admin
 from org.standing import api as standing
 from telemetry.logging import get_logger
 from user.querysets import with_user_profiles

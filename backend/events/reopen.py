@@ -7,9 +7,10 @@ from django.utils import timezone
 
 import events.eligibility.store  # noqa: F401
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, OrgLog
+from app.models import CustomUser
 from events.constants import EVENT_REOPEN_TRANSITIONS, EventState
 from events.models import Event
+from org.models import OrgLog
 from org.standing import api as standing
 from telemetry.logging import get_logger
 

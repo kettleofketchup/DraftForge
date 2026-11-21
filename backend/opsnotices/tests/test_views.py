@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from events.tests.base import EventTestCase
@@ -17,7 +17,7 @@ from opsnotices.models import OpsNotice
 from opsnotices.registry import isolated_registry
 from opsnotices.services import CLOSE_NOTE_MAX
 from opsnotices.tests.types import register_test_types
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 RESOLVE_URLS: tuple[str, ...] = ("org_ops_notice_resolve", "event_ops_notice_resolve")
 

@@ -13,8 +13,9 @@ already holds the id, plus a lookup endpoint the edit form calls on blur.
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from app.steam_accounts import steam_account_id_conflict_payload
+from org.models import Organization
 from tests.populate.utils import ensure_org_user
 
 TAKEN_ID = 765353730

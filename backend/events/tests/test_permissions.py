@@ -4,18 +4,25 @@ from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase
 from django.utils import timezone as tz
 
-from app.models import CustomUser, League, Organization, PositionsModel
-from app.permissions_org import has_event_staff_access
+from app.models import CustomUser, League, PositionsModel
+from app.permissions_tournament import has_event_staff_access
 from events.constants import EventState
 from events.models import Event
+from org.models import Organization
 
 
 class HasEventStaffAccessTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.org_staff = CustomUser.objects.create_user(username="org_staff_p", password="x")
-        cls.league_staff = CustomUser.objects.create_user(username="league_staff_p", password="x")
-        cls.unrelated = CustomUser.objects.create_user(username="unrelated_p", password="x")
+        cls.org_staff = CustomUser.objects.create_user(
+            username="org_staff_p", password="x"
+        )
+        cls.league_staff = CustomUser.objects.create_user(
+            username="league_staff_p", password="x"
+        )
+        cls.unrelated = CustomUser.objects.create_user(
+            username="unrelated_p", password="x"
+        )
         cls.owner = CustomUser.objects.create_user(username="owner_p", password="x")
         for u in (cls.org_staff, cls.league_staff, cls.unrelated, cls.owner):
             u.positions = PositionsModel.objects.create()
@@ -23,7 +30,9 @@ class HasEventStaffAccessTest(TestCase):
 
         cls.org = Organization.objects.create(name="Perm Test Org", owner=cls.owner)
         cls.org.staff.add(cls.org_staff)
-        cls.league = League.objects.create(name="Perm Test League", organization=None, steam_league_id=88888)
+        cls.league = League.objects.create(
+            name="Perm Test League", organization=None, steam_league_id=88888
+        )
         cls.league.staff.add(cls.league_staff)
 
         cls.event_with_league = Event.objects.create(

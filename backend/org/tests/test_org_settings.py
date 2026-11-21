@@ -12,9 +12,9 @@ from django.test import SimpleTestCase, TestCase
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser
 from org import settings_constants, settings_service
-from org.models import OrgSettings, OrgUser
+from org.models import Organization, OrgLog, OrgSettings, OrgUser
 from org.settings_constants import ALL_CODES, StaffOverridePolicy
 from org.settings_service import (
     get_org_settings,

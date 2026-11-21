@@ -14,9 +14,9 @@ on transaction.on_commit hooks fired by invalidate_after_commit.
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, PositionsModel
+from app.models import CustomUser, PositionsModel
 from common.game import GameType
-from org.models import OrgUserGameMmr
+from org.models import Organization, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
 
 

@@ -10,7 +10,7 @@ from django.db.models import F, Q
 from django.utils import timezone
 from pydantic import BaseModel, ValidationError
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.models import Event
 from opsnotices.models import OpsNotice
 from opsnotices.registry import (
@@ -21,6 +21,7 @@ from opsnotices.registry import (
     get_notice_type,
 )
 from opsnotices.signals import notice_emitted, notice_resolved
+from org.models import Organization
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

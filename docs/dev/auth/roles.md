@@ -10,7 +10,9 @@ from a row there, the tests fail (or you have a documentation bug).
 > 1. The relevant hook in
 >    [`frontend/app/hooks/usePermissions.ts`][hooks]
 > 2. The matching backend helper in
->    [`backend/app/permissions_org.py`][permissions]
+>    [`backend/org/permissions.py`][permissions] (org roles) or
+>    [`backend/app/permissions_tournament.py`][permissions-tournament]
+>    (league, tournament, game and lobby checks)
 > 3. The expectations in the matrix spec under
 >    [`frontend/tests/playwright/e2e/17-auth/`][matrix]
 > 4. The corresponding row in this document
@@ -312,7 +314,8 @@ feature suites.
 | Concern                          | File                                                                                  |
 | -------------------------------- | ------------------------------------------------------------------------------------- |
 | Frontend permission hooks         | `frontend/app/hooks/usePermissions.ts`                                                |
-| Backend permission helpers        | `backend/app/permissions_org.py`                                                      |
+| Backend org permission helpers    | `backend/org/permissions.py`                                                          |
+| Backend league/tournament checks  | `backend/app/permissions_tournament.py`                                               |
 | User serializer (role memberships)| `backend/app/serializers.py` (`UserSerializer`)                                       |
 | Playwright role fixture           | `frontend/tests/playwright/fixtures/role-contexts.ts`                                 |
 | Login endpoints                   | `backend/tests/test_auth.py`, `backend/tests/urls.py`                                 |
@@ -322,5 +325,6 @@ feature suites.
 | Locked-feature gates              | `backend/org/feature_errors.py`, `frontend/tests/playwright/e2e/19-org-features/`      |
 
 [hooks]: https://github.com/kettleofketchup/DraftForge/blob/main/frontend/app/hooks/usePermissions.ts
-[permissions]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/app/permissions_org.py
+[permissions]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/org/permissions.py
+[permissions-tournament]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/app/permissions_tournament.py
 [matrix]: https://github.com/kettleofketchup/DraftForge/tree/main/frontend/tests/playwright/e2e/17-auth

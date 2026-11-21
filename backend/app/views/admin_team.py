@@ -1,8 +1,5 @@
-"""Admin Team API views for organization and league permission management."""
+"""Admin Team API views for league and tournament permission management."""
 
-from typing import Any
-
-from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404
@@ -16,41 +13,26 @@ from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.tournament import _serialize_tournament
 from app.models import (
     CustomUser,
-    GameType,
     League,
     LeagueLog,
-    Organization,
-    OrgLog,
-    PositionsModel,
     Tournament,
 )
-from app.permissions_org import (
+from app.permissions_tournament import (
     has_league_admin_access,
     has_league_staff_access,
-    has_org_admin_access,
-    has_org_staff_access,
-    is_org_owner,
 )
 from app.serializers import TournamentUserSerializer
-from app.steam_accounts import (
-    steam_account_id_conflict_payload,
-    steam_account_id_holder,
-)
-from discordbot.services.member_names import normalise_name
-from events.eligibility import refresh_unmet_requirements
 from league.models import LeagueUser
+from org.member_resolution import member_nick, resolve_member_user
 from org.mmr import (
     LEAGUE_GAME,
-    OrgMmrError,
-    game_mmrs_prefetch,
-    mark_dota_mmr_verified,
     org_mmr_for,
-    resolve_game_type,
-    set_org_mmr,
-    validate_org_mmr,
 )
-from org.models import OrgUser, OrgUserGameMmr
-from org.serializers import OrgUserSerializer
+from org.models import Organization, OrgUser
+from org.permissions import (
+    has_org_admin_access,
+    has_org_staff_access,
+)
 from org.user_search import user_name_q
 from user.querysets import with_user_profiles
 
@@ -163,271 +145,6 @@ def search_users(request: Request) -> Response:
                 user_data["membership_label"] = None
 
     return Response(data)
-
-
-# =============================================================================
-# Organization Admin Team Management
-# =============================================================================
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def add_org_admin(request: Request, org_id: int) -> Response:
-    """Add an admin to an organization. Requires owner or admin access."""
-    try:
-        org = Organization.objects.get(pk=org_id)
-    except Organization.DoesNotExist:
-        return Response(
-            {"error": "Organization not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    if not has_org_admin_access(request.user, org):
-        return Response(
-            {"error": "You do not have permission to manage this organization"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    user_id = request.data.get("user_id")
-    if not user_id:
-        return Response(
-            {"error": "user_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        user = CustomUser.objects.get(pk=user_id)
-    except CustomUser.DoesNotExist:
-        return Response(
-            {"error": "User not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    # Don't add owner as admin
-    if org.owner_id == user.pk:
-        return Response(
-            {"error": "Owner cannot be added as admin"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    org.admins.add(user)
-    OrgUser.objects.get_or_create(user=user, organization=org)
-    invalidate_obj(org)
-
-    # Log the action
-    OrgLog.objects.create(
-        organization=org,
-        actor=request.user,
-        action="add_admin",
-        target_user=user,
-    )
-
-    return Response({"status": "added", "user": TournamentUserSerializer(user).data})
-
-
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-def remove_org_admin(request: Request, org_id: int, user_id: int) -> Response:
-    """Remove an admin from an organization. Requires owner access."""
-    try:
-        org = Organization.objects.get(pk=org_id)
-    except Organization.DoesNotExist:
-        return Response(
-            {"error": "Organization not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    # Only owner or superuser can remove admins
-    if not (is_org_owner(request.user, org) or request.user.is_superuser):
-        return Response(
-            {"error": "Only owner can remove admins"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    try:
-        user = CustomUser.objects.get(pk=user_id)
-    except CustomUser.DoesNotExist:
-        return Response(
-            {"error": "User not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    org.admins.remove(user)
-    invalidate_obj(org)
-
-    # Log the action
-    OrgLog.objects.create(
-        organization=org,
-        actor=request.user,
-        action="remove_admin",
-        target_user=user,
-    )
-
-    return Response({"status": "removed"})
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def add_org_staff(request: Request, org_id: int) -> Response:
-    """Add staff to an organization. Requires owner or admin access."""
-    try:
-        org = Organization.objects.get(pk=org_id)
-    except Organization.DoesNotExist:
-        return Response(
-            {"error": "Organization not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    if not has_org_admin_access(request.user, org):
-        return Response(
-            {"error": "You do not have permission to manage this organization"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    user_id = request.data.get("user_id")
-    if not user_id:
-        return Response(
-            {"error": "user_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        user = CustomUser.objects.get(pk=user_id)
-    except CustomUser.DoesNotExist:
-        return Response(
-            {"error": "User not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    org.staff.add(user)
-    OrgUser.objects.get_or_create(user=user, organization=org)
-    invalidate_obj(org)
-
-    # Log the action
-    OrgLog.objects.create(
-        organization=org,
-        actor=request.user,
-        action="add_staff",
-        target_user=user,
-    )
-
-    return Response({"status": "added", "user": TournamentUserSerializer(user).data})
-
-
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-def remove_org_staff(request: Request, org_id: int, user_id: int) -> Response:
-    """Remove staff from an organization. Requires owner or admin access."""
-    try:
-        org = Organization.objects.get(pk=org_id)
-    except Organization.DoesNotExist:
-        return Response(
-            {"error": "Organization not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    if not has_org_admin_access(request.user, org):
-        return Response(
-            {"error": "You do not have permission to manage this organization"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    try:
-        user = CustomUser.objects.get(pk=user_id)
-    except CustomUser.DoesNotExist:
-        return Response(
-            {"error": "User not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    org.staff.remove(user)
-    invalidate_obj(org)
-
-    # Log the action
-    OrgLog.objects.create(
-        organization=org,
-        actor=request.user,
-        action="remove_staff",
-        target_user=user,
-    )
-
-    return Response({"status": "removed"})
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def transfer_org_ownership(request: Request, org_id: int) -> Response:
-    """Transfer organization ownership. Requires owner or superuser access."""
-    try:
-        org = Organization.objects.get(pk=org_id)
-    except Organization.DoesNotExist:
-        return Response(
-            {"error": "Organization not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    # Only owner or superuser can transfer ownership
-    if not (is_org_owner(request.user, org) or request.user.is_superuser):
-        return Response(
-            {"error": "Only owner or site admin can transfer ownership"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    new_owner_id = request.data.get("user_id")
-    if not new_owner_id:
-        return Response(
-            {"error": "user_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        new_owner = CustomUser.objects.get(pk=new_owner_id)
-    except CustomUser.DoesNotExist:
-        return Response(
-            {"error": "User not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    # New owner must be an admin (or current owner can transfer to anyone)
-    if (
-        not org.admins.filter(pk=new_owner.pk).exists()
-        and not request.user.is_superuser
-    ):
-        return Response(
-            {"error": "New owner must be an existing admin"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    old_owner = org.owner
-
-    # Transfer ownership
-    org.owner = new_owner
-    org.save(update_fields=["owner"])
-
-    # Remove new owner from admins (owner is separate role)
-    org.admins.remove(new_owner)
-
-    # Add old owner as admin (if they existed)
-    if old_owner:
-        org.admins.add(old_owner)
-
-    invalidate_obj(org)
-
-    # Log the action
-    OrgLog.objects.create(
-        organization=org,
-        actor=request.user,
-        action="transfer_ownership",
-        target_user=new_owner,
-        details={"previous_owner_id": old_owner.pk if old_owner else None},
-    )
-
-    return Response(
-        {
-            "status": "transferred",
-            "new_owner": TournamentUserSerializer(new_owner).data,
-        }
-    )
 
 
 # =============================================================================
@@ -620,301 +337,8 @@ def remove_league_staff(request: Request, league_id: int, user_id: int) -> Respo
 
 
 # =============================================================================
-# Member Management (Org, League, Tournament)
+# Member Management (League, Tournament)
 # =============================================================================
-
-
-def _find_member(members: list[dict], discord_id: str) -> dict | None:
-    for m in members:
-        if m.get("user", {}).get("id") == discord_id:
-            return m
-    return None
-
-
-def _cached_guild_member(
-    org: Organization | None, discord_id: str | None
-) -> dict | None:
-    if not org or not org.discord_server_id or not discord_id:
-        return None
-    members = cache.get(f"discord_members_search_{org.discord_server_id}") or []
-    return _find_member(members, discord_id)
-
-
-def _member_nick(member: dict | None) -> str | None:
-    if member is None:
-        return None
-    return normalise_name(member.get("nick"))
-
-
-def _resolve_user(
-    data: dict, org: Organization | None = None
-) -> tuple[CustomUser, dict | None] | Response:
-    """
-    Resolve a user from user_id or discord_id, plus their cached guild member.
-
-    Discord member data comes from the backend's own cache, never the client.
-    No Discord fetch is made; a cold cache yields ``None`` for the member.
-    """
-    user_id = data.get("user_id")
-    discord_id = data.get("discord_id")
-
-    if user_id:
-        try:
-            user = CustomUser.objects.get(pk=user_id)
-        except CustomUser.DoesNotExist:
-            return Response(
-                {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
-            )
-        return user, _cached_guild_member(org, user.discordId)
-    elif discord_id:
-        existing = CustomUser.objects.filter(discordId=discord_id).first()
-        if existing:
-            return existing, _cached_guild_member(org, discord_id)
-
-        if not org or not org.discord_server_id:
-            return Response(
-                {"error": "Cannot resolve Discord user without org Discord server"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        members = cache.get(f"discord_members_search_{org.discord_server_id}")
-        if not members:
-            return Response(
-                {
-                    "error": "Discord member cache is empty. "
-                    "Please refresh Discord members first."
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        discord_member = _find_member(members, discord_id)
-        if not discord_member:
-            return Response(
-                {"error": "Discord member not found in cache"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        positions = PositionsModel.objects.create()
-        user = CustomUser(positions=positions)
-        user.createFromDiscordData(discord_member)
-        user.save()
-        return user, discord_member
-    else:
-        return Response(
-            {"error": "user_id or discord_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def add_org_member(request: Request, org_id: int) -> Response:
-    """Add a member to an organization. Creates OrgUser record."""
-    org = get_object_or_404(Organization, pk=org_id)
-
-    if not has_org_staff_access(request.user, org):
-        return Response(
-            {"error": "You do not have permission"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    result = _resolve_user(request.data, org=org)
-    if isinstance(result, Response):
-        return result
-    user, member = result
-
-    try:
-        with transaction.atomic():
-            OrgUser.objects.create(
-                user=user, organization=org, guild_nickname=_member_nick(member)
-            )
-            invalidate_after_commit(user)
-    except IntegrityError:
-        return Response(
-            {"error": "User is already a member of this organization"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    OrgLog.objects.create(
-        organization=org,
-        actor=request.user,
-        action="add_member",
-        target_user=user,
-    )
-    return Response({"status": "added", "user": TournamentUserSerializer(user).data})
-
-
-@api_view(["PATCH"])
-@permission_classes([IsAuthenticated])
-def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response:
-    """Update an OrgUser and/or its underlying CustomUser.
-
-    Org MMR is written per game via ``game_mmrs`` (or ``mmr`` + ``mmr_game_type``).
-    Base user fields (nickname, steam_account_id, etc.) are forwarded
-    to the CustomUser model so edits from the org page work end-to-end.
-    """
-    org = get_object_or_404(Organization, pk=org_id)
-
-    if not has_org_staff_access(request.user, org):
-        return Response(
-            {"error": "You do not have permission"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    org_user = get_object_or_404(
-        with_user_profiles(OrgUser.objects.all(), "user", dota=True),
-        pk=org_user_id,
-        organization=org,
-    )
-
-    mmr_changes = _parse_mmr_patch(request.data)
-    if isinstance(mmr_changes, str):
-        return Response({"error": mmr_changes}, status=status.HTTP_400_BAD_REQUEST)
-
-    # --- Base CustomUser fields ---
-    USER_FIELDS = {"nickname", "steam_account_id"}
-    user = org_user.user
-    user_updated = False
-    for field in USER_FIELDS:
-        if field in request.data:
-            new_val = request.data[field]
-            # Coerce empty strings to None for nullable fields
-            if new_val == "" or new_val == "null":
-                new_val = None
-            if field == "steam_account_id" and new_val is not None:
-                holder = steam_account_id_holder(new_val, exclude_pk=user.pk)
-                if holder is not None:
-                    return Response(
-                        steam_account_id_conflict_payload(new_val, holder),
-                        status=status.HTTP_409_CONFLICT,
-                    )
-            if getattr(user, field) != new_val:
-                setattr(user, field, new_val)
-                user_updated = True
-
-    # --- Positions (nested FK) ---
-    positions_data = request.data.get("positions")
-    if positions_data and isinstance(positions_data, dict):
-        positions_instance = user.positions
-        for key in ("carry", "mid", "offlane", "soft_support", "hard_support"):
-            if key in positions_data:
-                val = int(positions_data[key])
-                if getattr(positions_instance, key) != val:
-                    setattr(positions_instance, key, val)
-                    user_updated = True
-        if user_updated:
-            positions_instance.save()
-
-    if not mmr_changes and not user_updated:
-        return Response(
-            {"error": "No valid fields to update"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    with transaction.atomic():
-        current_mmrs: dict[int, int | None] = (
-            dict(
-                OrgUserGameMmr.objects.nocache()
-                .filter(org_user_id=org_user.pk)
-                .values_list("game_type", "mmr")
-            )
-            if mmr_changes
-            else {}
-        )
-        for game_type, value in mmr_changes.items():
-            if (value or 0) == current_mmrs.get(game_type, 0):
-                if game_type == GameType.DOTA2:
-                    mark_dota_mmr_verified(org_user)
-                continue
-            set_org_mmr(org_user, game_type, value, mark_verified=True)
-            OrgLog.objects.create(
-                organization=org,
-                actor=request.user,
-                action="set_mmr",
-                target_user=user,
-                details={
-                    "game_type": game_type,
-                    "mmr": value,
-                    "source": "org_user_patch",
-                },
-            )
-        if user_updated:
-            user.save()  # Full save triggers steamid sync
-        refresh_unmet_requirements(org_user)
-
-        # Invalidate all cached views affected by this change
-        league_users = LeagueUser.objects.filter(org_user=org_user).select_related(
-            "league"
-        )
-        invalidate_after_commit(
-            org_user,
-            org,
-            *user.tournaments.all(),
-            *league_users,
-            *(lu.league for lu in league_users),
-        )
-
-    written = (
-        with_user_profiles(OrgUser.objects.nocache(), "user", dota=True)
-        .prefetch_related(game_mmrs_prefetch(fresh=True))
-        .get(pk=org_user.pk)
-    )
-    context_game = resolve_game_type(_query_int(request.query_params.get("game_type")))
-    return Response(
-        OrgUserSerializer(
-            written,
-            context={"game_type": context_game, "include_game_mmrs": True},
-        ).data
-    )
-
-
-BARE_MMR_ERROR = "mmr requires mmr_game_type; reload the page"
-
-
-def _query_int(raw: str | None) -> int | None:
-    try:
-        return int(raw) if raw is not None else None
-    except ValueError:
-        return None
-
-
-def _valid_game_type(value: object) -> int | None:
-    if isinstance(value, bool) or not isinstance(value, int):
-        return None
-    return value if value in GameType.values else None
-
-
-def _parse_mmr_patch(data: Any) -> dict[int, int | None] | str:
-    changes: dict[int, int | None] = {}
-    if "game_mmrs" in data:
-        raw = data["game_mmrs"]
-        if not isinstance(raw, dict):
-            return "game_mmrs must be an object of game_type to mmr"
-        for key, value in raw.items():
-            key_str = str(key)
-            game = (
-                _valid_game_type(int(key_str))
-                if key_str.isascii() and key_str.isdigit()
-                else None
-            )
-            if game is None:
-                return f"Unknown game_type: {key!r}"
-            changes[game] = value
-    if "mmr" in data:
-        if data.get("mmr_game_type") is None:
-            return BARE_MMR_ERROR
-        game = _valid_game_type(data["mmr_game_type"])
-        if game is None:
-            return f"Unknown game_type: {data['mmr_game_type']!r}"
-        if game in changes and changes[game] != data["mmr"]:
-            return "mmr and game_mmrs disagree for the same game"
-        changes[game] = data["mmr"]
-    for game, value in changes.items():
-        try:
-            validate_org_mmr(game, value)
-        except OrgMmrError as exc:
-            return str(exc)
-    return changes
 
 
 @api_view(["POST"])
@@ -931,7 +355,7 @@ def add_league_member(request: Request, league_id: int) -> Response:
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    result = _resolve_user(request.data, org=league.organization)
+    result = resolve_member_user(request.data, org=league.organization)
     if isinstance(result, Response):
         return result
     user, member = result
@@ -941,7 +365,7 @@ def add_league_member(request: Request, league_id: int) -> Response:
             org_user, _ = OrgUser.objects.get_or_create(
                 user=user, organization=league.organization
             )
-            nick = _member_nick(member)
+            nick = member_nick(member)
             if org_user.guild_nickname is None and nick is not None:
                 org_user.guild_nickname = nick
                 org_user.save(update_fields=["guild_nickname"])
@@ -986,7 +410,7 @@ def add_tournament_member(request: Request, tournament_id: int) -> Response:
         )
 
     org = tournament.league.organization if tournament.league else None
-    result = _resolve_user(request.data, org=org)
+    result = resolve_member_user(request.data, org=org)
     if isinstance(result, Response):
         return result
     user, _ = result

@@ -19,13 +19,13 @@ DEADLOCK = 2
 
 
 class ForwardBackfillTest(MigratorTestCase):
-    migrate_from = ("org", "0013_conduct")
-    migrate_to = ("org", "0016_remove_orguser_mmr")
+    migrate_from = ("org", "0014_move_organization_models_from_app")
+    migrate_to = ("org", "0017_remove_orguser_mmr")
 
     def prepare(self) -> None:
         apps = self.old_state.apps
         CustomUser = apps.get_model("app", "CustomUser")
-        Organization = apps.get_model("app", "Organization")
+        Organization = apps.get_model("org", "Organization")
         OrgUser = apps.get_model("org", "OrgUser")
         org = Organization.objects.create(name="Backfill Org")
         self.pks: dict[int, int] = {}
@@ -55,13 +55,13 @@ class ForwardBackfillTest(MigratorTestCase):
 
 
 class BackfillIdempotencyTest(MigratorTestCase):
-    migrate_from = ("org", "0014_orgusergamemmr")
-    migrate_to = ("org", "0015_backfill_org_user_game_mmr")
+    migrate_from = ("org", "0015_orgusergamemmr")
+    migrate_to = ("org", "0016_backfill_org_user_game_mmr")
 
     def prepare(self) -> None:
         apps = self.old_state.apps
         CustomUser = apps.get_model("app", "CustomUser")
-        Organization = apps.get_model("app", "Organization")
+        Organization = apps.get_model("org", "Organization")
         OrgUser = apps.get_model("org", "OrgUser")
         Row = apps.get_model("org", "OrgUserGameMmr")
         org = Organization.objects.create(name="Idempotent Org")
@@ -81,13 +81,13 @@ class BackfillIdempotencyTest(MigratorTestCase):
 
 
 class BackfillReverseTest(MigratorTestCase):
-    migrate_from = ("org", "0015_backfill_org_user_game_mmr")
-    migrate_to = ("org", "0014_orgusergamemmr")
+    migrate_from = ("org", "0016_backfill_org_user_game_mmr")
+    migrate_to = ("org", "0015_orgusergamemmr")
 
     def prepare(self) -> None:
         apps = self.old_state.apps
         CustomUser = apps.get_model("app", "CustomUser")
-        Organization = apps.get_model("app", "Organization")
+        Organization = apps.get_model("org", "Organization")
         OrgUser = apps.get_model("org", "OrgUser")
         Row = apps.get_model("org", "OrgUserGameMmr")
         org = Organization.objects.create(name="Reverse Org")
@@ -114,13 +114,13 @@ class BackfillReverseTest(MigratorTestCase):
 
 
 class ReverseRestoreTest(MigratorTestCase):
-    migrate_from = ("org", "0016_remove_orguser_mmr")
-    migrate_to = ("org", "0013_conduct")
+    migrate_from = ("org", "0017_remove_orguser_mmr")
+    migrate_to = ("org", "0014_move_organization_models_from_app")
 
     def prepare(self) -> None:
         apps = self.old_state.apps
         CustomUser = apps.get_model("app", "CustomUser")
-        Organization = apps.get_model("app", "Organization")
+        Organization = apps.get_model("org", "Organization")
         OrgUser = apps.get_model("org", "OrgUser")
         Row = apps.get_model("org", "OrgUserGameMmr")
         org = Organization.objects.create(name="Restore Org")
@@ -156,21 +156,21 @@ class ReverseRestoreTest(MigratorTestCase):
 
 
 class OrgMmrMigrationShapeTest(SimpleTestCase):
-    def test_only_0016_is_destructive(self) -> None:
+    def test_only_0017_is_destructive(self) -> None:
         graph = MigrationLoader(None, ignore_no_migrations=True).graph
         destructive: list[tuple[str, str, str]] = []
         for name in (
-            "0014_orgusergamemmr",
-            "0015_backfill_org_user_game_mmr",
-            "0016_remove_orguser_mmr",
+            "0015_orgusergamemmr",
+            "0016_backfill_org_user_game_mmr",
+            "0017_remove_orguser_mmr",
         ):
             for op in graph.nodes[("org", name)].operations:
                 if isinstance(op, RemoveField):
                     destructive.append((name, op.model_name, op.name))
                 elif isinstance(op, DeleteModel):
                     destructive.append((name, op.name, ""))
-        self.assertEqual(destructive, [("0016_remove_orguser_mmr", "orguser", "mmr")])
+        self.assertEqual(destructive, [("0017_remove_orguser_mmr", "orguser", "mmr")])
         self.assertIn(
-            ("org", "0015_backfill_org_user_game_mmr"),
-            graph.nodes[("org", "0016_remove_orguser_mmr")].dependencies,
+            ("org", "0016_backfill_org_user_game_mmr"),
+            graph.nodes[("org", "0017_remove_orguser_mmr")].dependencies,
         )

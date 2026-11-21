@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('org', '0015_backfill_org_user_game_mmr'),
+        ('org', '0016_backfill_org_user_game_mmr'),
     ]
 
     operations = [

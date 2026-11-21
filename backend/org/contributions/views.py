@@ -12,8 +12,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser, Organization
-from app.permissions_org import can_view_org_members, has_org_staff_access
+from app.models import CustomUser
 from events.models import Event
 from org.contributions.kinds import DEFAULT_POINTS, RATED_KINDS, ContributionKind
 from org.contributions.queries import (
@@ -45,7 +44,11 @@ from org.feature_errors import (
     require_org_admin,
 )
 from org.features import FeatureKey
-from org.models import ContributionEntry, ContributionPointValue, OrgUser
+from org.models import ContributionEntry, ContributionPointValue, Organization, OrgUser
+from org.permissions import (
+    can_view_org_members,
+    has_org_staff_access,
+)
 from org.standing import api as standing
 from org.standing.periods import Period, parse_period
 from user.querysets import with_user_profiles

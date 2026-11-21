@@ -8,10 +8,10 @@ from django.test import TestCase, override_settings
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, League, Tournament
 from events.constants import EventState
 from events.models import Event
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 LIST_URL = "/api/tournaments-list/"
 NOW = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)

@@ -11,19 +11,20 @@ import django
 
 django.setup()
 
-from datetime import time, timedelta
+from datetime import time, timedelta  # noqa: E402
 
-from django.test.runner import DiscoverRunner
-from django.utils import timezone
+from django.test.runner import DiscoverRunner  # noqa: E402
+from django.utils import timezone  # noqa: E402
 
 runner = DiscoverRunner(verbosity=0)
 old_config = runner.setup_databases()
 
-from app.models import CustomUser, GameType, Organization, PositionsModel
-from discordbot.models import DiscordMessageLog
-from events.constants import EventState, RepeatFrequency, SignupStatus
-from events.models import Event, EventRepeater, EventSignup
-from events.tasks import send_event_announcement
+from app.models import CustomUser, GameType, PositionsModel  # noqa: E402
+from discordbot.models import DiscordMessageLog  # noqa: E402
+from events.constants import EventState, RepeatFrequency, SignupStatus  # noqa: E402
+from events.models import Event, EventRepeater, EventSignup  # noqa: E402
+from events.tasks import send_event_announcement  # noqa: E402
+from org.models import Organization  # noqa: E402
 
 # Create org
 org = Organization.objects.create(
@@ -125,7 +126,7 @@ result = send_event_announcement(event.pk)
 print(f"Result: {result}")
 
 # Create Discord scheduled event (synchronous — no Celery worker in script)
-from events.tasks import create_discord_scheduled_event
+from events.tasks import create_discord_scheduled_event  # noqa: E402
 
 discord_event_result = create_discord_scheduled_event(event.pk)
 print(f"Discord scheduled event: {discord_event_result}")

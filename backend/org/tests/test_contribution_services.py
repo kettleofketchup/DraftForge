@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League, Organization, OrgLog
+from app.models import CustomUser, League
 from events.models import Event
 from org.contributions.kinds import DEFAULT_POINTS, ContributionKind
 from org.contributions.services import (
@@ -16,7 +16,13 @@ from org.contributions.services import (
     set_point_value,
     update_manual_award,
 )
-from org.models import ContributionEntry, ContributionPointValue, OrgUser
+from org.models import (
+    ContributionEntry,
+    ContributionPointValue,
+    Organization,
+    OrgLog,
+    OrgUser,
+)
 from org.standing.ledger import points_for
 
 

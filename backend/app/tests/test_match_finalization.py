@@ -10,8 +10,8 @@ from app.models import (
     League,
     LeagueMatch,
     LeagueRating,
-    Organization,
 )
+from org.models import Organization
 from tests.populate.utils import ensure_org_user
 
 
