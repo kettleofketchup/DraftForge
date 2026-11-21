@@ -62,8 +62,7 @@ SEAT_HOLDING_STATUSES: frozenset[str] = frozenset(
     }
 )
 
-# Signup statuses that put a player in the event's tournament
-# (approve_signup / confirm_signup call add_user_to_tournament).
+# Signup statuses that can put a player in the event's tournament.
 # An allow-list, so DROPPED is excluded on purpose.
 REGISTERED_SIGNUP_STATUSES: tuple[str, ...] = (
     SignupStatus.APPROVED,
