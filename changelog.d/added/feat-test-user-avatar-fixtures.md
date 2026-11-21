@@ -1,1 +1,0 @@
-- Test and demo data: the real test users now show their Discord avatars. Populate applies avatar hashes committed in `backend/tests/data/discord_avatars.py`, so it needs no Discord token; `just db::avatars::refresh` refetches them.

@@ -1,1 +1,0 @@
-- The player profile dialog no longer shows an empty row between Nickname and Friend ID for players with no positions set (#702).

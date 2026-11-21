@@ -14,6 +14,271 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.16.0] - 2026-11-21
+
+### Upgrading
+
+Run migrations: `events.0032` adds `eligibility_reasons` and
+`eligibility_checked_at` to event signups. Existing signups start with no stored
+reasons; they fill in the next time the player's profile changes or staff
+re-check the signup.
+
+Org conduct adds three migrations: `org.0013_conduct` (the attendance outcome and conduct
+settings tables), `events.0034_event_conduct_finalized_at` (a nullable field on events)
+and `app.0110_orglog_conduct_actions` (new org log action choices). They run with the
+usual migrate step and need no data backfill: past events have no attendance record, so
+tracking starts with the next event that closes after an organization gets the feature.
+Reversing the migrations drops the new tables and the `conduct_finalized_at` field.
+
+The feature is locked by default and every enforcement mode is off, so nothing changes
+for members until a site admin unlocks it and an organization admin turns a mode on.
+
+### Security
+
+- Removed the unused `/ajax-auth/<backend>/` login endpoint, which crashed on every
+  request. Discord login is unaffected.
+- The hourly limit on the public avatar refresh at `/api/avatars/refresh/` now claims
+  its slot atomically, so simultaneous page loads can no longer queue the refresh twice.
+
+### Added
+
+- Signups held for approval now record why: each unmet event requirement is
+  stored as a reason with a code, a message, the rule it enforces and, where the
+  player can fix it, a link to their profile. Event staff and the player see the
+  reasons on the signup; other members do not (#500).
+- Staff can re-check a signup's requirements with
+  `POST /api/events/signups/<id>/recheck/`, and players can ask
+  `GET /api/events/<id>/eligibility/?intent=main|maybe` what they are missing
+  without joining the organization (#500).
+- Refused web signups now return `reasons` alongside `error` (#500).
+- Events can mention their signed-up members on Discord a set number of minutes
+  (5, 10, 15, 30 or 60) before start, as replies to the signup post (#540). The
+  option is off by default; organizers choose the main list only or all active
+  signups. Members are mentioned in chunks of 80 per message, and staff can fire
+  the mention by hand from the event's task schedule.
+- Teams: staff and system changes to a tournament team's leadership and roster are now
+  recorded in a read-only team audit log (Django admin: Team logs), with who made it,
+  from where, the reason and the roster before and after. This covers the team
+  management service, the existing team edit (PATCH), and captain successions, kept
+  empty teams and team deletions done by the system; it does not cover team creation,
+  draft resets or plain member removals done by the system. A team service backs the
+  upcoming staff team management tools: change captain or deputy, mark a dropout,
+  restore a member, add, remove or sub in a stand-in, and rename, with a reason required
+  when acting on another player and a staff override for the stand-in limit and
+  eligibility (#544).
+- Team drafts: the event feed shows when a team's captain changes mid-draft (#544).
+- Team drafts: stand-ins and dropouts can no longer be drafted, undoing a pick refuses
+  when the picked player has since been made captain, and rebuilding teams from the
+  draft picks refuses once staff have changed a team (#544).
+- Teams: staff can change team captains, deputies, stand-ins and dropouts, rename teams and read a team's change history through new API endpoints, each change requiring a reason (#545).
+- Teams: team and tournament API responses now list captain or deputy problems for each team (#545).
+- Teams: staff can manage a tournament team's captain, deputy, stand-ins and dropouts from the team modal, with a reason for every change and a change history (#546).
+- Teams: staff see which teams have a captain or deputy who is not a member, or a deputy who is also the captain, on the Teams tab, team cards and team modal, and can fix them from the management dialog (#546).
+- Shared staff override contract: one policy check that follows the organization's
+  staff override setting, one `409 override_required` response, a reason requirement,
+  and a warning dialog that lists each broken rule and asks for a reason. Endpoints
+  adopt it in follow-up changes (#585).
+- HeroDraft: press Enter anywhere in the draft to open chat and start typing. An Enter
+  keycap on the empty chat box shows the shortcut; Escape closes chat again.
+- Organizations can track attendance for their events. When an event completes, every
+  expected member is recorded as attended unless staff mark them as a no-show, late
+  cancel or excused. Staff edits need a reason and are written to the org log.
+- Each member gets a show rate built from recent attendance, with older events counting
+  less, available through the new conduct and organization standing endpoints.
+- Organizations can opt in to enforcement for members below a threshold: send them to
+  the back of the line, require approval for their signups, or block self sign-up.
+  Organizers can still add or approve them; a blocked member added by staff waits for
+  approval.
+- The feature is locked by default and a site admin unlocks it per organization.
+- New organization standing endpoints list the tracks a viewer can see and serve any
+  track's leaderboard, including contributions ranked by number of entries.
+- Test and demo data: the real test users now show their Discord avatars. Populate applies avatar hashes committed in `backend/tests/data/discord_avatars.py`, so it needs no Discord token; `just db::avatars::refresh` refetches them.
+- Hero Draft: team chat, all chat (/all) and right-click hero pick/ban suggestions visible only to your team, with a click-through preview of your team's new messages while the chat is closed.
+- The frontend design-system lint now catches colour literals inside Tailwind arbitrary values (`shadow-[...rgba(...)]`, `text-[#5865F2]`) with `draftforge/no-arbitrary-color-literals`; pure black and white shadows stay allowed. The 14 existing cases use theme tokens instead: hero draft pick/ban/turn glows, the team draft reserve tint (`error`), Discord accents (`discord`), the navbar label (`primary`), the node loading ring (`info`) and the brand select glow.
+
+### Changed
+
+- Radio buttons now use the brand look: a violet ring, a violet-to-cyan dot with a soft glow when selected, and the same keyboard focus ring as switches. They no longer stretch into pills or pick up a stray hover border.
+- Organization settings now open in a full-screen modal from an **Org Settings** button in the organization
+  header, replacing the Settings tab and the separate Organization Event Defaults dialog.
+  General, Discord, Members, Rules, Admin Team, Staff placement and the new-event defaults
+  share one save bar. Only org admins, owners and site admins see the button, so org staff
+  can no longer edit event defaults. `?settings=<section>` links open a section; old
+  `?tab=settings` links still work.
+- Organization settings now live on one page: the org Settings tab holds General, Discord,
+  Members, Rules, Admin Team and Staff placement in a searchable sidebar (a tab strip on
+  phones). The Edit button opens that tab instead of the Edit Organization dialog, which is
+  removed. Changes to the organization's own fields show a save bar until saved or
+  discarded; a field with an error marks and opens its section.
+- Organization contributions now run through a single internal standing interface. No user-visible change.
+- Create Tournament and Tournament Settings now use the same searchable settings sidebar as
+  the event dialogs: General, Config and Discord sit in a sidebar (a tab strip on phones)
+  with a search that jumps to any setting. `/` or Ctrl/Cmd+K focuses the search, and a
+  section holding an invalid field is marked. Discord Activity is a section of Tournament
+  Settings instead of a separate tab.
+- Only org admins, the org owner and site admins can change an organization's event defaults through the API. Org staff can still read them, so creating events still fills in the defaults.
+- Team draft: on tall desktop windows the available-players list scrolls on its own, so the pick clock, pick order and drafting team stay in view; on shorter or narrower windows the pick clock stays pinned to the top while the page scrolls.
+- The manage dialog's roster is now one table with a row per player (members, stand-ins
+  and dropouts), role badges and MMR; Add stand-in sits above the table.
+- The team manage dialog now opens full-screen, like the settings dialogs. On tablets and
+  desktops each roster row shows its actions as buttons; phones keep a per-row menu.
+- The Captain and Deputy pickers show each player's avatar beside their name.
+- The manage dialog's leadership problems panel is easier to read: an opaque red panel with a
+  count heading and one row per problem showing the player, a plain sentence and its fixes.
+- Pages load fewer separate script files: small chunks are merged and all icons ship in one file, cutting a first visit from about 62 requests to about 42 (88 to 54 on the tournament page).
+- Bracket nodes, match stats, Steam match linking, league match cards and the completed hero draft now take their Radiant/Dire, winner, live, GPM/XPM and bracket-section colors from the shared domain-color tokens, so the same meaning looks the same everywhere. A few shades shift slightly: winner highlights use the success green, Dire's red is a touch lighter, and the unsaved-changes and lobby-suggestion highlights use the warning amber.
+- The hero draft now takes its colors from the shared domain-color tokens: picks, bans, the acting turn, Radiant/Dire headers, hero attribute sections and status messages use one consistent palette. Shades shift slightly: ban and pick slot backgrounds are a little darker, attribute section tints a little brighter, and the "Session Replaced" overlay and guest notice use the standard warning amber.
+- Team draft now uses the shared domain-color tokens for picks and the pick clock. The current pick, current captain and "your turn" highlights stay green through a new `current-pick` token; "picked" and double-pick hints use the pick green; the clock running out shows in the error color, pauses in the warning color, and connection dots use the online/offline colors.
+- Team draft setup and summary screens now use the shared domain-color tokens: draft style labels match the snake/normal/shuffle colors used elsewhere, placing badges and trophies use the gold/silver/bronze medal colors, the balance badge reads green when balanced and amber when not, the Restart Draft tooltip and menu item use the standard destructive red, and the draft footer borders follow the site's border color.
+- Position badges, tooltips and icons now use the domain-color tokens: each position icon takes its badge's color (carry rose, mid cyan, offlane green, soft support violet, hard support indigo), and the badges get a little brighter on hover. The team-draft position coverage cards and table use the success, warning and error colors, so "contested" rows are amber instead of orange.
+- Role badges and icons, Dota rank and medal badges, trophies, online dots and claim badges now use the shared domain color tokens. Admin is red and staff blue everywhere, including the admin team list, whose admin shield was blue and staff icon gray. Medal badges get a lighter tint, the missing-info dot on user cards pulses red instead of blue, and MMR warnings and claim badges use the standard warning, success and error colors.
+- The last raw palette colours in the hero draft, navbar, captain avatars, confirm dialogs, toasts and brand button styles now use domain color tokens: `captain`, `search-match`, opaque `success-surface`/`warning-surface`/`error-surface`/`selection-surface` with `success-tint`/`warning-tint`/`error-tint` text, and `destructive-hover`. Warning toasts now use the warning surface (dark orange) instead of dark red. The unused `AddButton` component and `SecondaryButton`'s unused `lime` colour are removed.
+- Buttons, brand dropdowns and selects, dialog close buttons and toasts now use the domain color tokens. Warning buttons are amber with dark text instead of orange with white text, destructive buttons use the brighter rose error red, and blue color buttons now match the sky accent.
+- The "Join our Discord" link on organization pages now uses the Discord brand color, and the admin tooltip, avatar hover and bracket node handles draw from the domain-color tokens instead of raw Tailwind colors.
+- Neutral text, panels, error messages, warning banners and dropdown highlights on the leaderboard, player search, Discord log and lobby panels now use the shared theme and domain-color tokens. Discord log categories, error text and the highlighted option in user search dropdowns shift slightly in tone, and the "View in Discord" link now brightens on hover.
+- Hero draft backend code (models, services, tick driver, WebSocket consumer,
+  serializers, views, admin and signals) moved from `app` into the new `draft`
+  Django app. The migrations are state-only: tables keep their `app_*` names and
+  no schema changes on deploy; the hero draft ContentType rows are relabelled
+  from `app` to `draft` so existing admin permissions carry over.
+- The team `references` payload key `app.DraftTeam.tournament_team` is now
+  `draft.DraftTeam.tournament_team`.
+- In the team usage list returned with a blocked or completed draft reset,
+  the hero draft entry's `model` is now `draft.HeroDraft` (was `app.HeroDraft`).
+  Its `label` and `label_plural` are unchanged.
+- Hero draft logger names follow the new module paths (for example
+  `app.functions.herodraft` is now `draft.services.hero`), and so does the
+  OpenTelemetry instrumentation scope on `herodraft.*` spans. Span names and
+  `system=`/`subsystem=` log fields are unchanged.
+- Hero draft admin pages moved from `/admin/app/herodraft/` to
+  `/admin/draft/herodraft/`.
+- The shared draft tick runner and WebSocket consumer base moved from `app`
+  into the `draft` app, so their logger names changed: `app.tasks.draft_tick`
+  is now `draft.tasks.draft_tick`, and `app.consumers_base` is now
+  `draft.consumers.base`. The `system=` and `subsystem=` log fields didn't
+  change.
+- Team draft backend code (the `Draft`, `DraftRound`, `DraftEvent` and
+  `DraftOptions` models, team draft services, the
+  `DraftConsumer` WebSocket consumer, serializers, views, routes and
+  permissions) moved from `app` into the `draft` Django app. The migrations
+  are state-only: tables keep their `app_*` names and no schema changes on
+  deploy. The four team draft ContentType rows are relabelled from `app` to
+  `draft`, so their permission codenames now live under the `draft` label and
+  existing grants carry over.
+- Team draft logger names follow the new module paths: `app.models` (draft
+  methods) is now `draft.models.team`, `app.functions.tournament` (draft
+  setup) is `draft.views.team_setup`, `app.functions.teamdraft` is
+  `draft.services.team`, `app.functions.teamdraft_timeout` is
+  `draft.services.team_timeout`, `app.functions.teamdraft_views` is
+  `draft.views.team`, `app.functions.draft_picks` is `draft.views.team_picks`,
+  `app.broadcast` is `draft.services.team_broadcast`, `app.tasks.teamdraft_tick`
+  is `draft.tasks.team_tick` and `app.consumers` (`DraftConsumer`) is
+  `draft.consumers.team`.
+  The INFO level overrides in settings moved with them. `system=`/`subsystem=`
+  log fields are unchanged.
+- No HTTP or WebSocket path, payload or `_meta.label`-derived key changes.
+- Organization backend code moved from `app` into the `org` Django app,
+  ahead of the model move. `app.permissions_org` is split: org role helpers
+  and `IsOrgOwner`/`IsOrgAdmin`/`IsOrgStaff` are now in `org.permissions`,
+  and the league, tournament, game and lobby checks stay in `app` as
+  `app.permissions_tournament`. `OrganizationView` is now in
+  `org.views_organization`, `OrganizationSerializer` in `org.serializers`,
+  the organization SSR view in `org.ssr`, the org admin/staff/member
+  endpoints in `org.views_admin_team` and the organization signal receivers
+  in `org.signals`.
+- The `view` field of `drf_error_response` logs for these endpoints now
+  reads `org.views_organization.OrganizationView`, `org.views_admin_team.*`
+  and `org.ssr.*` instead of `app.views_main.*`, `app.views.admin_team.*`
+  and `app.views.ssr.*`. Log queries that filter on it need updating.
+- No HTTP path, URL name, payload or model change.
+- The `Organization` and `OrgLog` models moved from `app` into the `org`
+  Django app. The migrations are state-only: the tables keep their
+  `app_organization`, `app_orglog` and `app_organization_*` names and no
+  schema changes on deploy.
+- The two ContentType rows are relabelled from `app` to `org`, so the
+  permission labels change from `app.*_organization` and `app.*_orglog` to
+  `org.*_organization` and `org.*_orglog`. Existing user and group grants
+  carry over.
+- The cacheops profile key `app.organization` is renamed to
+  `org.organization`, with the same profile.
+- No admin URL changes, since neither model is registered in admin. No
+  logger name, HTTP or WebSocket path, payload or `_meta.label`-derived key
+  changes either.
+
+### Fixed
+
+- The Discord signup post now follows the event state. Every state change refreshes
+  it, including restarts and the hourly auto-close. Outside open signups it shows a
+  status line (roll call, in progress, finished, cancelled). Sign Up and Tentative
+  appear only while self-serve signups are open, and Decline only until the event
+  starts. A failed edit is retried up to `SIGNUP_POST_READ_RETRIES` times. Each
+  applied edit logs `signup_post_edit_applied` with `lag_ms`, the time since the
+  oldest change it shows, at warning level above 10 seconds (#537).
+- Teams: a team used by bracket games or hero drafts is no longer deleted when its last
+  member is removed, which used to delete those games and drafts with it. Saving a team
+  with no members is refused for such a team (#544, follow-up to #604).
+- Teams: replacing a team's whole roster in one save no longer deletes the team, and a
+  save that does delete an unreferenced team no longer fails with a server error (#544).
+- Drafts: when a team's captain changes, that team's draft rounds now follow the new
+  captain, and a former captain or a stand-in can no longer be drafted onto a second
+  team (#544).
+- Teams: deleting a team that games or drafts still use is refused instead of deleting them with it, regenerating tournament teams checks every team first and deletes none if any is still used, and team deletions are recorded in the team audit log (#545).
+- The signup approval dialog keeps Close, Reject and Approve pinned to its bottom edge
+  while the rank signals, screenshot and MMR delta warning scroll above them, so the
+  actions stay on screen at desktop and phone sizes (#698).
+- The signup approval dialog only shows the Dotabuff link on Dota 2 events, on
+  both the event page and the roll call page (#695).
+- The Approval section of event forms no longer shows the Dota-only rank types
+  (active MMR, previously ranked, battle cup, their screenshot options and minimum
+  MMR) or "Require verified MMR" on non-Dota events, and the settings search no
+  longer finds them there. Saved values are kept. Web signups for non-Dota events no
+  longer check a submitted rank status against those hidden Dota settings (#710).
+- On Deadlock events, the signups list and the signup approval dialog now both show
+  the player's self-reported Deadlock rank, or nothing when they have none. They no
+  longer show the player's Dota 2 medal, battle cup tier, MMR or rank screenshot, and
+  the approval pre-fill no longer uses the Dota self-reported MMR (#690).
+- The Discord signup modal no longer points Deadlock and other non-Dota players to a Dotabuff URL for their Friend ID; they see the Steam Friend Code hint instead, while Dota 2 events keep the Dotabuff hint (#708).
+- The Discord profile reminder now lists the event's actual requirements instead of
+  always asking for "a complete profile". The Friend ID line reads "Dota 2 Friend ID"
+  on Dota events and "Steam Friend ID" on other games, and the verified-MMR line only
+  appears on Dota events (#716).
+- The "Teams are in use" warning before a draft restart counts each game once and lists what uses the teams by kind ("2 games and 1 HeroDraft") and which teams, instead of adding up every reference into an inflated "6 games and other records" (#630).
+- After a draft restart or start that drops or keeps teams, a summary dialog names each team, its captain and why it was dropped or kept. It stays open until closed instead of reporting only counts in a short toast (#630).
+- Restarting a finished snake or normal draft without the timer no longer leaves the open draft modal on "Team Draft Complete"; every open client now receives the reset draft (#630).
+- nginx now reloads when the frontend or backend container gets a new IP, so
+  restarting either one no longer leaves the site serving only the app shell while
+  nginx proxies to the old address.
+- The avatar ring in the player profile is no longer cut off at the top and left edges (#696).
+- The player profile dialog no longer shows an empty row between Nickname and Friend ID for players with no positions set (#702).
+- Position badge rank numbers are no longer cut off when you hover a badge in the player
+  profile and other player views (#689).
+- Home page feature cards no longer show a loading spinner forever when a preview thumbnail can't load; they show "Preview unavailable" instead.
+- Bracket match slots show the captain's avatar through the shared `UserAvatar`, so it uses the same Discord avatar and initials fallback as everywhere else.
+- Select fields no longer blank out and mark forms dirty when their stored value has no matching option.
+- Closing the organization settings modal now returns to the page's earlier history entry, so one Back leaves the page.
+- The organization settings modal can be closed again when a save request hangs for more than 15 seconds; the save bar shows "Still saving…".
+- The settings sidebar groups its categories as labelled groups, so screen readers no longer read group headings as tabs.
+- The event signup Friend ID field on Deadlock events now reads "Steam Friend ID" and points to the Steam Friend Code instead of a Dotabuff URL; the event "Require Friend ID" setting no longer says Dota 2 (#704).
+- Test stack slots: idle slots are auto-reaped again. Redis logs every periodic save and
+  celery runs scheduled tasks, so their log lines made every running stack look active and
+  `just test::upd` failed with "no free test slot". Only `backend`, `frontend` and `nginx`
+  logs now count as activity; container starts and stops still count for every service.
+- The team manage dialog's history table now scrolls inside the dialog instead of
+  widening it, so the Reason and Overrides columns, the pager and (on mobile) the
+  dialog title stay on screen.
+- Select options with a leading icon, such as a captain or deputy who is no longer on
+  the team, keep the icon on the same line as the name.
+- Red and orange confirm dialogs (Mark dropout, Remove stand-in, delete and similar)
+  are opaque again instead of showing the page through them.
+- Captain, Deputy, Stand-in and Dropout badges on team cards and the roster now share
+  one size, colour scheme and position.
+- Switching an organization tab and opening its settings back to back no longer
+  drops the tab from the URL, so a reload stays on the tab you chose.
+
+### Documentation
+
+- Hero Draft demo: the recording now shows team chat, `/all` chat, pick/ban suggestions from team members and opening chat with Enter, plus a short side-by-side `herodraft_chat.webp` clip of both captains' team chats (`just demo::clips`).
+
 ## [0.15.0] - 2026-11-19
 
 ### Upgrading
