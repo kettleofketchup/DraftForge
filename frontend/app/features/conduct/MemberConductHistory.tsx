@@ -132,7 +132,7 @@ export function MemberConductHistory({
               user={{ ...data.member, pk: data.member.user_pk }}
               size="md"
             />
-            <h3 className="wrap-anywhere text-lg font-semibold">
+            <h3 className="break-words text-lg font-semibold">
               {DisplayName(data.member)}
             </h3>
           </div>
