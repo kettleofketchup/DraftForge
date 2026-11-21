@@ -111,7 +111,7 @@ class DotaRequirements:
                 requirement_reason(ReasonCode.RANK_TYPE_DISALLOWED, rank_status=status)
             )
         if dota_require_screenshot(status, cfg):
-            if status in ("active", "previous") and not profile.rank_screenshot:
+            if status == "active" and not profile.rank_screenshot:
                 reasons.append(requirement_reason(ReasonCode.RANK_SCREENSHOT_MISSING))
             if status == "never" and not profile.battlecup_screenshot:
                 reasons.append(

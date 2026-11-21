@@ -307,7 +307,6 @@ describe('module load and eventSchema', () => {
     discord_announcement_channel_id: '',
     discord_announcement_hours: 24,
     discord_require_rank_screenshot: false,
-    discord_require_previous_rank_screenshot: false,
     discord_require_battlecup_screenshot: false,
     min_mmr: null,
   };

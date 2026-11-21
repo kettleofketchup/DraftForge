@@ -83,7 +83,6 @@ export const baseEvent: EventType = {
   discord_start_mention_minutes: 15,
   discord_start_mention_scope: 'all_active' as const,
   discord_require_rank_screenshot: false,
-  discord_require_previous_rank_screenshot: false,
   discord_require_battlecup_screenshot: false,
   min_mmr: null,
   is_off_schedule: false,
@@ -183,7 +182,6 @@ export const baseRepeater = {
   discord_start_mention_minutes: 15,
   discord_start_mention_scope: 'all_active' as const,
   discord_require_rank_screenshot: false,
-  discord_require_previous_rank_screenshot: false,
   discord_require_battlecup_screenshot: false,
   min_mmr: null,
   discord_notify_new_events: true,
@@ -249,7 +247,6 @@ export const baseOrgDefaults: OrgEventDefaultsType = {
   discord_announcement_role_ids: [],
   discord_signup_role_ids: [],
   discord_require_rank_screenshot: false,
-  discord_require_previous_rank_screenshot: false,
   discord_require_battlecup_screenshot: false,
   min_mmr: null,
 };

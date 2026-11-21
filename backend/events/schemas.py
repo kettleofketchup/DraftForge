@@ -305,7 +305,6 @@ class SupportsDotaGates(Protocol):
 
     require_steam_id: bool
     discord_require_rank_screenshot: bool
-    discord_require_previous_rank_screenshot: bool
     discord_require_battlecup_screenshot: bool
     min_mmr: int | None
     allow_active_mmr: bool
@@ -316,7 +315,6 @@ class SupportsDotaGates(Protocol):
 class DotaModalConfig(SignupModalConfig):
     kind: Literal["dota"] = "dota"
     require_rank_screenshot: bool = False
-    require_previous_rank_screenshot: bool = False
     require_battlecup_screenshot: bool = False
     min_mmr: int | None = None
     allow_active_mmr: bool = True
@@ -328,7 +326,6 @@ class DotaModalConfig(SignupModalConfig):
         return cls(
             require_steam_id=event.require_steam_id,
             require_rank_screenshot=event.discord_require_rank_screenshot,
-            require_previous_rank_screenshot=event.discord_require_previous_rank_screenshot,
             require_battlecup_screenshot=event.discord_require_battlecup_screenshot,
             min_mmr=event.min_mmr,
             allow_active_mmr=event.allow_active_mmr,
@@ -372,8 +369,6 @@ def dota_require_screenshot(rank_status: str, cfg: "DotaModalConfig") -> bool:
     """
     if rank_status == "active":
         return cfg.require_rank_screenshot
-    if rank_status == "previous":
-        return cfg.require_previous_rank_screenshot
     if rank_status == "never":
         return cfg.require_battlecup_screenshot
     return False

@@ -84,7 +84,6 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
 
   const isDota = watch('game_type') === GAME_TYPE.DOTA2;
   const allowActiveMmr = watch('allow_active_mmr');
-  const allowPreviousRank = watch('allow_previous_rank');
   const allowBattlecupRating = watch('allow_battlecup_rating');
 
   return (
@@ -155,16 +154,6 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
               label="Previously Ranked Players"
               description="Players who had a rank but are no longer active"
             />
-            {allowPreviousRank && (
-              <div className="ml-7">
-                <CheckboxField
-                  control={control}
-                  name="discord_require_previous_rank_screenshot"
-                  label="Require last ranked MMR screenshot"
-                  description="Player must upload a screenshot of their last ranked MMR before signup completes"
-                />
-              </div>
-            )}
           </div>
 
           {/* Battle Cup (Never Ranked) */}

@@ -35,31 +35,17 @@ class ModalConfigKindTest(SimpleTestCase):
 class DotaRequireScreenshotTest(SimpleTestCase):
     def test_truth_table(self):
         on = DotaModalConfig(
-            require_rank_screenshot=True,
-            require_previous_rank_screenshot=True,
-            require_battlecup_screenshot=True,
+            require_rank_screenshot=True, require_battlecup_screenshot=True
         )
         self.assertTrue(dota_require_screenshot("active", on))
-        self.assertTrue(dota_require_screenshot("previous", on))
         self.assertTrue(dota_require_screenshot("never", on))
+        self.assertFalse(dota_require_screenshot("previous", on))
 
-        off = DotaModalConfig()
+        off = DotaModalConfig(
+            require_rank_screenshot=False, require_battlecup_screenshot=False
+        )
         self.assertFalse(dota_require_screenshot("active", off))
-        self.assertFalse(dota_require_screenshot("previous", off))
         self.assertFalse(dota_require_screenshot("never", off))
-
-    def test_each_rank_type_reads_only_its_own_flag(self):
-        for status, flag in (
-            ("active", "require_rank_screenshot"),
-            ("previous", "require_previous_rank_screenshot"),
-            ("never", "require_battlecup_screenshot"),
-        ):
-            cfg = DotaModalConfig(**{flag: True})
-            for other in ("active", "previous", "never"):
-                with self.subTest(flag=flag, status=other):
-                    self.assertEqual(
-                        dota_require_screenshot(other, cfg), other == status
-                    )
 
 
 class SignupActionResponseContractTest(SimpleTestCase):

@@ -138,7 +138,6 @@ const event: EventType = {
   discord_start_mention_minutes: 15,
   discord_start_mention_scope: 'all_active' as const,
   discord_require_rank_screenshot: false,
-  discord_require_previous_rank_screenshot: false,
   discord_require_battlecup_screenshot: false,
   min_mmr: null,
   is_off_schedule: false,
