@@ -19,7 +19,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, Team, Tournament
+from app.models import CustomUser, Team, Tournament
 from app.serializers import DraftSerializerSlim, _tournament_organization
 from draft.consumers.team import DraftConsumer
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
@@ -41,6 +41,7 @@ from draft.tests.team_fixtures import (
     mid_draft_fixture,
     rename_team,
 )
+from org.models import Organization
 
 # Paused org draft: draft, tournament, rounds, teams, members, dropins, lefts,
 # users (8 prefetch), users_remaining (1), draft_options (1), league +

@@ -69,7 +69,7 @@ def restore_orguser_mmr(apps: Apps, schema_editor: BaseDatabaseSchemaEditor) -> 
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("org", "0014_orgusergamemmr"),
+        ("org", "0015_orgusergamemmr"),
     ]
 
     operations = [

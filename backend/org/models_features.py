@@ -7,7 +7,7 @@ class OrgFeature(models.Model):
     """Lockable feature switch for one organization, unlocked by a site admin."""
 
     organization = models.ForeignKey(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="features",
     )

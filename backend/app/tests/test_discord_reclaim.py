@@ -18,13 +18,13 @@ from app.discord_accounts import (
     find_split_discord_accounts,
     merge_discord_accounts,
 )
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from app.pipelines import associate_by_discord_id, save_discord
 from common.game import GameType
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from org.contributions.kinds import ContributionKind
-from org.models import ContributionEntry, OrgUser, OrgUserGameMmr
+from org.models import ContributionEntry, Organization, OrgUser, OrgUserGameMmr
 
 DISCORD_ID = "555000111222333444"
 

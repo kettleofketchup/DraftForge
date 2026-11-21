@@ -7,10 +7,10 @@ from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
 from django.db.models import QuerySet
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.models import Event, EventSignup
 from org.feature_keys import FeatureKey
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.standing.base import TrackBase
 from org.standing.cache import StandingCache
 from org.standing.periods import Period

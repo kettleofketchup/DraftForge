@@ -1,8 +1,8 @@
 from django.test import TestCase
 
-from app.models import CustomUser, GameType, Organization
+from app.models import CustomUser, GameType
 from org.mmr import bulk_set_org_mmrs, merge_org_mmrs, set_org_mmr
-from org.models import OrgUser, OrgUserGameMmr
+from org.models import Organization, OrgUser, OrgUserGameMmr
 
 DOTA = GameType.DOTA2
 DL = GameType.DEADLOCK

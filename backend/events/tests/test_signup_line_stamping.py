@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.constants import Commitment, EventState, SignupStatus
 from events.exceptions import ImmutableFieldError
 from events.models import Event, EventSignup
@@ -18,6 +18,7 @@ from events.services import (
     reinstate_signup,
     reject_signup,
 )
+from org.models import Organization
 
 
 class SignupLineStampingTests(TestCase):

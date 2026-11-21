@@ -26,7 +26,6 @@ from app.models import (
     GameMode,
     GameType,
     League,
-    Organization,
     PositionsModel,
     Team,
     Tournament,
@@ -44,6 +43,7 @@ from lobby import services, states
 from lobby.client import DotaLobbyClient, DotaLobbyError
 from lobby.models import GameLobby
 from lobby.passwords import PasswordMode, generate_password
+from org.models import Organization
 from tests.data.dota_lobby import (
     LOBBY_FIXED_PASSWORD,
     LOBBY_LEAGUE,

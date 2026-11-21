@@ -21,7 +21,7 @@ from django.test import TestCase
 from django.utils import timezone as tz
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Organization, PositionsModel
+from app.models import CustomUser, PositionsModel
 from common.game import GameType
 from events.constants import SignupStatus
 from events.eligibility import EligibilityResult, sync_steam_account_from_profiles
@@ -35,7 +35,7 @@ from events.services import (
 )
 from events.tests.base import EventTestCase
 from org.mmr import org_mmr_for, set_org_mmr
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
 

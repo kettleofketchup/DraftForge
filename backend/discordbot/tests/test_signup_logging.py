@@ -24,12 +24,13 @@ from django.utils import timezone
 from structlog.contextvars import clear_contextvars
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, GameType, Organization
+from app.models import CustomUser, GameType
 from discordbot.components import SignupButton
 from events.constants import EventState, SignupStatus
 from events.discord.handlers import handle_signup_button
 from events.models import Event, EventSignup
 from events.services import resolve_or_create_org_user
+from org.models import Organization
 from org.models_profiles import PlayerDotaProfile
 
 
@@ -237,7 +238,7 @@ class FullSignupPipelineTests(TransactionTestCase):
         self.assertEqual(finished["interaction_id"], "12345")
         self.assertEqual(finished["tags_csv"], "events,signup")
 
-        # Celery dispatch fires EXACTLY ONCE per signup (Task 8 Step 7 dedupe fix)
+        # Celery dispatch fires EXACTLY ONCE per signup
         mock_apply_async.assert_called_once_with(
             (self.event.pk,),
             {"interaction_id": "12345"},

@@ -12,6 +12,7 @@ on:
       - 'backend/**/migrations/*.py'
       - 'backend/**/models.py'
       - 'backend/**/models/*.py'
+      - 'backend/**/models_*.py'
   workflow_dispatch:
 
 env:

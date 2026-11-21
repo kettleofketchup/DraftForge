@@ -358,7 +358,7 @@ CACHEOPS_REDIS = {
 # @cached_as sites can resolve a cacheprofile. CACHEOPS_ENABLED (set below) is
 # what actually gates every Redis read/write and invalidation.
 CACHEOPS = {
-    "app.organization": {"ops": "all", "timeout": 60 * 60},
+    "org.organization": {"ops": "all", "timeout": 60 * 60},
     "app.league": {"ops": "all", "timeout": 60 * 60},
     "app.tournament": {"ops": "all", "timeout": 60 * 60},
     "app.team": {"ops": "all", "timeout": 60 * 60},

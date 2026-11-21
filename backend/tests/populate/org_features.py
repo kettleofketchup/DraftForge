@@ -19,7 +19,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_model, invalidate_obj
-from app.models import CustomUser, League, Organization, PositionsModel, Tournament
+from app.models import CustomUser, League, PositionsModel, Tournament
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from org.conduct.constants import Outcome, OutcomeSource
@@ -29,6 +29,7 @@ from org.features import FeatureKey, set_org_feature
 from org.models import (
     ContributionEntry,
     ContributionPointValue,
+    Organization,
     OrgSettings,
     OrgUser,
     PromoSend,

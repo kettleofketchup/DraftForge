@@ -6,7 +6,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization, Team, Tournament
+from app.models import CustomUser, League, Team, Tournament
 from draft.models import Draft, DraftOptions, DraftRound
 from draft.serializers.team import DraftSerializer
 from draft.services.shuffle import (
@@ -16,6 +16,7 @@ from draft.services.shuffle import (
     get_team_total_mmr,
     roll_until_winner,
 )
+from org.models import Organization
 from tests.populate.utils import ensure_org_user
 
 

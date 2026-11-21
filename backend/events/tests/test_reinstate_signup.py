@@ -20,10 +20,11 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone as tz
 
-from app.models import CustomUser, Organization, PositionsModel
+from app.models import CustomUser, PositionsModel
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import reinstate_signup
+from org.models import Organization
 
 
 class ReinstateSignupTest(TestCase):
@@ -99,9 +100,7 @@ class ReinstateSignupTest(TestCase):
     @patch("events.services.notify_signup_changed")
     def test_signups_open_cancelled_to_rsvp_when_room(self, _notify):
         """Cancelled → RSVP in signups_open with capacity available."""
-        event = self._make_event(
-            state=EventState.SIGNUPS_OPEN, max_players=10
-        )
+        event = self._make_event(state=EventState.SIGNUPS_OPEN, max_players=10)
         signup = self._make_signup(event, status=SignupStatus.CANCELLED)
 
         result = reinstate_signup(signup)
@@ -112,9 +111,7 @@ class ReinstateSignupTest(TestCase):
     @patch("events.services.notify_signup_changed")
     def test_signups_open_cancelled_to_waitlisted_when_full(self, _notify):
         """Cancelled → Waitlisted when active signup count is at max_players."""
-        event = self._make_event(
-            state=EventState.SIGNUPS_OPEN, max_players=2
-        )
+        event = self._make_event(state=EventState.SIGNUPS_OPEN, max_players=2)
         # Fill the event with two active signups.
         u1 = CustomUser.objects.create(
             username="rsvp_a", positions=PositionsModel.objects.create()

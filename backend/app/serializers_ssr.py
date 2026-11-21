@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, League, Tournament
 from events.models import Event
 
 
@@ -24,12 +24,6 @@ class TournamentSerializerSSR(serializers.ModelSerializer):
         if obj.league and obj.league.organization and obj.league.organization.logo:
             return obj.league.organization.logo
         return None
-
-
-class OrganizationSerializerSSR(serializers.ModelSerializer):
-    class Meta:
-        model = Organization
-        fields = ["pk", "name", "description", "logo"]
 
 
 class LeagueSerializerSSR(serializers.ModelSerializer):
