@@ -46,7 +46,7 @@ import { cn } from '~/lib/utils';
 
 const LARGE_CHANGE_THRESHOLD = 0.2;
 
-// 0 means "Not added" for non-Dota games; Dota keeps today's 0 approvals.
+// 0 means "Not added" for non-Dota games, so they require at least 1; Dota allows 0.
 function buildMmrSchema(gameType: GameTypeValue) {
   const [lo, hi] = GAME_MMR_BOUNDS[gameType] ?? DEFAULT_MMR_BOUNDS;
   const min = gameType === GAME_TYPE.DOTA2 ? lo : Math.max(lo, 1);

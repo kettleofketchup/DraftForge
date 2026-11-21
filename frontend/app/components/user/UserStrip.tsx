@@ -61,8 +61,7 @@ export interface UserStripProps {
   /**
    * Show MMR badges (default true). Set false in contexts where MMR is
    * irrelevant (e.g. Discord DM history, claim approval lists). When true,
-   * the org MMR badge still auto-hides when the value is 0/undefined and
-   * the League MMR badge auto-hides when the value is 0/undefined.
+   * the org and League MMR badges still auto-hide when 0/undefined.
    */
   showMmr?: boolean;
 

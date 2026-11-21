@@ -219,7 +219,6 @@ export function CSVImportModal({
         } else if (selectedUser.discordId) {
           row.discord_id = selectedUser.discordId;
         }
-        // Include mmr from the original CSV row
         if (originalRaw?.mmr?.trim()) {
           row.mmr = Number(originalRaw.mmr.trim());
         }
@@ -254,7 +253,6 @@ export function CSVImportModal({
         const resolved = result.results[0];
         if (!resolved) return;
 
-        // Merge the resolved result back into the existing import result
         setImportResult((prev) => {
           if (!prev) return prev;
           const newResults = prev.results.map((r) =>
@@ -263,7 +261,6 @@ export function CSVImportModal({
           const newSummary = { ...prev.summary };
           // Decrement errors since this row was an error
           newSummary.errors = Math.max(0, newSummary.errors - 1);
-          // Increment the appropriate counter based on the resolved status
           if (resolved.status === 'added') newSummary.added++;
           else if (resolved.status === 'updated') newSummary.updated++;
           else if (resolved.status === 'skipped') newSummary.skipped++;
