@@ -32,10 +32,9 @@ TEAM_SIZE = 5
 _user_ids = itertools.count(100_000)
 # tournament, league, org, games, lobbies, herodrafts, 3 roster tables,
 # org users, league users, org user game MMRs
-# +1: OrgUserGameMmr prefetch
 BRACKET_QUERIES = 12
 # insert missing org users, then reread them with their league users and
-# game MMRs (+1: OrgUserGameMmr prefetch on the reread)
+# game MMRs
 ORG_USER_CREATE_QUERIES = 4
 
 # (bracket_type, round, games in round)
