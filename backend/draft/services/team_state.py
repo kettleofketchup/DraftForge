@@ -5,9 +5,10 @@ serialization costs a fixed number of queries regardless of rounds, teams or
 users. ``fresh=True`` makes no cacheops read anywhere in the payload: the
 prefetches, draft options, league/organization (and the source event's
 organization), the OrgUser/LeagueUser MMR overlay and the ``_users`` cores all
-come from the database (pinned by DraftStateFreshReadTests). Use it for
-anything built right after a write (broadcasts, endpoint responses) so the
-payload never depends on the ordering of post-commit invalidations.
+come from the database (pinned by DraftStateFreshReadTests in
+draft/tests/test_team_state_queries.py). Use it for anything built right after
+a write (broadcasts, endpoint responses) so the payload never depends on the
+ordering of post-commit invalidations.
 """
 
 from django.db import connection, transaction
