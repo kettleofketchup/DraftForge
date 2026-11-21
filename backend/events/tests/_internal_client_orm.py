@@ -456,6 +456,7 @@ _CALLSITE_MODULES = (
     "app.internal_client.discord",
     "app.internal_client.events",
     "events.discord.embeds",
+    "events.scheduling.fire",
     "events.tasks",
     "discordbot.utils",
 )

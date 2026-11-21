@@ -8,7 +8,7 @@ from events.tasks import check_event_reminders
 
 
 class CheckEventRemindersDelegateTest(TestCase):
-    @patch("events.scheduling.fire.fire_due_reminders")
+    @patch("events.tasks.fire_due_reminders")
     def test_delegates_to_fire_due_reminders(self, mock_fire):
         # Patch target is the SOURCE module (events.scheduling.fire). The new
         # check_event_reminders body does

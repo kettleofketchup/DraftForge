@@ -114,10 +114,10 @@ class TournamentDiscordLogAPITest(TestCase):
 
 
 class SendDraftLinksTaskTest(TestCase):
-    @patch("app.internal_client.create_tournament_log")
-    @patch("discordbot.utils.sync_send_dm")
-    @patch("app.internal_client.get_tournament_participants")
-    @patch("app.internal_client.get_tournament_for_task")
+    @patch("events.tournament_tasks.create_tournament_log")
+    @patch("events.tournament_tasks.sync_send_dm")
+    @patch("events.tournament_tasks.get_tournament_participants")
+    @patch("events.tournament_tasks.get_tournament_for_task")
     def test_sends_dm_to_participants(
         self, mock_get_tourn, mock_get_parts, mock_dm, mock_log
     ):
@@ -143,11 +143,11 @@ class SendDraftLinksTaskTest(TestCase):
         self.assertEqual(mock_dm.call_count, 2)
 
     @override_settings(DISCORD_ACTIVITY_ENABLED=True)
-    @patch("app.internal_client.update_tournament_log")
-    @patch("app.internal_client.create_tournament_log")
-    @patch("discordbot.utils.sync_send_dm")
-    @patch("app.internal_client.get_tournament_participants")
-    @patch("app.internal_client.get_tournament_for_task")
+    @patch("events.tournament_tasks.update_tournament_log")
+    @patch("events.tournament_tasks.create_tournament_log")
+    @patch("events.tournament_tasks.sync_send_dm")
+    @patch("events.tournament_tasks.get_tournament_participants")
+    @patch("events.tournament_tasks.get_tournament_for_task")
     def test_activity_button_uses_actual_draft_id_in_sent_dm(
         self, mock_tournament, mock_participants, mock_dm, mock_log, mock_update
     ):
@@ -171,7 +171,7 @@ class SendDraftLinksTaskTest(TestCase):
         self.assertEqual(buttons[1]["custom_id"], "draft_activity:team:42")
         self.assertIn("voice channel", mock_dm.call_args.kwargs["embed"]["description"])
 
-    @patch("app.internal_client.get_tournament_for_task")
+    @patch("events.tournament_tasks.get_tournament_for_task")
     def test_skips_when_disabled(self, mock_get):
         from app.schemas import TournamentTaskSchema
 
@@ -186,10 +186,10 @@ class SendDraftLinksTaskTest(TestCase):
         result = send_tournament_draft_links(1, 42)
         self.assertIn("disabled", result.lower())
 
-    @patch("app.internal_client.create_tournament_log")
-    @patch("discordbot.utils.sync_send_dm")
-    @patch("app.internal_client.get_tournament_participants")
-    @patch("app.internal_client.get_tournament_for_task")
+    @patch("events.tournament_tasks.create_tournament_log")
+    @patch("events.tournament_tasks.sync_send_dm")
+    @patch("events.tournament_tasks.get_tournament_participants")
+    @patch("events.tournament_tasks.get_tournament_for_task")
     def test_creates_log(self, mock_get_tourn, mock_get_parts, mock_dm, mock_log):
         from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
 
@@ -217,10 +217,10 @@ class SendDraftLinksTaskTest(TestCase):
 
 
 class SendHeroDraftLinksTaskTest(TestCase):
-    @patch("app.internal_client.create_tournament_log")
-    @patch("discordbot.utils.sync_send_dm")
-    @patch("app.internal_client.get_match_participants")
-    @patch("app.internal_client.get_tournament_for_task")
+    @patch("events.tournament_tasks.create_tournament_log")
+    @patch("events.tournament_tasks.sync_send_dm")
+    @patch("events.tournament_tasks.get_match_participants")
+    @patch("events.tournament_tasks.get_tournament_for_task")
     def test_sends_dm_to_match_players(self, mock_tourn, mock_parts, mock_dm, mock_log):
         from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
 
@@ -245,11 +245,11 @@ class SendHeroDraftLinksTaskTest(TestCase):
         self.assertEqual(mock_dm.call_count, 2)
 
     @override_settings(DISCORD_ACTIVITY_ENABLED=True)
-    @patch("app.internal_client.update_tournament_log")
-    @patch("app.internal_client.create_tournament_log")
-    @patch("discordbot.utils.sync_send_dm")
-    @patch("app.internal_client.get_match_participants")
-    @patch("app.internal_client.get_tournament_for_task")
+    @patch("events.tournament_tasks.update_tournament_log")
+    @patch("events.tournament_tasks.create_tournament_log")
+    @patch("events.tournament_tasks.sync_send_dm")
+    @patch("events.tournament_tasks.get_match_participants")
+    @patch("events.tournament_tasks.get_tournament_for_task")
     def test_activity_button_is_in_hero_draft_dm(
         self, mock_tournament, mock_participants, mock_dm, mock_log, mock_update
     ):
@@ -289,8 +289,8 @@ class SweepAutoHeroDraftsTaskTest(TestCase):
         )
 
     @patch("events.tournament_tasks.send_tournament_herodraft_links.delay")
-    @patch("app.internal_client.create_herodraft_for_game")
-    @patch("app.internal_client.get_auto_herodraft_games")
+    @patch("events.tournament_tasks.create_herodraft_for_game")
+    @patch("events.tournament_tasks.get_auto_herodraft_games")
     def test_creates_drafts_and_sends_links(
         self, mock_games, mock_create, mock_links
     ) -> None:
@@ -307,8 +307,8 @@ class SweepAutoHeroDraftsTaskTest(TestCase):
         mock_links.assert_called_once_with(1, 99, 10, radiant_name="A", dire_name="B")
 
     @patch("events.tournament_tasks.send_tournament_herodraft_links.delay")
-    @patch("app.internal_client.create_herodraft_for_game")
-    @patch("app.internal_client.get_auto_herodraft_games")
+    @patch("events.tournament_tasks.create_herodraft_for_game")
+    @patch("events.tournament_tasks.get_auto_herodraft_games")
     def test_existing_draft_sends_no_link(
         self, mock_games, mock_create, mock_links
     ) -> None:
@@ -323,8 +323,8 @@ class SweepAutoHeroDraftsTaskTest(TestCase):
         mock_links.assert_not_called()
 
     @patch("events.tournament_tasks.send_tournament_herodraft_links.delay")
-    @patch("app.internal_client.create_herodraft_for_game")
-    @patch("app.internal_client.get_auto_herodraft_games")
+    @patch("events.tournament_tasks.create_herodraft_for_game")
+    @patch("events.tournament_tasks.get_auto_herodraft_games")
     def test_failed_create_continues_with_next_game(
         self, mock_games, mock_create, mock_links
     ) -> None:
@@ -414,11 +414,11 @@ class SendDraftLinksRaceTest(TestCase):
     The create-time row should be in-flight (success=None); the post-loop
     update is what flips success to True/False with the final count."""
 
-    @patch("app.internal_client.update_tournament_log")
-    @patch("app.internal_client.create_tournament_log")
-    @patch("discordbot.utils.sync_send_dm")
-    @patch("app.internal_client.get_tournament_participants")
-    @patch("app.internal_client.get_tournament_for_task")
+    @patch("events.tournament_tasks.update_tournament_log")
+    @patch("events.tournament_tasks.create_tournament_log")
+    @patch("events.tournament_tasks.sync_send_dm")
+    @patch("events.tournament_tasks.get_tournament_participants")
+    @patch("events.tournament_tasks.get_tournament_for_task")
     def test_create_log_passes_success_none(
         self, mock_tourn, mock_parts, mock_dm, mock_create, mock_update
     ):
@@ -453,11 +453,11 @@ class SendDraftLinksRaceTest(TestCase):
         )
         self.assertEqual(create_kwargs.get("recipient_count"), 0)
 
-    @patch("app.internal_client.update_tournament_log")
-    @patch("app.internal_client.create_tournament_log")
-    @patch("discordbot.utils.sync_send_dm")
-    @patch("app.internal_client.get_tournament_participants")
-    @patch("app.internal_client.get_tournament_for_task")
+    @patch("events.tournament_tasks.update_tournament_log")
+    @patch("events.tournament_tasks.create_tournament_log")
+    @patch("events.tournament_tasks.sync_send_dm")
+    @patch("events.tournament_tasks.get_tournament_participants")
+    @patch("events.tournament_tasks.get_tournament_for_task")
     def test_update_log_sets_terminal_state(
         self, mock_tourn, mock_parts, mock_dm, mock_create, mock_update
     ):
@@ -490,11 +490,11 @@ class SendDraftLinksRaceTest(TestCase):
 class SendHerodraftLinksRaceTest(TestCase):
     """Same contract as SendDraftLinksRaceTest, for herodraft variant."""
 
-    @patch("app.internal_client.update_tournament_log")
-    @patch("app.internal_client.create_tournament_log")
-    @patch("discordbot.utils.sync_send_dm")
-    @patch("app.internal_client.get_match_participants")
-    @patch("app.internal_client.get_tournament_for_task")
+    @patch("events.tournament_tasks.update_tournament_log")
+    @patch("events.tournament_tasks.create_tournament_log")
+    @patch("events.tournament_tasks.sync_send_dm")
+    @patch("events.tournament_tasks.get_match_participants")
+    @patch("events.tournament_tasks.get_tournament_for_task")
     def test_create_log_passes_success_none(
         self, mock_tourn, mock_parts, mock_dm, mock_create, mock_update
     ):
