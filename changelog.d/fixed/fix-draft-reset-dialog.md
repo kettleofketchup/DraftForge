@@ -1,3 +1,0 @@
-- The "Teams are in use" warning before a draft restart counts each game once and lists what uses the teams by kind ("2 games and 1 HeroDraft") and which teams, instead of adding up every reference into an inflated "6 games and other records" (#630).
-- After a draft restart or start that drops or keeps teams, a summary dialog names each team, its captain and why it was dropped or kept. It stays open until closed instead of reporting only counts in a short toast (#630).
-- Restarting a finished snake or normal draft without the timer no longer leaves the open draft modal on "Team Draft Complete"; every open client now receives the reset draft (#630).
