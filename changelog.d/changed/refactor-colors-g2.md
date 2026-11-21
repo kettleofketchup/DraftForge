@@ -1,1 +1,0 @@
-- The "Join our Discord" link on organization pages now uses the Discord brand color, and the admin tooltip, avatar hover and bracket node handles draw from the domain-color tokens instead of raw Tailwind colors.

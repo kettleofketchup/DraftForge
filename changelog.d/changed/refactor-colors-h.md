@@ -1,1 +1,0 @@
-- Neutral text, panels, error messages, warning banners and dropdown highlights on the leaderboard, player search, Discord log and lobby panels now use the shared theme and domain-color tokens. Discord log categories, error text and the highlighted option in user search dropdowns shift slightly in tone, and the "View in Discord" link now brightens on hover.
