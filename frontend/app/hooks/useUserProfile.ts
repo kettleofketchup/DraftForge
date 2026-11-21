@@ -1,30 +1,32 @@
 'use client';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { z } from 'zod';
 import api from '~/components/api/axios';
 import type { DotaProfileData } from '~/components/user';
 
-/** Backend wire shape for `/api/organizations/<org_id>/my-dota-profile/`. */
-type DotaProfileApi = {
-  id: number;
-  org_user_id: number;
-  rank_status: string | null;
-  rank_medal: string | null;
-  rank_date: string | null;
-  battle_cup_tier: number | null;
-  mmr: number | null;
-  rank_screenshot: string | null;
-  battlecup_screenshot: string | null;
-  unverified_friend_id: string | null;
-  pos_1: boolean;
-  pos_2: boolean;
-  pos_3: boolean;
-  pos_4: boolean;
-  pos_5: boolean;
-};
+/** Wire shape of `/api/organizations/<org_id>/my-dota-profile/`
+ * (backend/org/views_profiles.py `_serialize_dota_profile`). */
+export const DotaProfileApiSchema = z.object({
+  id: z.number(),
+  org_user_id: z.number(),
+  rank_status: z.string(),
+  rank_medal: z.string(),
+  rank_date: z.string().nullable(),
+  battle_cup_tier: z.number().nullable(),
+  mmr: z.number().nullable(),
+  rank_screenshot: z.string().nullable(),
+  battlecup_screenshot: z.string().nullable(),
+  steam_account_id: z.number().nullable(),
+  pos_1: z.boolean(),
+  pos_2: z.boolean(),
+  pos_3: z.boolean(),
+  pos_4: z.boolean(),
+  pos_5: z.boolean(),
+});
+export type DotaProfileApi = z.infer<typeof DotaProfileApiSchema>;
 
 function adaptApiToData(api: DotaProfileApi): DotaProfileData {
   return {
-    unverified_friend_id: api.unverified_friend_id,
     positions: {
       pos_1: api.pos_1,
       pos_2: api.pos_2,
@@ -67,10 +69,8 @@ export function useUserDotaProfile(
   return useQuery({
     queryKey: ['user-dota-profile', userPk, orgId],
     queryFn: async () => {
-      const resp = await api.get<DotaProfileApi>(
-        `/organizations/${orgId}/my-dota-profile/`,
-      );
-      return adaptApiToData(resp.data);
+      const resp = await api.get(`/organizations/${orgId}/my-dota-profile/`);
+      return adaptApiToData(DotaProfileApiSchema.parse(resp.data));
     },
     enabled: userPk != null && orgId != null,
     staleTime: 30_000,

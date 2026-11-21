@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useUserDotaProfile } from '../useUserProfile';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+import { DotaProfileApiSchema, useUserDotaProfile } from '../useUserProfile';
 
 /**
  * These tests use react-dom/server to render the hook synchronously without
@@ -19,7 +19,9 @@ function withQueryClient(children: ReactNode) {
 interface ProbeProps {
   userPk: number | null | undefined;
   orgId: number | null | undefined;
-  initialData: Parameters<typeof useUserDotaProfile>[2] extends { initialData?: infer T } | undefined
+  initialData: Parameters<typeof useUserDotaProfile>[2] extends
+    | { initialData?: infer T }
+    | undefined
     ? T
     : never;
   onCapture: (snapshot: { data: unknown; isFetching: boolean }) => void;
@@ -34,10 +36,15 @@ function Probe({ userPk, orgId, initialData, onCapture }: ProbeProps) {
 describe('useUserDotaProfile', () => {
   it('uses initialData when provided', () => {
     const initial = {
-      unverified_friend_id: null,
       rank_status: 'active',
       rank_medal: 'Legend 1',
-      positions: { pos_1: true, pos_2: false, pos_3: false, pos_4: false, pos_5: false },
+      positions: {
+        pos_1: true,
+        pos_2: false,
+        pos_3: false,
+        pos_4: false,
+        pos_5: false,
+      },
       mmr: null,
       battle_cup_tier: null,
       rank_screenshot: null,
@@ -112,5 +119,38 @@ describe('useUserDotaProfile', () => {
     );
     const snap = captured as unknown as { data: unknown; isFetching: boolean };
     expect(snap.isFetching).toBe(false);
+  });
+});
+
+describe('DotaProfileApiSchema', () => {
+  const body = {
+    id: 1,
+    org_user_id: 2,
+    rank_status: 'never',
+    rank_medal: '',
+    rank_date: null,
+    battle_cup_tier: null,
+    mmr: null,
+    rank_screenshot: null,
+    battlecup_screenshot: null,
+    steam_account_id: 4294967295,
+    pos_1: false,
+    pos_2: false,
+    pos_3: false,
+    pos_4: false,
+    pos_5: false,
+  };
+
+  it('parses the user Friend ID, including IDs above 2^31', () => {
+    expect(DotaProfileApiSchema.parse(body).steam_account_id).toBe(4294967295);
+    expect(
+      DotaProfileApiSchema.parse({ ...body, steam_account_id: null })
+        .steam_account_id,
+    ).toBeNull();
+  });
+
+  it('rejects a body without steam_account_id', () => {
+    const { steam_account_id: _omit, ...rest } = body;
+    expect(() => DotaProfileApiSchema.parse(rest)).toThrow();
   });
 });

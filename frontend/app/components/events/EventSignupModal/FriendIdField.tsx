@@ -1,6 +1,7 @@
 'use client';
 import { type Control } from 'react-hook-form';
 import { GAME_TYPE } from '~/components/game/constants';
+import { Badge } from '~/components/ui/badge';
 import {
   FormControl,
   FormField,
@@ -27,7 +28,7 @@ export function FriendIdField({ control, gameType }: Props) {
   return (
     <FormField
       control={control}
-      name="unverified_friend_id"
+      name="steam_account_id"
       render={({ field }) => (
         <FormItem>
           <FormLabel>{copy.label}</FormLabel>
@@ -44,5 +45,26 @@ export function FriendIdField({ control, gameType }: Props) {
         </FormItem>
       )}
     />
+  );
+}
+
+type ReadOnlyProps = { friendId: string; gameType: number };
+
+/** The user's stored Friend ID; a signup cannot change it. */
+export function FriendIdReadOnly({ friendId, gameType }: ReadOnlyProps) {
+  const copy = gameType === GAME_TYPE.DOTA2 ? DOTA_COPY : STEAM_COPY;
+  return (
+    <div
+      data-testid="signup-prefilled-summary-friend-id"
+      className="flex min-h-11 items-center justify-between gap-2 rounded-md border border-border bg-base-200 px-3 py-2"
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">{copy.label}</span>
+        <Badge variant="secondary">{friendId}</Badge>
+      </div>
+      <span className="text-xs text-muted-foreground">
+        Contact an admin to change it
+      </span>
+    </div>
   );
 }

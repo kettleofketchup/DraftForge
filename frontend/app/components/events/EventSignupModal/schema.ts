@@ -8,6 +8,7 @@ import {
   type SteamGateOptions,
 } from './evaluateSignupGap';
 
+const STEAM_ACCOUNT_ID_MAX = 2 ** 32 - 1;
 const SCREENSHOT_URL_RE = /^https?:\/\/.+\.(png|jpe?g|webp)(\?.*)?$/i;
 
 /**
@@ -46,11 +47,16 @@ export function buildSignupPatchSchema(
     .string()
     .trim()
     .max(20)
-    .regex(/^[0-9]*$/, 'Friend ID must be digits only');
-  if (event.require_steam_id && !hasFriendId(profile, opts)) {
-    fields.unverified_friend_id = friendId.min(1);
-  } else {
-    fields.unverified_friend_id = friendId.optional();
+    .regex(/^[0-9]*$/, 'Friend ID must be digits only')
+    .refine(
+      (v) => v === '' || (Number(v) >= 1 && Number(v) <= STEAM_ACCOUNT_ID_MAX),
+      `Friend ID must be between 1 and ${STEAM_ACCOUNT_ID_MAX}`,
+    );
+  // A stored Friend ID is shown read-only and never sent.
+  if (!hasFriendId(opts)) {
+    fields.steam_account_id = event.require_steam_id
+      ? friendId.min(1)
+      : friendId.optional();
   }
 
   if (event.game_type === GAME_TYPE.DOTA2) {
