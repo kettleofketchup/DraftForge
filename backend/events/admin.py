@@ -16,13 +16,24 @@ from events.models import (
     ReadyCheckEntry,
     SignupLedgerEntry,
 )
-from org.standing import api as standing
+from events.services import teardown_event, teardown_event_repeater
 
 
 @admin.register(EventRepeater)
 class EventRepeaterAdmin(admin.ModelAdmin):
     list_display = ["name", "organization", "frequency", "is_active", "created_at"]
     list_filter = ["is_active", "frequency", "organization"]
+
+    def delete_model(self, request: HttpRequest, obj: EventRepeater) -> None:
+        teardown_event_repeater(obj, actor=cast(CustomUser, request.user))
+
+    def delete_queryset(
+        self, request: HttpRequest, queryset: QuerySet[EventRepeater]
+    ) -> None:
+        actor = cast(CustomUser, request.user)
+        with transaction.atomic():
+            for repeater in queryset:
+                teardown_event_repeater(repeater, actor=actor)
 
 
 @admin.register(Event)
@@ -45,16 +56,13 @@ class EventAdmin(admin.ModelAdmin):
     ]
 
     def delete_model(self, request: HttpRequest, obj: Event) -> None:
-        with transaction.atomic():
-            standing.on_event_deleted(obj, actor=cast(CustomUser, request.user))
-            super().delete_model(request, obj)
+        teardown_event(obj, actor=cast(CustomUser, request.user))
 
     def delete_queryset(self, request: HttpRequest, queryset: QuerySet[Event]) -> None:
         actor = cast(CustomUser, request.user)
         with transaction.atomic():
             for event in queryset:
-                standing.on_event_deleted(event, actor=actor)
-            super().delete_queryset(request, queryset)
+                teardown_event(event, actor=actor)
 
 
 @admin.register(EventTeam)

@@ -8,12 +8,17 @@ SET_NULL) with no teardown, and nothing ever DELETEs the live Discord event.
 """
 
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from django.contrib.admin.sites import site as admin_site
+from django.http import HttpRequest
+from django.test import RequestFactory
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from discordbot.models import DiscordEvent
+from app.models import Tournament
+from discordbot.models import DiscordEvent, DiscordMessageLog
+from events.admin import EventAdmin, EventRepeaterAdmin
 from events.constants import EventState, RepeatFrequency
 from events.models import Event, EventRepeater
 from events.tests.base import EventTestCase
@@ -87,3 +92,71 @@ class SeriesDeleteCleanupTest(EventTestCase):
             "734185035623825559", "1529289108529352788"
         )
         self.assertFalse(DiscordEvent.objects.filter(pk=self.discord_event.pk).exists())
+
+
+class AdminDeleteCleanupTest(SeriesDeleteCleanupTest):
+    """Django admin deletes tear down the same Discord and tournament state."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.tournament = Tournament.objects.create(
+            name="Sunday Turbo Cup", date_played=tz.now()
+        )
+        self.future_event.tournament = self.tournament
+        self.future_event.save(update_fields=["tournament"])
+        self.message_log = DiscordMessageLog.objects.create(
+            channel_id="1",
+            embed_data={},
+            success=True,
+            source="event_announcement",
+            source_id=self.future_event.pk,
+        )
+
+    def _request(self) -> HttpRequest:
+        request = RequestFactory().post("/admin/")
+        request.user = self.admin
+        return request
+
+    def _assert_torn_down(self, mock_delete_task: MagicMock) -> None:
+        mock_delete_task.delay.assert_called_once_with(
+            "734185035623825559", "1529289108529352788"
+        )
+        self.assertFalse(Event.objects.filter(pk=self.future_event.pk).exists())
+        self.assertFalse(DiscordEvent.objects.filter(pk=self.discord_event.pk).exists())
+        self.assertFalse(Tournament.objects.filter(pk=self.tournament.pk).exists())
+        self.assertFalse(
+            DiscordMessageLog.objects.filter(pk=self.message_log.pk).exists()
+        )
+
+    @patch("events.tasks.delete_discord_scheduled_event")
+    def test_admin_event_delete_tears_down(self, mock_delete_task: MagicMock) -> None:
+        EventAdmin(Event, admin_site).delete_model(self._request(), self.future_event)
+        self._assert_torn_down(mock_delete_task)
+
+    @patch("events.tasks.delete_discord_scheduled_event")
+    def test_admin_event_bulk_delete_tears_down(
+        self, mock_delete_task: MagicMock
+    ) -> None:
+        EventAdmin(Event, admin_site).delete_queryset(
+            self._request(), Event.objects.filter(pk=self.future_event.pk)
+        )
+        self._assert_torn_down(mock_delete_task)
+
+    @patch("events.tasks.delete_discord_scheduled_event")
+    def test_admin_series_delete_tears_down(self, mock_delete_task: MagicMock) -> None:
+        EventRepeaterAdmin(EventRepeater, admin_site).delete_model(
+            self._request(), self.repeater
+        )
+        self._assert_torn_down(mock_delete_task)
+        self.past_event.refresh_from_db()
+        self.assertIsNone(self.past_event.event_repeater_id)
+
+    @patch("events.tasks.delete_discord_scheduled_event")
+    def test_admin_series_bulk_delete_tears_down(
+        self, mock_delete_task: MagicMock
+    ) -> None:
+        EventRepeaterAdmin(EventRepeater, admin_site).delete_queryset(
+            self._request(), EventRepeater.objects.filter(pk=self.repeater.pk)
+        )
+        self._assert_torn_down(mock_delete_task)
+        self.assertFalse(EventRepeater.objects.filter(pk=self.repeater.pk).exists())

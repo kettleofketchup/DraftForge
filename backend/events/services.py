@@ -1199,6 +1199,26 @@ def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
         event.delete()
 
 
+def teardown_event_repeater(
+    repeater: EventRepeater, *, actor: CustomUser | None = None
+) -> None:
+    """Delete a series after tearing down its still-active occurrences.
+
+    Their live Discord scheduled events would otherwise come back as ghosts on the
+    next sync_discord_events run. Completed and cancelled occurrences stay, with
+    Event.event_repeater set to NULL, as the series' history.
+    """
+    active_states = [
+        EventState.UPCOMING,
+        EventState.SIGNUPS_OPEN,
+        EventState.ROLL_CALL,
+    ]
+    with transaction.atomic():
+        for event in list(repeater.events.filter(state__in=active_states)):
+            teardown_event(event, actor=actor)
+        repeater.delete()
+
+
 # ---------------------------------------------------------------------------
 # Lobby passwords
 # ---------------------------------------------------------------------------
