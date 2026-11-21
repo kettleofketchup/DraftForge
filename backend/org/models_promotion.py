@@ -7,7 +7,7 @@ class PromoTemplate(models.Model):
     """Reusable Discord DM body an org's promoters send to players."""
 
     organization = models.ForeignKey(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="promo_templates",
     )
@@ -34,7 +34,7 @@ class PromoSend(models.Model):
     """One promotion DM a promoter recorded sending for an event."""
 
     organization = models.ForeignKey(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="promo_sends",
     )

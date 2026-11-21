@@ -134,6 +134,9 @@ class EventTaskSchema(BaseModel):
     # Config
     timezone: str = "America/New_York"
     roll_call_enabled: bool = False
+    require_steam_id: bool = False
+    require_mmr_verified: bool = False
+    require_profile_complete: bool = False
 
     model_config = {"extra": "ignore"}  # ignore extra fields from serializer
 

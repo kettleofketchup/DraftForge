@@ -13,7 +13,6 @@ from django.test import TestCase
 from django.utils import timezone
 from pydantic import ValidationError
 
-from app.models import Organization
 from app.schemas import (
     GameWithoutHeroDraftSchema,
     TournamentParticipantSchema,
@@ -29,6 +28,7 @@ from events.schemas import (
     RepeaterSubscriberSchema,
     ScheduledEventDueSchema,
 )
+from org.models import Organization
 
 
 class EventTaskSchemaDriftTest(TestCase):

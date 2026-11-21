@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from structlog.testing import capture_logs
 
-from app.models import GameType, League, Organization, Tournament
+from app.models import GameType, League, Tournament
 from events.models import Event, EventState
 from org import activity
 from org.activity import (
@@ -15,6 +15,7 @@ from org.activity import (
     guild_sync_lock,
     release_guild_sync_lock,
 )
+from org.models import Organization
 
 LOCMEM = {
     "default": {

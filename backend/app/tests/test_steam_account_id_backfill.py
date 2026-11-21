@@ -16,18 +16,18 @@ STEAM_ID_64_BASE = 76561197960265728
 
 
 class SteamAccountIdBackfillMigrationTest(MigratorTestCase):
-    """app 0112: profile Friend IDs move onto empty CustomUser.steam_account_id."""
+    """app 0113: profile Friend IDs move onto empty CustomUser.steam_account_id."""
 
     migrate_from = [
-        ("app", "0111_widen_steam_account_id"),
-        ("org", "0013_conduct"),
+        ("app", "0112_widen_steam_account_id"),
+        ("org", "0014_move_organization_models_from_app"),
     ]
-    migrate_to = ("app", "0112_copy_profile_friend_ids")
+    migrate_to = ("app", "0113_copy_profile_friend_ids")
 
     def prepare(self) -> None:
         apps = self.old_state.apps
         CustomUser = apps.get_model("app", "CustomUser")
-        Organization = apps.get_model("app", "Organization")
+        Organization = apps.get_model("org", "Organization")
         OrgUser = apps.get_model("org", "OrgUser")
         Dota = apps.get_model("org", "PlayerDotaProfile")
         Deadlock = apps.get_model("org", "PlayerDeadlockProfile")
@@ -112,7 +112,7 @@ class SteamAccountIdBackfillMigrationTest(MigratorTestCase):
     def test_rerun_is_idempotent_and_logs_skips(self) -> None:
         before = self._account_ids()
         migration = importlib.import_module(
-            "app.migrations.0112_copy_profile_friend_ids"
+            "app.migrations.0113_copy_profile_friend_ids"
         )
         with capture_logs() as logs:
             migration.copy_profile_friend_ids(self.new_state.apps, None)

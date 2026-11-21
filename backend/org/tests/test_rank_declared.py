@@ -3,8 +3,8 @@ from django.urls import reverse
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
-from org.models import OrgUser
+from app.models import CustomUser
+from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
 from org.tests.rank_evidence_cases import RANK_EVIDENCE_CASES
 

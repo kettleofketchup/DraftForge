@@ -1,8 +1,6 @@
 from collections.abc import Collection
 from dataclasses import dataclass
-from functools import cache
 from typing import Any, ClassVar
-from zoneinfo import available_timezones
 
 import nh3
 from django.db import transaction
@@ -12,7 +10,10 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
-from app.permissions_org import check_lobby_steam_league_id, request_user
+from app.permissions_tournament import (
+    check_lobby_steam_league_id,
+    request_user,
+)
 from app.services.team_references import team_references
 from draft.models import Draft, DraftOptions, DraftRound
 from events.overrides import (
@@ -21,7 +22,7 @@ from events.overrides import (
     OverrideRequestSerializer,
 )
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from telemetry.logging import get_logger
 from user.querysets import with_user_profiles
 
@@ -32,7 +33,6 @@ from .models import (
     GameType,
     Joke,
     League,
-    Organization,
     PositionsModel,
     Team,
     TeamLog,
@@ -40,11 +40,6 @@ from .models import (
 )
 
 log = get_logger(__name__)
-
-
-@cache
-def _known_timezones() -> frozenset[str]:
-    return frozenset(available_timezones())
 
 
 class UserPkField(serializers.RelatedField):
@@ -561,69 +556,6 @@ class TournamentListSerializer(serializers.ModelSerializer):
             "user_count",
             "signups_open",
         )
-
-
-class OrganizationSerializer(serializers.ModelSerializer):
-    # Roles change only through the admin_team endpoints.
-    owner = TournamentUserSerializer(read_only=True)
-    admins = TournamentUserSerializer(many=True, read_only=True)
-    staff = TournamentUserSerializer(many=True, read_only=True)
-    # Use annotated fields from ViewSet queryset (avoids N+1)
-    league_count = serializers.IntegerField(read_only=True)
-    tournament_count = serializers.IntegerField(read_only=True)
-    users_count = serializers.IntegerField(read_only=True)
-
-    class Meta:
-        model = Organization
-        fields = (
-            "pk",
-            "name",
-            "description",
-            "logo",
-            "discord_link",
-            "discord_server_id",
-            "rules_template",
-            "timezone",
-            "members_private",
-            "owner",
-            "admins",
-            "staff",
-            "default_league",
-            "league_count",
-            "tournament_count",
-            "users_count",
-            "created_at",
-            "updated_at",
-        )
-        read_only_fields = (
-            "pk",
-            "created_at",
-            "updated_at",
-            "league_count",
-            "tournament_count",
-            "users_count",
-        )
-
-    def validate_description(self, value: str | None) -> str | None:
-        """Sanitize markdown to prevent XSS."""
-        if value:
-            return nh3.clean(value)
-        return value
-
-    def validate_rules_template(self, value: str | None) -> str | None:
-        """Sanitize markdown to prevent XSS."""
-        if value:
-            return nh3.clean(value)
-        return value
-
-    def validate_timezone(self, value: str) -> str:
-        if self.instance is not None and value == getattr(
-            self.instance, "timezone", None
-        ):
-            return value
-        if value not in _known_timezones():
-            raise serializers.ValidationError(f"Unknown timezone {value!r}.")
-        return value
 
 
 class OrganizationsSerializer(serializers.ModelSerializer):

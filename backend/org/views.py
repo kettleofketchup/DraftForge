@@ -21,19 +21,18 @@ from app.models import (
     LeagueLog,
     LeagueMatchParticipant,
     LeagueRating,
-    OrgLog,
     PositionsModel,
     ProfileClaimRequest,
     Team,
 )
-from app.permissions_org import IsOrgStaff
 from draft.models import DraftRound
 from draft.services.hero_chat import repoint_chat_attribution
 from events.models import Event
 from events.staff import dedupe_host_helpers
 from league.models import LeagueUser
 from org.accounts import repoint_org_attribution
-from org.models import OrgUser, PromoSend
+from org.models import OrgLog, OrgUser, PromoSend
+from org.permissions import IsOrgStaff
 from org.promotion.services import demote_colliding_earning_sends
 from org.serializers import ProfileClaimRequestSerializer
 from org.standing import api as standing

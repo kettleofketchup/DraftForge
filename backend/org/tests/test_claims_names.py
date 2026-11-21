@@ -1,7 +1,8 @@
 from django.db import connection
 from django.test import TestCase
 
-from app.models import CustomUser, Organization, ProfileClaimRequest
+from app.models import CustomUser, ProfileClaimRequest
+from org.models import Organization
 from org.serializers import ProfileClaimRequestSerializer
 
 

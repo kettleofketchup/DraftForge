@@ -3,8 +3,8 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, PositionsModel
-from org.models import OrgUser
+from app.models import CustomUser, PositionsModel
+from org.models import Organization, OrgUser
 
 
 class OrgCSVImportTest(TestCase):

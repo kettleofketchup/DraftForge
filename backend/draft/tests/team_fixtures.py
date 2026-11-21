@@ -15,7 +15,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from app.models import CustomUser, League, Organization, Team, Tournament
+from app.models import CustomUser, League, Team, Tournament
 from app.serializers import (
     _collect_context_mmr,
     _collect_tournament_user_pks,
@@ -27,7 +27,7 @@ from draft.services import team as teamdraft
 from draft.services.team_timeout import skip_turn
 from draft.views.team import teamdraft_pause
 from draft.views.team_picks import pick_player_for_round, undo_last_pick
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 User = get_user_model()
 

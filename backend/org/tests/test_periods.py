@@ -6,7 +6,8 @@ from rest_framework import status
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
+from org.models import Organization
 from org.standing.periods import (
     Period,
     local_day_start_utc,

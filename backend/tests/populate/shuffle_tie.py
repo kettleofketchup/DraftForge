@@ -24,15 +24,9 @@ can log in and manage the draft.
 
 from datetime import date
 
-from app.models import (
-    CustomUser,
-    League,
-    Organization,
-    PositionsModel,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, League, PositionsModel, Team, Tournament
 from draft.models import Draft, DraftOptions
+from org.models import Organization
 from tests.data.leagues import SHUFFLE_TIE_LEAGUE
 from tests.data.organizations import SHUFFLE_TIE_ORG
 from tests.data.tournaments import SHUFFLE_TIE_TOURNAMENT

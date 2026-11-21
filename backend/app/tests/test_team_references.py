@@ -7,7 +7,6 @@ from app.models import (
     CustomUser,
     Game,
     League,
-    Organization,
     Team,
     TeamLog,
     TeamLogAction,
@@ -20,6 +19,7 @@ from app.services.team_references import (
     team_usage,
 )
 from bracket.models import BracketSlot, TournamentBracket
+from org.models import Organization
 
 
 class TeamReferencesFixture:

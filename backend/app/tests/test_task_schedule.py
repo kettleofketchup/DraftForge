@@ -5,9 +5,10 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Game, Organization, Team, Tournament
+from app.models import CustomUser, Game, Team, Tournament
 from draft.models import HeroDraft
 from events.models import Event
+from org.models import Organization
 
 
 class TaskScheduleEndpointTest(TestCase):
@@ -201,7 +202,7 @@ class FireSignupPostRepostTest(TestCase):
             discord_announcement_channel_id="ch_ann",
         )
         # Both is_staff and is_superuser bypass the org-admin cascade
-        # (see has_org_admin_access in app/permissions_org.py).
+        # (see has_org_admin_access in org/permissions.py).
         self.admin = CustomUser.objects.create_superuser(
             username="repost_admin", password="x"
         )

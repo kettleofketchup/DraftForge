@@ -9,15 +9,15 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
-from app.models import CustomUser, Organization
-from app.permissions_org import has_org_staff_access
+from app.models import CustomUser
 from events.eligibility import (
     claim_friend_id,
     refresh_unmet_requirements,
     validate_friend_id,
 )
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
+from org.permissions import has_org_staff_access
 
 DOTA_PROFILE_FIELDS = {
     "rank_status",

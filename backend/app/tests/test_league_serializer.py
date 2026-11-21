@@ -4,10 +4,10 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization, PositionsModel
+from app.models import CustomUser, League, PositionsModel
 from app.serializers import LeagueSerializer
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from tests.cache import flush_run_cache
 
 
@@ -121,7 +121,7 @@ class LeaguePatchSteamLeagueIdTest(TestCase):
     def test_collision_returns_custom_validator_message(self):
         """Custom validator must not be shadowed by DRF UniqueValidator."""
         # Create a second league with a known steam_league_id
-        other = League.objects.create(
+        League.objects.create(
             organization=self.org,
             name="Conflicting League",
             steam_league_id=30100,
