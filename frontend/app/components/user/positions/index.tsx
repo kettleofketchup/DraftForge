@@ -482,7 +482,7 @@ interface RolePositionsProps {
    */
   disableTooltips?: boolean;
   /**
-   * Fill empty position slots with invisible placeholders to maintain consistent width.
+   * Fill empty position slots with faded placeholders to maintain consistent width.
    * Useful in list views where alignment matters.
    */
   fillEmpty?: boolean;
@@ -494,7 +494,6 @@ interface RolePositionsProps {
   unranked?: boolean;
 }
 
-/** Position icon mapping */
 const positionIcons: Record<string, React.FC<{ className?: string }>> = {
   carry: CarrySVG,
   mid: MidSVG,
@@ -503,7 +502,6 @@ const positionIcons: Record<string, React.FC<{ className?: string }>> = {
   hard_support: HardSupportSVG,
 };
 
-/** Invisible placeholder badge showing the missing position icon */
 const PlaceholderBadge: React.FC<{
   compact?: boolean;
   positionKey: string;
@@ -587,7 +585,6 @@ export const RolePositions: React.FC<RolePositionsProps> = ({
     .filter(({ value }) => value != null && value > 0)
     .sort((a, b) => (a.value || 0) - (b.value || 0));
 
-  // Find which positions are missing (for placeholder icons)
   const activeKeys = new Set(activePositions.map((p) => p.key));
   const missingPositions = positions.filter((p) => !activeKeys.has(p.key));
 
@@ -605,7 +602,6 @@ export const RolePositions: React.FC<RolePositionsProps> = ({
             : 'flex-col md:flex-row gap-1',
       )}
     >
-      {/* Render active positions first (sorted by preference) */}
       {activePositions.map(({ component: Component, key }) => (
         <Component
           key={key}
@@ -615,7 +611,6 @@ export const RolePositions: React.FC<RolePositionsProps> = ({
           unranked={unranked}
         />
       ))}
-      {/* Render placeholders for missing positions with correct icons */}
       {fillEmpty &&
         missingPositions.map(({ key }) => (
           <PlaceholderBadge
