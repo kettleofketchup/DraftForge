@@ -35,6 +35,10 @@ gifs *args:
     {{just}} demo::gifs "$@"
 
 [group('test::demo')]
+clips *args:
+    {{just}} demo::clips "$@"
+
+[group('test::demo')]
 trim *args:
     {{just}} demo::trim "$@"
 

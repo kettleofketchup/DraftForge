@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,28 @@ DEMO_RESET_KEYS = {
     "snake": "demo_snake_draft",
     "csv": "demo_csv_import",
 }
+
+
+@dataclass(frozen=True)
+class Clip:
+    """A short animated WebP cut side by side from recordings of one run."""
+
+    output: str
+    videos: tuple[str, ...]
+    metadata: str
+    key: str
+
+
+# Cut from the raw recordings in demo-results/, whose clock the spec's
+# timestamps use; docs/assets/videos/ copies may already be trimmed.
+DEMO_CLIPS = [
+    Clip(
+        output="herodraft_chat.webp",
+        videos=("captain1_herodraft.webm", "captain2_herodraft.webm"),
+        metadata="herodraft.demo.yaml",
+        key="chat_clip",
+    ),
+]
 
 DEMO_RESULTS = paths.FRONTEND_PATH / "demo-results"
 DOCS_ASSETS = paths.PROJECT_PATH / "docs" / "assets"
@@ -180,10 +203,15 @@ def _single(title: str, spec: str, reset_key: str | None = None) -> Callable[[],
     return record
 
 
+def _herodraft() -> int:
+    status = _single("HeroDraft Demo", "herodraft", "herodraft")()
+    return status or clips()
+
+
 SINGLE_DEMOS: dict[str, Callable[[], int]] = {
     "shuffle": _single("Shuffle Draft Demo", "shuffle", "shuffle"),
     "snake": _single("Snake Draft Demo", "snake", "snake"),
-    "herodraft": _single("HeroDraft Demo", "herodraft", "herodraft"),
+    "herodraft": _herodraft,
     "csv": _single("CSV Import Demo", "CSV Import", "csv"),
     "event-creation": _single("Event Creation Demo", "event creation"),
     "roll-call": _single("Roll Call Demo", "roll call"),
@@ -316,6 +344,95 @@ def gifs(
     return 1 if failed else 0
 
 
+def load_clip_window(clip: Clip) -> tuple[float, float] | None:
+    metadata = DEMO_RESULTS / "videos" / clip.metadata
+    if not metadata.exists():
+        return None
+    try:
+        data = yaml.safe_load(metadata.read_text())
+    except (OSError, yaml.YAMLError) as e:
+        print(f"Warning: Failed to parse {metadata}: {e}")
+        return None
+    window = data.get(clip.key) if isinstance(data, dict) else None
+    if not isinstance(window, dict):
+        return None
+    try:
+        return float(window["start_seconds"]), float(window["duration_seconds"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def clips(
+    fps: int = 15,
+    width: int = 1200,
+    duration: float | None = None,
+    quality: int = 80,
+) -> int:
+    """Cut each DEMO_CLIPS window into an animated WebP in docs/assets/gifs/."""
+    if not shutil.which("ffmpeg"):
+        print(FFMPEG_MISSING)
+        return 1
+
+    docs_gifs = DOCS_ASSETS / "gifs"
+    docs_gifs.mkdir(parents=True, exist_ok=True)
+    failed = 0
+    for clip in DEMO_CLIPS:
+        window = load_clip_window(clip)
+        videos = [DEMO_RESULTS / "videos" / v for v in clip.videos]
+        missing = [v.name for v in videos if not v.exists()]
+        if window is None or missing:
+            reason = (
+                f"missing {', '.join(missing)}"
+                if missing
+                else f"no {clip.key} in {clip.metadata}"
+            )
+            print(f"  SKIPPED: {clip.output} ({reason}; record the demo first)")
+            continue
+        start, length = window
+        if duration is not None:
+            length = duration
+        out = docs_gifs / clip.output
+        print(
+            f"Clipping: {clip.output} ({length:.1f}s from {start:.1f}s, {len(videos)} views)"
+        )
+
+        inputs: list[str] = []
+        for video in videos:
+            inputs += ["-ss", f"{start:.2f}", "-t", f"{length:.2f}", "-i", str(video)]
+        streams = "".join(f"[{i}:v]" for i in range(len(videos)))
+        stack = f"{streams}hstack=inputs={len(videos)}," if len(videos) > 1 else ""
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                *inputs,
+                "-filter_complex",
+                f"{stack}fps={fps},scale={width}:-2:flags=lanczos",
+                "-an",
+                "-c:v",
+                "libwebp_anim",
+                "-quality",
+                str(quality),
+                "-compression_level",
+                "6",
+                "-loop",
+                "0",
+                str(out),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            print(f"  Created: {out.name} ({out.stat().st_size / 1024:.1f} KB)")
+        else:
+            failed += 1
+            print(f"  FAILED: {out.name}")
+            print(f"  Error: {_ffmpeg_error(result)}")
+
+    print(f"\nClips saved to: {docs_gifs}")
+    return 1 if failed else 0
+
+
 def load_trim_metadata() -> dict[str, float]:
     trim_times: dict[str, float] = {}
     videos_dir = DEMO_RESULTS / "videos"
@@ -406,7 +523,8 @@ def quick(duration: int = 10, fps: int = 12, width: int = 400) -> int:
     recorded = create()
     trimmed = trim()
     converted = gifs(duration=duration, fps=fps, width=width)
-    return recorded or trimmed or converted
+    clipped = clips()
+    return recorded or trimmed or converted or clipped
 
 
 def snapshots() -> int:
@@ -544,6 +662,12 @@ def _parser() -> argparse.ArgumentParser:
         "--no-start-from-middle", dest="start_from_middle", action="store_false"
     )
 
+    clips_p = sub.add_parser("clips", help="cut short animated WebP clips")
+    clips_p.add_argument("--fps", type=int, default=15)
+    clips_p.add_argument("--width", type=int, default=1200)
+    clips_p.add_argument("--duration", type=float, default=None)
+    clips_p.add_argument("--quality", type=int, default=80)
+
     trim_p = sub.add_parser("trim", help="trim the loading screen from demo videos")
     trim_p.add_argument("--trim-start", type=float, default=None)
     trim_p.add_argument("--no-auto", dest="auto", action="store_false")
@@ -567,6 +691,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return git_cleanup()
         elif ns.cmd == "gifs":
             return gifs(ns.duration, ns.fps, ns.width, ns.start_from_middle)
+        elif ns.cmd == "clips":
+            return clips(ns.fps, ns.width, ns.duration, ns.quality)
         elif ns.cmd == "trim":
             return trim(ns.trim_start, ns.auto)
         elif ns.cmd == "quick":

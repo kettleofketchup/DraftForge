@@ -7,6 +7,10 @@ The Hero Draft system implements Dota 2's Captain's Mode for tournament matches,
 | ![Captain 1](https://assets.kettle.sh/draftforge/gifs/captain1_herodraft.gif) | ![Captain 2](https://assets.kettle.sh/draftforge/gifs/captain2_herodraft.gif) |
 | [:material-play-circle: Full Video](https://assets.kettle.sh/draftforge/videos/captain1_herodraft.webm) | [:material-play-circle: Full Video](https://assets.kettle.sh/draftforge/videos/captain2_herodraft.webm) |
 
+![Team chat: both captains side by side](https://assets.kettle.sh/draftforge/gifs/herodraft_chat.webp)
+
+Team chat, side by side: a member of each team right-clicks a hero to suggest a ban or pick and adds a line of team chat; each captain answers their own team, and neither sees the other team's messages. Earlier in the same draft both captains press <kbd>Enter</kbd> to open chat and trade `/all` lines. See [Chat](#chat).
+
 ## Overview
 
 Hero Draft runs through several phases:
