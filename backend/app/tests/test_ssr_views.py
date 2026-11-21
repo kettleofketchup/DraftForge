@@ -1,7 +1,12 @@
 """Tests for SSR meta tag endpoints."""
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
+
+from app.models import CustomUser, Game, League, Organization, Team, Tournament
+from draft.models import DraftTeam, HeroDraft
+from events.models import Event
 
 
 class SSREndpointTests(TestCase):
@@ -11,10 +16,6 @@ class SSREndpointTests(TestCase):
         self.client = APIClient()
 
     def test_tournament_ssr_returns_200(self):
-        from django.utils import timezone
-
-        from app.models import Tournament
-
         t = Tournament.objects.create(name="Test Tourney", date_played=timezone.now())
         resp = self.client.get(f"/api/tournaments/{t.pk}/ssr/")
         self.assertEqual(resp.status_code, 200)
@@ -28,8 +29,6 @@ class SSREndpointTests(TestCase):
         self.assertEqual(resp.status_code, 404)
 
     def test_organization_ssr_returns_200(self):
-        from app.models import Organization
-
         org = Organization.objects.create(name="Test Org", description="A test org")
         resp = self.client.get(f"/api/organizations/{org.pk}/ssr/")
         self.assertEqual(resp.status_code, 200)
@@ -39,8 +38,6 @@ class SSREndpointTests(TestCase):
         self.assertNotIn("staff", resp.data)
 
     def test_league_ssr_returns_200(self):
-        from app.models import League, Organization
-
         org = Organization.objects.create(name="Test Org")
         league = League.objects.create(
             name="Test League", organization=org, steam_league_id=12345
@@ -51,11 +48,6 @@ class SSREndpointTests(TestCase):
         self.assertEqual(resp.data["org_name"], "Test Org")
 
     def test_event_ssr_returns_200(self):
-        from django.utils import timezone
-
-        from app.models import Organization
-        from events.models import Event
-
         org = Organization.objects.create(name="Test Org")
         event = Event.objects.create(
             name="Test Event",
@@ -68,8 +60,6 @@ class SSREndpointTests(TestCase):
         self.assertEqual(resp.data["org_name"], "Test Org")
 
     def test_user_ssr_returns_200(self):
-        from app.models import CustomUser
-
         user = CustomUser.objects.create_user(
             username="testplayer", password="testpass123"
         )
@@ -81,10 +71,6 @@ class SSREndpointTests(TestCase):
         self.assertNotIn("email", resp.data)
 
     def test_tournament_ssr_with_org(self):
-        from django.utils import timezone
-
-        from app.models import League, Organization, Tournament
-
         org = Organization.objects.create(
             name="Big Org", logo="https://example.com/logo.png"
         )
@@ -101,11 +87,6 @@ class SSREndpointTests(TestCase):
         self.assertEqual(resp.data["league_name"], "Big League")
 
     def test_herodraft_ssr_returns_200(self):
-        from django.utils import timezone
-
-        from app.models import Game, Team, Tournament
-        from draft.models import DraftTeam, HeroDraft
-
         t = Tournament.objects.create(name="Draft Tourney", date_played=timezone.now())
         game = Game.objects.create(tournament=t, round=1)
         draft = HeroDraft.objects.create(game=game)
@@ -119,10 +100,6 @@ class SSREndpointTests(TestCase):
         self.assertEqual(resp.data["team_names"], ["Team Alpha", "Team Beta"])
 
     def test_ssr_endpoints_are_public(self):
-        from django.utils import timezone
-
-        from app.models import CustomUser, Organization, Tournament
-
         client = APIClient()
         org = Organization.objects.create(name="Pub Org")
         t = Tournament.objects.create(name="Pub T", date_played=timezone.now())

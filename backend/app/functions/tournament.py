@@ -10,8 +10,8 @@ from app.models import CustomUser, Team, Tournament
 from app.permissions_org import can_edit_tournament
 from app.serializers import (
     TournamentSerializer,
-    _build_users_dict,
-    _tournament_organization,
+    build_users_dict,
+    tournament_organization,
 )
 from app.tournament_state import tournament_state_queryset
 from org.display_names import guild_nicknames, org_nicknames_public
@@ -20,7 +20,7 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
-def _serialize_tournament(tournament: Tournament) -> dict:
+def serialize_tournament(tournament: Tournament) -> dict:
     """Serialize a tournament with the _users dict for frontend hydration.
 
     Re-fetches uncached with the full prefetch plan: callers respond right
@@ -28,7 +28,7 @@ def _serialize_tournament(tournament: Tournament) -> dict:
     """
     tournament = tournament_state_queryset(fresh=True).get(pk=tournament.pk)
     data = TournamentSerializer(tournament, context={"fresh": True}).data
-    data["_users"] = _build_users_dict(tournament, fresh=True)
+    data["_users"] = build_users_dict(tournament, fresh=True)
     return data
 
 
@@ -83,7 +83,7 @@ def create_team_from_captain(request: Request) -> Response:
                 tournament_id=tournament.pk,
             )
             return Response(
-                _serialize_tournament(tournament),
+                serialize_tournament(tournament),
                 status=201,
             )
 
@@ -97,7 +97,7 @@ def create_team_from_captain(request: Request) -> Response:
             status=201,
         )
 
-    org = _tournament_organization(tournament, fresh=True)
+    org = tournament_organization(tournament, fresh=True)
     org_id = org.pk if org and org_nicknames_public(org.pk) else None
     display_name = user_display_name(
         user, guild_nickname=guild_nicknames(org_id, [user.pk]).get(user.pk)
@@ -114,4 +114,4 @@ def create_team_from_captain(request: Request) -> Response:
     invalidate_obj(tournament)
     invalidate_obj(team)
 
-    return Response(_serialize_tournament(tournament), status=201)
+    return Response(serialize_tournament(tournament), status=201)

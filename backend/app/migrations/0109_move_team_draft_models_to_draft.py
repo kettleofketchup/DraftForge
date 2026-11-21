@@ -1,10 +1,10 @@
+import logging
+
 from django.apps.registry import Apps
 from django.db import migrations
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 
-from telemetry.logging import get_logger
-
-log = get_logger(__name__)
+log = logging.getLogger(__name__)
 
 TEAM_MODELS = ("draft", "draftround", "draftevent", "draftoptions")
 
@@ -17,10 +17,12 @@ def relabel(apps: Apps, src: str, dst: str) -> None:
             if source.exists():
                 log.warning(
                     "contenttype_relabel_skipped",
-                    system="migrations",
-                    subsystem="contenttypes",
-                    model=model,
-                    direction=f"{src}->{dst}",
+                    extra={
+                        "system": "migrations",
+                        "subsystem": "contenttypes",
+                        "model": model,
+                        "direction": f"{src}->{dst}",
+                    },
                 )
             continue
         source.update(app_label=dst)

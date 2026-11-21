@@ -43,7 +43,7 @@ from app.permissions_org import (
     can_edit_tournament,
     has_org_staff_access,
 )
-from app.serializers import _tournament_organization
+from app.serializers import tournament_organization
 from lobby import broadcast, events, services, states
 from lobby.client import DotaLobbyClient, DotaLobbyError
 from lobby.models import GameLobby
@@ -129,7 +129,7 @@ def _upstream_error(exc: DotaLobbyError, *, game_pk: int, action: str) -> Respon
 
 
 def _org_id(game: Game) -> int | None:
-    org = _tournament_organization(game.tournament)
+    org = tournament_organization(game.tournament)
     return org.pk if org else None
 
 

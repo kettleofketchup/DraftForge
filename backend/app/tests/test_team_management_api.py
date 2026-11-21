@@ -24,7 +24,7 @@ from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
 from app.exception_handler import exception_handler
-from app.functions.tournament import _serialize_tournament
+from app.functions.tournament import serialize_tournament
 from app.models import (
     CustomUser,
     Game,
@@ -316,14 +316,14 @@ class TournamentLeadershipQueryTests(TeamManagementFixture, TestCase):
 
         serialize_counts = [
             _count_queries(
-                lambda t=t: _serialize_tournament(
+                lambda t=t: serialize_tournament(
                     Tournament.objects.nocache().get(pk=t.pk)
                 )
             )
             for t in (small, large)
         ]
         self.assertEqual(serialize_counts[0], serialize_counts[1])
-        payload = _serialize_tournament(large)
+        payload = serialize_tournament(large)
         self.assertTrue(all("leadership_problems" in t for t in payload["teams"]))
 
 
