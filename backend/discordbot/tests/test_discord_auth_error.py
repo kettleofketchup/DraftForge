@@ -73,7 +73,7 @@ class TestEndpointsDiscordAuthTest(SimpleTestCase):
             events.select_related.return_value.get.return_value = MagicMock()
             return send_test_notification(request, 1)
 
-    @patch("events.tasks.sync_discord_events", return_value="Scanned 1 events")
+    @patch("tests.test_auth.sync_discord_events", return_value="Scanned 1 events")
     def test_sync_returns_503_before_event_loop(
         self,
         sync: MagicMock,
@@ -91,7 +91,7 @@ class TestEndpointsDiscordAuthTest(SimpleTestCase):
         message_log.assert_not_called()
 
     @override_settings(DISCORD_BOT_TOKEN="")
-    @patch("events.tasks.sync_discord_events", return_value="Scanned 0 events")
+    @patch("tests.test_auth.sync_discord_events", return_value="Scanned 0 events")
     def test_sync_without_token_keeps_running(
         self,
         sync: MagicMock,

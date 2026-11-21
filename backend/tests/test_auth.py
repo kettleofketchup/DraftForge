@@ -5,8 +5,11 @@
 #
 import logging
 import random
+import uuid
 
-from cacheops import invalidate_obj
+from asgiref.sync import async_to_sync
+from cacheops import invalidate_model, invalidate_obj
+from channels.layers import get_channel_layer
 from django.contrib.auth import login
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
@@ -21,12 +24,20 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
-from app.models import CustomUser
+from app.models import CustomUser, League, ProfileClaimRequest, Tournament
+from app.serializers import TournamentSerializer, UserSerializer
 from common.game import GameType
 from common.utils import isTestEnvironment
+from discordbot.models import DiscordEvent, DiscordEventLog
 from draft.models import Draft
+from events.constants import EventState
+from events.models import Event, EventRepeater, EventSignup, RepeaterSubscription
+from events.services import generate_events_for_repeater, process_rsvp
+from events.tasks import sync_discord_events
+from league.models import LeagueUser
 from org.mmr import game_mmrs_prefetch, get_org_mmr, get_org_mmrs
-from org.models import Organization
+from org.models import Organization, OrgUser
+from org.serializers import ProfileClaimRequestSerializer
 from tests.data.tournaments import (
     BRACKET_UNSET_WINNER_TOURNAMENT,
     SHUFFLE_TIE_TOURNAMENT,
@@ -43,6 +54,7 @@ from tests.data.users import (
     AUTH_MATRIX_ORG_PROMOTER_USER,
     AUTH_MATRIX_ORG_STAFF_USER,
     CLAIMABLE_USER,
+    EVENT_LEAGUE_STAFF_USER,
     LEAGUE_ADMIN_USER,
     LEAGUE_STAFF_USER,
     ORG_ADMIN_USER,
@@ -60,6 +72,7 @@ from tests.helpers.team_management_fixture import (
     TEAM_MANAGEMENT_TOURNAMENT_NAME,
     populate_team_management_tournament,
 )
+from tests.helpers.tournament_config import TEST_KEY_TO_NAME, TEST_TOURNAMENTS
 from tests.populate.bracket import populate_bracket_unset_winner_tournament
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.utils import ensure_org_user
@@ -630,7 +643,6 @@ def login_org_member(request):
     # Make this user a member (NOT admin or staff) of org 1 (DTX) by
     # ensuring an OrgUser row — that's the actual "member of org"
     # relationship; Organization.users isn't a field.
-    from tests.populate.utils import ensure_org_user
 
     org = Organization.objects.filter(pk=1).first()
     if org:
@@ -653,7 +665,6 @@ def login_league_admin(request):
     user, created = createLeagueAdminTestUser()
 
     # Make this user an admin of league 1 if not already
-    from app.models import League
 
     league = League.objects.filter(pk=1).first()
     if league and user not in league.admins.all():
@@ -676,7 +687,6 @@ def login_league_staff(request):
     user, created = createLeagueStaffTestUser()
 
     # Make this user staff of league 1 if not already
-    from app.models import League
 
     league = League.objects.filter(pk=1).first()
     if league and user not in league.staff.all():
@@ -797,7 +807,6 @@ def login_auth_matrix_league_admin(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixLeagueAdminTestUser()
-    from app.models import League
 
     league = League.objects.filter(pk=AUTH_MATRIX_LEAGUE_ADMIN_USER.league_id).first()
     if league and user not in league.admins.all():
@@ -816,7 +825,6 @@ def login_auth_matrix_league_staff(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixLeagueStaffTestUser()
-    from app.models import League
 
     league = League.objects.filter(pk=AUTH_MATRIX_LEAGUE_STAFF_USER.league_id).first()
     if league and user not in league.staff.all():
@@ -834,8 +842,6 @@ def login_event_league_staff(request):
     """Login as event-league-staff test user (staff of league 7)."""
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
-
-    from tests.data.users import EVENT_LEAGUE_STAFF_USER
 
     user = CustomUser.objects.filter(pk=EVENT_LEAGUE_STAFF_USER.pk).first()
     if not user:
@@ -881,8 +887,6 @@ def login_as_user(request):
         return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-
-    from app.serializers import UserSerializer
 
     return Response({"success": True, "user": UserSerializer(user).data})
 
@@ -963,10 +967,6 @@ def get_tournament_by_key(request, key: str):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from app.models import Tournament
-    from app.serializers import TournamentSerializer
-    from tests.helpers.tournament_config import TEST_KEY_TO_NAME
-
     tournament_name = TEST_KEY_TO_NAME.get(key)
     if not tournament_name:
         return Response(
@@ -1004,10 +1004,6 @@ def reset_tournament_by_key(request, key: str):
     """
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
-
-    from app.models import Tournament
-    from app.serializers import TournamentSerializer
-    from tests.helpers.tournament_config import TEST_TOURNAMENTS
 
     # Special reset functions for non-standard tournament configs.
     # Each entry is the populate function itself, called with force=True below.
@@ -1079,8 +1075,6 @@ def create_claimable_user(request):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    import uuid
-
     # Generate unique identifiers if not provided
     unique_id = str(uuid.uuid4())[:8]
     username = request.data.get("username", f"claimable_{unique_id}")
@@ -1096,8 +1090,6 @@ def create_claimable_user(request):
     )
     user.set_unusable_password()
     user.save()
-
-    from app.serializers import UserSerializer
 
     return Response(
         {
@@ -1134,9 +1126,6 @@ def get_user_org_membership(request, user_pk: int):
             {"error": f"User with pk {user_pk} not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
-
-    from league.models import LeagueUser
-    from org.models import OrgUser
 
     org_users = (
         OrgUser.objects.nocache()
@@ -1216,12 +1205,7 @@ def reset_org_admin_team(request, org_pk: int):
         org.staff.add(org_staff)
 
     # Invalidate cacheops cache — M2M .clear()/.add() may not auto-invalidate
-    try:
-        from cacheops import invalidate_obj
-
-        invalidate_obj(org)
-    except ImportError:
-        pass
+    invalidate_obj(org)
 
     return Response(
         {
@@ -1255,10 +1239,6 @@ def create_claim_request(request):
     """
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
-
-    import uuid
-
-    from app.models import ProfileClaimRequest
 
     organization_id = request.data.get("organization_id", 1)
     try:
@@ -1308,8 +1288,6 @@ def create_claim_request(request):
         status=ProfileClaimRequest.Status.PENDING,
     )
 
-    from org.serializers import ProfileClaimRequestSerializer
-
     return Response(
         {
             "success": True,
@@ -1341,9 +1319,6 @@ def kill_draft_websocket(request, draft_id):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from asgiref.sync import async_to_sync
-    from channels.layers import get_channel_layer
-
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
         f"draft_{draft_id}",
@@ -1373,8 +1348,6 @@ def generate_events(request):
 
     # Call service layer directly (not the Celery task, which uses HTTP internal API).
     # This runs synchronously on the backend where Django ORM is available.
-    from events.models import EventRepeater
-    from events.services import generate_events_for_repeater
 
     repeaters = EventRepeater.objects.filter(is_active=True).select_related(
         "organization", "tournament_league", "created_by"
@@ -1401,14 +1374,7 @@ def reset_events_data(request):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from cacheops import invalidate_model, invalidate_obj
-
-    from events.constants import EventState
-    from events.models import Event, EventRepeater, EventSignup
-
     EVENTS_ORG_NAME = "Events Test Org"
-
-    from discordbot.models import DiscordEvent, DiscordEventLog
 
     # Invalidate EventSignup cache — bulk deletes don't auto-invalidate cacheops
     invalidate_model(EventSignup)
@@ -1473,9 +1439,6 @@ def reset_events_demo(request):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from app.models import Tournament
-    from events.models import Event, EventRepeater, EventSignup, RepeaterSubscription
-
     EVENTS_ORG_NAME = "Events Test Org"
 
     # Delete all signups
@@ -1524,9 +1487,6 @@ def bulk_rsvp_for_event(request, event_pk):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from events.models import Event
-    from events.services import process_rsvp
-
     event = Event.objects.get(pk=event_pk)
     user_pks = request.data.get("user_pks", [])
     results = []
@@ -1548,8 +1508,6 @@ def sync_discord_events_test(request):
     """TEST ONLY: Trigger sync_discord_events synchronously."""
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
-
-    from events.tasks import sync_discord_events
 
     auth_failure = discord_auth_failure()
     if auth_failure is not None:
