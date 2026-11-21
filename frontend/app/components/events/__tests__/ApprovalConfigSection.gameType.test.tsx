@@ -55,6 +55,7 @@ const RANK_TYPE_LABELS = [
   'Previously Ranked Players',
   'Battle Cup Players (Never Ranked)',
 ];
+const DOTA_ONLY_LABELS = [...RANK_TYPE_LABELS, 'Require verified MMR'];
 
 const deadlockEvent: EventType = {
   ...event,
@@ -62,6 +63,7 @@ const deadlockEvent: EventType = {
   allow_previous_rank: false,
   discord_require_rank_screenshot: true,
   min_mmr: 3000,
+  require_mmr_verified: true,
 };
 
 function renderEdit(e: EventType) {
@@ -89,7 +91,7 @@ beforeEach(() => {
 describe('Approval rank types by game', () => {
   it('shows the Dota rank types on a Dota event', () => {
     renderEdit(event);
-    for (const label of RANK_TYPE_LABELS) {
+    for (const label of DOTA_ONLY_LABELS) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     expect(search('edit-event', 'battle cup')).toContain(
@@ -99,15 +101,29 @@ describe('Approval rank types by game', () => {
 
   it('hides the Dota rank types on a Deadlock event', () => {
     renderEdit(deadlockEvent);
-    for (const label of RANK_TYPE_LABELS) {
+    for (const label of DOTA_ONLY_LABELS) {
       expect(screen.queryByText(label)).not.toBeInTheDocument();
     }
     expect(screen.getByText('General Requirements')).toBeInTheDocument();
   });
 
+  it('keeps Dota wording out of the complete profile requirement on a Deadlock event', () => {
+    renderEdit(deadlockEvent);
+    const row = screen
+      .getByText('Require complete profile')
+      .closest('[data-field="require_profile_complete"]');
+    expect(row).not.toBeNull();
+    expect(row!.textContent).not.toMatch(/dota|dotabuff/i);
+  });
+
   it('leaves the Dota rank types out of the settings search on a Deadlock event', () => {
     renderEdit(deadlockEvent);
-    for (const term of ['battle cup', 'previously ranked', 'minimum mmr']) {
+    for (const term of [
+      'battle cup',
+      'previously ranked',
+      'minimum mmr',
+      'verified mmr',
+    ]) {
       expect(search('edit-event', term)).toEqual([]);
     }
   });
@@ -122,6 +138,7 @@ describe('Approval rank types by game', () => {
       allow_battlecup_rating: true,
       discord_require_rank_screenshot: true,
       min_mmr: 3000,
+      require_mmr_verified: true,
     });
   });
 

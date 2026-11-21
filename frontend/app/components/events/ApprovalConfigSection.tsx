@@ -1,7 +1,8 @@
 /**
  * Approval Requirements config section for event create/edit modals.
  * Controls which rank types are allowed, screenshot requirements, and min MMR.
- * The rank types are Dota-only: other games hide them and keep the stored values.
+ * The rank types and verified MMR are Dota-only: other games hide them and keep
+ * the stored values.
  *
  * Shared by the event forms; their schemas `.merge(discordConfigSchema)`, so any
  * generic T extending z.input<typeof discordConfigSchema> is accepted.
@@ -201,12 +202,14 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
           description="Player must provide their Dota 2 Friend ID"
         />
 
-        <CheckboxField
-          control={control}
-          name="require_mmr_verified"
-          label="Require verified MMR"
-          description="Player must have admin-verified MMR on their org profile"
-        />
+        {isDota && (
+          <CheckboxField
+            control={control}
+            name="require_mmr_verified"
+            label="Require verified MMR"
+            description="Player must have admin-verified MMR on their org profile"
+          />
+        )}
 
         <CheckboxField
           control={control}
