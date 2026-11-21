@@ -699,7 +699,7 @@ approve the signup.
 
 | Code | Meaning |
 |------|---------|
-| `steam_id_missing` | "Require Friend ID" is on and neither a game profile friend ID nor a linked Steam account is known |
+| `steam_id_missing` | "Require Friend ID" is on and the player has no Friend ID (`steam_account_id`) |
 | `mmr_unverified` | The event requires verified MMR and the player's MMR is not verified |
 | `profile_incomplete` | The event requires a complete profile and the player's is not |
 | `dota_rank_undeclared` | The event has Dota rank gates and the player never declared a rank |

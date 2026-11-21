@@ -74,7 +74,7 @@ class DefaultSignupModal(ui.Modal):
         ) as ctx:
             values = {}
             if self.friend_id_input:
-                values["unverified_friend_id"] = self.friend_id_input.value
+                values["friend_id"] = self.friend_id_input.value
 
             result = await sync_to_async(signup_modal_submit, thread_sensitive=False)(
                 event_id=self.event_id,

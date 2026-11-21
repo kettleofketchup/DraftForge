@@ -123,8 +123,9 @@ class CustomUser(AbstractUser):
     # Override username to allow blank (users can be created from Steam only)
     username = models.CharField(max_length=150, unique=True, blank=True, null=True)
 
-    # 32-bit Friend ID (Dotabuff URL) - set by user, primary identifier
-    steam_account_id = models.IntegerField(null=True, unique=True, blank=True)
+    # 32-bit Friend ID (Dotabuff URL) - set by user, primary identifier.
+    # Unsigned 32-bit, so wider than IntegerField.
+    steam_account_id = models.BigIntegerField(null=True, unique=True, blank=True)
     # 64-bit Steam ID - auto-calculated from steam_account_id
     steamid = models.BigIntegerField(null=True, blank=True, db_index=True)
 

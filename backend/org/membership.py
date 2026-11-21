@@ -47,4 +47,5 @@ def viewer_member_organization_ids(user: CustomUser | AnonymousUser) -> list[int
 
 def resolve_or_create_org_user(user: CustomUser, organization: Organization) -> OrgUser:
     org_user, _ = OrgUser.objects.get_or_create(user=user, organization=organization)
+    org_user.user = user
     return org_user

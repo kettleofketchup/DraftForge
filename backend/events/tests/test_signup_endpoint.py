@@ -109,7 +109,7 @@ class SignupEndpointHappyPathTests(TestCase):
             {
                 "intent": "rsvp",
                 "profile": {
-                    "unverified_friend_id": "12345",
+                    "steam_account_id": "12345",
                     "positions": [1, 2],
                     "rank_status": "active",
                     "rank_medal": "Legend 4",
@@ -123,8 +123,9 @@ class SignupEndpointHappyPathTests(TestCase):
 
         org_user = OrgUser.objects.get(user=self.user, organization=self.org)
         profile = PlayerDotaProfile.objects.get(org_user=org_user)
-        self.assertEqual(profile.unverified_friend_id, "12345")
         self.assertEqual(profile.rank_medal, "Legend 4")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.steam_account_id, 12345)
 
     def test_tentative_intent_creates_tentative_signup(self):
         resp = self.client.post(
@@ -203,7 +204,7 @@ class SignupEndpointRollbackTests(TransactionTestCase):
             {
                 "intent": "rsvp",
                 "profile": {
-                    "unverified_friend_id": "12345",
+                    "steam_account_id": "12345",
                     "rank_status": "active",
                     "rank_medal": "Legend 4",
                 },
@@ -223,6 +224,8 @@ class SignupEndpointRollbackTests(TransactionTestCase):
                 "PlayerDotaProfile should not exist after rollback; "
                 f"got {PlayerDotaProfile.objects.filter(org_user=org_user).first()}",
             )
+        user.refresh_from_db()
+        self.assertIsNone(user.steam_account_id)
 
     def test_notify_signup_changed_fires_once_after_commit(self):
         from datetime import timedelta
@@ -314,7 +317,7 @@ class SignupEndpointSteamGateTests(EventTestCase):
     def test_friend_id_in_request_satisfies_require_steam_id(self) -> None:
         ev = self.make_event(require_steam_id=True)
         self.api.force_authenticate(self.make_user())
-        resp = self._post(ev, {"unverified_friend_id": "98765"})
+        resp = self._post(ev, {"steam_account_id": "98765"})
         self.assertEqual(resp.status_code, 201, resp.content)
         self.assertIn(resp.json()["status"], ("approved", "confirmed"))
 

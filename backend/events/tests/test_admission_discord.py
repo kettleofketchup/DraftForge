@@ -98,7 +98,7 @@ class DiscordFollowUpAdmissionTests(EventTestCase):
             self.closed.pk,
             DISCORD_ID,
             game_type=GameType.DOTA2,
-            values={"unverified_friend_id": "12345", "rank_status": "active"},
+            values={"friend_id": "12345", "rank_status": "active"},
         )
 
         self.assertEqual(

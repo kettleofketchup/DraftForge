@@ -33,28 +33,8 @@ from org.settings_constants import ALL_CODES
 PROFILE_URL = f"{settings.SITE_URL}/profile"
 
 
-def _legacy_has_steam_id(user: CustomUser, org_user: OrgUser | None) -> bool:
-    if user.steamid:
-        return True
-    fid = ""
-    for attr in ("dota_profile", "deadlock_profile"):
-        value = getattr(getattr(org_user, attr, None), "unverified_friend_id", "")
-        value = (value or "").strip()
-        if value.isascii() and value.isdigit():
-            fid = value
-            break
-    if not fid:
-        return False
-    account_id = int(fid)
-    if account_id not in range(1, 2**32):
-        return False
-    if account_id > 2**31 - 1:
-        return True
-    return (
-        not CustomUser.objects.filter(steam_account_id=account_id)
-        .exclude(pk=user.pk)
-        .exists()
-    )
+def _legacy_has_steam_id(user: CustomUser) -> bool:
+    return user.steam_account_id is not None or user.steamid is not None
 
 
 def _legacy_rank_codes(event: Event, profile: PlayerDotaProfile) -> list[str]:
@@ -83,7 +63,7 @@ def _legacy_unmet(event: Event, user: CustomUser) -> list[str]:
     )
     dota = GameType(event.game_type) == GameType.DOTA2
     steam_ok = (
-        _legacy_has_steam_id(user, org_user)
+        _legacy_has_steam_id(user)
         if event.require_steam_id or event.require_profile_complete
         else True
     )
@@ -356,14 +336,14 @@ class GatingTests(EvaluatorTestCase):
 
     def test_has_registered_steam_id(self) -> None:
         self.assertTrue(
-            has_registered_steam_id(self.make_user(steamid=76561198000000099), None)
+            has_registered_steam_id(self.make_user(steamid=76561198000000099))
         )
         u = self.make_user()
-        self.assertFalse(has_registered_steam_id(u, self._org_user(u)))
-        PlayerDeadlockProfile.objects.create(
-            org_user=self._org_user(u), unverified_friend_id="424242"
-        )
-        self.assertTrue(has_registered_steam_id(u, self._org_user(u)))
+        PlayerDeadlockProfile.objects.create(org_user=self._org_user(u))
+        self.assertFalse(has_registered_steam_id(u))
+        u.steam_account_id = 424242
+        u.save()
+        self.assertTrue(has_registered_steam_id(u))
 
 
 class CheckRequirementsParityTests(EvaluatorTestCase):
@@ -402,19 +382,15 @@ class CheckRequirementsParityTests(EvaluatorTestCase):
         users["complete_active"] = complete
 
         friend = self.make_user()
-        PlayerDotaProfile.objects.create(
-            org_user=self._org_user(friend), unverified_friend_id="606060"
-        )
+        friend.steam_account_id = 606060
+        friend.save()
+        PlayerDotaProfile.objects.create(org_user=self._org_user(friend))
         users["friend_id_undeclared"] = friend
 
-        owned = self.make_user()
-        holder = self.make_user()
-        holder.steam_account_id = 616161
-        holder.save()
-        PlayerDotaProfile.objects.create(
-            org_user=self._org_user(owned), unverified_friend_id="616161"
-        )
-        users["friend_id_owned_elsewhere"] = owned
+        wide = self.make_user()
+        wide.steam_account_id = 2**32 - 1
+        wide.save()
+        users["friend_id_above_signed_32_bit"] = wide
 
         low = self.make_user()
         self._declared(low, "active", mmr=1000)
@@ -433,8 +409,10 @@ class CheckRequirementsParityTests(EvaluatorTestCase):
         users["never_no_shot"] = never_bare
 
         deadlock = self.make_user()
+        deadlock.steam_account_id = 626262
+        deadlock.save()
         PlayerDeadlockProfile.objects.create(
-            org_user=self._org_user(deadlock), unverified_friend_id="626262"
+            org_user=self._org_user(deadlock), rank="Ritualist"
         )
         users["deadlock_friend_id"] = deadlock
 
