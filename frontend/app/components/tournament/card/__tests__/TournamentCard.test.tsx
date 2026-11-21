@@ -31,14 +31,36 @@ vi.mock('~/store/userStore', async () => {
   };
 });
 
+const NOW = new Date('2026-11-10T12:00:00Z');
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 const LOGO = 'https://example.test/logo-a.png';
 const OTHER_LOGO = 'https://example.test/logo-b.png';
+
+const NOW = new Date('2026-06-01T12:00:00Z');
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function tournament(overrides: Partial<TournamentType> = {}): TournamentType {
   return {
     pk: 900,
     name: 'Discovery Cup',
-    date_played: '2026-11-20T18:00:00Z',
+    date_played: '2026-06-08T18:00:00Z',
     timezone: 'UTC',
     tournament_type: 'double_elimination',
     state: 'future',

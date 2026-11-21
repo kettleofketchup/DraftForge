@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta
 
 from django.contrib.auth.models import AnonymousUser
-from django.db import transaction
+from django.db import connection, transaction
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from app.models import CustomUser, Organization, OrgLog
@@ -23,7 +24,7 @@ from org.models import ContributionEntry, OrgFeature, OrgUser, PromoSend, PromoT
 from org.standing import api as standing
 from org.standing import registry
 from org.standing.periods import parse_period
-from org.standing.types import CloseSource, TrackAccess
+from org.standing.types import CloseSource, TrackAccess, ViewerRoles
 
 
 @override_settings(CACHEOPS_ENABLED=False)
@@ -68,7 +69,9 @@ class ContributionAdapterTest(TestCase):
         return ContributionEntry.objects.nocache().filter(event=self.event).count()
 
     def test_registry_holds_contribution(self) -> None:
-        self.assertEqual([t.key for t in registry.tracks()], ["contribution"])
+        self.assertEqual(
+            [t.key for t in registry.tracks()], ["contribution", "conduct"]
+        )
 
     def test_close_completed_awards_and_stamps(self) -> None:
         self._add_helpers(2)
@@ -129,7 +132,9 @@ class ContributionAdapterTest(TestCase):
         )
         with transaction.atomic():
             result = standing.on_event_reopened(self.event, actor=None)
-        self.assertEqual(result.orglog_details(), {"revoked": staff})
+        self.assertEqual(
+            result.orglog_details(), {"revoked": staff, "attendance_reopened": 0}
+        )
         self.assertEqual(result.log_fields(), {"revoked": staff})
         self.assertEqual(self._entries(), 1)
 
@@ -149,7 +154,8 @@ class ContributionAdapterTest(TestCase):
 
     def test_reopen_reset_fields(self) -> None:
         self.assertEqual(
-            standing.reopen_reset_fields(), {"contributions_awarded_at": None}
+            standing.reopen_reset_fields(),
+            {"contributions_awarded_at": None, "conduct_finalized_at": None},
         )
 
     def test_deletion_blockers_lazy(self) -> None:
@@ -194,8 +200,108 @@ class ContributionAdapterTest(TestCase):
 
     def test_access_viewer_none(self) -> None:
         with self.assertNumQueries(0):
-            access = CONTRIBUTION.access(self.org.pk, viewer=None)
+            access = CONTRIBUTION.access(
+                self.org.pk, viewer=None, roles=ViewerRoles.fixed(False, False, False)
+            )
         self.assertEqual(access, TrackAccess(False, False))
+
+    def _award_entries(self) -> None:
+        set_org_feature(
+            self.org, FeatureKey.CONTRIBUTIONS, enabled=True, actor=self.owner
+        )
+        self._add_helpers(2)
+        self._close(cancelled=False, source="admin")
+        helper = CustomUser.objects.get(username="ca_helper0")
+        second = Event.objects.create(
+            organization=self.org,
+            name="CA Event 2",
+            scheduled_at=timezone.now() - timedelta(hours=1),
+            created_by=self.owner,
+            host=helper,
+            state=EventState.COMPLETED,
+        )
+        with transaction.atomic():
+            standing.on_event_closed(
+                second, cancelled=False, source="admin", actor=None
+            )
+
+    def test_entries_metric_declared_not_default(self) -> None:
+        entries = next(m for m in CONTRIBUTION.metrics if m.key == "entries")
+        self.assertEqual(
+            (entries.label, entries.format, entries.periodic, entries.default),
+            ("Entries", "int", True, False),
+        )
+
+    def test_entries_metric_matches_legacy_entries(self) -> None:
+        self._award_entries()
+        period = parse_period(self.org, None)
+        board = standing.leaderboard(
+            self.org, "contribution", "entries", period, viewer=self.owner
+        )
+        legacy = contribution_leaderboard(self.org, period)
+        by_member = {r["org_user_pk"]: r["entries"] for r in legacy}
+        self.assertEqual({r.org_user_id: r.value for r in board.rows}, by_member)
+        self.assertEqual({r.org_user_id: r.sample for r in board.rows}, by_member)
+        values = [r.value for r in board.rows]
+        self.assertEqual(values, sorted(values, reverse=True))
+        self.assertEqual(board.metric.key, "entries")
+
+    def test_entries_metric_same_query_count_as_points(self) -> None:
+        self._award_entries()
+        period = parse_period(self.org, None)
+        counts: dict[str, int] = {}
+        for metric in ("points", "entries"):
+            with CaptureQueriesContext(connection) as ctx:
+                standing.leaderboard(
+                    self.org, "contribution", metric, period, viewer=self.owner
+                )
+            counts[metric] = len(ctx.captured_queries)
+        self.assertEqual(counts["entries"], counts["points"])
+
+    def test_member_standing_payload(self) -> None:
+        self._award_entries()
+        block = CONTRIBUTION.member_standing(
+            self.host_ou,
+            viewer=self.host,
+            roles=ViewerRoles.fixed(False, False, False),
+            now=timezone.now(),
+        )
+        assert block is not None
+        self.assertEqual(set(block), {"totals", "monthly"})
+
+    def test_member_standing_budget(self) -> None:
+        self._award_entries()
+        with self.assertNumQueries(2):
+            CONTRIBUTION.member_standing(
+                self.host_ou,
+                viewer=self.host,
+                roles=ViewerRoles.fixed(False, False, False),
+                now=timezone.now(),
+            )
+
+    def test_member_standing_viewer_rule(self) -> None:
+        set_org_feature(
+            self.org, FeatureKey.CONTRIBUTIONS, enabled=True, actor=self.owner
+        )
+        self.org.members_private = True
+        self.org.save()
+        other = CustomUser.objects.create_user(username="ca_other", password="x")
+        OrgUser.objects.create(user=other, organization=self.org)
+        now = timezone.now()
+        cases: list[tuple[CustomUser | AnonymousUser, bool]] = [
+            (self.host, True),
+            (self.owner, True),
+            (other, False),
+            (AnonymousUser(), False),
+        ]
+        for viewer, visible in cases:
+            roles = standing.viewer_roles(self.org, viewer)
+            block = CONTRIBUTION.member_standing(
+                self.host_ou, viewer=viewer, roles=roles, now=now
+            )
+            self.assertEqual(block is not None, visible, viewer)
+            found = standing.member_standing(self.host_ou, viewer=viewer, roles=roles)
+            self.assertEqual("contribution" in found, visible, viewer)
 
     def test_promo_wrappers(self) -> None:
         send = PromoSend.objects.create(

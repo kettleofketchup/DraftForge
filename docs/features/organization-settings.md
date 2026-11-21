@@ -19,7 +19,7 @@ An **Org Settings** button (cog icon) in the organization header opens the modal
 
 | Group | Sections |
 |---|---|
-| **Organization** | General, Discord, Members, Rules, Admin Team, Staff placement |
+| **Organization** | General, Discord, Members, Rules, Admin Team, Staff placement, Conduct (when the [conduct](organization-conduct.md) feature is unlocked) |
 | **New Event Defaults** | Event, Tournament, Lobby, Discord, Ready check |
 
 The **New Event Defaults** sections hold the values the create-event form pre-fills (see
@@ -34,7 +34,7 @@ field error is marked in the sidebar and opens on save.
 
 The open section is kept in the URL as `?settings=<section>`, so a link such as
 `/organizations/12?settings=staff-placement` opens the modal on that section. Section
-ids are `general`, `discord`, `members`, `rules`, `admins`, `staff-placement`,
+ids are `general`, `discord`, `members`, `rules`, `admins`, `staff-placement`, `conduct`,
 `defaults-event`, `defaults-tournament`, `defaults-lobby`, `defaults-discord` and
 `defaults-ready`. The older `?tab=settings&section=<id>` links are rewritten to
 `?settings=<id>`.

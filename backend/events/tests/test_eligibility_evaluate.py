@@ -6,7 +6,7 @@ from django.conf import settings
 from structlog.testing import capture_logs
 
 from app.models import CustomUser, GameType
-from events.constants import Commitment
+from events.constants import Commitment, SignupStatus
 from events.eligibility import (
     CHECKS,
     EvalContext,
@@ -24,7 +24,7 @@ from events.eligibility import (
 )
 from events.models import Event
 from events.schemas import DotaModalConfig, dota_require_screenshot
-from events.services import check_requirements
+from events.services import _decide_signup_status, check_requirements
 from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
@@ -295,9 +295,13 @@ class RegistryTests(EvaluatorTestCase):
         u = self.make_user()
         with patch("events.eligibility.evaluate.CHECKS", (self._blocking_check(),)):
             result = evaluate_signup(ev, u)
-            self.assertTrue(check_requirements(ev, u))
+            self.assertFalse(check_requirements(ev, u))
         self.assertFalse(result.admissible)
         self.assertEqual(result.approval, ())
+        self.assertTrue(ev.auto_approve)
+        self.assertEqual(
+            _decide_signup_status(ev, result), SignupStatus.PENDING_APPROVAL
+        )
 
     def test_context_is_loaded_once_and_never_creates_org_user(self) -> None:
         ev = self.make_event(require_steam_id=True)
@@ -467,4 +471,6 @@ class CheckRequirementsParityTests(EvaluatorTestCase):
             ev = self.make_event(**gate, **dict(zip(self.REQUIRE_FLAGS, flags)))
             for user in users.values():
                 seen.update(_legacy_unmet(ev, user))
-        self.assertEqual(seen, set(ReasonCode.values))
+        self.assertEqual(
+            seen, set(ReasonCode.values) - {ReasonCode.CONDUCT_BELOW_THRESHOLD}
+        )

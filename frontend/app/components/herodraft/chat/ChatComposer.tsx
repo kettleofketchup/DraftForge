@@ -2,6 +2,7 @@ import { Send } from 'lucide-react';
 import type { FormEvent, KeyboardEvent, Ref } from 'react';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Input } from '~/components/ui/input';
+import { Kbd } from '~/components/ui/kbd';
 import { cn } from '~/lib/utils';
 import { ChannelBadge } from './ChatMessageRow';
 import type { ComposerState } from './composerState';
@@ -16,6 +17,7 @@ export interface ChatComposerProps {
   target: ChatChannel | null;
   onFocus?: () => void;
   onEscape?: () => void;
+  enterHint?: boolean;
   className?: string;
 }
 
@@ -28,6 +30,7 @@ export function ChatComposer({
   target,
   onFocus,
   onEscape,
+  enterHint = false,
   className,
 }: ChatComposerProps) {
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -39,6 +42,8 @@ export function ChatComposer({
     if (e.key === 'Escape') onEscape?.();
   };
 
+  const showHint = enterHint && !state.inputDisabled && value === '';
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -49,19 +54,34 @@ export function ChatComposer({
           <ChannelBadge channel={target} />
         </span>
       )}
-      <Input
-        ref={inputRef}
-        value={value}
-        onChange={(e) => onValueChange(e.target.value)}
-        onFocus={onFocus}
-        onKeyDown={handleKeyDown}
-        disabled={state.inputDisabled}
-        placeholder={state.placeholder}
-        aria-label="Chat message"
-        autoComplete="off"
-        className="flex-1 bg-input border-border placeholder:text-muted-foreground"
-        data-testid="herodraft-chat-input"
-      />
+      <div className="relative min-w-0 flex-1">
+        <Input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => onValueChange(e.target.value)}
+          onFocus={onFocus}
+          onKeyDown={handleKeyDown}
+          disabled={state.inputDisabled}
+          placeholder={state.placeholder}
+          aria-label="Chat message"
+          aria-keyshortcuts={showHint ? 'Enter' : undefined}
+          autoComplete="off"
+          className={cn(
+            'peer w-full bg-input border-border placeholder:text-muted-foreground',
+            showHint && 'pr-16',
+          )}
+          data-testid="herodraft-chat-input"
+        />
+        {showHint && (
+          <Kbd
+            className="absolute top-1/2 right-2 -translate-y-1/2 peer-focus:hidden"
+            aria-hidden="true"
+            data-testid="herodraft-chat-enter-hint"
+          >
+            Enter
+          </Kbd>
+        )}
+      </div>
       <PrimaryButton
         type="submit"
         size="icon"

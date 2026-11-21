@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from django.db import transaction
 from django.utils import timezone
 
+import events.eligibility.store  # noqa: F401
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, OrgLog
 from events.constants import EVENT_REOPEN_TRANSITIONS, EventState

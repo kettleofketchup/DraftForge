@@ -550,7 +550,8 @@ class CancelDeletesDiscordEventTest(EventTestCase):
             scheduled_event_id="1529289108529352788",
         )
         self.client.force_authenticate(self.admin)
-        resp = self.client.post(f"/api/events/{self.target.pk}/cancel/")
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self.client.post(f"/api/events/{self.target.pk}/cancel/")
 
         self.assertEqual(resp.status_code, 200, resp.content)
         self.target.refresh_from_db()
@@ -566,7 +567,8 @@ class CancelDeletesDiscordEventTest(EventTestCase):
     @patch("events.tasks.delete_discord_scheduled_event")
     def test_cancel_without_discord_event_is_noop(self, mock_delete):
         self.client.force_authenticate(self.admin)
-        resp = self.client.post(f"/api/events/{self.target.pk}/cancel/")
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self.client.post(f"/api/events/{self.target.pk}/cancel/")
         self.assertEqual(resp.status_code, 200, resp.content)
         mock_delete.delay.assert_not_called()
 

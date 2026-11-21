@@ -35,15 +35,26 @@ class MemberTotals(TypedDict):
     this_month: int
 
 
+class MemberOverview(TypedDict):
+    totals: MemberTotals
+    monthly: list[MonthPoints]
+
+
 def org_total(org: Organization, period: Period) -> int:
     return ledger.total(org.pk, track="contribution", period=period)
 
 
 def leaderboard(
-    org: Organization, period: Period, *, limit: int = 100
+    org: Organization,
+    period: Period,
+    *,
+    sort: ledger.SortField = "total",
+    limit: int = 100,
 ) -> list[LeaderboardRow]:
     sums = list(
-        ledger.sum_by_member(org.pk, track="contribution", period=period)[:limit]
+        ledger.sum_by_member(org.pk, track="contribution", period=period, sort=sort)[
+            :limit
+        ]
     )
     org_users = with_user_profiles(
         OrgUser.objects.filter(pk__in=[s["org_user"] for s in sums]), "user"
@@ -119,4 +130,13 @@ def member_totals(org_user: OrgUser, *, now: datetime | None = None) -> MemberTo
     return MemberTotals(
         all_time=_sum(qs),
         this_month=_sum(ledger.in_period(qs, this_month)),
+    )
+
+
+def member_overview(org_user: OrgUser, *, now: datetime) -> MemberOverview:
+    monthly = member_monthly(org_user, now=now)
+    all_time = _sum(ContributionEntry.objects.nocache().filter(org_user=org_user))
+    return MemberOverview(
+        totals=MemberTotals(all_time=all_time, this_month=monthly[-1]["points"]),
+        monthly=monthly,
     )

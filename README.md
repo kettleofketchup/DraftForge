@@ -108,6 +108,10 @@ Automated demo recordings are available for key features:
 | ![Captain 1](https://assets.kettle.sh/draftforge/gifs/captain1_herodraft.gif) | ![Captain 2](https://assets.kettle.sh/draftforge/gifs/captain2_herodraft.gif) |
 | [Full Video](https://assets.kettle.sh/draftforge/videos/captain1_herodraft.webm) | [Full Video](https://assets.kettle.sh/draftforge/videos/captain2_herodraft.webm) |
 
+**Team chat:** each team talks and suggests picks/bans in its own chat; the other captain never sees it. Captains press Enter to open chat and use `/all` to talk to everyone.
+
+![HeroDraft team chat, both captains side by side](https://assets.kettle.sh/draftforge/gifs/herodraft_chat.webp)
+
 | Shuffle Draft | Snake Draft |
 |---------------|-------------|
 | ![Shuffle Draft](https://assets.kettle.sh/draftforge/gifs/shuffle_draft.gif) | ![Snake Draft](https://assets.kettle.sh/draftforge/gifs/snake_draft.gif) |

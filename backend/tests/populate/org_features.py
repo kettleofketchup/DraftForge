@@ -6,11 +6,13 @@ POST /api/tests/org-features/reset/, rebuilds everything the specs change: ledge
 rows, promo sends, point values, events, templates, org settings (deleted, so
 the next read gets the defaults), feature switches, role membership, org
 memberships (non-seeded OrgUsers are deleted), the seeded tournaments (non-seeded
-ones in the features leagues are deleted) and org name and timezone.
+ones in the features leagues are deleted), org name and timezone, and the
+conduct seed (finalized attendance outcomes on completed events, conduct
+settings deleted, approved signups on the forecast event).
 org_features_test_data is the lookup the specs read.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from django.db import transaction
@@ -18,8 +20,9 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_model, invalidate_obj
 from app.models import CustomUser, League, Organization, PositionsModel, Tournament
-from events.constants import EventState
-from events.models import Event
+from events.constants import EventState, SignupStatus
+from events.models import Event, EventSignup
+from org.conduct.constants import Outcome, OutcomeSource
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry, sync_event_staff_entries
 from org.features import FeatureKey, set_org_feature
@@ -30,6 +33,7 @@ from org.models import (
     OrgUser,
     PromoSend,
 )
+from org.models_conduct import AttendanceOutcome, OrgConductSettings
 from org.models_promotion import PromoTemplate
 from tests.data.models import TestLeague, TestOrganization, TestUser
 from tests.data.org_features import (
@@ -43,6 +47,12 @@ from tests.data.org_features import (
     OF_PROMOTER,
     OF_STAFF,
     ORG_FEATURES_COMPLETED_EVENT_NAME,
+    ORG_FEATURES_CONDUCT_EVENT_NAME,
+    ORG_FEATURES_CONDUCT_NEW_MEMBER,
+    ORG_FEATURES_CONDUCT_OUTCOMES,
+    ORG_FEATURES_CONDUCT_PAST_EVENT_NAMES,
+    ORG_FEATURES_CONDUCT_RANKED,
+    ORG_FEATURES_CONDUCT_SIGNUPS,
     ORG_FEATURES_MANUAL_AWARDS,
     ORG_FEATURES_MEMBERS,
     ORG_FEATURES_ORG_LEAGUES,
@@ -200,9 +210,10 @@ def _reset_switches(orgs: dict[int, Organization]) -> None:
 def _create_events(org: Organization, users: dict[int, CustomUser]) -> None:
     now = timezone.now()
     admin = users[OF_ADMIN.pk]
-    for name, days in (
-        (ORG_FEATURES_UPCOMING_EVENT_NAME, 3),
-        (ORG_FEATURES_UPCOMING2_EVENT_NAME, 5),
+    for name, days, state in (
+        (ORG_FEATURES_UPCOMING_EVENT_NAME, 3, EventState.UPCOMING),
+        (ORG_FEATURES_CONDUCT_EVENT_NAME, 4, EventState.SIGNUPS_OPEN),
+        (ORG_FEATURES_UPCOMING2_EVENT_NAME, 5, EventState.UPCOMING),
     ):
         start = now + timedelta(days=days)
         Event.objects.create(
@@ -211,7 +222,7 @@ def _create_events(org: Organization, users: dict[int, CustomUser]) -> None:
             description="Upcoming event for the locked features E2E tests.",
             scheduled_at=start,
             ends_at=start + timedelta(hours=3),
-            state=EventState.UPCOMING,
+            state=state,
             created_by=admin,
         )
 
@@ -231,12 +242,106 @@ def _create_events(org: Organization, users: dict[int, CustomUser]) -> None:
     Event.objects.nocache().filter(pk=completed.pk).update(contributions_awarded_at=now)
 
 
+def _outcome_row(
+    org: Organization,
+    org_user: OrgUser,
+    event: Event,
+    outcome: str,
+    *,
+    admin: CustomUser,
+    now: datetime,
+) -> AttendanceOutcome:
+    source = {
+        Outcome.LATE_CANCEL: OutcomeSource.LATE_CANCEL,
+        Outcome.EXCUSED: OutcomeSource.STAFF,
+    }.get(Outcome(outcome), OutcomeSource.DEFAULT)
+    staff = source == OutcomeSource.STAFF
+    return AttendanceOutcome(
+        organization=org,
+        org_user=org_user,
+        event=event,
+        event_name=event.name,
+        event_starts_at=event.scheduled_at,
+        outcome=outcome,
+        source=source,
+        cancelled_at=(
+            event.scheduled_at - timedelta(hours=1)
+            if outcome == Outcome.LATE_CANCEL
+            else None
+        ),
+        set_by=admin if staff else None,
+        reason="Seeded excuse" if staff else "",
+        finalized_at=now,
+    )
+
+
+def _seed_conduct(
+    org: Organization, users: dict[int, CustomUser], now: datetime
+) -> None:
+    admin = users[OF_ADMIN.pk]
+    org_users = {
+        ou.user_id: ou for ou in OrgUser.objects.nocache().filter(organization=org)
+    }
+    past: list[Event] = []
+    for name, days in zip(ORG_FEATURES_CONDUCT_PAST_EVENT_NAMES, (30, 60), strict=True):
+        start = now - timedelta(days=days)
+        past.append(
+            Event.objects.create(
+                organization=org,
+                name=name,
+                description="Past event with seeded attendance.",
+                scheduled_at=start,
+                ends_at=start + timedelta(hours=3),
+                state=EventState.COMPLETED,
+                created_by=admin,
+                conduct_finalized_at=now,
+            )
+        )
+    completed = Event.objects.nocache().get(
+        organization=org, name=ORG_FEATURES_COMPLETED_EVENT_NAME
+    )
+    Event.objects.nocache().filter(pk=completed.pk).update(conduct_finalized_at=now)
+
+    rows = [
+        _outcome_row(org, org_users[data.pk], completed, outcome, admin=admin, now=now)
+        for data, outcome in ORG_FEATURES_CONDUCT_OUTCOMES
+    ]
+    rows += [
+        _outcome_row(
+            org, org_users[data.pk], event, Outcome.ATTENDED, admin=admin, now=now
+        )
+        for event in past
+        for data in ORG_FEATURES_CONDUCT_RANKED
+    ]
+    rows.append(
+        _outcome_row(
+            org,
+            org_users[ORG_FEATURES_CONDUCT_NEW_MEMBER.pk],
+            past[0],
+            Outcome.ATTENDED,
+            admin=admin,
+            now=now,
+        )
+    )
+    AttendanceOutcome.objects.bulk_create(rows)
+
+    forecast_event = Event.objects.nocache().get(
+        organization=org, name=ORG_FEATURES_CONDUCT_EVENT_NAME
+    )
+    for data in ORG_FEATURES_CONDUCT_SIGNUPS:
+        EventSignup.objects.create(
+            event=forecast_event, user=users[data.pk], status=SignupStatus.APPROVED
+        )
+
+
 @transaction.atomic
 def _rebuild() -> list[Organization]:
     orgs = _orgs()
     users = _users()
     org_pks = list(orgs)
     delete_ledger_for_users(list(users))
+    AttendanceOutcome.objects.nocache().filter(organization__in=org_pks).delete()
+    OrgConductSettings.objects.nocache().filter(organization__in=org_pks).delete()
     ContributionEntry.objects.nocache().filter(organization__in=org_pks).delete()
     PromoSend.objects.nocache().filter(organization__in=org_pks).delete()
     ContributionPointValue.objects.nocache().filter(organization__in=org_pks).delete()
@@ -260,6 +365,7 @@ def _rebuild() -> list[Organization]:
     _reset_switches(orgs)
     _create_events(orgs[FEATURES_ORG.pk], users)
     now = timezone.now()
+    _seed_conduct(orgs[FEATURES_ORG.pk], users, now)
     for org_pk, data, points, reason in ORG_FEATURES_MANUAL_AWARDS:
         award_entry(
             org=orgs[org_pk],
@@ -284,6 +390,8 @@ def reset_org_features_data() -> dict[str, Any]:
         OrgSettings,
         OrgUser,
         Tournament,
+        AttendanceOutcome,
+        OrgConductSettings,
     ):
         invalidate_model(model)
     for org in orgs:
@@ -294,6 +402,24 @@ def reset_org_features_data() -> dict[str, Any]:
 def _event_payload(org: Organization, name: str) -> dict[str, Any]:
     event = Event.objects.nocache().get(organization=org, name=name)
     return {"pk": event.pk, "name": event.name, "state": event.state}
+
+
+def _conduct_payload(org: Organization) -> dict[str, Any]:
+    org_user_pks = dict(
+        OrgUser.objects.nocache().filter(organization=org).values_list("user_id", "pk")
+    )
+    attended = next(
+        data
+        for data, outcome in ORG_FEATURES_CONDUCT_OUTCOMES
+        if outcome == Outcome.ATTENDED
+    )
+    return {
+        "ranked_org_user_pks": [
+            org_user_pks[data.pk] for data in ORG_FEATURES_CONDUCT_RANKED
+        ],
+        "new_member_org_user_pk": org_user_pks[ORG_FEATURES_CONDUCT_NEW_MEMBER.pk],
+        "completed_event_member_org_user_pk": org_user_pks[attended.pk],
+    }
 
 
 def org_features_test_data() -> dict[str, Any]:
@@ -318,7 +444,11 @@ def org_features_test_data() -> dict[str, Any]:
             "upcoming": _event_payload(features, ORG_FEATURES_UPCOMING_EVENT_NAME),
             "upcoming2": _event_payload(features, ORG_FEATURES_UPCOMING2_EVENT_NAME),
             "completed": _event_payload(features, ORG_FEATURES_COMPLETED_EVENT_NAME),
+            "conduct_upcoming": _event_payload(
+                features, ORG_FEATURES_CONDUCT_EVENT_NAME
+            ),
         },
+        "conduct": _conduct_payload(features),
         "templates": [
             {"pk": t.pk, "name": t.name, "org_pk": t.organization_id}
             for t in PromoTemplate.objects.nocache()

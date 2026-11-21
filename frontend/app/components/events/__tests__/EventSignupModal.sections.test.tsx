@@ -45,6 +45,22 @@ describe('EventSignupModal sections follow the event configuration', () => {
     expect(screen.getByTestId('position-choices')).toBeInTheDocument();
   });
 
+  it('uses Steam copy without Dotabuff for the friend ID on a Deadlock event', () => {
+    renderModal({ game_type: GAME_TYPE.DEADLOCK, require_steam_id: true });
+
+    const input = screen.getByLabelText('Steam Friend ID');
+    expect(input).toHaveAttribute('data-testid', 'signup-friend-id');
+    expect(input.getAttribute('placeholder')).not.toMatch(/dotabuff/i);
+    expect(screen.queryByText(/dota/i)).toBeNull();
+  });
+
+  it('keeps the Dotabuff hint for the friend ID on a Dota event', () => {
+    renderModal({ game_type: GAME_TYPE.DOTA2, require_steam_id: true });
+
+    const input = screen.getByLabelText('Dota 2 Friend ID');
+    expect(input.getAttribute('placeholder')).toMatch(/dotabuff/i);
+  });
+
   it('hides the friend ID entry when the event does not require it', () => {
     renderModal({ game_type: GAME_TYPE.DOTA2, require_steam_id: false });
 

@@ -30,6 +30,7 @@ import {
 const log = getLogger('LockedFeaturesPanel');
 
 const FEATURE_LABELS: Record<FeatureKey, string> = {
+  conduct: 'Conduct',
   contributions: 'Contributions',
   promotion: 'Promotion',
 };
