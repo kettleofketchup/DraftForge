@@ -215,7 +215,9 @@ export function MmrApprovalModal({
                   {playerName}
                 </DialogTitle>
                 <DialogDescription className="flex items-center gap-1.5 mt-0.5">
-                  {rankStatusBadge ?? 'No Dota profile'}
+                  {gameType === GAME_TYPE.DOTA2
+                    ? (rankStatusBadge ?? 'No Dota profile')
+                    : null}
                 </DialogDescription>
               </div>
               <DotabuffButton
