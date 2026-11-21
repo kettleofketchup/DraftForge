@@ -102,14 +102,10 @@ SCAN_TARGETS = [
     REPO_ROOT / "backend" / "app" / "user_cache.py",
     REPO_ROOT / "backend" / "draft" / "views" / "team_setup.py",
     REPO_ROOT / "backend" / "draft" / "views" / "team_api.py",
+    REPO_ROOT / "backend" / "events" / "views.py",
 ]
 
-UNSCANNED: dict[pathlib.Path, str] = {
-    REPO_ROOT / "backend" / "events" / "views.py": (
-        "pre-existing: @cached_as blocks in EventViewSet.retrieve and the "
-        "discord action miss profile deps; tracked separately"
-    ),
-}
+UNSCANNED: dict[pathlib.Path, str] = {}
 
 
 def _customuser_blocks_missing(dep: str) -> list[str]:
