@@ -7,7 +7,8 @@ export const DEFAULT_SENTRY_DSN =
 // import.meta.env, or any map of build variables.
 type SentryEnv = Readonly<Record<string, unknown>>;
 
-const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+const text = (value: unknown): string =>
+  typeof value === 'string' ? value.trim() : '';
 
 /** The DSN to report to, or null when Sentry stays off for this build. */
 export function resolveSentryDsn(env: SentryEnv): string | null {

@@ -5,8 +5,10 @@ import { LazyTooltip } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
 import { brandGlowLift, brandGradient, buttonLift } from '../styles';
 
-export interface PlusIconButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
+export interface PlusIconButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant' | 'size'
+> {
   /** Optional tooltip text */
   tooltip?: string;
 }
@@ -32,7 +34,7 @@ const PlusIconButton = React.forwardRef<HTMLButtonElement, PlusIconButtonProps>(
           buttonLift,
           brandGlowLift,
           '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
-          className
+          className,
         )}
         {...props}
       >
@@ -46,7 +48,7 @@ const PlusIconButton = React.forwardRef<HTMLButtonElement, PlusIconButtonProps>(
     }
 
     return button;
-  }
+  },
 );
 
 PlusIconButton.displayName = 'PlusIconButton';

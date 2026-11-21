@@ -6,6 +6,11 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-format.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-format.yml'
 
 permissions:
   contents: read
@@ -16,13 +21,12 @@ concurrency:
 
 jobs:
   prettier:
-    name: prettier (changed frontend files)
+    name: prettier (frontend)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/setup-node@v4
@@ -34,9 +38,6 @@ jobs:
       - name: Install frontend dependencies
         run: npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
 
-      # Only files this PR adds or modifies, so untouched legacy files don't fail it.
-      # HEAD is the merge into main's current tip; base.sha goes stale as main advances.
+      # The whole tree, so drift fails on the change that brings it in.
       - name: Check formatting
-        run: |
-          mapfile -t changed < <(git diff --name-only --diff-filter=d HEAD^1 HEAD -- frontend/)
-          frontend/scripts/prettier-check-files.sh "${changed[@]}"
+        run: npm --prefix frontend run format:check

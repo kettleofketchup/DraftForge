@@ -9,12 +9,12 @@
  */
 
 import {
-  test,
+  DraftWebSocketHelper,
   expect,
   getTournamentByKey,
   resetTournamentByKey,
+  test,
   TournamentPage,
-  DraftWebSocketHelper,
 } from '../../fixtures';
 
 interface TournamentWithDraft {
@@ -28,7 +28,8 @@ test.describe('WebSocket Toast Notifications', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const result = await getTournamentByKey(context, 'draft_captain_turn');
-    if (!result) throw new Error('Could not find draft_captain_turn tournament');
+    if (!result)
+      throw new Error('Could not find draft_captain_turn tournament');
     const tournament = result as unknown as TournamentWithDraft;
     tournamentPk = tournament.pk;
     await context.close();
@@ -78,7 +79,9 @@ test.describe('WebSocket Toast Notifications', () => {
 
     // Captain picks the first available player
     const dialog = page.locator('[role="dialog"]');
-    const pickButton = dialog.locator('[data-testid="pickPlayerButton"]').first();
+    const pickButton = dialog
+      .locator('[data-testid="pickPlayerButton"]')
+      .first();
     await expect(pickButton).toBeVisible({ timeout: 5000 });
     await pickButton.click();
 

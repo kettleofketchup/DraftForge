@@ -9,12 +9,7 @@
  * Ported from Cypress: frontend/tests/cypress/e2e/10-leagues/03-matches.cy.ts
  */
 
-import {
-  test,
-  expect,
-  LeaguePage,
-  getFirstLeague,
-} from '../../fixtures';
+import { expect, getFirstLeague, LeaguePage, test } from '../../fixtures';
 
 // Will be set dynamically in beforeAll
 let testLeagueId: number;
@@ -25,7 +20,9 @@ test.describe('League Page - Matches Tab (e2e)', () => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const league = await getFirstLeague(context);
     if (!league) {
-      throw new Error('No leagues found in database. Run just db::populate::all first.');
+      throw new Error(
+        'No leagues found in database. Run just db::populate::all first.',
+      );
     }
     testLeagueId = league.pk;
     await context.close();
@@ -40,7 +37,9 @@ test.describe('League Page - Matches Tab (e2e)', () => {
     await leaguePage.goto(testLeagueId, 'matches');
 
     // Should show matches heading with count
-    await expect(page.locator('[data-testid="league-matches-heading"]')).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator('[data-testid="league-matches-heading"]'),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('should have Steam linked filter button', async ({ page }) => {
@@ -48,7 +47,9 @@ test.describe('League Page - Matches Tab (e2e)', () => {
     await leaguePage.goto(testLeagueId, 'matches');
 
     // Filter button should be visible
-    await expect(leaguePage.steamLinkedFilterButton).toBeVisible({ timeout: 10000 });
+    await expect(leaguePage.steamLinkedFilterButton).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test('should toggle Steam linked filter', async ({ page }) => {
@@ -80,7 +81,10 @@ test.describe('League Page - Matches Tab (e2e)', () => {
 
     // Either matches are shown or empty state is shown
     const matchCardCount = await leaguePage.getMatchCardCount();
-    const hasEmptyState = await page.locator('[data-testid="league-matches-empty-state"]').isVisible().catch(() => false);
+    const hasEmptyState = await page
+      .locator('[data-testid="league-matches-empty-state"]')
+      .isVisible()
+      .catch(() => false);
 
     // One of these should be true
     expect(matchCardCount > 0 || hasEmptyState).toBe(true);
@@ -89,10 +93,14 @@ test.describe('League Page - Matches Tab (e2e)', () => {
   test('should load matches via API', async ({ page }) => {
     // Set up BOTH request and response waits BEFORE navigation to avoid race conditions
     const matchesRequestPromise = page.waitForRequest(
-      (request) => request.url().includes(`/leagues/${testLeagueId}/matches/`) && request.method() === 'GET'
+      (request) =>
+        request.url().includes(`/leagues/${testLeagueId}/matches/`) &&
+        request.method() === 'GET',
     );
     const matchesResponsePromise = page.waitForResponse(
-      (response) => response.url().includes(`/leagues/${testLeagueId}/matches/`) && (response.status() === 200 || response.status() === 304)
+      (response) =>
+        response.url().includes(`/leagues/${testLeagueId}/matches/`) &&
+        (response.status() === 200 || response.status() === 304),
     );
 
     const leaguePage = new LeaguePage(page);
@@ -128,11 +136,15 @@ test.describe.skip('League Match Card (e2e)', () => {
 
     if (matchCardCount > 0) {
       // Wait for the first card to be visible before asserting
-      await leaguePage.matchCards.first().waitFor({ state: 'visible', timeout: 10000 });
+      await leaguePage.matchCards
+        .first()
+        .waitFor({ state: 'visible', timeout: 10000 });
       await expect(leaguePage.matchCards.first()).toBeVisible();
     } else {
       // No match cards found - this is expected if no matches exist
-      console.log('No match cards found - this is expected if no matches exist');
+      console.log(
+        'No match cards found - this is expected if no matches exist',
+      );
     }
   });
 });

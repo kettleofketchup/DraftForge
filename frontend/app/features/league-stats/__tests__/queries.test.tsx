@@ -102,10 +102,14 @@ describe('league player summaries', () => {
   it('usePlayerLeagueSummary returns the user slice, population, minGames', async () => {
     fetchSpy.mockImplementation(async () => jsonResponse(summaries));
     const { wrapper } = setup();
-    const { result } = renderHook(() => usePlayerLeagueSummary(3, 42), { wrapper });
+    const { result } = renderHook(() => usePlayerLeagueSummary(3, 42), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fetchSpy).toHaveBeenCalledWith('/api/steam/leagues/3/player-summaries/');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/steam/leagues/3/player-summaries/',
+    );
     expect(result.current.data).toEqual({
       summary: summaries.players['42'],
       population: 1,
@@ -116,7 +120,9 @@ describe('league player summaries', () => {
   it('slice reference is stable across a refetch with identical data', async () => {
     fetchSpy.mockImplementation(async () => jsonResponse(summaries));
     const { client, wrapper } = setup();
-    const { result } = renderHook(() => usePlayerLeagueSummary(3, 42), { wrapper });
+    const { result } = renderHook(() => usePlayerLeagueSummary(3, 42), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     const first = result.current.data;
@@ -129,7 +135,9 @@ describe('league player summaries', () => {
   it('missing user yields summary undefined', async () => {
     fetchSpy.mockImplementation(async () => jsonResponse(summaries));
     const { wrapper } = setup();
-    const { result } = renderHook(() => usePlayerLeagueSummary(3, 999), { wrapper });
+    const { result } = renderHook(() => usePlayerLeagueSummary(3, 999), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.summary).toBeUndefined();
@@ -140,7 +148,10 @@ describe('league player summaries', () => {
     fetchSpy.mockImplementation(async () => jsonResponse(summaries));
     const { wrapper } = setup();
     const { result } = renderHook(
-      () => ({ dist: useLeagueDistribution(3), slice: usePlayerLeagueSummary(3, 42) }),
+      () => ({
+        dist: useLeagueDistribution(3),
+        slice: usePlayerLeagueSummary(3, 42),
+      }),
       { wrapper },
     );
 
@@ -157,7 +168,10 @@ describe('league player summaries', () => {
     fetchSpy.mockImplementation(async () => jsonResponse(summaries));
     const { wrapper } = setup();
     const { result } = renderHook(
-      () => ({ slice: usePlayerLeagueSummary(pk, 42), dist: useLeagueDistribution(pk) }),
+      () => ({
+        slice: usePlayerLeagueSummary(pk, 42),
+        dist: useLeagueDistribution(pk),
+      }),
       { wrapper },
     );
 
@@ -172,7 +186,9 @@ describe('league player summaries', () => {
       jsonResponse({ ...summaries, population: 'many' }),
     );
     const { wrapper } = setup();
-    const { result } = renderHook(() => usePlayerLeagueSummary(3, 42), { wrapper });
+    const { result } = renderHook(() => usePlayerLeagueSummary(3, 42), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
   });
@@ -182,17 +198,25 @@ describe('useUserLeagueStatsByLeague', () => {
   it('sends ?league=<pk> and parses the body', async () => {
     fetchSpy.mockImplementation(async () => jsonResponse(leagueStats));
     const { wrapper } = setup();
-    const { result } = renderHook(() => useUserLeagueStatsByLeague(42, 3), { wrapper });
+    const { result } = renderHook(() => useUserLeagueStatsByLeague(42, 3), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fetchSpy).toHaveBeenCalledWith('/api/steam/league-stats/42/?league=3');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/steam/league-stats/42/?league=3',
+    );
     expect(result.current.data).toEqual(leagueStats);
   });
 
   it('resolves null on 404 without retry', async () => {
-    fetchSpy.mockImplementation(async () => jsonResponse({ error: 'nope' }, 404));
+    fetchSpy.mockImplementation(async () =>
+      jsonResponse({ error: 'nope' }, 404),
+    );
     const { wrapper } = setup();
-    const { result } = renderHook(() => useUserLeagueStatsByLeague(42, 3), { wrapper });
+    const { result } = renderHook(() => useUserLeagueStatsByLeague(42, 3), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBeNull();
@@ -200,9 +224,13 @@ describe('useUserLeagueStatsByLeague', () => {
   });
 
   it('throws LeagueStatsHttpError with status 500', async () => {
-    fetchSpy.mockImplementation(async () => jsonResponse({ error: 'boom' }, 500));
+    fetchSpy.mockImplementation(async () =>
+      jsonResponse({ error: 'boom' }, 500),
+    );
     const { wrapper } = setup();
-    const { result } = renderHook(() => useUserLeagueStatsByLeague(42, 3), { wrapper });
+    const { result } = renderHook(() => useUserLeagueStatsByLeague(42, 3), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toBeInstanceOf(LeagueStatsHttpError);
@@ -212,7 +240,9 @@ describe('useUserLeagueStatsByLeague', () => {
   it('malformed 200 body surfaces a non-HTTP error without retry', async () => {
     fetchSpy.mockImplementation(async () => jsonResponse({ user_id: 'x' }));
     const { wrapper } = setup();
-    const { result } = renderHook(() => useUserLeagueStatsByLeague(42, 3), { wrapper });
+    const { result } = renderHook(() => useUserLeagueStatsByLeague(42, 3), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).not.toBeInstanceOf(LeagueStatsHttpError);
@@ -226,7 +256,10 @@ describe('useUserLeagueStatsByLeague', () => {
   ])('no fetch when userId=%s leaguePk=%s', async (userId, pk) => {
     fetchSpy.mockImplementation(async () => jsonResponse(leagueStats));
     const { wrapper } = setup();
-    const { result } = renderHook(() => useUserLeagueStatsByLeague(userId, pk), { wrapper });
+    const { result } = renderHook(
+      () => useUserLeagueStatsByLeague(userId, pk),
+      { wrapper },
+    );
 
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(fetchSpy).not.toHaveBeenCalled();

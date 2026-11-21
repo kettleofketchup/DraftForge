@@ -21,7 +21,7 @@
  * — never call this test flaky.
  */
 
-import { test, expect } from '../../fixtures';
+import { expect, test } from '../../fixtures';
 
 test.describe('Edit Profile — Base tab (new layered modal) (@cicd)', () => {
   test('@cicd smoke: change nickname, see it in profile header AND navbar avatar without refresh', async ({
@@ -32,7 +32,9 @@ test.describe('Edit Profile — Base tab (new layered modal) (@cicd)', () => {
     await page.goto('/profile');
 
     // /profile redirects to /user/<currentUserPk>. Wait for the header H1.
-    const headerNickname = page.locator('[data-testid="user-card-nickname"]').first();
+    const headerNickname = page
+      .locator('[data-testid="user-card-nickname"]')
+      .first();
     await expect(headerNickname).toBeVisible({ timeout: 15_000 });
 
     // Navbar avatar: alt text === currentUser.nickname || username (getDisplayName).
@@ -65,7 +67,9 @@ test.describe('Edit Profile — Base tab (new layered modal) (@cicd)', () => {
       // Dual-write verification (2/2) — userStore.patchCurrentUser updates
       // currentUser, which feeds the navbar UserAvatar's alt text. If
       // patchCurrentUser is broken, the alt stays as the old nickname.
-      await expect(navAvatar).toHaveAttribute('alt', newNickname, { timeout: 10_000 });
+      await expect(navAvatar).toHaveAttribute('alt', newNickname, {
+        timeout: 10_000,
+      });
     } finally {
       // Wait out the success toast from the edit above. Sonner stacks toasts
       // rather than replacing them, and the restore below raises an identical
@@ -134,7 +138,10 @@ test.describe('Edit Profile — Base tab (new layered modal) (@cicd)', () => {
     await page.unroute('**/api/users/me/profile/base/');
 
     // Cancel — no restore needed since the failed PATCH didn't persist.
-    await page.getByRole('dialog').getByRole('button', { name: /cancel/i }).click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: /cancel/i })
+      .click();
     await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
   });
 });

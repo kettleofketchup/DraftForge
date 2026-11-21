@@ -7,7 +7,11 @@ const PW = fileURLToPath(new URL('../playwright', import.meta.url));
 const FRONTEND = fileURLToPath(new URL('../..', import.meta.url));
 const walk = (d: string): string[] =>
   readdirSync(d, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? walk(join(d, e.name)) : /\.(ts|tsx|js|mjs)$/.test(e.name) ? [join(d, e.name)] : [],
+    e.isDirectory()
+      ? walk(join(d, e.name))
+      : /\.(ts|tsx|js|mjs)$/.test(e.name)
+        ? [join(d, e.name)]
+        : [],
   );
 const globConfigs = (d: string): string[] =>
   readdirSync(d)
@@ -18,6 +22,8 @@ it('no localhost/DOCKER_HOST literals outside base-url-resolve.ts', () => {
   const offenders = walk(PW)
     .concat(globConfigs(FRONTEND))
     .filter((f) => !f.endsWith('base-url-resolve.ts'))
-    .filter((f) => /https:\/\/localhost|DOCKER_HOST/.test(readFileSync(f, 'utf8')));
+    .filter((f) =>
+      /https:\/\/localhost|DOCKER_HOST/.test(readFileSync(f, 'utf8')),
+    );
   expect(offenders).toEqual([]);
 });

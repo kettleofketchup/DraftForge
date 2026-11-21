@@ -11,10 +11,10 @@
 
 import type { Page } from '@playwright/test';
 import {
-  test,
   expect,
   loginAdmin,
   resetTournamentByKey,
+  test,
   type TournamentData,
 } from '../../fixtures';
 
@@ -22,12 +22,14 @@ const KEY = 'shuffle_tie_resolution';
 
 async function openDraft(page: Page, tournamentPk: number): Promise<void> {
   await page.goto(`/tournament/${tournamentPk}`);
-  await page.getByTestId('tournamentDetailPage').waitFor({ state: 'visible', timeout: 15_000 });
+  await page
+    .getByTestId('tournamentDetailPage')
+    .waitFor({ state: 'visible', timeout: 15_000 });
   await page.getByTestId('teamsTab').click();
   await page.getByTestId('teamsTabContent').waitFor({ state: 'visible' });
   await page
     .locator(
-      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
+      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]',
     )
     .first()
     .click();
@@ -54,7 +56,10 @@ test.describe.serial('Shuffle draft - tie roll popup', () => {
     try {
       await loginAdmin(admin);
       const reset = await resetTournamentByKey(admin, KEY);
-      if (!reset) throw new Error(`Could not reset ${KEY}. Run: just db::populate::fresh`);
+      if (!reset)
+        throw new Error(
+          `Could not reset ${KEY}. Run: just db::populate::fresh`,
+        );
       t = reset;
     } finally {
       await admin.close();
@@ -82,19 +87,35 @@ test.describe.serial('Shuffle draft - tie roll popup', () => {
         await expect(popup).toHaveCount(1);
         await expect(popup).toHaveAttribute('data-pick-number', '2');
         await expect(popup).toContainText('Tie for pick #2');
-        await expect(popup.locator('[data-testid^="tie-roll-row-"]')).toHaveCount(3);
-        await expect(popup.getByRole('button', { name: /continue/i })).toHaveCount(0);
+        await expect(
+          popup.locator('[data-testid^="tie-roll-row-"]'),
+        ).toHaveCount(3);
+        await expect(
+          popup.getByRole('button', { name: /continue/i }),
+        ).toHaveCount(0);
       }
 
-      const winnerId = await page.getByTestId('tie-roll-popup').getAttribute('data-winner-id');
-      await expect(spectator.getByTestId('tie-roll-popup')).toHaveAttribute('data-winner-id', winnerId!);
+      const winnerId = await page
+        .getByTestId('tie-roll-popup')
+        .getAttribute('data-winner-id');
+      await expect(spectator.getByTestId('tie-roll-popup')).toHaveAttribute(
+        'data-winner-id',
+        winnerId!,
+      );
       for (const viewer of [page, spectator]) {
-        await expect(viewer.getByTestId('tie-roll-result')).toContainText('picks next', { timeout: 6_000 });
-        await expect(viewer.getByTestId(`tie-roll-row-${winnerId}`)).toHaveAttribute('data-winner', 'true');
+        await expect(viewer.getByTestId('tie-roll-result')).toContainText(
+          'picks next',
+          { timeout: 6_000 },
+        );
+        await expect(
+          viewer.getByTestId(`tie-roll-row-${winnerId}`),
+        ).toHaveAttribute('data-winner', 'true');
       }
 
       for (const viewer of [page, spectator]) {
-        await expect(viewer.getByTestId('tie-roll-popup')).toHaveCount(0, { timeout: 8_000 });
+        await expect(viewer.getByTestId('tie-roll-popup')).toHaveCount(0, {
+          timeout: 8_000,
+        });
       }
       await expect(page.getByRole('dialog').first()).toBeVisible();
     } finally {

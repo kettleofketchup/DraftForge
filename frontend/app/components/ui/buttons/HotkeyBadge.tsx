@@ -33,9 +33,12 @@ export function HotkeyBadge({ hotkey, tooltip, className }: HotkeyBadgeProps) {
   const tooltipContent =
     tooltip === null
       ? null
-      : tooltip ?? (
-          <>Press <strong className="font-semibold">{hotkey}</strong> for keyboard shortcut</>
-        );
+      : (tooltip ?? (
+          <>
+            Press <strong className="font-semibold">{hotkey}</strong> for
+            keyboard shortcut
+          </>
+        ));
 
   // The outer <span> owns positioning + pointer events (Kbd itself sets
   // `pointer-events-none`, which would block tooltip hover detection).
@@ -49,9 +52,7 @@ export function HotkeyBadge({ hotkey, tooltip, className }: HotkeyBadgeProps) {
   // via aria-describedby — that's the right vehicle for screen readers.
   const badge = (
     <span
-      className={cn(
-        'absolute -top-1.5 -left-1.5 z-10 inline-flex cursor-help',
-      )}
+      className={cn('absolute -top-1.5 -left-1.5 z-10 inline-flex cursor-help')}
       aria-hidden="true"
     >
       <Kbd

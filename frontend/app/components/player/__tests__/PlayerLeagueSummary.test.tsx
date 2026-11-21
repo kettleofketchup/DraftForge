@@ -20,7 +20,8 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
 const LEAGUE_PK = 10;
 const USER_ID = 42;
@@ -90,7 +91,9 @@ function json(status: number, body: unknown): Response {
 function stubFetch(summaryReply: Reply, statsReply: Reply) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input);
-    const reply = url.includes('/player-summaries/') ? summaryReply : statsReply;
+    const reply = url.includes('/player-summaries/')
+      ? summaryReply
+      : statsReply;
     if (reply === 'pending') return new Promise<Response>(() => {});
     return json(reply.status, reply.body);
   });
@@ -103,7 +106,11 @@ function renderPanel(compact = false) {
   return render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <PlayerLeagueSummary leaguePk={LEAGUE_PK} userId={USER_ID} compact={compact} />
+        <PlayerLeagueSummary
+          leaguePk={LEAGUE_PK}
+          userId={USER_ID}
+          compact={compact}
+        />
       </TooltipProvider>
     </QueryClientProvider>,
   );
@@ -119,7 +126,10 @@ afterEach(() => {
 
 describe('PlayerLeagueSummary', () => {
   it('renders the summary while the averages are still pending', async () => {
-    stubFetch({ status: 200, body: summaries({ [USER_ID]: rankedRow }) }, 'pending');
+    stubFetch(
+      { status: 200, body: summaries({ [USER_ID]: rankedRow }) },
+      'pending',
+    );
     renderPanel();
     const panel = await screen.findByTestId('player-league-summary');
     expect(panel.textContent).toContain('#12 / 84');
@@ -143,7 +153,10 @@ describe('PlayerLeagueSummary', () => {
   });
 
   it('shows "Couldn\'t load league stats" on a malformed summary body and logs', async () => {
-    stubFetch({ status: 200, body: { nope: true } }, { status: 200, body: leagueStats });
+    stubFetch(
+      { status: 200, body: { nope: true } },
+      { status: 200, body: leagueStats },
+    );
     renderPanel();
     expect(await screen.findByText("Couldn't load league stats")).toBeTruthy();
     expect(screen.queryByText('No league stats available')).toBeNull();
@@ -200,7 +213,10 @@ describe('PlayerLeagueSummary', () => {
   });
 
   it('shows "No league stats available" with no row even when by-league is 200', async () => {
-    stubFetch({ status: 200, body: summaries({}) }, { status: 200, body: leagueStats });
+    stubFetch(
+      { status: 200, body: summaries({}) },
+      { status: 200, body: leagueStats },
+    );
     renderPanel();
     expect(await screen.findByText('No league stats available')).toBeTruthy();
     expect(screen.queryByTestId('player-league-summary')).toBeNull();
@@ -309,14 +325,19 @@ describe('PlayerLeagueSummary', () => {
     );
     renderPanel();
     expect(await screen.findByText('2/3 games to rank')).toBeTruthy();
-    expect(screen.getByTestId('player-league-summary').textContent).toContain('— / 84');
+    expect(screen.getByTestId('player-league-summary').textContent).toContain(
+      '— / 84',
+    );
   });
 
   it('compact renders the tiles without fetching or showing averages', async () => {
-    const fetchSpy = stubFetch({ status: 200, body: summaries({ [USER_ID]: rankedRow }) }, {
-      status: 200,
-      body: leagueStats,
-    });
+    const fetchSpy = stubFetch(
+      { status: 200, body: summaries({ [USER_ID]: rankedRow }) },
+      {
+        status: 200,
+        body: leagueStats,
+      },
+    );
     renderPanel(true);
     expect(await screen.findByText('#12 / 84')).toBeTruthy();
     expect(screen.getByTestId('win-rate-histogram')).toBeTruthy();

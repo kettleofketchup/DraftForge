@@ -7,9 +7,9 @@
 }
 
 /* Ensure match nodes render above divider */
-.react-flow__node[data-id^="w-"],
-.react-flow__node[data-id^="l-"],
-.react-flow__node[data-id^="gf-"] {
+.react-flow__node[data-id^='w-'],
+.react-flow__node[data-id^='l-'],
+.react-flow__node[data-id^='gf-'] {
   z-index: 10 !important;
 }
 

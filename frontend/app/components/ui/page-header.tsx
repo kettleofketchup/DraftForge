@@ -38,9 +38,7 @@ export function PageHeader({
         {badge}
       </div>
 
-      {subtitle && (
-        <div className="flex justify-center">{subtitle}</div>
-      )}
+      {subtitle && <div className="flex justify-center">{subtitle}</div>}
 
       {actions && <div className="flex justify-center">{actions}</div>}
     </div>

@@ -12,20 +12,23 @@
  * Uses the dedicated Events Test Org (pk=7) with 12 event players (pk=5001-5012).
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   getEventsTestData,
-  resetEventsData,
   loginEventAdmin,
+  resetEventsData,
+  test,
+  visitAndWaitForHydration,
   type EventInfo,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 import { postWithCsrf } from '../../fixtures/events';
-import { waitForAddUserModal, searchAndAddUser, closeAddUserModal } from '../../helpers/add-user';
-
+import {
+  closeAddUserModal,
+  searchAndAddUser,
+  waitForAddUserModal,
+} from '../../helpers/add-user';
 
 let eventInfo: EventInfo;
 
@@ -48,22 +51,26 @@ test.describe('Event Signup Management (@cicd)', () => {
     // =========================================================================
     // 1. Create event with max_players=10, auto_approve=false
     // =========================================================================
-    const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
-      organization: eventInfo.orgPk,
-      name: 'Signup Lifecycle Test',
-      description: 'Testing full signup management workflow',
-      scheduled_at: new Date(Date.now() + 86400000).toISOString(),
-      tournament_name: 'Lifecycle Tournament',
-      tournament_league: eventInfo.leaguePk,
-      tournament_type: 'single_elimination',
-      game_type: 1,
-      draft_type: 'shuffle',
-      people_per_team: 5,
-      number_of_teams: 2,
-      max_players: 10,
-      auto_approve: false,
-      timezone: 'America/New_York',
-    });
+    const createResp = await postWithCsrf(
+      context,
+      `${API_URL}/events/?open_signups=true`,
+      {
+        organization: eventInfo.orgPk,
+        name: 'Signup Lifecycle Test',
+        description: 'Testing full signup management workflow',
+        scheduled_at: new Date(Date.now() + 86400000).toISOString(),
+        tournament_name: 'Lifecycle Tournament',
+        tournament_league: eventInfo.leaguePk,
+        tournament_type: 'single_elimination',
+        game_type: 1,
+        draft_type: 'shuffle',
+        people_per_team: 5,
+        number_of_teams: 2,
+        max_players: 10,
+        auto_approve: false,
+        timezone: 'America/New_York',
+      },
+    );
     expect(createResp.ok()).toBeTruthy();
     const event = await createResp.json();
     const eventId = event.id;
@@ -71,20 +78,31 @@ test.describe('Event Signup Management (@cicd)', () => {
     // =========================================================================
     // 2. Bulk RSVP 12 players (10 active + 2 waitlisted)
     // =========================================================================
-    const playerPks = [5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010, 5011, 5012];
-    const bulkResp = await context.request.post(`${API_URL}/tests/events/${eventId}/bulk-rsvp/`, {
-      data: { user_pks: playerPks },
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const playerPks = [
+      5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010, 5011, 5012,
+    ];
+    const bulkResp = await context.request.post(
+      `${API_URL}/tests/events/${eventId}/bulk-rsvp/`,
+      {
+        data: { user_pks: playerPks },
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
     expect(bulkResp.ok()).toBeTruthy();
     const bulkData = await bulkResp.json();
     expect(bulkData.count).toBe(12);
 
     // Verify: 10 active (rsvp) + 2 waitlisted
-    const signupsResp = await context.request.get(`${API_URL}/events/signups/?event=${eventId}`);
+    const signupsResp = await context.request.get(
+      `${API_URL}/events/signups/?event=${eventId}`,
+    );
     const signups = await signupsResp.json();
-    const activeSignups = signups.filter((s: { status: string }) => s.status === 'rsvp');
-    const waitlistedSignups = signups.filter((s: { status: string }) => s.status === 'waitlisted');
+    const activeSignups = signups.filter(
+      (s: { status: string }) => s.status === 'rsvp',
+    );
+    const waitlistedSignups = signups.filter(
+      (s: { status: string }) => s.status === 'waitlisted',
+    );
     expect(activeSignups.length).toBe(10);
     expect(waitlistedSignups.length).toBe(2);
 
@@ -112,10 +130,18 @@ test.describe('Event Signup Management (@cicd)', () => {
     }
 
     // Verify: 7 approved + 5 waitlisted (2 original + 3 demoted)
-    const afterDemoteResp = await context.request.get(`${API_URL}/events/signups/?event=${eventId}`);
+    const afterDemoteResp = await context.request.get(
+      `${API_URL}/events/signups/?event=${eventId}`,
+    );
     const afterDemote = await afterDemoteResp.json();
-    expect(afterDemote.filter((s: { status: string }) => s.status === 'approved').length).toBe(7);
-    expect(afterDemote.filter((s: { status: string }) => s.status === 'waitlisted').length).toBe(5);
+    expect(
+      afterDemote.filter((s: { status: string }) => s.status === 'approved')
+        .length,
+    ).toBe(7);
+    expect(
+      afterDemote.filter((s: { status: string }) => s.status === 'waitlisted')
+        .length,
+    ).toBe(5);
 
     // =========================================================================
     // 5. Reinstate 1 demoted player (misclick recovery) — re-approve signup 7
@@ -136,11 +162,14 @@ test.describe('Event Signup Management (@cicd)', () => {
     // =========================================================================
     // 6. Promote 2 from waitlist and approve with MMR
     // =========================================================================
-    const afterReinstateResp = await context.request.get(`${API_URL}/events/signups/?event=${eventId}`);
+    const afterReinstateResp = await context.request.get(
+      `${API_URL}/events/signups/?event=${eventId}`,
+    );
     const currentWaitlist = (await afterReinstateResp.json())
       .filter((s: { status: string }) => s.status === 'waitlisted')
-      .sort((a: { waitlist_position: number }, b: { waitlist_position: number }) =>
-        (a.waitlist_position ?? 999) - (b.waitlist_position ?? 999),
+      .sort(
+        (a: { waitlist_position: number }, b: { waitlist_position: number }) =>
+          (a.waitlist_position ?? 999) - (b.waitlist_position ?? 999),
       );
 
     for (let i = 0; i < 2 && i < currentWaitlist.length; i++) {
@@ -156,11 +185,18 @@ test.describe('Event Signup Management (@cicd)', () => {
     // =========================================================================
     // 7. Verify pre-rollcall state: 10 approved, 2 waitlisted
     // =========================================================================
-    const preRollcallResp = await context.request.get(`${API_URL}/events/signups/?event=${eventId}`);
+    const preRollcallResp = await context.request.get(
+      `${API_URL}/events/signups/?event=${eventId}`,
+    );
     const preRollcall = await preRollcallResp.json();
-    const approvedSignups = preRollcall.filter((s: { status: string }) => s.status === 'approved');
+    const approvedSignups = preRollcall.filter(
+      (s: { status: string }) => s.status === 'approved',
+    );
     expect(approvedSignups.length).toBe(10);
-    expect(preRollcall.filter((s: { status: string }) => s.status === 'waitlisted').length).toBe(2);
+    expect(
+      preRollcall.filter((s: { status: string }) => s.status === 'waitlisted')
+        .length,
+    ).toBe(2);
 
     // =========================================================================
     // 8. Start Roll Call
@@ -214,10 +250,16 @@ test.describe('Event Signup Management (@cicd)', () => {
     // =========================================================================
     // 10. Verify roll call state: 8 confirmed, 2 approved (unconfirmed)
     // =========================================================================
-    const rollcallSignupsResp = await context.request.get(`${API_URL}/events/signups/?event=${eventId}`);
+    const rollcallSignupsResp = await context.request.get(
+      `${API_URL}/events/signups/?event=${eventId}`,
+    );
     const rollcallSignups = await rollcallSignupsResp.json();
-    const confirmed = rollcallSignups.filter((s: { status: string }) => s.status === 'confirmed');
-    const stillApproved = rollcallSignups.filter((s: { status: string }) => s.status === 'approved');
+    const confirmed = rollcallSignups.filter(
+      (s: { status: string }) => s.status === 'confirmed',
+    );
+    const stillApproved = rollcallSignups.filter(
+      (s: { status: string }) => s.status === 'approved',
+    );
     expect(confirmed.length).toBe(8);
     expect(stillApproved.length).toBe(2);
 
@@ -239,7 +281,9 @@ test.describe('Event Signup Management (@cicd)', () => {
       `${API_URL}/tournaments/${startedEvent.tournament}/`,
     );
     expect(tournResp.ok()).toBeTruthy();
-    const tournamentUsers = ((await tournResp.json()).users as Array<number | { pk: number }>)
+    const tournamentUsers = (
+      (await tournResp.json()).users as Array<number | { pk: number }>
+    )
       .map((u) => (typeof u === 'number' ? u : u.pk))
       .sort((a, b) => a - b);
     const confirmedUserPks = confirmed
@@ -259,7 +303,10 @@ test.describe('Event Signup Management (@cicd)', () => {
     await expect(page.getByTestId('event-tab-waitlist')).toContainText('2');
   });
 
-  test('staff can admin-add a user during roll_call (@cicd)', async ({ page, context }) => {
+  test('staff can admin-add a user during roll_call (@cicd)', async ({
+    page,
+    context,
+  }) => {
     // Force the event into ROLL_CALL via the API.
     const startResp = await postWithCsrf(
       context,
@@ -269,7 +316,9 @@ test.describe('Event Signup Management (@cicd)', () => {
 
     // Route is /events/:eventId/:tab? — plural; navigate directly to the signups tab.
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}/signups`);
-    await expect(page.getByTestId('event-state-badge')).toHaveText(/Roll Call/i);
+    await expect(page.getByTestId('event-state-badge')).toHaveText(
+      /Roll Call/i,
+    );
 
     // Open AddUserModal via canonical testid (the gate includes ROLL_CALL).
     await page.getByTestId('admin-add-signup-btn').click();

@@ -1,11 +1,15 @@
 import {
+  brandGlowLift,
+  brandGradient,
+  brandSecondary,
+} from '~/components/ui/buttons';
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { brandGlowLift, brandGradient, brandSecondary } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
 export interface MobileNavOption {
@@ -80,7 +84,9 @@ export function MobileNavDropdown({
               key={option.value}
               value={option.value}
               data-testid={
-                itemTestIdPrefix ? `${itemTestIdPrefix}${option.value}` : undefined
+                itemTestIdPrefix
+                  ? `${itemTestIdPrefix}${option.value}`
+                  : undefined
               }
               className={cn(
                 'min-h-[44px] flex items-center text-base cursor-pointer',

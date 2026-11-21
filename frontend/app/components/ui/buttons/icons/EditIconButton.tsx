@@ -5,8 +5,10 @@ import { FastTooltip } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
 import { brandToxic, brandToxicGlowLift, buttonLift } from '../styles';
 
-export interface EditIconButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
+export interface EditIconButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant' | 'size'
+> {
   /** Optional tooltip text */
   tooltip?: string;
   /** Test ID for Playwright/testing */
@@ -35,7 +37,7 @@ const EditIconButton = React.forwardRef<HTMLButtonElement, EditIconButtonProps>(
           buttonLift,
           brandToxicGlowLift,
           '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
-          className
+          className,
         )}
         {...props}
       >
@@ -49,7 +51,7 @@ const EditIconButton = React.forwardRef<HTMLButtonElement, EditIconButtonProps>(
     }
 
     return button;
-  }
+  },
 );
 
 EditIconButton.displayName = 'EditIconButton';

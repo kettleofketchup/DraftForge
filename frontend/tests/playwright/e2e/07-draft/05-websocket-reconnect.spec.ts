@@ -14,12 +14,12 @@
  */
 
 import {
-  test,
+  DraftWebSocketHelper,
   expect,
   getTournamentByKey,
   killDraftWebSocket,
+  test,
   TournamentPage,
-  DraftWebSocketHelper,
 } from '../../fixtures';
 
 // Extended tournament response that includes the draft field
@@ -54,7 +54,7 @@ test.describe.serial('WebSocket Reconnection', () => {
 
     if (!draftPk) {
       throw new Error(
-        `No draft PK in tournament response (keys: ${Object.keys(tournament).join(', ')})`
+        `No draft PK in tournament response (keys: ${Object.keys(tournament).join(', ')})`,
       );
     }
 
@@ -67,7 +67,7 @@ test.describe.serial('WebSocket Reconnection', () => {
    */
   async function openDraftWithWS(
     page: Parameters<Parameters<typeof test>[2]>[0]['page'],
-    wsHelper: DraftWebSocketHelper
+    wsHelper: DraftWebSocketHelper,
   ): Promise<void> {
     const tournamentPage = new TournamentPage(page);
     await tournamentPage.goto(tournamentPk);
@@ -124,7 +124,9 @@ test.describe.serial('WebSocket Reconnection', () => {
     const firstInitial = wsHelper.messagesOfType('initial_state');
     expect(firstInitial.length).toBe(1);
     expect(firstInitial[0].draft_state).toBeDefined();
-    expect(wsHelper.messagesOfType('initial_events')[0].draft_state).toBeUndefined();
+    expect(
+      wsHelper.messagesOfType('initial_events')[0].draft_state,
+    ).toBeUndefined();
 
     // Kill and reconnect
     await killDraftWebSocket(context, draftPk);
@@ -198,9 +200,12 @@ test.describe.serial('WebSocket Reconnection', () => {
     await openDraftWithWS(page, wsHelper);
 
     // Dismiss any existing toasts
-    await page.locator('[data-sonner-toast]').all().then((toasts) =>
-      Promise.all(toasts.map((t) => t.click().catch(() => {})))
-    );
+    await page
+      .locator('[data-sonner-toast]')
+      .all()
+      .then((toasts) =>
+        Promise.all(toasts.map((t) => t.click().catch(() => {}))),
+      );
     await page.waitForTimeout(500);
 
     // Kill and reconnect

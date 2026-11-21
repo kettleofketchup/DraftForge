@@ -2,9 +2,9 @@ import { Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { undoLastPick } from '~/components/api/api';
-import type { TournamentType } from '~/index';
 import { WarningButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
+import type { TournamentType } from '~/index';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -33,7 +33,9 @@ export const UndoPickButton: React.FC = () => {
     setIsLoading(true);
     try {
       const rawTournament = await undoLastPick({ draft_pk: draft.pk });
-      const updatedTournament = hydrateTournament(rawTournament as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
+      const updatedTournament = hydrateTournament(
+        rawTournament as TournamentType & { _users?: Record<number, unknown> },
+      ) as TournamentType;
 
       setTournament(updatedTournament);
       if (updatedTournament.draft) {
@@ -42,7 +44,7 @@ export const UndoPickButton: React.FC = () => {
 
       // Find the round that was undone (now has no choice)
       const undoneRound = updatedTournament.draft?.draft_rounds?.find(
-        (r) => r.pk === updatedTournament.draft?.latest_round
+        (r) => r.pk === updatedTournament.draft?.latest_round,
       );
 
       if (undoneRound) {

@@ -1,5 +1,5 @@
 'use client';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import api from '~/components/api/axios';
 import type { DotaProfileData } from '~/components/user';
 

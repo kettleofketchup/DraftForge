@@ -5,8 +5,8 @@
  */
 
 import { Building2, CalendarDays, Repeat, Swords, Trophy } from 'lucide-react';
-import type { EntityType } from './entity-breadcrumb';
 import { cn } from '~/lib/utils';
+import type { EntityType } from './entity-breadcrumb';
 
 export const ENTITY_ICONS: Record<EntityType, typeof Building2> = {
   organization: Building2,

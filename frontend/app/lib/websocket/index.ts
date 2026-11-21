@@ -7,7 +7,6 @@
  *   const connId = manager.connect(url, options);
  */
 
-export { getWebSocketManager } from './WebSocketManager';
 export type {
   ConnectionOptions,
   ConnectionState,
@@ -18,3 +17,4 @@ export type {
   Unsubscribe,
   WebSocketTelemetry,
 } from './types';
+export { getWebSocketManager } from './WebSocketManager';

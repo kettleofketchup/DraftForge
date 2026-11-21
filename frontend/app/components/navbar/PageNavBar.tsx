@@ -1,5 +1,5 @@
-import { usePageNavStore } from '~/store/pageNavStore';
 import { MobileNavDropdown } from '~/components/ui/mobile-nav-dropdown';
+import { usePageNavStore } from '~/store/pageNavStore';
 
 export function PageNavBar() {
   const options = usePageNavStore((s) => s.options);

@@ -4,6 +4,7 @@ import { useMediaQuery } from '@uidotdev/usehooks';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import * as React from 'react';
 
+import { useLeagues } from '~/components/league/hooks/useLeagues';
 import { Button } from '~/components/ui/button';
 import {
   Command,
@@ -13,7 +14,6 @@ import {
   CommandItem,
   CommandList,
 } from '~/components/ui/command';
-import { useLeagues } from '~/components/league/hooks/useLeagues';
 import {
   Popover,
   PopoverContent,
@@ -160,7 +160,9 @@ export const LeagueCombobox: React.FC<LeagueComboboxProps> = ({
                     key={league.pk}
                     value={league.name}
                     data-testid={
-                      itemTestIdPrefix ? `${itemTestIdPrefix}${league.pk}` : undefined
+                      itemTestIdPrefix
+                        ? `${itemTestIdPrefix}${league.pk}`
+                        : undefined
                     }
                     onSelect={() => {
                       onChange(league.pk ?? null);

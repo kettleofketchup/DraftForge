@@ -14,7 +14,9 @@ export const StreakBadge: React.FC<{
       data-testid="streak-badge"
       className={cn(
         'rounded-[2px] border-transparent px-1 py-px text-[10px] leading-none font-semibold tabular-nums',
-        win ? 'bg-success/15 text-success' : 'bg-destructive/25 text-foreground',
+        win
+          ? 'bg-success/15 text-success'
+          : 'bg-destructive/25 text-foreground',
       )}
     >
       {streak.result}

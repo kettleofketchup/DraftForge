@@ -11,8 +11,14 @@ import { BASE_URL } from '../../fixtures/constants';
 
 // API helper to get user's org membership data
 async function getUserOrgMembership(
-  context: { request: { get: (url: string) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }> } },
-  userPk: number
+  context: {
+    request: {
+      get: (
+        url: string,
+      ) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }>;
+    };
+  },
+  userPk: number,
 ): Promise<{
   user: { pk: number; username: string; discordId: string };
   org_users: Array<{
@@ -30,7 +36,7 @@ async function getUserOrgMembership(
   }>;
 } | null> {
   const response = await context.request.get(
-    `${BASE_URL}/api/tests/user/${userPk}/org-membership/`
+    `${BASE_URL}/api/tests/user/${userPk}/org-membership/`,
   );
   if (!response.ok()) return null;
   return (await response.json()) as {
@@ -53,40 +59,63 @@ async function getUserOrgMembership(
 
 // API helper to get tournament data
 async function getTournament(
-  context: { request: { get: (url: string) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }> } },
-  tournamentPk: number
+  context: {
+    request: {
+      get: (
+        url: string,
+      ) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }>;
+    };
+  },
+  tournamentPk: number,
 ): Promise<{
   pk: number;
   name: string;
-  league: { pk: number; name: string; organization: { pk: number; name: string } | null } | null;
+  league: {
+    pk: number;
+    name: string;
+    organization: { pk: number; name: string } | null;
+  } | null;
   users: Array<{ pk: number; username: string }>;
 } | null> {
   const response = await context.request.get(
-    `${BASE_URL}/api/tournaments/${tournamentPk}/`
+    `${BASE_URL}/api/tournaments/${tournamentPk}/`,
   );
   if (!response.ok()) return null;
   return (await response.json()) as {
     pk: number;
     name: string;
-    league: { pk: number; name: string; organization: { pk: number; name: string } | null } | null;
+    league: {
+      pk: number;
+      name: string;
+      organization: { pk: number; name: string } | null;
+    } | null;
     users: Array<{ pk: number; username: string }>;
   };
 }
 
 // API helper to find a user not in tournament
 async function findUserNotInTournament(
-  context: { request: { get: (url: string) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }> } },
-  tournamentUserPks: number[]
+  context: {
+    request: {
+      get: (
+        url: string,
+      ) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }>;
+    };
+  },
+  tournamentUserPks: number[],
 ): Promise<{ pk: number; username: string } | null> {
   // Get all users
   const response = await context.request.get(`${BASE_URL}/api/users/`);
   if (!response.ok()) return null;
 
-  const users = (await response.json()) as Array<{ pk: number; username: string }>;
+  const users = (await response.json()) as Array<{
+    pk: number;
+    username: string;
+  }>;
 
   // Find a user not in the tournament
   const userNotInTournament = users.find(
-    (u) => !tournamentUserPks.includes(u.pk) && u.username
+    (u) => !tournamentUserPks.includes(u.pk) && u.username,
   );
 
   return userNotInTournament || null;
@@ -112,9 +141,11 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
 
     // Find a user not in this tournament
     // users is now an array of PKs (not full objects)
-    const tournamentUsersRaw = tournament!.users as unknown as Array<number | { pk: number }>;
+    const tournamentUsersRaw = tournament!.users as unknown as Array<
+      number | { pk: number }
+    >;
     const tournamentUserPks: number[] = tournamentUsersRaw.map((u) =>
-      typeof u === 'number' ? u : u.pk
+      typeof u === 'number' ? u : u.pk,
     );
     const userToAdd = await findUserNotInTournament(context, tournamentUserPks);
     expect(userToAdd).not.toBeNull();
@@ -122,10 +153,10 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     // Check user's current org membership (may or may not exist)
     const membershipBefore = await getUserOrgMembership(context, userToAdd!.pk);
     const hadOrgUserBefore = membershipBefore?.org_users.some(
-      (ou) => ou.organization_pk === org!.pk
+      (ou) => ou.organization_pk === org!.pk,
     );
     const hadLeagueUserBefore = membershipBefore?.league_users.some(
-      (lu) => lu.league_pk === league.pk
+      (lu) => lu.league_pk === league.pk,
     );
 
     // Navigate to tournament page
@@ -161,15 +192,19 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     await page.waitForTimeout(1500); // Give more time for API call and UI update
 
     // Click the add button for the user (scoped to modal, use first() in case of duplicates)
-    const addUserBtn = modal.locator(
-      `[data-testid="add-user-btn-${userToAdd!.username}"]`
-    ).first();
+    const addUserBtn = modal
+      .locator(`[data-testid="add-user-btn-${userToAdd!.username}"]`)
+      .first();
 
     // If the option isn't visible, check if there's a "No users" message and log it
     const noUsersMsg = page.locator('text="No users or too many users found"');
     if (await noUsersMsg.isVisible({ timeout: 2000 }).catch(() => false)) {
-      console.log(`Warning: No users found when searching for ${userToAdd!.username}`);
-      console.log('This may mean the user is not in the organization member list.');
+      console.log(
+        `Warning: No users found when searching for ${userToAdd!.username}`,
+      );
+      console.log(
+        'This may mean the user is not in the organization member list.',
+      );
       // Try clicking the Create User button to add them manually
       const createUserBtn = page.locator('button:has-text("Create User")');
       if (await createUserBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
@@ -182,7 +217,7 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
 
     // Wait for success (user card should appear)
     const userCard = page.locator(
-      `[data-testid="usercard-${userToAdd!.username}"]`
+      `[data-testid="usercard-${userToAdd!.username}"]`,
     );
     await expect(userCard).toBeVisible({ timeout: 10000 });
 
@@ -192,14 +227,14 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
 
     // Check OrgUser exists for the tournament's organization
     const orgUser = membershipAfter!.org_users.find(
-      (ou) => ou.organization_pk === org.pk
+      (ou) => ou.organization_pk === org.pk,
     );
     expect(orgUser).toBeDefined();
     expect(orgUser!.organization_name).toBe(org.name);
 
     // Check LeagueUser exists for the tournament's league
     const leagueUser = membershipAfter!.league_users.find(
-      (lu) => lu.league_pk === league.pk
+      (lu) => lu.league_pk === league.pk,
     );
     expect(leagueUser).toBeDefined();
     expect(leagueUser!.league_name).toBe(league.name);
@@ -207,13 +242,13 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
 
     // Log results for debugging
     console.log(
-      `User ${userToAdd!.username} (pk=${userToAdd!.pk}) added to tournament ${tournament!.name}`
+      `User ${userToAdd!.username} (pk=${userToAdd!.pk}) added to tournament ${tournament!.name}`,
     );
     console.log(
-      `  OrgUser: ${hadOrgUserBefore ? 'existed' : 'created'} for ${org.name}`
+      `  OrgUser: ${hadOrgUserBefore ? 'existed' : 'created'} for ${org.name}`,
     );
     console.log(
-      `  LeagueUser: ${hadLeagueUserBefore ? 'existed' : 'created'} for ${league.name}`
+      `  LeagueUser: ${hadLeagueUserBefore ? 'existed' : 'created'} for ${league.name}`,
     );
   });
 
@@ -232,7 +267,8 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     // users is now PK-only; full data is in _users sidecar dict
     const firstUserPk = tournament!.users[0] as unknown as number;
     const usersDict = (tournament as Record<string, unknown>)._users as
-      Record<string, { pk: number; username: string; mmr?: number }> | undefined;
+      | Record<string, { pk: number; username: string; mmr?: number }>
+      | undefined;
 
     // The mmr in the _users dict should come from OrgUser
     if (tournament!.league && usersDict) {
@@ -243,7 +279,7 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
       expect(membership).not.toBeNull();
 
       const orgUser = membership!.org_users.find(
-        (ou) => ou.organization_pk === tournament!.league!.organization?.pk
+        (ou) => ou.organization_pk === tournament!.league!.organization?.pk,
       );
 
       // If user has an OrgUser record, verify mmr matches

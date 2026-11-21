@@ -1,4 +1,4 @@
-import type { BracketMatch, BadgeMapping } from '../types';
+import type { BadgeMapping, BracketMatch } from '../types';
 
 /**
  * Badge utilities for linking winners bracket games to losers bracket destinations.
@@ -24,7 +24,7 @@ export function getBadgeLetter(
   bracketType: string,
   round: number,
   position: number,
-  hasLoserPath: boolean
+  hasLoserPath: boolean,
 ): string | null {
   // Only winners bracket games with loser path get badges
   if (bracketType !== 'winners' || !hasLoserPath) {
@@ -60,13 +60,19 @@ export function getBadgeColor(letter: string): string {
  */
 export function getLoserSlotBadgeLetter(
   sourceGameId: string | undefined,
-  allMatches: Array<{ id: string; bracketType: string; round: number; position: number; loserNextMatchId?: string }>
+  allMatches: Array<{
+    id: string;
+    bracketType: string;
+    round: number;
+    position: number;
+    loserNextMatchId?: string;
+  }>,
 ): string | null {
   if (!sourceGameId) return null;
 
   // Find the winners bracket game that feeds into this slot
   const sourceGame = allMatches.find(
-    (m) => m.bracketType === 'winners' && m.loserNextMatchId === sourceGameId
+    (m) => m.bracketType === 'winners' && m.loserNextMatchId === sourceGameId,
   );
 
   if (!sourceGame) return null;
@@ -75,7 +81,7 @@ export function getLoserSlotBadgeLetter(
     sourceGame.bracketType,
     sourceGame.round,
     sourceGame.position,
-    true
+    true,
   );
 }
 
@@ -88,7 +94,8 @@ export function buildBadgeMapping(matches: BracketMatch[]): BadgeMapping {
 
   // Find all winners bracket games with loser paths
   const winnersWithLoserPath = matches.filter(
-    (m) => m.bracketType === 'winners' && m.loserNextMatchId && m.loserNextMatchSlot
+    (m) =>
+      m.bracketType === 'winners' && m.loserNextMatchId && m.loserNextMatchSlot,
   );
 
   for (const game of winnersWithLoserPath) {
@@ -96,7 +103,7 @@ export function buildBadgeMapping(matches: BracketMatch[]): BadgeMapping {
       game.bracketType,
       game.round,
       game.position,
-      true
+      true,
     );
 
     if (letter && game.loserNextMatchId && game.loserNextMatchSlot) {
