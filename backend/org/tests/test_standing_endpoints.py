@@ -177,3 +177,33 @@ class StandingEndpointsTest(ConductTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["rows"], [])
         self.assertEqual(response.data["total"], 0)
+
+    def test_contribution_own_row_for_member(self) -> None:
+        self.entry(self.member, 5)
+        self.entry(self.member, 3)
+        response = self.get(self.url("contribution"), self.member)
+        own = response.data["own_row"]
+        self.assertEqual(own["member"]["org_user_pk"], self.org_user(self.member).pk)
+        self.assertEqual((own["value"], own["sample"], own["status"]), (8, 2, "ranked"))
+
+    def test_contribution_own_row_entries_metric(self) -> None:
+        self.entry(self.member, 5)
+        response = self.get(self.url("contribution", "?metric=entries"), self.member)
+        self.assertEqual(response.data["own_row"]["value"], 1)
+
+    def test_contribution_own_row_null_without_entries_or_anonymous(self) -> None:
+        self.entry(self.admin, 3)
+        self.assertIsNone(
+            self.get(self.url("contribution"), self.member).data["own_row"]
+        )
+        self.assertIsNone(self.get(self.url("contribution")).data["own_row"])
+
+    def test_contribution_private_members_keeps_own_row(self) -> None:
+        self.org.members_private = True
+        self.org.save(update_fields=["members_private"])
+        self.entry(self.member, 4)
+        self.entry(self.admin, 2)
+        response = self.get(self.url("contribution"), self.member)
+        self.assertFalse(response.data["rows_visible"])
+        self.assertEqual(response.data["rows"], [])
+        self.assertEqual(response.data["own_row"]["value"], 4)

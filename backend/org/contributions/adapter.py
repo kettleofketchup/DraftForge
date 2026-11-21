@@ -9,7 +9,13 @@ from app.models import CustomUser, Organization
 from events.models import Event
 from org.contributions.kinds import EVENT_STAFF_KINDS
 from org.contributions.queries import leaderboard as contribution_leaderboard
-from org.contributions.queries import member_overview, org_total
+from org.contributions.queries import (
+    member_overview,
+    org_total,
+    own_org_user,
+    own_totals,
+)
+from org.contributions.serializers import member_summary
 from org.contributions.services import (
     delete_user_entries,
     reassign_member,
@@ -185,13 +191,25 @@ class ContributionTrack(TrackBase):
             if access.can_view_rows
             else []
         )
+        own = own_org_user(viewer, org)
+        totals = own_totals(own, period) if own is not None else None
+        own_row = None
+        if own is not None and totals is not None:
+            points, entries = totals
+            own_row = LeaderboardRow(
+                org_user_id=own.pk,
+                member=member_summary(own),
+                value=entries if metric.key == "entries" else points,
+                sample=entries,
+                status="ranked",
+            )
         return Leaderboard(
             track=self.key,
             metric=metric,
             period=period.label,
             rows=rows,
             total=total,
-            own_row=None,
+            own_row=own_row,
             rows_visible=access.can_view_rows,
         )
 

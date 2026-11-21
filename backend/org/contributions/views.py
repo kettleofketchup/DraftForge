@@ -1,7 +1,5 @@
 from typing import Any
 
-from django.contrib.auth.models import AnonymousUser
-from django.db.models import Count, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -17,7 +15,6 @@ from app.permissions_org import can_view_org_members, has_org_staff_access
 from events.models import Event
 from org.contributions.kinds import DEFAULT_POINTS, RATED_KINDS, ContributionKind
 from org.contributions.queries import (
-    LeaderboardRow,
     member_entries,
     member_monthly,
     member_totals,
@@ -76,29 +73,6 @@ def _parse_period(org: Organization, value: str | None) -> Period:
         raise ValidationError({"period": str(exc)}) from exc
 
 
-def _own_org_user(
-    user: CustomUser | AnonymousUser, org: Organization
-) -> OrgUser | None:
-    if not user.is_authenticated:
-        return None
-    return with_user_profiles(
-        OrgUser.objects.filter(organization=org, user_id=user.pk), "user"
-    ).first()
-
-
-def _own_row(org_user: OrgUser, period: Period) -> LeaderboardRow | None:
-    sums = member_entries(org_user, period).aggregate(
-        total=Sum("points"), entries=Count("pk")
-    )
-    if not sums["entries"]:
-        return None
-    return LeaderboardRow(
-        **member_summary(org_user),
-        points=sums["total"] or 0,
-        entries=sums["entries"],
-    )
-
-
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def contributions_leaderboard(request: Request, org_id: int) -> Response:
@@ -114,7 +88,6 @@ def contributions_leaderboard(request: Request, org_id: int) -> Response:
         )
     except standing.FeatureLocked as exc:
         raise feature_locked() from exc
-    own = _own_org_user(request.user, org)
     return Response(
         {
             "period": period.label,
@@ -124,7 +97,15 @@ def contributions_leaderboard(request: Request, org_id: int) -> Response:
                 {**row.member, "points": row.value, "entries": row.sample}
                 for row in board.rows
             ],
-            "own_row": _own_row(own, period) if own is not None else None,
+            "own_row": (
+                {
+                    **board.own_row.member,
+                    "points": board.own_row.value,
+                    "entries": board.own_row.sample,
+                }
+                if board.own_row is not None
+                else None
+            ),
         }
     )
 
