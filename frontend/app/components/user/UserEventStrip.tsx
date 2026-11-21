@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react';
+import type { GameTypeValue } from '~/components/game/constants';
 import { PlayerPopover } from '~/components/player';
 import { Badge } from '~/components/ui/badge';
 import {
@@ -33,6 +34,8 @@ export interface DotaProfileData {
 interface UserEventStripProps {
   user: UserType;
   dotaProfile?: DotaProfileData | null;
+  /** The event's game, forwarded to the player popover and modal. */
+  gameType: GameTypeValue;
 
   /** Slot for status badge (signup status, position number) */
   contextSlot?: React.ReactNode;
@@ -72,6 +75,7 @@ export const UserEventStrip = memo(
   ({
     user,
     dotaProfile,
+    gameType,
     contextSlot,
     actionSlot,
     className,
@@ -167,7 +171,7 @@ export const UserEventStrip = memo(
         data-testid={testId}
       >
         {/* Avatar */}
-        <PlayerPopover player={user}>
+        <PlayerPopover player={user} gameType={gameType}>
           <UserAvatar
             user={user}
             size="md"
@@ -177,7 +181,7 @@ export const UserEventStrip = memo(
 
         {/* Name + Positions */}
         <div className="min-w-0 flex flex-col justify-center">
-          <PlayerPopover player={user}>
+          <PlayerPopover player={user} gameType={gameType}>
             <span
               className="text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight"
               title={fullName.length > 20 ? fullName : undefined}

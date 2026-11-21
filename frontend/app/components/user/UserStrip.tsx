@@ -305,6 +305,7 @@ export const UserStrip = memo(
             leaguePk={statsLeagueId}
             player={user}
             breakpoint={statsBreakpoint}
+            gameType={gameType}
           />
         ) : null}
 

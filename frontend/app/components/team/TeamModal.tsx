@@ -12,6 +12,7 @@ import {
   useInvalidateOnRosterChange,
   useManagedTeam,
 } from '~/components/team/manage/useTeamManagement';
+import { useTeamGameType } from '~/components/team/useTeamGameType';
 import { TeamPositionCoverageRow } from '~/components/teamdraft/TeamPositionCoverage';
 import type { TeamType } from '~/components/tournament/types';
 import { SecondaryButton } from '~/components/ui/buttons';
@@ -48,6 +49,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({
   const teamName =
     team.name || (captain ? `${DisplayName(captain)}'s Team` : 'Team');
   const hasMembers = team.members && team.members.length > 0;
+  const gameType = useTeamGameType(team.tournament);
 
   const avgMMR = useMemo(() => {
     if (!team.members || team.members.length === 0) return 0;
@@ -148,7 +150,11 @@ export const TeamModal: React.FC<TeamModalProps> = ({
         <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
           Position Coverage
         </h5>
-        <TeamPositionCoverageRow team={team} teamName={teamName} />
+        <TeamPositionCoverageRow
+          team={team}
+          teamName={teamName}
+          gameType={gameType}
+        />
       </div>
 
       {/* Captain Section */}
@@ -215,7 +221,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({
                     {idx + 1}
                   </TableCell>
                   <TableCell>
-                    <PlayerPopover player={member}>
+                    <PlayerPopover player={member} gameType={gameType}>
                       <div className="flex items-center gap-3 cursor-pointer hover:text-primary transition-colors">
                         <UserAvatar
                           user={member}

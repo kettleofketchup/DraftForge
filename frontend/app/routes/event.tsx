@@ -1231,6 +1231,7 @@ function SignupsTab({
                 data-testid={`event-signup-row-${signup.id}`}
                 user={user}
                 dotaProfile={stripProfile}
+                gameType={toGameType(gameType)}
                 contextSlot={statusSlot}
                 actionSlot={adminActions}
               />
