@@ -1,19 +1,26 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { TooltipProvider } from '~/components/ui/tooltip';
-import { UserCard } from '~/components/user/userCard';
-import type { UserClassType } from '~/components/user/types';
-import type { OrganizationType } from '~/components/organization/schemas';
 import type { LeagueType } from '~/components/league/schemas';
+import type { OrganizationType } from '~/components/organization/schemas';
+import type { TournamentType } from '~/components/tournament/types';
+import { TooltipProvider } from '~/components/ui/tooltip';
+import type { UserClassType } from '~/components/user/types';
+import { UserCard } from '~/components/user/userCard';
 import { resolveOrgUserLink } from '~/components/user/userCard/editUserSchema';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
-import type { UserEntry } from '~/store/userCacheTypes';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import type { UserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 
 vi.mock('~/components/ui/shared-popover-context', () => ({
@@ -38,7 +45,8 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
 const ORG_PK = 5;
 
@@ -67,7 +75,12 @@ describe('UserCard org-scoped edit for tournament players', () => {
   beforeEach(() => {
     useUserCacheStore.getState().reset?.();
     useUserStore.setState({
-      currentUser: { pk: 1, username: 'admin', is_superuser: true, is_staff: true },
+      currentUser: {
+        pk: 1,
+        username: 'admin',
+        is_superuser: true,
+        is_staff: true,
+      },
     } as never);
     useOrgStore.setState({
       currentOrg: { pk: ORG_PK, name: 'Org' } as OrganizationType,
@@ -90,11 +103,46 @@ describe('UserCard org-scoped edit for tournament players', () => {
       target: { value: 'Renamed' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
-    await waitFor(() => expect(screen.queryByTestId('edit-user-nickname')).toBeNull());
-    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 77, { nickname: 'Renamed' });
+    await waitFor(() =>
+      expect(screen.queryByTestId('edit-user-nickname')).toBeNull(),
+    );
+    expect(updateOrgUser).toHaveBeenCalledWith(
+      ORG_PK,
+      77,
+      { nickname: 'Renamed' },
+      1,
+    );
 
     fireEvent.click(screen.getByTestId('edit-user-btn'));
-    expect(screen.getByTestId('edit-user-nickname')).toHaveProperty('value', 'Renamed');
+    expect(screen.getByTestId('edit-user-nickname')).toHaveProperty(
+      'value',
+      'Renamed',
+    );
+  });
+
+  it('a Deadlock tournament of the org PATCHes the Deadlock org MMR', async () => {
+    useUserStore.setState({
+      tournament: {
+        pk: 9,
+        organization_pk: ORG_PK,
+        game_type: 2,
+      } as TournamentType,
+    });
+    updateOrgUser.mockResolvedValue({ ...tournamentUser, mmr: 4300 });
+    renderCard(ORG_PK);
+    fireEvent.click(screen.getByTestId('edit-user-btn'));
+    fireEvent.change(screen.getByTestId('edit-user-mmr'), {
+      target: { value: '4300' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() => expect(updateOrgUser).toHaveBeenCalled());
+    expect(updateOrgUser).toHaveBeenCalledWith(
+      ORG_PK,
+      77,
+      { mmr: 4300, mmr_game_type: 2 },
+      2,
+    );
+    useUserStore.setState({ tournament: {} as TournamentType });
   });
 
   it('hides the MMR field without org context', () => {
@@ -132,7 +180,12 @@ describe('UserCard with a stale store org (finding 3)', () => {
 
   function viewer(superuser: boolean) {
     useUserStore.setState({
-      currentUser: { pk: 1021, username: 'v', is_superuser: superuser, is_staff: false },
+      currentUser: {
+        pk: 1021,
+        username: 'v',
+        is_superuser: superuser,
+        is_staff: false,
+      },
     } as never);
   }
 
@@ -140,7 +193,9 @@ describe('UserCard with a stale store org (finding 3)', () => {
     useUserCacheStore.getState().reset?.();
     useOrgStore.setState({
       currentOrg: {
-        pk: STALE_ORG_PK, name: 'Stale', staff_ids: [1021],
+        pk: STALE_ORG_PK,
+        name: 'Stale',
+        staff_ids: [1021],
       } as unknown as OrganizationType,
     });
     useLeagueStore.setState({ currentLeague: null });
@@ -160,13 +215,16 @@ describe('UserCard with a stale store org (finding 3)', () => {
     expect(container.querySelector('.animate-ping')).toBeNull();
   });
 
-  it.each([8, undefined])('superuser in org %s gets global scope (no MMR field)', (orgId) => {
-    viewer(true);
-    renderStale(orgId);
-    fireEvent.click(screen.getByTestId('edit-user-btn'));
-    expect(screen.getByTestId('edit-user-nickname')).toBeTruthy();
-    expect(screen.queryByTestId('edit-user-mmr')).toBeNull();
-  });
+  it.each([8, undefined])(
+    'superuser in org %s gets global scope (no MMR field)',
+    (orgId) => {
+      viewer(true);
+      renderStale(orgId);
+      fireEvent.click(screen.getByTestId('edit-user-btn'));
+      expect(screen.getByTestId('edit-user-nickname')).toBeTruthy();
+      expect(screen.queryByTestId('edit-user-mmr')).toBeNull();
+    },
+  );
 });
 
 function renderEntryCard(
@@ -208,7 +266,8 @@ async function saveNickname(nickname: string) {
   fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
   await waitFor(() =>
     expect(
-      updateOrgUser.mock.calls.length + vi.mocked(toast.error).mock.calls.length,
+      updateOrgUser.mock.calls.length +
+        vi.mocked(toast.error).mock.calls.length,
     ).toBeGreaterThan(0),
   );
 }
@@ -219,27 +278,51 @@ describe('UserCard edit for cache entries (finding 4)', () => {
   beforeEach(() => {
     useUserCacheStore.getState().reset?.();
     useUserStore.setState({
-      currentUser: { pk: 1, username: 'admin', is_superuser: true, is_staff: true },
+      currentUser: {
+        pk: 1,
+        username: 'admin',
+        is_superuser: true,
+        is_staff: true,
+      },
     } as never);
     useOrgStore.setState({ currentOrg: null });
     useLeagueStore.setState({ currentLeague: null });
   });
 
   it('org scope shows the MMR field and reopens with the saved MMR', async () => {
-    useOrgStore.setState({ currentOrg: { pk: ORG_PK, name: 'Org' } as OrganizationType });
-    const entry = seed({
-      pk: 50, username: 'org', nickname: 'Org',
-      orgData: { [ORG_PK]: { id: 60, mmr: 3000, _fetchedAt: 0 } },
-      leagueData: {}, _fetchedAt: 0,
+    useOrgStore.setState({
+      currentOrg: { pk: ORG_PK, name: 'Org' } as OrganizationType,
     });
-    updateOrgUser.mockResolvedValue({ pk: 50, username: 'org', mmr: 3500, orgUserPk: 60 });
+    const entry = seed({
+      pk: 50,
+      username: 'org',
+      nickname: 'Org',
+      orgData: { [ORG_PK]: { id: 60, mmr: 3000, _fetchedAt: 0 } },
+      leagueData: {},
+      _fetchedAt: 0,
+    });
+    updateOrgUser.mockResolvedValue({
+      pk: 50,
+      username: 'org',
+      mmr: 3500,
+      orgUserPk: 60,
+    });
     renderEntryCard(entry, ORG_PK);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
     expect(screen.getByTestId('edit-user-mmr')).toHaveProperty('value', '3000');
-    fireEvent.change(screen.getByTestId('edit-user-mmr'), { target: { value: '3500' } });
+    fireEvent.change(screen.getByTestId('edit-user-mmr'), {
+      target: { value: '3500' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
-    await waitFor(() => expect(screen.queryByTestId('edit-user-mmr')).toBeNull());
-    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 60, { mmr: 3500 });
+    await waitFor(() =>
+      expect(screen.queryByTestId('edit-user-mmr')).toBeNull(),
+    );
+    expect(updateOrgUser).toHaveBeenCalledWith(
+      ORG_PK,
+      60,
+      { mmr: 3500, mmr_game_type: 1 },
+      1,
+    );
 
     fireEvent.click(screen.getByTestId('edit-user-btn'));
     expect(screen.getByTestId('edit-user-mmr')).toHaveProperty('value', '3500');
@@ -248,31 +331,51 @@ describe('UserCard edit for cache entries (finding 4)', () => {
   it('league scope with an orgData link PATCHes the parent org and labels Org MMR', async () => {
     setLeague(LEAGUE_PK, ORG_PK);
     const entry = seed({
-      pk: 51, username: 'lg', nickname: 'Lg',
+      pk: 51,
+      username: 'lg',
+      nickname: 'Lg',
       orgData: { [ORG_PK]: { id: 61, mmr: 2000, _fetchedAt: 0 } },
-      leagueData: {}, _fetchedAt: 0,
+      leagueData: {},
+      _fetchedAt: 0,
     });
-    updateOrgUser.mockResolvedValue({ pk: 51, username: 'lg', nickname: 'New Nick' });
+    updateOrgUser.mockResolvedValue({
+      pk: 51,
+      username: 'lg',
+      nickname: 'New Nick',
+    });
     renderEntryCard(entry, ORG_PK, LEAGUE_PK);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
-    expect(screen.getByLabelText(/Org MMR/)).toBe(screen.getByTestId('edit-user-mmr'));
+    expect(screen.getByLabelText(/Org MMR/)).toBe(
+      screen.getByTestId('edit-user-mmr'),
+    );
     fireEvent.change(screen.getByTestId('edit-user-nickname'), {
       target: { value: 'New Nick' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     await waitFor(() => expect(updateOrgUser).toHaveBeenCalled());
-    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 61, { nickname: 'New Nick' });
+    expect(updateOrgUser).toHaveBeenCalledWith(
+      ORG_PK,
+      61,
+      { nickname: 'New Nick' },
+      1,
+    );
   });
 
   it('a leagueData-only link opens league scope, does not prefill MMR, and saves', async () => {
     setLeague(LEAGUE_PK, ORG_PK);
     const entry = seed({
-      pk: 52, username: 'lonly', nickname: 'Lonly',
+      pk: 52,
+      username: 'lonly',
+      nickname: 'Lonly',
       orgData: {},
       leagueData: { [LEAGUE_PK]: { id: 41, mmr: 1200, _fetchedAt: 0 } },
       _fetchedAt: 0,
     });
-    updateOrgUser.mockResolvedValue({ pk: 52, username: 'lonly', nickname: 'New Nick' });
+    updateOrgUser.mockResolvedValue({
+      pk: 52,
+      username: 'lonly',
+      nickname: 'New Nick',
+    });
     renderEntryCard(entry, ORG_PK, LEAGUE_PK);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
     expect(screen.getByTestId('edit-user-mmr')).toHaveProperty('value', '');
@@ -282,17 +385,25 @@ describe('UserCard edit for cache entries (finding 4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     await waitFor(() =>
       expect(
-        updateOrgUser.mock.calls.length + vi.mocked(toast.error).mock.calls.length,
+        updateOrgUser.mock.calls.length +
+          vi.mocked(toast.error).mock.calls.length,
       ).toBeGreaterThan(0),
     );
     expect(toast.error).not.toHaveBeenCalled();
-    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 41, { nickname: 'New Nick' });
+    expect(updateOrgUser).toHaveBeenCalledWith(
+      ORG_PK,
+      41,
+      { nickname: 'New Nick' },
+      1,
+    );
   });
 
   it('a leagueData link for a different league falls back to global scope', () => {
     setLeague(LEAGUE_PK, ORG_PK);
     const entry = seed({
-      pk: 53, username: 'other', nickname: 'Other',
+      pk: 53,
+      username: 'other',
+      nickname: 'Other',
       orgData: {},
       leagueData: { 4: { id: 44, mmr: 1500, _fetchedAt: 0 } },
       _fetchedAt: 0,
@@ -314,22 +425,35 @@ describe('UserCard edit user carries the scope-gating link', () => {
   const rows: Row[] = [
     {
       name: 'flat link',
-      source: { pk: 70, username: 'flat', nickname: 'Flat', orgUserPk: 170 } as UserClassType,
+      source: {
+        pk: 70,
+        username: 'flat',
+        nickname: 'Flat',
+        orgUserPk: 170,
+      } as UserClassType,
       store: 'org',
     },
     {
       name: 'orgData link',
       source: {
-        pk: 71, username: 'org', nickname: 'Org',
-        orgData: { 8: { id: 171, mmr: 1000, _fetchedAt: 0 } }, leagueData: {}, _fetchedAt: 0,
+        pk: 71,
+        username: 'org',
+        nickname: 'Org',
+        orgData: { 8: { id: 171, mmr: 1000, _fetchedAt: 0 } },
+        leagueData: {},
+        _fetchedAt: 0,
       },
       store: 'org',
     },
     {
       name: 'leagueData link',
       source: {
-        pk: 72, username: 'lg', nickname: 'Lg',
-        orgData: {}, leagueData: { 8: { id: 172, mmr: 1000, _fetchedAt: 0 } }, _fetchedAt: 0,
+        pk: 72,
+        username: 'lg',
+        nickname: 'Lg',
+        orgData: {},
+        leagueData: { 8: { id: 172, mmr: 1000, _fetchedAt: 0 } },
+        _fetchedAt: 0,
       },
       store: 'league',
     },
@@ -338,7 +462,12 @@ describe('UserCard edit user carries the scope-gating link', () => {
   beforeEach(() => {
     useUserCacheStore.getState().reset?.();
     useUserStore.setState({
-      currentUser: { pk: 1, username: 'admin', is_superuser: true, is_staff: true },
+      currentUser: {
+        pk: 1,
+        username: 'admin',
+        is_superuser: true,
+        is_staff: true,
+      },
     } as never);
     useOrgStore.setState({ currentOrg: null });
     useLeagueStore.setState({ currentLeague: null });
@@ -346,30 +475,44 @@ describe('UserCard edit user carries the scope-gating link', () => {
 
   function applyStore(store: Row['store']) {
     if (store !== 'league') {
-      useOrgStore.setState({ currentOrg: { pk: 8, name: 'O' } as OrganizationType });
+      useOrgStore.setState({
+        currentOrg: { pk: 8, name: 'O' } as OrganizationType,
+      });
     }
     if (store !== 'org') setLeague(8, 8);
   }
 
-  it.each(rows)('$name: PATCH uses the resolved link', async ({ source, store }) => {
-    applyStore(store);
-    const user = 'orgData' in source ? seed(source as UserEntry) : source;
-    updateOrgUser.mockResolvedValue({ pk: source.pk, username: 'u', nickname: 'x' });
-    renderEntryCard(user, CTX.organizationId, CTX.leagueId);
-    await saveNickname('xx');
-    expect(toast.error).not.toHaveBeenCalled();
-    expect(updateOrgUser).toHaveBeenCalledWith(
-      8,
-      resolveOrgUserLink(source as UserEntry, CTX),
-      { nickname: 'xx' },
-    );
-  });
+  it.each(rows)(
+    '$name: PATCH uses the resolved link',
+    async ({ source, store }) => {
+      applyStore(store);
+      const user = 'orgData' in source ? seed(source as UserEntry) : source;
+      updateOrgUser.mockResolvedValue({
+        pk: source.pk,
+        username: 'u',
+        nickname: 'x',
+      });
+      renderEntryCard(user, CTX.organizationId, CTX.leagueId);
+      await saveNickname('xx');
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(updateOrgUser).toHaveBeenCalledWith(
+        8,
+        resolveOrgUserLink(source as UserEntry, CTX),
+        { nickname: 'xx' },
+        1,
+      );
+    },
+  );
 
   it('no link: global scope, no MMR field', () => {
     applyStore('both');
     const user = seed({
-      pk: 73, username: 'none', nickname: 'None',
-      orgData: {}, leagueData: {}, _fetchedAt: 0,
+      pk: 73,
+      username: 'none',
+      nickname: 'None',
+      orgData: {},
+      leagueData: {},
+      _fetchedAt: 0,
     });
     renderEntryCard(user, CTX.organizationId, CTX.leagueId);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
@@ -381,25 +524,40 @@ describe('UserCard edit gate follows a same-pk org refresh (MA-5)', () => {
   beforeEach(() => {
     useUserCacheStore.getState().reset?.();
     useUserStore.setState({
-      currentUser: { pk: 1021, username: 'v', is_superuser: false, is_staff: false },
+      currentUser: {
+        pk: 1021,
+        username: 'v',
+        is_superuser: false,
+        is_staff: false,
+      },
     } as never);
     useLeagueStore.setState({ currentLeague: null });
   });
 
   it('shows the edit button once the refreshed org lists the viewer as staff', () => {
-    const org = { pk: ORG_PK, name: 'Org', staff_ids: [] } as unknown as OrganizationType;
+    const org = {
+      pk: ORG_PK,
+      name: 'Org',
+      staff_ids: [],
+    } as unknown as OrganizationType;
     useOrgStore.setState({ currentOrg: org });
     const entry = seed({
-      pk: 80, username: 'staffed', nickname: 'Staffed',
+      pk: 80,
+      username: 'staffed',
+      nickname: 'Staffed',
       orgData: { [ORG_PK]: { id: 180, mmr: 1000, _fetchedAt: 0 } },
-      leagueData: {}, _fetchedAt: 0,
+      leagueData: {},
+      _fetchedAt: 0,
     });
     renderEntryCard(entry, ORG_PK);
     expect(screen.queryByTestId('edit-user-btn')).toBeNull();
 
     act(() =>
       useOrgStore.setState({
-        currentOrg: { ...org, staff_ids: [1021] } as unknown as OrganizationType,
+        currentOrg: {
+          ...org,
+          staff_ids: [1021],
+        } as unknown as OrganizationType,
       }),
     );
     expect(screen.getByTestId('edit-user-btn')).toBeTruthy();

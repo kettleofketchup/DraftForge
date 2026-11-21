@@ -10,6 +10,7 @@ import {
   resolveEditScope,
   resolveOrgUserLink,
   scopeToContext,
+  tournamentMmrGame,
   type EditUserScope,
 } from './editUserSchema';
 
@@ -241,9 +242,14 @@ describe('dispatchPatch', () => {
       { kind: 'org', organization: org },
       { nickname: 'After' },
     );
-    expect(mockUpdateOrgUser).toHaveBeenCalledWith(2, 110, {
-      nickname: 'After',
-    });
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(
+      2,
+      110,
+      {
+        nickname: 'After',
+      },
+      1,
+    );
   });
 
   it('league scope PATCHes through the deterministic parent orgId', async () => {
@@ -257,9 +263,14 @@ describe('dispatchPatch', () => {
       { kind: 'league', league: lg, orgId: 2 },
       { nickname: 'After' },
     );
-    expect(mockUpdateOrgUser).toHaveBeenCalledWith(2, 110, {
-      nickname: 'After',
-    });
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(
+      2,
+      110,
+      {
+        nickname: 'After',
+      },
+      1,
+    );
   });
 
   it('mirrors the org response onto the instance so a reopen re-seeds fresh', async () => {
@@ -319,10 +330,15 @@ describe('dispatchPatch', () => {
       { kind: 'org', organization: org },
       { mmr: 4200 },
     );
-    expect(mockUpdateOrgUser).toHaveBeenCalledWith(2, 110, {
-      mmr: 4200,
-      mmr_game_type: 1,
-    });
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(
+      2,
+      110,
+      {
+        mmr: 4200,
+        mmr_game_type: 1,
+      },
+      1,
+    );
   });
 
   it('league scope sends the context game alongside mmr', async () => {
@@ -334,10 +350,35 @@ describe('dispatchPatch', () => {
       gameType: 2,
     };
     await dispatchPatch(userClass(), scope, { mmr: 2500 });
-    expect(mockUpdateOrgUser).toHaveBeenCalledWith(2, 110, {
-      mmr: 2500,
-      mmr_game_type: 2,
-    });
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(
+      2,
+      110,
+      {
+        mmr: 2500,
+        mmr_game_type: 2,
+      },
+      2,
+    );
+  });
+
+  it('Deadlock tournament org scope sends mmr_game_type 2 and ?game_type=2', async () => {
+    mockUpdateOrgUser.mockResolvedValue({ pk: 1, mmr: 2500 } as UserType);
+    const scope = resolveEditScope(
+      { orgUserPk: 110 },
+      {
+        organizationId: 2,
+        currentOrg: org,
+        currentLeague: null,
+        gameType: tournamentMmrGame({ organization_pk: 2, game_type: 2 }, 2),
+      },
+    );
+    await dispatchPatch(userClass(), scope, { mmr: 2500 });
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(
+      2,
+      110,
+      { mmr: 2500, mmr_game_type: 2 },
+      2,
+    );
   });
 
   it('omits mmr_game_type when mmr is not in the payload', async () => {
@@ -349,9 +390,14 @@ describe('dispatchPatch', () => {
       gameType: 2,
     };
     await dispatchPatch(userClass(), scope, { nickname: 'After' });
-    expect(mockUpdateOrgUser).toHaveBeenCalledWith(2, 110, {
-      nickname: 'After',
-    });
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(
+      2,
+      110,
+      {
+        nickname: 'After',
+      },
+      2,
+    );
   });
 
   it('league scope without an OrgUser link throws rather than silently no-op', async () => {
@@ -402,6 +448,23 @@ describe('org-less league tournament (spec 6.1)', () => {
       dbUpdate: vi.fn(),
     } as unknown as UserClassType;
     await dispatchPatch(user, scope, { nickname: 'After' });
-    expect(updateOrgUser).toHaveBeenCalledWith(5, 41, { nickname: 'After' });
+    expect(updateOrgUser).toHaveBeenCalledWith(5, 41, { nickname: 'After' }, 1);
+  });
+});
+
+describe('tournamentMmrGame', () => {
+  it('returns the tournament game for its own org', () => {
+    expect(tournamentMmrGame({ organization_pk: 2, game_type: 2 }, 2)).toBe(2);
+  });
+
+  it('ignores a tournament of another org or no tournament', () => {
+    expect(
+      tournamentMmrGame({ organization_pk: 3, game_type: 2 }, 2),
+    ).toBeUndefined();
+    expect(tournamentMmrGame({}, 2)).toBeUndefined();
+    expect(tournamentMmrGame(null, 2)).toBeUndefined();
+    expect(
+      tournamentMmrGame({ organization_pk: 2, game_type: 2 }, undefined),
+    ).toBeUndefined();
   });
 });

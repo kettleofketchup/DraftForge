@@ -18,7 +18,10 @@ import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
-import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
+import {
+  useTournamentMmrGame,
+  type EditUserScope,
+} from '~/components/user/userCard/editUserSchema';
 import { getLogger } from '~/lib/logger';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
@@ -53,10 +56,19 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
 
+  const orgMmrGame = useTournamentMmrGame(ctx?.organizationId);
+  const leagueMmrGame = useTournamentMmrGame(
+    currentLeague?.organization?.pk ?? undefined,
+  );
+
   const editScope = React.useMemo<EditUserScope>(() => {
     // Org context: only trust currentOrg if its pk matches the popover's request.
     if (ctx?.organizationId && currentOrg?.pk === ctx.organizationId) {
-      return { kind: 'org', organization: currentOrg };
+      return {
+        kind: 'org',
+        organization: currentOrg,
+        ...(orgMmrGame != null ? { gameType: orgMmrGame } : {}),
+      };
     }
     // League context: pk-match guard. Carry the parent organization through if available.
     if (ctx?.leagueId && currentLeague?.pk === ctx.leagueId) {
@@ -67,10 +79,13 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
           currentOrg && currentLeague.organization?.pk === currentOrg.pk
             ? currentOrg
             : undefined,
+        ...(leagueMmrGame != null ? { gameType: leagueMmrGame } : {}),
       };
     }
     return { kind: 'global' };
   }, [
+    orgMmrGame,
+    leagueMmrGame,
     ctx?.organizationId,
     ctx?.leagueId,
     currentOrg?.pk,

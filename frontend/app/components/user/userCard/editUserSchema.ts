@@ -13,6 +13,7 @@ import {
 import { selectPositions } from '~/store/selectPositions';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
+import { useUserStore } from '~/store/userStore';
 
 // Dota positions use a 0-5 self-rating scale: 0=hidden, 1=favorite, 5=avoid.
 const PositionFieldSchema = z.coerce.number().int().min(0).max(5);
@@ -107,6 +108,26 @@ export function resolveEditScope(
     return { kind: 'org', organization: ctx.currentOrg, ...game };
   }
   return { kind: 'global' };
+}
+
+// On a tournament page the cached org `mmr` is resolved for the tournament's
+// game, so edits of it must carry that game.
+export function tournamentMmrGame(
+  tournament:
+    | { organization_pk?: number | null; game_type?: number | null }
+    | null
+    | undefined,
+  organizationId: number | undefined,
+): number | undefined {
+  if (!tournament || organizationId == null) return undefined;
+  if (tournament.organization_pk !== organizationId) return undefined;
+  return tournament.game_type ?? undefined;
+}
+
+export function useTournamentMmrGame(
+  organizationId: number | undefined,
+): number | undefined {
+  return useUserStore((s) => tournamentMmrGame(s.tournament, organizationId));
 }
 
 // Coerce missing-or-empty string fields to null so Zod's `.nullable()`
@@ -214,6 +235,7 @@ export async function dispatchPatch(
         orgId,
         orgUserPk,
         withMmrGame(payload, scope.gameType),
+        scope.gameType ?? GAME_TYPE.DOTA2,
       ),
     );
   }
@@ -234,6 +256,7 @@ export async function dispatchPatch(
         orgId,
         orgUserPk,
         withMmrGame(payload, scope.gameType),
+        scope.gameType ?? GAME_TYPE.DOTA2,
       ),
     );
   }

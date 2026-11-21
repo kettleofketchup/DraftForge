@@ -33,6 +33,7 @@ import UserEditModal from './userCard/editModal';
 import {
   resolveEditScope,
   resolveOrgUserLink,
+  useTournamentMmrGame,
   type EditUserScope,
 } from './userCard/editUserSchema';
 import { LoginAsUserButton } from './userCard/LoginAsUserButton';
@@ -117,6 +118,7 @@ export const UserCard: React.FC<Props> = memo(
     const linkPk =
       resolveOrgUserLink(orgSource ?? user, { organizationId, leagueId }) ??
       resolveOrgUserLink(user, { organizationId, leagueId });
+    const mmrGame = useTournamentMmrGame(organizationId);
     const editScope = React.useMemo<EditUserScope>(
       () =>
         resolveEditScope(
@@ -126,9 +128,10 @@ export const UserCard: React.FC<Props> = memo(
             leagueId,
             currentOrg,
             currentLeague,
+            gameType: mmrGame,
           },
         ),
-      [linkPk, organizationId, leagueId, currentOrg, currentLeague],
+      [linkPk, organizationId, leagueId, currentOrg, currentLeague, mmrGame],
     );
 
     // Construct the User instance ONCE per stable input set. Doing this

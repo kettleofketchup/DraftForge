@@ -577,14 +577,14 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
         if org:
             try:
                 with transaction.atomic():
-                    OrgUser.objects.create(user=user, organization=org)
+                    created_ou = OrgUser.objects.create(user=user, organization=org)
             except IntegrityError:
                 # Already a member of the org -- update MMR if provided
                 if base_mmr is not None:
                     _set_org_game_mmr(user, org, game_type, base_mmr)
             else:
                 if base_mmr:
-                    _set_org_game_mmr(user, org, game_type, base_mmr)
+                    set_org_mmr(created_ou, game_type, base_mmr, mark_verified=False)
 
         # For league-level MMR, also create/update LeagueUser
         if league and mmr_target == "league" and base_mmr is not None:

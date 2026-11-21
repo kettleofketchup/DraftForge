@@ -147,10 +147,12 @@ export async function updateOrgUser(
   organizationId: number,
   orgUserId: number,
   data: Partial<UserType> & { mmr_game_type?: number },
+  gameType?: number,
 ): Promise<UserType> {
   const response = await axios.patch<UserType>(
     `/organizations/${organizationId}/users/${orgUserId}/`,
     data,
+    gameType != null ? { params: { game_type: gameType } } : undefined,
   );
   return response.data;
 }

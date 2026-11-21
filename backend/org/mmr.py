@@ -178,6 +178,12 @@ def invalidate_org_user_tournaments(org_user: OrgUser) -> None:
     transaction.on_commit(_do)
 
 
+def mark_dota_mmr_verified(org_user: OrgUser) -> None:
+    org_user.has_active_dota_mmr = True
+    org_user.dota_mmr_last_verified = timezone.now()
+    org_user.save(update_fields=_DOTA_FLAG_FIELDS)
+
+
 def set_org_mmr(
     org_user: OrgUser,
     game_type: int,
@@ -209,9 +215,7 @@ def set_org_mmr(
         if game_type == GameType.DOTA2:
             _mirror_dota_column(org_user, value)
             if mark_verified:
-                org_user.has_active_dota_mmr = True
-                org_user.dota_mmr_last_verified = timezone.now()
-                org_user.save(update_fields=_DOTA_FLAG_FIELDS)
+                mark_dota_mmr_verified(org_user)
         _drop_read_caches(org_user)
         log.info(
             "org_mmr_set",

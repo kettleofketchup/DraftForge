@@ -197,6 +197,9 @@ class OrgUserPatchGameMmrsTests(PatchFixtures, TestCase):
             {"game_mmrs": {"1": "4200"}},
             {"game_mmrs": {"1": 4200.5}},
             {"game_mmrs": {"abc": 1}},
+            {"game_mmrs": {"\u00b2": 1}},
+            {"game_mmrs": {"\u0662": 1}},
+            {"game_mmrs": {"-1": 1}},
             {"game_mmrs": {"99": 1}},
             {"game_mmrs": {"1": 20001}},
             {"game_mmrs": {"1": -1}},
@@ -219,6 +222,40 @@ class OrgUserPatchGameMmrsTests(PatchFixtures, TestCase):
                         organization=self.org, action="set_mmr"
                     ).exists()
                 )
+
+    def test_patch_unchanged_game_not_logged(self) -> None:
+        response = self.patch({"game_mmrs": {"1": 4000, "2": 2500}})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(_rows(self.org_user), {1: 4000, 2: 2500})
+        self.assertFalse(
+            OrgLog.objects.filter(organization=self.org, action="set_mmr").exists()
+        )
+        active, verified = self.flags()
+        self.assertTrue(active)
+        self.assertIsNotNone(verified)
+
+    def test_patch_logs_only_changed_games(self) -> None:
+        response = self.patch({"game_mmrs": {"1": 4000, "2": 2600}})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(_rows(self.org_user), {1: 4000, 2: 2600})
+        logs = OrgLog.objects.filter(organization=self.org, action="set_mmr")
+        self.assertEqual(
+            [log.details["game_type"] for log in logs], [GameType.DEADLOCK]
+        )
+
+    def test_patch_unchanged_deadlock_clear_of_missing_row(self) -> None:
+        OrgUserGameMmr.objects.filter(
+            org_user=self.org_user, game_type=GameType.DEADLOCK
+        ).delete()
+        response = self.patch({"game_mmrs": {"2": None}})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(self.flags(), (False, None))
+        self.assertFalse(
+            OrgLog.objects.filter(organization=self.org, action="set_mmr").exists()
+        )
 
     def test_patch_no_change_400(self) -> None:
         response = self.patch({})

@@ -43,12 +43,13 @@ from org.mmr import (
     LEAGUE_GAME,
     OrgMmrError,
     game_mmrs_prefetch,
+    mark_dota_mmr_verified,
     org_mmr_for,
     resolve_game_type,
     set_org_mmr,
     validate_org_mmr,
 )
-from org.models import OrgUser
+from org.models import OrgUser, OrgUserGameMmr
 from org.serializers import OrgUserSerializer
 from org.user_search import user_name_q
 from user.querysets import with_user_profiles
@@ -810,8 +811,21 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    current_mmrs = (
+        dict(
+            OrgUserGameMmr.objects.nocache()
+            .filter(org_user_id=org_user.pk)
+            .values_list("game_type", "mmr")
+        )
+        if mmr_changes
+        else {}
+    )
     with transaction.atomic():
         for game_type, value in mmr_changes.items():
+            if (value or 0) == current_mmrs.get(game_type, 0):
+                if game_type == GameType.DOTA2:
+                    mark_dota_mmr_verified(org_user)
+                continue
             set_org_mmr(org_user, game_type, value, mark_verified=True)
             OrgLog.objects.create(
                 organization=org,
@@ -877,7 +891,12 @@ def _parse_mmr_patch(data: Any) -> dict[int, int | None] | str:
         if not isinstance(raw, dict):
             return "game_mmrs must be an object of game_type to mmr"
         for key, value in raw.items():
-            game = _valid_game_type(int(key)) if str(key).isdigit() else None
+            key_str = str(key)
+            game = (
+                _valid_game_type(int(key_str))
+                if key_str.isascii() and key_str.isdigit()
+                else None
+            )
             if game is None:
                 return f"Unknown game_type: {key!r}"
             changes[game] = value
