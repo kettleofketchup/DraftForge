@@ -76,7 +76,7 @@ describe('useEventActionMutation contribution invalidation', () => {
   });
 
   it.each(['completeEvent', 'setEventStaff'] as const)(
-    '%s refreshes contributions and conduct for every viewer',
+    '%s refreshes contributions for every viewer',
     async (action) => {
       const { hook, keys, invalid } = setup();
       await act(async () => {
@@ -92,7 +92,7 @@ describe('useEventActionMutation contribution invalidation', () => {
       expect(invalid(keys.contribBoard)).toBe(true);
       expect(invalid(keys.anonContribBoard)).toBe(true);
       expect(invalid(keys.member)).toBe(true);
-      expect(invalid(keys.conductBoard)).toBe(true);
+      expect(invalid(keys.conductBoard)).toBe(action === 'completeEvent');
       expect(invalid(keys.otherOrgBoard)).toBe(false);
     },
   );

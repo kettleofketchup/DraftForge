@@ -115,7 +115,10 @@ export function useSignupMutation(eventId: number) {
         });
       }
       useOrgStore.getState().clearOrgUsers();
-      void invalidateConductQueries(queryClient);
+      void invalidateConductQueries(
+        queryClient,
+        queryClient.getQueryData<EventType>(['event', eventId])?.organization,
+      );
     },
   });
 }
@@ -125,10 +128,7 @@ export function useEventActionMutation(eventId: number) {
   return {
     openSignups: useMutation({
       mutationFn: () => openSignupsAPI(eventId),
-      onSuccess: (data) => {
-        queryClient.setQueryData(['event', eventId], data);
-        void invalidateConductQueries(queryClient, data.organization);
-      },
+      onSuccess: (data) => queryClient.setQueryData(['event', eventId], data),
     }),
     startRollCall: useMutation({
       mutationFn: () => startRollCallAPI(eventId),
@@ -150,10 +150,7 @@ export function useEventActionMutation(eventId: number) {
     }),
     startTournament: useMutation({
       mutationFn: () => startTournamentAPI(eventId),
-      onSuccess: (data) => {
-        queryClient.setQueryData(['event', eventId], data);
-        void invalidateConductQueries(queryClient, data.organization);
-      },
+      onSuccess: (data) => queryClient.setQueryData(['event', eventId], data),
     }),
     cancelEvent: useMutation({
       mutationFn: () => cancelEventAPI(eventId),
@@ -168,6 +165,7 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['events'] });
         queryClient.removeQueries({ queryKey: ['event', eventId] });
+        void invalidateConductQueries(queryClient);
       },
     }),
     restartTournament: useMutation({
@@ -193,7 +191,6 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         void invalidateOrgContributionQueries(queryClient, data.organization);
-        void invalidateConductQueries(queryClient, data.organization);
       },
     }),
   };
@@ -269,6 +266,7 @@ export function useUpdateEventMutation(eventId: number) {
       queryClient.invalidateQueries({
         queryKey: ['event-lobby-password', eventId],
       });
+      void invalidateConductQueries(queryClient, data.organization);
     },
   });
 }
@@ -309,7 +307,10 @@ export function useSignupActionMutations(eventId: number) {
       queryClient.invalidateQueries({
         queryKey: ['event-lobby-password', eventId],
       });
-      void invalidateConductQueries(queryClient);
+      void invalidateConductQueries(
+        queryClient,
+        queryClient.getQueryData<EventType>(['event', eventId])?.organization,
+      );
     },
   });
 

@@ -4,17 +4,20 @@ import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
-import { conductKeys } from '~/features/org-features';
+import { conductKeys, standingKeys } from '~/features/org-features/queryKeys';
 
 const api = vi.hoisted(() => ({
   signupForEvent: vi.fn(),
+  openSignups: vi.fn(),
+  startRollCall: vi.fn(),
   cancelEvent: vi.fn(),
+  deleteEvent: vi.fn(),
   reopenSignups: vi.fn(),
   restartTournament: vi.fn(),
   completeEvent: vi.fn(),
   setEventStaff: vi.fn(),
+  updateEvent: vi.fn(),
   confirmSignup: vi.fn(),
-  cancelSignup: vi.fn(),
   getEventSignups: vi.fn(),
   getEvent: vi.fn(),
 }));
@@ -28,83 +31,155 @@ import {
   useEventActionMutation,
   useSignupActionMutations,
   useSignupMutation,
+  useUpdateEventMutation,
 } from '../useEvent';
 
-const EVENT_ID = 9;
-const CONDUCT_KEY = conductKeys.forecast(5, 1, EVENT_ID);
-const event = { id: EVENT_ID, organization: 5 } as unknown as EventType;
+const EVENT = 5;
+const ORG = 3;
+const OTHER_ORG = 4;
+const event = { pk: EVENT, organization: ORG } as unknown as EventType;
 const signup = { id: 3, status: 'confirmed', user: 3 } as EventSignupType;
 
-function setup() {
+function setup(seedEvent = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  client.setQueryData(CONDUCT_KEY, { members: {} });
+  const keys = {
+    forecast: conductKeys.forecast(ORG, 11, EVENT),
+    attendance: conductKeys.attendance(ORG, 11, EVENT),
+    conductBoard: standingKeys.leaderboard(
+      ORG,
+      11,
+      'conduct',
+      'show_rate',
+      'current',
+    ),
+    contribBoard: standingKeys.leaderboard(
+      ORG,
+      11,
+      'contribution',
+      'points',
+      'all',
+    ),
+    otherForecast: conductKeys.forecast(OTHER_ORG, 11, 9),
+  };
+  for (const key of Object.values(keys)) client.setQueryData(key, {});
+  if (seedEvent) client.setQueryData(['event', EVENT], event);
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   const hook = renderHook(
     () => ({
-      signup: useSignupMutation(EVENT_ID),
-      event: useEventActionMutation(EVENT_ID),
-      signups: useSignupActionMutations(EVENT_ID),
+      signup: useSignupMutation(EVENT),
+      event: useEventActionMutation(EVENT),
+      update: useUpdateEventMutation(EVENT),
+      signups: useSignupActionMutations(EVENT),
     }),
     { wrapper },
   );
-  const conductInvalidated = () =>
-    client.getQueryState(CONDUCT_KEY)?.isInvalidated === true;
-  return { hook, conductInvalidated };
+  const invalid = (key: readonly unknown[]) =>
+    client.getQueryState(key)?.isInvalidated ?? false;
+  const thisOrgConductInvalid = () =>
+    invalid(keys.forecast) &&
+    invalid(keys.attendance) &&
+    invalid(keys.conductBoard);
+  return { hook, keys, invalid, thisOrgConductInvalid };
 }
 
-describe('event mutations invalidate conduct queries', () => {
+describe('event mutations refresh conduct queries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const name of [
+      'openSignups',
+      'startRollCall',
+      'cancelEvent',
+      'reopenSignups',
+      'restartTournament',
+      'completeEvent',
+      'setEventStaff',
+      'updateEvent',
+      'getEvent',
+    ] as const)
+      api[name].mockResolvedValue(event);
+    api.deleteEvent.mockResolvedValue(undefined);
     api.signupForEvent.mockResolvedValue(signup);
-    api.cancelEvent.mockResolvedValue(event);
-    api.reopenSignups.mockResolvedValue(event);
-    api.restartTournament.mockResolvedValue(event);
-    api.completeEvent.mockResolvedValue(event);
-    api.setEventStaff.mockResolvedValue(event);
     api.confirmSignup.mockResolvedValue(signup);
-    api.cancelSignup.mockResolvedValue(signup);
     api.getEventSignups.mockResolvedValue([signup]);
-    api.getEvent.mockResolvedValue(event);
-  });
-
-  it('after a signup', async () => {
-    const { hook, conductInvalidated } = setup();
-    await act(() => hook.result.current.signup.mutateAsync({ intent: 'rsvp' }));
-    expect(conductInvalidated()).toBe(true);
   });
 
   it.each([
-    'cancelEvent',
+    'startRollCall',
     'reopenSignups',
+    'cancelEvent',
     'restartTournament',
     'completeEvent',
-  ] as const)('after %s', async (name) => {
-    const { hook, conductInvalidated } = setup();
+  ] as const)('%s refreshes this org’s conduct queries only', async (name) => {
+    const { hook, keys, invalid, thisOrgConductInvalid } = setup();
     await act(() => hook.result.current.event[name].mutateAsync());
-    expect(conductInvalidated()).toBe(true);
+    expect(thisOrgConductInvalid()).toBe(true);
+    expect(invalid(keys.otherForecast)).toBe(false);
   });
 
-  it('after setEventStaff', async () => {
-    const { hook, conductInvalidated } = setup();
+  it('updating the event (capacity, approval mode) refreshes this org’s conduct queries', async () => {
+    const { hook, keys, invalid, thisOrgConductInvalid } = setup();
+    await act(() =>
+      hook.result.current.update.mutateAsync({ max_players: 20 } as never),
+    );
+    expect(thisOrgConductInvalid()).toBe(true);
+    expect(invalid(keys.otherForecast)).toBe(false);
+  });
+
+  it('deleteEvent refreshes conduct queries', async () => {
+    const { hook, keys, invalid } = setup();
+    await act(() => hook.result.current.event.deleteEvent.mutateAsync());
+    expect(invalid(keys.forecast)).toBe(true);
+    expect(invalid(keys.conductBoard)).toBe(true);
+    expect(invalid(keys.contribBoard)).toBe(false);
+  });
+
+  it('openSignups and setEventStaff leave conduct alone', async () => {
+    const { hook, keys, invalid } = setup();
+    await act(() => hook.result.current.event.openSignups.mutateAsync());
     await act(() =>
       hook.result.current.event.setEventStaff.mutateAsync({
         host_id: null,
         helper_ids: [],
-      }),
+      } as never),
     );
-    expect(conductInvalidated()).toBe(true);
+    expect(invalid(keys.forecast)).toBe(false);
+    expect(invalid(keys.attendance)).toBe(false);
+    expect(invalid(keys.conductBoard)).toBe(false);
   });
 
-  it.each(['confirm', 'cancel'] as const)(
-    'after the %s signup action',
-    async (name) => {
-      const { hook, conductInvalidated } = setup();
-      await act(() => hook.result.current.signups[name].mutateAsync(3));
-      expect(conductInvalidated()).toBe(true);
-    },
-  );
+  it('a signup action refreshes the event org’s forecast once the last action settles', async () => {
+    let releaseFirst: (value: EventSignupType) => void = () => {};
+    api.confirmSignup
+      .mockImplementationOnce(
+        () =>
+          new Promise<EventSignupType>((resolve) => {
+            releaseFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(signup);
+    const { hook, keys, invalid, thisOrgConductInvalid } = setup(true);
+    let first: Promise<unknown> = Promise.resolve();
+    act(() => {
+      first = hook.result.current.signups.confirm.mutateAsync(3);
+    });
+    await act(() => hook.result.current.signups.confirm.mutateAsync(4));
+    expect(invalid(keys.forecast)).toBe(false);
+    await act(async () => {
+      releaseFirst(signup);
+      await first;
+    });
+    expect(thisOrgConductInvalid()).toBe(true);
+    expect(invalid(keys.otherForecast)).toBe(false);
+  });
+
+  it('self signup refreshes the event org’s conduct queries', async () => {
+    const { hook, keys, invalid, thisOrgConductInvalid } = setup(true);
+    await act(() => hook.result.current.signup.mutateAsync({ intent: 'rsvp' }));
+    expect(thisOrgConductInvalid()).toBe(true);
+    expect(invalid(keys.otherForecast)).toBe(false);
+  });
 });

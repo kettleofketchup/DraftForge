@@ -125,16 +125,14 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import {
-  ATTENDANCE_STATES,
-  AttendancePanel,
   ConductBadge,
-  ConductForecastCard,
   eventConductEnabled,
-  FORECAST_STATES,
+  EventConductSection,
   useForecast,
   type ForecastMember,
 } from '~/features/conduct';
 import {
+  invalidateConductQueries,
   removeFeatureQueries,
   useOrgFeatureAccess,
 } from '~/features/org-features';
@@ -658,31 +656,11 @@ export default function EventPage() {
 
           <TabsContent value="details">
             {isAdmin && <OpsNoticesCard eventId={event.id} />}
-            {conductEnabled &&
-              event.organization != null &&
-              FORECAST_STATES.has(event.state) && (
-                <div className="mb-4">
-                  <ConductForecastCard
-                    orgId={event.organization}
-                    eventId={event.id}
-                    access={eventOrgAccess}
-                    enabled={conductEnabled}
-                  />
-                </div>
-              )}
-            {conductEnabled &&
-              event.organization != null &&
-              ATTENDANCE_STATES.has(event.state) && (
-                <div className="mb-4">
-                  <AttendancePanel
-                    orgId={event.organization}
-                    eventId={event.id}
-                    eventState={event.state}
-                    access={eventOrgAccess}
-                    enabled={conductEnabled}
-                  />
-                </div>
-              )}
+            <EventConductSection
+              event={event}
+              org={eventOrg ?? undefined}
+              access={eventOrgAccess}
+            />
             <DetailsTab
               event={event}
               signedIn={!!currentUser?.pk}
@@ -1001,6 +979,7 @@ function SignupsTab({
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
       // Backend adds the user as an OrgUser when an admin signs them up; reset
       // the org-users cache so the org page reflects the new membership.
+      void invalidateConductQueries(queryClient, orgId);
       if (orgId) useOrgStore.getState().clearOrgUsers();
       // AddUserModal reads `.pk` off this to track optimistic adds — the signup
       // itself has no pk, so hand back the user it embeds.
@@ -1220,11 +1199,12 @@ function SignupsTab({
             ? signupHoldReason(signup, autoApprove)
             : null;
           const statusSlot = (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-mono text-muted-foreground">
                 #{position}
               </span>
               <EventStateBadge state={signup.status} />
+              <ConductBadge member={conductMembers?.[String(signup.user)]} />
               {holdReason && (
                 <span
                   className="text-xs text-muted-foreground"
@@ -1274,14 +1254,7 @@ function SignupsTab({
                 user={user}
                 dotaProfile={stripProfile}
                 selfReportedRank={signup.self_reported_rank}
-                contextSlot={
-                  <>
-                    {statusSlot}
-                    <ConductBadge
-                      member={conductMembers?.[String(signup.user)]}
-                    />
-                  </>
-                }
+                contextSlot={statusSlot}
                 actionSlot={adminActions}
               />
             );
