@@ -81,8 +81,8 @@ export function MmrApprovalModal({
     defaultValues: { mmr: 0 },
   });
 
-  // Reset form when signup changes. suggested_mmr is now self-report-first
-  // (see backend events.mmr_suggestions.suggest_mmr).
+  // Reset when the signup or open state changes. suggested_mmr is
+  // self-report-first (see backend events.mmr_suggestions.suggest_mmr).
   useEffect(() => {
     if (signup && open) {
       form.reset({ mmr: signup.suggested_mmr });
@@ -116,9 +116,7 @@ export function MmrApprovalModal({
     profile?.rank_screenshot ?? profile?.battlecup_screenshot ?? null;
 
   // Rank-status badge — values come from PlayerDotaProfile.rank_status:
-  // 'active' | 'previous' | 'never'. Earlier mapping checked for 'ranked' /
-  // 'expired' (never set anywhere) and fell every profile through to "Never
-  // Ranked" — including active and previously-ranked players.
+  // 'active' | 'previous' | 'never'.
   const rankStatusBadge = profile ? (
     profile.rank_status === 'active' ? (
       <Badge
@@ -220,11 +218,13 @@ export function MmrApprovalModal({
                     : null}
                 </DialogDescription>
               </div>
-              <DotabuffButton
-                steamAccountId={user?.steam_account_id}
-                responsive={false}
-                size="sm"
-              />
+              {gameType === GAME_TYPE.DOTA2 && (
+                <DotabuffButton
+                  steamAccountId={user?.steam_account_id}
+                  responsive={false}
+                  size="sm"
+                />
+              )}
             </div>
           </DialogHeader>
 
