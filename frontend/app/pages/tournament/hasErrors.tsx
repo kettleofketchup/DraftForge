@@ -138,7 +138,7 @@ export const hasErrors = () => {
           leagueId,
           currentOrg,
           currentLeague: league,
-          gameType: tournament?.game_type,
+          gameType,
         });
         issues.push({ user, scope, issues: userIssues });
       }

@@ -74,7 +74,10 @@ export const CaptainTable: React.FC = () => {
             {sortedUsers.map((user) => (
               <TableRow key={`TeamTableRow-${user.pk}`}>
                 <TableCell>
-                  <PlayerPopover player={user}>
+                  <PlayerPopover
+                    player={user}
+                    gameType={toGameType(tournament?.game_type)}
+                  >
                     <div className="flex items-center gap-2 hover:text-primary transition-colors">
                       <UserAvatar
                         user={user}

@@ -3,14 +3,17 @@ import { updateOrgUser } from '~/components/api/api';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user/types';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import type { UserEntry } from '~/store/userCacheTypes';
 import {
   buildDefaults,
   dispatchPatch,
+  editableGames,
+  EditUserSchema,
+  pickDirty,
   resolveEditScope,
   resolveOrgUserLink,
   scopeToContext,
-  tournamentMmrGame,
   type EditUserScope,
 } from './editUserSchema';
 
@@ -331,25 +334,7 @@ describe('dispatchPatch', () => {
     expect(mockUpdateOrgUser).not.toHaveBeenCalled();
   });
 
-  it('org scope sends mmr_game_type Dota alongside mmr', async () => {
-    mockUpdateOrgUser.mockResolvedValue({ pk: 1, mmr: 4200 } as UserType);
-    await dispatchPatch(
-      userClass(),
-      { kind: 'org', organization: org },
-      { mmr: 4200 },
-    );
-    expect(mockUpdateOrgUser).toHaveBeenCalledWith(
-      2,
-      110,
-      {
-        mmr: 4200,
-        mmr_game_type: 1,
-      },
-      1,
-    );
-  });
-
-  it('league scope sends the context game alongside mmr', async () => {
+  it('league scope sends dirty game_mmrs with the context ?game_type', async () => {
     mockUpdateOrgUser.mockResolvedValue({ pk: 1, mmr: 2500 } as UserType);
     const scope: EditUserScope = {
       kind: 'league',
@@ -357,39 +342,16 @@ describe('dispatchPatch', () => {
       orgId: 2,
       gameType: 2,
     };
-    await dispatchPatch(userClass(), scope, { mmr: 2500 });
+    await dispatchPatch(userClass(), scope, { game_mmrs: { '2': 2500 } });
     expect(mockUpdateOrgUser).toHaveBeenCalledWith(
       2,
       110,
-      {
-        mmr: 2500,
-        mmr_game_type: 2,
-      },
+      { game_mmrs: { 2: 2500 } },
       2,
     );
   });
 
-  it('Deadlock tournament org scope sends mmr_game_type 2 and ?game_type=2', async () => {
-    mockUpdateOrgUser.mockResolvedValue({ pk: 1, mmr: 2500 } as UserType);
-    const scope = resolveEditScope(
-      { orgUserPk: 110 },
-      {
-        organizationId: 2,
-        currentOrg: org,
-        currentLeague: null,
-        gameType: tournamentMmrGame({ organization_pk: 2, game_type: 2 }, 2),
-      },
-    );
-    await dispatchPatch(userClass(), scope, { mmr: 2500 });
-    expect(mockUpdateOrgUser).toHaveBeenCalledWith(
-      2,
-      110,
-      { mmr: 2500, mmr_game_type: 2 },
-      2,
-    );
-  });
-
-  it('omits mmr_game_type when mmr is not in the payload', async () => {
+  it('nickname-only edit sends no game_mmrs and keeps ?game_type', async () => {
     mockUpdateOrgUser.mockResolvedValue({ pk: 1 } as UserType);
     const scope: EditUserScope = {
       kind: 'league',
@@ -401,9 +363,7 @@ describe('dispatchPatch', () => {
     expect(mockUpdateOrgUser).toHaveBeenCalledWith(
       2,
       110,
-      {
-        nickname: 'After',
-      },
+      { nickname: 'After' },
       2,
     );
   });
@@ -460,19 +420,146 @@ describe('org-less league tournament (spec 6.1)', () => {
   });
 });
 
-describe('tournamentMmrGame', () => {
-  it('returns the tournament game for its own org', () => {
-    expect(tournamentMmrGame({ organization_pk: 2, game_type: 2 }, 2)).toBe(2);
+describe('per-game org MMR edit fields', () => {
+  const mockUpdateOrgUser = vi.mocked(updateOrgUser);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useUserCacheStore.getState().reset?.();
   });
 
-  it('ignores a tournament of another org or no tournament', () => {
+  function plainUser(over: Partial<UserClassType> = {}): UserClassType {
+    return {
+      pk: 1,
+      username: 'u',
+      nickname: 'Nick',
+      orgUserPk: 110,
+      positions: {},
+      dbUpdate: vi.fn(),
+      ...over,
+    } as unknown as UserClassType;
+  }
+
+  it('org scope edits every game, defaulted from the cache', () => {
+    useUserCacheStore.setState({
+      entities: {
+        1: entry({
+          pk: 1,
+          orgData: {
+            2: { id: 110, mmrs: { 1: 4200, 2: 2500 }, _fetchedAt: 0 },
+          },
+        }),
+      },
+    } as never);
+    const scope: EditUserScope = { kind: 'org', organization: org };
+    expect(editableGames(scope)).toEqual([1, 2]);
+    expect(buildDefaults(plainUser(), scope).game_mmrs).toEqual({
+      '1': 4200,
+      '2': 2500,
+    });
+  });
+
+  it('org scope falls back to the user game_mmrs payload', () => {
+    const user = plainUser({ game_mmrs: { '1': 4000, '2': 0 } } as never);
     expect(
-      tournamentMmrGame({ organization_pk: 3, game_type: 2 }, 2),
-    ).toBeUndefined();
-    expect(tournamentMmrGame({}, 2)).toBeUndefined();
-    expect(tournamentMmrGame(null, 2)).toBeUndefined();
+      buildDefaults(user, { kind: 'org', organization: org }).game_mmrs,
+    ).toEqual({ '1': 4000, '2': 0 });
+  });
+
+  it('a Deadlock tournament scope edits only Deadlock, from the flat mmr', () => {
+    useUserCacheStore.setState({
+      entities: {
+        1: entry({
+          pk: 1,
+          orgData: { 2: { id: 110, mmrs: { 1: 4200 }, _fetchedAt: 0 } },
+        }),
+      },
+    } as never);
+    const scope: EditUserScope = {
+      kind: 'org',
+      organization: org,
+      gameType: 2,
+    };
+    expect(editableGames(scope)).toEqual([2]);
     expect(
-      tournamentMmrGame({ organization_pk: 2, game_type: 2 }, undefined),
-    ).toBeUndefined();
+      buildDefaults(plainUser({ mmr: 2600, mmr_game_type: 2 } as never), scope)
+        .game_mmrs,
+    ).toEqual({ '2': 2600 });
+  });
+
+  it('league scope without a game edits the league game only', () => {
+    expect(editableGames({ kind: 'league', league: lg, orgId: 2 })).toEqual([
+      1,
+    ]);
+  });
+
+  it('global scope has no org MMR fields', () => {
+    expect(editableGames({ kind: 'global' })).toEqual([]);
+    expect(
+      'game_mmrs' in buildDefaults(plainUser({ mmr: 1 }), { kind: 'global' }),
+    ).toBe(false);
+  });
+
+  it('pickDirty keeps only the dirty games', () => {
+    expect(
+      pickDirty(
+        {
+          nickname: 'n',
+          steam_account_id: null,
+          positions: {} as never,
+          game_mmrs: { '1': 4200, '2': 3000 },
+        },
+        { game_mmrs: { '2': true } } as never,
+      ),
+    ).toEqual({ game_mmrs: { '2': 3000 } });
+  });
+
+  it('a cleared field is sent as null', async () => {
+    mockUpdateOrgUser.mockResolvedValue({ pk: 1 } as UserType);
+    await dispatchPatch(
+      plainUser(),
+      { kind: 'org', organization: org },
+      { game_mmrs: { '2': null } },
+    );
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(
+      2,
+      110,
+      { game_mmrs: { 2: null } },
+      1,
+    );
+  });
+
+  it('never sends the legacy mmr key', async () => {
+    mockUpdateOrgUser.mockResolvedValue({ pk: 1 } as UserType);
+    await dispatchPatch(
+      plainUser(),
+      { kind: 'org', organization: org, gameType: 2 },
+      { game_mmrs: { '2': 3000 } },
+    );
+    const body = mockUpdateOrgUser.mock.calls[0][2];
+    expect(body).not.toHaveProperty('mmr');
+    expect(body).not.toHaveProperty('mmr_game_type');
+    expect(mockUpdateOrgUser.mock.calls[0][3]).toBe(2);
+  });
+
+  it('a legacy out-of-range value errors on its own field only', () => {
+    const result = EditUserSchema.safeParse({
+      nickname: 'Nick',
+      steam_account_id: null,
+      positions: {
+        carry: 0,
+        mid: 0,
+        offlane: 0,
+        soft_support: 0,
+        hard_support: 0,
+      },
+      game_mmrs: { '1': 25000, '2': 2500 },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((i) => i.path.join('.'))).toEqual([
+        'game_mmrs.1',
+      ]);
+    }
   });
 });

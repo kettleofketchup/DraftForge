@@ -69,3 +69,16 @@ describe('UserStrip popover statsLeagueId', () => {
     },
   );
 });
+
+describe('UserStrip popover gameType', () => {
+  it('threads its gameType into the player modal', () => {
+    render(wrap(<UserStrip gameType={GAME_TYPE.DEADLOCK} user={user} />));
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'View profile for Alice' })[0],
+    );
+    expect(actions.openPlayerModal).toHaveBeenCalledWith(
+      user,
+      expect.objectContaining({ gameType: GAME_TYPE.DEADLOCK }),
+    );
+  });
+});

@@ -125,7 +125,7 @@ export const TeamTable: React.FC<TeamTableProps> = memo(
           {members.map((user: UserType, idx: number) => (
             <TableRow key={`TeamTableRow-${user.pk}`}>
               <TableCell>
-                <PlayerPopover player={user}>
+                <PlayerPopover player={user} gameType={gameType}>
                   <div className="flex items-center gap-2 hover:text-primary transition-colors">
                     <UserAvatar
                       user={user}
