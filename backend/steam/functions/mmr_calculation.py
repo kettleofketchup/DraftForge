@@ -10,7 +10,8 @@ from org.mmr import org_mmr_for
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
-    from app.models import CustomUser, League, Organization
+    from app.models import CustomUser, League
+    from org.models import Organization
     from steam.models import LeaguePlayerStats
 
 logger = get_logger(__name__)

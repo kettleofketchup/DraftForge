@@ -15,13 +15,13 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory
 
-from app.models import CustomUser, Organization, OrgLog, PositionsModel, Tournament
+from app.models import CustomUser, PositionsModel, Tournament
 from common.game import GameType
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
 from events.serializers import EventSignupSerializer
 from events.services import create_tournament_for_event
-from org.models import OrgUser, OrgUserGameMmr
+from org.models import Organization, OrgLog, OrgUser, OrgUserGameMmr
 from org.models_profiles import PlayerDeadlockProfile
 from tests.populate.utils import ensure_org_user
 from tests.test_auth import get_user_org_membership
