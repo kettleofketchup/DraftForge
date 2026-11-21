@@ -653,7 +653,7 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("git-cleanup", help="rewrite history to drop old demo blobs")
 
     gifs_p = sub.add_parser("gifs", help="convert demo videos to GIFs")
-    quick_p = sub.add_parser("quick", help="create, trim, then gifs")
+    quick_p = sub.add_parser("quick", help="create, trim, gifs, then clips")
     for sp in (gifs_p, quick_p):
         sp.add_argument("--duration", type=int, default=10)
         sp.add_argument("--fps", type=int, default=12)
