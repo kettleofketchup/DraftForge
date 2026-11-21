@@ -588,7 +588,6 @@ export const RolePositions: React.FC<RolePositionsProps> = ({
   const activeKeys = new Set(activePositions.map((p) => p.key));
   const missingPositions = positions.filter((p) => !activeKeys.has(p.key));
 
-  // If no positions and not filling empty, return null
   if (activePositions.length === 0 && !fillEmpty) return null;
 
   return (
