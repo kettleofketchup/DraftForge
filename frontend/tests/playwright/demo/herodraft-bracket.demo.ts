@@ -79,12 +79,19 @@ interface HeroDraftTestInfo {
 interface MemberContext {
   context: BrowserContext;
   page: Page;
+  teamIndex: number;
 }
 
-const CHAT_TYPE_DELAY_MS = 35;
+const CHAT_TYPE_DELAY_MS = 15;
+
+type SuggestKind = 'suggest_pick' | 'suggest_ban';
 
 function chatInput(page: Page) {
   return page.getByTestId('herodraft-chat-input');
+}
+
+function chatPanel(page: Page) {
+  return page.getByTestId('herodraft-chat-panel');
 }
 
 function chatRowWith(page: Page, text: string) {
@@ -93,11 +100,7 @@ function chatRowWith(page: Page, text: string) {
     .filter({ hasText: text });
 }
 
-function suggestionRow(
-  page: Page,
-  kind: 'suggest_pick' | 'suggest_ban',
-  heroId: number,
-) {
+function suggestionRow(page: Page, kind: SuggestKind, heroId: number) {
   return page.locator(
     `[data-testid^="herodraft-chat-message-"][data-kind="${kind}"][data-hero-id="${heroId}"]`,
   );
@@ -110,8 +113,18 @@ async function openChatWithEnter(page: Page): Promise<void> {
     (document.activeElement as HTMLElement | null)?.blur(),
   );
   await page.keyboard.press('Enter');
-  await expect(page.getByTestId('herodraft-chat-panel')).toBeVisible();
+  await expect(chatPanel(page)).toBeVisible();
   await expect(chatInput(page)).toBeFocused();
+}
+
+/** Escape in the composer closes the panel and blurs the input. */
+async function closeChatWithEscape(page: Page): Promise<void> {
+  const input = chatInput(page);
+  if (!(await input.evaluate((el) => el === document.activeElement))) {
+    await input.click();
+  }
+  await page.keyboard.press('Escape');
+  await expect(chatPanel(page)).toBeHidden();
 }
 
 /** Types into the focused composer at a readable pace and sends with Enter. */
@@ -123,18 +136,29 @@ async function typeChat(page: Page, text: string): Promise<void> {
   await expect(input).toHaveValue('');
 }
 
+/** Clicks into the composer (which opens the panel) and types a message. */
+async function captainSay(page: Page, text: string): Promise<void> {
+  const input = chatInput(page);
+  if (!(await input.evaluate((el) => el === document.activeElement))) {
+    await input.click();
+  }
+  await typeChat(page, text);
+}
+
 async function memberSendChat(page: Page, text: string): Promise<void> {
   const input = chatInput(page);
   await expect(input).toBeEnabled({ timeout: 15000 });
   await input.fill(text);
   await input.press('Enter');
   await expect(input).toHaveValue('');
+  // Closed again so the member's grid stays clear for right-clicks.
+  await input.press('Escape');
 }
 
 async function memberSuggest(
   page: Page,
   heroId: number,
-  kind: 'suggest_pick' | 'suggest_ban',
+  kind: SuggestKind,
 ): Promise<void> {
   const hero = page.getByTestId(`herodraft-hero-${heroId}`);
   await hero.scrollIntoViewIfNeeded();
@@ -151,11 +175,28 @@ async function memberSuggest(
   await expect(menu).toBeHidden();
 }
 
-async function closeChat(page: Page): Promise<void> {
-  const panel = page.getByTestId('herodraft-chat-panel');
-  if (!(await panel.isVisible())) return;
+/** Clicks the newest suggestion chip for a hero, which selects it in the grid. */
+async function selectSuggestion(
+  page: Page,
+  kind: SuggestKind,
+  heroId: number,
+): Promise<void> {
+  await suggestionRow(page, kind, heroId)
+    .last()
+    .locator('[data-testid^="herodraft-chat-suggestion-"]')
+    .click();
+}
+
+async function openChat(page: Page): Promise<void> {
+  if (await chatPanel(page).isVisible()) return;
   await page.getByTestId('herodraft-chat-toggle').click();
-  await expect(panel).toBeHidden();
+  await expect(chatPanel(page)).toBeVisible();
+}
+
+async function closeChat(page: Page): Promise<void> {
+  if (!(await chatPanel(page).isVisible())) return;
+  await page.getByTestId('herodraft-chat-toggle').click();
+  await expect(chatPanel(page)).toBeHidden();
 }
 
 test.describe('HeroDraft with Bracket Demo', () => {
@@ -638,26 +679,30 @@ test.describe('HeroDraft with Bracket Demo', () => {
       teamName: teams[1].team_name,
     };
 
-    // One unrecorded non-captain per team, for team chat and suggestions.
+    // Two unrecorded non-captains per team, for team chat and suggestions.
     for (const [i, team] of teams.entries()) {
-      const memberPk = team.member_pks.find((pk) => pk !== team.captain.pk);
-      if (memberPk === undefined) {
-        throw new Error(`${team.team_name} has no non-captain member`);
+      const memberPks = team.member_pks
+        .filter((pk) => pk !== team.captain.pk)
+        .slice(0, 2);
+      if (memberPks.length < 2) {
+        throw new Error(`${team.team_name} needs two non-captain members`);
       }
       const browser = i === 0 ? browserA! : browserB!;
-      const context = await browser.newContext({
-        ignoreHTTPSErrors: true,
-        viewport: { width: windowSize, height: windowSize },
-      });
-      await context.addInitScript(() => {
-        (window as Window & { playwright?: boolean }).playwright = true;
-      });
-      await loginAsUser(context, memberPk);
-      const page = await context.newPage();
-      await page.goto(herodraftUrl);
-      await waitForHydration(page);
-      await new HeroDraftPage(page).waitForConnection(20000);
-      members.push({ context, page });
+      for (const memberPk of memberPks) {
+        const context = await browser.newContext({
+          ignoreHTTPSErrors: true,
+          viewport: { width: windowSize, height: windowSize },
+        });
+        await context.addInitScript(() => {
+          (window as Window & { playwright?: boolean }).playwright = true;
+        });
+        await loginAsUser(context, memberPk);
+        const page = await context.newPage();
+        await page.goto(herodraftUrl);
+        await waitForHydration(page);
+        await new HeroDraftPage(page).waitForConnection(20000);
+        members.push({ context, page, teamIndex: i });
+      }
     }
     console.log('Video: Team members connected for chat');
 
@@ -806,19 +851,52 @@ test.describe('HeroDraft with Bracket Demo', () => {
     const maxRounds = 24;
     let heroIndex = 0;
 
-    // Get hero IDs from the grid (first 30 heroes)
     const heroGrid = captainA.page.locator(
       '[data-testid="herodraft-hero-grid"]',
     );
     await expect(heroGrid).toBeVisible();
 
+    const heroIdByName = async (name: string): Promise<number> => {
+      const id = await heroGrid
+        .locator(`[data-hero-name="${name}"]`)
+        .getAttribute('data-hero-id');
+      if (!id) throw new Error(`hero ${name} not in the grid`);
+      return Number(id);
+    };
+
+    // Heroes the chat talks about, by the round that bans or picks them.
+    const PLANNED: Record<number, string> = {
+      1: 'Anti-Mage',
+      2: 'Axe',
+      3: 'Invoker',
+      6: 'Faceless Void',
+      8: 'Crystal Maiden',
+      9: 'Morphling',
+      11: 'Sniper',
+      13: 'Lion',
+      14: 'Lina',
+      15: 'Pudge',
+      16: 'Witch Doctor',
+      17: 'Puck',
+      18: 'Juggernaut',
+      19: 'Tidehunter',
+      20: 'Earthshaker',
+      23: 'Rubick',
+      24: 'Mars',
+    };
+    const hero: Record<string, number> = {};
+    for (const name of Object.values(PLANNED)) {
+      hero[name] = await heroIdByName(name);
+    }
+    const planned = new Set(Object.values(hero));
+
+    // Unplanned rounds take heroes from the top of the grid.
     const heroButtons = heroGrid.locator('[data-hero-id]');
     const heroCount = await heroButtons.count();
-
     const heroIds: number[] = [];
-    for (let i = 0; i < Math.min(heroCount, 30); i++) {
-      const heroId = await heroButtons.nth(i).getAttribute('data-hero-id');
-      if (heroId) heroIds.push(parseInt(heroId));
+    for (let i = 0; i < heroCount && heroIds.length < 30; i++) {
+      const id = Number(await heroButtons.nth(i).getAttribute('data-hero-id'));
+      if (!planned.has(id)) heroIds.push(id);
     }
 
     // Winner chose "First Pick", so they are the first pick captain
@@ -827,31 +905,24 @@ test.describe('HeroDraft with Bracket Demo', () => {
 
     console.log(`First pick: ${firstPickCaptain.username}`);
 
+    type Side = 'F' | 'S';
+    const captainOf = (side: Side): CaptainContext =>
+      side === 'F' ? firstPickCaptain : secondPickCaptain;
+    const membersOf = (side: Side): Page[] => {
+      const teamIndex = captainOf(side) === captainA ? 0 : 1;
+      return members
+        .filter((m) => m.teamIndex === teamIndex)
+        .map((m) => m.page);
+    };
+
     // =========================================================================
     // CHAT: Enter keybind, /all chat, team suggestions and replies
     // =========================================================================
     console.log('=== CHAT ===');
-    const memberOf = (captain: CaptainContext): Page =>
-      members[captain === captainA ? 0 : 1].page;
-    const firstMember = memberOf(firstPickCaptain);
-    const secondMember = memberOf(secondPickCaptain);
-
-    // Outside the 30 heroes the round loop uses, so both stay available.
-    const banHeroId = Number(
-      await heroButtons.nth(36).getAttribute('data-hero-id'),
-    );
-    const pickHeroId = Number(
-      await heroButtons.nth(41).getAttribute('data-hero-id'),
-    );
-    const banHeroName = await heroButtons
-      .nth(36)
-      .getAttribute('data-hero-name');
-    const pickHeroName = await heroButtons
-      .nth(41)
-      .getAttribute('data-hero-name');
-    console.log(
-      `Chat: ban suggestion ${banHeroName} (${banHeroId}), pick suggestion ${pickHeroName} (${pickHeroId})`,
-    );
+    const [firstMember] = membersOf('F');
+    const [secondMember] = membersOf('S');
+    const banHeroId = hero['Anti-Mage'];
+    const pickHeroId = hero['Morphling'];
 
     // Show the Enter hint on the closed composer before using it.
     await captainA.page.waitForTimeout(1500);
@@ -880,14 +951,8 @@ test.describe('HeroDraft with Bracket Demo', () => {
       memberSuggest(secondMember, pickHeroId, 'suggest_pick'),
     ]);
     await Promise.all([
-      memberSendChat(
-        firstMember,
-        `They spam ${banHeroName} every game, ban it`,
-      ),
-      memberSendChat(
-        secondMember,
-        `${pickHeroName} is still open, let's take it`,
-      ),
+      memberSendChat(firstMember, 'They spam Anti-Mage every game, ban it'),
+      memberSendChat(secondMember, "Morphling is still open, let's take it"),
     ]);
     await Promise.all([
       expect(
@@ -899,7 +964,7 @@ test.describe('HeroDraft with Bracket Demo', () => {
     ]);
     await captainA.page.waitForTimeout(700);
     await Promise.all([
-      typeChat(firstPickCaptain.page, `Agreed, banning ${banHeroName}`),
+      typeChat(firstPickCaptain.page, 'Agreed, banning Anti-Mage'),
       typeChat(secondPickCaptain.page, 'On it, ours at first pick'),
     ]);
     await captainA.page.waitForTimeout(1500);
@@ -919,21 +984,242 @@ test.describe('HeroDraft with Bracket Demo', () => {
       chatRowWith(firstPickCaptain.page, 'is still open'),
     ).toHaveCount(0);
 
-    await fs.appendFile(
-      DEMO_METADATA_FILE,
-      `\nchat_clip:\n` +
-        `  starts:\n` +
-        `    captain1_herodraft.webm: ${((chatClipStart - recordingStartTime) / 1000).toFixed(2)}\n` +
-        `    captain2_herodraft.webm: ${((chatClipStart - recordingStartTimeB) / 1000).toFixed(2)}\n` +
-        `  duration_seconds: ${((chatClipEnd - chatClipStart) / 1000).toFixed(2)}\n`,
-    );
+    const clipWindows: string[] = [];
+    const recordClip = (key: string, start: number, end: number): void => {
+      clipWindows.push(
+        `\n${key}:\n` +
+          `  starts:\n` +
+          `    captain1_herodraft.webm: ${((start - recordingStartTime) / 1000).toFixed(2)}\n` +
+          `    captain2_herodraft.webm: ${((start - recordingStartTimeB) / 1000).toFixed(2)}\n` +
+          `  duration_seconds: ${((end - start) / 1000).toFixed(2)}\n`,
+      );
+    };
+    recordClip('chat_clip', chatClipStart, chatClipEnd);
 
-    // The first-pick captain follows the suggestion: click it, then ban.
-    await suggestionRow(firstPickCaptain.page, 'suggest_ban', banHeroId)
-      .locator('[data-testid^="herodraft-chat-suggestion-"]')
-      .click();
-    await firstPickCaptain.page.waitForTimeout(800);
-    await Promise.all([closeChat(captainA.page), closeChat(captainB.page)]);
+    // =========================================================================
+    // CHAT THROUGH THE DRAFT: a beat for each team before most picks and bans
+    // =========================================================================
+    interface Beat {
+      /** 'cap' is the recorded captain, 1 and 2 the unrecorded members. */
+      by: 'cap' | 1 | 2;
+      say?: string;
+      suggest?: [SuggestKind, string];
+      /** Captain clicks the newest suggestion chip for this hero. */
+      select?: [SuggestKind, string];
+    }
+    const SCRIPT: Record<number, Partial<Record<Side, Beat[]>>> = {
+      1: { F: [{ by: 'cap', select: ['suggest_ban', 'Anti-Mage'] }] },
+      2: {
+        F: [
+          { by: 2, suggest: ['suggest_ban', 'Axe'] },
+          { by: 2, say: 'Axe too, their offlaner lives on him' },
+          { by: 'cap', select: ['suggest_ban', 'Axe'] },
+        ],
+        S: [{ by: 'cap', say: 'AM gone. Invoker ban next?' }],
+      },
+      3: {
+        S: [
+          { by: 1, suggest: ['suggest_ban', 'Invoker'] },
+          { by: 1, say: 'Yes, their mid one-tricks it' },
+          { by: 'cap', select: ['suggest_ban', 'Invoker'] },
+        ],
+        F: [{ by: 1, say: "Let them ban, we're flexible" }],
+      },
+      4: {
+        S: [
+          { by: 2, say: 'No strong feelings on this one' },
+          { by: 'cap', say: 'Taking a utility ban' },
+        ],
+        F: [{ by: 'cap', say: 'CM is still open, keep it in mind' }],
+      },
+      5: {
+        F: [
+          { by: 2, suggest: ['suggest_ban', 'Pudge'] },
+          { by: 2, say: 'Pudge again? Ban?' },
+          { by: 'cap', say: "Nah, I'd rather we play Pudge" },
+        ],
+        S: [{ by: 1, say: 'We need a support soon' }],
+      },
+      6: {
+        S: [
+          { by: 2, suggest: ['suggest_ban', 'Faceless Void'] },
+          { by: 2, say: 'Ban Void, their carry is scary on it' },
+          { by: 'cap', select: ['suggest_ban', 'Faceless Void'] },
+        ],
+        F: [{ by: 1, say: 'Void ban incoming, we go Jugg later' }],
+      },
+      7: {
+        S: [
+          { by: 'cap', say: 'Last ban this phase, ideas?' },
+          { by: 1, say: "Anything, we're fine" },
+        ],
+        F: [{ by: 2, say: "I'll play offlane" }],
+      },
+      8: {
+        F: [
+          { by: 1, suggest: ['suggest_pick', 'Crystal Maiden'] },
+          { by: 1, say: 'I can play CM pos 5' },
+          { by: 'cap', say: 'Locking CM' },
+        ],
+        S: [{ by: 'cap', say: 'Morphling for us next' }],
+      },
+      9: {
+        S: [
+          { by: 1, say: "Morph, I'm on carry" },
+          { by: 'cap', select: ['suggest_pick', 'Morphling'] },
+        ],
+        F: [{ by: 2, say: "They'll go Morph" }],
+      },
+      10: {
+        F: [
+          { by: 'cap', say: "Who's mid for us?" },
+          { by: 1, say: 'Me. Lina or Puck' },
+        ],
+        S: [{ by: 2, say: 'I can support with Lion' }],
+      },
+      11: {
+        F: [
+          { by: 2, suggest: ['suggest_ban', 'Sniper'] },
+          { by: 2, say: 'Ban Sniper, their mid is good on it' },
+          { by: 'cap', say: 'Banning Sniper' },
+        ],
+        S: [{ by: 'cap', say: 'Lion first, then a mid' }],
+      },
+      12: {
+        S: [
+          { by: 2, suggest: ['suggest_pick', 'Lion'] },
+          { by: 2, say: 'Lion pos 4 for me' },
+          { by: 'cap', say: 'Next pick, promise' },
+        ],
+        F: [
+          { by: 1, suggest: ['suggest_pick', 'Lina'] },
+          { by: 1, say: 'Lina mid please' },
+        ],
+      },
+      13: {
+        S: [{ by: 'cap', select: ['suggest_pick', 'Lion'] }],
+        F: [{ by: 'cap', say: 'Lina next, then Pudge' }],
+      },
+      14: {
+        F: [
+          { by: 'cap', select: ['suggest_pick', 'Lina'] },
+          { by: 2, say: "Lina mid, I'll take Pudge off" },
+        ],
+        S: [{ by: 1, say: 'CM + Lina, lots of stuns' }],
+      },
+      15: {
+        F: [
+          { by: 2, suggest: ['suggest_pick', 'Pudge'] },
+          { by: 'cap', say: 'Pudge offlane, go' },
+        ],
+        S: [
+          { by: 2, suggest: ['suggest_pick', 'Witch Doctor'] },
+          { by: 2, say: 'WD pos 5?' },
+        ],
+      },
+      16: {
+        S: [
+          { by: 'cap', select: ['suggest_pick', 'Witch Doctor'] },
+          { by: 'cap', say: 'WD it is' },
+        ],
+        F: [{ by: 1, say: 'We still need a carry' }],
+      },
+      17: {
+        S: [
+          { by: 1, suggest: ['suggest_pick', 'Puck'] },
+          { by: 1, say: 'Puck mid for me' },
+          { by: 'cap', say: 'Puck locked' },
+        ],
+        F: [
+          { by: 2, suggest: ['suggest_pick', 'Juggernaut'] },
+          { by: 2, say: 'Jugg for carry?' },
+        ],
+      },
+      18: {
+        F: [
+          { by: 'cap', select: ['suggest_pick', 'Juggernaut'] },
+          { by: 'cap', say: 'Jugg, last core' },
+        ],
+        S: [{ by: 2, say: 'Earthshaker ban next?' }],
+      },
+      19: {
+        F: [
+          { by: 1, suggest: ['suggest_ban', 'Tidehunter'] },
+          { by: 1, say: 'Ban Tide, they still need an offlaner' },
+          { by: 'cap', say: 'Good call' },
+        ],
+        S: [{ by: 'cap', say: 'Yes, ES ban' }],
+      },
+      20: {
+        S: [
+          { by: 1, suggest: ['suggest_ban', 'Earthshaker'] },
+          { by: 'cap', select: ['suggest_ban', 'Earthshaker'] },
+        ],
+        F: [{ by: 2, say: 'Rubick for me at 4?' }],
+      },
+      21: {
+        F: [
+          { by: 'cap', say: 'Rubick after this ban' },
+          { by: 2, say: 'ok' },
+        ],
+        S: [{ by: 2, say: 'Mars last pick, offlane' }],
+      },
+      22: {
+        S: [
+          { by: 2, suggest: ['suggest_pick', 'Mars'] },
+          { by: 'cap', say: 'Mars last, then gg' },
+        ],
+        F: [{ by: 2, suggest: ['suggest_pick', 'Rubick'] }],
+      },
+      23: {
+        F: [
+          { by: 'cap', select: ['suggest_pick', 'Rubick'] },
+          { by: 1, say: 'Nice draft' },
+        ],
+        S: [{ by: 1, say: 'We win lanes with this' }],
+      },
+      24: {
+        F: [{ by: 'cap', say: '/all gg wp' }],
+        S: [
+          { by: 'cap', say: '/all gg wp, see you in game' },
+          { by: 'cap', select: ['suggest_pick', 'Mars'] },
+        ],
+      },
+    };
+
+    const runBeats = async (side: Side, beats: Beat[]): Promise<void> => {
+      const captain = captainOf(side);
+      const [m1, m2] = membersOf(side);
+      for (const beat of beats) {
+        const page = beat.by === 'cap' ? captain.page : beat.by === 1 ? m1 : m2;
+        if (beat.suggest) {
+          const [kind, name] = beat.suggest;
+          await memberSuggest(page, hero[name], kind);
+          await expect(
+            suggestionRow(captain.page, kind, hero[name]).last(),
+          ).toBeAttached();
+        }
+        if (beat.say) {
+          if (beat.by === 'cap') {
+            await captainSay(page, beat.say);
+          } else {
+            await memberSendChat(page, beat.say);
+            await expect(
+              chatRowWith(captain.page, beat.say).last(),
+            ).toBeAttached();
+          }
+        }
+        if (beat.select) {
+          const [kind, name] = beat.select;
+          await openChat(captain.page);
+          await selectSuggestion(captain.page, kind, hero[name]);
+        }
+        await captain.page.waitForTimeout(250);
+      }
+    };
+
+    // The acting captain closes chat to pick; Escape/Enter in these rounds.
+    const KEYBIND_ROUNDS = new Set([8, 13]);
 
     // Draft sequence helper
     const getCurrentPicker = async (roundNum: number) => {
@@ -975,6 +1261,7 @@ test.describe('HeroDraft with Bracket Demo', () => {
       return isFirstPickTeam ? firstPickCaptain : secondPickCaptain;
     };
 
+    let picksClipStart = 0;
     for (let round = 1; round <= maxRounds; round++) {
       console.log(`--- Round ${round}/${maxRounds} ---`);
 
@@ -985,13 +1272,22 @@ test.describe('HeroDraft with Bracket Demo', () => {
 
       console.log(`${currentPicker.username} will ${action}`);
 
-      // Round 1 is the first-pick ban, round 9 the second team's first pick.
-      const heroId =
-        round === 1
-          ? banHeroId
-          : round === 9
-            ? pickHeroId
-            : heroIds[heroIndex++];
+      if (round === 14) picksClipStart = Date.now();
+      const beats = SCRIPT[round] ?? {};
+      await Promise.all([
+        runBeats('F', beats.F ?? []),
+        runBeats('S', beats.S ?? []),
+      ]);
+      await currentPicker.page.waitForTimeout(200);
+
+      if (KEYBIND_ROUNDS.has(round)) {
+        await closeChatWithEscape(currentPicker.page);
+      } else {
+        await closeChat(currentPicker.page);
+      }
+
+      const name = PLANNED[round];
+      const heroId = name ? hero[name] : heroIds[heroIndex++];
       await currentPicker.draftPage.pickHero(heroId);
 
       // Wait for round completion (using round captured before pick)
@@ -1009,6 +1305,19 @@ test.describe('HeroDraft with Bracket Demo', () => {
         ]);
       } catch {
         console.log(`Round ${currentRound} completion timeout, continuing...`);
+      }
+
+      if (round < maxRounds) {
+        await currentPicker.page.waitForTimeout(250);
+        if (KEYBIND_ROUNDS.has(round)) {
+          await openChatWithEnter(currentPicker.page);
+        } else {
+          await openChat(currentPicker.page);
+        }
+      }
+      if (round === 14) {
+        await captainA.page.waitForTimeout(1200);
+        recordClip('chat_picks_clip', picksClipStart, Date.now());
       }
 
       // =========================================================================
@@ -1060,8 +1369,16 @@ test.describe('HeroDraft with Bracket Demo', () => {
           `Paused timers (A view): grace=${graceBeforeA}s, A=${teamABeforeA}s, B=${teamBBeforeA}s; (B view): grace=${graceBeforeB}s`,
         );
 
-        // Show the paused state for video
-        await captainA.page.waitForTimeout(3000);
+        // Chat keeps working while paused; at least 3s to show the frozen clock.
+        const pausedAt = Date.now();
+        await captainSay(captainA.page, '/all brb, one sec');
+        await captainB.page.waitForTimeout(500);
+        await captainSay(captainB.page, '/all np');
+        await captainA.page.waitForTimeout(1500);
+        await captainSay(captainA.page, '/all back, ty');
+        await captainA.page.waitForTimeout(
+          Math.max(500, 3000 - (Date.now() - pausedAt)),
+        );
 
         const graceAfterA = await captainA.draftPage.getGraceTimeSeconds();
         const teamAAfterA =
@@ -1117,15 +1434,38 @@ test.describe('HeroDraft with Bracket Demo', () => {
 
         // Brief pause after resume
         await captainA.page.waitForTimeout(1000);
+        await Promise.all([openChat(captainA.page), openChat(captainB.page)]);
       }
 
       // Pause for video clarity
-      await captainA.page.waitForTimeout(400);
+      await captainA.page.waitForTimeout(200);
     }
 
     // Final pause to show completed draft
     console.log('=== DRAFT COMPLETE ===');
-    await captainA.page.waitForTimeout(5000);
+    // Leave the gg lines up, then close chat so the summary shows unobstructed.
+    await captainA.page.waitForTimeout(2000);
+    await Promise.all([closeChat(captainA.page), closeChat(captainB.page)]);
+    await captainA.page.waitForTimeout(3500);
+
+    // Each team's suggestions stayed in its own view for the whole draft.
+    for (const [side, other] of [
+      ['F', 'S'],
+      ['S', 'F'],
+    ] as const) {
+      const outsider = captainOf(other).page;
+      for (const beats of Object.values(SCRIPT)) {
+        for (const beat of beats[side] ?? []) {
+          if (!beat.suggest) continue;
+          const [kind, name] = beat.suggest;
+          await expect(suggestionRow(outsider, kind, hero[name])).toHaveCount(
+            0,
+          );
+        }
+      }
+    }
+
+    await fs.appendFile(DEMO_METADATA_FILE, clipWindows.join(''));
 
     console.log(`Demo complete! ${maxRounds} rounds of hero bans and picks.`);
   });

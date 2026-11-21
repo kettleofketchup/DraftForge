@@ -66,6 +66,12 @@ DEMO_CLIPS = [
         metadata="herodraft.demo.yaml",
         key="chat_clip",
     ),
+    Clip(
+        output="herodraft_chat_picks.webp",
+        videos=("captain1_herodraft.webm", "captain2_herodraft.webm"),
+        metadata="herodraft.demo.yaml",
+        key="chat_picks_clip",
+    ),
 ]
 
 DEMO_RESULTS = paths.FRONTEND_PATH / "demo-results"
