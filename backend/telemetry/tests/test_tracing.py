@@ -206,9 +206,9 @@ class ResourceAttributesTest(TestCase):
     def test_no_deprecated_deployment_environment_key(self, mock_setup):
         """`deployment.environment` (deprecated, no `.name`) is NOT set.
 
-        Setting both the deprecated and current keys causes downstream
-        confusion (Grafana Cloud's OTLP translator occasionally trips on
-        the duplicate). Resource builder must emit only the current key.
+        Emitting both the deprecated and current keys confuses downstream
+        consumers (Grafana Cloud's OTLP translator occasionally trips on the
+        duplicate).
         """
         env = {
             "OTEL_ENABLED": "true",

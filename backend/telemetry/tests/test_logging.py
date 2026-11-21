@@ -124,7 +124,6 @@ class GetLoggerTest(TestCase):
         configure_logging(level="INFO", format="json")
         log = get_logger("mymodule")
 
-        # Should have standard logging methods
         self.assertTrue(hasattr(log, "info"))
         self.assertTrue(hasattr(log, "warning"))
         self.assertTrue(hasattr(log, "error"))
