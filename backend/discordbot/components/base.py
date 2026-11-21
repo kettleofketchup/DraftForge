@@ -16,6 +16,8 @@ from typing import Protocol, runtime_checkable
 import discord
 from asgiref.sync import sync_to_async
 from discord import ui
+from discord.http import MultipartParameters
+from discord.webhook.async_ import async_context
 from django.conf import settings
 
 from app.models import GameType
@@ -38,6 +40,7 @@ from discordbot.internal_client.signup_actions import (
     tentative_button,
 )
 from discordbot.log_context import discord_log_context
+from discordbot.screenshot_tips import SCREENSHOT_TIPS
 from discordbot.signup_responses import respond_to_signup_user
 from events.schemas import STALE_MODAL_MESSAGE, signed_up_text
 from telemetry.logging import get_logger
@@ -55,8 +58,6 @@ async def send_modal_v2(interaction: discord.Interaction, modal: ui.Modal) -> No
     String Selects in modals get rejected. This helper sends the modal
     response manually with the flag included.
     """
-    from discord.webhook.async_ import async_context
-
     adapter = async_context.get()
     http = interaction._state.http
 
@@ -67,8 +68,6 @@ async def send_modal_v2(interaction: discord.Interaction, modal: ui.Modal) -> No
         "type": discord.InteractionResponseType.modal.value,
         "data": payload,
     }
-
-    from discord.http import MultipartParameters
 
     params = MultipartParameters(payload=data, multipart=None, files=None)
 
@@ -221,6 +220,7 @@ class SignupButton(ui.Button):
                     content=f"✅ {signed_up_text(result['status'], result.get('unmet_labels'))}",
                 )
             elif result["action"] == "needs_modal":
+                # Local: registry imports this module.
                 from discordbot.components.registry import get_component_provider
 
                 provider = get_component_provider(result["game_type"])
@@ -414,8 +414,6 @@ class ScreenshotUploadModal(ui.Modal):
             else "Upload Battle Cup Screenshot"
         )
         super().__init__(title=title)
-
-        from discordbot.screenshot_tips import SCREENSHOT_TIPS
 
         example_url = SCREENSHOT_EXAMPLE_URLS.get(screenshot_type, "")
 
