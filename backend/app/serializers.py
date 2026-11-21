@@ -147,14 +147,18 @@ def _serialize_users_with_mmr(
     from org.serializers import OrgUserSerializer
 
     league = tournament.league if tournament else None
-    org = _tournament_organization(tournament)
+    org = _tournament_organization(tournament, fresh=fresh)
 
     if not org:
         return TournamentUserSerializer(users_qs, many=True).data
 
+    if fresh:
+        users_qs = users_qs.nocache()
+    org_user_qs = OrgUser.objects.nocache() if fresh else OrgUser.objects.all()
+    league_user_qs = LeagueUser.objects.nocache() if fresh else LeagueUser.objects.all()
     # Auto-create OrgUser records for tournament users missing from the org
     existing_user_pks = set(
-        OrgUser.objects.filter(user__in=users_qs, organization=org).values_list(
+        org_user_qs.filter(user__in=users_qs, organization=org).values_list(
             "user_id", flat=True
         )
     )
@@ -172,7 +176,7 @@ def _serialize_users_with_mmr(
     ).prefetch_related(
         Prefetch(
             "league_memberships",
-            queryset=LeagueUser.objects.filter(league_id=league.pk if league else None),
+            queryset=league_user_qs.filter(league_id=league.pk if league else None),
         ),
         game_mmrs_prefetch(fresh=fresh),
     )

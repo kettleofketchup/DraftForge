@@ -269,6 +269,7 @@ export function MmrApprovalModal({
                       />
                     </FormControl>
                     {gameType === GAME_TYPE.DOTA2 &&
+                      signup.suggested_mmr_range != null &&
                       signup.suggested_mmr_range_source !== 'fallback' && (
                         <p
                           data-testid="suggested-range-helper"

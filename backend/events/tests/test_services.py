@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.utils import timezone as tz
 
+from common.game import GameType
 from events.constants import EventState, SignupStatus, SignupType
 from events.models import Event, EventSignup
 from events.tests.base import EventTestCase
@@ -144,7 +145,9 @@ class SignupProcessingTests(EventTestCase):
         )
         approve_signup(signup, mmr_override=3500)
         org_user.refresh_from_db()
-        self.assertEqual(org_user.mmr, 3500)
+        self.assertEqual(
+            org_user.game_mmrs.nocache().get(game_type=GameType.DOTA2).mmr, 3500
+        )
         self.assertTrue(org_user.has_active_dota_mmr)
         self.assertIsNotNone(org_user.dota_mmr_last_verified)
 
@@ -161,7 +164,7 @@ class SignupProcessingTests(EventTestCase):
         )
         approve_signup(signup)
         org_user.refresh_from_db()
-        self.assertEqual(org_user.mmr, 0)
+        self.assertFalse(org_user.game_mmrs.nocache().exists())
         self.assertFalse(org_user.has_active_dota_mmr)
 
     def test_check_requirements_reads_orguser(self):

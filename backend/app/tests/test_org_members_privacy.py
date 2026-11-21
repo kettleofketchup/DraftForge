@@ -15,6 +15,7 @@ from app.permissions_org import (
 from events.models import Event, EventSignup, EventState, SignupStatus
 from league.models import LeagueUser
 from org.models import OrgUser
+from tests.populate.utils import ensure_org_user
 
 
 class OrgMembersPrivacyTest(TestCase):
@@ -33,7 +34,7 @@ class OrgMembersPrivacyTest(TestCase):
         self.org = Organization.objects.create(name="Privacy Org", owner=self.owner)
         self.org.admins.add(self.admin)
         self.org.staff.add(self.staff)
-        OrgUser.objects.create(user=self.member, organization=self.org, mmr=4200)
+        ensure_org_user(self.member, self.org, mmr=4200)
 
         self.client = APIClient()
         self.url = f"/api/organizations/{self.org.pk}/users/"
@@ -171,7 +172,7 @@ class LeagueMembersPrivacyTest(TestCase):
 
         self.org = Organization.objects.create(name="League Org", owner=self.owner)
         self.org.staff.add(self.org_staff)
-        OrgUser.objects.create(user=self.member, organization=self.org, mmr=4200)
+        ensure_org_user(self.member, self.org, mmr=4200)
         self.league = League.objects.create(
             name="Private League", organization=self.org, steam_league_id=424242
         )
@@ -219,7 +220,7 @@ class LeagueMembersPrivacyTest(TestCase):
 
     def _league_member(self, username: str, league: League) -> CustomUser:
         user = CustomUser.objects.create_user(username=username, password="x")
-        org_user = OrgUser.objects.create(user=user, organization=self.org, mmr=3000)
+        org_user = ensure_org_user(user, self.org, mmr=3000)
         LeagueUser.objects.create(user=user, org_user=org_user, league=league, mmr=3000)
         return user
 
@@ -270,8 +271,8 @@ class EventSignupOrgMmrPrivacyTest(TestCase):
         )
 
         self.org = Organization.objects.create(name="Event Org", owner=self.owner)
-        OrgUser.objects.create(user=self.player, organization=self.org, mmr=5100)
-        OrgUser.objects.create(user=self.member, organization=self.org, mmr=3000)
+        ensure_org_user(self.player, self.org, mmr=5100)
+        ensure_org_user(self.member, self.org, mmr=3000)
         event = Event.objects.create(
             name="Evt",
             organization=self.org,
@@ -286,22 +287,33 @@ class EventSignupOrgMmrPrivacyTest(TestCase):
         self.client = APIClient()
         self.url = f"/api/events/signups/?event={event.pk}"
 
-    def _mmr_for(self, user: CustomUser | None) -> int | None:
+    def _row_for(self, user: CustomUser | None) -> dict:
         self.client.force_authenticate(user=user)
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         rows = resp.data["results"] if isinstance(resp.data, dict) else resp.data
-        return rows[0]["org_user_mmr"]
+        return rows[0]
+
+    def _mmr_for(self, user: CustomUser | None) -> int | None:
+        return self._row_for(user)["org_user_mmr"]
 
     def test_outsiders_do_not_see_org_mmr(self) -> None:
         for user in (None, self.outsider):
             with self.subTest(user=getattr(user, "username", "anon")):
-                self.assertIsNone(self._mmr_for(user))
+                row = self._row_for(user)
+                self.assertIsNone(row["org_user_mmr"])
+                self.assertIsNone(row["org_user_game_mmrs"])
+                # The org MMR is not a suggestion prior for outsiders: they
+                # get the fallback midpoint of DOTA_DEFAULT_MMR_RANGE.
+                self.assertEqual(row["suggested_mmr"], 1000)
 
     def test_members_staff_and_self_see_org_mmr(self) -> None:
         for user in (self.member, self.owner, self.player):
             with self.subTest(user=user.username):
-                self.assertEqual(self._mmr_for(user), 5100)
+                row = self._row_for(user)
+                self.assertEqual(row["org_user_mmr"], 5100)
+                self.assertEqual(row["org_user_game_mmrs"], {"1": 5100, "2": 0})
+                self.assertEqual(row["suggested_mmr"], 5100)
 
     def test_private_org_hides_mmr_from_plain_members_but_not_self(self) -> None:
         self.org.members_private = True

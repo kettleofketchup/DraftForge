@@ -17,6 +17,7 @@ from app.permissions_org import (
 )
 from app.serializers import TournamentUserSerializer, _serialize_users_with_mmr
 from app.user_cache import serialize_users_core
+from common.game import GameType
 from events.capacity import seat_holding_statuses
 from events.constants import LINE_EXCLUDED_STATUSES, EventState, SignupOpenMode
 from events.mmr_suggestions import suggest_mmr
@@ -49,8 +50,9 @@ from events.signup_schedule import (
 from lobby.passwords import MAX_LENGTH as LOBBY_PASSWORD_MAX_LENGTH
 from lobby.passwords import PasswordMode, validate_password
 from org.display_names import guild_nicknames, org_nicknames_public
+from org.mmr import game_for_event, game_mmrs_prefetch, get_org_mmr, get_org_mmrs
 from org.models import OrgUser
-from org.models_profiles import PlayerDotaProfile
+from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
 # The lobby password is write-only on every events serializer: event and
 # series payloads are cached, public and handed to Celery. Staff and
@@ -813,6 +815,9 @@ class EventSignupSerializer(serializers.ModelSerializer):
     user_data = serializers.SerializerMethodField()
     dota_profile = serializers.SerializerMethodField()
     org_user_mmr = serializers.SerializerMethodField()
+    org_user_game_mmrs = serializers.SerializerMethodField()
+    self_reported_rank = serializers.SerializerMethodField()
+    self_reported_rank_date = serializers.SerializerMethodField()
     org_user_pk = serializers.SerializerMethodField()
     organization = serializers.IntegerField(
         source="event.organization_id", read_only=True
@@ -837,6 +842,9 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "user_data",
             "dota_profile",
             "org_user_mmr",
+            "org_user_game_mmrs",
+            "self_reported_rank",
+            "self_reported_rank_date",
             "org_user_pk",
             "suggested_mmr",
             "suggested_mmr_range",
@@ -914,7 +922,8 @@ class EventSignupSerializer(serializers.ModelSerializer):
                     user_id__in={user_id for user_id, _ in keys},
                     organization_id__in={org_id for _, org_id in keys},
                 )
-                .select_related("dota_profile")
+                .select_related("dota_profile", "deadlock_profile")
+                .prefetch_related(game_mmrs_prefetch(fresh=True))
             )
             for org_user in found:
                 pair = (org_user.user_id, org_user.organization_id)
@@ -935,23 +944,28 @@ class EventSignupSerializer(serializers.ModelSerializer):
 
     def _user_payload(self, obj: EventSignup) -> dict[str, Any]:
         """Serialized user (org-shaped for tournament events), bulk per list."""
-        memo: dict[int | None, dict[int, dict[str, Any]]] = self.context.setdefault(
-            "_signup_user_payloads", {}
+        memo: dict[tuple[int | None, int], dict[int, dict[str, Any]]] = (
+            self.context.setdefault("_signup_user_payloads", {})
         )
         tournament_id = obj.event.tournament_id
-        payloads = memo.setdefault(tournament_id, {})
+        game_type = game_for_event(obj.event)
+        payloads = memo.setdefault((tournament_id, game_type), {})
         if obj.user_id not in payloads:
             user_ids = {
                 r.user_id
                 for r in self._batch(obj)
                 if r.event.tournament_id == tournament_id
+                and game_for_event(r.event) == game_type
             } - payloads.keys()
             user_ids.add(obj.user_id)
             if tournament_id is None:
                 payloads.update(serialize_users_core(user_ids))
             else:
                 rows = _serialize_users_with_mmr(
-                    CustomUser.objects.filter(pk__in=user_ids), obj.event.tournament
+                    CustomUser.objects.filter(pk__in=user_ids),
+                    obj.event.tournament,
+                    game_type=game_type,
+                    fresh=True,
                 )
                 payloads.update({row["pk"]: row for row in rows})
             for user_id in user_ids - payloads.keys():
@@ -975,7 +989,13 @@ class EventSignupSerializer(serializers.ModelSerializer):
             org_user = self._org_user(obj)
             data["guildNickname"] = org_user.guild_nickname if org_user else None
         if not self._viewer_sees_org_mmr(obj):
-            for key in ("guildNickname", "mmr", "league_mmr"):
+            for key in (
+                "guildNickname",
+                "mmr",
+                "league_mmr",
+                "mmr_game_type",
+                "game_mmrs",
+            ):
                 data.pop(key, None)
         return data
 
@@ -1038,8 +1058,38 @@ class EventSignupSerializer(serializers.ModelSerializer):
         """
         if not self._viewer_sees_org_mmr(obj):
             return None
+        return get_org_mmr(self._org_user(obj), game_for_event(obj.event)) or None
+
+    def get_org_user_game_mmrs(self, obj: EventSignup) -> dict[str, int] | None:
+        if not self._viewer_sees_org_mmr(obj):
+            return None
         org_user = self._org_user(obj)
-        return org_user.mmr if org_user and org_user.mmr else None
+        if org_user is None:
+            return None
+        return {str(game): mmr for game, mmr in get_org_mmrs(org_user).items()}
+
+    def _deadlock_profile(self, obj: EventSignup) -> PlayerDeadlockProfile | None:
+        if game_for_event(obj.event) != GameType.DEADLOCK:
+            return None
+        if not self._viewer_sees_org_mmr(obj):
+            return None
+        org_user = self._org_user(obj)
+        if org_user is None:
+            return None
+        try:
+            return org_user.deadlock_profile
+        except PlayerDeadlockProfile.DoesNotExist:
+            return None
+
+    def get_self_reported_rank(self, obj: EventSignup) -> str | None:
+        profile = self._deadlock_profile(obj)
+        return (profile.rank or None) if profile else None
+
+    def get_self_reported_rank_date(self, obj: EventSignup) -> str | None:
+        profile = self._deadlock_profile(obj)
+        if profile is None or profile.rank_date is None:
+            return None
+        return profile.rank_date.isoformat()
 
     def _viewer_sees_org_mmr(self, obj: EventSignup) -> bool:
         request = self.context.get("request")
@@ -1065,10 +1115,10 @@ class EventSignupSerializer(serializers.ModelSerializer):
         org_user = self._org_user(obj)
         return org_user.pk if org_user else None
 
-    def get_suggested_mmr(self, obj: EventSignup) -> int:
+    def get_suggested_mmr(self, obj: EventSignup) -> int | None:
         return self._mmr_suggestion(obj)["default"]
 
-    def get_suggested_mmr_range(self, obj: EventSignup) -> list[int]:
+    def get_suggested_mmr_range(self, obj: EventSignup) -> list[int] | None:
         return self._mmr_suggestion(obj)["range"]
 
     def get_suggested_mmr_range_source(self, obj: EventSignup) -> str:
@@ -1078,10 +1128,21 @@ class EventSignupSerializer(serializers.ModelSerializer):
         """Memoize the suggest_mmr result per signup instance."""
         if hasattr(obj, "_mmr_suggestion_cache"):
             return obj._mmr_suggestion_cache
-        org_user = self._org_user(obj)
-        prior_mmr = org_user.mmr if org_user and org_user.mmr else None
-        obj._mmr_suggestion_cache = suggest_mmr(self._dota_profile(obj), prior_mmr)
-        return obj._mmr_suggestion_cache
+        game_type = game_for_event(obj.event)
+        prior_mmr = None
+        if self._viewer_sees_org_mmr(obj):
+            prior_mmr = get_org_mmr(self._org_user(obj), game_type) or None
+        if game_type == GameType.DOTA2:
+            suggestion = suggest_mmr(self._dota_profile(obj), prior_mmr)
+        else:
+            suggestion = {
+                "default": prior_mmr,
+                "default_source": "prior" if prior_mmr is not None else "none",
+                "range": None,
+                "range_source": "none",
+            }
+        obj._mmr_suggestion_cache = suggestion
+        return suggestion
 
 
 class OrgEventDefaultsSerializer(

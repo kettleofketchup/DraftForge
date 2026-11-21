@@ -22,7 +22,9 @@ from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
 from app.models import CustomUser, Draft, Organization
+from common.game import GameType
 from common.utils import isTestEnvironment
+from org.mmr import game_mmrs_prefetch, get_org_mmr, get_org_mmrs
 from tests.data.tournaments import (
     BRACKET_UNSET_WINNER_TOURNAMENT,
     SHUFFLE_TIE_TOURNAMENT,
@@ -1137,7 +1139,12 @@ def get_user_org_membership(request, user_pk: int):
     from league.models import LeagueUser
     from org.models import OrgUser
 
-    org_users = OrgUser.objects.filter(user=user).select_related("organization")
+    org_users = (
+        OrgUser.objects.nocache()
+        .filter(user=user)
+        .select_related("organization")
+        .prefetch_related(game_mmrs_prefetch(fresh=True))
+    )
     league_users = LeagueUser.objects.filter(user=user).select_related(
         "league", "org_user"
     )
@@ -1154,7 +1161,10 @@ def get_user_org_membership(request, user_pk: int):
                     "pk": ou.pk,
                     "organization_pk": ou.organization.pk,
                     "organization_name": ou.organization.name,
-                    "mmr": ou.mmr,
+                    "mmr": get_org_mmr(ou, GameType.DOTA2),
+                    "game_mmrs": {
+                        str(game): mmr for game, mmr in get_org_mmrs(ou).items()
+                    },
                 }
                 for ou in org_users
             ],

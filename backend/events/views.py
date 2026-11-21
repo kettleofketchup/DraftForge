@@ -102,6 +102,7 @@ from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
 from org.contributions.services import should_sync_staff, sync_event_staff_entries
 from org.feature_errors import not_permitted
+from org.mmr import OrgMmrError, game_for_event, validate_org_mmr
 from org.models import OrgUser, OrgUserGameMmr
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile
@@ -1252,6 +1253,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Optional MMR override from admin
         mmr_override = None
+        game_type = game_for_event(signup.event)
         if request.data:
             raw_mmr = request.data.get("mmr")
             if raw_mmr is not None:
@@ -1262,10 +1264,11 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                         {"error": "mmr must be an integer."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-                if not (0 <= mmr_override <= 20000):
+                try:
+                    validate_org_mmr(game_type, mmr_override)
+                except OrgMmrError as e:
                     return Response(
-                        {"error": "mmr must be between 0 and 20000."},
-                        status=status.HTTP_400_BAD_REQUEST,
+                        {"error": str(e)}, status=status.HTTP_400_BAD_REQUEST
                     )
 
         try:
@@ -1280,7 +1283,11 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                 actor=request.user,
                 action="set_mmr",
                 target_user=signup.user,
-                details={"mmr": mmr_override, "event_id": signup.event.pk},
+                details={
+                    "mmr": mmr_override,
+                    "event_id": signup.event.pk,
+                    "game_type": int(game_type),
+                },
             )
 
         return Response(
