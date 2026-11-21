@@ -123,7 +123,7 @@ invalidate_obj(org)  # REQUIRED — otherwise GET returns stale cached data
 
 Without this, subsequent API requests (e.g., `GET /organizations/1/`) will return cached data that doesn't reflect the M2M changes, causing test flakes.
 
-**This also applies to production views** — see `backend/app/views/admin_team.py` for the pattern where every M2M mutation (`add_org_admin`, `remove_org_staff`, etc.) calls `invalidate_obj()` after the change.
+**This also applies to production views** — see `backend/org/views_admin_team.py` for the pattern where every M2M mutation (`add_org_admin`, `remove_org_staff`, etc.) calls `invalidate_obj()` after the change.
 
 ## Diagnostic Endpoints
 

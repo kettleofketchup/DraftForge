@@ -11,7 +11,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.discord_accounts import merge_discord_accounts
-from app.models import CustomUser, Organization, ProfileClaimRequest
+from app.models import CustomUser, ProfileClaimRequest
 from events.constants import EventState
 from events.models import Event
 from events.staff import dedupe_host_helpers
@@ -19,7 +19,13 @@ from org.accounts import repoint_org_attribution
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import reassign_member, repoint_ledger_attribution
 from org.feature_keys import FeatureKey
-from org.models import ContributionEntry, ContributionPointValue, OrgFeature, OrgUser
+from org.models import (
+    ContributionEntry,
+    ContributionPointValue,
+    Organization,
+    OrgFeature,
+    OrgUser,
+)
 
 
 class _LedgerFixture(TestCase):

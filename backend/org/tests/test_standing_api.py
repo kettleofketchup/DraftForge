@@ -9,13 +9,13 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event, EventSignup
 from org.admin import OrgFeatureAdmin
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
-from org.models import OrgFeature, OrgUser
+from org.models import Organization, OrgFeature, OrgUser
 from org.standing import api as standing
 from org.standing.base import TrackBase
 from org.standing.cache import StandingCache

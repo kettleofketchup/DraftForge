@@ -5,7 +5,7 @@ from typing import override
 from django.contrib.auth.models import AnonymousUser
 from django.utils import timezone
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.models import Event, EventSignup
 from org.conduct.capture import capture_late_cancel
 from org.conduct.eligibility import gate_for, standings
@@ -25,7 +25,7 @@ from org.conduct.serializers import DEFAULT_HISTORY_LIMIT, history_item, rate
 from org.conduct.services import reassign_member
 from org.contributions.serializers import member_summary
 from org.feature_keys import FeatureKey
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_conduct import AttendanceOutcome, OrgConductSettings
 from org.standing import restamp
 from org.standing.base import TrackBase

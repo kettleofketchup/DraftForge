@@ -4,10 +4,10 @@ import random
 
 from django.db.models import QuerySet
 
-from app.models import CustomUser, Organization, Team
+from app.models import CustomUser, Team
 from draft.models import Draft, DraftEvent, DraftRound
 from draft.services.team_broadcast import broadcast_event_after_commit
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 # Maximum team size (captain + 4 drafted players)
 MAX_TEAM_SIZE = 5

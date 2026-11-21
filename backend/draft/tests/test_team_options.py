@@ -13,7 +13,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.management.commands import import_prod_tournament, sync_prod_tournaments
-from app.models import League, Organization, Team, Tournament
+from app.models import League, Team, Tournament
 from app.serializers import DraftSerializerSlim, TournamentSerializer
 from draft.models import (
     Draft,
@@ -25,6 +25,7 @@ from draft.models import (
 )
 from draft.services.team_timeout import skip_turn
 from draft.tests.team_fixtures import TimedDraftFixture
+from org.models import Organization
 from tests.data.users import REGULAR_USER
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, TestTournamentConfig
 
@@ -556,7 +557,7 @@ class FixtureConfigTests(TestCase):
         field = DraftOptions._meta.get_field("timer_enabled")
         with patch.object(
             field, "get_default", return_value=True
-        ):  # PR 3 flips the default; fixtures must not follow it
+        ):  # a True field default must not reach fixtures
             t = TestTournamentConfig(
                 key="k1b", name="K1b", description="d", draft_state="not_started"
             ).create()

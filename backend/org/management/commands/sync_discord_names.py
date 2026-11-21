@@ -7,7 +7,6 @@ from cacheops.conf import settings as cacheops_settings
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from app.models import Organization
 from discordbot.services.discord_members import (
     DiscordMembersFetchError,
     get_discord_members_data,
@@ -15,6 +14,7 @@ from discordbot.services.discord_members import (
 from discordbot.services.member_names import members_from_discord_payload
 from org.activity import guild_sync_lock, release_guild_sync_lock
 from org.discord_names import apply_guild_member_names, org_ids_for_guild
+from org.models import Organization
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

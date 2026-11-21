@@ -4,10 +4,10 @@ from unittest import mock
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from app.models import League, Organization, Tournament
+from app.models import League, Tournament
 from events.constants import EventState
 from events.models import Event
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from tests.populate.tournament_discovery import populate_tournament_discovery
 
 LIST_URL = "/api/tournaments-list/"
@@ -96,6 +96,4 @@ class TournamentDiscoverySeedTests(TestCase):
         rows = self._rows("?bucket=upcoming&organizations=30&open_signups=1")
         mine = {row["pk"]: row["signups_open"] for row in rows}
         seeded = {pk: v for pk, v in mine.items() if pk in EXPECTED_TOURNAMENTS}
-        self.assertEqual(
-            seeded, {900: False, 901: False, 902: False, 906: True}
-        )
+        self.assertEqual(seeded, {900: False, 901: False, 902: False, 906: True})

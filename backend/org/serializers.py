@@ -1,14 +1,84 @@
+from functools import cache
 from typing import Any
+from zoneinfo import available_timezones
 
+import nh3
 from rest_framework import serializers
 
 from app.models import ProfileClaimRequest
-from app.serializers import PositionsSerializer
+from app.serializers import PositionsSerializer, TournamentUserSerializer
 from org import settings_constants
+from org.models import Organization, OrgSettings, OrgUser
 from org.settings_constants import StaffOverridePolicy
 from org.settings_service import normalize_warning_codes
 
-from .models import OrgSettings, OrgUser
+
+@cache
+def _known_timezones() -> frozenset[str]:
+    return frozenset(available_timezones())
+
+
+class OrganizationSerializer(serializers.ModelSerializer):
+    # Roles change only through the admin_team endpoints.
+    owner = TournamentUserSerializer(read_only=True)
+    admins = TournamentUserSerializer(many=True, read_only=True)
+    staff = TournamentUserSerializer(many=True, read_only=True)
+    # Use annotated fields from ViewSet queryset (avoids N+1)
+    league_count = serializers.IntegerField(read_only=True)
+    tournament_count = serializers.IntegerField(read_only=True)
+    users_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Organization
+        fields = (
+            "pk",
+            "name",
+            "description",
+            "logo",
+            "discord_link",
+            "discord_server_id",
+            "rules_template",
+            "timezone",
+            "members_private",
+            "owner",
+            "admins",
+            "staff",
+            "default_league",
+            "league_count",
+            "tournament_count",
+            "users_count",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "pk",
+            "created_at",
+            "updated_at",
+            "league_count",
+            "tournament_count",
+            "users_count",
+        )
+
+    def validate_description(self, value: str | None) -> str | None:
+        """Sanitize markdown to prevent XSS."""
+        if value:
+            return nh3.clean(value)
+        return value
+
+    def validate_rules_template(self, value: str | None) -> str | None:
+        """Sanitize markdown to prevent XSS."""
+        if value:
+            return nh3.clean(value)
+        return value
+
+    def validate_timezone(self, value: str) -> str:
+        if self.instance is not None and value == getattr(
+            self.instance, "timezone", None
+        ):
+            return value
+        if value not in _known_timezones():
+            raise serializers.ValidationError(f"Unknown timezone {value!r}.")
+        return value
 
 
 class OrgUserSerializer(serializers.ModelSerializer):

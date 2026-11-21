@@ -132,7 +132,7 @@ class CustomUser(AbstractUser):
     # deprecated: replaced by OrgUser.guild_nickname; dropped in a later release
     guildNickname = models.TextField(null=True, blank=True)
     default_organization = models.ForeignKey(
-        "Organization",
+        "org.Organization",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -512,87 +512,11 @@ class CustomUser(AbstractUser):
         ]
 
 
-class Organization(models.Model):
-    """Organization that owns leagues and tournaments."""
-
-    name = models.CharField(max_length=255, db_index=True)
-    description = models.TextField(blank=True, default="", max_length=10000)
-    logo = models.URLField(blank=True, default="")
-    discord_link = models.URLField(blank=True, default="")
-    discord_server_id = models.CharField(
-        max_length=20,
-        null=True,
-        blank=True,
-        help_text="Discord server (guild) ID for fetching members",
-    )
-    rules_template = models.TextField(blank=True, default="", max_length=50000)
-    timezone = models.CharField(max_length=50, default="America/New_York")
-    members_private = models.BooleanField(
-        default=False,
-        help_text="Restrict the member list to org staff (hides it from regular members)",
-    )
-    owner = models.ForeignKey(
-        "CustomUser",
-        on_delete=models.PROTECT,
-        related_name="owned_organizations",
-        null=True,  # Nullable initially for migration, will be required
-        blank=True,
-    )
-    admins = models.ManyToManyField(
-        "CustomUser",
-        related_name="admin_organizations",
-        blank=True,
-    )
-    staff = models.ManyToManyField(
-        "CustomUser",
-        related_name="staff_organizations",
-        blank=True,
-    )
-    promoters = models.ManyToManyField(
-        "CustomUser",
-        related_name="promoter_organizations",
-        blank=True,
-    )
-    default_league = models.ForeignKey(
-        "League",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="default_for_organization",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["name"]
-        verbose_name = "Organization"
-        verbose_name_plural = "Organizations"
-        indexes = [
-            models.Index(fields=["created_at"]),
-        ]
-
-    def __str__(self) -> str:
-        return self.name
-
-    def save(self, *args: object, **kwargs: object) -> None:
-        super().save(*args, **kwargs)
-        # Cacheops post_save signal handles self-invalidation. This save()
-        # exists only so the orm-defined behavior matches the call shape
-        # used elsewhere; no cache work needed beyond what cacheops does.
-
-    def delete(self, *args: object, **kwargs: object) -> None:
-        # Invalidate related leagues before deletion
-
-        for league in self.leagues.all():
-            invalidate_obj(league)
-        super().delete(*args, **kwargs)
-
-
 class League(models.Model):
     """League belonging to a single organization."""
 
     organization = models.ForeignKey(
-        Organization,
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="leagues",
         null=True,
@@ -1470,77 +1394,6 @@ class LeagueMatchParticipant(models.Model):
         return f"{self.player.username} ({result}) in Match {self.match_id}"
 
 
-class OrgLog(models.Model):
-    """Audit log for organization admin team changes."""
-
-    ACTION_CHOICES = [
-        ("add_admin", "Add Admin"),
-        ("remove_admin", "Remove Admin"),
-        ("add_staff", "Add Staff"),
-        ("remove_staff", "Remove Staff"),
-        ("add_member", "Add Member"),
-        ("transfer_ownership", "Transfer Ownership"),
-        ("create", "Create Organization"),
-        ("update", "Update Organization"),
-        ("delete", "Delete Organization"),
-        ("approve_claim", "Approve Profile Claim"),
-        ("reject_claim", "Reject Profile Claim"),
-        ("set_mmr", "Set MMR"),
-        ("enable_feature", "Enable Feature"),
-        ("disable_feature", "Disable Feature"),
-        ("add_promoter", "Add Promoter"),
-        ("remove_promoter", "Remove Promoter"),
-        ("set_point_value", "Set Point Value"),
-        ("rescore", "Rescore Contributions"),
-        ("award_points", "Award Points"),
-        ("edit_award", "Edit Award"),
-        ("delete_award", "Delete Award"),
-        ("complete_event", "Complete Event"),
-        ("reopen_event", "Reopen Event"),
-        ("set_event_staff", "Set Event Staff"),
-        ("delete_user_contributions", "Delete User Contributions"),
-        ("set_attendance", "Set Attendance"),
-        ("finalize_attendance", "Finalize Attendance"),
-        ("void_attendance", "Void Attendance"),
-    ]
-
-    organization = models.ForeignKey(
-        Organization,
-        on_delete=models.CASCADE,
-        related_name="logs",
-    )
-    actor = models.ForeignKey(
-        "CustomUser",
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name="org_actions_performed",
-        help_text="User who performed the action",
-    )
-    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
-    target_user = models.ForeignKey(
-        "CustomUser",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="org_actions_received",
-        help_text="User affected by the action (if applicable)",
-    )
-    details = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["organization", "-created_at"]),
-        ]
-        verbose_name = "Organization Log"
-        verbose_name_plural = "Organization Logs"
-
-    def __str__(self) -> str:
-        actor_name = self.actor.username if self.actor else "System"
-        return f"{actor_name} {self.action} on {self.organization.name}"
-
-
 class LeagueLog(models.Model):
     """Audit log for league admin team changes."""
 
@@ -1705,7 +1558,7 @@ class ProfileClaimRequest(models.Model):
         help_text="Profile being claimed (has Steam ID, no Discord). NULL after merge.",
     )
     organization = models.ForeignKey(
-        Organization,
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="claim_requests",
         help_text="Organization where the target profile is a member",

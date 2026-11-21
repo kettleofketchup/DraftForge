@@ -5,7 +5,7 @@ from typing import Any, override
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import QuerySet
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.models import Event
 from org.contributions.kinds import EVENT_STAFF_KINDS
 from org.contributions.queries import leaderboard as contribution_leaderboard
@@ -19,7 +19,7 @@ from org.contributions.services import (
     user_entries,
 )
 from org.feature_keys import FeatureKey
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.standing import ledger
 from org.standing.base import TrackBase
 from org.standing.periods import Period
