@@ -2,19 +2,20 @@
 
 Pure functions — no DB access, no Django-model imports. Caller passes a
 duck-typed `profile` (the relevant fields of PlayerDotaProfile) and the
-`prior_approved_mmr` (OrgUser.mmr, or None).
+`prior_approved_mmr` (the org MMR for the event's game, or None).
 
 Settings constants:
     DOTA_MEDAL_MMR_RANGES        — medal name → (low, high)
     DOTA_BATTLE_CUP_MMR_RANGES   — tier (1-8) → (low, high)
     DOTA_DEFAULT_MMR_RANGE       — fallback (low, high)
 """
-from typing import Optional
+
+from typing import Any, Optional
 
 from django.conf import settings
 
 
-def suggest_mmr(profile, prior_approved_mmr: Optional[int]) -> dict:
+def suggest_mmr(profile: Any, prior_approved_mmr: Optional[int]) -> dict:
     """Compute the values the approval modal needs.
 
     Default precedence: self-reported MMR (player just told us a number) →
@@ -46,7 +47,7 @@ def suggest_mmr(profile, prior_approved_mmr: Optional[int]) -> dict:
     }
 
 
-def _compute_range(profile) -> tuple[int, int, str]:
+def _compute_range(profile: Any) -> tuple[int, int, str]:
     if profile is not None and profile.rank_medal:
         ranges = settings.DOTA_MEDAL_MMR_RANGES
         if profile.rank_medal in ranges:

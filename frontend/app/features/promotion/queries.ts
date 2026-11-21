@@ -6,7 +6,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import {
-  contributionsKeys,
+  invalidateContributionQueries,
   promotionKeys,
   type OrgFeatureAccess,
 } from '~/features/org-features';
@@ -130,9 +130,7 @@ function useInvalidatePromoLedger(
       queryClient.invalidateQueries({
         queryKey: promotionKeys.all(orgId, access.viewerPk),
       }),
-      queryClient.invalidateQueries({
-        queryKey: contributionsKeys.all(orgId, access.viewerPk),
-      }),
+      invalidateContributionQueries(queryClient, orgId, access.viewerPk),
     ]);
   };
 }

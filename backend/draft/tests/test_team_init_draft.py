@@ -23,7 +23,8 @@ from bracket.models import BracketSlot, TournamentBracket
 from draft.models import Draft, DraftEvent, DraftOptions, DraftTeam, HeroDraft
 from draft.services.team_reset import reset_draft_teams
 from league.models import LeagueUser
-from org.models import Organization, OrgUser
+from org.models import Organization
+from tests.populate.utils import ensure_org_user
 from user.tests.test_cacheops_integration import _redis_reachable
 
 
@@ -46,7 +47,7 @@ class TeamResetFixture:
 
     def make_user(self, username: str) -> CustomUser:
         user = CustomUser.objects.create_user(username=username, password="test")
-        OrgUser.objects.create(user=user, organization=self.org, mmr=3000)
+        ensure_org_user(user, self.org, mmr=3000)
         return user
 
     def corrupt_captain(self) -> None:
@@ -239,7 +240,7 @@ class InitDraftEndpointTests(TestCase):
 
     def make_user(self, username: str, mmr: int) -> CustomUser:
         user = CustomUser.objects.create_user(username=username, password="test")
-        OrgUser.objects.create(user=user, organization=self.org, mmr=mmr)
+        ensure_org_user(user, self.org, mmr=mmr)
         return user
 
     def make_team(

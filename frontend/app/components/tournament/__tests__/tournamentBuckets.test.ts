@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import type { TournamentType } from '../types';
 import {
   bucketCutoff,
   clockBucket,
@@ -16,6 +15,7 @@ import {
   splitByMembership,
   utcDayStart,
 } from '../tournamentBuckets';
+import type { TournamentType } from '../types';
 
 const NOW = new Date('2026-11-13T15:00:00Z');
 
@@ -42,7 +42,12 @@ function make(overrides: Partial<TournamentType> = {}): TournamentType {
 function withOrg(pk: number, organizationId: number | null): TournamentType {
   return make({
     pk,
-    league: { pk: 100 + pk, name: 'L', organization_name: 'O', organization_id: organizationId },
+    league: {
+      pk: 100 + pk,
+      name: 'L',
+      organization_name: 'O',
+      organization_id: organizationId,
+    },
   });
 }
 
@@ -62,11 +67,15 @@ describe('cutoff', () => {
 
 describe('clockBucket', () => {
   it('puts a future tournament on the cutoff in upcoming', () => {
-    expect(clockBucket(make({ date_played: '2026-11-11T00:00:00Z' }), NOW)).toBe('upcoming');
+    expect(
+      clockBucket(make({ date_played: '2026-11-11T00:00:00Z' }), NOW),
+    ).toBe('upcoming');
   });
 
   it('puts a future tournament before the cutoff in archived', () => {
-    expect(clockBucket(make({ date_played: '2026-11-10T23:59:59Z' }), NOW)).toBe('archived');
+    expect(
+      clockBucket(make({ date_played: '2026-11-10T23:59:59Z' }), NOW),
+    ).toBe('archived');
   });
 
   it('puts an undated tournament in archived', () => {
@@ -80,18 +89,27 @@ describe('clockBucket', () => {
 
 describe('displayState without a bucket', () => {
   it('shows Live for an in-progress tournament today', () => {
-    const t = make({ state: 'in_progress', date_played: '2026-11-13T12:00:00Z' });
+    const t = make({
+      state: 'in_progress',
+      date_played: '2026-11-13T12:00:00Z',
+    });
     expect(displayState(t, NOW)).toEqual({ label: 'Live', muted: false });
     expect(isTournamentLive(t, NOW)).toBe(true);
   });
 
   it('shows Awaiting results inside the grace window', () => {
     const t = make({ date_played: '2026-11-12T12:00:00Z' });
-    expect(displayState(t, NOW)).toEqual({ label: 'Awaiting results', muted: true });
+    expect(displayState(t, NOW)).toEqual({
+      label: 'Awaiting results',
+      muted: true,
+    });
   });
 
   it('shows Upcoming for a future date', () => {
-    expect(displayState(make(), NOW)).toEqual({ label: 'Upcoming', muted: false });
+    expect(displayState(make(), NOW)).toEqual({
+      label: 'Upcoming',
+      muted: false,
+    });
   });
 
   it('shows Past for a past tournament', () => {
@@ -101,36 +119,63 @@ describe('displayState without a bucket', () => {
 
   it('shows Past (not closed) for a stale future tournament', () => {
     const t = make({ date_played: '2026-11-10T23:59:59Z' });
-    expect(displayState(t, NOW)).toEqual({ label: 'Past (not closed)', muted: true });
+    expect(displayState(t, NOW)).toEqual({
+      label: 'Past (not closed)',
+      muted: true,
+    });
   });
 
   it('shows Past (not closed) and not live for a stale in-progress tournament', () => {
-    const t = make({ state: 'in_progress', date_played: '2026-11-01T12:00:00Z' });
-    expect(displayState(t, NOW)).toEqual({ label: 'Past (not closed)', muted: true });
+    const t = make({
+      state: 'in_progress',
+      date_played: '2026-11-01T12:00:00Z',
+    });
+    expect(displayState(t, NOW)).toEqual({
+      label: 'Past (not closed)',
+      muted: true,
+    });
     expect(isTournamentLive(t, NOW)).toBe(false);
   });
 
   it('shows Past (not closed) for an unknown state', () => {
     const t = make({ state: 'ongoing' as never });
-    expect(displayState(t, NOW)).toEqual({ label: 'Past (not closed)', muted: true });
+    expect(displayState(t, NOW)).toEqual({
+      label: 'Past (not closed)',
+      muted: true,
+    });
   });
 });
 
 describe('displayState with a bucket', () => {
   it('never shows Past* for an upcoming row', () => {
     const t = make({ date_played: '2026-11-10T12:00:00Z' });
-    expect(displayState(t, NOW, 'upcoming')).toEqual({ label: 'Awaiting results', muted: true });
+    expect(displayState(t, NOW, 'upcoming')).toEqual({
+      label: 'Awaiting results',
+      muted: true,
+    });
   });
 
   it('always shows Live for an in-progress upcoming row', () => {
-    const t = make({ state: 'in_progress', date_played: '2026-11-01T12:00:00Z' });
-    expect(displayState(t, NOW, 'upcoming')).toEqual({ label: 'Live', muted: false });
+    const t = make({
+      state: 'in_progress',
+      date_played: '2026-11-01T12:00:00Z',
+    });
+    expect(displayState(t, NOW, 'upcoming')).toEqual({
+      label: 'Live',
+      muted: false,
+    });
     expect(isTournamentLive(t, NOW, 'upcoming')).toBe(true);
   });
 
   it('never shows Live for an archived row', () => {
-    const t = make({ state: 'in_progress', date_played: '2026-11-13T12:00:00Z' });
-    expect(displayState(t, NOW, 'archived')).toEqual({ label: 'Past (not closed)', muted: true });
+    const t = make({
+      state: 'in_progress',
+      date_played: '2026-11-13T12:00:00Z',
+    });
+    expect(displayState(t, NOW, 'archived')).toEqual({
+      label: 'Past (not closed)',
+      muted: true,
+    });
     expect(isTournamentLive(t, NOW, 'archived')).toBe(false);
   });
 });
@@ -165,12 +210,18 @@ describe('splitByMembership', () => {
     const c = withOrg(3, null);
     const d = make({ pk: 4, league: 7 });
     const e = withOrg(5, 1);
-    expect(splitByMembership([a, b, c, d, e], [1])).toEqual({ yours: [a, e], others: [b, c, d] });
+    expect(splitByMembership([a, b, c, d, e], [1])).toEqual({
+      yours: [a, e],
+      others: [b, c, d],
+    });
   });
 
   it('treats undefined ids as no memberships', () => {
     const a = withOrg(1, 1);
-    expect(splitByMembership([a], undefined)).toEqual({ yours: [], others: [a] });
+    expect(splitByMembership([a], undefined)).toEqual({
+      yours: [],
+      others: [a],
+    });
   });
 });
 

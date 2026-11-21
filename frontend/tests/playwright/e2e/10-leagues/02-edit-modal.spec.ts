@@ -9,12 +9,7 @@
  * Ported from Cypress: frontend/tests/cypress/e2e/10-leagues/02-edit-modal.cy.ts
  */
 
-import {
-  test,
-  expect,
-  LeaguePage,
-  getFirstLeague,
-} from '../../fixtures';
+import { expect, getFirstLeague, LeaguePage, test } from '../../fixtures';
 
 // Will be set dynamically in beforeAll
 let testLeagueId: number;
@@ -32,7 +27,9 @@ test.describe('League Page - Edit Modal (e2e)', () => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const league = await getFirstLeague(context);
     if (!league) {
-      throw new Error('No leagues found in database. Run just db::populate::all first.');
+      throw new Error(
+        'No leagues found in database. Run just db::populate::all first.',
+      );
     }
     testLeagueId = league.pk;
     await context.close();
@@ -60,7 +57,9 @@ test.describe('League Page - Edit Modal (e2e)', () => {
     await leaguePage.openEditModal();
 
     // Modal should be visible with correct elements
-    await expect(page.locator('[data-testid="edit-league-modal-heading"]')).toBeVisible();
+    await expect(
+      page.locator('[data-testid="edit-league-modal-heading"]'),
+    ).toBeVisible();
     await expect(leaguePage.nameInput).toBeVisible();
     await expect(leaguePage.prizeInput).toBeVisible();
     await expect(leaguePage.descriptionInput).toBeVisible();
@@ -108,7 +107,9 @@ test.describe('League Page - Edit Modal (e2e)', () => {
     await leaguePage.submitEditForm();
 
     // Should show error message
-    await expect(page.locator('[data-testid="form-error-message"]')).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.locator('[data-testid="form-error-message"]'),
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('should update league successfully', async ({ page }) => {
@@ -129,16 +130,23 @@ test.describe('League Page - Edit Modal (e2e)', () => {
     await leaguePage.submitEditForm();
 
     // Should show success message (sonner toast)
-    await expect(page.locator('[data-sonner-toast][data-type="success"]')).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator('[data-sonner-toast][data-type="success"]'),
+    ).toBeVisible({ timeout: 10000 });
 
     // Modal should close
     await leaguePage.assertEditModalNotVisible();
 
     // Page should show updated name (use .first() — name appears in heading and possibly breadcrumb)
-    await expect(page.getByText(EDITED_LEAGUE_NAME).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(EDITED_LEAGUE_NAME).first()).toBeVisible({
+      timeout: 5000,
+    });
   });
 
-  test('should not show edit button for non-admin users', async ({ page, loginUser }) => {
+  test('should not show edit button for non-admin users', async ({
+    page,
+    loginUser,
+  }) => {
     // Login as regular user
     await loginUser();
 
@@ -157,7 +165,9 @@ test.describe('League Page - Edit Modal Accessibility (e2e)', () => {
       const context = await browser.newContext({ ignoreHTTPSErrors: true });
       const league = await getFirstLeague(context);
       if (!league) {
-        throw new Error('No leagues found in database. Run just db::populate::all first.');
+        throw new Error(
+          'No leagues found in database. Run just db::populate::all first.',
+        );
       }
       testLeagueId = league.pk;
       await context.close();

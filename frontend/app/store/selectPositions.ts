@@ -1,5 +1,5 @@
-import { GAME_TYPE } from '~/components/game/constants';
 import type { GameTypeValue } from '~/components/game/constants';
+import { GAME_TYPE } from '~/components/game/constants';
 
 import type { UserCacheState } from './userCacheStore';
 import type { PositionsType } from './userCacheTypes';

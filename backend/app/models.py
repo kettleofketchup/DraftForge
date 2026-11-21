@@ -11,6 +11,7 @@ from django.db.models import QuerySet
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
+from common.game import GameType  # noqa: F401
 from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
 
@@ -82,19 +83,6 @@ class DraftStyles(StrEnum):
     snake = "snake"
     normal = "normal"
     shuffle = "shuffle"
-
-
-class GameType(models.IntegerChoices):
-    """Integer codes for the supported games.
-
-    KEEP IN SYNC with frontend: `frontend/app/components/game/constants.ts`
-    (`GAME_TYPE`). When adding a new game, update BOTH files. The numeric IDs
-    MUST match — they are persisted in `Event.game_type`,
-    `OrgEventDefaults.game_type`, etc.
-    """
-
-    DOTA2 = 1, "Dota 2"
-    DEADLOCK = 2, "Deadlock"
 
 
 class GameMode(models.TextChoices):

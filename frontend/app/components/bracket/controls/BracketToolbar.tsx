@@ -1,20 +1,20 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, Save, Wand2 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { AutoAssignModal } from '~/components/bracket/modals';
+import type { TeamType } from '~/components/tournament/types';
+import {
+  BrandDropdownMenu,
+  type BrandDropdownAction,
+} from '~/components/ui/brand-dropdown-menu';
 import {
   DestructiveButton,
   SecondaryButton,
   SubmitButton,
 } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
-import {
-  BrandDropdownMenu,
-  type BrandDropdownAction,
-} from '~/components/ui/brand-dropdown-menu';
-import { useBracketStore } from '~/store/bracketStore';
 import { useSaveBracket } from '~/hooks/useBracket';
-import { useQueryClient } from '@tanstack/react-query';
-import type { TeamType } from '~/components/tournament/types';
+import { useBracketStore } from '~/store/bracketStore';
 import type { SeedingMethod } from '../types';
 
 interface BracketToolbarProps {
@@ -36,9 +36,8 @@ export function BracketToolbar({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
   const [showAutoAssign, setShowAutoAssign] = useState(false);
-  const [pendingSeedMethod, setPendingSeedMethod] = useState<SeedingMethod | null>(
-    null
-  );
+  const [pendingSeedMethod, setPendingSeedMethod] =
+    useState<SeedingMethod | null>(null);
 
   const handleAutoAssignComplete = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
@@ -112,7 +111,9 @@ export function BracketToolbar({
           label={hasMatches ? 'Reseed Bracket' : 'Generate Bracket'}
           variant="primary"
           className="min-h-11 px-4"
-          data-testid={hasMatches ? 'reseedBracketButton' : 'generateBracketButton'}
+          data-testid={
+            hasMatches ? 'reseedBracketButton' : 'generateBracketButton'
+          }
           actions={[
             {
               key: 'seed-mmr-total',

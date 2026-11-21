@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { getWebSocketManager } from '~/lib/websocket';
-import { getLogger } from '~/lib/logger';
+import { useEffect } from 'react';
 import type { BracketResponseDTO } from '~/components/bracket/schemas';
+import { getLogger } from '~/lib/logger';
+import { getWebSocketManager } from '~/lib/websocket';
 import { useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 
 const log = getLogger('useTournamentSocket');
@@ -45,7 +45,10 @@ function cachedLobbyState(
   tournamentId: number,
   gameId: number,
 ): string | null | undefined {
-  const bracket = queryClient.getQueryData<BracketResponseDTO>(['bracket', tournamentId]);
+  const bracket = queryClient.getQueryData<BracketResponseDTO>([
+    'bracket',
+    tournamentId,
+  ]);
   const match = bracket?.matches.find((m) => m.pk === gameId);
   return match ? (match.lobby_state ?? null) : undefined;
 }
@@ -109,14 +112,21 @@ export function useTournamentSocket(tournamentId: number | null) {
       if (timer !== null) return;
       timer = setTimeout(() => {
         timer = null;
-        queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
+        queryClient.invalidateQueries({
+          queryKey: ['tournament', tournamentId],
+        });
       }, TOURNAMENT_REFETCH_WINDOW_MS);
     };
 
     const unsub = manager.subscribe(connId, (message) => {
       const msg = message as TournamentSocketMessage;
       log.debug('Tournament WS event', msg.type);
-      handleTournamentMessage(queryClient, tournamentId, msg, refetchTournament);
+      handleTournamentMessage(
+        queryClient,
+        tournamentId,
+        msg,
+        refetchTournament,
+      );
     });
 
     return () => {

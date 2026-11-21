@@ -102,15 +102,11 @@ SCAN_TARGETS = [
     REPO_ROOT / "backend" / "app" / "user_cache.py",
     REPO_ROOT / "backend" / "draft" / "views" / "team_setup.py",
     REPO_ROOT / "backend" / "draft" / "views" / "team_api.py",
+    REPO_ROOT / "backend" / "events" / "views.py",
     REPO_ROOT / "backend" / "org" / "views_organization.py",
 ]
 
-UNSCANNED: dict[pathlib.Path, str] = {
-    REPO_ROOT / "backend" / "events" / "views.py": (
-        "pre-existing: @cached_as blocks in EventViewSet.retrieve and the "
-        "discord action miss profile deps; tracked separately"
-    ),
-}
+UNSCANNED: dict[pathlib.Path, str] = {}
 
 
 def _customuser_blocks_missing(dep: str) -> list[str]:
@@ -119,7 +115,7 @@ def _customuser_blocks_missing(dep: str) -> list[str]:
 
     Positions and nickname/avatar both ship on the same user-list/detail/org/
     league/draft endpoints, so any CustomUser-dependent block needs both
-    BaseUserProfile (T1) and DotaUserProfile (T2) deps.
+    BaseUserProfile and DotaUserProfile deps.
     """
     offenders = []
     for path in SCAN_TARGETS:
@@ -137,8 +133,8 @@ def _customuser_blocks_missing(dep: str) -> list[str]:
 
 class CachedAsGuardrailTests(TestCase):
     """Every cacheops decorator block that depends on ``CustomUser`` MUST
-    also depend on ``BaseUserProfile`` (nickname/avatar — T1 epic) AND
-    ``DotaUserProfile`` (positions/dota-mmr — T2 epic). A CustomUser-only dep
+    also depend on ``BaseUserProfile`` (nickname/avatar) AND
+    ``DotaUserProfile`` (positions/dota-mmr). A CustomUser-only dep
     would serve stale data from cached endpoints (org rosters, tournament
     participants, draft payloads) after a PATCH to the profile-base or
     profile-game/dota endpoints.
@@ -158,8 +154,8 @@ class CachedAsGuardrailTests(TestCase):
         """Any @cached_as(CustomUser, ...) site that ships positions must also
         depend on DotaUserProfile so a PATCH to /api/users/me/profile/game/dota/
         evicts it. Positions ship on the same user-list/detail/org/league
-        endpoints that T1 guarded for BaseUserProfile, so the dependency set is
-        identical."""
+        endpoints as nickname/avatar, so the dependency set matches
+        BaseUserProfile's."""
         offenders = _customuser_blocks_missing("DotaUserProfile")
         assert not offenders, (
             "@cached_as sites depending on CustomUser but missing "
@@ -197,8 +193,8 @@ class ScanTargetsCompleteTests(SimpleTestCase):
         self.assertTrue(all(UNSCANNED.values()))
 
 
-# Relation paths that reach a profile table owning nickname/avatar (T1) or
-# positions/rank (T2) from some *other* base table.
+# Relation paths that reach a profile table owning nickname/avatar or
+# positions/rank from some *other* base table.
 _PROFILE_JOIN_RE = re.compile(r"base_profile|dota_user_profile|deadlock_user_profile")
 
 _SANCTIONED_MODULE = "user/querysets.py"

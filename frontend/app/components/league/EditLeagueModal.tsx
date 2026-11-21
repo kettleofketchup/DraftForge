@@ -19,9 +19,16 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
-import { useIsLeagueAdmin, useIsOrganizationAdmin } from '~/hooks/usePermissions';
+import {
+  useIsLeagueAdmin,
+  useIsOrganizationAdmin,
+} from '~/hooks/usePermissions';
 import { extractApiError } from '~/lib/apiError';
-import { EditLeagueSchema, type EditLeagueInput, type LeagueType } from './schemas';
+import {
+  EditLeagueSchema,
+  type EditLeagueInput,
+  type LeagueType,
+} from './schemas';
 
 interface EditLeagueModalProps {
   open: boolean;
@@ -42,7 +49,9 @@ export function EditLeagueModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isLeagueAdmin = useIsLeagueAdmin(league);
   const orgPk =
-    typeof league.organization === 'object' ? league.organization?.pk : undefined;
+    typeof league.organization === 'object'
+      ? league.organization?.pk
+      : undefined;
   const { organization: parentOrg } = useOrganization(orgPk);
   const isOrgAdmin = useIsOrganizationAdmin(parentOrg);
 
@@ -204,15 +213,11 @@ export function EditLeagueModal({
             </FormItem>
           )}
         />
-
       </Form>
 
       {/* Admin Team Section - outside Form to prevent button clicks from submitting the league edit form */}
       {isLeagueAdmin && (
-        <AdminTeamSection
-          league={league}
-          onUpdate={onSuccess}
-        />
+        <AdminTeamSection league={league} onUpdate={onSuccess} />
       )}
 
       {isOrgAdmin && league.pk != null && (

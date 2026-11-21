@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { GameLobbyResponseSchema, GameLobbySchema, InviteResultSchema } from '../schemas';
-import { provisionalWinnerSlot } from '../provisional';
 import { lobbyErrorText } from '../api';
+import { provisionalWinnerSlot } from '../provisional';
+import {
+  GameLobbyResponseSchema,
+  GameLobbySchema,
+  InviteResultSchema,
+} from '../schemas';
 import { lobbyStateLabel, showLobbyDot } from '../states';
 import { publicLobby } from './fixtures';
-
 
 describe('GameLobbySchema', () => {
   it('parses the public view without private fields', () => {
@@ -26,9 +29,9 @@ describe('GameLobbySchema', () => {
   });
 
   it('keeps unknown states instead of failing', () => {
-    expect(GameLobbySchema.parse({ ...publicLobby, state: 'warming_up' }).state).toBe(
-      'warming_up',
-    );
+    expect(
+      GameLobbySchema.parse({ ...publicLobby, state: 'warming_up' }).state,
+    ).toBe('warming_up');
     expect(lobbyStateLabel('warming_up')).toBe('warming_up');
   });
 
@@ -76,10 +79,18 @@ describe('provisionalWinnerSlot', () => {
   it('suggests nothing for unscored, unknown or missing results', () => {
     expect(provisionalWinnerSlot(null, 10, 11)).toBeNull();
     expect(
-      provisionalWinnerSlot({ provisional_winner_team_id: 11, provisional_scored: false }, 10, 11),
+      provisionalWinnerSlot(
+        { provisional_winner_team_id: 11, provisional_scored: false },
+        10,
+        11,
+      ),
     ).toBeNull();
     expect(
-      provisionalWinnerSlot({ provisional_winner_team_id: 99, provisional_scored: true }, 10, 11),
+      provisionalWinnerSlot(
+        { provisional_winner_team_id: 99, provisional_scored: true },
+        10,
+        11,
+      ),
     ).toBeNull();
   });
 });
@@ -87,7 +98,9 @@ describe('provisionalWinnerSlot', () => {
 describe('lobby helpers', () => {
   it('describes known error codes and falls back to the server message', () => {
     expect(lobbyErrorText('league_not_held')).toMatch(/league/);
-    expect(lobbyErrorText('something_new', 'Server says no')).toBe('Server says no');
+    expect(lobbyErrorText('something_new', 'Server says no')).toBe(
+      'Server says no',
+    );
     expect(lobbyErrorText(null)).toBe('Unknown error');
   });
 

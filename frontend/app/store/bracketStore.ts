@@ -1,9 +1,12 @@
+import type { Edge, Node } from '@xyflow/react';
 import { create } from 'zustand';
-import type { Node, Edge } from '@xyflow/react';
-import type { BracketMatch, SeedingMethod } from '~/components/bracket/types';
-import type { TeamType } from '~/components/tournament/types.d';
-import { generateBracket, reseedBracket } from '~/components/bracket/utils/bracketFactory';
 import type { BracketMatchDTO as ApiBracketMatch } from '~/components/bracket/schemas';
+import type { BracketMatch, SeedingMethod } from '~/components/bracket/types';
+import {
+  generateBracket,
+  reseedBracket,
+} from '~/components/bracket/utils/bracketFactory';
+import type { TeamType } from '~/components/tournament/types.d';
 import { getLogger } from '~/lib/logger';
 
 const log = getLogger('bracket:store');
@@ -12,7 +15,11 @@ const log = getLogger('bracket:store');
  * Generate a consistent string ID for bracket matches
  * Format: {bracketType}-{round}-{position} e.g., "winners-1-0"
  */
-export function generateMatchId(bracketType: string, round: number, position: number): string {
+export function generateMatchId(
+  bracketType: string,
+  round: number,
+  position: number,
+): string {
   // Use short prefixes for cleaner IDs
   const typePrefix: Record<string, string> = {
     winners: 'w',
@@ -27,9 +34,16 @@ export function generateMatchId(bracketType: string, round: number, position: nu
 /**
  * Converts API response match (snake_case) to frontend match (camelCase)
  */
-export function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBracketMatch[]): BracketMatch {
+export function mapApiMatchToMatch(
+  apiMatch: ApiBracketMatch,
+  allMatches: ApiBracketMatch[],
+): BracketMatch {
   // Generate consistent string ID from bracket structure
-  const id = generateMatchId(apiMatch.bracket_type, apiMatch.round, apiMatch.position);
+  const id = generateMatchId(
+    apiMatch.bracket_type,
+    apiMatch.round,
+    apiMatch.position,
+  );
 
   // Determine winner by comparing winning_team with radiant/dire teams
   let winner: 'radiant' | 'dire' | undefined;
@@ -44,18 +58,28 @@ export function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBra
   // Find the next match by pk and generate its string ID
   let nextMatchId: string | undefined;
   if (apiMatch.next_game) {
-    const nextMatch = allMatches.find(m => m.pk === apiMatch.next_game);
+    const nextMatch = allMatches.find((m) => m.pk === apiMatch.next_game);
     if (nextMatch) {
-      nextMatchId = generateMatchId(nextMatch.bracket_type, nextMatch.round, nextMatch.position);
+      nextMatchId = generateMatchId(
+        nextMatch.bracket_type,
+        nextMatch.round,
+        nextMatch.position,
+      );
     }
   }
 
   // Find the loser's next match
   let loserNextMatchId: string | undefined;
   if (apiMatch.loser_next_game) {
-    const loserNextMatch = allMatches.find(m => m.pk === apiMatch.loser_next_game);
+    const loserNextMatch = allMatches.find(
+      (m) => m.pk === apiMatch.loser_next_game,
+    );
     if (loserNextMatch) {
-      loserNextMatchId = generateMatchId(loserNextMatch.bracket_type, loserNextMatch.round, loserNextMatch.position);
+      loserNextMatchId = generateMatchId(
+        loserNextMatch.bracket_type,
+        loserNextMatch.round,
+        loserNextMatch.position,
+      );
     }
   }
 
@@ -98,7 +122,11 @@ interface BracketStore {
   // Bracket operations
   generateBracket: (teams: TeamType[], method: SeedingMethod) => void;
   reseedBracket: (teams: TeamType[], method: SeedingMethod) => void;
-  assignTeamToSlot: (matchId: string, slot: 'radiant' | 'dire', team: TeamType) => void;
+  assignTeamToSlot: (
+    matchId: string,
+    slot: 'radiant' | 'dire',
+    team: TeamType,
+  ) => void;
   removeTeamFromSlot: (matchId: string, slot: 'radiant' | 'dire') => void;
   setMatchWinner: (matchId: string, winner: 'radiant' | 'dire') => void;
   advanceWinner: (matchId: string) => void;
@@ -144,7 +172,7 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
       matches: state.matches.map((m) =>
         m.id === matchId
           ? { ...m, [slot === 'radiant' ? 'radiantTeam' : 'direTeam']: team }
-          : m
+          : m,
       ),
       isDirty: true,
     }));
@@ -155,8 +183,11 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     set((state) => ({
       matches: state.matches.map((m) =>
         m.id === matchId
-          ? { ...m, [slot === 'radiant' ? 'radiantTeam' : 'direTeam']: undefined }
-          : m
+          ? {
+              ...m,
+              [slot === 'radiant' ? 'radiantTeam' : 'direTeam']: undefined,
+            }
+          : m,
       ),
       isDirty: true,
     }));
@@ -166,7 +197,7 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     log.debug('Setting match winner', { matchId, winner });
     set((state) => ({
       matches: state.matches.map((m) =>
-        m.id === matchId ? { ...m, winner, status: 'completed' as const } : m
+        m.id === matchId ? { ...m, winner, status: 'completed' as const } : m,
       ),
       isDirty: true,
     }));
@@ -192,7 +223,11 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
           slot: match.nextMatchSlot,
           team: winningTeam.name,
         });
-        get().assignTeamToSlot(match.nextMatchId, match.nextMatchSlot, winningTeam);
+        get().assignTeamToSlot(
+          match.nextMatchId,
+          match.nextMatchSlot,
+          winningTeam,
+        );
       } else {
         log.warn('bracket_advance_winner_target_missing', {
           matchId,
@@ -220,7 +255,11 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
           slot: match.loserNextMatchSlot,
           team: losingTeam.name,
         });
-        get().assignTeamToSlot(match.loserNextMatchId, match.loserNextMatchSlot, losingTeam);
+        get().assignTeamToSlot(
+          match.loserNextMatchId,
+          match.loserNextMatchSlot,
+          losingTeam,
+        );
       } else {
         log.warn('bracket_advance_loser_target_missing', {
           matchId,
@@ -259,17 +298,22 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
       log.debug('Unsetting match status (no derivable winner)', { matchId });
       set((state) => ({
         matches: state.matches.map((m) =>
-          m.id === matchId ? { ...m, status: 'pending' as const } : m
+          m.id === matchId ? { ...m, status: 'pending' as const } : m,
         ),
         isDirty: true,
       }));
       return;
     }
 
-    const winningTeam = match.winner === 'radiant' ? match.radiantTeam : match.direTeam;
-    const losingTeam = match.winner === 'radiant' ? match.direTeam : match.radiantTeam;
+    const winningTeam =
+      match.winner === 'radiant' ? match.radiantTeam : match.direTeam;
+    const losingTeam =
+      match.winner === 'radiant' ? match.direTeam : match.radiantTeam;
 
-    log.debug('Unsetting match winner', { matchId, previousWinner: match.winner });
+    log.debug('Unsetting match winner', {
+      matchId,
+      previousWinner: match.winner,
+    });
 
     set((state) => ({
       matches: state.matches.map((m) => {

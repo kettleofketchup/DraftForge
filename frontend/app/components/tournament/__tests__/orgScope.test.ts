@@ -12,7 +12,10 @@ import {
   showsSignupsOpenBadge,
 } from '../orgScope';
 
-function tournament(orgId: number | null, signupsOpen: boolean): TournamentType {
+function tournament(
+  orgId: number | null,
+  signupsOpen: boolean,
+): TournamentType {
   return {
     pk: 1,
     name: 'Cup',
@@ -160,7 +163,10 @@ describe('showsSignupsOpenBadge', () => {
     expect(showsSignupsOpenBadge(tournament(30, true), [30])).toBe(false);
     expect(showsSignupsOpenBadge(tournament(31, false), [30])).toBe(false);
     expect(
-      showsSignupsOpenBadge({ ...tournament(31, false), signups_open: undefined }, [30]),
+      showsSignupsOpenBadge(
+        { ...tournament(31, false), signups_open: undefined },
+        [30],
+      ),
     ).toBe(false);
   });
 });

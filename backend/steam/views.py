@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.conf import settings
 from django.db.models import QuerySet
 from django.http import QueryDict
@@ -10,6 +12,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from app.models import League
+from common.game import GameType
+from league.models import LeagueUser
+from org.mmr import org_mmr_map
 from user.querysets import with_user_profiles
 
 from .constants import LEAGUE_ID
@@ -30,7 +35,7 @@ class MatchDetailView(APIView):
     Fetches from Steam API if not cached locally.
     """
 
-    def get(self, request, match_id):
+    def get(self, request: Request, match_id: int) -> Response:
         match = update_match_details(match_id)
         if match:
             serializer = MatchSerializer(match)
@@ -105,6 +110,41 @@ class LeaderboardView(generics.ListAPIView):
             return queryset.order_by(sort_field, "pk")
         return queryset.order_by(sort_field, "-games_played", "pk")
 
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        rows = list(page) if page is not None else list(queryset)
+        context = self.get_serializer_context() | _leaderboard_mmr_maps(rows)
+        serializer = self.get_serializer(rows, many=True, context=context)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+
+def _leaderboard_mmr_maps(
+    rows: list[LeaguePlayerStats],
+) -> dict[str, dict[int, int]]:
+    user_ids = [row.user_id for row in rows]
+    league = (
+        League.objects.filter(steam_league_id=LEAGUE_ID)
+        .only("pk", "organization_id")
+        .first()
+    )
+    if league is None or not user_ids:
+        return {"base_mmr_map": {}, "league_mmr_map": {}}
+    base_mmr_map = (
+        org_mmr_map(league.organization_id, user_ids, GameType.DOTA2)
+        if league.organization_id
+        else {}
+    )
+    league_mmr_map = {
+        user_id: mmr or 0
+        for user_id, mmr in LeagueUser.objects.filter(
+            league=league, user_id__in=user_ids
+        ).values_list("user_id", "mmr")
+    }
+    return {"base_mmr_map": base_mmr_map, "league_mmr_map": league_mmr_map}
+
 
 def _resolve_stats_league_id(params: QueryDict) -> int | Response:
     if "league" in params:
@@ -166,7 +206,7 @@ class MyLeagueStatsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         try:
             stats = LeaguePlayerStats.objects.select_related("user").get(
                 user=request.user,

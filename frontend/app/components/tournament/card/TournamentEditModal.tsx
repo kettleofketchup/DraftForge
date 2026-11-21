@@ -33,12 +33,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
-import type { TournamentType } from '../types';
 import { STATE_CHOICES } from '../constants';
-import { COMMON_TIMEZONES, STATE_VALUES, TOURNAMENT_TYPE_VALUES } from '../schemas';
-import { getLogger } from '~/lib/logger';
+import {
+  COMMON_TIMEZONES,
+  STATE_VALUES,
+  TOURNAMENT_TYPE_VALUES,
+} from '../schemas';
+import type { TournamentType } from '../types';
 
 const log = getLogger('TournamentEditModal');
 
@@ -55,7 +59,10 @@ function formatTimezoneLabel(tz: string): string {
 }
 
 // Helper to extract date and time from ISO string
-function extractDateAndTime(isoString: string | null | undefined): { date: string; time: string } {
+function extractDateAndTime(isoString: string | null | undefined): {
+  date: string;
+  time: string;
+} {
   if (!isoString) {
     const now = new Date();
     return {
@@ -138,12 +145,14 @@ export function TournamentEditModal({
   };
 
   // Get league timezone if available, default to America/New_York
-  const leagueData = typeof tournament.league === 'object'
-    ? (tournament.league as unknown as { timezone?: string })
-    : null;
-  const defaultTimezone = leagueData?.timezone
-    || (tournament as unknown as { timezone?: string })?.timezone
-    || 'America/New_York';
+  const leagueData =
+    typeof tournament.league === 'object'
+      ? (tournament.league as unknown as { timezone?: string })
+      : null;
+  const defaultTimezone =
+    leagueData?.timezone ||
+    (tournament as unknown as { timezone?: string })?.timezone ||
+    'America/New_York';
 
   // Extract initial date and time from existing tournament
   const initialDateTime = extractDateAndTime(tournament.date_played);
@@ -156,7 +165,10 @@ export function TournamentEditModal({
       name: tournament.name || '',
       state: tournament.state ?? undefined,
       tournament_type: tournament.tournament_type ?? undefined,
-      date_played: combineDateAndTime(initialDateTime.date, initialDateTime.time),
+      date_played: combineDateAndTime(
+        initialDateTime.date,
+        initialDateTime.time,
+      ),
       timezone: defaultTimezone,
       league: getCurrentLeagueId(),
     },
@@ -169,11 +181,12 @@ export function TournamentEditModal({
       setSelectedDate(dateTime.date);
       setSelectedTime(dateTime.time);
 
-      const tz = (typeof tournament.league === 'object'
-        ? (tournament.league as unknown as { timezone?: string })?.timezone
-        : null)
-        || (tournament as unknown as { timezone?: string })?.timezone
-        || 'America/New_York';
+      const tz =
+        (typeof tournament.league === 'object'
+          ? (tournament.league as unknown as { timezone?: string })?.timezone
+          : null) ||
+        (tournament as unknown as { timezone?: string })?.timezone ||
+        'America/New_York';
 
       form.reset({
         name: tournament.name || '',
@@ -188,7 +201,10 @@ export function TournamentEditModal({
 
   // Update date_played when date or time changes
   useEffect(() => {
-    form.setValue('date_played', combineDateAndTime(selectedDate, selectedTime));
+    form.setValue(
+      'date_played',
+      combineDateAndTime(selectedDate, selectedTime),
+    );
   }, [selectedDate, selectedTime, form]);
 
   async function onSubmit(data: TournamentEditInput) {
@@ -197,7 +213,10 @@ export function TournamentEditModal({
 
     try {
       // Build payload - convert empty strings to null for proper API handling
-      const payload: Partial<TournamentType> & { timezone?: string; league_id_write?: number | null } = {
+      const payload: Partial<TournamentType> & {
+        timezone?: string;
+        league_id_write?: number | null;
+      } = {
         name: data.name,
         state: data.state || null,
         tournament_type: data.tournament_type || null,
@@ -213,7 +232,8 @@ export function TournamentEditModal({
       onOpenChange(false);
       onSuccess?.();
     } catch (err: any) {
-      const message = err?.response?.data || err?.message || 'Failed to update tournament';
+      const message =
+        err?.response?.data || err?.message || 'Failed to update tournament';
       log.error('Failed to update tournament', err);
       toast.error(`Failed to update tournament: ${message}`);
     } finally {
@@ -311,14 +331,18 @@ export function TournamentEditModal({
               <FormLabel>Tournament Date & Time</FormLabel>
               <div className="flex gap-2">
                 {/* Date Picker */}
-                <Popover open={calendarOpen} onOpenChange={setCalendarOpen} modal={true}>
+                <Popover
+                  open={calendarOpen}
+                  onOpenChange={setCalendarOpen}
+                  modal={true}
+                >
                   <PopoverTrigger asChild>
                     <FormControl>
                       <Button
                         variant="outline"
                         className={cn(
                           'flex-1 pl-3 text-left font-normal',
-                          !selectedDate && 'text-muted-foreground'
+                          !selectedDate && 'text-muted-foreground',
                         )}
                         data-testid="tournament-date-picker"
                       >
@@ -334,7 +358,9 @@ export function TournamentEditModal({
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="single"
-                      selected={selectedDate ? localDate(selectedDate) : undefined}
+                      selected={
+                        selectedDate ? localDate(selectedDate) : undefined
+                      }
                       onSelect={(date) => {
                         if (date) {
                           setSelectedDate(format(date, 'yyyy-MM-dd'));
@@ -373,10 +399,7 @@ export function TournamentEditModal({
                 <Globe className="h-4 w-4" />
                 Timezone
               </FormLabel>
-              <Select
-                onValueChange={field.onChange}
-                value={field.value}
-              >
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger data-testid="tournament-timezone-select">
                     <SelectValue placeholder="Select timezone" />
@@ -389,7 +412,9 @@ export function TournamentEditModal({
                       value={tz}
                       data-testid={`tournament-timezone-${tz}`}
                     >
-                      {tz === 'UTC' ? 'UTC' : `${formatTimezoneLabel(tz)} (${tz})`}
+                      {tz === 'UTC'
+                        ? 'UTC'
+                        : `${formatTimezoneLabel(tz)} (${tz})`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -411,16 +436,18 @@ export function TournamentEditModal({
               <FormLabel>League</FormLabel>
               <Select
                 onValueChange={(value) => {
-                  const leagueId = value === "none" ? null : Number(value);
+                  const leagueId = value === 'none' ? null : Number(value);
                   field.onChange(leagueId);
                   if (leagueId && leagues) {
-                    const selectedLeague = leagues.find((l: LeagueType) => l.pk === leagueId);
+                    const selectedLeague = leagues.find(
+                      (l: LeagueType) => l.pk === leagueId,
+                    );
                     if (selectedLeague?.timezone) {
                       form.setValue('timezone', selectedLeague.timezone);
                     }
                   }
                 }}
-                value={field.value?.toString() ?? "none"}
+                value={field.value?.toString() ?? 'none'}
               >
                 <FormControl>
                   <SelectTrigger data-testid="tournament-league-select">
@@ -429,11 +456,13 @@ export function TournamentEditModal({
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="none">No League</SelectItem>
-                  {leagues?.filter((league: LeagueType) => league.pk != null).map((league: LeagueType) => (
-                    <SelectItem key={league.pk} value={league.pk!.toString()}>
-                      {league.name}
-                    </SelectItem>
-                  ))}
+                  {leagues
+                    ?.filter((league: LeagueType) => league.pk != null)
+                    .map((league: LeagueType) => (
+                      <SelectItem key={league.pk} value={league.pk!.toString()}>
+                        {league.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               <FormDescription>

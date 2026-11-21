@@ -2,7 +2,6 @@ import { TriangleAlert } from 'lucide-react';
 import React from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { lookupSteamAccountIdHolder } from '~/components/api/userAPI';
-import { getLogger } from '~/lib/logger';
 import {
   FormControl,
   FormField,
@@ -25,6 +24,7 @@ import {
   positionKeys,
   type PositionKey,
 } from '~/components/user/positions/positionEdit';
+import { getLogger } from '~/lib/logger';
 import type { EditUserInput } from './editUserSchema';
 import {
   describeSteamAccountIdConflict,
@@ -303,7 +303,12 @@ export const UserEditForm: React.FC<Props> = ({
   // No outer <ScrollArea> — FormDialog already wraps its children in one.
   return (
     <div className="flex flex-col w-full gap-4">
-      <StringField form={form} fieldKey="nickname" label="Nickname" hotkey="N" />
+      <StringField
+        form={form}
+        fieldKey="nickname"
+        label="Nickname"
+        hotkey="N"
+      />
       {showMmr && (
         <NumberField form={form} fieldKey="mmr" label={mmrLabel} hotkey="R" />
       )}

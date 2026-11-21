@@ -9,5 +9,4 @@
   ],
 
   "tailwindConfig": "./tailwind.config.js"
-
 }

@@ -2,10 +2,12 @@ from collections import defaultdict
 from datetime import datetime
 from typing import TypedDict
 
-from django.db.models import QuerySet, Sum
+from django.contrib.auth.models import AnonymousUser
+from django.db.models import Count, QuerySet, Sum
 from django.utils import timezone
 
 from app.display_names import first_name
+from app.models import CustomUser
 from org.models import ContributionEntry, Organization, OrgUser
 from org.standing import ledger
 from org.standing.periods import Period, month_period, resolve_org_tz
@@ -90,6 +92,25 @@ def member_entries(org_user: OrgUser, period: Period) -> QuerySet[ContributionEn
         .select_related("event")
         .order_by("-occurred_at", "-pk")
     )
+
+
+def own_org_user(
+    viewer: CustomUser | AnonymousUser | None, org: Organization
+) -> OrgUser | None:
+    if viewer is None or not viewer.is_authenticated:
+        return None
+    return with_user_profiles(
+        OrgUser.objects.filter(organization=org, user_id=viewer.pk), "user"
+    ).first()
+
+
+def own_totals(org_user: OrgUser, period: Period) -> tuple[int, int] | None:
+    sums = member_entries(org_user, period).aggregate(
+        total=Sum("points"), entries=Count("pk")
+    )
+    if not sums["entries"]:
+        return None
+    return sums["total"] or 0, sums["entries"]
 
 
 def _month_key(year: int, month: int) -> str:

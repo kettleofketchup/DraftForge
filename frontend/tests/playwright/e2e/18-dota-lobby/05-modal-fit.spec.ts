@@ -7,6 +7,7 @@
  * the dialog body. Needs lobbies on (docker/.env.test), not the simulator.
  */
 
+import type { Locator, Page } from '@playwright/test';
 import {
   expect,
   loginAdmin,
@@ -16,21 +17,28 @@ import {
   test,
   type DotaLobbyTestData,
 } from '../../fixtures';
-import type { Locator, Page } from '@playwright/test';
 
 const VIEWPORTS = [
   { name: 'phone', width: 390, height: 844 },
   { name: 'laptop', width: 1366, height: 768 },
 ];
 
-async function expectInViewport(page: Page, locator: Locator, what: string): Promise<void> {
+async function expectInViewport(
+  page: Page,
+  locator: Locator,
+  what: string,
+): Promise<void> {
   const viewport = page.viewportSize()!;
   const box = await locator.boundingBox();
   expect(box, `${what} is rendered`).not.toBeNull();
   expect(box!.x, `${what} left edge`).toBeGreaterThanOrEqual(0);
   expect(box!.y, `${what} top edge`).toBeGreaterThanOrEqual(0);
-  expect(box!.x + box!.width, `${what} right edge`).toBeLessThanOrEqual(viewport.width + 0.5);
-  expect(box!.y + box!.height, `${what} bottom edge`).toBeLessThanOrEqual(viewport.height + 0.5);
+  expect(box!.x + box!.width, `${what} right edge`).toBeLessThanOrEqual(
+    viewport.width + 0.5,
+  );
+  expect(box!.y + box!.height, `${what} bottom edge`).toBeLessThanOrEqual(
+    viewport.height + 0.5,
+  );
 }
 
 test.describe('Dota lobby: Match Details dialog fits the viewport (e2e)', () => {
@@ -45,12 +53,19 @@ test.describe('Dota lobby: Match Details dialog fits the viewport (e2e)', () => 
     test(`@cicd title, close and Link Steam Match fit at ${viewport.width}x${viewport.height}`, async ({
       page,
     }) => {
-      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.setViewportSize({
+        width: viewport.width,
+        height: viewport.height,
+      });
       const tournament = data.series_event.tournament;
       await openBracket(page, tournament.pk);
       const dialog = await openMatchModal(page, tournament.games[0].pk);
-      await expect(dialog.locator('[data-testid="lobby-panel"]')).toBeVisible({ timeout: 15_000 });
-      await expect(dialog.locator('[data-testid="lobby-staff-controls"]')).toBeVisible();
+      await expect(dialog.locator('[data-testid="lobby-panel"]')).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(
+        dialog.locator('[data-testid="lobby-staff-controls"]'),
+      ).toBeVisible();
 
       const title = dialog.locator('[data-testid="match-details-header"]');
       const close = dialog.locator('[data-testid="dialog-close-button"]');
@@ -64,10 +79,14 @@ test.describe('Dota lobby: Match Details dialog fits the viewport (e2e)', () => 
       await link.scrollIntoViewIfNeeded();
       await expect(link).toBeVisible();
       await expectInViewport(page, link, 'Link Steam Match');
-      const body = await dialog.locator('[data-testid="matchStatsModal-body"]').boundingBox();
+      const body = await dialog
+        .locator('[data-testid="matchStatsModal-body"]')
+        .boundingBox();
       const linkBox = await link.boundingBox();
       expect(linkBox!.y).toBeGreaterThanOrEqual(body!.y - 0.5);
-      expect(linkBox!.y + linkBox!.height).toBeLessThanOrEqual(body!.y + body!.height + 0.5);
+      expect(linkBox!.y + linkBox!.height).toBeLessThanOrEqual(
+        body!.y + body!.height + 0.5,
+      );
 
       // Scrolling the body leaves the header where it was.
       await expectInViewport(page, title, 'title after scrolling');

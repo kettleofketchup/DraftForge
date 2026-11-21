@@ -6,10 +6,10 @@
 import { PassThrough } from 'node:stream';
 
 import { createReadableStreamFromReadable } from '@react-router/node';
-import type { EntryContext } from 'react-router';
-import { ServerRouter } from 'react-router';
 import { renderToPipeableStream } from 'react-dom/server';
 import { I18nextProvider } from 'react-i18next';
+import type { EntryContext } from 'react-router';
+import { ServerRouter } from 'react-router';
 import { createI18nInstance } from './i18n/config';
 import { i18nServer } from './i18n/i18n.server';
 

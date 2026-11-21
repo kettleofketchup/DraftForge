@@ -75,6 +75,7 @@ from events.schemas import DotaModalConfig
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
 from lobby.passwords import PasswordMode, generate_password
 from org.membership import resolve_or_create_org_user
+from org.mmr import game_for_event, set_org_mmr
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 from org.standing import api as standing
@@ -594,13 +595,9 @@ def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> Even
         if signup.event.organization_id is None:
             raise ValueError("Cannot set MMR for an event without an organization.")
         org_user = resolve_or_create_org_user(signup.user, signup.event.organization)
-        org_user.mmr = mmr_override
-        org_user.has_active_dota_mmr = True
-        org_user.dota_mmr_last_verified = timezone.now()
-        org_user.save(
-            update_fields=["mmr", "has_active_dota_mmr", "dota_mmr_last_verified"]
+        set_org_mmr(
+            org_user, game_for_event(signup.event), mmr_override, mark_verified=True
         )
-        invalidate_after_commit(org_user)
         refresh_unmet_requirements(org_user)
 
     signup.status = SignupStatus.APPROVED

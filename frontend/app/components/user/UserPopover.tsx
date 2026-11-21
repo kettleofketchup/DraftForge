@@ -2,11 +2,11 @@ import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
-} from "~/components/ui/hover-card";
-import { useUserLeagueStats } from "~/features/leaderboard/queries";
-import { DisplayName } from "~/components/user/avatar";
-import { LeagueStatsCard } from "./LeagueStatsCard";
-import { UserAvatar } from "./UserAvatar";
+} from '~/components/ui/hover-card';
+import { DisplayName } from '~/components/user/avatar';
+import { useUserLeagueStats } from '~/features/leaderboard/queries';
+import { LeagueStatsCard } from './LeagueStatsCard';
+import { UserAvatar } from './UserAvatar';
 
 interface UserPopoverProps {
   userId: number;
@@ -33,7 +33,9 @@ export function UserPopover({
     <HoverCard>
       <HoverCardTrigger asChild>
         {children ?? (
-          <button className="cursor-pointer hover:underline">{displayName}</button>
+          <button className="cursor-pointer hover:underline">
+            {displayName}
+          </button>
         )}
       </HoverCardTrigger>
       <HoverCardContent className="w-64 border-border bg-base-800">
@@ -46,7 +48,9 @@ export function UserPopover({
             <div className="font-semibold text-white">{displayName}</div>
           </div>
           {isLoading ? (
-            <div className="text-sm text-muted-foreground">Loading stats...</div>
+            <div className="text-sm text-muted-foreground">
+              Loading stats...
+            </div>
           ) : stats ? (
             <LeagueStatsCard
               stats={stats}

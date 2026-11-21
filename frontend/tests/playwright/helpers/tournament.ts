@@ -1,7 +1,6 @@
-import { API_URL } from '../fixtures/base-url';
+import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
-import type { Page, Locator, BrowserContext } from '@playwright/test';
-
+import { API_URL } from '../fixtures/base-url';
 
 /**
  * Tournament data returned from the test API endpoint.
@@ -41,11 +40,11 @@ export interface CreateTournamentOptions {
  */
 export async function getTournamentByKey(
   context: BrowserContext,
-  key: string
+  key: string,
 ): Promise<TournamentData | null> {
   const response = await context.request.get(
     `${API_URL}/tests/tournament-by-key/${key}/`,
-    { failOnStatusCode: false }
+    { failOnStatusCode: false },
   );
 
   if (!response.ok()) {
@@ -64,11 +63,11 @@ export async function getTournamentByKey(
  */
 export async function resetTournamentByKey(
   context: BrowserContext,
-  key: string
+  key: string,
 ): Promise<TournamentData | null> {
   const response = await context.request.post(
     `${API_URL}/tests/reset-tournament/${key}/`,
-    { failOnStatusCode: false }
+    { failOnStatusCode: false },
   );
 
   if (!response.ok()) {
@@ -103,17 +102,23 @@ async function searchTab(
   const result: { card: Locator | null } = { card: null };
 
   await expect(async () => {
-    await expect(panel).toHaveAttribute('data-fetching', 'false', { timeout: 1000 });
+    await expect(panel).toHaveAttribute('data-fetching', 'false', {
+      timeout: 1000,
+    });
     if (await card.isVisible()) {
       await expect(card).toContainText(name, { timeout: 1000 });
       result.card = card;
       return;
     }
     if (!(await empty.isVisible())) {
-      throw new Error(`/tournaments ${tab}: neither "${name}" nor the empty state is shown yet`);
+      throw new Error(
+        `/tournaments ${tab}: neither "${name}" nor the empty state is shown yet`,
+      );
     }
     await page.waitForTimeout(SEARCH_SETTLE_MS);
-    await expect(panel).toHaveAttribute('data-fetching', 'false', { timeout: 1000 });
+    await expect(panel).toHaveAttribute('data-fetching', 'false', {
+      timeout: 1000,
+    });
     await expect(empty).toBeVisible({ timeout: 1000 });
     result.card = null;
   }).toPass({ timeout });
@@ -125,12 +130,17 @@ async function searchTab(
  * Widen `/tournaments` to every organization. Logged-in users start on
  * "My organizations", which hides tournaments of organizations they are not in.
  */
-export async function showAllOrganizations(page: Page, timeout = 30_000): Promise<void> {
+export async function showAllOrganizations(
+  page: Page,
+  timeout = 30_000,
+): Promise<void> {
   const trigger = page.getByTestId('tournaments-filter-organization');
   await expect(trigger).toBeVisible({ timeout });
   if (!(await trigger.textContent())?.includes('My organizations')) return;
   await trigger.click();
-  await page.getByRole('option', { name: 'All organizations', exact: true }).click();
+  await page
+    .getByRole('option', { name: 'All organizations', exact: true })
+    .click();
   await expect(trigger).toContainText('All organizations');
 }
 
@@ -169,7 +179,9 @@ export async function findTournamentCard(
   const archived = await searchTab(page, 'archived', name, timeout);
   if (archived) return archived;
 
-  throw new Error(`Tournament card "${name}" is on neither the Upcoming nor the Archived tab`);
+  throw new Error(
+    `Tournament card "${name}" is on neither the Upcoming nor the Archived tab`,
+  );
 }
 
 /**
@@ -243,34 +255,44 @@ export class TournamentPage {
     this.bracketContainer = page.locator('[data-testid="bracketContainer"]');
 
     // Player management
-    this.addPlayerButton = page.locator('[data-testid="tournamentAddPlayerBtn"]');
+    this.addPlayerButton = page.locator(
+      '[data-testid="tournamentAddPlayerBtn"]',
+    );
     this.playerSearchInput = page.locator('[data-testid="add-user-search"]');
 
     // Tournament creation
-    this.createButton = page.locator('[data-testid="tournament-create-button"]');
+    this.createButton = page.locator(
+      '[data-testid="tournament-create-button"]',
+    );
     this.createModal = page.locator('[data-testid="tournament-create-modal"]');
     this.tournamentForm = page.locator('[data-testid="tournament-form"]');
     this.nameInput = page.locator('[data-testid="tournament-name-input"]');
     this.typeSelect = page.locator('[data-testid="tournament-type-select"]');
     this.datePicker = page.locator('[data-testid="tournament-date-picker"]');
-    this.leagueSelect = page.locator('[data-testid="tournament-league-select"]');
-    this.submitButton = page.locator('[data-testid="tournament-submit-button"]');
-    this.cancelButton = page.locator('[data-testid="tournament-cancel-button"]');
+    this.leagueSelect = page.locator(
+      '[data-testid="tournament-league-select"]',
+    );
+    this.submitButton = page.locator(
+      '[data-testid="tournament-submit-button"]',
+    );
+    this.cancelButton = page.locator(
+      '[data-testid="tournament-cancel-button"]',
+    );
 
     // Draft buttons - try multiple possible selectors (team draft and hero draft)
     this.startDraftButton = page.locator(
-      '[data-testid="startTeamDraftButton"], [data-testid="startDraftButton"], button:has-text("Start Draft")'
+      '[data-testid="startTeamDraftButton"], [data-testid="startDraftButton"], button:has-text("Start Draft")',
     );
     this.liveDraftButton = page.locator(
-      '[data-testid="liveTeamDraftButton"], [data-testid="liveDraftButton"], button:has-text("Live Draft")'
+      '[data-testid="liveTeamDraftButton"], [data-testid="liveDraftButton"], button:has-text("Live Draft")',
     );
     this.viewDraftButton = page.locator(
-      '[data-testid="viewTeamDraftButton"], [data-testid="viewDraftButton"], button:has-text("View Draft")'
+      '[data-testid="viewTeamDraftButton"], [data-testid="viewDraftButton"], button:has-text("View Draft")',
     );
 
     // Draft modal - HeroDraft modal or generic draft modal
     this.draftModal = page.locator(
-      '[data-testid="herodraft-modal"], [data-testid="draftModal"], [role="dialog"]'
+      '[data-testid="herodraft-modal"], [data-testid="draftModal"], [role="dialog"]',
     );
   }
 
@@ -284,8 +306,13 @@ export class TournamentPage {
    * @param tournamentPk - Tournament primary key
    * @param tab - Optional tab to navigate to ('players' | 'teams' | 'games')
    */
-  async goto(tournamentPk: number, tab?: 'players' | 'teams' | 'games'): Promise<void> {
-    const path = tab ? `/tournament/${tournamentPk}/${tab}` : `/tournament/${tournamentPk}`;
+  async goto(
+    tournamentPk: number,
+    tab?: 'players' | 'teams' | 'games',
+  ): Promise<void> {
+    const path = tab
+      ? `/tournament/${tournamentPk}/${tab}`
+      : `/tournament/${tournamentPk}`;
     await this.page.goto(path);
     await this.waitForPageLoad();
   }
@@ -345,28 +372,34 @@ export class TournamentPage {
    */
   async clickStartDraft(): Promise<void> {
     // Try Start Draft first, then Live Draft, then View Draft
-    const startVisible = await this.startDraftButton.isVisible().catch(() => false);
+    const startVisible = await this.startDraftButton
+      .isVisible()
+      .catch(() => false);
     if (startVisible) {
       await this.startDraftButton.click();
       return;
     }
 
-    const liveVisible = await this.liveDraftButton.isVisible().catch(() => false);
+    const liveVisible = await this.liveDraftButton
+      .isVisible()
+      .catch(() => false);
     if (liveVisible) {
       await this.liveDraftButton.click();
       return;
     }
 
-    const viewVisible = await this.viewDraftButton.isVisible().catch(() => false);
+    const viewVisible = await this.viewDraftButton
+      .isVisible()
+      .catch(() => false);
     if (viewVisible) {
       await this.viewDraftButton.click();
       return;
     }
 
     // Fallback: look for any button containing draft-related text
-    const draftButton = this.page.locator(
-      'button:has-text("Draft"), button:has-text("draft")'
-    ).first();
+    const draftButton = this.page
+      .locator('button:has-text("Draft"), button:has-text("draft")')
+      .first();
     await draftButton.click();
   }
 
@@ -386,7 +419,9 @@ export class TournamentPage {
    * @param draftPk - Draft primary key
    */
   async gotoDraft(tournamentPk: number, draftPk: number): Promise<void> {
-    await this.page.goto(`/tournament/${tournamentPk}/bracket/draft/${draftPk}`);
+    await this.page.goto(
+      `/tournament/${tournamentPk}/bracket/draft/${draftPk}`,
+    );
     await this.waitForDraftModal();
   }
 
@@ -415,14 +450,16 @@ export class TournamentPage {
     await this.playerSearchInput.fill(username);
 
     // Wait for and click the add button for the user
-    const addUserBtn = this.page.locator(`[data-testid="add-user-btn-${username}"]`);
+    const addUserBtn = this.page.locator(
+      `[data-testid="add-user-btn-${username}"]`,
+    );
     await addUserBtn.waitFor({ state: 'visible' });
     await addUserBtn.click();
 
     // Wait for success message
-    await expect(
-      this.page.locator('text=/added|created/i')
-    ).toBeVisible({ timeout: 5000 });
+    await expect(this.page.locator('text=/added|created/i')).toBeVisible({
+      timeout: 5000,
+    });
 
     // Verify player card appears
     await this.page
@@ -436,18 +473,20 @@ export class TournamentPage {
    * @param username - Player username to remove
    */
   async removePlayer(username: string): Promise<void> {
-    const removeButton = this.page.locator(`[data-testid="removePlayerBtn-${username}"]`);
+    const removeButton = this.page.locator(
+      `[data-testid="removePlayerBtn-${username}"]`,
+    );
     await removeButton.scrollIntoViewIfNeeded();
     await removeButton.click();
 
     // Wait for success message
-    await expect(
-      this.page.locator('text=/removed|deleted/i')
-    ).toBeVisible({ timeout: 5000 });
+    await expect(this.page.locator('text=/removed|deleted/i')).toBeVisible({
+      timeout: 5000,
+    });
 
     // Verify player card is removed
     await expect(
-      this.page.locator(`[data-testid="usercard-${username}"]`)
+      this.page.locator(`[data-testid="usercard-${username}"]`),
     ).not.toBeVisible();
   }
 
@@ -488,7 +527,7 @@ export class TournamentPage {
     // Select tournament type
     await this.typeSelect.click();
     const typeOption = this.page.locator(
-      `[data-testid="tournament-type-${tournamentType.replace('_elimination', '')}"]`
+      `[data-testid="tournament-type-${tournamentType.replace('_elimination', '')}"]`,
     );
     await typeOption.waitFor({ state: 'visible' });
     await typeOption.click();
@@ -526,9 +565,9 @@ export class TournamentPage {
     await this.submitForm();
 
     // Wait for success message
-    await expect(
-      this.page.locator('text=/created successfully/i')
-    ).toBeVisible({ timeout: 5000 });
+    await expect(this.page.locator('text=/created successfully/i')).toBeVisible(
+      { timeout: 5000 },
+    );
   }
 
   // ============================================================================
@@ -602,7 +641,7 @@ export class TournamentPage {
  */
 export async function navigateToTournament(
   page: Page,
-  tournamentPk: number
+  tournamentPk: number,
 ): Promise<void> {
   await page.goto(`/tournament/${tournamentPk}`);
   await page.locator('[data-testid="tournamentDetailPage"]').waitFor({
@@ -632,11 +671,13 @@ export async function clickTeamsTab(page: Page): Promise<void> {
  */
 export async function clickStartDraft(page: Page): Promise<void> {
   // Use data-testid for reliable selection - supports both team draft and hero draft buttons
-  const draftButton = page.locator(
-    '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], [data-testid="viewTeamDraftButton"], ' +
-    '[data-testid="startDraftButton"], [data-testid="liveDraftButton"], [data-testid="viewDraftButton"], ' +
-    'button:has-text("Start Draft"), button:has-text("View Draft")'
-  ).first();
+  const draftButton = page
+    .locator(
+      '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], [data-testid="viewTeamDraftButton"], ' +
+        '[data-testid="startDraftButton"], [data-testid="liveDraftButton"], [data-testid="viewDraftButton"], ' +
+        'button:has-text("Start Draft"), button:has-text("View Draft")',
+    )
+    .first();
 
   await draftButton.click();
 }
@@ -650,11 +691,11 @@ export async function clickStartDraft(page: Page): Promise<void> {
  */
 export async function waitForDraftModal(
   page: Page,
-  timeout = 15000
+  timeout = 15000,
 ): Promise<void> {
   await page
     .locator(
-      '[data-testid="herodraft-modal"], [data-testid="draftModal"], [role="dialog"]'
+      '[data-testid="herodraft-modal"], [data-testid="draftModal"], [role="dialog"]',
     )
     .waitFor({ state: 'visible', timeout });
 }

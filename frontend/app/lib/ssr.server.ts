@@ -6,7 +6,7 @@
  * the Django backend for meta tags and above-the-fold skeletons.
  */
 
-const SSR_API_URL = process.env.SSR_API_URL ?? "http://backend:8000/api";
+const SSR_API_URL = process.env.SSR_API_URL ?? 'http://backend:8000/api';
 
 /**
  * Fetch SSR data from a Django /ssr/ endpoint.

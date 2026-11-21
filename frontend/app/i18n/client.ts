@@ -1,8 +1,19 @@
-import { createI18nInstance, FALLBACK_LOCALE, type SupportedLocale } from './config';
-import { isSupportedLocale, readLocaleCookie, serializeLocaleCookie } from './localeCookie';
+import {
+  createI18nInstance,
+  FALLBACK_LOCALE,
+  type SupportedLocale,
+} from './config';
+import {
+  isSupportedLocale,
+  readLocaleCookie,
+  serializeLocaleCookie,
+} from './localeCookie';
 
 function writeLocaleCookie(locale: SupportedLocale): void {
-  document.cookie = serializeLocaleCookie(locale, location.protocol === 'https:');
+  document.cookie = serializeLocaleCookie(
+    locale,
+    location.protocol === 'https:',
+  );
 }
 
 export function resolveLocale(): SupportedLocale {
@@ -10,7 +21,8 @@ export function resolveLocale(): SupportedLocale {
   const stored = readLocaleCookie(document.cookie);
   const queryLocale = new URLSearchParams(location.search).get('lang');
   if (isSupportedLocale(queryLocale)) {
-    if (stored.locale !== queryLocale || stored.needsRewrite) writeLocaleCookie(queryLocale);
+    if (stored.locale !== queryLocale || stored.needsRewrite)
+      writeLocaleCookie(queryLocale);
   } else if (stored.locale && stored.needsRewrite) {
     writeLocaleCookie(stored.locale);
   }

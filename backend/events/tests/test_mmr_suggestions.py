@@ -79,7 +79,7 @@ class SuggestMmrPrecedenceTest(SimpleTestCase):
         self.assertEqual(result["range_source"], "medal")
 
     def test_prior_zero_is_treated_as_present(self) -> None:
-        """org_user.mmr=0 is not None, so prior is selected when no self-report."""
+        """A prior of 0 is not None, so prior is selected when no self-report."""
         profile = make_profile(rank_medal="Legend 3", mmr=None)
         result = suggest_mmr(profile, prior_approved_mmr=0)
         self.assertEqual(result["default"], 0)
@@ -116,14 +116,18 @@ class SuggestMmrRangeTableTest(SimpleTestCase):
     def test_all_medals_match_settings_range(self) -> None:
         for medal, expected_low, expected_high in MEDAL_RANGES:
             with self.subTest(medal=medal):
-                result = suggest_mmr(make_profile(rank_medal=medal), prior_approved_mmr=None)
+                result = suggest_mmr(
+                    make_profile(rank_medal=medal), prior_approved_mmr=None
+                )
                 self.assertEqual(result["range"], [expected_low, expected_high])
                 self.assertEqual(result["range_source"], "medal")
 
     def test_all_battle_cup_tiers_match_settings_range(self) -> None:
         for tier, expected_low, expected_high in BATTLE_CUP_RANGES:
             with self.subTest(tier=tier):
-                profile = make_profile(rank_status="never", rank_medal="", battle_cup_tier=tier)
+                profile = make_profile(
+                    rank_status="never", rank_medal="", battle_cup_tier=tier
+                )
                 result = suggest_mmr(profile, prior_approved_mmr=None)
                 self.assertEqual(result["range"], [expected_low, expected_high])
                 self.assertEqual(result["range_source"], "battle_cup")

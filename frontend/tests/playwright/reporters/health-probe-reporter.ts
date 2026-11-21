@@ -1,8 +1,8 @@
-import { API_URL } from '../fixtures/base-url';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as https from 'node:https';
 import type { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
+import * as fs from 'node:fs';
+import * as https from 'node:https';
+import * as path from 'node:path';
+import { API_URL } from '../fixtures/base-url';
 
 /**
  * Playwright reporter that pings `/api/healthz` after every test and writes a
@@ -34,7 +34,8 @@ interface ProbeResult {
 // Test-only endpoint, gated by `isTestEnvironment()` in backend/urls.py —
 // lives under `api/tests/` alongside the other test-only login + reset
 // helpers. NOT reachable in prod/release.
-const HEALTH_URL = process.env.PLAYWRIGHT_HEALTH_URL ?? `${API_URL}/tests/healthz/`;
+const HEALTH_URL =
+  process.env.PLAYWRIGHT_HEALTH_URL ?? `${API_URL}/tests/healthz/`;
 const HEALTH_TIMEOUT_MS = 5000;
 
 function probeOnce(): Promise<ProbeResult> {
@@ -63,16 +64,33 @@ function probeOnce(): Promise<ProbeResult> {
           } catch {
             // ignore parse error — probe still recorded
           }
-          resolve({ ok: (res.statusCode ?? 0) < 400, status: res.statusCode ?? 0, totalMs, dbMs });
+          resolve({
+            ok: (res.statusCode ?? 0) < 400,
+            status: res.statusCode ?? 0,
+            totalMs,
+            dbMs,
+          });
         });
       },
     );
     req.on('timeout', () => {
       req.destroy();
-      resolve({ ok: false, status: 0, totalMs: Date.now() - start, dbMs: null, error: 'timeout' });
+      resolve({
+        ok: false,
+        status: 0,
+        totalMs: Date.now() - start,
+        dbMs: null,
+        error: 'timeout',
+      });
     });
     req.on('error', (err) => {
-      resolve({ ok: false, status: 0, totalMs: Date.now() - start, dbMs: null, error: String(err) });
+      resolve({
+        ok: false,
+        status: 0,
+        totalMs: Date.now() - start,
+        dbMs: null,
+        error: String(err),
+      });
     });
     req.end();
   });
@@ -89,7 +107,8 @@ class HealthProbeReporter implements Reporter {
     this.logFile = path.join(dir, `health-probe-${stamp}.jsonl`);
     fs.writeFileSync(
       this.logFile,
-      JSON.stringify({ event: 'begin', timestamp: new Date().toISOString() }) + '\n',
+      JSON.stringify({ event: 'begin', timestamp: new Date().toISOString() }) +
+        '\n',
     );
   }
 
@@ -116,7 +135,11 @@ class HealthProbeReporter implements Reporter {
   onEnd() {
     fs.appendFileSync(
       this.logFile,
-      JSON.stringify({ event: 'end', timestamp: new Date().toISOString(), totalTests: this.testIndex }) + '\n',
+      JSON.stringify({
+        event: 'end',
+        timestamp: new Date().toISOString(),
+        totalTests: this.testIndex,
+      }) + '\n',
     );
   }
 }

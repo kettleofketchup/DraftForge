@@ -1,15 +1,15 @@
+import { findOverflow } from '../../../../scripts/find-overflow';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   loginAdmin,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
 import {
   AUDIT_ROUTE_COUNT,
   resolveAuditRoutes,
   type AuditRoute,
 } from '../../helpers/audit-routes';
-import { findOverflow } from '../../../../scripts/find-overflow';
 
 let ROUTES: AuditRoute[];
 
@@ -41,7 +41,9 @@ test.describe('mobile hydration mismatch audit (@cicd)', () => {
   });
 
   for (let i = 0; i < AUDIT_ROUTE_COUNT; i++) {
-    test(`route ${i} renders without SSR/client divergence`, async ({ page }) => {
+    test(`route ${i} renders without SSR/client divergence`, async ({
+      page,
+    }) => {
       const errors: string[] = [];
       page.on('pageerror', (e) => errors.push(e.message));
       page.on('console', (m) => {
@@ -49,7 +51,8 @@ test.describe('mobile hydration mismatch audit (@cicd)', () => {
       });
       const route = ROUTES[i];
       await visitAndWaitForHydration(page, route.path);
-      const HYDRATION_RX = /hydration|did not match|server rendered|server-rendered/i;
+      const HYDRATION_RX =
+        /hydration|did not match|server rendered|server-rendered/i;
       const hydrationErrors = errors.filter((m) => HYDRATION_RX.test(m));
       expect(
         hydrationErrors,

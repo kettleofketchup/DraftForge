@@ -1,10 +1,12 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { brandToxic, brandButtonVariants } from './styles';
+import { brandButtonVariants, brandToxic } from './styles';
 
-export interface EditButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
+export interface EditButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant'
+> {
   /** When true, shows "Done Editing" text; when false, shows children or "Edit" */
   editMode?: boolean;
   /** Whether to apply the soft-shadow lift (default: true) */
@@ -27,10 +29,7 @@ const EditButton = React.forwardRef<HTMLButtonElement, EditButtonProps>(
     return (
       <Button
         ref={ref}
-        className={cn(
-          depth ? brandButtonVariants.edit : brandToxic,
-          className
-        )}
+        className={cn(depth ? brandButtonVariants.edit : brandToxic, className)}
         {...props}
       >
         {editMode !== undefined
@@ -40,7 +39,7 @@ const EditButton = React.forwardRef<HTMLButtonElement, EditButtonProps>(
           : children}
       </Button>
     );
-  }
+  },
 );
 
 EditButton.displayName = 'EditButton';

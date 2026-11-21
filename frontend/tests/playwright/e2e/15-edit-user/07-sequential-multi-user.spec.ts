@@ -6,15 +6,15 @@
  * behavior — only changed fields land in the request body.
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
-  openEditModal,
   fillEditField,
+  openEditModal,
   saveEditModal,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 const USER_EDIT_ORG_NAME = 'User Edit Org';
 
@@ -33,9 +33,14 @@ test.describe.serial('Sequential multi-user edits (@cicd)', () => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const orgsResp = await context.request.get(`${API_URL}/organizations/`);
     const orgs = await orgsResp.json();
-    const orgList = Array.isArray(orgs) ? orgs : orgs.results ?? [];
-    const editOrg = orgList.find((o: { name: string }) => o.name === USER_EDIT_ORG_NAME);
-    if (!editOrg) throw new Error(`Org "${USER_EDIT_ORG_NAME}" not found. Run just db::populate::all`);
+    const orgList = Array.isArray(orgs) ? orgs : (orgs.results ?? []);
+    const editOrg = orgList.find(
+      (o: { name: string }) => o.name === USER_EDIT_ORG_NAME,
+    );
+    if (!editOrg)
+      throw new Error(
+        `Org "${USER_EDIT_ORG_NAME}" not found. Run just db::populate::all`,
+      );
     orgPk = editOrg.pk;
     await context.close();
   });
@@ -44,7 +49,9 @@ test.describe.serial('Sequential multi-user edits (@cicd)', () => {
     await loginAdmin();
   });
 
-  test('@cicd edit user A and user B sequentially; both saves persist', async ({ page }) => {
+  test('@cicd edit user A and user B sequentially; both saves persist', async ({
+    page,
+  }) => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await page.locator('[data-testid="org-tab-users"]').click();
 
@@ -69,8 +76,12 @@ test.describe.serial('Sequential multi-user edits (@cicd)', () => {
     // Reload and verify both persist
     await page.reload();
     await page.locator('[data-testid="org-tab-users"]').click();
-    await expect(cardA.getByText(newNickA).first()).toBeVisible({ timeout: 5000 });
-    await expect(cardB.getByText(newNickB).first()).toBeVisible({ timeout: 5000 });
+    await expect(cardA.getByText(newNickA).first()).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(cardB.getByText(newNickB).first()).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test('@cicd PATCH body contains only dirty fields', async ({ page }) => {

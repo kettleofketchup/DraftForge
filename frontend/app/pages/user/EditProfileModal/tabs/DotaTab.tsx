@@ -1,24 +1,21 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import type { z } from 'zod';
 
 import { patchGameProfile } from '~/components/api/userProfileApi';
-import { Form } from '~/components/ui/form';
 import { CancelButton } from '~/components/ui/buttons/CancelButton';
 import { SubmitButton } from '~/components/ui/buttons/SubmitButton';
-import { PositionFormFields } from '~/pages/profile/forms/position';
+import { Form } from '~/components/ui/form';
 import { getLogger } from '~/lib/logger';
 import { Sentry } from '~/lib/sentry';
+import { PositionFormFields } from '~/pages/profile/forms/position';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserProfileStore } from '~/store/userProfileStore';
 import type { UserProfileEntry } from '~/store/userProfileTypes';
 
-import {
-  DotaProfileFormSchema,
-  type DotaProfileFormValues,
-} from '../schemas';
+import { DotaProfileFormSchema, type DotaProfileFormValues } from '../schemas';
 
 const log = getLogger('user.editProfile.dota');
 
@@ -88,7 +85,10 @@ export default function DotaTab({ profile, onSave, onClose }: DotaTabProps) {
       onClose();
     },
     onError: (err) => {
-      log.error('dota_patch_failed', { userPk: profile.pk, error: String(err) });
+      log.error('dota_patch_failed', {
+        userPk: profile.pk,
+        error: String(err),
+      });
       Sentry.captureException(err, {
         tags: { system: 'users', subsystem: 'profile' },
         extra: { userPk: profile.pk },

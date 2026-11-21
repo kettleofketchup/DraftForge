@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
 import { useUserDotaProfile } from '../useUserProfile';
 
 /**
@@ -19,7 +19,9 @@ function withQueryClient(children: ReactNode) {
 interface ProbeProps {
   userPk: number | null | undefined;
   orgId: number | null | undefined;
-  initialData: Parameters<typeof useUserDotaProfile>[2] extends { initialData?: infer T } | undefined
+  initialData: Parameters<typeof useUserDotaProfile>[2] extends
+    | { initialData?: infer T }
+    | undefined
     ? T
     : never;
   onCapture: (snapshot: { data: unknown; isFetching: boolean }) => void;
@@ -37,7 +39,13 @@ describe('useUserDotaProfile', () => {
       unverified_friend_id: null,
       rank_status: 'active',
       rank_medal: 'Legend 1',
-      positions: { pos_1: true, pos_2: false, pos_3: false, pos_4: false, pos_5: false },
+      positions: {
+        pos_1: true,
+        pos_2: false,
+        pos_3: false,
+        pos_4: false,
+        pos_5: false,
+      },
       mmr: null,
       battle_cup_tier: null,
       rank_screenshot: null,

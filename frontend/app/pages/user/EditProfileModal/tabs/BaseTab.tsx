@@ -1,5 +1,5 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
@@ -7,6 +7,8 @@ import {
   patchBaseProfile,
   type BasePatchPayload,
 } from '~/components/api/userProfileApi';
+import { CancelButton } from '~/components/ui/buttons/CancelButton';
+import { SubmitButton } from '~/components/ui/buttons/SubmitButton';
 import {
   Form,
   FormControl,
@@ -17,8 +19,6 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
-import { CancelButton } from '~/components/ui/buttons/CancelButton';
-import { SubmitButton } from '~/components/ui/buttons/SubmitButton';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { Sentry } from '~/lib/sentry';
@@ -27,10 +27,7 @@ import { useUserProfileStore } from '~/store/userProfileStore';
 import type { UserProfileEntry } from '~/store/userProfileTypes';
 import { useUserStore } from '~/store/userStore';
 
-import {
-  BaseProfileFormSchema,
-  type BaseProfileFormValues,
-} from '../schemas';
+import { BaseProfileFormSchema, type BaseProfileFormValues } from '../schemas';
 
 const log = getLogger('user.editProfile.base');
 
@@ -64,7 +61,8 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
 
       // userProfileStore: same idea via its upsert() — built-in
       // hasChanged() short-circuits no-op writes.
-      const currentProfile = useUserProfileStore.getState().entities[profile.pk];
+      const currentProfile =
+        useUserProfileStore.getState().entities[profile.pk];
       if (currentProfile) {
         useUserProfileStore.getState().upsert({
           ...currentProfile,
@@ -92,7 +90,10 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
       onClose();
     },
     onError: (err) => {
-      log.error('base_patch_failed', { userPk: profile.pk, error: String(err) });
+      log.error('base_patch_failed', {
+        userPk: profile.pk,
+        error: String(err),
+      });
       Sentry.captureException(err, {
         tags: { system: 'users', subsystem: 'profile' },
         extra: { userPk: profile.pk },
@@ -151,7 +152,9 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
                   value={field.value ?? ''}
                 />
               </FormControl>
-              <FormDescription>Display name shown on your profile</FormDescription>
+              <FormDescription>
+                Display name shown on your profile
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}

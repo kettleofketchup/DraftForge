@@ -1,25 +1,47 @@
 import { describe, expect, it, vi } from 'vitest';
-import { NO_SLOT_MESSAGE, parseSlotFile, resolveBaseUrl } from '../playwright/fixtures/base-url-resolve';
+import {
+  NO_SLOT_MESSAGE,
+  parseSlotFile,
+  resolveBaseUrl,
+} from '../playwright/fixtures/base-url-resolve';
 
 const slot = (o: Record<string, string> = {}) =>
-  Object.entries({ DF_SLOT: '2', DF_BASE_URL: 'https://localhost:12443', DF_WORKTREE: '/wt', DF_SLOT_TOKEN: 'tok', DF_REGISTRY: '/reg', ...o })
-    .map(([k, v]) => `${k}=${v}`).join('\n');
+  Object.entries({
+    DF_SLOT: '2',
+    DF_BASE_URL: 'https://localhost:12443',
+    DF_WORKTREE: '/wt',
+    DF_SLOT_TOKEN: 'tok',
+    DF_REGISTRY: '/reg',
+    ...o,
+  })
+    .map(([k, v]) => `${k}=${v}`)
+    .join('\n');
 const RES = 'owner=/wt\ntoken=tok\nlast_used=1';
 const OK = { '/wt/docker/.env.slot': slot(), '/reg/slot-2': RES };
 const id = (p: string) => p.replace(/\/+$/, '');
-const input = (env: Record<string, string | undefined>, fsMap: Record<string, string> = {}, root = '/wt') => {
+const input = (
+  env: Record<string, string | undefined>,
+  fsMap: Record<string, string> = {},
+  root = '/wt',
+) => {
   const readFile = vi.fn((p: string) => fsMap[p] ?? null);
   return { env, repoRoot: () => root, readFile, realpath: id };
 };
 
 describe('resolveBaseUrl', () => {
   it('env with marker=runner wins and never reads files', () => {
-    const i = input({ DF_BASE_URL: 'https://localhost:15443', DF_BASE_URL_SOURCE: 'runner' }, OK);
+    const i = input(
+      { DF_BASE_URL: 'https://localhost:15443', DF_BASE_URL_SOURCE: 'runner' },
+      OK,
+    );
     expect(resolveBaseUrl(i)).toBe('https://localhost:15443');
     expect(i.readFile).not.toHaveBeenCalled();
   });
   it('marker=container with a disagreeing slot file returns env without reading files', () => {
-    const i = input({ DF_BASE_URL: 'https://nginx', DF_BASE_URL_SOURCE: 'container' }, OK);
+    const i = input(
+      { DF_BASE_URL: 'https://nginx', DF_BASE_URL_SOURCE: 'container' },
+      OK,
+    );
     expect(resolveBaseUrl(i)).toBe('https://nginx');
     expect(i.readFile).not.toHaveBeenCalled();
   });
@@ -33,33 +55,62 @@ describe('resolveBaseUrl', () => {
     expect(resolveBaseUrl(input({}, OK))).toBe('https://localhost:12443');
   });
   it('GITHUB_ACTIONS fallback', () => {
-    expect(resolveBaseUrl(input({ GITHUB_ACTIONS: 'true' }, {}))).toBe('https://localhost');
+    expect(resolveBaseUrl(input({ GITHUB_ACTIONS: 'true' }, {}))).toBe(
+      'https://localhost',
+    );
   });
   it('CI=true alone throws NO_SLOT_MESSAGE', () => {
-    expect(() => resolveBaseUrl(input({ CI: 'true' }, {}))).toThrow(NO_SLOT_MESSAGE);
+    expect(() => resolveBaseUrl(input({ CI: 'true' }, {}))).toThrow(
+      NO_SLOT_MESSAGE,
+    );
   });
   it('DF_WORKTREE mismatch throws', () => {
-    const i = input({}, { '/wt/docker/.env.slot': slot({ DF_WORKTREE: '/other' }), '/reg/slot-2': RES });
-    expect(() => resolveBaseUrl(i)).toThrow('`.env.slot` was written for /other');
+    const i = input(
+      {},
+      {
+        '/wt/docker/.env.slot': slot({ DF_WORKTREE: '/other' }),
+        '/reg/slot-2': RES,
+      },
+    );
+    expect(() => resolveBaseUrl(i)).toThrow(
+      '`.env.slot` was written for /other',
+    );
   });
   it('repoRoot with trailing slash still matches', () => {
-    expect(resolveBaseUrl(input({}, OK, '/wt/'))).toBe('https://localhost:12443');
+    expect(resolveBaseUrl(input({}, OK, '/wt/'))).toBe(
+      'https://localhost:12443',
+    );
   });
   it('registry token mismatch throws "now belongs to"', () => {
-    const i = input({}, { '/wt/docker/.env.slot': slot(), '/reg/slot-2': 'owner=/other\ntoken=x\nlast_used=1' });
+    const i = input(
+      {},
+      {
+        '/wt/docker/.env.slot': slot(),
+        '/reg/slot-2': 'owner=/other\ntoken=x\nlast_used=1',
+      },
+    );
     expect(() => resolveBaseUrl(i)).toThrow('slot 2 now belongs to /other');
   });
   it('missing reservation throws', () => {
-    expect(() => resolveBaseUrl(input({}, { '/wt/docker/.env.slot': slot() }))).toThrow('no reservation for slot 2');
+    expect(() =>
+      resolveBaseUrl(input({}, { '/wt/docker/.env.slot': slot() })),
+    ).toThrow('no reservation for slot 2');
   });
   it('stale DF_BASE_URL without source marker throws "disagrees"', () => {
-    expect(() => resolveBaseUrl(input({ DF_BASE_URL: 'https://localhost' }, OK))).toThrow('disagrees');
+    expect(() =>
+      resolveBaseUrl(input({ DF_BASE_URL: 'https://localhost' }, OK)),
+    ).toThrow('disagrees');
   });
   it('stale export with matching slot passes', () => {
-    expect(resolveBaseUrl(input({ DF_BASE_URL: 'https://localhost:12443' }, OK))).toBe('https://localhost:12443');
+    expect(
+      resolveBaseUrl(input({ DF_BASE_URL: 'https://localhost:12443' }, OK)),
+    ).toBe('https://localhost:12443');
   });
   it('slot file without DF_BASE_URL throws', () => {
-    const i = input({}, { '/wt/docker/.env.slot': slot({ DF_BASE_URL: '' }), '/reg/slot-2': RES });
+    const i = input(
+      {},
+      { '/wt/docker/.env.slot': slot({ DF_BASE_URL: '' }), '/reg/slot-2': RES },
+    );
     expect(() => resolveBaseUrl(i)).toThrow('has no DF_BASE_URL');
   });
 });

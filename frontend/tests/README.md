@@ -5,11 +5,13 @@ This directory contains comprehensive Cypress tests for the frontend application
 ## Setup
 
 1. Install Cypress and dependencies:
+
 ```bash
 npm install
 ```
 
 2. Install Cypress binary:
+
 ```bash
 npm run cypress:install
 ```
@@ -40,6 +42,7 @@ tests/cypress/
 ## Running Tests
 
 ### Interactive Mode (Recommended for Development)
+
 ```bash
 # Open Cypress Test Runner for E2E tests
 npm run test:e2e:open
@@ -49,6 +52,7 @@ npm run test:component:open
 ```
 
 ### Headless Mode (CI/Production)
+
 ```bash
 # Run all E2E tests headlessly
 npm run test:e2e
@@ -58,6 +62,7 @@ npm run test:component
 ```
 
 ### Running Specific Tests
+
 ```bash
 # Run specific test file
 npx cypress run --spec "tests/cypress/e2e/01-navigation.cy.ts"
@@ -80,11 +85,13 @@ The tests are configured via `cypress.config.ts` with the following key settings
 Before running tests, ensure:
 
 1. **Frontend dev server is running**:
+
 ```bash
 npm run dev
 ```
 
 2. **Backend API is available** (for API integration tests):
+
 ```bash
 # In backend directory
 python manage.py runserver
@@ -93,6 +100,7 @@ python manage.py runserver
 ## Test Features
 
 ### Hydration Handling Tests (`00-hydration-handling.cy.ts`)
+
 - ✅ React hydration error suppression
 - ✅ Font loading compatibility
 - ✅ Theme application verification
@@ -100,6 +108,7 @@ python manage.py runserver
 - ✅ Graceful handling of SSR mismatches
 
 ### Navigation Tests (`01-navigation.cy.ts`)
+
 - ✅ Home page loading
 - ✅ Navigation link functionality
 - ✅ Responsive design testing
@@ -109,6 +118,7 @@ python manage.py runserver
 - ✅ Browser back/forward navigation
 
 ### Structure & Accessibility Tests (`01b-structure-accessibility.cy.ts`)
+
 - ✅ HTML structure validation
 - ✅ Semantic content containers
 - ✅ Navigation structure detection
@@ -117,6 +127,7 @@ python manage.py runserver
 - ✅ Responsive design across viewports
 
 ### Tournament Tests (`02-tournaments.cy.ts`)
+
 - ✅ Tournament list display
 - ✅ Individual tournament navigation
 - ✅ Tournament detail views
@@ -125,6 +136,7 @@ python manage.py runserver
 - ✅ Search and filtering
 
 ### Authentication Tests (`03-authentication.cy.ts`)
+
 - ✅ Login page functionality
 - ✅ Form validation
 - ✅ Valid/invalid login handling
@@ -134,6 +146,7 @@ python manage.py runserver
 - ✅ Protected route handling
 
 ### API Integration Tests (`04-api-integration.cy.ts`)
+
 - ✅ Tournament API calls
 - ✅ Error handling
 - ✅ Authentication API
@@ -144,6 +157,7 @@ python manage.py runserver
 - ✅ Concurrent requests
 
 ### UI Component Tests (`05-ui-components.cy.ts`)
+
 - ✅ Form validation
 - ✅ Theme toggling
 - ✅ Dropdown menus
@@ -160,22 +174,22 @@ The test suite includes custom Cypress commands defined in `support/commands.ts`
 
 ```typescript
 // Login via UI
-cy.login('user@example.com', 'password')
+cy.login('user@example.com', 'password');
 
 // Login via API (faster for test setup)
-cy.loginAdmin('user@example.com', 'password')
+cy.loginAdmin('user@example.com', 'password');
 
 // Logout
-cy.logout()
+cy.logout();
 
 // Visit page and wait for loading
-cy.visitAndWait('/tournaments')
+cy.visitAndWait('/tournaments');
 
 // Check if element is in viewport
-cy.get('.element').isInViewport()
+cy.get('.element').isInViewport();
 
 // Wait for API calls
-cy.waitForApi()
+cy.waitForApi();
 ```
 
 ## Test Data
@@ -208,16 +222,18 @@ For continuous integration, use:
 ## Debugging Tests
 
 1. **Use Cypress Test Runner** for visual debugging:
+
 ```bash
 npm run test:e2e:open
 ```
 
 2. **Add debug commands** in tests:
+
 ```typescript
-cy.debug()          // Pause execution
-cy.pause()          // Pause with resume option
-cy.screenshot()     // Take screenshot
-cy.log('Debug message')  // Add log message
+cy.debug(); // Pause execution
+cy.pause(); // Pause with resume option
+cy.screenshot(); // Take screenshot
+cy.log('Debug message'); // Add log message
 ```
 
 3. **View network requests** in Cypress Test Runner's Network tab
@@ -238,8 +254,12 @@ cy.log('Debug message')  // Add log message
 This test suite includes special handling for React hydration errors. See [HYDRATION.md](./HYDRATION.md) for detailed information.
 
 **Quick fix for hydration errors:**
+
 ```typescript
-import { visitAndWaitForHydration, suppressHydrationErrors } from '../support/utils';
+import {
+  visitAndWaitForHydration,
+  suppressHydrationErrors,
+} from '../support/utils';
 
 describe('My Tests', () => {
   beforeEach(() => {

@@ -16,17 +16,25 @@ const args = (from: string, to: string, extra: Partial<Args> = {}): Args =>
 
 describe('organization shouldRevalidate', () => {
   it('skips the loader when only ?tab changes', () => {
-    expect(shouldRevalidate(args('/organizations/8', '/organizations/8?tab=events'))).toBe(false);
-    expect(shouldRevalidate(args('/organizations/8?tab=users', '/organizations/8'))).toBe(false);
+    expect(
+      shouldRevalidate(args('/organizations/8', '/organizations/8?tab=events')),
+    ).toBe(false);
+    expect(
+      shouldRevalidate(args('/organizations/8?tab=users', '/organizations/8')),
+    ).toBe(false);
   });
 
   it('revalidates when the organization changes', () => {
-    expect(shouldRevalidate(args('/organizations/8', '/organizations/9'))).toBe(true);
+    expect(shouldRevalidate(args('/organizations/8', '/organizations/9'))).toBe(
+      true,
+    );
   });
 
   it('defers to the default after a form submission', () => {
     expect(
-      shouldRevalidate(args('/organizations/8', '/organizations/8', { formMethod: 'POST' })),
+      shouldRevalidate(
+        args('/organizations/8', '/organizations/8', { formMethod: 'POST' }),
+      ),
     ).toBe(true);
   });
 });

@@ -7,12 +7,14 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
+from common.game import GameType
 from events.constants import SignupStatus
 from events.models import Event, EventSignup, EventTeam
 from events.schemas import EventSignupSchema
 from events.services import create_tournament_for_event
 from org.models import Organization, OrgUser
 from tests.cache import flush_run_cache
+from tests.populate.utils import ensure_org_user
 
 
 class SignupNameFieldsTest(TestCase):
@@ -40,10 +42,12 @@ class SignupNameFieldsTest(TestCase):
         user = CustomUser.objects.create_user(
             username=name, password="x", discordNickname=f"{name}_global"
         )
-        OrgUser.objects.update_or_create(
-            user=user,
-            organization=self.org,
-            defaults={"guild_nickname": f"{name}_server", "mmr": 4000},
+        ensure_org_user(
+            user,
+            self.org,
+            mmr=4000,
+            guild_nickname=f"{name}_server",
+            game_mmrs={GameType.DEADLOCK: 2000},
         )
         EventSignup.objects.create(event=event, user=user, status=SignupStatus.RSVP)
         return user
@@ -83,7 +87,10 @@ class SignupNameFieldsTest(TestCase):
                 data = rows[0]["user_data"]
                 self.assertIsNone(data.get("guildNickname"))
                 self.assertNotIn("mmr", data)
+                self.assertNotIn("mmr_game_type", data)
                 self.assertNotIn("league_mmr", data)
+                self.assertIsNone(rows[0]["org_user_game_mmrs"])
+                self.assertNotEqual(rows[0]["suggested_mmr"], 4000)
                 self.assertEqual(
                     data["discordNickname"], f"snf_hidden_{tournament}_global"
                 )

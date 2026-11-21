@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
-import type { ArchivedTournamentsResult } from '~/hooks/useTournamentList';
 import { SecondaryButton } from '~/components/ui/buttons';
+import type { ArchivedTournamentsResult } from '~/hooks/useTournamentList';
 import { getLogger } from '~/lib/logger';
 import { ListError } from './ListError';
 import {
@@ -62,7 +62,8 @@ export function ArchivedTab({
   }, [failed, error]);
 
   useEffect(() => {
-    if (isFetchNextPageError) log.error('Failed to load more archived tournaments', error);
+    if (isFetchNextPageError)
+      log.error('Failed to load more archived tournaments', error);
   }, [isFetchNextPageError, error]);
 
   let content: ReactNode;
@@ -81,7 +82,9 @@ export function ArchivedTab({
       <EmptyState
         testId="tournaments-empty-archived"
         message={
-          mine ? 'No archived tournaments in your organizations' : 'No archived tournaments'
+          mine
+            ? 'No archived tournaments in your organizations'
+            : 'No archived tournaments'
         }
         showClearHint={showClearHint}
         action={mine ? <BrowseAllButton onClick={onBrowseAll} /> : undefined}
@@ -102,7 +105,9 @@ export function ArchivedTab({
             </SecondaryButton>
             {isFetchNextPageError && (
               <>
-                <p className="text-sm text-error">Could not load more tournaments.</p>
+                <p className="text-sm text-error">
+                  Could not load more tournaments.
+                </p>
                 <SecondaryButton size="sm" onClick={() => void fetchNextPage()}>
                   Retry
                 </SecondaryButton>

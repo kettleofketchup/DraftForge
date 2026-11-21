@@ -8,12 +8,12 @@ import { useUserStore } from '~/store/userStore';
 const log = getLogger('editForm');
 
 import { refreshTournamentHook } from '~/components/teamdraft/hooks/refreshTournamentHook';
+import { PrimaryButton } from '~/components/ui/buttons';
+import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import type { GameType, TeamType, UserType } from '~/index';
 import { TeamComboBox } from '../helpers/teamCombobox';
 import { createGameHook } from '../hooks/createGameHook';
-import { PrimaryButton } from '~/components/ui/buttons';
-import { Input } from '~/components/ui/input';
 
 export const GameCreateForm: React.FC = () => {
   const currentUser: UserType = useUserStore((state) => state.currentUser);

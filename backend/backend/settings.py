@@ -382,6 +382,7 @@ CACHEOPS = {
     "draft.draftround": {"ops": "all", "timeout": 60 * 60},
     # Organization/League membership models
     "org.orguser": {"ops": "all", "timeout": 60 * 60},
+    "org.orgusergamemmr": {"ops": "all", "timeout": 60 * 60},
     "org.playerdotaprofile": {"ops": "all", "timeout": 60 * 60},
     "org.playerdeadlockprofile": {"ops": "all", "timeout": 60 * 60},
     "org.orgsettings": {"ops": "all", "timeout": 60 * 60},

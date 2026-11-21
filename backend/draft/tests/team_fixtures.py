@@ -27,7 +27,8 @@ from draft.services import team as teamdraft
 from draft.services.team_timeout import skip_turn
 from draft.views.team import teamdraft_pause
 from draft.views.team_picks import pick_player_for_round, undo_last_pick
-from org.models import Organization, OrgUser
+from org.models import Organization
+from tests.populate.utils import ensure_org_user
 
 User = get_user_model()
 
@@ -80,7 +81,7 @@ class TimedDraftFixture:
             self.tournament.league = league
             self.tournament.save()
             for captain, mmr in zip(self.captains, captain_mmrs):
-                OrgUser.objects.create(user=captain, organization=org, mmr=mmr)
+                ensure_org_user(captain, org, mmr=mmr)
 
         self.options: DraftOptions = DraftOptions.ensure_for(
             self.tournament,

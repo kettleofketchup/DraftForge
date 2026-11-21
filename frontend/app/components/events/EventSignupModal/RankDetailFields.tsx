@@ -1,9 +1,30 @@
 'use client';
 import { type Control, useWatch } from 'react-hook-form';
-import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '~/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select';
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '~/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
 
-const MEDALS = ['Herald', 'Guardian', 'Crusader', 'Archon', 'Legend', 'Ancient', 'Divine', 'Immortal'];
+const MEDALS = [
+  'Herald',
+  'Guardian',
+  'Crusader',
+  'Archon',
+  'Legend',
+  'Ancient',
+  'Divine',
+  'Immortal',
+];
 const STARS = ['1', '2', '3', '4', '5'];
 const BC_TIERS = ['1', '2', '3', '4', '5', '6', '7', '8'];
 
@@ -25,11 +46,18 @@ export function RankDetailFields({ control }: { control: Control }) {
                 value={field.value != null ? String(field.value) : ''}
                 onValueChange={(v) => field.onChange(parseInt(v, 10))}
               >
-                <SelectTrigger data-testid="signup-battlecup-tier" className="min-h-11">
+                <SelectTrigger
+                  data-testid="signup-battlecup-tier"
+                  className="min-h-11"
+                >
                   <SelectValue placeholder="Select tier" />
                 </SelectTrigger>
                 <SelectContent>
-                  {BC_TIERS.map((t) => <SelectItem key={t} value={t}>Tier {t}</SelectItem>)}
+                  {BC_TIERS.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      Tier {t}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </FormControl>
@@ -52,12 +80,23 @@ export function RankDetailFields({ control }: { control: Control }) {
           <FormItem>
             <FormLabel>Medal</FormLabel>
             <FormControl>
-              <Select key={rankStatus} value={field.value ?? ''} onValueChange={field.onChange}>
-                <SelectTrigger data-testid="signup-rank-medal" className="min-h-11">
+              <Select
+                key={rankStatus}
+                value={field.value ?? ''}
+                onValueChange={field.onChange}
+              >
+                <SelectTrigger
+                  data-testid="signup-rank-medal"
+                  className="min-h-11"
+                >
                   <SelectValue placeholder="Select medal" />
                 </SelectTrigger>
                 <SelectContent>
-                  {MEDALS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  {MEDALS.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {m}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </FormControl>
@@ -73,12 +112,23 @@ export function RankDetailFields({ control }: { control: Control }) {
           <FormItem>
             <FormLabel>Star</FormLabel>
             <FormControl>
-              <Select key={rankStatus} value={field.value ?? ''} onValueChange={field.onChange}>
-                <SelectTrigger data-testid="signup-rank-star" className="min-h-11">
+              <Select
+                key={rankStatus}
+                value={field.value ?? ''}
+                onValueChange={field.onChange}
+              >
+                <SelectTrigger
+                  data-testid="signup-rank-star"
+                  className="min-h-11"
+                >
                   <SelectValue placeholder="Star (1-5)" />
                 </SelectTrigger>
                 <SelectContent>
-                  {STARS.map((s) => <SelectItem key={s} value={s}>Star {s}</SelectItem>)}
+                  {STARS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      Star {s}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </FormControl>

@@ -1,18 +1,18 @@
-import { z } from 'zod';
 import type { FieldNamesMarkedBoolean } from 'react-hook-form';
+import { z } from 'zod';
+import { updateOrgUser } from '~/components/api/api';
+import { GAME_TYPE } from '~/components/game/constants';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user/types';
-import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import {
   useIsLeagueAdmin,
   useIsOrganizationStaff,
   useIsSuperuser,
 } from '~/hooks/usePermissions';
-import { updateOrgUser } from '~/components/api/api';
-import { GAME_TYPE } from '~/components/game/constants';
 import { selectPositions } from '~/store/selectPositions';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 
 // Dota positions use a 0-5 self-rating scale: 0=hidden, 1=favorite, 5=avoid.
 const PositionFieldSchema = z.coerce.number().int().min(0).max(5);
@@ -34,7 +34,12 @@ export type EditUserInput = z.infer<typeof EditUserSchema>;
 
 export type EditUserScope =
   | { kind: 'org'; organization: OrganizationType }
-  | { kind: 'league'; league: LeagueType; organization?: OrganizationType; orgId?: number }
+  | {
+      kind: 'league';
+      league: LeagueType;
+      organization?: OrganizationType;
+      orgId?: number;
+    }
   | { kind: 'global' };
 
 export type EditableField = keyof EditUserInput;
@@ -59,7 +64,9 @@ export function resolveOrgUserLink(
   const maybeEntry = user as UserType | UserEntry;
   if (isUserEntry(maybeEntry)) {
     const id =
-      (ctx.organizationId ? maybeEntry.orgData[ctx.organizationId]?.id : undefined) ??
+      (ctx.organizationId
+        ? maybeEntry.orgData[ctx.organizationId]?.id
+        : undefined) ??
       (ctx.leagueId ? maybeEntry.leagueData[ctx.leagueId]?.id : undefined);
     if (id != null) return id;
   }
@@ -85,7 +92,11 @@ export function resolveEditScope(
 ): EditUserScope {
   if (resolveOrgUserLink(user, ctx) == null) return { kind: 'global' };
   if (ctx.leagueId && ctx.currentLeague?.pk === ctx.leagueId) {
-    return { kind: 'league', league: ctx.currentLeague, orgId: ctx.organizationId };
+    return {
+      kind: 'league',
+      league: ctx.currentLeague,
+      orgId: ctx.organizationId,
+    };
   }
   if (ctx.currentOrg && ctx.currentOrg.pk === ctx.organizationId) {
     return { kind: 'org', organization: ctx.currentOrg };
@@ -192,7 +203,9 @@ export async function dispatchPatch(
       scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk;
     const orgUserPk: number | undefined = user.orgUserPk;
     if (!orgId || !orgUserPk) {
-      throw new Error('League scope requires a parent org with an OrgUser link');
+      throw new Error(
+        'League scope requires a parent org with an OrgUser link',
+      );
     }
     return applyLocal(user, await updateOrgUser(orgId, orgUserPk, payload));
   }
@@ -205,7 +218,10 @@ export function scopeToContext(
 ): { orgId?: number } | undefined {
   if (scope.kind === 'org') return { orgId: scope.organization.pk };
   if (scope.kind === 'league')
-    return { orgId: scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk };
+    return {
+      orgId:
+        scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk,
+    };
   return undefined;
 }
 

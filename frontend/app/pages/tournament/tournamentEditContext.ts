@@ -5,7 +5,10 @@ export interface TournamentEditContext {
 
 /** Org/league ids for edit scoping, read from the tournament only (never the org/league stores). */
 export function tournamentEditContext(
-  tournament: { organization_pk?: number | null; league_pk?: number | null } | null | undefined,
+  tournament:
+    | { organization_pk?: number | null; league_pk?: number | null }
+    | null
+    | undefined,
 ): TournamentEditContext {
   return {
     organizationId: tournament?.organization_pk ?? undefined,

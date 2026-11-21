@@ -6,9 +6,20 @@ import type { LobbyPlayer } from './schemas';
 // dota_lobby's player statuses, plus '' for a player the lobby has not
 // reported on yet (no lobby, or the roster changed since). Keys are spelled
 // out so i18next-parser can extract them.
-export const PLAYER_STATUSES = ['', 'pending', 'invited', 'joined', 'seated', 'left', 'kicked'];
+export const PLAYER_STATUSES = [
+  '',
+  'pending',
+  'invited',
+  'joined',
+  'seated',
+  'left',
+  'kicked',
+];
 
-function knownStatusLabel(status: string, t: TFunction<'lobby'>): string | undefined {
+function knownStatusLabel(
+  status: string,
+  t: TFunction<'lobby'>,
+): string | undefined {
   switch (status) {
     case '':
       return t('player.status.not_invited');
@@ -35,7 +46,10 @@ function humanize(value: string): string {
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
 }
 
-export function playerStatusLabel(status: string | null | undefined, t: TFunction<'lobby'>): string {
+export function playerStatusLabel(
+  status: string | null | undefined,
+  t: TFunction<'lobby'>,
+): string {
   const key = status ?? '';
   return knownStatusLabel(key, t) ?? humanize(key);
 }
@@ -51,7 +65,9 @@ export function seatLabel(seat: string, t: TFunction<'lobby'>): string {
   if (team) {
     const [, side, slot] = team;
     if (side === 'radiant') {
-      return slot ? t('player.seat.radiant_slot', { slot }) : t('player.seat.radiant');
+      return slot
+        ? t('player.seat.radiant_slot', { slot })
+        : t('player.seat.radiant');
     }
     return slot ? t('player.seat.dire_slot', { slot }) : t('player.seat.dire');
   }
@@ -69,7 +85,9 @@ export function seatLabel(seat: string, t: TFunction<'lobby'>): string {
 
 /** The player is a member of the in-game lobby (seated or not). */
 export function isInLobby(player: LobbyPlayer): boolean {
-  return !!player.seat || player.status === 'joined' || player.status === 'seated';
+  return (
+    !!player.seat || player.status === 'joined' || player.status === 'seated'
+  );
 }
 
 /** The player can be invited and is not in the lobby yet. */
@@ -78,7 +96,10 @@ export function needsInvite(player: LobbyPlayer): boolean {
 }
 
 /** The roster line under a player's name: `Seated · Radiant 1 · Ready`. */
-export function playerStatusText(player: LobbyPlayer, t: TFunction<'lobby'>): string {
+export function playerStatusText(
+  player: LobbyPlayer,
+  t: TFunction<'lobby'>,
+): string {
   if (player.account_id === null) return t('player.no_steam');
   const join = (parts: string[]) => parts.join(t('player.separator'));
   if (player.seat) {
@@ -90,7 +111,9 @@ export function playerStatusText(player: LobbyPlayer, t: TFunction<'lobby'>): st
     // In the lobby but not on a team: the pool, a spectator or broadcaster
     // slot, or a slot dota_lobby could not read.
     const inLobby = playerStatusLabel('joined', t);
-    return OFF_TEAM_SEATS.has(player.seat) ? join([inLobby, seatLabel(player.seat, t)]) : inLobby;
+    return OFF_TEAM_SEATS.has(player.seat)
+      ? join([inLobby, seatLabel(player.seat, t)])
+      : inLobby;
   }
   if (player.status === 'invited' && player.invites_sent > 1) {
     return t('player.status.invited_times', { times: player.invites_sent });

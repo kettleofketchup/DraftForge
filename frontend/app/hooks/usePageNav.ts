@@ -1,8 +1,5 @@
 import { useEffect } from 'react';
-import {
-  usePageNavStore,
-  type PageNavOption,
-} from '~/store/pageNavStore';
+import { usePageNavStore, type PageNavOption } from '~/store/pageNavStore';
 
 export function usePageNav(
   options: PageNavOption[] | null,

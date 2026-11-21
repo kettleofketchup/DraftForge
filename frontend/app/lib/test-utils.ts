@@ -22,7 +22,10 @@
  */
 export function isPlaywrightRunning(): boolean {
   if (typeof window === 'undefined') return false;
-  return 'playwright' in window && (window as Window & { playwright?: boolean }).playwright === true;
+  return (
+    'playwright' in window &&
+    (window as Window & { playwright?: boolean }).playwright === true
+  );
 }
 
 /**
@@ -36,7 +39,8 @@ export function isPlaywrightRunning(): boolean {
  */
 export function shouldShowTestFeatures(): boolean {
   return (
-    (import.meta.env.DEV || import.meta.env.VITE_PREVIEW_TEST_FEATURES === 'true') &&
+    (import.meta.env.DEV ||
+      import.meta.env.VITE_PREVIEW_TEST_FEATURES === 'true') &&
     !isPlaywrightRunning()
   );
 }

@@ -48,7 +48,7 @@ class SignupSelfReportedRankTests(EventTestCase):
         self.assertIsNone(row["dota_profile"])
         self.assertEqual(row["self_reported_rank"], "Emissary 1")
         self.assertEqual(row["self_reported_rank_date"], "2026-10-02")
-        self.assertEqual(row["suggested_mmr_range_source"], "fallback")
+        self.assertEqual(row["suggested_mmr_range_source"], "none")
 
     def test_dota_event_serves_dota_profile_not_deadlock_rank(
         self, _notify: object

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { refreshTournamentHook } from '~/components/teamdraft/hooks/refreshTournamentHook';
-import { ConfirmDialog } from '~/components/ui/dialogs';
 import { TrashIconButton } from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { deleteGameHook } from '../hooks/deleteGameHook';
 
 import {

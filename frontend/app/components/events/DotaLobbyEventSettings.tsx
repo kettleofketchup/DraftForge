@@ -31,18 +31,20 @@ interface Props<T extends FieldValues & DotaLobbyEventFields> {
  * Hosted-lobby settings and the lobby password on series and event forms
  * (Dota 2 only). Generated events and their tournaments inherit them.
  */
-export function DotaLobbyEventSettings<T extends FieldValues & DotaLobbyEventFields>({
-  control: parentControl,
-  watch: parentWatch,
-  ...passwordProps
-}: Props<T>) {
+export function DotaLobbyEventSettings<
+  T extends FieldValues & DotaLobbyEventFields,
+>({ control: parentControl, watch: parentWatch, ...passwordProps }: Props<T>) {
   const control = parentControl as unknown as Control<DotaLobbyEventFields>;
   const watch = parentWatch as unknown as UseFormWatch<DotaLobbyEventFields>;
   if (watch('game_type') !== GAME_TYPE.DOTA2) return null;
   return (
     <div className="space-y-4">
       <DotaLobbyConfigSection control={control} includeLobbyInfo />
-      <LobbyPasswordSettings control={control} watch={watch} {...passwordProps} />
+      <LobbyPasswordSettings
+        control={control}
+        watch={watch}
+        {...passwordProps}
+      />
     </div>
   );
 }

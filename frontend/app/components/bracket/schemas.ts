@@ -4,31 +4,41 @@ import { z } from 'zod';
 export const MatchStatusSchema = z.enum(['pending', 'live', 'completed']);
 
 // Bracket section enum
-export const BracketSectionSchema = z.enum(['winners', 'losers', 'grand_finals', 'swiss']);
+export const BracketSectionSchema = z.enum([
+  'winners',
+  'losers',
+  'grand_finals',
+  'swiss',
+]);
 
 // Elimination type enum
 export const EliminationTypeSchema = z.enum(['single', 'double', 'swiss']);
 
 // Seeding method enum
-export const SeedingMethodSchema = z.enum(['random', 'mmr_total', 'captain_mmr', 'manual']);
+export const SeedingMethodSchema = z.enum([
+  'random',
+  'mmr_total',
+  'captain_mmr',
+  'manual',
+]);
 
 // Single bracket match (matches backend API response)
 export const BracketMatchSchema = z.object({
-  pk: z.number(),                      // Backend Game.pk (primary key)
+  pk: z.number(), // Backend Game.pk (primary key)
   round: z.number().min(1),
   position: z.number().min(0),
   bracket_type: BracketSectionSchema,
   elimination_type: EliminationTypeSchema.optional(),
-  radiant_team: z.any().optional(),    // TeamType from API
-  dire_team: z.any().optional(),       // TeamType from API
-  winning_team: z.any().optional(),    // TeamType from API
+  radiant_team: z.any().optional(), // TeamType from API
+  dire_team: z.any().optional(), // TeamType from API
+  winning_team: z.any().optional(), // TeamType from API
   status: MatchStatusSchema,
-  gameid: z.number().nullable(),        // Steam match ID (null for pending games)
-  herodraft_id: z.number().nullable().optional(),  // HeroDraft ID for this game
-  lobby_state: z.string().nullable().optional(),   // Latest dota_lobby lobby state (no password)
-  next_game: z.number().nullable().optional(),    // FK to next game for winner
+  gameid: z.number().nullable(), // Steam match ID (null for pending games)
+  herodraft_id: z.number().nullable().optional(), // HeroDraft ID for this game
+  lobby_state: z.string().nullable().optional(), // Latest dota_lobby lobby state (no password)
+  next_game: z.number().nullable().optional(), // FK to next game for winner
   next_game_slot: z.enum(['radiant', 'dire']).nullable().optional(),
-  loser_next_game: z.number().nullable().optional(),    // FK to next game for loser
+  loser_next_game: z.number().nullable().optional(), // FK to next game for loser
   loser_next_game_slot: z.enum(['radiant', 'dire']).nullable().optional(),
   swiss_record_wins: z.number().optional(),
   swiss_record_losses: z.number().optional(),
@@ -53,5 +63,7 @@ export const SaveBracketRequestSchema = z.object({
 // Type exports (API DTOs - use types.ts for frontend interfaces)
 export type BracketMatchDTO = z.infer<typeof BracketMatchSchema>;
 export type BracketResponseDTO = z.infer<typeof BracketResponseSchema>;
-export type GenerateBracketRequest = z.infer<typeof GenerateBracketRequestSchema>;
+export type GenerateBracketRequest = z.infer<
+  typeof GenerateBracketRequestSchema
+>;
 export type SaveBracketRequest = z.infer<typeof SaveBracketRequestSchema>;

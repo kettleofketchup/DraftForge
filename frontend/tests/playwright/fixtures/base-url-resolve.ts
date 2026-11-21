@@ -1,4 +1,5 @@
-export const NO_SLOT_MESSAGE = 'No test-stack slot for this worktree. Run "just test::slot".';
+export const NO_SLOT_MESSAGE =
+  'No test-stack slot for this worktree. Run "just test::slot".';
 
 const SLOT_FILE_REL = 'docker/.env.slot';
 const TRUSTED_SOURCES = new Set(['runner', 'container']);
@@ -21,12 +22,19 @@ export function parseSlotFile(text: string): Record<string, string> {
   return out;
 }
 
-function readSlot(input: ResolveInput, root: string): Record<string, string> | null {
+function readSlot(
+  input: ResolveInput,
+  root: string,
+): Record<string, string> | null {
   const text = input.readFile(`${root}/${SLOT_FILE_REL}`);
   return text === null ? null : parseSlotFile(text);
 }
 
-function slotBaseUrl(input: ResolveInput, root: string, kv: Record<string, string>): string {
+function slotBaseUrl(
+  input: ResolveInput,
+  root: string,
+  kv: Record<string, string>,
+): string {
   const writtenFor = kv.DF_WORKTREE ?? '';
   if (!writtenFor || input.realpath(writtenFor) !== root) {
     throw new Error(
@@ -41,10 +49,17 @@ function slotBaseUrl(input: ResolveInput, root: string, kv: Record<string, strin
   }
   const res = parseSlotFile(resText);
   const owner = res.owner ?? '';
-  if (!owner || input.realpath(owner) !== root || res.token !== kv.DF_SLOT_TOKEN) {
-    throw new Error(`slot ${n} now belongs to ${owner}; run \`just test::slot\` to get a new slot`);
+  if (
+    !owner ||
+    input.realpath(owner) !== root ||
+    res.token !== kv.DF_SLOT_TOKEN
+  ) {
+    throw new Error(
+      `slot ${n} now belongs to ${owner}; run \`just test::slot\` to get a new slot`,
+    );
   }
-  if (!kv.DF_BASE_URL) throw new Error(`\`.env.slot\` for slot ${n} has no DF_BASE_URL`);
+  if (!kv.DF_BASE_URL)
+    throw new Error(`\`.env.slot\` for slot ${n} has no DF_BASE_URL`);
   return kv.DF_BASE_URL;
 }
 

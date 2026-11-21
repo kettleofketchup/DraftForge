@@ -1,8 +1,8 @@
+import { getLogger } from '~/lib/logger';
 import { AboutHero } from '~/pages/about/sections/AboutHero';
 import { HistorySection } from '~/pages/about/sections/HistorySection';
 import { MaintainerSection } from '~/pages/about/sections/MaintainerSection';
 import { TechnologyStack } from '~/pages/about/sections/TechnologyStack';
-import { getLogger } from '~/lib/logger';
 
 const log = getLogger('About');
 
