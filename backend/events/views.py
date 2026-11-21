@@ -37,12 +37,8 @@ from rest_framework.utils.serializer_helpers import ReturnDict, ReturnList
 from rest_framework.views import APIView
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, Game, Organization, OrgLog
-from app.permissions_org import (
-    has_event_staff_access,
-    has_org_admin_access,
-    has_org_staff_access,
-)
+from app.models import CustomUser, Game
+from app.permissions_tournament import has_event_staff_access
 from draft.models import Draft, HeroDraft
 from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
@@ -111,7 +107,11 @@ from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
 from org.feature_errors import not_permitted
 from org.mmr import OrgMmrError, game_for_event, validate_org_mmr
-from org.models import OrgUser, OrgUserGameMmr
+from org.models import Organization, OrgLog, OrgUser, OrgUserGameMmr
+from org.permissions import (
+    has_org_admin_access,
+    has_org_staff_access,
+)
 from org.standing import api as standing
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile

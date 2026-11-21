@@ -1,7 +1,7 @@
 from django.test import TransactionTestCase
 from django.utils import timezone
 
-from app.models import CustomUser, GameType, League, Organization, Tournament
+from app.models import CustomUser, GameType, League, Tournament
 from app.serializers import (
     TournamentSerializer,
     _build_users_dict,
@@ -11,7 +11,7 @@ from events.models import Event
 from events.services import create_tournament_for_event
 from league.models import LeagueUser
 from org.mmr import set_org_mmr
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from tests.populate.utils import ensure_org_user
 
 # Hardcoded pre-change ground-truth key sets (from reading OrgUserSerializer /

@@ -12,10 +12,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
-from app.models import Organization
 from discordbot.services.member_names import MemberNames
 from org.activity import active_org_ids, guild_sync_lock, release_guild_sync_lock
 from org.discord_names import apply_guild_member_names
+from org.models import Organization
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

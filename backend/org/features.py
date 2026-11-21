@@ -2,9 +2,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser
 from org.feature_keys import FeatureKey
-from org.models import OrgFeature
+from org.models import Organization, OrgFeature, OrgLog
 from org.promotion import starter
 from telemetry.logging import get_logger
 

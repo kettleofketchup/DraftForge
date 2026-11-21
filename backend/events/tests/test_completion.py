@@ -6,7 +6,7 @@ from unittest.mock import patch
 from django.db.models import QuerySet
 from django.utils import timezone as tz
 
-from app.models import CustomUser, Organization, OrgLog, PositionsModel
+from app.models import CustomUser, PositionsModel
 from events.completion import CloseResult, close_event
 from events.constants import EventState
 from events.models import Event
@@ -21,7 +21,7 @@ from org.contributions.services import (
 )
 from org.feature_keys import FeatureKey
 from org.features import org_has_feature, set_org_feature
-from org.models import ContributionEntry
+from org.models import ContributionEntry, Organization, OrgLog
 from org.standing.periods import parse_period
 
 

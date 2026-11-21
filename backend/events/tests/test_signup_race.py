@@ -5,10 +5,11 @@ from django.db import close_old_connections
 from django.test import TransactionTestCase
 from django.utils import timezone as tz
 
-from app.models import CustomUser, Organization, PositionsModel
+from app.models import CustomUser, PositionsModel
 from events.constants import EventState
 from events.models import Event
 from events.services import staff_add_signup
+from org.models import Organization
 
 
 class StaffAddSignupRaceTest(TransactionTestCase):
@@ -33,7 +34,9 @@ class StaffAddSignupRaceTest(TransactionTestCase):
     def test_concurrent_staff_add_for_same_user_only_one_succeeds(self):
         results = {"success": 0, "errors": 0}
         lock = threading.Lock()
-        barrier = threading.Barrier(2)  # force actual contention on the unique constraint
+        barrier = threading.Barrier(
+            2
+        )  # force actual contention on the unique constraint
 
         def worker():
             try:

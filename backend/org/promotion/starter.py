@@ -1,6 +1,7 @@
 from django.db import transaction
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
+from org.models import Organization
 from org.models_promotion import PromoTemplate
 from telemetry.logging import get_logger
 

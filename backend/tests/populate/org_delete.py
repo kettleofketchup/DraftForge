@@ -18,10 +18,10 @@ permission matrix on the Danger Zone UI.
 from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
-from app.models import CustomUser, Organization, PositionsModel
+from app.models import CustomUser, PositionsModel
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry
-from org.models import ContributionEntry
+from org.models import ContributionEntry, Organization
 from tests.data.models import TestUser
 from tests.data.org_delete import (
     ORG_DELETE_ADMIN,

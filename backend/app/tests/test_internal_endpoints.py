@@ -1,7 +1,7 @@
 from django.test import LiveServerTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 
-from app.models import Organization
+from org.models import Organization
 
 TOKEN = "test-internal-token"
 HEADERS = {"HTTP_X_INTERNAL_TOKEN": TOKEN}

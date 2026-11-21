@@ -15,7 +15,8 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
+from org.models import Organization
 
 TOKEN = "test-internal-token"
 HEADERS = {"HTTP_X_INTERNAL_TOKEN": TOKEN}
@@ -26,9 +27,7 @@ class ListDiscordLinkedUsersTest(TestCase):
     """list_discord_linked_users returns Discord-linked users only."""
 
     def test_returns_only_users_with_discord_id(self):
-        CustomUser.objects.create(
-            username="linked", discordId="111", avatar="hash_a"
-        )
+        CustomUser.objects.create(username="linked", discordId="111", avatar="hash_a")
         CustomUser.objects.create(
             username="no_discord", discordId=None, avatar="hash_b"
         )
@@ -45,9 +44,7 @@ class ListDiscordLinkedUsersTest(TestCase):
         self.assertEqual(usernames, ["linked"])
 
     def test_returns_expected_fields(self):
-        CustomUser.objects.create(
-            username="alice", discordId="42", avatar="hash_x"
-        )
+        CustomUser.objects.create(username="alice", discordId="42", avatar="hash_x")
         c = APIClient()
         resp = c.get("/api/internal/users/discord-linked/", **HEADERS)
         self.assertEqual(resp.status_code, 200)
@@ -96,12 +93,8 @@ class ListDiscordGuildIdsTest(TestCase):
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
 class BulkUpdateUserAvatarsTest(TestCase):
     def test_updates_avatars_by_pk(self):
-        u1 = CustomUser.objects.create(
-            username="u1", discordId="1", avatar="old"
-        )
-        u2 = CustomUser.objects.create(
-            username="u2", discordId="2", avatar="old"
-        )
+        u1 = CustomUser.objects.create(username="u1", discordId="1", avatar="old")
+        u2 = CustomUser.objects.create(username="u2", discordId="2", avatar="old")
 
         c = APIClient()
         resp = c.post(
@@ -306,9 +299,7 @@ class SweepStaleDiscordLeasesTest(TestCase):
         from discordbot.models import DiscordMessageLog
 
         # Pre-existing fresh log; must NOT be deleted.
-        log_row = self._make_log(
-            claimed_at=timezone.now(), success=None
-        )
+        log_row = self._make_log(claimed_at=timezone.now(), success=None)
 
         c = APIClient()
         resp = c.post(
@@ -318,9 +309,7 @@ class SweepStaleDiscordLeasesTest(TestCase):
             **HEADERS,
         )
         self.assertEqual(resp.status_code, 400)
-        self.assertTrue(
-            DiscordMessageLog.objects.filter(pk=log_row.pk).exists()
-        )
+        self.assertTrue(DiscordMessageLog.objects.filter(pk=log_row.pk).exists())
 
     def test_rejects_negative_failed_threshold(self):
         c = APIClient()
@@ -345,7 +334,5 @@ class SweepStaleDiscordLeasesTest(TestCase):
 
     def test_requires_token(self):
         c = APIClient()
-        resp = c.post(
-            "/api/internal/discord/sweep-stale-leases/", {}, format="json"
-        )
+        resp = c.post("/api/internal/discord/sweep-stale-leases/", {}, format="json")
         self.assertEqual(resp.status_code, 403)

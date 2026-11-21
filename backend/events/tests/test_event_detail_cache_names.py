@@ -4,9 +4,9 @@ from django.test import TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.models import Event
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from user.tests.test_cacheops_integration import _redis_reachable
 
 

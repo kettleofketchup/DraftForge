@@ -13,7 +13,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, League, Tournament
 from draft.models import Draft, DraftRound
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
@@ -24,6 +24,7 @@ from org.features import FeatureKey, org_has_feature, set_org_feature
 from org.models import (
     ContributionEntry,
     ContributionPointValue,
+    Organization,
     OrgSettings,
     OrgUser,
     PromoSend,

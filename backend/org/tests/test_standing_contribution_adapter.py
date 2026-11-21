@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from org.accounts import repoint_org_attribution
@@ -20,7 +20,15 @@ from org.contributions.services import (
 )
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
-from org.models import ContributionEntry, OrgFeature, OrgUser, PromoSend, PromoTemplate
+from org.models import (
+    ContributionEntry,
+    Organization,
+    OrgFeature,
+    OrgLog,
+    OrgUser,
+    PromoSend,
+    PromoTemplate,
+)
 from org.standing import api as standing
 from org.standing import registry
 from org.standing.periods import parse_period

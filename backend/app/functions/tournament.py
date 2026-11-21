@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from app.cache_utils import invalidate_obj
 from app.display_names import user_display_name
 from app.models import CustomUser, Team, Tournament
-from app.permissions_org import can_edit_tournament
+from app.permissions_tournament import can_edit_tournament
 from app.serializers import (
     TournamentSerializer,
     _build_users_dict,

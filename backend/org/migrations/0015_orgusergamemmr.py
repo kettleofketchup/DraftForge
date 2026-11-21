@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('org', '0013_conduct'),
+        ('org', '0014_move_organization_models_from_app'),
     ]
 
     operations = [

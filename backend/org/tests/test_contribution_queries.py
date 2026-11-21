@@ -5,7 +5,7 @@ from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League, Organization
+from app.models import CustomUser, League
 from events.models import Event
 from org.contributions.kinds import ContributionKind
 from org.contributions.queries import (
@@ -19,7 +19,7 @@ from org.contributions.queries import (
 )
 from org.contributions.serializers import member_summary
 from org.contributions.services import award_entry
-from org.models import ContributionEntry, OrgUser
+from org.models import ContributionEntry, Organization, OrgUser
 from org.standing.periods import parse_period
 from user.querysets import with_user_profiles
 

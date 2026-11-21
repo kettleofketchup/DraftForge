@@ -5,10 +5,10 @@ from django.db.models import RestrictedError
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League, Organization
+from app.models import CustomUser, League
 from events.models import Event
 from org.contributions.kinds import DEFAULT_POINTS, ContributionKind
-from org.models import ContributionEntry, ContributionPointValue, OrgUser
+from org.models import ContributionEntry, ContributionPointValue, Organization, OrgUser
 from org.standing.ledger import points_for
 
 
