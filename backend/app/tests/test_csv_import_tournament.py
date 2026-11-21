@@ -1,5 +1,7 @@
 """Tests for tournament CSV import endpoint."""
 
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -15,6 +17,7 @@ from app.models import (
 )
 from app.services.team_leadership import teams_with_leadership_problems
 from league.models import LeagueUser
+from org import mmr as org_mmr
 from org.mmr import org_mmr_for
 from org.models import OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
@@ -362,6 +365,34 @@ class TournamentCSVImportGameTest(TestCase):
             user__steamid=self.NEW_STEAM_ID, organization=self.org
         )
         self.assertEqual(self.rows_for(new_ou), {GameType.DEADLOCK: 1900})
+
+    def test_tournament_import_writes_org_mmrs_in_one_batch(self) -> None:
+        self.dl_tournament.users.add(self.user)
+        with (
+            patch(
+                "app.views.csv_import.bulk_set_org_mmrs",
+                wraps=org_mmr.bulk_set_org_mmrs,
+            ) as bulk,
+            patch("app.views.csv_import.set_org_mmr", create=True) as single,
+        ):
+            resp = self.post(
+                self.dl_tournament,
+                [
+                    {"steam_friend_id": str(self.STEAM_ID), "mmr": 2600},
+                    {"steam_friend_id": str(self.NEW_STEAM_ID), "mmr": 1900},
+                ],
+                update_mmr=True,
+            )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.data["summary"]["errors"], 0)
+        single.assert_not_called()
+        bulk.assert_called_once()
+        org_id, game, values = bulk.call_args.args
+        new_user = CustomUser.objects.get(steamid=self.NEW_STEAM_ID)
+        self.assertEqual(org_id, self.org.pk)
+        self.assertEqual(game, GameType.DEADLOCK)
+        self.assertEqual(values, {self.user.pk: 2600, new_user.pk: 1900})
 
     def test_tournament_import_existing_org_member_writes_tournament_game(
         self,

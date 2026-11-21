@@ -30,7 +30,6 @@ from org.mmr import (
     OrgMmrError,
     bulk_set_org_mmrs,
     game_for_tournament,
-    set_org_mmr,
     validate_org_mmr,
 )
 from org.models import OrgUser
@@ -405,12 +404,19 @@ def _parse_mmr_cell(value: Any, game_type: int) -> tuple[int | None, str | None]
     return base_mmr, None
 
 
-def _set_org_game_mmr(
-    user: CustomUser, org: Organization, game_type: int, base_mmr: int
+def _flush_org_mmrs(
+    org: Organization, game_type: int, pending: dict[int, int | None]
 ) -> None:
-    org_user = OrgUser.objects.filter(user=user, organization=org).first()
-    if org_user is not None:
-        set_org_mmr(org_user, game_type, base_mmr, mark_verified=False)
+    if not pending:
+        return
+    member_ids = set(
+        OrgUser.objects.nocache()
+        .filter(organization=org, user_id__in=list(pending))
+        .values_list("user_id", flat=True)
+    )
+    values = {uid: mmr for uid, mmr in pending.items() if uid in member_ids}
+    if values:
+        bulk_set_org_mmrs(org.pk, game_type, values)
 
 
 def _update_mmr_for_target(
@@ -418,8 +424,8 @@ def _update_mmr_for_target(
     org: Organization | None,
     league: League | None,
     mmr_target: str | None,
-    game_type: int,
     base_mmr: int,
+    pending_mmrs: dict[int, int | None],
 ) -> None:
     """Update MMR at the specified target level (organization or league)."""
     if mmr_target == "league" and league and org:
@@ -431,7 +437,7 @@ def _update_mmr_for_target(
                 defaults={"org_user": org_user, "mmr": base_mmr},
             )
     elif org:
-        _set_org_game_mmr(user, org, game_type, base_mmr)
+        pending_mmrs[user.pk] = base_mmr
 
 
 @api_view(["POST"])
@@ -506,6 +512,7 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
 
     # Cache for team_name -> Team (get_or_create within this import)
     team_cache = {}
+    pending_mmrs: dict[int, int | None] = {}
 
     for i, row in enumerate(rows):
         if not isinstance(row, dict):
@@ -550,7 +557,7 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
         if tournament.users.filter(pk=user.pk).exists():
             if update_mmr and base_mmr is not None:
                 _update_mmr_for_target(
-                    user, org, league, mmr_target, game_type, base_mmr
+                    user, org, league, mmr_target, base_mmr, pending_mmrs
                 )
                 results.append(
                     {
@@ -581,10 +588,10 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
             except IntegrityError:
                 # Already a member of the org -- update MMR if provided
                 if base_mmr is not None:
-                    _set_org_game_mmr(user, org, game_type, base_mmr)
+                    pending_mmrs[user.pk] = base_mmr
             else:
                 if base_mmr:
-                    set_org_mmr(created_ou, game_type, base_mmr, mark_verified=False)
+                    pending_mmrs[created_ou.user_id] = base_mmr
 
         # For league-level MMR, also create/update LeagueUser
         if league and mmr_target == "league" and base_mmr is not None:
@@ -636,6 +643,9 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
                 action="add_member",
                 target_user=user,
             )
+
+    if org:
+        _flush_org_mmrs(org, game_type, pending_mmrs)
 
     # Invalidate tournament cache so refreshed data reflects MMR changes
     invalidate_obj(tournament)

@@ -223,34 +223,41 @@ def set_org_mmr(
 
 
 def merge_org_mmrs(loser: OrgUser, keeper: OrgUser) -> None:
+    rows = list(
+        OrgUserGameMmr.objects.nocache().filter(org_user_id__in=[loser.pk, keeper.pk])
+    )
+    loser_rows = [row for row in rows if row.org_user_id == loser.pk]
+    _drop_read_caches(keeper)
+    _drop_read_caches(loser)
+    if not loser_rows:
+        return
+    keeper_rows = {row.game_type: row for row in rows if row.org_user_id == keeper.pk}
+    moved: list[OrgUserGameMmr] = []
+    raised: list[OrgUserGameMmr] = []
+    now = timezone.now()
+    for row in loser_rows:
+        target = keeper_rows.get(row.game_type)
+        if target is None:
+            moved.append(row)
+        elif target.mmr < row.mmr:
+            target.mmr = row.mmr
+            target.updated_at = now
+            raised.append(target)
     with transaction.atomic():
-        keeper_rows = {
-            row.game_type: row
-            for row in OrgUserGameMmr.objects.nocache().filter(org_user_id=keeper.pk)
-        }
-        moved: list[int] = []
-        raised: list[int] = []
-        for row in OrgUserGameMmr.objects.nocache().filter(org_user_id=loser.pk):
-            target = keeper_rows.get(row.game_type)
-            if target is None:
-                row.org_user = keeper
-                row.save(update_fields=["org_user", "updated_at"])
-                keeper_rows[row.game_type] = row
-                moved.append(row.game_type)
-            elif target.mmr < row.mmr:
-                target.mmr = row.mmr
-                target.save(update_fields=["mmr", "updated_at"])
-                raised.append(row.game_type)
-        _drop_read_caches(keeper)
-        _drop_read_caches(loser)
+        if moved:
+            OrgUserGameMmr.objects.filter(pk__in=[row.pk for row in moved]).update(
+                org_user=keeper, updated_at=now
+            )
+        if raised:
+            OrgUserGameMmr.objects.bulk_update(raised, ["mmr", "updated_at"])
         log.info(
             "org_mmr_merged",
             system="org",
             subsystem="mmr",
             loser_org_user_id=loser.pk,
             keeper_org_user_id=keeper.pk,
-            moved_games=moved,
-            raised_games=raised,
+            moved_games=[row.game_type for row in moved],
+            raised_games=[row.game_type for row in raised],
         )
         invalidate_after_commit(loser, keeper)
         transaction.on_commit(lambda: invalidate_model(OrgUserGameMmr))
