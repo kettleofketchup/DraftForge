@@ -18,4 +18,4 @@ steam *args:
 
 [group('test::backend')]
 draft *args:
-    cd {{quote(root / "backend")}} && {{pytest}} -vvv app/tests/test_shuffle_draft*.py -c pytest.ini "$@"
+    cd {{quote(root / "backend")}} && {{pytest}} -vvv draft/tests/test_team_shuffle*.py -c pytest.ini "$@"

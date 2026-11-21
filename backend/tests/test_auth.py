@@ -21,9 +21,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
-from app.models import CustomUser, Draft, Organization
+from app.models import CustomUser, Organization
 from common.game import GameType
 from common.utils import isTestEnvironment
+from draft.models import Draft
 from org.mmr import game_mmrs_prefetch, get_org_mmr, get_org_mmrs
 from tests.data.tournaments import (
     BRACKET_UNSET_WINNER_TOURNAMENT,

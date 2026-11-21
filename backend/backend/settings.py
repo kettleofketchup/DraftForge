@@ -130,7 +130,9 @@ logging.basicConfig(
 if _log_level != "DEBUG":
     logging.getLogger("app.models").setLevel(logging.INFO)
     logging.getLogger("app.functions.tournament").setLevel(logging.INFO)
-    logging.getLogger("app.functions.draft_picks").setLevel(logging.INFO)
+    logging.getLogger("draft.views.team_picks").setLevel(logging.INFO)
+    logging.getLogger("draft.models.team").setLevel(logging.INFO)
+    logging.getLogger("draft.views.team_setup").setLevel(logging.INFO)
 
 
 # Application definition
@@ -372,12 +374,12 @@ CACHEOPS = {
     # cached payload — see backend/user/tests/test_cacheops.py grep guardrail.
     "user.dotauserprofile": {"ops": "all", "timeout": 60 * 60},
     "user.deadlockuserprofile": {"ops": "all", "timeout": 60 * 60},
-    "app.draft": {"ops": "all", "timeout": 60 * 60},
-    "app.draftoptions": {"ops": "all", "timeout": 60 * 60},
+    "draft.draft": {"ops": "all", "timeout": 60 * 60},
+    "draft.draftoptions": {"ops": "all", "timeout": 60 * 60},
     "app.game": {"ops": "all", "timeout": 60 * 60},
     "draft.herodraft": {"ops": "all", "timeout": 60 * 60},
     "draft.draftteam": {"ops": "all", "timeout": 60 * 60},
-    "app.draftround": {"ops": "all", "timeout": 60 * 60},
+    "draft.draftround": {"ops": "all", "timeout": 60 * 60},
     # Organization/League membership models
     "org.orguser": {"ops": "all", "timeout": 60 * 60},
     "org.orgusergamemmr": {"ops": "all", "timeout": 60 * 60},

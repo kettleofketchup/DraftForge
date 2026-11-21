@@ -16,15 +16,11 @@ from django.utils import timezone
 
 from app.models import (
     CustomUser,
-    Draft,
-    DraftEvent,
-    DraftRound,
     Game,
     League,
     Organization,
     PositionsModel,
     Team,
-    TeamDraftState,
     TeamLog,
     Tournament,
 )
@@ -34,6 +30,7 @@ from app.services.team_signals import (
     owning_team_audit,
     team_roster_changed,
 )
+from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
 from tests.populate.utils import ensure_org_user
 
 

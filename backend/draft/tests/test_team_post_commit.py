@@ -10,14 +10,15 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app import broadcast
-from app.models import CustomUser, Draft, DraftRound, Team, TeamDraftState
-from app.tests.teamdraft_fixtures import TimedDraftFixture
+from app.models import CustomUser, Team
+from draft.models import Draft, DraftRound, TeamDraftState
+from draft.services import team_broadcast as broadcast
+from draft.tests.team_fixtures import TimedDraftFixture
 
 BROADCAST_CALL_SITES: tuple[str, ...] = (
-    "app.functions.teamdraft",
-    "app.functions.draft_picks",
-    "app.functions.shuffle_draft",
+    "draft.services.team",
+    "draft.views.team_picks",
+    "draft.services.shuffle",
 )
 
 
@@ -65,7 +66,8 @@ class PostCommitFailureTests(TransactionTestCase):
         self.addCleanup(stack.close)
         stack.enter_context(
             patch(
-                "app.broadcast.broadcast_event", side_effect=RuntimeError("layer down")
+                "draft.services.team_broadcast.broadcast_event",
+                side_effect=RuntimeError("layer down"),
             )
         )
         sentinel = HookSentinel()
@@ -176,7 +178,7 @@ class PostCommitFailureTests(TransactionTestCase):
                 "app.cache_utils._cacheops_invalidate_obj",
                 side_effect=ResponseError("MISCONF"),
             ),
-            patch("app.broadcast.broadcast_event") as broadcast_mock,
+            patch("draft.services.team_broadcast.broadcast_event") as broadcast_mock,
             capture_logs() as logs,
         ):
             response = self.post(fx, fx.captains[0], "ready", {"ready": True})

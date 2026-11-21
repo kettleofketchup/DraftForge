@@ -4,10 +4,8 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.functions.shuffle_draft import get_lowest_mmr_team, get_team_total_mmr
 from app.models import (
     CustomUser,
-    Draft,
     League,
     Organization,
     PositionsModel,
@@ -16,6 +14,8 @@ from app.models import (
 )
 from app.services.team_leadership import successor_after_removal
 from common.game import GameType
+from draft.models import Draft
+from draft.services.shuffle import get_lowest_mmr_team, get_team_total_mmr
 from events.models import Event
 from events.services import create_tournament_for_event
 from org.mmr import set_org_mmr

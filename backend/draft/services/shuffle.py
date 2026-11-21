@@ -4,8 +4,9 @@ import random
 
 from django.db.models import QuerySet
 
-from app.broadcast import broadcast_event_after_commit
-from app.models import CustomUser, Draft, DraftEvent, DraftRound, Organization, Team
+from app.models import CustomUser, Organization, Team
+from draft.models import Draft, DraftEvent, DraftRound
+from draft.services.team_broadcast import broadcast_event_after_commit
 from org.mmr import game_for_tournament, org_mmr_for, org_mmr_map
 
 # Maximum team size (captain + 4 drafted players)

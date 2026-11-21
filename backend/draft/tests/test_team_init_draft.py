@@ -9,9 +9,6 @@ from rest_framework.test import APIClient
 
 from app.models import (
     CustomUser,
-    Draft,
-    DraftEvent,
-    DraftOptions,
     Game,
     League,
     Organization,
@@ -22,15 +19,10 @@ from app.models import (
     Tournament,
 )
 from app.serializers import _users_remaining_pks
-from app.services.draft_reset import reset_draft_teams
-from app.services.team_references import (
-    all_reference_keys,
-    team_references,
-    team_usage,
-)
 from app.tournament_state import tournament_state_queryset
 from bracket.models import BracketSlot, TournamentBracket
-from draft.models import DraftTeam, HeroDraft
+from draft.models import Draft, DraftEvent, DraftOptions, DraftTeam, HeroDraft
+from draft.services.team_reset import reset_draft_teams
 from league.models import LeagueUser
 from tests.populate.utils import ensure_org_user
 from user.tests.test_cacheops_integration import _redis_reachable
@@ -137,45 +129,6 @@ class TeamResetTests(TeamResetFixture, TestCase):
         self.assertTrue(Team.objects.filter(pk=self.team.pk).exists())
         self.assertEqual(self.member_pks(self.team), [self.z.pk])
         self.assertTrue(Game.objects.filter(pk=game.pk).exists())
-
-    def test_team_references_relation_names(self) -> None:
-        expected = {
-            "app.Game.radiant_team",
-            "app.Game.dire_team",
-            "app.Game.winning_team",
-            "draft.DraftTeam.tournament_team",
-            "app.Tournament.winning_team",
-            "bracket.BracketSlot.participant",
-            "lobby.GameLobby.radiant_team",
-            "lobby.GameLobby.dire_team",
-            "lobby.GameLobby.provisional_winner_team",
-        }
-        keys = all_reference_keys()
-        self.assertTrue(expected <= set(keys), expected - set(keys))
-        self.assertFalse([k for k in keys if "_members." in k or "_league_users" in k])
-
-    def test_team_references_counts_only_nonzero(self) -> None:
-        self.team.members.set([self.x])
-        self.team.captain = self.x
-        self.team.save()
-        other = Team.objects.create(tournament=self.tournament, name="Other")
-        Game.objects.create(
-            tournament=self.tournament, radiant_team=self.team, dire_team=other
-        )
-        Game.objects.create(tournament=self.tournament, radiant_team=self.team)
-
-        refs = team_references(Team.objects.filter(pk=self.team.pk))
-
-        self.assertEqual(refs, {"app.Game.radiant_team": 2})
-        self.assertEqual(team_references(Team.objects.none()), {})
-
-    def test_teamlog_not_a_reference_key(self) -> None:
-        self.assertNotIn("app.TeamLog.team", all_reference_keys())
-
-    def test_herodraft_chat_not_a_reference_key(self) -> None:
-        keys = all_reference_keys()
-        self.assertNotIn("draft.HeroDraftChatMessage.team", keys)
-        self.assertNotIn("draft.HeroDraftChatMembership.team", keys)
 
     def test_reset_drops_audited_ineligible_team(self) -> None:
         self.team.members.set([self.x])
@@ -483,7 +436,7 @@ class InitDraftEndpointTests(TestCase):
         self.assertEqual(draft.snake_first_pick_mmr, 3000 + 2500)
 
     def test_reset_logs_removed_count(self) -> None:
-        with patch("app.functions.tournament.log") as log:
+        with patch("draft.views.team_setup.log") as log:
             resp = self.post()
 
         self.assertEqual(resp.status_code, 201)
@@ -533,9 +486,9 @@ class InitDraftEndpointTests(TestCase):
         Draft.objects.create(tournament=self.tournament, draft_style="shuffle")
         order = MagicMock()
         with (
-            patch("app.functions.tournament.notify_draft_started") as notify,
+            patch("draft.views.team_setup.notify_draft_started") as notify,
             patch("app.cache_utils.invalidate_obj") as invalidate,
-            patch("app.broadcast.broadcast_event") as broadcast,
+            patch("draft.services.team_broadcast.broadcast_event") as broadcast,
         ):
             order.attach_mock(invalidate, "invalidate")
             order.attach_mock(broadcast, "broadcast")
@@ -570,7 +523,7 @@ class InitDraftEndpointTests(TestCase):
         client = APIClient(raise_request_exception=True)
         client.force_authenticate(user=self.admin)
         with (
-            patch("app.functions.tournament.notify_draft_started") as notify,
+            patch("draft.views.team_setup.notify_draft_started") as notify,
             patch.object(Draft, "build_rounds", side_effect=RuntimeError("boom")),
             self.captureOnCommitCallbacks(execute=False) as callbacks,
         ):
@@ -618,7 +571,7 @@ class InitDraftEndpointTests(TestCase):
         self.team_a.captain = self.cap_a
         self.team_a.save()
         game = Game.objects.create(tournament=self.tournament, radiant_team=self.team_a)
-        with patch("app.functions.tournament.notify_draft_started") as notify:
+        with patch("draft.views.team_setup.notify_draft_started") as notify:
             with self.captureOnCommitCallbacks(execute=False) as callbacks:
                 resp = self.post(REBUILD_URL)
             notify.assert_not_called()
@@ -716,7 +669,7 @@ class InitDraftEndpointTests(TestCase):
         draft = Draft.objects.get(tournament=self.tournament)
         DraftEvent.objects.filter(draft=draft).delete()
 
-        with patch("app.broadcast.broadcast_event") as broadcast:
+        with patch("draft.services.team_broadcast.broadcast_event") as broadcast:
             with self.captureOnCommitCallbacks(execute=True):
                 resp = self.post()
 
@@ -733,41 +686,3 @@ class InitDraftEndpointTests(TestCase):
             [c.args[0].event_type for c in broadcast.call_args_list],
             ["draft_started"],
         )
-
-
-class TeamUsageTests(TeamResetFixture, TestCase):
-    def test_distinct_rows_per_model(self) -> None:
-        other = Team.objects.create(tournament=self.tournament, name="Other")
-        game = Game.objects.create(
-            tournament=self.tournament,
-            radiant_team=self.team,
-            dire_team=other,
-            winning_team=self.team,
-        )
-        bracket = TournamentBracket.objects.create(tournament=self.tournament)
-        BracketSlot.objects.create(
-            bracket=bracket, max_rounds=1, game=game, participant=other
-        )
-
-        usage = team_usage(Team.objects.filter(pk__in=[self.team.pk, other.pk]))
-
-        self.assertEqual(
-            [(u["model"], u["count"]) for u in usage],
-            [("app.Game", 1), ("bracket.BracketSlot", 1)],
-        )
-        self.assertEqual([t["name"] for t in usage[0]["teams"]], ["Resetters", "Other"])
-        self.assertEqual([t["name"] for t in usage[1]["teams"]], ["Other"])
-
-    def test_empty(self) -> None:
-        self.assertEqual(team_usage(Team.objects.none()), [])
-        self.assertEqual(team_usage([self.team]), [])
-
-    def test_teamlog_rows_are_not_usage(self) -> None:
-        TeamLog.objects.create(
-            team=self.team,
-            team_snapshot_id=self.team.pk,
-            team_name=self.team.name,
-            via=TeamLogVia.WEB,
-            action=TeamLogAction.RENAME,
-        )
-        self.assertEqual(team_usage([self.team]), [])

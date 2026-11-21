@@ -18,7 +18,6 @@ from rest_framework.response import Response
 from app.cache_utils import invalidate_after_commit
 from app.models import (
     CustomUser,
-    DraftRound,
     LeagueLog,
     LeagueMatchParticipant,
     LeagueRating,
@@ -28,6 +27,7 @@ from app.models import (
     Team,
 )
 from app.permissions_org import IsOrgStaff
+from draft.models import DraftRound
 from draft.services.hero_chat import repoint_chat_attribution
 from events.models import Event
 from events.staff import dedupe_host_helpers

@@ -192,7 +192,7 @@ def _reset_demo_herodraft(tournament):
 
 def _reset_demo_captaindraft(tournament):
     """Reset Captain Draft tournament to initial state."""
-    from app.models import Draft
+    from draft.models import Draft
 
     # Delete all teams (captain draft creates them)
     tournament.teams.all().delete()
@@ -231,7 +231,7 @@ def _reset_demo_draft(tournament, draft_style: str):
     Clears all draft rounds and resets draft to pending state.
     Teams and captains are preserved (they're created during populate).
     """
-    from app.models import Draft, DraftRound
+    from draft.models import Draft, DraftRound
 
     # Find and reset the draft
     draft = Draft.objects.filter(tournament=tournament).first()
@@ -340,8 +340,9 @@ def get_demo_tournament(request, key: str):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from app.models import Draft, Tournament
+    from app.models import Tournament
     from app.serializers import TournamentSerializer
+    from draft.models import Draft
     from draft.serializers.hero import HeroDraftSerializer
 
     tournament_name = DEMO_TOURNAMENTS.get(key)

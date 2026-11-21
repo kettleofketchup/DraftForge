@@ -119,7 +119,8 @@ class TestTournamentConfig(BaseModel):
         Returns:
             Tournament instance with teams, draft, and bracket games configured
         """
-        from app.models import DraftOptions, Tournament
+        from app.models import Tournament
+        from draft.models import DraftOptions
 
         self._tournament = Tournament.objects.create(
             name=self.name,
@@ -181,7 +182,7 @@ class TestTournamentConfig(BaseModel):
         """Create draft with rounds and apply picks."""
         from django.utils import timezone
 
-        from app.models import Draft, TeamDraftState
+        from draft.models import Draft, TeamDraftState
 
         draft = Draft.objects.create(
             tournament=self._tournament,
@@ -377,7 +378,7 @@ class TestTournamentConfig(BaseModel):
 
     def _set_test_user_as_captain(self) -> None:
         """Make test user the first captain for auth testing."""
-        from app.models import DraftRound
+        from draft.models import DraftRound
         from tests.test_auth import createTestUser
 
         test_user, _ = createTestUser()

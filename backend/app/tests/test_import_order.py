@@ -28,7 +28,7 @@ class ImportOrderTests(SimpleTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_broadcast_first(self) -> None:
-        result = self._import_first("app.broadcast")
+        result = self._import_first("draft.services.team_broadcast")
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_exception_handler_first(self) -> None:

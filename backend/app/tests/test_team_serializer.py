@@ -13,13 +13,9 @@ from rest_framework.test import APIClient
 
 from app.models import (
     CustomUser,
-    Draft,
-    DraftEvent,
-    DraftRound,
     Game,
     PositionsModel,
     Team,
-    TeamDraftState,
     TeamLog,
     TeamLogAction,
     TeamLogVia,
@@ -29,6 +25,7 @@ from app.serializers import TeamSerializer
 from app.services.team_leadership import teams_with_leadership_problems
 from app.services.team_signals import TeamRosterChange, team_roster_changed
 from app.tests.test_team_management import TeamManagementFixture
+from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
 
 _discord_ids = itertools.count(571000)
 

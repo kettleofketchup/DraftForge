@@ -12,8 +12,8 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.functions.teamdraft import apply_draft_options
 from app.models import CustomUser, PositionsModel, Team, Tournament
+from draft.services.team import apply_draft_options
 from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
 from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
