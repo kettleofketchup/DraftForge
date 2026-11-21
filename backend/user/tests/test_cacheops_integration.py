@@ -56,7 +56,7 @@ class CacheopsInvalidationOnBaseProfilePatchTests(TransactionTestCase):
     hooks would never fire mid-test, and the cache would never be evicted
     between the warm and the re-fetch. This class needs real commits in the
     middle of the test, which TransactionTestCase provides. Pattern mirrors
-    backend/app/tests/test_league_serializer.py:136.
+    backend/league/tests/test_league_serializer.py:143.
     """
 
     @classmethod
