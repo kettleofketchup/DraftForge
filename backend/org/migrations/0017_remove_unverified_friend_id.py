@@ -3,7 +3,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("org", "0014_move_organization_models_from_app"),
+        ("org", "0016_backfill_org_user_game_mmr"),
         ("app", "0113_copy_profile_friend_ids"),
     ]
 
