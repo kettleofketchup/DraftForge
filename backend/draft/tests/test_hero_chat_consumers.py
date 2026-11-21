@@ -31,11 +31,6 @@ from structlog.testing import capture_logs
 from app.models import CustomUser, Game, League, Organization, Team, Tournament
 from app.redis_client import get_redis_client
 from app.services.team_management import follow_captain
-from app.tests.ws_helpers import (
-    assert_no_frame_except_ping,
-    next_non_ping_output,
-    read_until_type,
-)
 from discordbot.activity_auth import ActivitySocketMiddleware, issue_activity_token
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 from draft.consumers.hero import HeroDraftConsumer
@@ -60,6 +55,11 @@ from draft.services.hero_chat import (
     rate_limit_key,
     resolve_chat_viewer,
     team_group_name,
+)
+from draft.tests.ws_helpers import (
+    assert_no_frame_except_ping,
+    next_non_ping_output,
+    read_until_type,
 )
 
 Channel = HeroDraftChatMessage.Channel

@@ -1,32 +1,30 @@
-"""DraftOptions model, lazy creation, Draft state/clock_armed, migration state rule (spec §2)."""
+"""DraftOptions model, lazy creation, Draft state/clock_armed, migration state rule."""
 
 import importlib
 from datetime import date, timedelta
 from unittest.mock import PropertyMock, patch
 
-from django.apps import apps as global_apps
+from django.apps.registry import Apps
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import connection, transaction
+from django.db.migrations.loader import MigrationLoader
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.functions.teamdraft_timeout import skip_turn
 from app.management.commands import import_prod_tournament, sync_prod_tournaments
-from app.models import (
+from app.models import League, Organization, Team, Tournament
+from app.serializers import DraftSerializerSlim, TournamentSerializer
+from draft.models import (
     Draft,
     DraftEvent,
     DraftOptions,
     DraftRound,
-    League,
-    Organization,
-    Team,
     TeamDraftState,
     TimeoutAction,
-    Tournament,
 )
-from app.serializers import DraftSerializerSlim, TournamentSerializer
-from app.tests.teamdraft_fixtures import TimedDraftFixture
+from draft.services.team_timeout import skip_turn
+from draft.tests.team_fixtures import TimedDraftFixture
 from tests.data.users import REGULAR_USER
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, TestTournamentConfig
 
@@ -173,6 +171,13 @@ class DraftStateTests(TestCase):
                 self.assertEqual(draft.lock_active_round().pick_number, 1)
 
 
+PRE_TEAM_MOVE = ("app", "0108_move_hero_draft_models_to_draft")
+
+
+def _pre_team_move_apps() -> Apps:
+    return MigrationLoader(connection).project_state(PRE_TEAM_MOVE).apps
+
+
 class MigrationStateRuleTests(TestCase):
     def test_set_initial_draft_states(self):
         mod = importlib.import_module("app.migrations.0097_teamdraft_timer")
@@ -187,7 +192,7 @@ class MigrationStateRuleTests(TestCase):
         DraftRound.objects.filter(draft=done).update(choice=t_done.users.first())
         Draft.objects.update(state="paused")
 
-        mod.set_initial_draft_states(global_apps, None)
+        mod.set_initial_draft_states(_pre_team_move_apps(), None)
 
         self.assertEqual(Draft.objects.get(pk=empty.pk).state, "pending")
         self.assertEqual(Draft.objects.get(pk=half.pk).state, "drafting")
@@ -203,7 +208,7 @@ class MigrationStateRuleTests(TestCase):
             tournament=opted_in, timer_enabled=True, grace_time_ms=5000
         )
 
-        mod.backfill_timer_off(global_apps, None)
+        mod.backfill_timer_off(_pre_team_move_apps(), None)
 
         self.assertFalse(DraftOptions.objects.get(tournament=bare).timer_enabled)
         kept = DraftOptions.objects.get(tournament=opted_in)
@@ -403,7 +408,7 @@ class SettingsWriteTests(TestCase):
         self.assertEqual(r.status_code, 200, r.data)
 
     def test_timer_off_from_pending_emits_options_changed(self):
-        with patch("app.broadcast.broadcast_event") as sent:
+        with patch("draft.services.team_broadcast.broadcast_event") as sent:
             self._patch_options({"timer_enabled": False})
         event = self.fx.events("draft_options_changed").get()
         self.assertEqual(event.actor, self.fx.staff)

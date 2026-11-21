@@ -95,13 +95,21 @@ class CacheopsSettingsTests(TestCase):
         )
 
 
-# Files we scan. Add new files here whenever a new module starts using
-# @cached_as with CustomUser deps.
+# Files we scan. test_scan_targets_complete fails when a module with a
+# CustomUser @cached_as block is in neither list.
 SCAN_TARGETS = [
     REPO_ROOT / "backend" / "app" / "views_main.py",
-    REPO_ROOT / "backend" / "app" / "functions" / "tournament.py",
     REPO_ROOT / "backend" / "app" / "user_cache.py",
+    REPO_ROOT / "backend" / "draft" / "views" / "team_setup.py",
+    REPO_ROOT / "backend" / "draft" / "views" / "team_api.py",
 ]
+
+UNSCANNED: dict[pathlib.Path, str] = {
+    REPO_ROOT / "backend" / "events" / "views.py": (
+        "pre-existing: @cached_as blocks in EventViewSet.retrieve and the "
+        "discord action miss profile deps; tracked separately"
+    ),
+}
 
 
 def _customuser_blocks_missing(dep: str) -> list[str]:
@@ -159,6 +167,33 @@ class CachedAsGuardrailTests(TestCase):
             + "\n\nAdd `DotaUserProfile` (from user.models) to each "
             "decorator's model list."
         )
+
+
+def _files_with_customuser_cached_as() -> set[pathlib.Path]:
+    return {
+        path
+        for path in _iter_scanned_files(BACKEND_ROOT)
+        if any("CustomUser" in block for _, block in _iter_cached_as_blocks(path))
+    }
+
+
+class ScanTargetsCompleteTests(SimpleTestCase):
+    def test_scan_targets_complete(self) -> None:
+        found = _files_with_customuser_cached_as()
+        listed = set(SCAN_TARGETS) | set(UNSCANNED)
+        self.assertTrue(found, "scan found no @cached_as(CustomUser, ...) blocks")
+        self.assertEqual(
+            sorted(str(p.relative_to(REPO_ROOT)) for p in found - listed),
+            [],
+            "add these to SCAN_TARGETS (or UNSCANNED with a reason)",
+        )
+        self.assertEqual(
+            sorted(str(p.relative_to(REPO_ROOT)) for p in listed - found),
+            [],
+            "these have no @cached_as(CustomUser, ...) block; drop them",
+        )
+        self.assertFalse(set(SCAN_TARGETS) & set(UNSCANNED))
+        self.assertTrue(all(UNSCANNED.values()))
 
 
 # Relation paths that reach a profile table owning nickname/avatar (T1) or

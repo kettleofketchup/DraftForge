@@ -1,30 +1,32 @@
-"""Shared fixture for team-draft timer tests."""
+"""Shared fixtures and helpers for team-draft tests."""
 
+import json
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
+from datetime import timezone as dt_timezone
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import connection, reset_queries, transaction
 from django.db.models import QuerySet
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from app.functions import teamdraft
-from app.functions.teamdraft_timeout import skip_turn
-from app.functions.teamdraft_views import teamdraft_pause
-from app.functions.draft_picks import pick_player_for_round, undo_last_pick
-from app.models import (
-    CustomUser,
-    Draft,
-    DraftEvent,
-    DraftOptions,
-    DraftRound,
-    League,
-    Organization,
-    Team,
-    Tournament,
+from app.models import CustomUser, League, Organization, Team, Tournament
+from app.serializers import (
+    _collect_context_mmr,
+    _collect_tournament_user_pks,
+    _tournament_organization,
 )
+from app.user_cache import serialize_user_core
+from draft.models import Draft, DraftEvent, DraftOptions, DraftRound
+from draft.services import team as teamdraft
+from draft.services.team_timeout import skip_turn
+from draft.views.team import teamdraft_pause
+from draft.views.team_picks import pick_player_for_round, undo_last_pick
 from org.models import OrgUser
 
 User = get_user_model()
@@ -160,4 +162,62 @@ class TimedDraftFixture:
     def events(self, event_type: str) -> QuerySet[DraftEvent]:
         return DraftEvent.objects.nocache().filter(
             draft=self.draft, event_type=event_type
+        )
+
+
+MID_DRAFT_BASE: datetime = datetime(2026, 1, 2, 3, 4, 5, tzinfo=dt_timezone.utc)
+MMRS_4: list[int] = [1000, 2000, 3000, 4000]
+MMRS_8: list[int] = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
+
+
+def mid_draft_fixture(num_teams: int, prefix: str) -> TimedDraftFixture:
+    mmrs = MMRS_4 if num_teams == 4 else MMRS_8
+    fx = TimedDraftFixture(num_teams=num_teams, prefix=prefix, captain_mmrs=mmrs)
+    fx.populate_mid_draft(MID_DRAFT_BASE)
+    return fx
+
+
+def legacy_users_dict(tournament: Tournament) -> dict:
+    """Pre-optimisation _build_users_dict: per-user cached core + MMR overlay."""
+    seen_pks = _collect_tournament_user_pks(tournament)
+    mmr_map = _collect_context_mmr(tournament, seen_pks)
+    is_org = _tournament_organization(tournament) is not None
+    result: dict = {}
+    for pk in seen_pks:
+        core = serialize_user_core(pk)
+        if not core:
+            continue
+        if is_org:
+            entry = dict(core)
+            entry.update(mmr_map.get(pk, {}))
+        else:
+            entry = dict(core)
+        result[pk] = entry
+    return result
+
+
+def dumps(data: object) -> str:
+    return json.dumps(data, cls=DjangoJSONEncoder)
+
+
+class FakeChannelLayer:
+    def __init__(self) -> None:
+        self.messages: list[dict] = []
+
+    async def group_send(self, group: str, message: dict) -> None:
+        self.messages.append(message)
+
+
+def count_queries(fn: Callable[[], object]) -> int:
+    # The query log is a capped deque; a full one makes every capture read 0.
+    reset_queries()
+    with CaptureQueriesContext(connection) as ctx:
+        fn()
+    return len(ctx.captured_queries)
+
+
+def rename_team(team_pk: int) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE app_team SET name = %s WHERE id = %s", ["Renamed", team_pk]
         )

@@ -13,14 +13,8 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
-from app.models import (
-    CustomUser,
-    Draft,
-    DraftRound,
-    League,
-    Organization,
-    Tournament,
-)
+from app.models import CustomUser, League, Organization, Tournament
+from draft.models import Draft, DraftRound
 from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind
