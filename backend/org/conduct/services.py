@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser
 from events.capacity import lock_event
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
@@ -20,7 +20,7 @@ from org.conduct.constants import (
     expected_statuses,
 )
 from org.conduct.gate import ConductGate, conduct_gate, get_conduct_settings
-from org.models import OrgUser
+from org.models import Organization, OrgLog, OrgUser
 from org.models_conduct import AttendanceOutcome, OrgConductSettings
 from org.standing import restamp
 from telemetry.logging import get_logger

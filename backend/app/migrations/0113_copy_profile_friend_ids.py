@@ -95,8 +95,8 @@ def _skip(user_id: int, reason: str, values: list[int]) -> None:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("app", "0111_widen_steam_account_id"),
-        ("org", "0013_conduct"),
+        ("app", "0112_widen_steam_account_id"),
+        ("org", "0014_move_organization_models_from_app"),
     ]
 
     operations = [

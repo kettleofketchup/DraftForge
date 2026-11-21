@@ -4,10 +4,10 @@ from django.test import TestCase
 from django.utils import timezone
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.models import Event
 from events.staff import dedupe_host_helpers
-from org.models import ContributionEntry, OrgUser
+from org.models import ContributionEntry, Organization, OrgUser
 from org.standing import registry
 from org.standing.registry import override_tracks
 from org.tests.standing_fakes import FakeTrack

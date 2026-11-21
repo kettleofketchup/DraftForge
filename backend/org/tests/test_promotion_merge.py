@@ -8,12 +8,18 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.discord_accounts import merge_discord_accounts
-from app.models import CustomUser, Organization, ProfileClaimRequest
+from app.models import CustomUser, ProfileClaimRequest
 from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry
-from org.models import ContributionEntry, OrgUser, PromoSend, PromoTemplate
+from org.models import (
+    ContributionEntry,
+    Organization,
+    OrgUser,
+    PromoSend,
+    PromoTemplate,
+)
 from org.promotion.services import demote_colliding_earning_sends
 
 

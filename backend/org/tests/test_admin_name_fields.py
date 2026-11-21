@@ -1,7 +1,7 @@
 from django.test import TestCase
 
-from app.models import CustomUser, Organization
-from org.models import OrgUser
+from app.models import CustomUser
+from org.models import Organization, OrgUser
 
 
 class AdminNameFieldsTest(TestCase):

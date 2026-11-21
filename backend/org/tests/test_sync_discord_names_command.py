@@ -5,10 +5,10 @@ from django.core.cache import cache
 from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 
-from app.models import Organization
 from discordbot.services.discord_members import DiscordMembersFetchError
 from org.activity import guild_sync_lock
 from org.discord_names import NameSyncResult
+from org.models import Organization
 
 LOCMEM = {
     "default": {

@@ -102,6 +102,7 @@ SCAN_TARGETS = [
     REPO_ROOT / "backend" / "app" / "user_cache.py",
     REPO_ROOT / "backend" / "draft" / "views" / "team_setup.py",
     REPO_ROOT / "backend" / "draft" / "views" / "team_api.py",
+    REPO_ROOT / "backend" / "org" / "views_organization.py",
 ]
 
 UNSCANNED: dict[pathlib.Path, str] = {

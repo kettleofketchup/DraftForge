@@ -4,10 +4,10 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, Organization
+from app.models import CustomUser, GameType
 from events.models import Event, EventState
 from events.tests.base import EventTestCase
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 
 class SignupEndpointAuthTests(TestCase):
@@ -157,7 +157,7 @@ class SignupEndpointRollbackTests(TransactionTestCase):
 
         from django.utils import timezone
 
-        from app.models import CustomUser, GameType, Organization
+        from app.models import CustomUser, GameType
         from events.models import (
             Event,
             EventSignup,
@@ -165,7 +165,6 @@ class SignupEndpointRollbackTests(TransactionTestCase):
             SignupStatus,
             SignupType,
         )
-        from org.models import OrgUser
         from org.models_profiles import PlayerDotaProfile
 
         org = Organization.objects.create(name="Org")
@@ -233,7 +232,7 @@ class SignupEndpointRollbackTests(TransactionTestCase):
 
         from django.utils import timezone
 
-        from app.models import CustomUser, GameType, Organization
+        from app.models import CustomUser, GameType
         from events.models import Event, EventState
 
         org = Organization.objects.create(name="Org")
@@ -271,7 +270,7 @@ class SignupEndpointRollbackTests(TransactionTestCase):
 
         from django.utils import timezone
 
-        from app.models import CustomUser, GameType, Organization
+        from app.models import CustomUser, GameType
         from events.models import Event, EventSignup, EventState
         from events.services import process_rsvp
 

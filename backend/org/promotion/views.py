@@ -8,13 +8,13 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser, Organization
-from app.permissions_org import has_org_staff_access
+from app.models import CustomUser
 from events.models import Event
 from org.contributions.services import promo_points
 from org.feature_errors import not_permitted, require_org_staff, require_promoter
 from org.features import FeatureKey, org_has_feature
-from org.models import PromoSend, PromoTemplate
+from org.models import Organization, PromoSend, PromoTemplate
+from org.permissions import has_org_staff_access
 from org.promotion.recipients import CandidateRow, candidates, clamp_pool_n
 from org.promotion.render import (
     PLACEHOLDERS,

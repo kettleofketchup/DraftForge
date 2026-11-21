@@ -4,9 +4,9 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from org.activity import guild_sync_lock
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 LOCMEM_CACHE = {
     "default": {

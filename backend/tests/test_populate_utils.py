@@ -11,7 +11,8 @@ from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
+from org.models import Organization
 from tests.populate.constants import DTX_ORG_NAME
 from tests.populate.users import populate_users
 from tests.populate.utils import (

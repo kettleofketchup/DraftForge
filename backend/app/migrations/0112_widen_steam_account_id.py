@@ -3,7 +3,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("app", "0110_orglog_conduct_actions"),
+        ("app", "0111_move_organization_models_to_org"),
     ]
 
     operations = [

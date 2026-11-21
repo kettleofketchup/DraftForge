@@ -4,17 +4,10 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import (
-    CustomUser,
-    League,
-    Organization,
-    PositionsModel,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, League, PositionsModel, Team, Tournament
 from app.services.team_leadership import teams_with_leadership_problems
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 
 class TournamentCSVImportTest(TestCase):

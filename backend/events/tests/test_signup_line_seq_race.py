@@ -7,11 +7,12 @@ from django.db import OperationalError, close_old_connections, connection
 from django.test import TransactionTestCase
 from django.utils import timezone as tz
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events import line
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import create_tentative_signup, decline_signup, process_rsvp
+from org.models import Organization
 
 
 class SignupLineSeqTransactionTests(TransactionTestCase):

@@ -2,8 +2,8 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization, Team, Tournament
-from org.models import OrgUser
+from app.models import CustomUser, League, Team, Tournament
+from org.models import Organization, OrgUser
 
 URL = "/api/tournaments/create-team-from-captain"
 

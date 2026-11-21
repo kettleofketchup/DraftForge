@@ -5,9 +5,9 @@ from django.test import TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization, ProfileClaimRequest
+from app.models import CustomUser, League, ProfileClaimRequest
 from org.contributions.kinds import ContributionKind
-from org.models import ContributionEntry, OrgUser
+from org.models import ContributionEntry, Organization, OrgUser
 from org.views import ClaimRequestViewSet
 from steam.functions.league_summary import get_league_summary
 from steam.tests.league_summary_fixtures import make_player, record_series

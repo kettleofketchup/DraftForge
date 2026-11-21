@@ -8,12 +8,12 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, Organization
+from app.models import CustomUser, GameType
 from events.models import Event, EventState
 from events.schemas import SignupInputPatch
 from events.services import apply_signup_input, resolve_or_create_org_user
 from events.tests.base import EventTestCase
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
 
 
@@ -160,6 +160,18 @@ class ApplySignupInputTests(TestCase):
             )
         self.assertEqual(ctx.exception.code, "rank_status_disallowed")
         self.assertIn("active MMR signups", str(ctx.exception))
+
+    def test_rank_status_ignores_dota_allow_flags_on_deadlock_event(self) -> None:
+        self.event.game_type = GameType.DEADLOCK
+        self.event.allow_active_mmr = False
+        self.event.save()
+        apply_signup_input(
+            org_user=self.org_user,
+            event=self.event,
+            patch=SignupInputPatch(rank_status="active"),
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertEqual(profile.rank_status, "active")
 
     def test_rank_medal_writes(self):
         apply_signup_input(

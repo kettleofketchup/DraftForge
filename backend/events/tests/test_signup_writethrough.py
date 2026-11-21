@@ -8,7 +8,7 @@ from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone as tz
 
-from app.models import CustomUser, Organization, PositionsModel
+from app.models import CustomUser, PositionsModel
 from events.constants import SignupStatus
 from events.eligibility import claim_friend_id
 from events.models import Event, EventSignup
@@ -16,7 +16,7 @@ from events.schemas import SignupInputPatch
 from events.services import _create_signup, apply_signup_input, process_rsvp
 from events.tests.base import EventTestCase
 from org.membership import resolve_or_create_org_user
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
 
 
