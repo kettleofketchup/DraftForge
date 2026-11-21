@@ -418,11 +418,8 @@ def add_tournament_member(request: Request, tournament_id: int) -> Response:
 
     tournament.users.add(user)
 
-    # Invalidate immediately so serialize_tournament gets fresh data,
-    # AND after commit so subsequent GET requests see the new state.
     invalidate_obj(tournament)
     invalidate_after_commit(tournament)
 
-    # Refresh to include the newly added user in serialization
     tournament.refresh_from_db()
     return Response({"status": "added", "tournament": serialize_tournament(tournament)})
