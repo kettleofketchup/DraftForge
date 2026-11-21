@@ -183,6 +183,45 @@ describe('dispatchPatch mmr game bridge', () => {
       { kind: 'org', organization: org },
       { mmr: 6000 },
     );
-    expect(mock).toHaveBeenCalledWith(11, 7, { mmr: 6000, mmr_game_type: 1 });
+    expect(mock).toHaveBeenCalledWith(
+      11,
+      7,
+      { mmr: 6000, mmr_game_type: 1 },
+      1,
+    );
+  });
+
+  it('tags a Deadlock-scoped mmr edit with the Deadlock game', async () => {
+    const mock = vi.mocked(updateOrgUser);
+    mock.mockResolvedValue({ pk: 42, mmr: 3000 } as any);
+    const user = { ...baseUser, dbUpdate: vi.fn() };
+    await dispatchPatch(
+      user,
+      { kind: 'org', organization: org, gameType: 2 },
+      { mmr: 3000 },
+    );
+    expect(mock).toHaveBeenCalledWith(
+      11,
+      7,
+      { mmr: 3000, mmr_game_type: 2 },
+      2,
+    );
+  });
+
+  it('tags a Deadlock league-scoped mmr edit with the Deadlock game', async () => {
+    const mock = vi.mocked(updateOrgUser);
+    mock.mockResolvedValue({ pk: 42, mmr: 3100 } as any);
+    const user = { ...baseUser, dbUpdate: vi.fn() };
+    await dispatchPatch(
+      user,
+      { kind: 'league', league, organization: org, gameType: 2 },
+      { mmr: 3100 },
+    );
+    expect(mock).toHaveBeenCalledWith(
+      11,
+      7,
+      { mmr: 3100, mmr_game_type: 2 },
+      2,
+    );
   });
 });

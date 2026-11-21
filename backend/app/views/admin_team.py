@@ -811,16 +811,16 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    current_mmrs = (
-        dict(
-            OrgUserGameMmr.objects.nocache()
-            .filter(org_user_id=org_user.pk)
-            .values_list("game_type", "mmr")
-        )
-        if mmr_changes
-        else {}
-    )
     with transaction.atomic():
+        current_mmrs: dict[int, int | None] = (
+            dict(
+                OrgUserGameMmr.objects.nocache()
+                .filter(org_user_id=org_user.pk)
+                .values_list("game_type", "mmr")
+            )
+            if mmr_changes
+            else {}
+        )
         for game_type, value in mmr_changes.items():
             if (value or 0) == current_mmrs.get(game_type, 0):
                 if game_type == GameType.DOTA2:
