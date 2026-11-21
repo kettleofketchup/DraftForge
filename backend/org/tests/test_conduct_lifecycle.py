@@ -9,7 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import Organization, OrgLog, Tournament
+from app.models import Tournament
 from discordbot.models import DiscordEvent
 from events.completion import close_event
 from events.constants import EventState, RepeatFrequency
@@ -23,7 +23,7 @@ from org.conduct.lifecycle import (
     teardown_event_outcomes,
     void_event_outcomes,
 )
-from org.models import OrgUser
+from org.models import Organization, OrgLog, OrgUser
 from org.models_conduct import AttendanceOutcome
 from org.models_contributions import ContributionEntry
 from org.tests.conduct_base import ConductTestCase

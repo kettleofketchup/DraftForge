@@ -9,7 +9,7 @@ from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.capacity import (
     count_seats,
     free_seats,
@@ -29,6 +29,7 @@ from events.services import (
 from events.tasks import _sync_discord_event_signups_impl
 from events.tests.base import EventTestCase
 from events.views import EventSignupViewSet
+from org.models import Organization
 
 INTERNAL_TOKEN = "test-internal-token"
 

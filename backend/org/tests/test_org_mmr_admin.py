@@ -1,9 +1,9 @@
 from django.contrib import admin
 from django.test import RequestFactory, TestCase
 
-from app.models import CustomUser, GameType, Organization
+from app.models import CustomUser, GameType
 from org.admin import OrgUserAdmin, OrgUserGameMmrInline
-from org.models import OrgUser, OrgUserGameMmr
+from org.models import Organization, OrgUser, OrgUserGameMmr
 
 ADD_URL = "/admin/org/orgusergamemmr/add/"
 

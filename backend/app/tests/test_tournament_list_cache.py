@@ -15,9 +15,10 @@ from django.test import TransactionTestCase, override_settings
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import League, Organization, Tournament
+from app.models import League, Tournament
 from events.constants import EventState
 from events.models import Event
+from org.models import Organization
 from user.tests.test_cacheops_integration import _redis_reachable
 
 LIST_URL = "/api/tournaments-list/"

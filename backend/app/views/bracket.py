@@ -10,7 +10,7 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import Game, Team, Tournament
-from app.permissions_org import IsTournamentStaff
+from app.permissions_tournament import IsTournamentStaff
 from app.serializers import (
     TEAM_USER_INDEX,
     BracketGameSerializer,

@@ -1,9 +1,12 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.permissions_org import can_manage_game
+from app.cache_utils import invalidate_obj
+from app.models import Game, Tournament
+from app.permissions_tournament import can_manage_game, has_league_staff_access
 from steam.constants import LEAGUE_ID
 from steam.functions.game_linking import (
     auto_assign_matches_by_time,
@@ -43,7 +46,7 @@ log = get_logger(__name__)
 
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
-def sync_league(request):
+def sync_league(request: Request) -> Response:
     """Trigger league sync (full or incremental)."""
     serializer = SyncLeagueRequestSerializer(data=request.data)
     if not serializer.is_valid():
@@ -59,7 +62,7 @@ def sync_league(request):
 
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
-def retry_failed(request):
+def retry_failed(request: Request) -> Response:
     """Retry failed match fetches."""
     serializer = RetryFailedRequestSerializer(data=request.data)
     if not serializer.is_valid():
@@ -73,7 +76,7 @@ def retry_failed(request):
 
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
-def relink_users(request):
+def relink_users(request: Request) -> Response:
     """Re-link users to match stats."""
     serializer = RelinkUsersSerializer(data=request.data)
     if not serializer.is_valid():
@@ -102,7 +105,7 @@ def relink_users(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
-def find_by_players(request):
+def find_by_players(request: Request) -> Response:
     """Find matches by player steam IDs."""
     serializer = FindMatchesByPlayersSerializer(data=request.data)
     if not serializer.is_valid():
@@ -121,7 +124,7 @@ def find_by_players(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def get_live_games(request):
+def get_live_games(request: Request) -> Response:
     """Get live league games."""
     league_id = request.query_params.get("league_id", LEAGUE_ID)
 
@@ -141,7 +144,7 @@ def get_live_games(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def get_sync_status(request):
+def get_sync_status(request: Request) -> Response:
     """Get current sync state."""
     league_id = request.query_params.get("league_id", LEAGUE_ID)
 
@@ -173,7 +176,7 @@ def get_sync_status(request):
 
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
-def auto_link_tournament(request):
+def auto_link_tournament(request: Request) -> Response:
     """Trigger auto-linking for a tournament."""
     serializer = AutoLinkRequestSerializer(data=request.data)
     if not serializer.is_valid():
@@ -187,7 +190,7 @@ def auto_link_tournament(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def get_tournament_suggestions(request, tournament_id):
+def get_tournament_suggestions(request: Request, tournament_id: int) -> Response:
     """Get match suggestions for a tournament."""
     suggestions = get_suggestions_for_tournament(tournament_id)
     return Response(GameMatchSuggestionSerializer(suggestions, many=True).data)
@@ -195,7 +198,7 @@ def get_tournament_suggestions(request, tournament_id):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def get_game_suggestions(request, game_id):
+def get_game_suggestions(request: Request, game_id: int) -> Response:
     """Get match suggestions for a specific game."""
     suggestions = get_suggestions_for_game(game_id)
     return Response(GameMatchSuggestionSerializer(suggestions, many=True).data)
@@ -203,7 +206,7 @@ def get_game_suggestions(request, game_id):
 
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
-def confirm_match_suggestion(request, suggestion_id):
+def confirm_match_suggestion(request: Request, suggestion_id: int) -> Response:
     """Confirm a suggestion (link game to match)."""
     success = confirm_suggestion(suggestion_id)
 
@@ -218,7 +221,7 @@ def confirm_match_suggestion(request, suggestion_id):
 
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
-def dismiss_match_suggestion(request, suggestion_id):
+def dismiss_match_suggestion(request: Request, suggestion_id: int) -> Response:
     """Dismiss a suggestion."""
     success = dismiss_suggestion(suggestion_id)
 
@@ -233,14 +236,13 @@ def dismiss_match_suggestion(request, suggestion_id):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def get_game_match_suggestions(request, game_id):
+def get_game_match_suggestions(request: Request, game_id: int) -> Response:
     """
     Get match suggestions for a bracket game with captain-aware tiers.
 
     Query params:
     - search: Filter by match ID or captain name
     """
-    from app.models import Game
 
     try:
         game = (
@@ -274,13 +276,11 @@ def get_game_match_suggestions(request, game_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def link_game_match(request, game_id):
+def link_game_match(request: Request, game_id: int) -> Response:
     """Link a bracket game to a Steam match.
 
     Requires league staff access.
     """
-    from app.cache_utils import invalidate_obj
-    from app.models import Game
 
     serializer = LinkMatchRequestSerializer(data=request.data)
     if not serializer.is_valid():
@@ -323,13 +323,11 @@ def link_game_match(request, game_id):
 
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
-def unlink_game_match(request, game_id):
+def unlink_game_match(request: Request, game_id: int) -> Response:
     """Unlink a bracket game from its Steam match.
 
     Requires league staff access.
     """
-    from app.cache_utils import invalidate_obj
-    from app.models import Game
 
     try:
         game = Game.objects.select_related("tournament", "league").get(pk=game_id)
@@ -361,7 +359,7 @@ def unlink_game_match(request, game_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def auto_assign_matches(request):
+def auto_assign_matches(request: Request) -> Response:
     """
     Auto-assign Steam matches to tournament bracket games based on time order.
 
@@ -377,8 +375,6 @@ def auto_assign_matches(request):
     - min_overlap: Minimum player overlap required (default 4)
     - apply: If true, applies the assignments (overrides preview)
     """
-    from app.models import Tournament
-    from app.permissions_org import has_league_staff_access
 
     tournament_id = request.data.get("tournament_id")
     if not tournament_id:

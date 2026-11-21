@@ -8,8 +8,7 @@ from django.db import transaction
 from django.db.models import Count, QuerySet
 from django.utils import timezone
 
-from app.models import CustomUser, Organization, OrgLog
-from app.permissions_org import is_org_role_holder
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import (
@@ -18,7 +17,15 @@ from org.contributions.kinds import (
     RATED_KINDS,
     ContributionKind,
 )
-from org.models import ContributionEntry, ContributionPointValue, OrgUser, PromoSend
+from org.models import (
+    ContributionEntry,
+    ContributionPointValue,
+    Organization,
+    OrgLog,
+    OrgUser,
+    PromoSend,
+)
+from org.permissions import is_org_role_holder
 from org.standing import ledger
 from org.standing.ledger import points_for
 from org.standing.periods import local_day_start_utc, local_noon_utc

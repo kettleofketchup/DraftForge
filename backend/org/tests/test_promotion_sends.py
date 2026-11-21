@@ -7,14 +7,20 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, League, Tournament
 from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry
 from org.feature_keys import FeatureKey
 from org.features import org_has_feature, set_org_feature
-from org.models import ContributionEntry, OrgUser, PromoSend, PromoTemplate
+from org.models import (
+    ContributionEntry,
+    Organization,
+    OrgUser,
+    PromoSend,
+    PromoTemplate,
+)
 from org.promotion.services import (
     MAX_SEND_TEXT,
     PromoSendError,

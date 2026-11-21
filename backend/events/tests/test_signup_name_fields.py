@@ -6,13 +6,13 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from common.game import GameType
 from events.constants import SignupStatus
 from events.models import Event, EventSignup, EventTeam
 from events.schemas import EventSignupSchema
 from events.services import create_tournament_for_event
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from tests.cache import flush_run_cache
 from tests.populate.utils import ensure_org_user
 

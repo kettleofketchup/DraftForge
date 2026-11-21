@@ -5,8 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import Organization
 from org.feature_errors import require_org_admin
+from org.models import Organization
 from org.serializers import OrgSettingsSerializer
 from org.settings_service import get_org_settings, update_org_settings
 

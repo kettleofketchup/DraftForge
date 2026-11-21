@@ -3,7 +3,6 @@ from typing import Any
 
 from django.utils import timezone
 
-from app.models import Organization
 from events.tests.base import EventTestCase
 from opsnotices.models import OpsNotice
 from opsnotices.registry import isolated_registry
@@ -15,6 +14,7 @@ from opsnotices.services import (
     resolve_notice_by_id,
 )
 from opsnotices.tests.types import register_test_types
+from org.models import Organization
 
 YEAR: timedelta = timedelta(days=365)
 

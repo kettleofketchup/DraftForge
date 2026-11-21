@@ -1,8 +1,8 @@
 from django.test import TestCase
 
-from app.models import CustomUser, League, Organization
+from app.models import CustomUser, League
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 
 class AdminSearchFieldsTest(TestCase):

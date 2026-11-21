@@ -19,13 +19,13 @@ from app.internal_client import (
     emit_ops_notice,
     resolve_ops_notice,
 )
-from app.models import Organization
 from events.models import Event, EventRepeater
 from events.tests.base import EventTestCase
 from opsnotices.models import OpsNotice
 from opsnotices.registry import isolated_registry
 from opsnotices.services import NoticeEmitError
 from opsnotices.tests.types import register_test_types
+from org.models import Organization
 
 TOKEN = "test-internal-token"
 HEADERS: dict[str, str] = {"HTTP_X_INTERNAL_TOKEN": TOKEN}

@@ -8,13 +8,13 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization, OrgLog
+from app.models import CustomUser, League
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.serializers import EventSignupSerializer
 from org.conduct.constants import Outcome, OutcomeSource
 from org.features import FeatureKey, set_org_feature
-from org.models import OrgUser
+from org.models import Organization, OrgLog, OrgUser
 from org.models_conduct import AttendanceOutcome, OrgConductSettings
 
 ROLES = (

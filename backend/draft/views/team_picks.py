@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from app.cache_utils import invalidate_after_commit
 from app.functions.tournament import _serialize_tournament
 from app.models import CustomUser, Team, Tournament
-from app.permissions_org import can_edit_tournament
+from app.permissions_tournament import can_edit_tournament
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound, TeamDraftState
 from draft.services.shuffle import assign_next_shuffle_captain
 from draft.services.team import (

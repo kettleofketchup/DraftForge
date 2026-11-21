@@ -9,16 +9,16 @@ from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 
-from app.models import CustomUser, Organization
-from app.permissions_org import (
+from app.models import CustomUser
+from events.models import Event, EventSignup
+from org.feature_keys import FeatureKey
+from org.features import org_has_feature
+from org.models import Organization, OrgUser
+from org.permissions import (
     can_view_org_members,
     has_org_admin_access,
     has_org_staff_access,
 )
-from events.models import Event, EventSignup
-from org.feature_keys import FeatureKey
-from org.features import org_has_feature
-from org.models import OrgUser
 from org.standing import registry
 from org.standing.base import TrackBase
 from org.standing.cache import StandingCache

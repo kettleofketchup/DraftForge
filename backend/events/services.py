@@ -12,7 +12,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, PositionsModel, Team, Tournament
+from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
 from draft.services.team import apply_draft_options
 from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
 from events.capacity import has_free_seat, lock_event, seat_holding_statuses
@@ -424,7 +424,7 @@ def apply_signup_input(
         uniqueness), then write.
       - positions: priorities dict or list[int] of roles; writes pos_1..pos_5
         booleans and CustomUser.positions priorities.
-      - rank_status: validated against event.allow_* flags before writing.
+      - rank_status: validated against event.allow_* flags on Dota events.
       - rank_medal, battle_cup_tier: written as-is.
       - rank_screenshot, battlecup_screenshot: URL shape validated, then written.
 
@@ -527,7 +527,9 @@ def apply_signup_input(
             invalidate_after_commit(user_positions, user)
     if "rank_status" in set_fields:
         status = set_fields["rank_status"]
-        if not DotaModalConfig.from_event(event).allows_rank_status(status):
+        if event.game_type == GameType.DOTA2 and not DotaModalConfig.from_event(
+            event
+        ).allows_rank_status(status):
             raise ValidationError(
                 RANK_STATUS_DISALLOWED_MESSAGES[status],
                 code="rank_status_disallowed",

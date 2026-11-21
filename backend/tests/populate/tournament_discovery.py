@@ -6,9 +6,10 @@ Used by frontend/tests/playwright/e2e/03-tournaments/04-discovery.spec.ts.
 """
 
 from app.cache_utils import invalidate_obj
-from app.models import CustomUser, League, Organization, PositionsModel, Tournament
+from app.models import CustomUser, League, PositionsModel, Tournament
 from events.constants import EventState
 from events.models import Event
+from org.models import Organization
 from tests.data.models import TestLeague, TestOrganization, TestUser
 from tests.data.tournament_discovery import (
     DISCOVERY_AWAY_LEAGUE,

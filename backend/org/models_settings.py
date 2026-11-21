@@ -9,7 +9,7 @@ class OrgSettings(models.Model):
     StaffOverridePolicy = StaffOverridePolicy
 
     organization = models.OneToOneField(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="settings",
     )

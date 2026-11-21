@@ -10,11 +10,12 @@ from discordbot.models import (
     DiscordEventMsgSignup,
     DMType,
 )
+from org.models import Organization
 
 
 def _make_event():
     """Create a minimal Event (and its required Organization + User)."""
-    from app.models import CustomUser, Organization
+    from app.models import CustomUser
     from events.models import Event
 
     user = CustomUser.objects.create_user(username="tester", password="pw")

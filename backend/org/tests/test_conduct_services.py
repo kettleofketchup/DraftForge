@@ -2,7 +2,6 @@ from datetime import timedelta
 
 from django.utils import timezone as tz
 
-from app.models import Organization, OrgLog
 from events.completion import close_event
 from events.constants import EventState, SignupStatus
 from events.models import Event
@@ -10,7 +9,7 @@ from org.conduct.constants import Outcome, OutcomeSource
 from org.conduct.services import SetResult, set_outcomes
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
-from org.models import OrgUser
+from org.models import Organization, OrgLog, OrgUser
 from org.models_conduct import AttendanceOutcome
 from org.tests.conduct_base import ConductTestCase
 

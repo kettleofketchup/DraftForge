@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -94,6 +94,7 @@ export function MmrApprovalModal({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [approvedMmr, setApprovedMmr] = useState<number | null>(null);
   const mmrSchema = useMemo(() => buildMmrSchema(gameType), [gameType]);
+  const formId = useId();
   // 3-generic useForm because z.coerce.number() genuinely splits input/output:
   // input is `unknown` (coerce accepts anything), output is `number`.
   // See https://github.com/react-hook-form/resolvers/issues/792.
@@ -221,7 +222,7 @@ export function MmrApprovalModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-md max-h-[90svh] grid-cols-[minmax(0,1fr)] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-3">
               <UserAvatar
@@ -266,6 +267,7 @@ export function MmrApprovalModal({
 
           <Form {...form}>
             <form
+              id={formId}
               onSubmit={form.handleSubmit(handleSubmit)}
               className="space-y-4"
             >
@@ -349,38 +351,39 @@ export function MmrApprovalModal({
                   </FormItem>
                 )}
               />
-
-              <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
-                <CancelButton
-                  type="button"
-                  onClick={() => onOpenChange(false)}
-                  disabled={isApproving || isRejecting}
-                  data-testid="mmr-modal-close"
-                >
-                  Close
-                </CancelButton>
-                {onReject && (
-                  <ConfirmButton
-                    type="button"
-                    variant="destructive"
-                    loading={isRejecting}
-                    disabled={isApproving}
-                    onClick={() => onReject(signup.id)}
-                    data-testid="mmr-modal-reject"
-                  >
-                    Reject
-                  </ConfirmButton>
-                )}
-                <SubmitButton
-                  loading={isApproving}
-                  disabled={isRejecting}
-                  data-testid="mmr-modal-approve"
-                >
-                  Approve
-                </SubmitButton>
-              </DialogFooter>
             </form>
           </Form>
+
+          <DialogFooter className="sticky -bottom-6 -mx-6 -mb-6 flex-row justify-end border-t border-border bg-background/95 px-6 py-4 backdrop-blur">
+            <CancelButton
+              type="button"
+              onClick={() => onOpenChange(false)}
+              disabled={isApproving || isRejecting}
+              data-testid="mmr-modal-close"
+            >
+              Close
+            </CancelButton>
+            {onReject && (
+              <ConfirmButton
+                type="button"
+                variant="destructive"
+                loading={isRejecting}
+                disabled={isApproving}
+                onClick={() => onReject(signup.id)}
+                data-testid="mmr-modal-reject"
+              >
+                Reject
+              </ConfirmButton>
+            )}
+            <SubmitButton
+              form={formId}
+              loading={isApproving}
+              disabled={isRejecting}
+              data-testid="mmr-modal-approve"
+            >
+              Approve
+            </SubmitButton>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
