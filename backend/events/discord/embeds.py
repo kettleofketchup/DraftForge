@@ -12,6 +12,7 @@ from django.conf import settings
 
 from app.constants import LOGO_URL
 from app.internal_client import get_event_signups
+from app.models import GameType
 from events.constants import SEAT_HOLDING_STATUSES, EventState
 from telemetry.logging import get_logger
 
@@ -668,14 +669,21 @@ def build_attendance_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
     )
 
 
-def build_profile_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
-    requirements = []
-    if getattr(event, "require_steam_id", False):
-        requirements.append("Steam ID")
-    if getattr(event, "require_mmr_verified", False):
+def _profile_requirements(event: "EmbedEvent") -> list[str]:
+    is_dota = event.game_type == GameType.DOTA2
+    requirements: list[str] = []
+    if event.require_steam_id:
+        requirements.append("Dota 2 Friend ID" if is_dota else "Steam Friend ID")
+    # Verified MMR is only checked on Dota.
+    if event.require_mmr_verified and is_dota:
         requirements.append("Verified MMR")
-    if getattr(event, "require_profile_complete", False):
+    if event.require_profile_complete:
         requirements.append("Complete profile")
+    return requirements
+
+
+def build_profile_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
+    requirements = _profile_requirements(event)
     req_text = ", ".join(requirements) if requirements else "a complete profile"
     return _build_reminder_embed(
         event,
