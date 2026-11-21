@@ -31,17 +31,6 @@ vi.mock('~/store/userStore', async () => {
   };
 });
 
-const NOW = new Date('2026-11-10T12:00:00Z');
-
-beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(NOW);
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-});
-
 const LOGO = 'https://example.test/logo-a.png';
 const OTHER_LOGO = 'https://example.test/logo-b.png';
 
@@ -96,16 +85,6 @@ function renderCard(t: TournamentType, bucket?: TournamentBucket) {
 function orgMedia(): HTMLElement {
   return screen.getByTestId('tournament-card-org-media');
 }
-
-// The card derives its state from the current time; pin it before the fixture's date_played.
-beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-11-14T12:00:00Z'));
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-});
 
 describe('TournamentCard (non-staff)', () => {
   it('shows the org logo in an aria-hidden media box', () => {
