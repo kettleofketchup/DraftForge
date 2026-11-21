@@ -10,7 +10,7 @@ from datetime import time, timedelta
 from cacheops import invalidate_obj
 from django.utils import timezone as tz
 
-from app.models import CustomUser, GameType, League, Organization, PositionsModel
+from app.models import CustomUser, GameType, League, PositionsModel
 from discordbot.models import DiscordEvent
 from events.constants import EventState, RepeatFrequency, SignupStatus
 from events.models import (
@@ -26,6 +26,7 @@ from events.ready_check_constants import (
     ReadyCheckLowCompletionAction,
     ReadyCheckScope,
 )
+from org.models import Organization
 from org.models_profiles import PlayerDotaProfile
 from tests.data import (
     ADMIN_USER,

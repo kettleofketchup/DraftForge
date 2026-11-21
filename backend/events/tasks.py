@@ -1475,9 +1475,6 @@ def fire_event_reminder(
         get_or_create_discord_event,
     )
     from discordbot.utils import sync_send_embed_with_components
-    from events.discord import (
-        build_profile_reminder_embed,
-    )
 
     REMINDER_MAP = {
         "signup_reminder": ("signup_reminder", build_signup_reminder_embed),

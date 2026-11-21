@@ -6,11 +6,17 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, League, Tournament
 from events.constants import EventState
 from events.models import Event
 from org.features import FeatureKey, set_org_feature
-from org.models import ContributionEntry, OrgUser, PromoSend, PromoTemplate
+from org.models import (
+    ContributionEntry,
+    Organization,
+    OrgUser,
+    PromoSend,
+    PromoTemplate,
+)
 from org.promotion.render import PLACEHOLDERS
 from org.promotion.services import record_promo_send
 from org.promotion.starter import STARTER_TEMPLATE_NAME

@@ -3,12 +3,12 @@
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
-from app.models import Organization
 from org.discord_names import reset_org_guild_nicknames
+from org.models import Organization
 
 
 @receiver(
-    pre_save, sender="app.Organization", dispatch_uid="org_track_discord_server_id"
+    pre_save, sender="org.Organization", dispatch_uid="org_track_discord_server_id"
 )
 def track_org_discord_server_id(
     sender: type[Organization],
@@ -33,7 +33,7 @@ def track_org_discord_server_id(
 
 
 @receiver(
-    post_save, sender="app.Organization", dispatch_uid="org_reset_guild_nicknames"
+    post_save, sender="org.Organization", dispatch_uid="org_reset_guild_nicknames"
 )
 def reset_guild_nicknames_on_server_change(
     sender: type[Organization],

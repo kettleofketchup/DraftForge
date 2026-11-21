@@ -15,9 +15,9 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, LeagueLog, Organization, Tournament
+from app.models import CustomUser, League, LeagueLog, Tournament
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 
 class AddLeagueMemberTest(TestCase):

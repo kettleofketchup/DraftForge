@@ -17,17 +17,10 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from app.models import (
-    CustomUser,
-    Organization,
-    OrgLog,
-    PositionsModel,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, PositionsModel, Team, Tournament
 from common.utils import isTestEnvironment
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import Organization, OrgLog, OrgUser
 from tests.data.organizations import CSV_ORG_NAME
 from tests.data.tournaments import CSV_IMPORT_TOURNAMENT
 from tests.data.users import ADMIN_USER, CSV_IMPORT_USERS

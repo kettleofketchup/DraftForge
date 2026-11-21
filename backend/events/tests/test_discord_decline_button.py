@@ -3,10 +3,11 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, GameType, Organization
+from app.models import CustomUser, GameType
 from events.discord.handlers import handle_decline_button
 from events.models import Event, EventSignup, EventState, SignupStatus
 from events.services import decline_signup
+from org.models import Organization
 
 
 class DeclineSignupServiceTests(TestCase):

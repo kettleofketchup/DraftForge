@@ -3,9 +3,9 @@ from collections.abc import Mapping
 from django.db import transaction
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser
 from org import settings_constants
-from org.models import OrgSettings
+from org.models import Organization, OrgLog, OrgSettings
 from org.settings_constants import StaffOverridePolicy
 from telemetry.logging import get_logger
 

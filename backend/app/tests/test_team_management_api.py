@@ -29,7 +29,6 @@ from app.models import (
     CustomUser,
     Game,
     League,
-    Organization,
     Team,
     TeamLog,
     TeamLogAction,
@@ -60,6 +59,7 @@ from draft.services.team_state import build_draft_state
 from draft.tests.team_fixtures import mid_draft_fixture
 from events.models import EventTeam
 from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
+from org.models import Organization
 from user.tests.test_cacheops_integration import _redis_reachable
 
 

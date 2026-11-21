@@ -2,7 +2,6 @@
 
 from datetime import timedelta
 
-from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
 
@@ -10,11 +9,9 @@ from app.models import (
     CustomUser,
     League,
     LeagueMatch,
-    LeagueMatchParticipant,
     LeagueRating,
-    Organization,
 )
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 
 class MatchFinalizationServiceTest(TestCase):

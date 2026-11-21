@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, PositionsModel
+from app.models import CustomUser, PositionsModel
 from events.constants import EventState
 from events.models import Event, EventSignup
 from events.services import (
@@ -14,6 +14,7 @@ from events.services import (
     ensure_tournament_with_signups,
     restart_event_tournament,
 )
+from org.models import Organization
 
 
 class EnsureTournamentWithSignupsTest(TestCase):
@@ -67,6 +68,7 @@ class EnsureTournamentWithSignupsTest(TestCase):
 
     def test_works_when_tournament_already_exists(self):
         from events.services import create_tournament_for_event
+
         create_tournament_for_event(self.event)
         self.event.refresh_from_db()
         existing_pk = self.event.tournament.pk
@@ -103,11 +105,13 @@ class EnsureTournamentWithSignupsTest(TestCase):
         # Find the M2M-add invalidation call — it's the one with the tournament
         # plus the two added users in its args.
         m2m_calls = [
-            c for c in mock_inv.call_args_list
+            c
+            for c in mock_inv.call_args_list
             if len(c.args) >= 2 and c.args[0] == self.event.tournament
         ]
         self.assertEqual(
-            len(m2m_calls), 1,
+            len(m2m_calls),
+            1,
             f"Expected exactly one M2M-add invalidation; got {mock_inv.call_args_list}",
         )
         args = m2m_calls[0].args

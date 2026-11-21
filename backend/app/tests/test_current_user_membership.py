@@ -6,9 +6,9 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization
+from app.models import CustomUser, League
 from org.membership import member_organization_ids, viewer_member_organization_ids
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 CURRENT_USER_URL = "/api/current_user"
 USERS_URL = "/api/users/"

@@ -13,9 +13,9 @@ already holds the id, plus a lookup endpoint the edit form calls on blur.
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from app.steam_accounts import steam_account_id_conflict_payload
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 TAKEN_ID = 765353730
 FREE_ID = 111222333

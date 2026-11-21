@@ -12,11 +12,11 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, League, Tournament
 from app.serializers import OrganizationsSerializer
 from org.features import FeatureKey, active_features
 from org.membership import member_access
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.permissions import (
     IsOrgAdmin,
     IsOrgOwner,
