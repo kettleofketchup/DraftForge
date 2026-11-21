@@ -48,6 +48,7 @@ from tests.populate.csv_import import populate_csv_import_data
 from tests.populate.demo import populate_demo_tournaments
 from tests.populate.dota_lobby import populate_dota_lobby_data
 from tests.populate.events import populate_events_data
+from tests.populate.game_org_mmr import populate_game_org_mmr_data
 from tests.populate.league_stats import (
     populate_league_stats_data,
     populate_league_stats_showcase,
@@ -115,6 +116,9 @@ def populate_all(force: bool = False) -> None:
         ("Tournament Discovery Data", populate_tournament_discovery),
         # After every pk-sensitive step: these users take auto-incremented pks.
         ("Discord Name Sync Users", populate_discord_name_sync_users),
+        # Last: explicit pks (org/league 50, users 8000-8007) bump the
+        # auto-increment counters every step above relies on.
+        ("Game Org MMR Data", populate_game_org_mmr_data),
     ]
 
     console = Console()
@@ -162,6 +166,7 @@ __all__ = [
     "populate_org_delete",
     "populate_user_edit_data",
     "populate_events_data",
+    "populate_game_org_mmr_data",
     "populate_auth_matrix_data",
     "populate_demo_tournaments",
     "populate_league_stats_data",
