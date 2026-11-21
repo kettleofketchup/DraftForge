@@ -106,22 +106,25 @@ def test_quick_keeps_post_processing_after_failed_recording(
     _playwright(monkeypatch, 1)
     monkeypatch.setattr(demo, "trim", lambda: calls.append("trim") or 0)
     monkeypatch.setattr(demo, "gifs", lambda **_: calls.append("gifs") or 0)
+    monkeypatch.setattr(demo, "clips", lambda: calls.append("clips") or 0)
     assert demo.main(["quick"]) != 0
-    assert calls[-2:] == ["trim", "gifs"]
+    assert calls[-3:] == ["trim", "gifs", "clips"]
 
 
 @pytest.mark.parametrize(
-    ("trimmed", "converted", "expected"),
-    [(0, 0, 0), (1, 0, 1), (0, 1, 1)],
+    ("trimmed", "converted", "clipped", "expected"),
+    [(0, 0, 0, 0), (1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)],
 )
 def test_quick_after_successful_recording(
     monkeypatch: pytest.MonkeyPatch,
     calls: list[str],
     trimmed: int,
     converted: int,
+    clipped: int,
     expected: int,
 ) -> None:
     _playwright(monkeypatch, 0)
     monkeypatch.setattr(demo, "trim", lambda: trimmed)
     monkeypatch.setattr(demo, "gifs", lambda **_: converted)
+    monkeypatch.setattr(demo, "clips", lambda: clipped)
     assert demo.main(["quick"]) == expected
