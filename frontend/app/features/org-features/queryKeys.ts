@@ -102,6 +102,19 @@ export async function invalidateContributionQueries(
   ]);
 }
 
+export async function invalidateOrgContributionQueries(
+  queryClient: QueryClient,
+  orgId: number,
+): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: [CONTRIBUTIONS, orgId] }),
+    queryClient.invalidateQueries({
+      queryKey: [STANDING, orgId],
+      predicate: (query) => query.queryKey[3] === 'contribution',
+    }),
+  ]);
+}
+
 export const orgFeaturesKey = (orgId: number) =>
   ['org-features', orgId] as const;
 
