@@ -116,27 +116,6 @@ def rank_medal_select(
     )
 
 
-def previous_rank_submit(
-    *,
-    event_id: int,
-    discord_user_id: str,
-    medal: str,
-    date_text: str = "",
-) -> dict[str, Any]:
-    return _validated(
-        transport.post(
-            "/discord/previous-rank-submit/",
-            {
-                "event_id": event_id,
-                "discord_user_id": discord_user_id,
-                "medal": medal,
-                "date_text": date_text or "",
-            },
-        ),
-        default={"action": "error", "message": "Signup service unavailable."},
-    )
-
-
 def battle_cup_submit(
     *,
     event_id: int,
