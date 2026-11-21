@@ -53,6 +53,7 @@ import {
   replaceSignup,
   signupIdOf,
 } from '~/components/events/signupOptimistic';
+import type { GameTypeValue } from '~/components/game/constants';
 import type { UserType } from '~/components/user/types';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
@@ -409,11 +410,13 @@ export function useEventSignupUsers(
   signups: EventSignupType[] | undefined,
   /**
    * Optional event organization id. When provided, each user's org-scoped
-   * cache slot is hydrated with `signup.org_user_mmr` + `signup.org_user_pk`
-   * so `<UserStrip organizationId={...} />` can show the right MMR badge
+   * cache slot is hydrated with the signup's org MMR + `org_user_pk` so
+   * `<UserStrip organizationId={...} />` can show the right MMR badge
    * without a second fetch.
    */
   eventOrgId?: number | null,
+  /** The event's game: `org_user_mmr` is filed under it (Dota 2 if omitted). */
+  gameType?: GameTypeValue,
 ) {
   useEffect(() => {
     if (!signups) return;
@@ -422,10 +425,10 @@ export function useEventSignupUsers(
       if (!s.user_data) continue;
       const base = { ...s.user_data } as UserType & { pk: number };
       if (eventOrgId && s.org_user_pk != null && s.org_user_mmr != null) {
-        // The user-cache `toUserEntry` looks for raw.mmr + raw.orgUserPk
-        // alongside an UpsertContext.orgId before populating orgData.
-        base.mmr = s.org_user_mmr;
         base.orgUserPk = s.org_user_pk;
+        base.mmr = s.org_user_mmr;
+        if (gameType != null) base.mmr_game_type = gameType;
+        if (s.org_user_game_mmrs) base.game_mmrs = s.org_user_game_mmrs;
       }
       users.push(base);
     }
@@ -434,5 +437,5 @@ export function useEventSignupUsers(
         .getState()
         .upsert(users, eventOrgId ? { orgId: eventOrgId } : undefined);
     }
-  }, [signups, eventOrgId]);
+  }, [signups, eventOrgId, gameType]);
 }
