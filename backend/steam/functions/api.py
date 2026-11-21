@@ -4,6 +4,8 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from app.cache_utils import invalidate_obj
+from app.models import Game, Tournament
 from app.permissions_tournament import can_manage_game, has_league_staff_access
 from steam.constants import LEAGUE_ID
 from steam.functions.game_linking import (
@@ -241,7 +243,6 @@ def get_game_match_suggestions(request: Request, game_id: int) -> Response:
     Query params:
     - search: Filter by match ID or captain name
     """
-    from app.models import Game
 
     try:
         game = (
@@ -280,8 +281,6 @@ def link_game_match(request: Request, game_id: int) -> Response:
 
     Requires league staff access.
     """
-    from app.cache_utils import invalidate_obj
-    from app.models import Game
 
     serializer = LinkMatchRequestSerializer(data=request.data)
     if not serializer.is_valid():
@@ -329,8 +328,6 @@ def unlink_game_match(request: Request, game_id: int) -> Response:
 
     Requires league staff access.
     """
-    from app.cache_utils import invalidate_obj
-    from app.models import Game
 
     try:
         game = Game.objects.select_related("tournament", "league").get(pk=game_id)
@@ -378,7 +375,6 @@ def auto_assign_matches(request: Request) -> Response:
     - min_overlap: Minimum player overlap required (default 4)
     - apply: If true, applies the assignments (overrides preview)
     """
-    from app.models import Tournament
 
     tournament_id = request.data.get("tournament_id")
     if not tournament_id:

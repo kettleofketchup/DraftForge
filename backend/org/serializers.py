@@ -8,11 +8,9 @@ from rest_framework import serializers
 from app.models import ProfileClaimRequest
 from app.serializers import PositionsSerializer, TournamentUserSerializer
 from org import settings_constants
-from org.models import Organization
+from org.models import Organization, OrgSettings, OrgUser
 from org.settings_constants import StaffOverridePolicy
 from org.settings_service import normalize_warning_codes
-
-from .models import OrgSettings, OrgUser
 
 
 @cache

@@ -24,8 +24,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
+from app.cache_utils import invalidate_obj
 from org.models import Organization
 from telemetry.logging import get_logger
+from user.models import BaseUserProfile
 
 log = get_logger(__name__)
 
@@ -80,7 +82,6 @@ def list_discord_guild_ids(request: Request) -> Response:
     Used by batched avatar refresh to know which guilds to call
     `get_discord_members_data` against.
     """
-
     # Organization has Meta.ordering — leaving it in the queryset would
     # add the ordering columns to the SELECT and defeat .distinct().
     guild_ids = list(
@@ -172,9 +173,6 @@ def bulk_update_user_avatars(request: Request) -> Response:
     # profile rows directly; the property on CustomUser proxies reads through
     # to base_profile.avatar. We need both: load each BaseUserProfile, set its
     # avatar field, then bulk_update on BaseUserProfile.
-    from app.cache_utils import invalidate_obj
-    from user.models import BaseUserProfile
-
     pks = [u["pk"] for u in cleaned]
     bp_by_user = {
         bp.user_id: bp for bp in BaseUserProfile.objects.filter(user_id__in=pks)
