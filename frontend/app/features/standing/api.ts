@@ -1,5 +1,5 @@
 import api from '~/components/api/axios';
-import { ALL_TIME } from '~/features/contributions/schemas';
+import { ALL_TIME } from './periods';
 import {
   StandingLeaderboardSchema,
   type Metric,

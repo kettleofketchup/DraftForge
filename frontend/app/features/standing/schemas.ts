@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MemberSummarySchema } from '~/features/contributions/schemas';
+import { MemberSummarySchema } from './members';
 
 export const TRACK_KEYS = ['contribution', 'conduct', 'leadership'] as const;
 export const TrackKeySchema = z.enum(TRACK_KEYS);

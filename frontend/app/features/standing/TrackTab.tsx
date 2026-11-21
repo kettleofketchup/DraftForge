@@ -7,13 +7,12 @@ import {
   BrandSelectTrigger,
   SelectValue,
 } from '~/components/ui/brand-select';
-import { ALL_TIME } from '~/features/contributions/schemas';
-import { periodOptions } from '~/features/contributions/timezone';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { MetricSwitcher } from './MetricSwitcher';
 import { panelFor } from './panels';
+import { ALL_TIME, periodOptions } from './periods';
 import { useStandingLeaderboard } from './queries';
 import { defaultMetric, type TrackInfo } from './schemas';
 import { StandingLeaderboard } from './StandingLeaderboard';

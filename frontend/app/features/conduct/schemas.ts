@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MemberSummarySchema } from '~/features/contributions/schemas';
+import { MemberSummarySchema } from '~/features/standing/members';
 
 export const OUTCOMES = [
   'pending',
