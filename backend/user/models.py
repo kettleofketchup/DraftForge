@@ -14,7 +14,8 @@ class BaseUserProfile(models.Model):
     Cacheops invalidation: BaseUserProfile is registered in CACHEOPS with
     ops="all", so post_save fires automatically. Every @cached_as site
     that ships nickname/avatar lists BaseUserProfile as a dependency
-    (see user/tests/test_cacheops.py), so its post_save eviction cascades through those caches.
+    (enforced by user/tests/test_cacheops.py), so its post_save eviction
+    cascades through those caches.
     No explicit invalidate_obj() call needed — main's cacheops audit
     (commit 02ff547d) removed the same pattern from 9 other models.
     """

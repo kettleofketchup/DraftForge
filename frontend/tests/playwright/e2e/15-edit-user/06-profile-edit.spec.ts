@@ -12,8 +12,8 @@
  *
  * Avatar is NOT user-editable in this modal — it's synced from Discord
  * server-side (BaseUserProfile.avatar stores the Discord avatar hash,
- * not a URL). If user-uploaded avatars are ever added,
- * add a separate spec for them.
+ * not a URL). If user-uploaded avatars are ever added, add a separate spec
+ * for them.
  *
  * Logs in as the admin user (PK 1001, kettleofketchup) and only edits that
  * user's OWN profile via /profile → EditProfileModal. Original values are

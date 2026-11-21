@@ -1,12 +1,12 @@
 """Live-Redis cacheops invalidation behavioral test for DotaUserProfile.
 
 Companion (#224) to the static grep guardrail in test_cacheops.py (the live
-gate for CI), which verifies the
-`@cached_as(..., DotaUserProfile, ...)` dependency declarations exist. This
-suite would, when run against the container-backed test stack with Redis,
-warm a cached user-list endpoint, PATCH positions via the new
-/api/users/me/profile/game/dota/ route, and re-fetch to confirm the cached
-payload (which embeds `positions`) was actually evicted.
+gate for CI), which verifies the `@cached_as(..., DotaUserProfile, ...)`
+dependency declarations exist. This suite would, when run against the
+container-backed test stack with Redis, warm a cached user-list endpoint,
+PATCH positions via the new /api/users/me/profile/game/dota/ route, and
+re-fetch to confirm the cached payload (which embeds `positions`) was
+actually evicted.
 
 Without this test, the `@cached_as(..., DotaUserProfile, ...)` dependency
 declarations could silently drift to the wrong model and CI wouldn't catch

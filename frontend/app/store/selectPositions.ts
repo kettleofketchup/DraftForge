@@ -8,8 +8,8 @@ import type { PositionsType } from './userCacheTypes';
  * Read a user's positions from the list-populated, rendered-once flat
  * `_users[]` entity adapter (userCacheStore). gameType-gated so future games
  * resolve their own layer. orgUserId is reserved for org overrides and is
- * unused; pass undefined. Returns the stored reference (or undefined) — stable for
- * Zustand Object.is, no per-call allocation.
+ * unused; pass undefined. Returns the stored reference (or undefined) —
+ * stable for Zustand Object.is, no per-call allocation.
  */
 export function selectPositions(
   state: UserCacheState,

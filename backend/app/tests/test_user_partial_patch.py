@@ -7,8 +7,8 @@ both endpoints must treat partial nested 'positions' objects as
 We use TestCase (not TransactionTestCase) here because cacheops auto-
 invalidation on post_save fires inside the test's transaction wrapper,
 which is fine for these assertions. A cache-commit verification test
-would need TransactionTestCase because it relies
-on transaction.on_commit hooks fired by invalidate_after_commit.
+would need TransactionTestCase, since it relies on transaction.on_commit
+hooks fired by invalidate_after_commit.
 """
 
 from django.test import TestCase
