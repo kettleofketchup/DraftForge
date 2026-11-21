@@ -44,9 +44,17 @@ export interface OrgFeaturesEvent {
 export interface OrgFeaturesTestData {
   orgs: Record<'features' | 'locked' | 'private', OrgFeaturesRef>;
   users: Record<OrgFeaturesRole, { pk: number; username: string }>;
-  events: Record<'upcoming' | 'upcoming2' | 'completed', OrgFeaturesEvent>;
+  events: Record<
+    'upcoming' | 'upcoming2' | 'completed' | 'conduct_upcoming',
+    OrgFeaturesEvent
+  >;
   templates: { pk: number; name: string; org_pk: number }[];
   tournaments: OrgFeaturesRef[];
+  conduct: {
+    ranked_org_user_pks: number[];
+    new_member_org_user_pk: number;
+    completed_event_member_org_user_pk: number;
+  };
 }
 
 async function json<T>(resp: APIResponse, what: string): Promise<T> {
@@ -101,7 +109,7 @@ async function csrfHeaders(
 /** A same-session API call with the CSRF header; throws on a non-2xx answer. */
 export async function orgFeaturesApi<T = unknown>(
   context: BrowserContext,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   data?: Record<string, unknown>,
 ): Promise<T> {

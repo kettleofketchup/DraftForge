@@ -1,4 +1,5 @@
 import type { OrganizationType } from '~/components/organization/schemas';
+import type { TrackInfo } from '~/features/standing/schemas';
 import { useUserStore } from '~/store/userStore';
 
 export interface OrgFeatureAccess {
@@ -11,7 +12,14 @@ export interface OrgFeatureAccess {
   canViewContributions: boolean;
   canViewContributors: boolean;
   canManageContributions: boolean;
+  canViewConduct: boolean;
+  canViewOwnConduct: boolean;
+  canViewConductDetails: boolean;
+  canManageConduct: boolean;
+  standingTracks: TrackInfo[];
 }
+
+const NO_TRACKS: TrackInfo[] = [];
 
 export function useOrgFeatureAccess(
   org: OrganizationType | undefined,
@@ -30,5 +38,10 @@ export function useOrgFeatureAccess(
     canViewContributions: flag(org?.can_view_contributions),
     canViewContributors: flag(org?.can_view_contributors),
     canManageContributions: flag(org?.can_manage_contributions),
+    canViewConduct: flag(org?.can_view_conduct),
+    canViewOwnConduct: flag(org?.can_view_own_conduct),
+    canViewConductDetails: flag(org?.can_view_conduct_details),
+    canManageConduct: flag(org?.can_manage_conduct),
+    standingTracks: (settled && org?.standing_tracks) || NO_TRACKS,
   };
 }

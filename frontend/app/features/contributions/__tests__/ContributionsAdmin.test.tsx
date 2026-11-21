@@ -13,20 +13,19 @@ import {
 } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { OrgFeatureAccess } from '~/features/org-features';
+import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import {
   createManualAward,
   deleteManualAward,
   getEntries,
-  getLeaderboard,
   getPointValues,
   setPointValue,
   updateManualAward,
 } from '../api';
-import { ContributionsTab } from '../ContributionsTab';
+import { ContributionsAdmin } from '../ContributionsPanels';
 import type { AdminEntry, PointValueRow } from '../schemas';
 
 vi.mock('../api', () => ({
-  getLeaderboard: vi.fn(),
   getMemberBreakdown: vi.fn(),
   getPointValues: vi.fn(),
   setPointValue: vi.fn(),
@@ -74,16 +73,11 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
 });
 
-const base: OrgFeatureAccess = {
-  settled: true,
+const base: OrgFeatureAccess = makeOrgFeatureAccess({
   viewerPk: 5,
-  canUsePromotion: false,
-  canManageTemplates: false,
-  canManagePromoters: false,
   canViewContributions: true,
   canViewContributors: true,
-  canManageContributions: false,
-};
+});
 const admin: OrgFeatureAccess = { ...base, canManageContributions: true };
 
 const pointValues: PointValueRow[] = [
@@ -122,24 +116,12 @@ function renderTab(access: OrgFeatureAccess, timeZone = 'UTC') {
     </QueryClientProvider>
   );
   return render(
-    <ContributionsTab
-      orgId={7}
-      timeZone={timeZone}
-      membersPrivate={false}
-      access={access}
-    />,
+    <ContributionsAdmin orgId={7} timeZone={timeZone} access={access} />,
     { wrapper },
   );
 }
 
 beforeEach(() => {
-  vi.mocked(getLeaderboard).mockResolvedValue({
-    period: 'all',
-    total: 0,
-    rows_visible: true,
-    rows: [],
-    own_row: null,
-  });
   vi.mocked(getPointValues).mockResolvedValue(pointValues);
   vi.mocked(getEntries).mockResolvedValue({
     count: 2,
@@ -164,8 +146,7 @@ afterEach(() => {
 describe('contributions admin section', () => {
   it('is not rendered and loads nothing for non-admins', async () => {
     renderTab(base);
-    await screen.findByTestId('contributions-tab');
-    await waitFor(() => expect(getLeaderboard).toHaveBeenCalled());
+    await waitFor(() => expect(getPointValues).not.toHaveBeenCalled());
     expect(screen.queryByTestId('contributions-admin')).toBeNull();
     expect(getPointValues).not.toHaveBeenCalled();
     expect(getEntries).not.toHaveBeenCalled();
