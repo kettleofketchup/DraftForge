@@ -320,16 +320,8 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "reloading users",
         ),
         "app/permissions_tournament.py": BackEdge(
-            frozenset(
-                {
-                    "_payload_lists_user",
-                    "can_view_org_members",
-                    "has_org_admin_access",
-                    "has_org_staff_access",
-                }
-            ),
-            "league access and member-visibility checks fall back to the league "
-            "org's roles; leaves with the league slice",
+            frozenset({"has_org_staff_access"}),
+            "has_event_staff_access grants event staff via the event org's staff role",
         ),
         "app/serializers.py": BackEdge(
             frozenset(

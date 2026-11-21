@@ -77,6 +77,12 @@ from draft.services.team import apply_draft_options
 from events.models import Event
 from events.signup_window import user_signups_open_tournament_ids
 from league.models import LeagueUser
+from league.permissions import (
+    IsLeagueAdmin,
+    can_view_league_members,
+    can_view_league_members_from_payload,
+    has_league_staff_access,
+)
 from league.serializers import LeagueUserSerializer
 from org.feature_errors import not_permitted
 from org.membership import (
@@ -117,13 +123,9 @@ from .permissions_tournament import (
     CanEditTeam,
     CanEditTournament,
     CanManageGame,
-    IsLeagueAdmin,
     can_edit_tournament,
     can_manage_game,
-    can_view_league_members,
-    can_view_league_members_from_payload,
     check_tournament_league_change,
-    has_league_staff_access,
 )
 from .serializers import (
     TEAM_MMR_MAPS,
