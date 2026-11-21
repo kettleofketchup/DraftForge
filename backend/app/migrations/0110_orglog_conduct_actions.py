@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("app", "0108_move_hero_draft_models_to_draft"),
+        ("app", "0109_move_team_draft_models_to_draft"),
     ]
 
     operations = [
