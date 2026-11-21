@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.models import Organization
+from org.models import Organization
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

@@ -10,7 +10,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, League, Tournament
 from discordbot.services.member_names import MemberNames
 from org import discord_names
 from org.discord_names import (
@@ -18,7 +18,7 @@ from org.discord_names import (
     apply_guild_member_names,
     org_ids_for_guild,
 )
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 LOCMEM = {
     "default": {

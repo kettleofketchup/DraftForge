@@ -5,13 +5,12 @@ from zoneinfo import available_timezones
 import nh3
 from rest_framework import serializers
 
-from app.models import Organization, ProfileClaimRequest
+from app.models import ProfileClaimRequest
 from app.serializers import PositionsSerializer, TournamentUserSerializer
 from org import settings_constants
+from org.models import Organization, OrgSettings, OrgUser
 from org.settings_constants import StaffOverridePolicy
 from org.settings_service import normalize_warning_codes
-
-from .models import OrgSettings, OrgUser
 
 
 @cache

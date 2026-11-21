@@ -3,9 +3,10 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, GameType, Organization
-from events.models import Event, EventState, EventSignup, SignupStatus
+from app.models import CustomUser, GameType
+from events.models import Event, EventSignup, EventState, SignupStatus
 from events.services import create_tentative_signup
+from org.models import Organization
 
 
 class CreateTentativeSignupTests(TestCase):

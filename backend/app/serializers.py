@@ -22,7 +22,7 @@ from events.overrides import (
     OverrideRequestSerializer,
 )
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from telemetry.logging import get_logger
 from user.querysets import with_user_profiles
 
@@ -33,7 +33,6 @@ from .models import (
     GameType,
     Joke,
     League,
-    Organization,
     PositionsModel,
     Team,
     TeamLog,

@@ -1,10 +1,10 @@
 from django.test import TestCase
 
 import events.services
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.services import resolve_or_create_org_user
 from org.membership import resolve_or_create_org_user as membership_fn
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 
 class ResolveOrCreateOrgUserTests(TestCase):

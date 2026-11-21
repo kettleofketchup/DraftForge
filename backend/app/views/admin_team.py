@@ -11,13 +11,7 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.tournament import _serialize_tournament
-from app.models import (
-    CustomUser,
-    League,
-    LeagueLog,
-    Organization,
-    Tournament,
-)
+from app.models import CustomUser, League, LeagueLog, Tournament
 from app.permissions_tournament import (
     has_league_admin_access,
     has_league_staff_access,
@@ -25,7 +19,7 @@ from app.permissions_tournament import (
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
 from org.member_resolution import member_nick, resolve_member_user
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.permissions import (
     has_org_admin_access,
     has_org_staff_access,

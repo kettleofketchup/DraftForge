@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import Organization
+from org.models import Organization
 from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
 

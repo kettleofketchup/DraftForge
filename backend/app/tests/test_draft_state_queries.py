@@ -16,7 +16,7 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
 from app.functions.tournament import _serialize_tournament
-from app.models import Organization, Tournament
+from app.models import Tournament
 from app.serializers import TournamentSerializer
 from app.tournament_state import tournament_state_queryset
 from draft.models import DraftEvent
@@ -33,7 +33,7 @@ from draft.tests.team_fixtures import (
 )
 from events.models import Event
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 # Upper bound at the time of writing; the 4 == 8 team equality is the real pin.
 TOURNAMENT_RESPONSE_QUERIES: int = 23

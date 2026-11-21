@@ -4,14 +4,20 @@ from django.db import IntegrityError, transaction
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League, Organization
+from app.models import CustomUser, League
 from common.discord_format import discord_timestamp
 from events.models import Event
 from org.accounts import repoint_org_attribution
 from org.contributions.kinds import ContributionKind
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
-from org.models import ContributionEntry, OrgUser, PromoSend, PromoTemplate
+from org.models import (
+    ContributionEntry,
+    Organization,
+    OrgUser,
+    PromoSend,
+    PromoTemplate,
+)
 from org.promotion.starter import (
     STARTER_TEMPLATE_BODY,
     STARTER_TEMPLATE_NAME,

@@ -4,7 +4,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase
 from rest_framework.exceptions import NotAuthenticated, PermissionDenied
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from org.feature_errors import (
     feature_locked,
     not_permitted,
@@ -14,7 +14,7 @@ from org.feature_errors import (
     require_promoter,
 )
 from org.features import FeatureKey, set_org_feature
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.permissions import (
     has_org_promoter_access,
     is_org_role_holder,

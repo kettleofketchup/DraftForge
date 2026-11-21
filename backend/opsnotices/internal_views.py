@@ -12,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events.models import Event
 from opsnotices.schemas import EmitNoticeRequest, ResolveNoticeRequest
 from opsnotices.services import (
@@ -21,6 +21,7 @@ from opsnotices.services import (
     _emit,
     resolve_notice,
 )
+from org.models import Organization
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

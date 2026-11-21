@@ -3,7 +3,7 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import Organization
+from org.models import Organization
 
 
 class OrganizationSSREndpointTests(TestCase):
