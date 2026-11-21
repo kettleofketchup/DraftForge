@@ -36,6 +36,8 @@ interface UserEventStripProps {
   dotaProfile?: DotaProfileData | null;
   /** The event's game, forwarded to the player popover and modal. */
   gameType: GameTypeValue;
+  /** Self-reported rank for non-Dota games, e.g. Deadlock. */
+  selfReportedRank?: string | null;
 
   /** Slot for status badge (signup status, position number) */
   contextSlot?: React.ReactNode;
@@ -76,6 +78,7 @@ export const UserEventStrip = memo(
     user,
     dotaProfile,
     gameType,
+    selfReportedRank,
     contextSlot,
     actionSlot,
     className,
@@ -96,12 +99,24 @@ export const UserEventStrip = memo(
       return { ...user, positions } as UserType;
     }, [user, dotaProfile?.positions]);
 
-    // Medal + MMR display
+    // Rank (medal or self-reported) + MMR display
     const rankDisplay = useMemo(() => {
-      if (!dotaProfile) return null;
       const parts: React.ReactNode[] = [];
 
-      if (dotaProfile.rank_medal) {
+      if (selfReportedRank) {
+        parts.push(
+          <Badge
+            key="self-reported-rank"
+            data-testid="event-strip-self-reported-rank"
+            variant="outline"
+            className="px-1.5 py-0 text-xs font-medium text-rank-ranked border-rank-ranked/30"
+          >
+            {selfReportedRank}
+          </Badge>,
+        );
+      }
+
+      if (dotaProfile?.rank_medal) {
         parts.push(
           <Badge
             key="medal"
@@ -112,7 +127,7 @@ export const UserEventStrip = memo(
           </Badge>,
         );
       } else if (
-        dotaProfile.rank_status === 'never' &&
+        dotaProfile?.rank_status === 'never' &&
         dotaProfile.battle_cup_tier
       ) {
         parts.push(
@@ -126,7 +141,7 @@ export const UserEventStrip = memo(
         );
       }
 
-      if (dotaProfile.mmr) {
+      if (dotaProfile?.mmr) {
         parts.push(
           <Badge
             key="mmr"
@@ -138,7 +153,7 @@ export const UserEventStrip = memo(
         );
       }
 
-      if (dotaProfile.rank_screenshot) {
+      if (dotaProfile?.rank_screenshot) {
         parts.push(
           <Tooltip key="ss">
             <TooltipTrigger asChild>
@@ -159,7 +174,7 @@ export const UserEventStrip = memo(
       return parts.length > 0 ? (
         <div className="flex items-center gap-1">{parts}</div>
       ) : null;
-    }, [dotaProfile]);
+    }, [dotaProfile, selfReportedRank]);
 
     return (
       <div

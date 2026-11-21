@@ -936,6 +936,8 @@ class EventSignupSerializer(serializers.ModelSerializer):
         return memo[key]
 
     def _dota_profile(self, obj: EventSignup) -> PlayerDotaProfile | None:
+        if game_for_event(obj.event) != GameType.DOTA2:
+            return None
         org_user = self._org_user(obj)
         if org_user is None:
             return None
@@ -1030,7 +1032,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
         return list(signup.eligibility_reasons or [])
 
     def get_dota_profile(self, obj: EventSignup) -> dict[str, Any] | None:
-        """Return DotaProfile data if the user has one for this event's org."""
+        """DotaProfile data for Dota 2 events only, if the user has one in the org."""
         profile = self._dota_profile(obj)
         if profile is None:
             return None

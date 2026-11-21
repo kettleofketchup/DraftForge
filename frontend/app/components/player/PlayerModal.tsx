@@ -100,15 +100,11 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const [isLoadingUser, setIsLoadingUser] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
 
-  // PlayerModal can be opened with a `player` prop that lacks orgUserPk
-  // (it comes from a signup list, a leaderboard row, or a draft seat).
-  // For org-scoped edits, dispatchPatch() requires user.orgUserPk; without
-  // it the Save button throws "Org scope requires user.orgUserPk". Look the
-  // OrgUser pk up from the user cache the same way userCard.tsx does.
-  //
-  // League scope is also reachable from PlayerModal (editUserSchema.ts:112-116
-  // requires orgUserPk for league-scoped edits too), so we widen the lookup to
-  // cover both cases using the parent org pk.
+  // The `player` prop (signup list, leaderboard row, draft seat) may lack
+  // orgUserPk, which dispatchPatch() requires for org- and league-scoped
+  // edits; without it Save throws "Org scope requires user.orgUserPk". Look it
+  // up from the user cache as userCard.tsx does, via the parent org pk for
+  // league scope.
   const cachedUserEntry = useUserCacheStore((s) =>
     player.pk != null ? s.entities[player.pk] : undefined,
   );
@@ -169,12 +165,10 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     }
   }, [open, player.pk, canEdit]);
 
-  // Reset full user data when player changes
   useEffect(() => {
     setFullUserData(null);
   }, [player.pk]);
 
-  // Use full data if available, otherwise fall back to partial player data
   const displayPlayer = fullUserData || player;
   const playerName = DisplayName(displayPlayer);
 
@@ -235,8 +229,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
       size="lg"
       showClose={false}
     >
-      {/* User Card Section */}
-      <div className="space-y-4">
+      {/* p-1 keeps the avatar's ring-2 inside the scroll viewport's clip edge */}
+      <div className="space-y-4 p-1">
         {/* Header with avatar and name */}
         <div className="flex items-center gap-4">
           <UserAvatar user={displayPlayer} size="xl" border="primary" />
@@ -329,7 +323,6 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
 
         {/* Action buttons */}
         <div className="pt-2 flex gap-2">
-          {/* Dotabuff link */}
           <DotabuffButton
             steamAccountId={displayPlayer.steam_account_id}
             responsive={false}

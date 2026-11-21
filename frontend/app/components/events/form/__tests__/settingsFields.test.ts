@@ -54,4 +54,10 @@ describe('EVENT_SECTION_FIELDS', () => {
       .filter((field) => !formFields.has(field));
     expect(stale).toEqual([]);
   });
+
+  it('describes the Friend ID requirement without naming one game', () => {
+    expect(
+      EVENT_SECTION_FIELDS.approval.require_steam_id.description,
+    ).not.toMatch(/dota/i);
+  });
 });

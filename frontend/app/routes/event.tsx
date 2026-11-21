@@ -1232,6 +1232,7 @@ function SignupsTab({
                 user={user}
                 dotaProfile={stripProfile}
                 gameType={toGameType(gameType)}
+                selfReportedRank={signup.self_reported_rank}
                 contextSlot={statusSlot}
                 actionSlot={adminActions}
               />

@@ -42,6 +42,10 @@ const numberClasses =
 const compactNumberClasses =
   'absolute -top-1 -left-1 h-3.5 w-3.5 text-[10px] rounded-full p-0 border-white border-1 text-white flex items-center justify-center';
 
+// hover:brightness-125 sets a filter, which makes the badge the bubble's
+// containing block; Badge's default overflow-hidden would then clip the bubble.
+const rankAnchorClasses = 'relative overflow-visible';
+
 const getRankLabel = (rank: number): string => {
   switch (rank) {
     case 1:
@@ -101,6 +105,7 @@ export const CarryBadge: React.FC<BadgeProps> = memo(
         <Badge
           className={cn(
             '!bg-pos-carry-surface !text-white hover:brightness-125 transition-colors',
+            rankAnchorClasses,
             forceCompact && '!px-1 !py-0.5',
             isResponsive && '!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5',
           )}
@@ -177,6 +182,7 @@ export const MidBadge: React.FC<BadgeProps> = memo(
         <Badge
           className={cn(
             '!bg-pos-mid-surface !text-white hover:brightness-125 transition-colors',
+            rankAnchorClasses,
             forceCompact && '!px-1 !py-0.5',
             isResponsive && '!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5',
           )}
@@ -251,6 +257,7 @@ export const OfflaneBadge: React.FC<BadgeProps> = memo(
         <Badge
           className={cn(
             '!bg-pos-offlane-surface !text-white hover:brightness-125 transition-colors',
+            rankAnchorClasses,
             forceCompact && '!px-1 !py-0.5',
             isResponsive && '!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5',
           )}
@@ -327,6 +334,7 @@ export const SoftSupportBadge: React.FC<BadgeProps> = memo(
         <Badge
           className={cn(
             '!bg-pos-soft-support-surface !text-white hover:brightness-125 transition-colors',
+            rankAnchorClasses,
             forceCompact && '!px-1 !py-0.5',
             isResponsive && '!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5',
           )}
@@ -404,6 +412,7 @@ export const HardSupportBadge: React.FC<BadgeProps> = memo(
         <Badge
           className={cn(
             '!bg-pos-hard-support-surface !text-white hover:brightness-125 transition-colors',
+            rankAnchorClasses,
             forceCompact && '!px-1 !py-0.5',
             isResponsive && '!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5',
           )}
@@ -473,7 +482,7 @@ interface RolePositionsProps {
    */
   disableTooltips?: boolean;
   /**
-   * Fill empty position slots with invisible placeholders to maintain consistent width.
+   * Fill empty position slots with faded placeholders to maintain consistent width.
    * Useful in list views where alignment matters.
    */
   fillEmpty?: boolean;
@@ -485,7 +494,6 @@ interface RolePositionsProps {
   unranked?: boolean;
 }
 
-/** Position icon mapping */
 const positionIcons: Record<string, React.FC<{ className?: string }>> = {
   carry: CarrySVG,
   mid: MidSVG,
@@ -494,7 +502,6 @@ const positionIcons: Record<string, React.FC<{ className?: string }>> = {
   hard_support: HardSupportSVG,
 };
 
-/** Invisible placeholder badge showing the missing position icon */
 const PlaceholderBadge: React.FC<{
   compact?: boolean;
   positionKey: string;
@@ -508,6 +515,7 @@ const PlaceholderBadge: React.FC<{
       <Badge
         className={cn(
           '!bg-base-100/50 !text-muted-foreground',
+          rankAnchorClasses,
           forceCompact && '!px-1 !py-0.5',
           isResponsive && '!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5',
         )}
@@ -577,11 +585,9 @@ export const RolePositions: React.FC<RolePositionsProps> = ({
     .filter(({ value }) => value != null && value > 0)
     .sort((a, b) => (a.value || 0) - (b.value || 0));
 
-  // Find which positions are missing (for placeholder icons)
   const activeKeys = new Set(activePositions.map((p) => p.key));
   const missingPositions = positions.filter((p) => !activeKeys.has(p.key));
 
-  // If no positions and not filling empty, return null
   if (activePositions.length === 0 && !fillEmpty) return null;
 
   return (
@@ -595,7 +601,6 @@ export const RolePositions: React.FC<RolePositionsProps> = ({
             : 'flex-col md:flex-row gap-1',
       )}
     >
-      {/* Render active positions first (sorted by preference) */}
       {activePositions.map(({ component: Component, key }) => (
         <Component
           key={key}
@@ -605,7 +610,6 @@ export const RolePositions: React.FC<RolePositionsProps> = ({
           unranked={unranked}
         />
       ))}
-      {/* Render placeholders for missing positions with correct icons */}
       {fillEmpty &&
         missingPositions.map(({ key }) => (
           <PlaceholderBadge

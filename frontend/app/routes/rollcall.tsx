@@ -75,6 +75,7 @@ import {
 } from '~/hooks/useEvent';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { cn } from '~/lib/utils';
+import { useGameTypeStore } from '~/store/gameTypeStore';
 
 export default function RollCallPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -99,6 +100,16 @@ export default function RollCallPage() {
     event?.organization ?? undefined,
   );
   const isAdmin = event?.user_can_manage ?? false;
+
+  const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
+  useEffect(() => {
+    if (event?.game_type) {
+      setCurrentGameType(event.game_type as GameTypeValue);
+    }
+    return () => {
+      setCurrentGameType(null);
+    };
+  }, [event?.game_type, setCurrentGameType]);
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
