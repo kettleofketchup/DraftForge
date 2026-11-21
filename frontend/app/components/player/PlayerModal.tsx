@@ -15,6 +15,7 @@ import { useSharedPopover } from '~/components/ui/shared-popover-context';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
+import { hasAnyPosition } from '~/components/user/positions/hasAnyPosition';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
@@ -24,21 +25,10 @@ import { getLogger } from '~/lib/logger';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
-import { isUserEntry, type PositionsType } from '~/store/userCacheTypes';
+import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('PlayerModal');
-
-function hasAnyPosition(p: PositionsType | undefined): boolean {
-  if (!p) return false;
-  return (
-    (p.carry ?? 0) > 0 ||
-    (p.mid ?? 0) > 0 ||
-    (p.offlane ?? 0) > 0 ||
-    (p.soft_support ?? 0) > 0 ||
-    (p.hard_support ?? 0) > 0
-  );
-}
 
 interface PlayerModalProps {
   player: UserType;
