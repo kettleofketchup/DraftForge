@@ -1,5 +1,6 @@
-import { Award, type LucideIcon } from 'lucide-react';
+import { Award, CalendarCheck, type LucideIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
+import { ConductDetail } from '~/features/conduct/ConductPanels';
 import {
   ContributionsAdmin,
   ContributionsDetail,
@@ -50,6 +51,16 @@ export const TRACK_PANELS: Partial<Record<TrackKey, TrackPanelSet>> = {
     openOwnByDefault: false,
     Detail: ContributionsDetail,
     Admin: ContributionsAdmin,
+  },
+  conduct: {
+    tabValue: 'conduct',
+    icon: CalendarCheck,
+    sampleLabel: () => 'Events',
+    totalUnit: null,
+    emptyLabel: () => 'No ranked members yet',
+    canOpen: ({ own, access }) => own || access.canViewConductDetails,
+    openOwnByDefault: true,
+    Detail: ConductDetail,
   },
 };
 
