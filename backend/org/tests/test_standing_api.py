@@ -15,7 +15,7 @@ from events.models import Event, EventSignup
 from org.admin import OrgFeatureAdmin
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
-from org.models import OrgFeature, Organization, OrgUser
+from org.models import Organization, OrgFeature, OrgUser
 from org.standing import api as standing
 from org.standing.base import TrackBase
 from org.standing.cache import StandingCache

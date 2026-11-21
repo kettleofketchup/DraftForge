@@ -14,7 +14,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.models import CustomUser
-from org.models import Organization
 from app.permissions_tournament import has_event_staff_access
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
@@ -40,7 +39,7 @@ from org.contributions.serializers import member_summary
 from org.feature_errors import not_permitted, require_feature, require_org_admin
 from org.features import FeatureKey
 from org.membership import resolve_or_create_org_user
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_conduct import AttendanceOutcome
 from org.permissions import can_view_org_members, has_org_staff_access
 from user.querysets import with_user_profiles

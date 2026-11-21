@@ -5,10 +5,10 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
-from org.models import OrgLog
 from events.capacity import lock_event
 from events.models import Event
 from org.conduct.constants import AUTOMATIC_SOURCES
+from org.models import OrgLog
 from org.models_conduct import AttendanceOutcome
 from telemetry.logging import get_logger
 

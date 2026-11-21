@@ -4,10 +4,9 @@ from django.test import override_settings
 from django.utils import timezone as tz
 
 from app.models import CustomUser
-from org.models import Organization
 from org.conduct.constants import Outcome
 from org.conduct.queries import member_scores, user_scores
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_conduct import AttendanceOutcome, OrgConductSettings
 from org.tests.conduct_base import ConductTestCase
 

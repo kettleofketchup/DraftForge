@@ -1,11 +1,10 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from org.models import Organization
 from org.conduct.queries import member_scores
 from org.conduct.scoring import MemberScore, prior_member_score
 from org.conduct.serializers import rate
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_conduct import OrgConductSettings
 from user.querysets import with_user_profiles
 

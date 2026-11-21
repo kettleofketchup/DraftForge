@@ -3,11 +3,10 @@ from decimal import Decimal
 from django.db import IntegrityError, transaction
 from django.utils import timezone as tz
 
-from org.models import OrgLog
 from events.serializers import EventSerializer
 from org.conduct.constants import Outcome, OutcomeSource
 from org.feature_keys import FeatureKey
-from org.models import OrgConductSettings
+from org.models import OrgConductSettings, OrgLog
 from org.models_conduct import AttendanceOutcome
 from org.tests.conduct_base import ConductTestCase
 

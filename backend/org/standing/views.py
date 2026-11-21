@@ -5,9 +5,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from org.models import Organization
 from org.feature_errors import feature_locked, not_permitted
 from org.features import active_features
+from org.models import Organization
 from org.standing import api as standing
 from org.standing.periods import Period, parse_period
 from org.standing.serializers import leaderboard_data

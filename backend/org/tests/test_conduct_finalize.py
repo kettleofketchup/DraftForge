@@ -6,7 +6,6 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 
 from app.models import CustomUser
-from org.models import OrgLog
 from events.completion import CloseResult, close_event
 from events.constants import EventState, SignupStatus
 from events.models import Event, ReadyCheck
@@ -20,6 +19,7 @@ from org.conduct.gate import get_conduct_settings
 from org.conduct.queries import member_scores
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
+from org.models import OrgLog
 from org.models_conduct import AttendanceOutcome
 from org.tests.conduct_base import ConductTestCase
 
