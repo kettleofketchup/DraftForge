@@ -45,6 +45,14 @@ export const DEFAULT_MMR_BOUNDS = [0, 20000] as const;
 
 export const DEFAULT_GAME_TYPE: GameTypeValue = GAME_TYPE.DOTA2;
 
+/** League snapshots (`league_mmr`) are seeded from this game's org MMR (backend `LEAGUE_GAME`). */
+export const LEAGUE_MMR_GAME: GameTypeValue = GAME_TYPE.DOTA2;
+
+/** Whether league MMR may sit beside this context game's org MMR; undefined = no single game. */
+export function showsLeagueMmr(gameType: GameTypeValue | undefined): boolean {
+  return gameType == null || gameType === LEAGUE_MMR_GAME;
+}
+
 export function isGameType(v: unknown): v is GameTypeValue {
   return (GAME_TYPES as readonly unknown[]).includes(v);
 }

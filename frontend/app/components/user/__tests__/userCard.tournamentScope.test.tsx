@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { GAME_TYPE, type GameTypeValue } from '~/components/game/constants';
 import type { OrganizationType } from '~/components/organization/schemas';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { UserClassType } from '~/components/user/types';
@@ -46,12 +47,23 @@ function deadlockPlayer(): UserClassType {
   } as UserClassType;
 }
 
-function renderCard(user: UserClassType) {
+const LEAGUE_PK = 9;
+
+function renderCard(
+  user: UserClassType,
+  opts: { gameType?: GameTypeValue; leagueId?: number } = {},
+) {
+  const { gameType = GAME_TYPE.DEADLOCK, leagueId } = opts;
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <TooltipProvider>
         <MemoryRouter>
-          <UserCard user={user} organizationId={ORG_PK} gameType={2} />
+          <UserCard
+            user={user}
+            organizationId={ORG_PK}
+            leagueId={leagueId}
+            gameType={gameType}
+          />
         </MemoryRouter>
       </TooltipProvider>
     </QueryClientProvider>,
@@ -135,6 +147,26 @@ describe('UserCard in a Deadlock tournament', () => {
     expect(screen.getByTestId('edit-user-mmr-deadlock')).toHaveProperty(
       'value',
       '3000',
+    );
+  });
+
+  it('hides the Dota-seeded league MMR tile', () => {
+    const user = { ...deadlockPlayer(), league_mmr: 2000 } as UserClassType;
+    renderCard(user, { leagueId: LEAGUE_PK });
+    expect(screen.getByTestId('usercard-org-mmr-deadlock')).toBeTruthy();
+    expect(screen.queryByText('League MMR')).toBeNull();
+  });
+
+  it('keeps the league MMR tile in a Dota tournament', () => {
+    const user = {
+      ...deadlockPlayer(),
+      mmr: 4200,
+      mmr_game_type: 1,
+      league_mmr: 2000,
+    } as UserClassType;
+    renderCard(user, { gameType: GAME_TYPE.DOTA2, leagueId: LEAGUE_PK });
+    expect(screen.getByText('League MMR').parentElement?.textContent).toContain(
+      '2000',
     );
   });
 

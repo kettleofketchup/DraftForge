@@ -4,6 +4,7 @@ import {
   GAME_LABEL,
   GAME_SLUG,
   GAME_TYPES,
+  showsLeagueMmr,
   toGameType,
   type GameTypeValue,
 } from '~/components/game/constants';
@@ -120,11 +121,13 @@ export const UserCard: React.FC<Props> = memo(
     const cachedOrgMmr = gameType != null ? mmrFor(gameType) : undefined;
     // Same resolution as UserStrip: scoped map for cache entries, flat field
     // for raw payloads.
-    const leagueMmr = isUserEntry(user)
-      ? leagueId
-        ? user.leagueData[leagueId]?.mmr
-        : undefined
-      : (user as UserType & { league_mmr?: number | null }).league_mmr;
+    const leagueMmr = !showsLeagueMmr(gameType)
+      ? undefined
+      : isUserEntry(user)
+        ? leagueId
+          ? user.leagueData[leagueId]?.mmr
+          : undefined
+        : (user as UserType & { league_mmr?: number | null }).league_mmr;
 
     // Shared resolver (same as the incomplete-profiles card). Gates on the
     // player's OrgUser link (flat orgUserPk on raw payloads, orgData/leagueData

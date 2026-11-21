@@ -4,6 +4,7 @@ import {
   GAME_SHORT_LABEL,
   GAME_TYPE,
   type GameTypeValue,
+  showsLeagueMmr,
 } from '~/components/game/constants';
 import { PlayerPopover } from '~/components/player';
 import { Badge } from '~/components/ui/badge';
@@ -153,11 +154,13 @@ export const UserStrip = memo(
       [orgMmr],
     );
 
-    const leagueMmrValue = isUserEntry(user)
-      ? leagueId
-        ? user.leagueData[leagueId]?.mmr
-        : undefined
-      : (user as UserType & { league_mmr?: number }).league_mmr;
+    const leagueMmrValue = !showsLeagueMmr(gameType)
+      ? undefined
+      : isUserEntry(user)
+        ? leagueId
+          ? user.leagueData[leagueId]?.mmr
+          : undefined
+        : (user as UserType & { league_mmr?: number }).league_mmr;
     const leagueMmr = useMemo(
       () => (leagueMmrValue ?? 0).toLocaleString().padStart(6, '\u2007'),
       [leagueMmrValue],

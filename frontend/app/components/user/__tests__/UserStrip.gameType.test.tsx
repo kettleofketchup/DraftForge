@@ -111,6 +111,51 @@ describe('UserStrip gameType', () => {
     expect(screen.queryByText('Dota 2 ranked MMR')).toBeNull();
   });
 
+  it('Deadlock hides the Dota-seeded league MMR badge', () => {
+    const user: UserEntry = {
+      ...entry,
+      leagueData: { 9: { id: 1, mmr: 2000, _fetchedAt: 0 } },
+    };
+    render(
+      wrap(
+        <UserStrip
+          user={user}
+          organizationId={5}
+          leagueId={9}
+          gameType={GAME_TYPE.DEADLOCK}
+        />,
+      ),
+    );
+    expect(screen.queryByText('L:')).toBeNull();
+    expect(orgBadge().textContent).toContain('DL:');
+  });
+
+  it('Dota still shows the league MMR badge', () => {
+    const user: UserEntry = {
+      ...entry,
+      leagueData: { 9: { id: 1, mmr: 2000, _fetchedAt: 0 } },
+    };
+    render(
+      wrap(
+        <UserStrip
+          user={user}
+          organizationId={5}
+          leagueId={9}
+          gameType={GAME_TYPE.DOTA2}
+        />,
+      ),
+    );
+    expect(screen.getByText('L:').parentElement?.textContent).toContain(
+      '2,000',
+    );
+  });
+
+  it('Deadlock hides a raw-payload league_mmr too', () => {
+    const user = { pk: 1, username: 'a', league_mmr: 2000 } as UserType;
+    render(wrap(<UserStrip user={user} gameType={GAME_TYPE.DEADLOCK} />));
+    expect(screen.queryByText('L:')).toBeNull();
+  });
+
   it('comparator returns false when gameType changes', () => {
     expect(
       userStripPropsAreEqual(

@@ -10,6 +10,7 @@ import {
   GAME_TYPE,
   GAME_TYPES,
   mmrTestId,
+  showsLeagueMmr,
   toGameType,
 } from './constants';
 
@@ -43,5 +44,11 @@ describe('game constants', () => {
   it('mmrTestId keeps the legacy Dota id', () => {
     expect(mmrTestId(1)).toBe('edit-user-mmr');
     expect(mmrTestId(2)).toBe('edit-user-mmr-deadlock');
+  });
+
+  it('shows league MMR only beside the league snapshot game', () => {
+    expect(showsLeagueMmr(GAME_TYPE.DOTA2)).toBe(true);
+    expect(showsLeagueMmr(GAME_TYPE.DEADLOCK)).toBe(false);
+    expect(showsLeagueMmr(undefined)).toBe(true);
   });
 });

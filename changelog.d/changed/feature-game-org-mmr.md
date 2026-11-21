@@ -15,3 +15,5 @@
 - CSV import rejects `mmr` cells outside 0–20000 as row errors instead of storing them,
   and the tournament import refuses the `league` MMR target for non-Dota tournaments.
 - The Django admin shows org MMRs read-only; edit them from the organization page.
+- Deadlock tournaments no longer show the league MMR on player cards and player strips;
+  league MMR is a Dota 2 value and still shows in Dota 2 tournaments.
