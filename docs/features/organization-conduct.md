@@ -13,10 +13,34 @@ Conduct is a [standing track](../development/org-standing.md#conduct-track), so 
 ranking is also served by the generic
 [standing endpoints](../api/endpoints.md#organization-standing).
 
-!!! note "Screens ship separately"
-    The backend (recording, scoring, enforcement and the API) ships first. The Conduct
-    tab, the Conduct settings section, the Attendance panel and the turnout forecast
-    card described below arrive with the conduct frontend.
+!!! note "Event screens ship separately"
+    The Conduct tab and the Conduct settings section are live. The Attendance panel and
+    the turnout forecast card on the event page arrive in a later release.
+
+## On the organization page
+
+The organization page shows one tab per enabled standing track, so an org with
+Conduct unlocked has a **Conduct** tab next to **Contributions**. A track with more
+than one metric gets a metric switcher above its leaderboard.
+
+- **Leaderboard.** Ranked members with rank, show rate and counted events, then a list
+  of new members (fewer than the minimum events). With **Public ranking** off, members
+  see only their own row and a note that the org keeps its ranking private.
+- **Member history.** Selecting a row (or your own row) opens that member's history:
+  each event with its outcome, source and weight, plus totals. Staff also see reasons
+  and who made an edit.
+- **Show rate explained.** The info button next to the ranking explains how the rate
+  is built: what counts as a show or a miss, what is left out, how older events weigh
+  less, and why new members lean on the org's baseline.
+
+### Conduct settings
+
+Org admins open **Organization Settings > Conduct**. The section holds the scoring
+parameters, the late-cancel window and weight, **Public ranking**, and the
+**Enforcement** group. Each field shows a **Default** badge or a **Reset** button. The
+three enforcement toggles are off by default and the group stays collapsed until one is
+on. Values are checked in the browser against the same ranges as the server; any error
+the server returns for a field is shown on that field and opens the section.
 
 ---
 
