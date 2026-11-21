@@ -26,7 +26,8 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
 const player = { pk: 42, username: 'alice', nickname: 'Alice' } as UserType;
 
@@ -59,7 +60,9 @@ function stubFetch() {
 }
 
 function renderModal(props: { leagueId?: number; organizationId?: number }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
     <MemoryRouter>
       <QueryClientProvider client={client}>
@@ -83,7 +86,9 @@ describe('PlayerModal league stats context', () => {
     await screen.findByText('No league stats available');
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
     const urls = fetchSpy.mock.calls.map(([input]) => String(input));
-    expect(urls.some((u) => u.includes('/leagues/10/player-summaries/'))).toBe(true);
+    expect(urls.some((u) => u.includes('/leagues/10/player-summaries/'))).toBe(
+      true,
+    );
     expect(urls.some((u) => u.includes('league=10'))).toBe(true);
     expect(urls.some((u) => u.includes('league_id='))).toBe(false);
   });
@@ -94,7 +99,9 @@ describe('PlayerModal league stats context', () => {
     renderModal({ leagueId: 2 });
     await screen.findByText('No league stats available');
     const urls = fetchSpy.mock.calls.map(([input]) => String(input));
-    expect(urls.some((u) => u.includes('/leagues/2/player-summaries/'))).toBe(true);
+    expect(urls.some((u) => u.includes('/leagues/2/player-summaries/'))).toBe(
+      true,
+    );
     expect(urls.some((u) => u.includes('league=2'))).toBe(true);
     expect(urls.some((u) => u.includes('league_id='))).toBe(false);
   });

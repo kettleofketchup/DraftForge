@@ -2,10 +2,15 @@
 import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UserType } from '~/components/user/types';
-import { SharedPopoverProvider, useSharedPopover } from '../shared-popover-context';
+import {
+  SharedPopoverProvider,
+  useSharedPopover,
+} from '../shared-popover-context';
 
 const player = { pk: 42, username: 'alice', nickname: 'Alice' } as UserType;
-const latest: { value: ReturnType<typeof useSharedPopover> | null } = { value: null };
+const latest: { value: ReturnType<typeof useSharedPopover> | null } = {
+  value: null,
+};
 
 function Probe() {
   latest.value = useSharedPopover();

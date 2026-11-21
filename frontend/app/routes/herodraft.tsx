@@ -1,6 +1,6 @@
-import HeroDraftPage from '~/pages/herodraft/HeroDraftPage';
 import { generateMeta } from '~/lib/seo';
 import type { HeroDraftSSR } from '~/lib/ssr-types';
+import HeroDraftPage from '~/pages/herodraft/HeroDraftPage';
 import type { Route } from './+types/herodraft';
 
 export async function loader({ params }: Route.LoaderArgs) {

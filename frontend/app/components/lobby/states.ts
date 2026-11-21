@@ -78,6 +78,8 @@ export function lobbyStateDot(state: string): string {
 }
 
 /** Whether the bracket node shows a dot: not for lobbies that simply ended. */
-export function showLobbyDot(state: string | null | undefined): state is string {
+export function showLobbyDot(
+  state: string | null | undefined,
+): state is string {
   return !!state && lobbyStateToneName(state) !== 'done';
 }

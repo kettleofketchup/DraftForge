@@ -5,8 +5,10 @@ import { cn } from '~/lib/utils';
 
 export type ZoomAction = 'in' | 'out' | 'fit' | 'reset';
 
-export interface ZoomIconButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
+export interface ZoomIconButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant' | 'size'
+> {
   /** The zoom action type */
   action: ZoomAction;
 }
@@ -50,7 +52,7 @@ const ZoomIconButton = React.forwardRef<HTMLButtonElement, ZoomIconButtonProps>(
         <span className="sr-only">{config.label}</span>
       </Button>
     );
-  }
+  },
 );
 
 ZoomIconButton.displayName = 'ZoomIconButton';

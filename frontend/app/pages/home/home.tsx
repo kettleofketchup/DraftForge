@@ -20,7 +20,6 @@ import { Link } from 'react-router';
 import { getHomeStats } from '~/components/api/api';
 import { FeatureCard } from '~/components/feature/FeatureCard';
 import { Badge } from '~/components/ui/badge';
-import { Button } from '~/components/ui/button';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 
 // Video/GIF assets stored in Cloudflare R2
@@ -230,12 +229,28 @@ export default function HomePage() {
               delay={0.2}
               gifSrc={`${ASSETS_BASE}/gifs/captain1_herodraft.gif`}
               quickMedia={[
-                { src: `${ASSETS_BASE}/gifs/captain1_herodraft.gif`, caption: 'Captain 1 Perspective', type: 'gif' },
-                { src: `${ASSETS_BASE}/gifs/captain2_herodraft.gif`, caption: 'Captain 2 Perspective', type: 'gif' },
+                {
+                  src: `${ASSETS_BASE}/gifs/captain1_herodraft.gif`,
+                  caption: 'Captain 1 Perspective',
+                  type: 'gif',
+                },
+                {
+                  src: `${ASSETS_BASE}/gifs/captain2_herodraft.gif`,
+                  caption: 'Captain 2 Perspective',
+                  type: 'gif',
+                },
               ]}
               modalMedia={[
-                { src: `${ASSETS_BASE}/videos/captain1_herodraft.webm`, caption: 'Captain 1 Perspective', type: 'video' },
-                { src: `${ASSETS_BASE}/videos/captain2_herodraft.webm`, caption: 'Captain 2 Perspective', type: 'video' },
+                {
+                  src: `${ASSETS_BASE}/videos/captain1_herodraft.webm`,
+                  caption: 'Captain 1 Perspective',
+                  type: 'video',
+                },
+                {
+                  src: `${ASSETS_BASE}/videos/captain2_herodraft.webm`,
+                  caption: 'Captain 2 Perspective',
+                  type: 'video',
+                },
               ]}
               docsPath="/features/herodraft/"
             />
@@ -253,12 +268,28 @@ export default function HomePage() {
               delay={0.3}
               gifSrc={`${ASSETS_BASE}/gifs/snake_draft.gif`}
               quickMedia={[
-                { src: `${ASSETS_BASE}/gifs/snake_draft.gif`, caption: 'Snake Draft', type: 'gif' },
-                { src: `${ASSETS_BASE}/gifs/shuffle_draft.gif`, caption: 'MMR Market', type: 'gif' },
+                {
+                  src: `${ASSETS_BASE}/gifs/snake_draft.gif`,
+                  caption: 'Snake Draft',
+                  type: 'gif',
+                },
+                {
+                  src: `${ASSETS_BASE}/gifs/shuffle_draft.gif`,
+                  caption: 'MMR Market',
+                  type: 'gif',
+                },
               ]}
               modalMedia={[
-                { src: `${ASSETS_BASE}/videos/snake_draft.webm`, caption: 'Snake Draft', type: 'video' },
-                { src: `${ASSETS_BASE}/videos/shuffle_draft.webm`, caption: 'MMR Market', type: 'video' },
+                {
+                  src: `${ASSETS_BASE}/videos/snake_draft.webm`,
+                  caption: 'Snake Draft',
+                  type: 'video',
+                },
+                {
+                  src: `${ASSETS_BASE}/videos/shuffle_draft.webm`,
+                  caption: 'MMR Market',
+                  type: 'video',
+                },
               ]}
               docsPath="/features/draft/"
             />
@@ -276,7 +307,11 @@ export default function HomePage() {
               delay={0.4}
               gifSrc={`${ASSETS_BASE}/gifs/csv_import.gif`}
               modalMedia={[
-                { src: `${ASSETS_BASE}/videos/csv_import.webm`, caption: 'CSV Import Demo', type: 'video' },
+                {
+                  src: `${ASSETS_BASE}/videos/csv_import.webm`,
+                  caption: 'CSV Import Demo',
+                  type: 'video',
+                },
               ]}
               docsPath="/features/csv-import/"
             />
@@ -294,8 +329,16 @@ export default function HomePage() {
               delay={0.45}
               gifSrc={`${ASSETS_BASE}/gifs/event_creation.gif`}
               modalMedia={[
-                { src: `${ASSETS_BASE}/videos/event_creation.webm`, caption: 'Event Creation', type: 'video' },
-                { src: `${ASSETS_BASE}/videos/roll_call.webm`, caption: 'Roll Call', type: 'video' },
+                {
+                  src: `${ASSETS_BASE}/videos/event_creation.webm`,
+                  caption: 'Event Creation',
+                  type: 'video',
+                },
+                {
+                  src: `${ASSETS_BASE}/videos/roll_call.webm`,
+                  caption: 'Roll Call',
+                  type: 'video',
+                },
               ]}
               docsPath="/features/events/"
             />
@@ -313,7 +356,11 @@ export default function HomePage() {
               delay={0.5}
               gifSrc={`${ASSETS_BASE}/gifs/roll_call.gif`}
               modalMedia={[
-                { src: `${ASSETS_BASE}/videos/roll_call.webm`, caption: 'Roll Call Demo', type: 'video' },
+                {
+                  src: `${ASSETS_BASE}/videos/roll_call.webm`,
+                  caption: 'Roll Call Demo',
+                  type: 'video',
+                },
               ]}
               docsPath="/features/events/roll-call/"
             />

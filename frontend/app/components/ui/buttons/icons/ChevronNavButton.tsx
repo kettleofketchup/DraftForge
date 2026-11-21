@@ -6,8 +6,10 @@ import { brandGlowLift, brandGradient, buttonLift } from '../styles';
 
 export type ChevronDirection = 'left' | 'right';
 
-export interface ChevronNavButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
+export interface ChevronNavButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant' | 'size'
+> {
   /** Direction of the chevron icon */
   direction: ChevronDirection;
 }
@@ -47,7 +49,7 @@ const ChevronNavButton = React.forwardRef<
         buttonLift,
         brandGlowLift,
         '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
-        className
+        className,
       )}
       {...props}
     >

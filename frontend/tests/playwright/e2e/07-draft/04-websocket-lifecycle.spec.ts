@@ -12,14 +12,14 @@
  */
 
 import type { Page } from '@playwright/test';
-import { BASE_URL } from '../../fixtures/base-url';
 import {
-  test,
+  DraftWebSocketHelper,
   expect,
   getTournamentByKey,
+  test,
   TournamentPage,
-  DraftWebSocketHelper,
 } from '../../fixtures';
+import { BASE_URL } from '../../fixtures/base-url';
 
 // Client-side route change to "/": the app must close the socket on unmount. A page.goto()
 // unloads the document instead, which closes sockets without Playwright emitting 'close'.
@@ -42,7 +42,8 @@ test.describe('WebSocket Connection Lifecycle', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const result = await getTournamentByKey(context, 'draft_captain_turn');
-    if (!result) throw new Error('Could not find draft_captain_turn tournament');
+    if (!result)
+      throw new Error('Could not find draft_captain_turn tournament');
     const tournament = result as unknown as TournamentWithDraft;
     tournamentPk = tournament.pk;
     await context.close();

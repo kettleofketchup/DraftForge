@@ -16,12 +16,14 @@ afterEach(() => {
 
 describe('LeaderboardPage', () => {
   it('requests the leaderboard sorted by win_rate by default', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ count: 0, next: null, previous: null, results: [] }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ count: 0, next: null, previous: null, results: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });

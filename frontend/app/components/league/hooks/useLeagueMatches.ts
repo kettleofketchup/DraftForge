@@ -7,7 +7,10 @@ interface UseLeagueMatchesOptions {
   linkedOnly?: boolean;
 }
 
-export function useLeagueMatches(leaguePk: number | null, options?: UseLeagueMatchesOptions) {
+export function useLeagueMatches(
+  leaguePk: number | null,
+  options?: UseLeagueMatchesOptions,
+) {
   const [matches, setMatches] = useState<LeagueMatchType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -20,7 +23,9 @@ export function useLeagueMatches(leaguePk: number | null, options?: UseLeagueMat
       const data = await getLeagueMatches(leaguePk, options);
       setMatches(data);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to fetch matches'));
+      setError(
+        err instanceof Error ? err : new Error('Failed to fetch matches'),
+      );
     } finally {
       setIsLoading(false);
     }

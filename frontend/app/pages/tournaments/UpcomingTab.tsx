@@ -1,18 +1,21 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useEffect, useId, type ReactNode } from 'react';
-import type { TournamentsType, TournamentType } from '~/components/tournament/types';
+import { showsSignupsOpenBadge } from '~/components/tournament/orgScope';
+import type {
+  TournamentsType,
+  TournamentType,
+} from '~/components/tournament/types';
 import { SecondaryButton } from '~/components/ui/buttons';
 import { getLogger } from '~/lib/logger';
-import { showsSignupsOpenBadge } from '~/components/tournament/orgScope';
+import { ListError } from './ListError';
 import {
   BrowseAllButton,
   EmptyState,
   TournamentGrid,
   TournamentGridSkeleton,
 } from './TournamentGrid';
-import type { Membership } from './useMembership';
 import { resolveUpcomingView } from './upcomingView';
-import { ListError } from './ListError';
+import type { Membership } from './useMembership';
 
 const log = getLogger('tournaments');
 
@@ -32,8 +35,16 @@ function Tier({
 }) {
   const headingId = useId();
   return (
-    <section data-tier={tier} aria-labelledby={headingId} className="flex flex-col gap-3">
-      <h2 id={headingId} data-testid={`tournaments-tier-${tier}`} className={TIER_HEADING}>
+    <section
+      data-tier={tier}
+      aria-labelledby={headingId}
+      className="flex flex-col gap-3"
+    >
+      <h2
+        id={headingId}
+        data-testid={`tournaments-tier-${tier}`}
+        className={TIER_HEADING}
+      >
         {title} <span>({tournaments.length})</span>
       </h2>
       {children}
@@ -54,7 +65,10 @@ export function UpcomingTab({
   onViewArchived,
   onBrowseAll,
 }: {
-  query: Pick<UseQueryResult<TournamentsType>, 'data' | 'isError' | 'isFetching' | 'refetch' | 'error'>;
+  query: Pick<
+    UseQueryResult<TournamentsType>,
+    'data' | 'isError' | 'isFetching' | 'refetch' | 'error'
+  >;
   membership: Membership;
   orgOrLeagueFilter: boolean;
   mine: boolean;
@@ -135,7 +149,11 @@ export function UpcomingTab({
           )}
         </Tier>
         {view.others.length > 0 && (
-          <Tier tier="others" title="Other organizations" tournaments={view.others} />
+          <Tier
+            tier="others"
+            title="Other organizations"
+            tournaments={view.others}
+          />
         )}
       </div>
     );

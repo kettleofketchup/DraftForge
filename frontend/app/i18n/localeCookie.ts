@@ -6,7 +6,10 @@ export const LOCALE_COOKIE_NAME = 'df-locale';
 export const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 export function isSupportedLocale(value: unknown): value is SupportedLocale {
-  return typeof value === 'string' && (SUPPORTED_LOCALES as readonly string[]).includes(value);
+  return (
+    typeof value === 'string' &&
+    (SUPPORTED_LOCALES as readonly string[]).includes(value)
+  );
 }
 
 // Before the plain format, React Router's createCookie wrote base64 JSON ("es" -> ImVzIg==).
@@ -19,7 +22,9 @@ function decodeLegacy(value: string): string | undefined {
   }
 }
 
-export function decodeLocaleCookieValue(value: string | undefined): SupportedLocale | undefined {
+export function decodeLocaleCookieValue(
+  value: string | undefined,
+): SupportedLocale | undefined {
   if (!value) return undefined;
   if (isSupportedLocale(value)) return value;
   const legacy = decodeLegacy(value);
@@ -35,7 +40,10 @@ export function readLocaleCookie(cookieHeader: string | null | undefined): {
   return { locale, needsRewrite: locale !== undefined && raw !== locale };
 }
 
-export function serializeLocaleCookie(locale: SupportedLocale, secure: boolean): string {
+export function serializeLocaleCookie(
+  locale: SupportedLocale,
+  secure: boolean,
+): string {
   const secureAttr = secure ? '; Secure' : '';
   return `${LOCALE_COOKIE_NAME}=${locale}; Path=/; Max-Age=${LOCALE_COOKIE_MAX_AGE}; SameSite=Lax${secureAttr}`;
 }

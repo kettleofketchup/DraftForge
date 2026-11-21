@@ -1,13 +1,15 @@
-import TournamentDetailPage from '~/pages/tournament/TournamentDetailPage';
-import { generateMeta } from '~/lib/seo';
 import { fetchTournament } from '~/components/api/api';
+import { generateMeta } from '~/lib/seo';
+import type { TournamentSSR } from '~/lib/ssr-types';
+import TournamentDetailPage from '~/pages/tournament/TournamentDetailPage';
 import { queryClient } from '~/root';
 import type { Route } from './+types/tournament';
-import type { TournamentSSR } from '~/lib/ssr-types';
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { fetchSSR } = await import('~/lib/ssr.server');
-  const tournament = await fetchSSR<TournamentSSR>(`/tournaments/${params.pk}/ssr/`);
+  const tournament = await fetchSSR<TournamentSSR>(
+    `/tournaments/${params.pk}/ssr/`,
+  );
   return { tournament };
 }
 
@@ -29,7 +31,9 @@ export function meta({ data }: Route.MetaArgs) {
   const tournament = data?.tournament as TournamentSSR | null;
 
   if (tournament?.name) {
-    const orgText = tournament.org_name ? ` presented by ${tournament.org_name}` : '';
+    const orgText = tournament.org_name
+      ? ` presented by ${tournament.org_name}`
+      : '';
     return generateMeta({
       title: tournament.name,
       description: `${tournament.name}${orgText} — DraftForge tournament management, drafts, and team organization`,

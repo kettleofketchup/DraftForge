@@ -1,10 +1,12 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import type { z } from 'zod';
 
 import { patchGameProfile } from '~/components/api/userProfileApi';
+import { CancelButton } from '~/components/ui/buttons/CancelButton';
+import { SubmitButton } from '~/components/ui/buttons/SubmitButton';
 import {
   Form,
   FormControl,
@@ -15,8 +17,6 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
-import { CancelButton } from '~/components/ui/buttons/CancelButton';
-import { SubmitButton } from '~/components/ui/buttons/SubmitButton';
 import { getLogger } from '~/lib/logger';
 import { Sentry } from '~/lib/sentry';
 import { useUserProfileStore } from '~/store/userProfileStore';
@@ -35,7 +35,11 @@ interface DeadlockTabProps {
   onClose: () => void;
 }
 
-export default function DeadlockTab({ profile, onSave, onClose }: DeadlockTabProps) {
+export default function DeadlockTab({
+  profile,
+  onSave,
+  onClose,
+}: DeadlockTabProps) {
   const queryClient = useQueryClient();
 
   const deadlock = profile.gameUser.deadlock;

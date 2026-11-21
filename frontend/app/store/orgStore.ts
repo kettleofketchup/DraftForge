@@ -88,7 +88,12 @@ export const useOrgStore = create<OrgState>((set, get) => ({
     if (get().orgUsersLoading && get().orgUsersOrgId === orgId) return;
 
     const request = ++orgUsersRequest;
-    set({ orgUsersLoading: true, orgUsersError: null, orgUsersOrgId: orgId, orgUserPks: [] });
+    set({
+      orgUsersLoading: true,
+      orgUsersError: null,
+      orgUsersOrgId: orgId,
+      orgUserPks: [],
+    });
 
     try {
       const users = await getOrganizationUsers(orgId);
@@ -113,7 +118,12 @@ export const useOrgStore = create<OrgState>((set, get) => ({
 
   clearOrgUsers: () => {
     orgUsersRequest++;
-    set({ orgUserPks: [], orgUsersOrgId: null, orgUsersError: null, orgUsersLoading: false });
+    set({
+      orgUserPks: [],
+      orgUsersOrgId: null,
+      orgUsersError: null,
+      orgUsersLoading: false,
+    });
   },
 }));
 

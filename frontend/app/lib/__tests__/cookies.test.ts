@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { readCookie } from '~/lib/cookies';
 
 describe('readCookie', () => {
-  const jar = 'sessionid-s3=abc; csrftoken-s3=slot3; csrftoken=slot0; csrftoken-s4=slot4';
+  const jar =
+    'sessionid-s3=abc; csrftoken-s3=slot3; csrftoken=slot0; csrftoken-s4=slot4';
 
   it('reads the exact cookie name, not a slot-suffixed neighbour', () => {
     expect(readCookie(jar, 'csrftoken')).toBe('slot0');

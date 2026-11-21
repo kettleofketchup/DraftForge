@@ -1,6 +1,6 @@
-import type { UserType } from '~/index';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import type { UserType } from '~/index';
 
 export const captainView = ({ user }: { user: UserType }) => {
   return (

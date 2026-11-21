@@ -4,13 +4,19 @@
  * API functions for league-related operations.
  */
 
-import type { LeagueType, LeaguesType, LeagueMatchType } from '~/components/league/schemas';
+import type {
+  LeagueMatchType,
+  LeagueType,
+  LeaguesType,
+} from '~/components/league/schemas';
 import type { UserType } from '~/index';
-import type { AddMemberPayload, AddUserResponse } from './types';
 import axios from './axios';
+import type { AddMemberPayload, AddUserResponse } from './types';
 
 // League CRUD
-export async function getLeagues(organizationId?: number): Promise<LeaguesType> {
+export async function getLeagues(
+  organizationId?: number,
+): Promise<LeaguesType> {
   const params = organizationId ? `?organization=${organizationId}` : '';
   const response = await axios.get<LeaguesType>(`/leagues/${params}`);
   return response.data;
@@ -43,35 +49,54 @@ export async function deleteLeague(pk: number): Promise<void> {
 // League Matches
 export async function getLeagueMatches(
   leaguePk: number,
-  options?: { tournament?: number; linkedOnly?: boolean }
+  options?: { tournament?: number; linkedOnly?: boolean },
 ): Promise<LeagueMatchType[]> {
   const params = new URLSearchParams();
-  if (options?.tournament) params.append('tournament', options.tournament.toString());
+  if (options?.tournament)
+    params.append('tournament', options.tournament.toString());
   if (options?.linkedOnly) params.append('linked_only', 'true');
 
   const queryString = params.toString() ? `?${params.toString()}` : '';
   const response = await axios.get<LeagueMatchType[]>(
-    `/leagues/${leaguePk}/matches/${queryString}`
+    `/leagues/${leaguePk}/matches/${queryString}`,
   );
   return response.data;
 }
 
 // League Admin Team
-export async function addLeagueAdmin(leagueId: number, userId: number): Promise<UserType> {
-  const response = await axios.post<AddUserResponse>(`/leagues/${leagueId}/admins/`, { user_id: userId });
+export async function addLeagueAdmin(
+  leagueId: number,
+  userId: number,
+): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(
+    `/leagues/${leagueId}/admins/`,
+    { user_id: userId },
+  );
   return response.data.user;
 }
 
-export async function removeLeagueAdmin(leagueId: number, userId: number): Promise<void> {
+export async function removeLeagueAdmin(
+  leagueId: number,
+  userId: number,
+): Promise<void> {
   await axios.delete(`/leagues/${leagueId}/admins/${userId}/`);
 }
 
-export async function addLeagueStaff(leagueId: number, userId: number): Promise<UserType> {
-  const response = await axios.post<AddUserResponse>(`/leagues/${leagueId}/staff/`, { user_id: userId });
+export async function addLeagueStaff(
+  leagueId: number,
+  userId: number,
+): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(
+    `/leagues/${leagueId}/staff/`,
+    { user_id: userId },
+  );
   return response.data.user;
 }
 
-export async function removeLeagueStaff(leagueId: number, userId: number): Promise<void> {
+export async function removeLeagueStaff(
+  leagueId: number,
+  userId: number,
+): Promise<void> {
   await axios.delete(`/leagues/${leagueId}/staff/${userId}/`);
 }
 

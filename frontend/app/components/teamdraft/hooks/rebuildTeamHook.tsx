@@ -34,7 +34,9 @@ export const rebuildTeamsHook = async ({
   toast.promise(DraftRebuild(data), {
     loading: `Rebuilding teams...`,
     success: (rawData) => {
-      const data = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
+      const data = hydrateTournament(
+        rawData as TournamentType & { _users?: Record<number, unknown> },
+      ) as TournamentType;
       setTournament(data);
       return `Tournament Draft has been rebuilt!`;
     },

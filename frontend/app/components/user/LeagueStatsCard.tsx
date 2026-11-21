@@ -2,8 +2,8 @@ import {
   formatWinRate,
   toneClass,
   winRateTone,
-} from "~/features/league-stats/format";
-import { cn } from "~/lib/utils";
+} from '~/features/league-stats/format';
+import { cn } from '~/lib/utils';
 
 interface LeagueStatsCardProps {
   stats: {
@@ -30,12 +30,11 @@ export function LeagueStatsCard({
   const adjustment = stats.mmr_adjustment;
   const adjustmentColor =
     adjustment > 0
-      ? "text-success"
+      ? 'text-success'
       : adjustment < 0
-        ? "text-destructive"
-        : "text-muted-foreground";
-  const adjustmentText =
-    adjustment > 0 ? `+${adjustment}` : String(adjustment);
+        ? 'text-destructive'
+        : 'text-muted-foreground';
+  const adjustmentText = adjustment > 0 ? `+${adjustment}` : String(adjustment);
 
   const winRateText = formatWinRate(stats.win_rate);
   const winRateColor = toneClass[winRateTone(stats.win_rate)];
@@ -45,18 +44,18 @@ export function LeagueStatsCard({
       <div className="space-y-1 text-sm">
         <div className="flex items-baseline gap-2">
           <span className="text-lg font-bold">
-            {leagueMmr ?? baseMmr ?? "—"}
+            {leagueMmr ?? baseMmr ?? '—'}
           </span>
-          <span className={cn("text-xs", adjustmentColor)}>
+          <span className={cn('text-xs', adjustmentColor)}>
             ({adjustmentText})
           </span>
         </div>
         <div className="text-muted-foreground">
-          {stats.games_played} games •{" "}
+          {stats.games_played} games •{' '}
           <span className={winRateColor}>{winRateText} WR</span>
         </div>
         <div className="text-muted-foreground">
-          KDA: {stats.avg_kills.toFixed(1)} / {stats.avg_deaths.toFixed(1)} /{" "}
+          KDA: {stats.avg_kills.toFixed(1)} / {stats.avg_deaths.toFixed(1)} /{' '}
           {stats.avg_assists.toFixed(1)}
         </div>
       </div>
@@ -71,9 +70,9 @@ export function LeagueStatsCard({
         </h3>
         <div className="text-right">
           <div className="text-2xl font-bold text-foreground">
-            {leagueMmr ?? baseMmr ?? "—"}
+            {leagueMmr ?? baseMmr ?? '—'}
           </div>
-          <div className={cn("text-sm", adjustmentColor)}>
+          <div className={cn('text-sm', adjustmentColor)}>
             {adjustmentText} from base
           </div>
         </div>
@@ -88,7 +87,7 @@ export function LeagueStatsCard({
         </div>
         <div>
           <div
-            className={cn("text-2xl font-bold text-foreground", winRateColor)}
+            className={cn('text-2xl font-bold text-foreground', winRateColor)}
           >
             {winRateText}
           </div>
@@ -109,15 +108,21 @@ export function LeagueStatsCard({
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Avg Kills</span>
-            <span className="text-foreground">{stats.avg_kills.toFixed(1)}</span>
+            <span className="text-foreground">
+              {stats.avg_kills.toFixed(1)}
+            </span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Avg Deaths</span>
-            <span className="text-foreground">{stats.avg_deaths.toFixed(1)}</span>
+            <span className="text-foreground">
+              {stats.avg_deaths.toFixed(1)}
+            </span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Avg Assists</span>
-            <span className="text-foreground">{stats.avg_assists.toFixed(1)}</span>
+            <span className="text-foreground">
+              {stats.avg_assists.toFixed(1)}
+            </span>
           </div>
         </div>
         <div className="space-y-2">

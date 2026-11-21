@@ -1,7 +1,7 @@
-import { memo, useCallback, useState } from "react";
-import { HistoryButton } from "~/components/ui/buttons";
-import type { DraftEvent } from "~/types/draftEvent";
-import { DraftEventModal } from "../DraftEventModal";
+import { memo, useCallback, useState } from 'react';
+import { HistoryButton } from '~/components/ui/buttons';
+import type { DraftEvent } from '~/types/draftEvent';
+import { DraftEventModal } from '../DraftEventModal';
 
 interface DraftHistoryButtonProps {
   events: DraftEvent[];
@@ -16,12 +16,15 @@ export const DraftHistoryButton = memo(function DraftHistoryButton({
 }: DraftHistoryButtonProps) {
   const [modalOpen, setModalOpen] = useState(false);
 
-  const handleOpenChange = useCallback((open: boolean) => {
-    setModalOpen(open);
-    if (open) {
-      onViewed();
-    }
-  }, [onViewed]);
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      setModalOpen(open);
+      if (open) {
+        onViewed();
+      }
+    },
+    [onViewed],
+  );
 
   const handleClick = useCallback(() => {
     setModalOpen(true);

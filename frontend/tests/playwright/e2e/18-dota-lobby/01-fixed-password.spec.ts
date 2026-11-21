@@ -14,13 +14,13 @@ import {
   expectLobbyState,
   getLobbyRow,
   getSimLobby,
+  hasSimulator,
   loginDotaLobby,
   openBracket,
   openMatchModal,
   patchWithCsrf,
   requestLobby,
   resetDotaLobbyData,
-  hasSimulator,
   SIMULATOR_SKIP_REASON,
   test,
   waitForLobbyRow,
@@ -83,7 +83,9 @@ test.describe('Dota lobby: fixed series password (e2e)', () => {
 
     // And the dialog shows it to staff.
     await expectLobbyState(dialog, ['waiting', 'ready']);
-    await expect(dialog.locator('[data-testid="lobby-password"]')).toHaveText(password);
+    await expect(dialog.locator('[data-testid="lobby-password"]')).toHaveText(
+      password,
+    );
   });
 
   test('the seeded series password is what a lobby gets after a reset', async ({
@@ -95,7 +97,10 @@ test.describe('Dota lobby: fixed series password (e2e)', () => {
       `${API_URL}/events/repeaters/${data.series.pk}/lobby-password/`,
     );
     expect(resp.status()).toBe(200);
-    expect(await resp.json()).toMatchObject({ mode: 'fixed', password: data.fixed_password });
+    expect(await resp.json()).toMatchObject({
+      mode: 'fixed',
+      password: data.fixed_password,
+    });
 
     // The reset cascades it to the event again, not only to the series row:
     // the first test moved the series and its event to a `Fixed-...` one.
@@ -113,8 +118,12 @@ test.describe('Dota lobby: fixed series password (e2e)', () => {
     const game = data.series_event.tournament.games[0];
     const before = await getLobbyRow(context, game.pk);
     await requestLobby(context, game.pk);
-    const row = await waitForLobbyRow(context, game.pk, undefined, { previousId: before?.id });
+    const row = await waitForLobbyRow(context, game.pk, undefined, {
+      previousId: before?.id,
+    });
     expect(row.password).toBe(data.fixed_password);
-    expect((await getSimLobby(context, row.lobby_id!)).password).toBe(data.fixed_password);
+    expect((await getSimLobby(context, row.lobby_id!)).password).toBe(
+      data.fixed_password,
+    );
   });
 });

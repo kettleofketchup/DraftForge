@@ -20,8 +20,20 @@ export const tick = (o: Partial<DraftTick> = {}): DraftTick => ({
   round_timed_out_at: null,
   round_grace_time_ms: 20_000,
   teams: [
-    { team_id: 1, captain_id: 7, reserve_ms: 10_000, is_connected: true, is_ready: true },
-    { team_id: 2, captain_id: 8, reserve_ms: 10_000, is_connected: false, is_ready: true },
+    {
+      team_id: 1,
+      captain_id: 7,
+      reserve_ms: 10_000,
+      is_connected: true,
+      is_ready: true,
+    },
+    {
+      team_id: 2,
+      captain_id: 8,
+      reserve_ms: 10_000,
+      is_connected: false,
+      is_ready: true,
+    },
   ],
   ...o,
 });

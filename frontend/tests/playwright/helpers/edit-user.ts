@@ -1,4 +1,4 @@
-import type { Page, Locator } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 
 /** Editable field names matching data-testid="edit-user-{field}" */
@@ -10,11 +10,16 @@ export type EditUserField = 'nickname' | 'mmr' | 'steam_account_id';
  * @param page - Playwright Page instance
  * @param userCard - Locator for the user card element
  */
-export async function openEditModal(page: Page, userCard: Locator): Promise<void> {
+export async function openEditModal(
+  page: Page,
+  userCard: Locator,
+): Promise<void> {
   const editBtn = userCard.locator('[data-testid="edit-user-btn"]');
   await expect(editBtn).toBeVisible({ timeout: 5000 });
   await editBtn.click();
-  await expect(page.locator('[data-testid="edit-user-nickname"]')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('[data-testid="edit-user-nickname"]')).toBeVisible({
+    timeout: 5000,
+  });
 }
 
 /**
@@ -24,7 +29,10 @@ export async function openEditModal(page: Page, userCard: Locator): Promise<void
  * @param field - The field name to read
  * @returns The current input value
  */
-export async function readEditField(page: Page, field: EditUserField): Promise<string> {
+export async function readEditField(
+  page: Page,
+  field: EditUserField,
+): Promise<string> {
   const input = page.locator(`[data-testid="edit-user-${field}"]`);
   await expect(input).toBeVisible({ timeout: 5000 });
   return input.inputValue();
@@ -37,7 +45,11 @@ export async function readEditField(page: Page, field: EditUserField): Promise<s
  * @param field - The field name to fill
  * @param value - The value to set
  */
-export async function fillEditField(page: Page, field: EditUserField, value: string): Promise<void> {
+export async function fillEditField(
+  page: Page,
+  field: EditUserField,
+  value: string,
+): Promise<void> {
   const input = page.locator(`[data-testid="edit-user-${field}"]`);
   await input.click();
   await input.fill(value);
@@ -55,7 +67,8 @@ export async function fillEditField(page: Page, field: EditUserField, value: str
 export async function saveEditModal(page: Page): Promise<void> {
   // Set up response listener BEFORE clicking save
   const patchResponse = page.waitForResponse(
-    (resp) => resp.request().method() === 'PATCH' && /\/users\//.test(resp.url()),
+    (resp) =>
+      resp.request().method() === 'PATCH' && /\/users\//.test(resp.url()),
     { timeout: 15000 },
   );
 
@@ -69,7 +82,9 @@ export async function saveEditModal(page: Page): Promise<void> {
   // Dialog may auto-close on success, or stay open. Handle both:
   // If still open, close via Escape. If already closed, move on.
   const dialog = page.locator('[role="dialog"]');
-  const stillOpen = await dialog.isVisible({ timeout: 1000 }).catch(() => false);
+  const stillOpen = await dialog
+    .isVisible({ timeout: 1000 })
+    .catch(() => false);
   if (stillOpen) {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
@@ -119,14 +134,22 @@ export async function restoreUserField(
 }
 
 /** Position keys matching data-testid="edit-user-{position}" select triggers. */
-export type PositionKey = 'carry' | 'mid' | 'offlane' | 'soft_support' | 'hard_support';
+export type PositionKey =
+  | 'carry'
+  | 'mid'
+  | 'offlane'
+  | 'soft_support'
+  | 'hard_support';
 
 /**
  * Read the rendered text of a position SelectTrigger.
  * Used because readEditField only works for <input> elements; positions are
  * shadcn <Select> components whose visible text lives on the trigger button.
  */
-export async function readPositionField(page: Page, position: PositionKey): Promise<string> {
+export async function readPositionField(
+  page: Page,
+  position: PositionKey,
+): Promise<string> {
   const trigger = page.locator(`[data-testid="edit-user-${position}"]`);
   await expect(trigger).toBeVisible({ timeout: 5000 });
   return (await trigger.innerText()).trim();
@@ -152,7 +175,14 @@ export async function setPositionField(
   await trigger.scrollIntoViewIfNeeded();
   await trigger.focus();
   await page.keyboard.press('Enter');
-  await expect(trigger).toHaveAttribute('data-state', 'open', { timeout: 5000 });
-  await page.getByRole('option').filter({ hasText: new RegExp(`^${value}: `) }).click();
-  await expect(trigger).toHaveAttribute('data-state', 'closed', { timeout: 5000 });
+  await expect(trigger).toHaveAttribute('data-state', 'open', {
+    timeout: 5000,
+  });
+  await page
+    .getByRole('option')
+    .filter({ hasText: new RegExp(`^${value}: `) })
+    .click();
+  await expect(trigger).toHaveAttribute('data-state', 'closed', {
+    timeout: 5000,
+  });
 }

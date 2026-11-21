@@ -21,11 +21,17 @@ export function extractApiError(err: unknown): string | undefined {
   const obj = data as Record<string, unknown>;
 
   if (typeof obj.error === 'string' && obj.error.length > 0) return obj.error;
-  if (typeof obj.detail === 'string' && obj.detail.length > 0) return obj.detail;
+  if (typeof obj.detail === 'string' && obj.detail.length > 0)
+    return obj.detail;
 
   // Field-level error shape: pick the first field's first non-empty message.
   for (const value of Object.values(obj)) {
-    if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string' && value[0].length > 0) {
+    if (
+      Array.isArray(value) &&
+      value.length > 0 &&
+      typeof value[0] === 'string' &&
+      value[0].length > 0
+    ) {
       return value[0];
     }
     if (typeof value === 'string' && value.length > 0) return value;

@@ -1,4 +1,3 @@
-import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 /**
@@ -41,7 +40,7 @@ const LOADING_SELECTORS = [
  */
 export async function waitForLoadingComplete(
   page: Page,
-  options: WaitForContentOptions = {}
+  options: WaitForContentOptions = {},
 ): Promise<void> {
   const { timeout = 30000 } = options;
 
@@ -52,10 +51,13 @@ export async function waitForLoadingComplete(
       const count = await page.locator(selector).count();
       if (count > 0) {
         // Wait for them to disappear
-        await page.locator(selector).first().waitFor({
-          state: 'hidden',
-          timeout: timeout / LOADING_SELECTORS.length,
-        });
+        await page
+          .locator(selector)
+          .first()
+          .waitFor({
+            state: 'hidden',
+            timeout: timeout / LOADING_SELECTORS.length,
+          });
       }
     } catch {
       // Ignore timeout errors - element might not exist
@@ -69,7 +71,7 @@ export async function waitForLoadingComplete(
 export async function waitForImagesToLoad(
   page: Page,
   containerSelector: string = 'body',
-  options: WaitForContentOptions = {}
+  options: WaitForContentOptions = {},
 ): Promise<void> {
   const { timeout = 30000 } = options;
 
@@ -92,7 +94,7 @@ export async function waitForImagesToLoad(
       return Promise.all(imagePromises).then(() => true);
     },
     { selector: containerSelector, timeoutMs: timeout },
-    { timeout }
+    { timeout },
   );
 }
 
@@ -102,7 +104,7 @@ export async function waitForImagesToLoad(
  */
 export async function waitForHeroDraftReady(
   page: Page,
-  options: WaitForContentOptions = {}
+  options: WaitForContentOptions = {},
 ): Promise<void> {
   const { timeout = 30000 } = options;
 
@@ -118,14 +120,24 @@ export async function waitForHeroDraftReady(
   const heroGrid = page.locator('[data-testid="herodraft-hero-grid"]');
   const waitingPhase = page.locator('[data-testid="herodraft-waiting-phase"]');
   const rollingPhase = page.locator('[data-testid="herodraft-rolling-phase"]');
-  const choosingPhase = page.locator('[data-testid="herodraft-choosing-phase"]');
+  const choosingPhase = page.locator(
+    '[data-testid="herodraft-choosing-phase"]',
+  );
 
   // Wait for any of the main content areas to be visible
   await Promise.race([
-    heroGrid.waitFor({ state: 'visible', timeout: timeout / 2 }).catch(() => {}),
-    waitingPhase.waitFor({ state: 'visible', timeout: timeout / 2 }).catch(() => {}),
-    rollingPhase.waitFor({ state: 'visible', timeout: timeout / 2 }).catch(() => {}),
-    choosingPhase.waitFor({ state: 'visible', timeout: timeout / 2 }).catch(() => {}),
+    heroGrid
+      .waitFor({ state: 'visible', timeout: timeout / 2 })
+      .catch(() => {}),
+    waitingPhase
+      .waitFor({ state: 'visible', timeout: timeout / 2 })
+      .catch(() => {}),
+    rollingPhase
+      .waitFor({ state: 'visible', timeout: timeout / 2 })
+      .catch(() => {}),
+    choosingPhase
+      .waitFor({ state: 'visible', timeout: timeout / 2 })
+      .catch(() => {}),
   ]);
 
   // If hero grid is visible, wait for heroes to load
@@ -137,12 +149,14 @@ export async function waitForHeroDraftReady(
     // Wait for at least some heroes to be rendered
     await page.waitForFunction(
       () => {
-        const grid = document.querySelector('[data-testid="herodraft-hero-grid"]');
+        const grid = document.querySelector(
+          '[data-testid="herodraft-hero-grid"]',
+        );
         if (!grid) return false;
         const heroes = grid.querySelectorAll('[data-hero-id]');
         return heroes.length >= 10; // At least 10 heroes visible
       },
-      { timeout: timeout / 3 }
+      { timeout: timeout / 3 },
     );
   }
 
@@ -155,7 +169,7 @@ export async function waitForHeroDraftReady(
  */
 export async function waitForDraftReady(
   page: Page,
-  options: WaitForContentOptions = {}
+  options: WaitForContentOptions = {},
 ): Promise<void> {
   const { timeout = 30000 } = options;
 
@@ -164,11 +178,13 @@ export async function waitForDraftReady(
 
   // Wait for draft modal or container
   const draftContainer = page.locator(
-    '[data-testid="draft-modal"], [data-testid="draft-container"], .draft-view'
+    '[data-testid="draft-modal"], [data-testid="draft-container"], .draft-view',
   );
 
   try {
-    await draftContainer.first().waitFor({ state: 'visible', timeout: timeout / 2 });
+    await draftContainer
+      .first()
+      .waitFor({ state: 'visible', timeout: timeout / 2 });
   } catch {
     // Container might not exist yet
   }
@@ -190,7 +206,7 @@ export async function waitForDraftReady(
  */
 export async function waitForBracketReady(
   page: Page,
-  options: WaitForContentOptions = {}
+  options: WaitForContentOptions = {},
 ): Promise<void> {
   const { timeout = 30000 } = options;
 
@@ -199,11 +215,13 @@ export async function waitForBracketReady(
 
   // Wait for bracket container
   const bracketContainer = page.locator(
-    '[data-testid="bracket"], .bracket-container, .bracket-view'
+    '[data-testid="bracket"], .bracket-container, .bracket-view',
   );
 
   try {
-    await bracketContainer.first().waitFor({ state: 'visible', timeout: timeout / 2 });
+    await bracketContainer
+      .first()
+      .waitFor({ state: 'visible', timeout: timeout / 2 });
   } catch {
     // Container might not exist
   }
@@ -218,12 +236,18 @@ export async function waitForBracketReady(
  */
 export async function waitForDemoReady(
   page: Page,
-  options: WaitForContentOptions = {}
+  options: WaitForContentOptions = {},
 ): Promise<void> {
-  const { timeout = 30000, requiredSelectors = [], waitForNetworkIdle = true } = options;
+  const {
+    timeout = 30000,
+    requiredSelectors = [],
+    waitForNetworkIdle = true,
+  } = options;
 
   // Wait for document ready
-  await page.waitForFunction(() => document.readyState === 'complete', { timeout });
+  await page.waitForFunction(() => document.readyState === 'complete', {
+    timeout,
+  });
 
   // Wait for network to settle (if enabled)
   if (waitForNetworkIdle) {
@@ -239,7 +263,10 @@ export async function waitForDemoReady(
 
   // Wait for any required selectors
   for (const selector of requiredSelectors) {
-    await page.locator(selector).first().waitFor({ state: 'visible', timeout: timeout / 4 });
+    await page
+      .locator(selector)
+      .first()
+      .waitFor({ state: 'visible', timeout: timeout / 4 });
   }
 
   // Wait for images in viewport to load
@@ -254,12 +281,14 @@ export async function waitForDemoReady(
  */
 export async function waitForMatchModalReady(
   page: Page,
-  options: WaitForContentOptions = {}
+  options: WaitForContentOptions = {},
 ): Promise<void> {
   const { timeout = 30000 } = options;
 
   // Wait for match modal to be visible
-  const matchModal = page.locator('[data-testid="match-modal"], [role="dialog"]');
+  const matchModal = page.locator(
+    '[data-testid="match-modal"], [role="dialog"]',
+  );
   await matchModal.first().waitFor({ state: 'visible', timeout: timeout / 2 });
 
   // Wait for loading to complete
@@ -267,11 +296,13 @@ export async function waitForMatchModalReady(
 
   // Wait for Start Draft or similar action buttons
   const actionButtons = page.locator(
-    'button:has-text("Start Draft"), button:has-text("View Draft"), button:has-text("Live Draft")'
+    'button:has-text("Start Draft"), button:has-text("View Draft"), button:has-text("Live Draft")',
   );
 
   try {
-    await actionButtons.first().waitFor({ state: 'visible', timeout: timeout / 2 });
+    await actionButtons
+      .first()
+      .waitFor({ state: 'visible', timeout: timeout / 2 });
   } catch {
     // Button might not exist for this match state
   }

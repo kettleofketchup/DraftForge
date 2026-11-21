@@ -13,10 +13,10 @@
  */
 
 import {
-  test,
   expect,
   getTournamentByKey,
   resetTournamentByKey,
+  test,
   TournamentPage,
   visitAndWaitForHydration,
   type TournamentData,
@@ -34,7 +34,8 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
 
     // Reset fixture — the full draft test mutates it (starts + completes the draft)
     const reset = await resetTournamentByKey(context, 'draft_not_started');
-    const tournament = reset ?? await getTournamentByKey(context, 'draft_not_started');
+    const tournament =
+      reset ?? (await getTournamentByKey(context, 'draft_not_started'));
     if (!tournament) {
       throw new Error('Could not find draft_not_started tournament');
     }
@@ -55,7 +56,10 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
     loginUser,
   }) => {
     await loginUser();
-    await visitAndWaitForHydration(page, `/tournament/${tournamentData.pk}/teams`);
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${tournamentData.pk}/teams`,
+    );
 
     // Click start draft button to open the draft modal
     const tournamentPage = new TournamentPage(page);
@@ -67,10 +71,14 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
 
     // Non-staff should see "Draft Not Started" message
     await expect(dialog.getByText('Draft Not Started')).toBeVisible();
-    await expect(dialog.getByText('Waiting for tournament staff')).toBeVisible();
+    await expect(
+      dialog.getByText('Waiting for tournament staff'),
+    ).toBeVisible();
 
     // Should NOT see the Start Draft button
-    await expect(dialog.locator('[data-testid="start-draft-button"]')).not.toBeVisible();
+    await expect(
+      dialog.locator('[data-testid="start-draft-button"]'),
+    ).not.toBeVisible();
   });
 
   test('@cicd staff can start and complete a full snake draft', async ({
@@ -81,7 +89,10 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
     test.setTimeout(120_000);
 
     await loginAdmin();
-    await visitAndWaitForHydration(page, `/tournament/${tournamentData.pk}/teams`);
+    await visitAndWaitForHydration(
+      page,
+      `/tournament/${tournamentData.pk}/teams`,
+    );
 
     // Open draft modal
     const tournamentPage = new TournamentPage(page);
@@ -93,56 +104,73 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
 
     // --- Step 1: Verify "Start Draft" UI ---
     await expect(dialog.getByText('Start Team Draft')).toBeVisible();
-    await expect(dialog.locator('[data-testid="start-draft-button"]')).toBeVisible();
+    await expect(
+      dialog.locator('[data-testid="start-draft-button"]'),
+    ).toBeVisible();
 
     // --- Step 2: Select snake draft style and start ---
     // The style selector defaults to "snake" so just click Start Draft
     await dialog.locator('[data-testid="start-draft-button"]').click();
 
     // Wait for draft to initialize - pick buttons should appear
-    await expect(dialog.locator('[data-testid="pickPlayerButton"]').first()).toBeVisible({
+    await expect(
+      dialog.locator('[data-testid="pickPlayerButton"]').first(),
+    ).toBeVisible({
       timeout: 30_000,
     });
 
     // --- Step 3: Pick all players ---
     // 4 teams with 5 members each = 20 users total
     // 4 captains are pre-assigned, so 16 picks needed
-    const totalPicks = tournamentData.users.length - tournamentData.captains.length;
+    const totalPicks =
+      tournamentData.users.length - tournamentData.captains.length;
     console.log(`Total picks needed: ${totalPicks}`);
 
     let picksMade = 0;
 
     for (let i = 0; i < totalPicks; i++) {
       // Wait for a pick button to become visible
-      const pickButton = dialog.locator('[data-testid="pickPlayerButton"]').first();
+      const pickButton = dialog
+        .locator('[data-testid="pickPlayerButton"]')
+        .first();
       try {
         await pickButton.waitFor({ state: 'visible', timeout: 10_000 });
       } catch {
-        console.log(`No pick button visible after ${picksMade} picks - draft may be complete`);
+        console.log(
+          `No pick button visible after ${picksMade} picks - draft may be complete`,
+        );
         break;
       }
 
       // Count players before pick to detect when UI updates
-      const playerCountBefore = await dialog.locator('[data-testid="pickPlayerButton"]').count();
+      const playerCountBefore = await dialog
+        .locator('[data-testid="pickPlayerButton"]')
+        .count();
 
       // Click the first available pick button
       await pickButton.click();
 
       // Handle confirmation dialog
       const alertDialog = page.locator('[role="alertdialog"]');
-      await alertDialog.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
+      await alertDialog
+        .waitFor({ state: 'visible', timeout: 5_000 })
+        .catch(() => {});
 
       if (await alertDialog.isVisible()) {
-        const confirmBtn = alertDialog.locator('[data-testid="confirmPickButton"]');
+        const confirmBtn = alertDialog.locator(
+          '[data-testid="confirmPickButton"]',
+        );
         await confirmBtn.click();
       }
 
       // Wait for the pick to be processed: player count should decrease
       // (avoids networkidle which never fires with active WebSocket)
-      await expect.poll(
-        () => dialog.locator('[data-testid="pickPlayerButton"]').count(),
-        { timeout: 10_000 },
-      ).toBeLessThan(playerCountBefore);
+      await expect
+        .poll(
+          () => dialog.locator('[data-testid="pickPlayerButton"]').count(),
+          { timeout: 10_000 },
+        )
+        .toBeLessThan(playerCountBefore);
 
       picksMade++;
       if (picksMade % 4 === 0) {
@@ -155,7 +183,9 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
 
     // --- Step 4: Verify draft completed ---
     // After all picks, no more pick buttons should be available
-    const remainingPicks = await dialog.locator('[data-testid="pickPlayerButton"]').count();
+    const remainingPicks = await dialog
+      .locator('[data-testid="pickPlayerButton"]')
+      .count();
     expect(remainingPicks).toBe(0);
 
     console.log('Draft completed successfully!');

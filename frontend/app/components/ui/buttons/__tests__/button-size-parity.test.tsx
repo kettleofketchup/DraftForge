@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { DestructiveButton } from '../DestructiveButton';
-import { WarningButton } from '../WarningButton';
 import { PrimaryButton } from '../PrimaryButton';
 import { SecondaryButton } from '../SecondaryButton';
+import { WarningButton } from '../WarningButton';
 
 // DestructiveButton/WarningButton hardcoded min-h-11 (the 44px dialog-footer
 // touch target), which overrode an explicit size="sm" and left them taller than
@@ -24,8 +24,12 @@ describe('button size parity', () => {
         <WarningButton size="sm">Warn</WarningButton>
       </Wrapper>,
     );
-    expect(screen.getByRole('button', { name: 'Delete' }).className).not.toContain('min-h-11');
-    expect(screen.getByRole('button', { name: 'Warn' }).className).not.toContain('min-h-11');
+    expect(
+      screen.getByRole('button', { name: 'Delete' }).className,
+    ).not.toContain('min-h-11');
+    expect(
+      screen.getByRole('button', { name: 'Warn' }).className,
+    ).not.toContain('min-h-11');
   });
 
   it('applies the h-8 sm height, matching Primary/Secondary siblings', () => {
@@ -48,7 +52,11 @@ describe('button size parity', () => {
         <WarningButton>Warn</WarningButton>
       </Wrapper>,
     );
-    expect(screen.getByRole('button', { name: 'Delete' }).className).toContain('min-h-11');
-    expect(screen.getByRole('button', { name: 'Warn' }).className).toContain('min-h-11');
+    expect(screen.getByRole('button', { name: 'Delete' }).className).toContain(
+      'min-h-11',
+    );
+    expect(screen.getByRole('button', { name: 'Warn' }).className).toContain(
+      'min-h-11',
+    );
   });
 });

@@ -1,7 +1,16 @@
 import { parse } from 'csv-parse/browser/esm/sync';
 import type { CSVRow, ValidatedRow } from './types';
 
-const VALID_HEADERS = ['steam_friend_id', 'discord_id', 'discord_username', 'name', 'mmr', 'team_name', 'team_captain', 'positions'];
+const VALID_HEADERS = [
+  'steam_friend_id',
+  'discord_id',
+  'discord_username',
+  'name',
+  'mmr',
+  'team_name',
+  'team_captain',
+  'positions',
+];
 
 interface ParseCSVResult {
   data: CSVRow[];
@@ -39,7 +48,8 @@ export function validateRows(rows: CSVRow[]): ValidatedRow[] {
         index,
         raw: row,
         status: 'error' as const,
-        message: 'Missing identifier (need steam_friend_id, discord_id, or discord_username)',
+        message:
+          'Missing identifier (need steam_friend_id, discord_id, or discord_username)',
       };
     }
 

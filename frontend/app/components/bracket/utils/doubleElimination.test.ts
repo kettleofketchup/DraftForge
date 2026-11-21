@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { generateDoubleElimination } from './doubleElimination';
+import { describe, expect, it } from 'vitest';
 import type { TeamType } from '~/components/tournament/types';
+import { generateDoubleElimination } from './doubleElimination';
 
 function buildTeams(n: number): TeamType[] {
   return Array.from({ length: n }, (_, i) => ({

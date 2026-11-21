@@ -1,5 +1,5 @@
-import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { expect } from '@playwright/test';
 
 /**
  * Shared helpers for interacting with AddUserModal across tests.
@@ -18,17 +18,24 @@ import type { Page } from '@playwright/test';
  */
 
 /** Wait for the AddUserModal to be visible and ready for interaction. */
-export async function waitForAddUserModal(page: Page, timeout = 5000): Promise<void> {
+export async function waitForAddUserModal(
+  page: Page,
+  timeout = 5000,
+): Promise<void> {
   const modal = page.locator('[data-testid="add-user-modal"]');
   await expect(modal).toBeVisible({ timeout });
   // Wait for the search input to be ready
-  await expect(page.locator('[data-testid="add-user-search"]')).toBeVisible({ timeout });
+  await expect(page.locator('[data-testid="add-user-search"]')).toBeVisible({
+    timeout,
+  });
 }
 
 /** Close the AddUserModal by pressing Escape. */
 export async function closeAddUserModal(page: Page): Promise<void> {
   await page.keyboard.press('Escape');
-  await expect(page.locator('[data-testid="add-user-modal"]')).not.toBeVisible({ timeout: 3000 });
+  await expect(page.locator('[data-testid="add-user-modal"]')).not.toBeVisible({
+    timeout: 3000,
+  });
 }
 
 /**
@@ -43,7 +50,7 @@ export async function searchUser(page: Page, query: string): Promise<void> {
   await searchInput.fill(query);
   // Wait for search results to appear (heading "Site Users" appears on desktop)
   await expect(
-    page.locator('text=/Site Users|Searching/i').first()
+    page.locator('text=/Site Users|Searching/i').first(),
   ).toBeVisible({ timeout: 5000 });
 }
 
@@ -57,20 +64,25 @@ export async function searchUser(page: Page, query: string): Promise<void> {
  * @param page - Playwright page
  * @param username - Username to search for and add
  */
-export async function searchAndAddUser(page: Page, username: string): Promise<void> {
+export async function searchAndAddUser(
+  page: Page,
+  username: string,
+): Promise<void> {
   // Type the username in the search field
   await searchUser(page, username);
 
   // Wait for and click the add button for the specific user
   // .first() picks the desktop-grid instance (rendered first in DOM)
-  const addBtn = page.locator(`[data-testid="add-user-btn-${username}"]`).first();
+  const addBtn = page
+    .locator(`[data-testid="add-user-btn-${username}"]`)
+    .first();
   await addBtn.waitFor({ state: 'visible', timeout: 10000 });
   await addBtn.click();
 
   // Wait for success toast
-  await expect(
-    page.locator('text=/added/i').first()
-  ).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('text=/added/i').first()).toBeVisible({
+    timeout: 5000,
+  });
 }
 
 /**
@@ -79,9 +91,16 @@ export async function searchAndAddUser(page: Page, username: string): Promise<vo
  * @param page - Playwright page
  * @param username - Username to check
  */
-export async function expectUserAlreadyAdded(page: Page, username: string): Promise<void> {
+export async function expectUserAlreadyAdded(
+  page: Page,
+  username: string,
+): Promise<void> {
   // .first() picks the desktop-grid instance (rendered first in DOM)
-  const userRow = page.locator(`[data-testid="site-user-result-${username}"]`).first();
+  const userRow = page
+    .locator(`[data-testid="site-user-result-${username}"]`)
+    .first();
   await expect(userRow).toBeVisible({ timeout: 5000 });
-  await expect(userRow.locator('text=/already added/i')).toBeVisible({ timeout: 3000 });
+  await expect(userRow.locator('text=/already added/i')).toBeVisible({
+    timeout: 3000,
+  });
 }
