@@ -856,7 +856,7 @@ def login_as_user(request):
     TEST ONLY: Login as any user by primary key.
 
     This endpoint only works when TEST_MODE environment is set.
-    Used by Cypress tests to login as specific users (e.g., captains).
+    Playwright fixtures call it to log in as specific users (e.g., captains).
 
     Request body:
         user_pk: int - Primary key of user to login as
@@ -935,7 +935,6 @@ def login_as_discord_id(request):
         status=status.HTTP_200_OK,
     )
 
-    # Set cookies in response headers for Cypress
     response["CookieSessionId"] = request.session.session_key
     response["CookieCsrfToken"] = request.META.get("CSRF_COOKIE", "")
 
@@ -949,7 +948,7 @@ def get_tournament_by_key(request, key: str):
     TEST ONLY: Get tournament by test config key.
 
     This endpoint only works when TEST_MODE environment is set.
-    Used by Cypress tests to get tournament data by config key.
+    Playwright global setup and specs call it to fetch a tournament by config key.
 
     Path params:
         key: str - Test tournament config key (e.g., 'draft_captain_turn')
