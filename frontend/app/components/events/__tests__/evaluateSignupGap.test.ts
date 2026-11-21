@@ -14,7 +14,6 @@ const baseEvent = {
 };
 
 const completeProfile = {
-  unverified_friend_id: '123',
   rank_status: 'active' as const,
   rank_medal: 'Legend 1',
   positions: {
@@ -39,10 +38,9 @@ describe('evaluateSignupGap', () => {
 
   it('flags friend_id when required and missing (universal across game types)', () => {
     const event = { ...baseEvent, require_steam_id: true, game_type: 99 };
-    const profile = { ...completeProfile, unverified_friend_id: null };
-    expect(evaluateSignupGap(event as never, profile as never)).toEqual([
-      'friend_id',
-    ]);
+    expect(evaluateSignupGap(event as never, completeProfile as never)).toEqual(
+      ['friend_id'],
+    );
   });
 
   it('flags rank_status when missing on Dota 2', () => {
@@ -97,19 +95,17 @@ describe('evaluateSignupGap', () => {
 
   it('no friend_id gap when the user has a steam_account_id', () => {
     const event = { ...baseEvent, require_steam_id: true };
-    const profile = { ...completeProfile, unverified_friend_id: '' };
     expect(
-      evaluateSignupGap(event as never, profile as never, {
-        steamAccountId: 12345,
+      evaluateSignupGap(event as never, completeProfile as never, {
+        steamAccountId: 4294967295,
       }),
     ).toBe('complete');
   });
 
-  it('still flags friend_id when neither source is set', () => {
+  it('still flags friend_id when the user has none', () => {
     const event = { ...baseEvent, require_steam_id: true };
-    const profile = { ...completeProfile, unverified_friend_id: '' };
     expect(
-      evaluateSignupGap(event as never, profile as never, {
+      evaluateSignupGap(event as never, completeProfile as never, {
         steamAccountId: null,
       }),
     ).toEqual(['friend_id']);

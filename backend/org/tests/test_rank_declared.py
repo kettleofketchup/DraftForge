@@ -88,7 +88,7 @@ class RankDeclaredViewTest(TestCase):
                 "rank_status": "never",
                 "rank_medal": "",
                 "battle_cup_tier": None,
-                "unverified_friend_id": "123456",
+                "steam_account_id": "123456",
                 "pos_1": True,
             }
         )
@@ -109,8 +109,7 @@ class RankDeclaredViewTest(TestCase):
 
 
 class DotaProfileFriendIdTest(TestCase):
-    """The deprecated ``unverified_friend_id`` key reads and fills the user's
-    ``steam_account_id``."""
+    """``steam_account_id`` reads and fills the user's Friend ID."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -128,7 +127,7 @@ class DotaProfileFriendIdTest(TestCase):
         client = APIClient()
         client.force_authenticate(actor)
         return client.patch(
-            url, {"unverified_friend_id": fid, "pos_1": True}, format="json"
+            url, {"steam_account_id": fid, "pos_1": True}, format="json"
         )
 
     def _my_url(self) -> str:
@@ -159,7 +158,7 @@ class DotaProfileFriendIdTest(TestCase):
             with self.subTest(actor=actor.username, fid=fid):
                 resp = self._patch(actor, url, fid)
                 self.assertEqual(resp.status_code, 400)
-                self.assertTrue(resp.data["unverified_friend_id"])
+                self.assertTrue(resp.data["steam_account_id"])
                 self.assertIsNone(self._stored())
                 self.assertFalse(self._profile().pos_1)
 
@@ -167,7 +166,7 @@ class DotaProfileFriendIdTest(TestCase):
         resp = self._patch(self.member, self._my_url(), " 0222 ")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(self._stored(), 222)
-        self.assertEqual(resp.data["unverified_friend_id"], "222")
+        self.assertEqual(resp.data["steam_account_id"], 222)
 
     def test_id_above_signed_32_bit_is_stored(self) -> None:
         resp = self._patch(self.member, self._my_url(), "3000000000")
@@ -201,7 +200,7 @@ class DotaProfileFriendIdTest(TestCase):
             with self.subTest(actor=actor.username):
                 resp = self._patch(actor, url, "222")
                 self.assertEqual(resp.status_code, 400)
-                self.assertIn("already set to 111", resp.data["unverified_friend_id"])
+                self.assertIn("already set to 111", resp.data["steam_account_id"])
                 self.assertEqual(self._stored(), 111)
 
     def test_get_returns_the_users_id(self) -> None:
@@ -210,4 +209,4 @@ class DotaProfileFriendIdTest(TestCase):
         client.force_authenticate(self.member)
         resp = client.get(reverse("my-dota-profile", args=[self.org.pk]))
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.data["unverified_friend_id"], "424242")
+        self.assertEqual(resp.data["steam_account_id"], 424242)
