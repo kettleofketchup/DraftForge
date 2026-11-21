@@ -6,8 +6,8 @@ both endpoints must treat partial nested 'positions' objects as
 
 We use TestCase (not TransactionTestCase) here because cacheops auto-
 invalidation on post_save fires inside the test's transaction wrapper,
-which is fine for these assertions. The optional cache-commit
-verification test in Task 2 uses TransactionTestCase because it relies
+which is fine for these assertions. A cache-commit verification test
+would need TransactionTestCase because it relies
 on transaction.on_commit hooks fired by invalidate_after_commit.
 """
 

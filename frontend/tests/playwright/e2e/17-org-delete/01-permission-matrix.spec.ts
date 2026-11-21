@@ -7,7 +7,7 @@
  *
  * The owner test deliberately does NOT submit the delete — that would remove
  * the org and pollute subsequent runs. The API-level destroy success path is
- * covered by backend unit tests (Task 14).
+ * covered by backend unit tests.
  *
  * PKs match backend/tests/data/org_delete.py.
  */

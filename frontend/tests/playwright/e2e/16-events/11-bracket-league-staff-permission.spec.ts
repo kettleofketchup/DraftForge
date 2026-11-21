@@ -31,7 +31,7 @@ test.describe('Bracket toolbar league-staff permission @cicd', () => {
     context,
   }) => {
     // event_league_staff is staff of league pk=7 only — never an org admin.
-    // useCanEditTournament now delegates to useIsLeagueStaff (Task 10b/10c)
+    // useCanEditTournament delegates to useIsLeagueStaff
     // so this user must see BracketToolbar via the league-staff branch.
     await loginEventLeagueStaff(context);
 

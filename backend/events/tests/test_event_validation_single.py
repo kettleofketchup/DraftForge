@@ -3,11 +3,9 @@
 Single events have no subscriber list (subscriptions are a series-level
 concept on EventRepeater), so the signup_reminder DM fields have no
 honest meaning for them. Backend rejection is the source of truth — the
-frontend conditional render in Task 2.3 is UX, but a client that bypasses
+frontend's conditional render is UX, but a client that bypasses
 it should still get a 400.
 """
-
-from django.test import TestCase
 
 from events.serializers import EventSerializer
 from events.tests.test_discord_tasks import _DiscordTaskTestCase
@@ -27,6 +25,7 @@ class EventSingleEventSignupReminderRejectionTest(_DiscordTaskTestCase):
 
     def test_signup_reminder_accepted_when_event_repeater_set(self):
         from datetime import time, timedelta
+
         from django.utils import timezone
 
         from events.models import EventRepeater

@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("app", "0095_remove_customuser_avatar_remove_customuser_nickname"),
         # The backfill (user/0004) must run before these columns drop, else
-        # the positions/mmr data is lost (T1 ordering lesson).
+        # the positions/mmr data is lost.
         ("user", "0004_backfill_game_profiles"),
     ]
 

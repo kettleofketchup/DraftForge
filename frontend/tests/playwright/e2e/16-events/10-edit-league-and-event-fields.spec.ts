@@ -20,7 +20,7 @@ import {
 //   user (pk=5000) is on org.admins but the embedded league.organization
 //   sub-serializer omits admin info, so useIsLeagueAdmin can't see it and
 //   the Edit button stays hidden. Org-admin API authorization is already
-//   covered by backend tests in Task 4/5; here we only validate the UI flow.
+//   covered by backend tests; here we only validate the UI flow.
 // - API-only tests (4, 5) keep loginEventAdmin so they exercise the real
 //   org-admin authorization path the feature targets.
 test.describe.serial('Edit league + event fields @cicd', () => {

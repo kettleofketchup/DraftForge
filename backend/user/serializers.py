@@ -1,3 +1,5 @@
+from typing import Any
+
 from rest_framework import serializers
 
 from app.models import CustomUser, PositionsModel
@@ -19,7 +21,9 @@ class DotaUserProfileSerializer(serializers.ModelSerializer):
         model = DotaUserProfile
         fields = ["positions", "has_active_dota_mmr", "dota_mmr_last_verified"]
 
-    def update(self, instance, validated_data):
+    def update(
+        self, instance: DotaUserProfile, validated_data: dict[str, Any]
+    ) -> DotaUserProfile:
         positions_data = validated_data.pop("positions", None)
         if positions_data:
             if instance.positions is None:
@@ -42,8 +46,7 @@ class DeadlockUserProfileSerializer(serializers.ModelSerializer):
 class UserProfileLayeredSerializer(serializers.Serializer):
     """Layered profile shape consumed by userProfileEntityAdapter on the frontend.
 
-    T1 ships only `base` populated; `gameUser` and `orgProfiles` are placeholders
-    that fill in during T2 and T3.
+    `orgProfiles` is a placeholder and always empty for now.
     """
 
     pk = serializers.IntegerField(read_only=True)
@@ -59,4 +62,4 @@ class UserProfileLayeredSerializer(serializers.Serializer):
         }
 
     def get_orgProfiles(self, user: CustomUser) -> dict:
-        return {}  # T3 populates
+        return {}  # org-scoped profiles are not built yet
