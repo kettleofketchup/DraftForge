@@ -312,8 +312,9 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "tournament player payloads show the league org's guild nicknames",
         ),
         "app/management/commands/sync_prod_users.py": BackEdge(
-            frozenset({"ContributionEntry", "PromoSend"}),
-            "prod user sync clears org contribution and promo rows before reloading users",
+            frozenset({"AttendanceOutcome", "ContributionEntry", "PromoSend"}),
+            "prod user sync clears org conduct, contribution and promo rows before "
+            "reloading users",
         ),
         "app/permissions_tournament.py": BackEdge(
             frozenset(
