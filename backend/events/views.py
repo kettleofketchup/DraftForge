@@ -175,6 +175,21 @@ def _event_payload(event_pk: int, user: CustomUser) -> dict[str, Any]:
     return data
 
 
+def _attach_is_subscribed(
+    items: list[dict[str, Any]], user: CustomUser | AnonymousUser
+) -> None:
+    """Set the per-user is_subscribed on series payloads served from the shared cache."""
+    subscribed: set[int] = set()
+    if user.is_authenticated:
+        subscribed = set(
+            RepeaterSubscription.objects.nocache()
+            .filter(user=user)
+            .values_list("event_repeater_id", flat=True)
+        )
+    for item in items:
+        item["is_subscribed"] = item["id"] in subscribed
+
+
 def _roster_sync_payload(
     event: Event, synced: RosterSyncResult, user: CustomUser
 ) -> dict[str, Any]:
@@ -329,13 +344,14 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
 
-        return Response(get_data())
+        data = [dict(item) for item in get_data()]
+        _attach_is_subscribed(data, request.user)
+        return Response(data)
 
     def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs.get("pk")
         cache_key = f"repeater_detail:{pk}"
 
-        # The cached payload is shared by every user; is_subscribed is not.
         @cached_as(
             EventRepeater.objects.filter(pk=pk),
             Event.objects.filter(event_repeater_id=pk),
@@ -350,12 +366,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             return self.get_serializer(instance).data
 
         data = dict(get_data())
-        data["is_subscribed"] = (
-            request.user.is_authenticated
-            and RepeaterSubscription.objects.nocache()
-            .filter(event_repeater_id=data["id"], user=request.user)
-            .exists()
-        )
+        _attach_is_subscribed([data], request.user)
         return Response(data)
 
     def perform_create(self, serializer: EventRepeaterSerializer) -> None:

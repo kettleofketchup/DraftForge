@@ -47,8 +47,8 @@ class RepeaterCacheTest(TransactionTestCase):
     def _detail(self, user: CustomUser | None = None) -> dict:
         return self._get(self.detail_url, user)
 
-    def _listed(self) -> dict:
-        (row,) = self._get(self.list_url)
+    def _listed(self, user: CustomUser | None = None) -> dict:
+        (row,) = self._get(self.list_url, user)
         return row
 
     def test_is_subscribed_is_not_shared_between_users(self) -> None:
@@ -59,6 +59,15 @@ class RepeaterCacheTest(TransactionTestCase):
         self.assertFalse(self._detail(self.stranger)["is_subscribed"])
         self.assertFalse(self._detail()["is_subscribed"])
         self.assertTrue(self._detail(self.subscriber)["is_subscribed"])
+
+    def test_list_is_subscribed_is_per_user(self) -> None:
+        RepeaterSubscription.objects.create(
+            event_repeater=self.repeater, user=self.subscriber
+        )
+        self.assertTrue(self._listed(self.subscriber)["is_subscribed"])
+        self.assertFalse(self._listed(self.stranger)["is_subscribed"])
+        self.assertFalse(self._listed()["is_subscribed"])
+        self.assertTrue(self._listed(self.subscriber)["is_subscribed"])
 
     def test_subscriber_count_follows_new_subscription(self) -> None:
         self.assertEqual(self._detail()["subscriber_count"], 0)
