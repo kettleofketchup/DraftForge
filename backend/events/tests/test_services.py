@@ -133,7 +133,7 @@ class SignupProcessingTests(EventTestCase):
         self.assertEqual(cancelled.status, SignupStatus.CANCELLED)
 
     def test_approve_with_mmr_override_sets_orguser(self):
-        """Approving with mmr_override sets OrgUser.mmr and has_active_dota_mmr."""
+        """Approving with mmr_override sets the Dota org MMR and has_active_dota_mmr."""
         from events.services import approve_signup
         from org.models import OrgUser
 
@@ -152,7 +152,7 @@ class SignupProcessingTests(EventTestCase):
         self.assertIsNotNone(org_user.dota_mmr_last_verified)
 
     def test_approve_without_mmr_override_unchanged(self):
-        """Approving without mmr_override doesn't change OrgUser.mmr."""
+        """Approving without mmr_override doesn't change the Dota org MMR."""
         from events.services import approve_signup
         from org.models import OrgUser
 

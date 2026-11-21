@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, GameType, Organization, PositionsModel
 from events.models import Event
 from events.services import create_tournament_for_event
+from org.mmr import org_mmr_for
 from org.models import OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
 from user.tests.test_cacheops_integration import _redis_reachable
@@ -44,8 +45,8 @@ class OrgCSVImportTest(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["added"], 1)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 5000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 5000)
 
     def test_import_creates_stub_user_when_no_match(self):
         """Row with unknown steam_friend_id creates a stub user + OrgUser."""
@@ -58,8 +59,8 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.data["summary"]["created"], 1)
         self.assertEqual(resp.data["summary"]["added"], 1)
         user = CustomUser.objects.get(steamid=76561198099999999)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 3000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 3000)
 
     def test_import_by_discord_id(self):
         """Row with discord_id matching existing user creates OrgUser."""
@@ -77,8 +78,8 @@ class OrgCSVImportTest(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["added"], 1)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 4000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 4000)
 
     def test_import_skips_existing_member(self):
         """Row matching a user already in the org is skipped."""
@@ -89,7 +90,7 @@ class OrgCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198011111111,
         )
-        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        ensure_org_user(user, self.org, mmr=1000)
         resp = self.client.post(
             self.url,
             {"rows": [{"steam_friend_id": "76561198011111111", "mmr": 2000}]},
@@ -98,8 +99,8 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["skipped"], 1)
         # MMR should NOT be updated for skipped users
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 1000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 1000)
 
     def test_import_row_with_no_identifier_errors(self):
         """Row without steam_friend_id or discord_id reports error."""
@@ -217,7 +218,7 @@ class OrgCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198011111111,
         )
-        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        ensure_org_user(user, self.org, mmr=1000)
         resp = self.client.post(
             self.url,
             {
@@ -231,8 +232,8 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.data["summary"]["skipped"], 0)
         result = resp.data["results"][0]
         self.assertEqual(result["status"], "updated")
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 5000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 5000)
 
     def test_import_update_mmr_false_skips(self):
         """update_mmr=False (default) skips existing members without updating MMR."""
@@ -243,7 +244,7 @@ class OrgCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198011111111,
         )
-        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        ensure_org_user(user, self.org, mmr=1000)
         resp = self.client.post(
             self.url,
             {
@@ -254,8 +255,10 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["skipped"], 1)
         self.assertEqual(resp.data["summary"]["updated"], 0)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 1000)  # Unchanged
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(
+            org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 1000
+        )  # Unchanged
 
     def test_import_requires_staff_access(self):
         """Non-staff/non-admin user gets 403."""
@@ -317,8 +320,8 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.data["summary"]["created"], 1)
         user = CustomUser.objects.get(discordId="555555555555555555")
         self.assertIsNotNone(user)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 2500)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 2500)
 
     def test_import_name_sets_nickname_on_new_stub(self):
         """CSV row with name sets nickname on newly created stub user."""

@@ -12,11 +12,20 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Game, League, Organization, Team, Tournament
+from app.models import (
+    CustomUser,
+    Game,
+    GameType,
+    League,
+    Organization,
+    Team,
+    Tournament,
+)
 from app.serializers import BracketGameSerializer
 from draft.models import HeroDraft
 from league.models import LeagueUser
 from lobby.models import GameLobby
+from org.mmr import set_org_mmr
 from org.models import OrgUser
 
 TEAM_SIZE = 5
@@ -96,8 +105,7 @@ def build_bracket(
         for i, org_user in enumerate(
             OrgUser.objects.filter(organization=org).order_by("pk")
         ):
-            org_user.mmr = 2000 + i * 37
-            org_user.save()
+            set_org_mmr(org_user, GameType.DOTA2, 2000 + i * 37, mark_verified=False)
             if i % 3 == 0:
                 LeagueUser.objects.update_or_create(
                     user_id=org_user.user_id,

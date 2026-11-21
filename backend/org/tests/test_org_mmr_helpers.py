@@ -347,7 +347,6 @@ class EnsureOrgUserTest(TestCase):
         ):
             ou = ensure_org_user(self.user, self.org, mmr=4000, game_mmrs={DL: 2500})
         self.assertEqual(rows(ou), {DOTA: 4000, DL: 2500})
-        self.assertEqual(OrgUser.objects.get(pk=ou.pk).mmr, 4000)
         self.assertEqual(events_named(logs, "org_mmr_set"), [])
         invalidate.assert_not_called()
 
@@ -356,12 +355,10 @@ class EnsureOrgUserTest(TestCase):
         ensure_org_user(self.user, self.org)
         ensure_org_user(self.user, self.org, game_mmrs={})
         self.assertEqual(rows(ou), {DOTA: 4000, DL: 2500})
-        self.assertEqual(OrgUser.objects.get(pk=ou.pk).mmr, 4000)
         league_user = ensure_league_user(self.user, ou, self.league)
         self.assertEqual(league_user.mmr, 4000)
         ensure_org_user(self.user, self.org, mmr=0)
         self.assertEqual(rows(ou), {DL: 2500})
-        self.assertEqual(OrgUser.objects.get(pk=ou.pk).mmr, 0)
         ensure_org_user(self.user, self.org, game_mmrs={DL: 0})
         self.assertEqual(rows(ou), {})
 
@@ -371,7 +368,6 @@ class EnsureOrgUserTest(TestCase):
 
     def test_ensure_league_user_seeds_dota(self) -> None:
         ou = ensure_org_user(self.user, self.org, mmr=4000, game_mmrs={DL: 2500})
-        OrgUser.objects.filter(pk=ou.pk).update(mmr=1)
         league_user = ensure_league_user(
             self.user, OrgUser.objects.get(pk=ou.pk), self.league
         )

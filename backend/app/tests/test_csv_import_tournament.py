@@ -15,6 +15,7 @@ from app.models import (
 )
 from app.services.team_leadership import teams_with_leadership_problems
 from league.models import LeagueUser
+from org.mmr import org_mmr_for
 from org.models import OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
 
@@ -61,8 +62,8 @@ class TournamentCSVImportTest(TestCase):
         self.assertEqual(resp.data["summary"]["added"], 1)
         self.assertTrue(self.tournament.users.filter(pk=user.pk).exists())
         # Also creates OrgUser with MMR
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 5000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 5000)
 
     def test_import_with_team_name_creates_team(self):
         """Row with team_name creates/assigns team."""
@@ -122,7 +123,7 @@ class TournamentCSVImportTest(TestCase):
         self.assertEqual(team.members.count(), 2)
 
     def test_import_update_mmr_org_level(self):
-        """update_mmr=True with mmr_target=organization updates OrgUser.mmr."""
+        """update_mmr=True with mmr_target=organization updates the Dota org MMR."""
         pos = PositionsModel.objects.create()
         user = CustomUser.objects.create_user(
             username="player",
@@ -144,8 +145,8 @@ class TournamentCSVImportTest(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["updated"], 1)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 6000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 6000)
 
     def test_import_update_mmr_league_level(self):
         """update_mmr=True with mmr_target=league updates LeagueUser.mmr."""
@@ -195,8 +196,10 @@ class TournamentCSVImportTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["skipped"], 1)
         self.assertEqual(resp.data["summary"]["updated"], 0)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 1000)  # Unchanged
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(
+            org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 1000
+        )  # Unchanged
 
     def test_import_requires_permission(self):
         """Non-admin user gets 403."""
