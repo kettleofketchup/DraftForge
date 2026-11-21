@@ -201,7 +201,7 @@ export function MmrApprovalModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md max-h-[90svh] overflow-y-auto">
+        <DialogContent className="sm:max-w-md max-h-[90svh] grid-cols-[minmax(0,1fr)] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-3">
               <UserAvatar
