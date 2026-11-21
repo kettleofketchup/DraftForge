@@ -145,9 +145,8 @@ class HandleSignupModalSubmitTest(EventTestCase):
 
         # Verify CustomUser.steam_account_id was NOT modified by the modal.
         # The setUp sets steamid, and CustomUser.save() syncs steam_account_id
-        # from steamid (32-bit vs 64-bit are the same identity — see T1.5
-        # resurrection of the steam-id sync). So the baseline is the derived
-        # value, not None. Confirm the modal handler didn't *change* it.
+        # from steamid (32-bit vs 64-bit are the same identity). So the
+        # baseline is the derived value, not None. Confirm the modal handler didn't *change* it.
         baseline_steam_account_id = self.user.steam_account_id
         self.user.refresh_from_db()
         self.assertEqual(self.user.steam_account_id, baseline_steam_account_id)

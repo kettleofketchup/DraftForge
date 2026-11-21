@@ -7,7 +7,7 @@ in-process now POSTs here so the backend is the sole writer.
 
 The lower-level transport helpers (``post``, ``X-Internal-Token`` auth,
 URL/timeout config) live in ``app.internal_client.transport`` — this module just
-contains the bot-side wrappers for the 13 signup-flow endpoints.
+contains the bot-side wrappers for the 12 signup-flow endpoints.
 
 Each function mirrors the handler's keyword signature and returns the
 handler's dict (or an empty dict where the handler returns None / on network
