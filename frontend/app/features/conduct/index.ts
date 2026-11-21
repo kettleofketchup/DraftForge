@@ -13,6 +13,10 @@ export {
   eventConductEnabled,
 } from './eventConduct';
 export {
+  EventConductSection,
+  type EventConductSectionProps,
+} from './EventConductSection';
+export {
   formatForecast,
   formatOpenSeats,
   formatPendingApproval,

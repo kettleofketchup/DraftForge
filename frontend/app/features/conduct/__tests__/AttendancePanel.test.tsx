@@ -8,6 +8,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { toast } from 'sonner';
 import {
   afterEach,
   beforeAll,
@@ -102,7 +103,10 @@ function attendance(overrides: Partial<Attendance> = {}): Attendance {
   };
 }
 
-function renderPanel(eventState = 'in_progress') {
+function renderPanel(
+  eventState = 'in_progress',
+  panelAccess: OrgFeatureAccess = access,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -114,7 +118,7 @@ function renderPanel(eventState = 'in_progress') {
       orgId={ORG}
       eventId={EVENT}
       eventState={eventState}
-      access={access}
+      access={panelAccess}
       enabled
     />,
     { wrapper },
@@ -133,6 +137,7 @@ beforeEach(() => {
   vi.mocked(getAttendance).mockReset();
   vi.mocked(putAttendance).mockReset();
   vi.mocked(searchUsers).mockReset();
+  vi.mocked(toast.error).mockReset();
 });
 
 afterEach(cleanup);
@@ -359,5 +364,115 @@ describe('AttendancePanel', () => {
       changes: [{ user_pk: 50, outcome: 'attended' }],
       reason: 'filled in',
     });
+  });
+
+  it('event staff who are not org staff get no Add walk-in button', async () => {
+    vi.mocked(getAttendance).mockResolvedValue(attendance());
+    renderPanel(
+      'in_progress',
+      makeOrgFeatureAccess({ viewerPk: 5, canViewConduct: true }),
+    );
+    await screen.findByTestId('attendance-row-11');
+    expect(screen.getByTestId('attendance-bulk-no-show')).toBeInTheDocument();
+    expect(screen.queryByTestId('attendance-add-walkin')).toBeNull();
+    expect(screen.queryByTestId('attendance-walkin-search')).toBeNull();
+  });
+
+  it('bulk late cancel and excuse set those outcomes', async () => {
+    vi.mocked(getAttendance).mockResolvedValue(attendance());
+    renderPanel();
+    await screen.findByTestId('attendance-row-11');
+    expect(screen.getByTestId('attendance-bulk-late-cancel')).toHaveTextContent(
+      'Mark late cancel',
+    );
+    expect(screen.getByTestId('attendance-bulk-attended')).toHaveTextContent(
+      'Mark attended',
+    );
+    fireEvent.click(screen.getByTestId('attendance-select-11'));
+    fireEvent.click(screen.getByTestId('attendance-bulk-late-cancel'));
+    fireEvent.click(screen.getByTestId('attendance-select-12'));
+    fireEvent.click(screen.getByTestId('attendance-bulk-excused'));
+    expect(screen.getByTestId('attendance-outcome-11')).toHaveTextContent(
+      'Late cancel',
+    );
+    expect(screen.getByTestId('attendance-outcome-12')).toHaveTextContent(
+      'Excused',
+    );
+    expect(screen.getByTestId('attendance-save')).toHaveTextContent('Save (2)');
+  });
+
+  it('clears the selection after a bulk action', async () => {
+    vi.mocked(getAttendance).mockResolvedValue(attendance());
+    renderPanel();
+    await screen.findByTestId('attendance-row-11');
+    fireEvent.click(screen.getByTestId('attendance-select-11'));
+    fireEvent.click(screen.getByTestId('attendance-bulk-no-show'));
+    expect(screen.getByTestId('attendance-bulk-no-show')).toBeDisabled();
+  });
+
+  it('a failed save keeps the draft and toasts the API error', async () => {
+    vi.mocked(getAttendance).mockResolvedValue(attendance());
+    vi.mocked(putAttendance).mockRejectedValue({
+      response: {
+        status: 400,
+        data: { detail: 'This event was cancelled.' },
+      },
+    });
+    renderPanel();
+    await screen.findByTestId('attendance-row-11');
+    fireEvent.click(screen.getByTestId('attendance-select-11'));
+    fireEvent.click(screen.getByTestId('attendance-bulk-no-show'));
+    fireEvent.click(screen.getByTestId('attendance-save'));
+    fireEvent.change(await screen.findByTestId('conduct-reason-input'), {
+      target: { value: 'Left early' },
+    });
+    fireEvent.click(screen.getByTestId('conduct-reason-confirm'));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('This event was cancelled.'),
+    );
+    expect(screen.getByTestId('conduct-reason-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('conduct-reason-input')).toHaveValue(
+      'Left early',
+    );
+    expect(screen.getByTestId('attendance-outcome-11')).toHaveTextContent(
+      'No-show',
+    );
+    expect(screen.getByTestId('attendance-save')).toHaveTextContent('Save (1)');
+  });
+
+  it('a completed event that was never tracked shows the not-tracked note', async () => {
+    vi.mocked(getAttendance).mockResolvedValue(
+      attendance({
+        state: 'completed',
+        editable: false,
+        editable_reason: 'Attendance was not tracked for this event.',
+      }),
+    );
+    renderPanel('completed');
+    const note = await screen.findByTestId('attendance-readonly');
+    expect(note).toHaveTextContent('Read-only');
+    expect(note).toHaveTextContent(
+      'Attendance was not tracked for this event.',
+    );
+    expect(screen.queryByTestId('attendance-bulk-no-show')).toBeNull();
+  });
+
+  it('Save is disabled with no changes', async () => {
+    vi.mocked(getAttendance).mockResolvedValue(attendance());
+    renderPanel();
+    await screen.findByTestId('attendance-row-11');
+    expect(screen.getByTestId('attendance-save')).toBeDisabled();
+    expect(screen.getByTestId('attendance-discard')).toBeDisabled();
+  });
+
+  it('shows the load error', async () => {
+    vi.mocked(getAttendance).mockRejectedValue({
+      response: { status: 403, data: { detail: 'Not allowed' } },
+    });
+    renderPanel();
+    expect(await screen.findByTestId('attendance-error')).toHaveTextContent(
+      'Not allowed',
+    );
   });
 });

@@ -6,6 +6,7 @@ import {
   DestructiveButton,
   PrimaryButton,
   SecondaryButton,
+  WarningButton,
 } from '~/components/ui/buttons';
 import {
   Card,
@@ -45,23 +46,32 @@ const BULK_ACTIONS: {
   outcome: StaffSettableOutcome;
   label: string;
   testId: string;
+  Button: typeof SecondaryButton;
 }[] = [
-  {
-    outcome: 'no_show',
-    label: 'Mark no-show',
-    testId: 'attendance-bulk-no-show',
-  },
   {
     outcome: 'attended',
     label: 'Mark attended',
     testId: 'attendance-bulk-attended',
+    Button: SecondaryButton,
+  },
+  {
+    outcome: 'no_show',
+    label: 'Mark no-show',
+    testId: 'attendance-bulk-no-show',
+    Button: DestructiveButton,
   },
   {
     outcome: 'late_cancel',
-    label: 'Late cancel',
+    label: 'Mark late cancel',
     testId: 'attendance-bulk-late-cancel',
+    Button: WarningButton,
   },
-  { outcome: 'excused', label: 'Excuse', testId: 'attendance-bulk-excused' },
+  {
+    outcome: 'excused',
+    label: 'Excuse',
+    testId: 'attendance-bulk-excused',
+    Button: SecondaryButton,
+  },
 ];
 
 export interface AttendancePanelProps {
@@ -87,7 +97,7 @@ export function AttendancePanel({
   );
   const put = usePutAttendance(orgId, access, eventId);
 
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [rawSelected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [draft, setDraft] = useState<AttendanceDraft>(EMPTY_DRAFT);
   const [reasonOpen, setReasonOpen] = useState(false);
   const [walkInOpen, setWalkInOpen] = useState(false);
@@ -108,6 +118,11 @@ export function AttendancePanel({
         .map(walkInTableRow),
     ];
   }, [serverRows, draft.walkIns]);
+
+  const selected = useMemo<ReadonlySet<string>>(() => {
+    const keys = new Set(rows.map((r) => r.key));
+    return new Set([...rawSelected].filter((key) => keys.has(key)));
+  }, [rawSelected, rows]);
 
   const excludeUserPks = useMemo(
     () => new Set(rows.map((r) => r.member.user_pk)),
@@ -162,8 +177,10 @@ export function AttendancePanel({
     setWalkInOpen(false);
   };
 
-  const onBulk = (outcome: StaffSettableOutcome) =>
+  const onBulk = (outcome: StaffSettableOutcome) => {
     setDraft((prev) => setOutcomes(prev, serverRows, selected, outcome));
+    setSelected(new Set());
+  };
 
   const reset = () => {
     setDraft(EMPTY_DRAFT);
@@ -202,7 +219,10 @@ export function AttendancePanel({
       <CardContent className="flex flex-col gap-4">
         {isPending && enabled && <Skeleton className="h-32 w-full" />}
         {isError && (
-          <p className="text-sm text-destructive">
+          <p
+            data-testid="attendance-error"
+            className="text-sm text-destructive"
+          >
             {extractApiError(error) ?? 'Failed to load attendance'}
           </p>
         )}
@@ -229,30 +249,26 @@ export function AttendancePanel({
         )}
         {data && editable && (
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            {BULK_ACTIONS.map((action) => {
-              const Button =
-                action.outcome === 'no_show'
-                  ? DestructiveButton
-                  : SecondaryButton;
-              return (
-                <Button
-                  key={action.outcome}
-                  data-testid={action.testId}
-                  disabled={selected.size === 0}
-                  onClick={() => onBulk(action.outcome)}
-                  className="min-h-11 sm:min-h-9"
-                >
-                  {action.label}
-                </Button>
-              );
-            })}
-            <SecondaryButton
-              data-testid="attendance-add-walkin"
-              onClick={() => setWalkInOpen(true)}
-              className="min-h-11 sm:min-h-9"
-            >
-              Add walk-in
-            </SecondaryButton>
+            {BULK_ACTIONS.map(({ outcome, label, testId, Button }) => (
+              <Button
+                key={outcome}
+                data-testid={testId}
+                disabled={selected.size === 0}
+                onClick={() => onBulk(outcome)}
+                className="min-h-11 sm:min-h-9"
+              >
+                {label}
+              </Button>
+            ))}
+            {access.canViewConductDetails && (
+              <SecondaryButton
+                data-testid="attendance-add-walkin"
+                onClick={() => setWalkInOpen(true)}
+                className="min-h-11 sm:min-h-9"
+              >
+                Add walk-in
+              </SecondaryButton>
+            )}
           </div>
         )}
         {data && (
@@ -295,15 +311,17 @@ export function AttendancePanel({
         pending={put.isPending}
         onConfirm={onConfirm}
       />
-      <WalkInPicker
-        open={walkInOpen}
-        onOpenChange={setWalkInOpen}
-        orgId={orgId}
-        eventId={eventId}
-        access={access}
-        excludeUserPks={excludeUserPks}
-        onPick={onPickWalkIn}
-      />
+      {access.canViewConductDetails && (
+        <WalkInPicker
+          open={walkInOpen}
+          onOpenChange={setWalkInOpen}
+          orgId={orgId}
+          eventId={eventId}
+          access={access}
+          excludeUserPks={excludeUserPks}
+          onPick={onPickWalkIn}
+        />
+      )}
     </Card>
   );
 }
