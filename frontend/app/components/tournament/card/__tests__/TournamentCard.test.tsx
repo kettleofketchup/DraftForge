@@ -31,6 +31,17 @@ vi.mock('~/store/userStore', async () => {
   };
 });
 
+const NOW = new Date('2026-11-10T12:00:00Z');
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 const LOGO = 'https://example.test/logo-a.png';
 const OTHER_LOGO = 'https://example.test/logo-b.png';
 
