@@ -17,6 +17,7 @@ apps := "steam app bracket discordbot events org user lobby opsnotices league dr
 
 mod migrate 'migrate.just'
 mod populate 'populate.just'
+mod avatars 'avatars.just'
 
 # Run migrations for dev (same as db::migrate::dev)
 [group('db')]

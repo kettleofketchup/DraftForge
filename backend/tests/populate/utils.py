@@ -20,6 +20,7 @@ from org.mmr import LEAGUE_GAME, org_mmr_for, validate_org_mmr
 from org.models import OrgUser, OrgUserGameMmr, PromoSend
 from org.standing import api as standing
 
+from .avatars import apply_committed_avatars
 from .constants import (
     BRACKET_STEAM_ID_BASE,
     BRACKET_USER_COUNT,
@@ -346,6 +347,7 @@ def get_or_create_demo_user(username, user_data, organization=None):
     if organization:
         ensure_org_user(user, organization, mmr=mmr)
 
+    apply_committed_avatars([user])
     return user
 
 
@@ -377,8 +379,13 @@ def _get_discord_avatar_cache() -> dict[str, str]:
     return _discord_avatar_cache
 
 
-def fetch_discord_avatars_for_users(users):
-    """Update avatars for users using cached bulk guild member data."""
+def fetch_discord_avatars_for_users(users: Iterable[CustomUser]) -> None:
+    """Apply committed avatars, then any newer ones from the live guild fetch.
+
+    The live fetch only sets non-empty hashes, so it never wipes a committed one.
+    """
+    users = list(users)
+    apply_committed_avatars(users)
     avatar_map = _get_discord_avatar_cache()
     if not avatar_map:
         return
@@ -389,7 +396,7 @@ def fetch_discord_avatars_for_users(users):
             continue
         avatar_hash = avatar_map.get(user.discordId)
         if avatar_hash and user.avatar != avatar_hash:
-            # T1.5+: avatar is a property over base_profile.avatar; the setter
+            # avatar is a property over base_profile.avatar; the setter
             # persists via bp.save(update_fields=["avatar"]) internally, so an
             # explicit CustomUser.save(update_fields=["avatar"]) crashes since
             # `avatar` is no longer a model field.
