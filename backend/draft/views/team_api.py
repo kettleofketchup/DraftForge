@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from app.models import CustomUser, Team, Tournament
 from app.permissions import IsStaff
 from app.permissions_tournament import CanEditTournament
-from app.serializers import _build_users_dict
+from app.serializers import build_users_dict
 from draft.models import Draft, DraftRound
 from draft.permissions import CanEditDraft, CanEditDraftRound
 from draft.serializers.team import DraftRoundSerializer, DraftSerializer
@@ -79,7 +79,7 @@ class DraftView(viewsets.ModelViewSet):
             data = serializer.data
 
             # Deduplicated user dict for frontend entity cache
-            data["_users"] = _build_users_dict(instance.tournament)
+            data["_users"] = build_users_dict(instance.tournament)
 
             return data
 

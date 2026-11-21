@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from app.models import CustomUser, Game, League, Team, Tournament
-from app.serializers import _tournament_organization
+from app.serializers import tournament_organization
 from draft.models import DraftTeam, HeroDraft
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero import build_draft_rounds
@@ -171,7 +171,7 @@ class HeroDraftNameFieldsTest(TestCase):
         tournament = draft.game.tournament
         self.assertEqual(
             self._serialize(draft)["organization_pk"],
-            _tournament_organization(tournament).pk,
+            tournament_organization(tournament).pk,
         )
 
     def test_organization_pk_is_none_without_an_org(self) -> None:

@@ -12,7 +12,7 @@ from unittest.mock import patch
 from cacheops.conf import settings as cacheops_settings
 from django.test import TestCase, TransactionTestCase
 
-from app.functions.tournament import _serialize_tournament
+from app.functions.tournament import serialize_tournament
 from app.models import Tournament
 from app.serializers import TournamentSerializer
 from app.tournament_state import tournament_state_queryset
@@ -41,13 +41,13 @@ class TournamentResponseOutputTests(TestCase):
         lazy = TournamentSerializer(tournament).data
         lazy["_users"] = legacy_users_dict(tournament)
         fresh = Tournament.objects.nocache().get(pk=self.fx.tournament.pk)
-        self.assertEqual(dumps(_serialize_tournament(fresh)), dumps(lazy))
+        self.assertEqual(dumps(serialize_tournament(fresh)), dumps(lazy))
 
     def test_tournament_response_reuses_prefetched_draft_options(self) -> None:
         with patch.object(
             Tournament, "get_draft_options", autospec=True
         ) as get_draft_options:
-            data = _serialize_tournament(self.fx.tournament)
+            data = serialize_tournament(self.fx.tournament)
         get_draft_options.assert_not_called()
         self.assertEqual(
             data["draft_options"]["grace_time_ms"], self.fx.options.grace_time_ms
@@ -80,7 +80,7 @@ class TournamentResponseQueryCountTests(TestCase):
     def test_tournament_response_is_constant(self) -> None:
         counts = [
             self.count(
-                lambda t=fx.tournament: _serialize_tournament(
+                lambda t=fx.tournament: serialize_tournament(
                     Tournament.objects.nocache().get(pk=t.pk)
                 )
             )
@@ -108,6 +108,6 @@ class TournamentResponseFreshTests(TransactionTestCase):
         return next(t["name"] for t in tournament["teams"] if t["pk"] == self.team.pk)
 
     def test_serialize_tournament_reads_fresh_state(self) -> None:
-        data = _serialize_tournament(self.fx.tournament)
+        data = serialize_tournament(self.fx.tournament)
         self.assertEqual(self.team_name(data), "Renamed")
         self.assertEqual(self.team_name(data["draft"]["tournament"]), "Renamed")

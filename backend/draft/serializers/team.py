@@ -9,7 +9,7 @@ from app.serializers import (
     TeamSerializerSlim,
     TournamentUserSerializer,
     UserPkField,
-    _serialize_user_with_mmr,
+    serialize_user_with_mmr,
 )
 from draft.models import Draft, DraftEvent, DraftRound
 
@@ -111,14 +111,12 @@ class DraftRoundSerializer(serializers.ModelSerializer):
     )
 
     def get_captain(self, draft_round: DraftRound) -> dict | None:
-        return _serialize_user_with_mmr(
+        return serialize_user_with_mmr(
             draft_round.captain, draft_round.draft.tournament
         )
 
     def get_choice(self, draft_round: DraftRound) -> dict | None:
-        return _serialize_user_with_mmr(
-            draft_round.choice, draft_round.draft.tournament
-        )
+        return serialize_user_with_mmr(draft_round.choice, draft_round.draft.tournament)
 
     class Meta:
         model = DraftRound
