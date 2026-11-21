@@ -1079,14 +1079,8 @@ def generate_repeater_events(request: Request, repeater_id: int) -> Response:
         return Response({"error": str(e)}, status=500)
 
 
-# Batched avatar refresh endpoints (list_discord_linked_users,
-# list_discord_guild_ids, bulk_update_user_avatars) moved to
-# `user/internal/avatar.py`. Imports in backend/urls.py point at the
-# new module; nothing else in this file references them.
-
-
 # ---------------------------------------------------------------------------
-# Discord lease sweeper (replaces direct ORM in discordbot/tasks.py)
+# Discord lease sweeper
 # ---------------------------------------------------------------------------
 
 

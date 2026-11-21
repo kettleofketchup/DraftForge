@@ -42,8 +42,6 @@ from tests.data.tournaments import (
     BRACKET_UNSET_WINNER_TOURNAMENT,
     SHUFFLE_TIE_TOURNAMENT,
 )
-
-# Import test user configuration
 from tests.data.users import (
     ADMIN_USER,
     AUTH_MATRIX_LEAGUE_ADMIN_USER,
@@ -64,10 +62,6 @@ from tests.data.users import (
     STAFF_USER,
     USER_CLAIMER,
 )
-
-# Populate functions for non-standard tournament resets. Top-level imports —
-# the previous lambda+__import__ form was a holdover; these are leaf modules
-# with no circular-import risk.
 from tests.helpers.team_management_fixture import (
     TEAM_MANAGEMENT_TOURNAMENT_NAME,
     populate_team_management_tournament,

@@ -387,9 +387,9 @@ class DiscordTournamentLogSuccessNullableTest(TestCase):
         self.assertIsNone(log.success)
 
     def test_internal_view_writes_success_null_via_orm(self):
-        """The internal view at app.views.internal.create_discord_tournament_log
-        forwards request.data fields directly into DiscordTournamentLog.objects.create
-        (see ALLOWED_FIELDS at app/views/internal.py:524-531). Verify the ORM path
+        """The internal view at app.views.internal.create_tournament_log
+        forwards request.data fields (filtered by its ALLOWED_FIELDS) directly into
+        DiscordTournamentLog.objects.create. Verify the ORM path
         the view ultimately calls accepts success=None — covers what the view does
         without going through the IP-whitelisted internal HTTP auth layer."""
         from discordbot.models import DiscordTournamentLog
