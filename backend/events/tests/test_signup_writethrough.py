@@ -22,6 +22,7 @@ from django.utils import timezone as tz
 from structlog.testing import capture_logs
 
 from app.models import CustomUser, Organization, PositionsModel
+from common.game import GameType
 from events.constants import SignupStatus
 from events.eligibility import EligibilityResult, sync_steam_account_from_profiles
 from events.models import Event, EventSignup
@@ -33,6 +34,7 @@ from events.services import (
     process_rsvp,
 )
 from events.tests.base import EventTestCase
+from org.mmr import org_mmr_for, set_org_mmr
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
@@ -149,9 +151,7 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
     """MMR isolation + transaction atomicity (#196a)."""
 
     def test_mmr_is_not_touched_on_signup_save(self):
-        # Set OrgUser.mmr to a known value
-        self.org_user.mmr = 4500
-        self.org_user.save(update_fields=["mmr"])
+        set_org_mmr(self.org_user, GameType.DOTA2, 4500, mark_verified=False)
 
         # Signup with a different "submitted" MMR on the profile
         profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=self.org_user)
@@ -159,9 +159,8 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
         profile.save()
 
         self._signup_with_positions(pos_1=True)
-        self.org_user.refresh_from_db()
-        # OrgUser MMR untouched — only approve_signup(mmr_override=...) writes it.
-        self.assertEqual(self.org_user.mmr, 4500)
+        # Org MMR untouched — only approve_signup(mmr_override=...) writes it.
+        self.assertEqual(org_mmr_for(self.org.pk, self.user.pk, GameType.DOTA2), 4500)
 
     def test_signup_rolls_back_when_a_later_step_fails(self):
         """The Steam sync and the signup row share _create_signup's atomic

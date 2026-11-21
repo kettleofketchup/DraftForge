@@ -1,8 +1,18 @@
 from django.test import TransactionTestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League, Organization, Tournament
-from app.serializers import _build_users_dict, _serialize_users_with_mmr
+from app.models import CustomUser, GameType, League, Organization, Tournament
+from app.serializers import (
+    TournamentSerializer,
+    _build_users_dict,
+    _serialize_users_with_mmr,
+)
+from events.models import Event
+from events.services import create_tournament_for_event
+from league.models import LeagueUser
+from org.mmr import set_org_mmr
+from org.models import OrgUser
+from tests.populate.utils import ensure_org_user
 
 # Hardcoded pre-change ground-truth key sets (from reading OrgUserSerializer /
 # TournamentUserSerializer). The shape-parity assertions below ALSO diff against
@@ -20,6 +30,7 @@ ORG_ENTRY_KEYS = {
     "steam_account_id",
     "avatarUrl",
     "mmr",
+    "mmr_game_type",
     "league_mmr",
 }
 NONORG_ENTRY_KEYS = {
@@ -51,14 +62,7 @@ class BuildUsersDictOrgTests(TransactionTestCase):
         self.member = CustomUser.objects.create(username="member", nickname="Member")
         self.tournament.users.add(self.member)
 
-        from league.models import LeagueUser
-        from org.models import OrgUser
-
-        # Adding the member to an org tournament auto-creates the OrgUser via
-        # signal; update its MMR rather than create a duplicate.
-        ou, _ = OrgUser.objects.update_or_create(
-            user=self.member, organization=self.org, defaults={"mmr": 4200}
-        )
+        ou = ensure_org_user(self.member, self.org, mmr=4200)
         LeagueUser.objects.update_or_create(
             user=self.member,
             org_user=ou,
@@ -89,8 +93,6 @@ class BuildUsersDictOrgTests(TransactionTestCase):
             assert entry[k] == ref[k], (k, entry[k], ref[k])
 
     def test_org_entry_carries_server_and_global_names(self) -> None:
-        from org.models import OrgUser
-
         OrgUser.objects.filter(user=self.member, organization=self.org).update(
             guild_nickname="DragonClaw"
         )
@@ -109,11 +111,8 @@ class BuildUsersDictOrgTests(TransactionTestCase):
 
     def test_mmr_change_reflected(self) -> None:
         _build_users_dict(self.tournament)  # warm
-        from org.models import OrgUser
-
         ou = OrgUser.objects.get(user=self.member, organization=self.org)
-        ou.mmr = 5555
-        ou.save()
+        set_org_mmr(ou, GameType.DOTA2, 5555, mark_verified=False)
         entry = _build_users_dict(self.tournament)[self.member.pk]
         assert entry["mmr"] == 5555
 
@@ -144,10 +143,6 @@ class BuildUsersDictLeaguelessEventTests(TransactionTestCase):
     """Event-spawned tournaments with no league inherit the event's org."""
 
     def setUp(self) -> None:
-        from events.models import Event
-        from events.services import create_tournament_for_event
-        from org.models import OrgUser
-
         self.owner = CustomUser.objects.create_user(username="owner", password="x")
         self.org = Organization.objects.create(name="Org", owner=self.owner)
         event = Event.objects.create(
@@ -160,9 +155,7 @@ class BuildUsersDictLeaguelessEventTests(TransactionTestCase):
         assert self.tournament.league is None
         self.member = CustomUser.objects.create(username="member", nickname="Member")
         self.tournament.users.add(self.member)
-        OrgUser.objects.update_or_create(
-            user=self.member, organization=self.org, defaults={"mmr": 4200}
-        )
+        ensure_org_user(self.member, self.org, mmr=4200)
 
     def test_entry_carries_event_org_mmr(self) -> None:
         entry = _build_users_dict(self.tournament)[self.member.pk]
@@ -177,8 +170,6 @@ class BuildUsersDictLeaguelessEventTests(TransactionTestCase):
             assert entry[k] == ref[k], (k, entry[k], ref[k])
 
     def test_organization_pk_falls_back_to_event_org(self) -> None:
-        from app.serializers import TournamentSerializer
-
         data = TournamentSerializer(self.tournament).data
         assert data["organization_pk"] == self.org.pk
         assert data["league_pk"] is None

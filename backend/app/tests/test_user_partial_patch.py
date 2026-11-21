@@ -15,7 +15,9 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization, PositionsModel
-from org.models import OrgUser
+from common.game import GameType
+from org.models import OrgUserGameMmr
+from tests.populate.utils import ensure_org_user
 
 
 class PartialUserPatchTests(TestCase):
@@ -34,9 +36,7 @@ class PartialUserPatchTests(TestCase):
         )
         self.org = Organization.objects.create(name="Patch Test Org")
         self.org.admins.add(self.admin)
-        self.org_user = OrgUser.objects.create(
-            user=self.target, organization=self.org, mmr=5000
-        )
+        self.org_user = ensure_org_user(self.target, self.org, mmr=5000)
         self.client = APIClient()
         self.client.force_authenticate(user=self.admin)
 
@@ -52,7 +52,9 @@ class PartialUserPatchTests(TestCase):
         self.assertEqual(self.target_positions.soft_support, 2)
         self.assertEqual(self.target_positions.hard_support, 2)
 
-    def test_partial_positions_patch_via_global_endpoint_passes_serializer_validation(self):
+    def test_partial_positions_patch_via_global_endpoint_passes_serializer_validation(
+        self,
+    ):
         """PATCH /users/:pk/ {positions: {carry: 3}} must return 200, not trip required-field validation."""
         url = f"/api/users/{self.target.pk}/"
         resp = self.client.patch(url, {"positions": {"carry": 3}}, format="json")
@@ -68,12 +70,16 @@ class PartialUserPatchTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_partial_mmr_patch_via_org_endpoint_does_not_clear_nickname(self):
-        """PATCH {mmr: 6500} must leave nickname unchanged — proves the safety property
-        the spec relies on for concurrent edits."""
+        """PATCH {game_mmrs: {"1": 6500}} must leave nickname unchanged, so concurrent
+        edits of different fields don't clobber each other."""
         url = f"/api/organizations/{self.org.pk}/users/{self.org_user.pk}/"
-        resp = self.client.patch(url, {"mmr": 6500}, format="json")
+        resp = self.client.patch(url, {"game_mmrs": {"1": 6500}}, format="json")
         self.assertEqual(resp.status_code, 200, resp.content)
         self.target.refresh_from_db()
-        self.org_user.refresh_from_db()
-        self.assertEqual(self.org_user.mmr, 6500)
+        self.assertEqual(
+            OrgUserGameMmr.objects.get(
+                org_user=self.org_user, game_type=GameType.DOTA2
+            ).mmr,
+            6500,
+        )
         self.assertEqual(self.target.nickname, "Target")

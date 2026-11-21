@@ -1,10 +1,18 @@
 """Tests for CSV import endpoints."""
 
-from django.test import TestCase
+from typing import Any
+
+from django.test import TestCase, TransactionTestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, PositionsModel
-from org.models import OrgUser
+from app.models import CustomUser, GameType, Organization, PositionsModel
+from events.models import Event
+from events.services import create_tournament_for_event
+from org.mmr import org_mmr_for
+from org.models import OrgUser, OrgUserGameMmr
+from tests.populate.utils import ensure_org_user
+from user.tests.test_cacheops_integration import _redis_reachable
 
 
 class OrgCSVImportTest(TestCase):
@@ -37,8 +45,8 @@ class OrgCSVImportTest(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["added"], 1)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 5000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 5000)
 
     def test_import_creates_stub_user_when_no_match(self):
         """Row with unknown steam_friend_id creates a stub user + OrgUser."""
@@ -51,8 +59,8 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.data["summary"]["created"], 1)
         self.assertEqual(resp.data["summary"]["added"], 1)
         user = CustomUser.objects.get(steamid=76561198099999999)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 3000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 3000)
 
     def test_import_by_discord_id(self):
         """Row with discord_id matching existing user creates OrgUser."""
@@ -70,8 +78,8 @@ class OrgCSVImportTest(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["added"], 1)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 4000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 4000)
 
     def test_import_skips_existing_member(self):
         """Row matching a user already in the org is skipped."""
@@ -82,7 +90,7 @@ class OrgCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198011111111,
         )
-        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        ensure_org_user(user, self.org, mmr=1000)
         resp = self.client.post(
             self.url,
             {"rows": [{"steam_friend_id": "76561198011111111", "mmr": 2000}]},
@@ -91,8 +99,8 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["skipped"], 1)
         # MMR should NOT be updated for skipped users
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 1000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 1000)
 
     def test_import_row_with_no_identifier_errors(self):
         """Row without steam_friend_id or discord_id reports error."""
@@ -210,7 +218,7 @@ class OrgCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198011111111,
         )
-        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        ensure_org_user(user, self.org, mmr=1000)
         resp = self.client.post(
             self.url,
             {
@@ -224,8 +232,8 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.data["summary"]["skipped"], 0)
         result = resp.data["results"][0]
         self.assertEqual(result["status"], "updated")
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 5000)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 5000)
 
     def test_import_update_mmr_false_skips(self):
         """update_mmr=False (default) skips existing members without updating MMR."""
@@ -236,7 +244,7 @@ class OrgCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198011111111,
         )
-        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        ensure_org_user(user, self.org, mmr=1000)
         resp = self.client.post(
             self.url,
             {
@@ -247,8 +255,10 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["skipped"], 1)
         self.assertEqual(resp.data["summary"]["updated"], 0)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 1000)  # Unchanged
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(
+            org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 1000
+        )  # Unchanged
 
     def test_import_requires_staff_access(self):
         """Non-staff/non-admin user gets 403."""
@@ -310,8 +320,8 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.data["summary"]["created"], 1)
         user = CustomUser.objects.get(discordId="555555555555555555")
         self.assertIsNotNone(user)
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        self.assertEqual(org_user.mmr, 2500)
+        OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_mmr_for(self.org.pk, user.pk, GameType.DOTA2), 2500)
 
     def test_import_name_sets_nickname_on_new_stub(self):
         """CSV row with name sets nickname on newly created stub user."""
@@ -343,3 +353,244 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         user.refresh_from_db()
         self.assertEqual(user.nickname, "GivenName")
+
+
+class OrgCSVImportDotaRowTest(TestCase):
+    def setUp(self) -> None:
+        self.admin = CustomUser.objects.create_user(
+            username="row_admin", password="pass"
+        )
+        self.org = Organization.objects.create(name="Row Org", owner=self.admin)
+        self.org.admins.add(self.admin)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+        self.url = f"/api/organizations/{self.org.pk}/import-csv/"
+        self.user = CustomUser.objects.create_user(
+            username="row_member", password="pass", steamid=76561198011111112
+        )
+        self.org_user = ensure_org_user(self.user, self.org, mmr=1000)
+
+    def post(self, mmr: int) -> dict:
+        resp = self.client.post(
+            self.url,
+            {
+                "rows": [{"steam_friend_id": "76561198011111112", "mmr": mmr}],
+                "update_mmr": True,
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        return resp.data
+
+    def test_update_mmr_writes_dota_row(self) -> None:
+        data = self.post(5000)
+        self.assertEqual(data["summary"]["updated"], 1)
+        self.assertEqual(
+            OrgUserGameMmr.objects.get(
+                org_user=self.org_user, game_type=GameType.DOTA2
+            ).mmr,
+            5000,
+        )
+
+    def test_update_mmr_out_of_range_is_row_error(self) -> None:
+        data = self.post(25000)
+        self.assertEqual(data["summary"]["errors"], 1)
+        self.assertEqual(data["results"][0]["status"], "error")
+        self.assertEqual(
+            OrgUserGameMmr.objects.get(
+                org_user=self.org_user, game_type=GameType.DOTA2
+            ).mmr,
+            1000,
+        )
+
+
+class OrgCSVImportGameTypeFixtures:
+    client: APIClient
+    admin: CustomUser
+    org: Organization
+    url: str
+    member: CustomUser
+    org_user: OrgUser
+
+    STEAM_ID = 76561198011111113
+
+    def build(self) -> None:
+        self.admin = CustomUser.objects.create_user(
+            username="gt_admin", password="pass"
+        )
+        self.org = Organization.objects.create(name="GT Org", owner=self.admin)
+        self.org.admins.add(self.admin)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+        self.url = f"/api/organizations/{self.org.pk}/import-csv/"
+        self.member = CustomUser.objects.create_user(
+            username="gt_member", password="pass", steamid=self.STEAM_ID
+        )
+        self.org_user = ensure_org_user(
+            self.member, self.org, mmr=1000, game_mmrs={GameType.DEADLOCK: 700}
+        )
+
+    def post(self, rows: list[dict[str, Any]], **extra: Any) -> Any:
+        return self.client.post(
+            self.url, {"rows": rows, "update_mmr": True, **extra}, format="json"
+        )
+
+    def rows_for(self, org_user: OrgUser) -> dict[int, int]:
+        return dict(
+            OrgUserGameMmr.objects.nocache()
+            .filter(org_user=org_user)
+            .values_list("game_type", "mmr")
+        )
+
+
+class OrgCSVImportGameTypeTest(OrgCSVImportGameTypeFixtures, TestCase):
+    def setUp(self) -> None:
+        self.build()
+
+    def test_org_import_game_type_deadlock(self) -> None:
+        resp = self.post(
+            [
+                {"steam_friend_id": str(self.STEAM_ID), "mmr": 2600},
+                {"steam_friend_id": "76561198011111199", "mmr": 1800},
+            ],
+            game_type=2,
+        )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.data["summary"]["updated"], 1)
+        self.assertEqual(resp.data["summary"]["added"], 1)
+        self.assertEqual(
+            resp.data["results"][0]["reason"], "Deadlock MMR updated to 2600"
+        )
+        self.assertEqual(
+            self.rows_for(self.org_user),
+            {GameType.DOTA2: 1000, GameType.DEADLOCK: 2600},
+        )
+        new_ou = OrgUser.objects.get(
+            user__steamid=76561198011111199, organization=self.org
+        )
+        self.assertEqual(self.rows_for(new_ou), {GameType.DEADLOCK: 1800})
+
+    def test_org_import_default_dota(self) -> None:
+        resp = self.post([{"steam_friend_id": str(self.STEAM_ID), "mmr": 4100}])
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(
+            resp.data["results"][0]["reason"], "Dota 2 MMR updated to 4100"
+        )
+        self.assertEqual(
+            self.rows_for(self.org_user),
+            {GameType.DOTA2: 4100, GameType.DEADLOCK: 700},
+        )
+
+    def test_org_import_out_of_range_row_error(self) -> None:
+        resp = self.post(
+            [
+                {"steam_friend_id": str(self.STEAM_ID), "mmr": 25000},
+                {"steam_friend_id": "76561198011111198", "mmr": 25000},
+                {"steam_friend_id": "76561198011111197", "mmr": 3000},
+            ],
+            game_type=2,
+        )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        statuses = [r["status"] for r in resp.data["results"]]
+        self.assertEqual(statuses, ["error", "error", "added"])
+        self.assertEqual(
+            self.rows_for(self.org_user),
+            {GameType.DOTA2: 1000, GameType.DEADLOCK: 700},
+        )
+        self.assertFalse(
+            OrgUser.objects.filter(user__steamid=76561198011111198).exists()
+        )
+        added = OrgUser.objects.get(user__steamid=76561198011111197)
+        self.assertEqual(self.rows_for(added), {GameType.DEADLOCK: 3000})
+
+    def test_org_import_invalid_game_type_400(self) -> None:
+        for game_type in (99, "2", True, 0):
+            with self.subTest(game_type=game_type):
+                resp = self.post(
+                    [{"steam_friend_id": str(self.STEAM_ID), "mmr": 2600}],
+                    game_type=game_type,
+                )
+                self.assertEqual(resp.status_code, 400, resp.content)
+                self.assertIn("error", resp.data)
+        self.assertEqual(
+            self.rows_for(self.org_user),
+            {GameType.DOTA2: 1000, GameType.DEADLOCK: 700},
+        )
+
+    def test_org_import_messy_cells(self) -> None:
+        cases: list[tuple[Any, str, int]] = [
+            ("4,200", "error", 1000),
+            (" 4200 ", "updated", 4200),
+            ("4k", "error", 4200),
+            ("", "skipped", 4200),
+            ("-1", "error", 4200),
+        ]
+        for cell, status, dota in cases:
+            with self.subTest(cell=cell):
+                resp = self.post([{"steam_friend_id": str(self.STEAM_ID), "mmr": cell}])
+                self.assertEqual(resp.status_code, 200, resp.content)
+                self.assertEqual(resp.data["results"][0]["status"], status)
+                self.assertEqual(self.rows_for(self.org_user)[GameType.DOTA2], dota)
+
+    def test_org_import_new_member_negative_is_row_error(self) -> None:
+        resp = self.post([{"steam_friend_id": "76561198011111196", "mmr": "-1"}])
+
+        self.assertEqual(resp.data["results"][0]["status"], "error")
+        self.assertFalse(
+            OrgUser.objects.filter(user__steamid=76561198011111196).exists()
+        )
+
+    def test_org_import_without_update_mmr_leaves_existing(self) -> None:
+        resp = self.client.post(
+            self.url,
+            {
+                "rows": [{"steam_friend_id": str(self.STEAM_ID), "mmr": 2600}],
+                "game_type": 2,
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.data["results"][0]["status"], "skipped")
+        self.assertEqual(self.rows_for(self.org_user)[GameType.DEADLOCK], 700)
+
+
+class OrgCSVImportCacheTest(OrgCSVImportGameTypeFixtures, TransactionTestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._redis_ok = _redis_reachable()
+
+    def setUp(self) -> None:
+        if not self._redis_ok:
+            self.fail("Cacheops Redis not reachable: cache tests cannot run")
+        self.build()
+
+    def test_org_import_invalidates_cache(self) -> None:
+        event = Event.objects.create(
+            name="CSV DL Night",
+            organization=self.org,
+            scheduled_at=timezone.now(),
+            timezone="UTC",
+            created_by=self.admin,
+            tournament_name="CSV DL Cup",
+            game_type=GameType.DEADLOCK,
+        )
+        tournament = create_tournament_for_event(event)
+        self.assertIsNone(tournament.league_id)
+        tournament.users.add(self.member)
+        detail = f"/api/tournaments/{tournament.pk}/"
+
+        def mmr() -> int:
+            return self.client.get(detail).json()["_users"][str(self.member.pk)]["mmr"]
+
+        self.assertEqual(mmr(), 700)
+
+        resp = self.post(
+            [{"steam_friend_id": str(self.STEAM_ID), "mmr": 2900}], game_type=2
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        self.assertEqual(mmr(), 2900)

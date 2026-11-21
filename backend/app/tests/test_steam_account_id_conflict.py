@@ -15,7 +15,7 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization
 from app.steam_accounts import steam_account_id_conflict_payload
-from org.models import OrgUser
+from tests.populate.utils import ensure_org_user
 
 TAKEN_ID = 765353730
 FREE_ID = 111222333
@@ -36,9 +36,7 @@ class SteamAccountIdConflictTests(TestCase):
         )
         self.org = Organization.objects.create(name="Steam Conflict Org")
         self.org.admins.add(self.admin)
-        self.org_user = OrgUser.objects.create(
-            user=self.target, organization=self.org, mmr=5000
-        )
+        self.org_user = ensure_org_user(self.target, self.org, mmr=5000)
         self.client = APIClient()
         self.client.force_authenticate(user=self.admin)
 

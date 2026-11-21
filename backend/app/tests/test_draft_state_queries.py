@@ -35,8 +35,8 @@ from events.models import Event
 from league.models import LeagueUser
 from org.models import OrgUser
 
-# Upper bound at the time of writing; the 4 == 8 team equality is the real pin.
-TOURNAMENT_RESPONSE_QUERIES: int = 23
+# Includes the OrgUserGameMmr prefetch in the users dict.
+TOURNAMENT_RESPONSE_QUERIES: int = 24
 
 
 class TournamentResponseOutputTests(TestCase):
@@ -96,7 +96,7 @@ class TournamentResponseQueryCountTests(TestCase):
             for fx in (self.small, self.large)
         ]
         self.assertEqual(counts[0], counts[1])
-        self.assertLessEqual(counts[0], TOURNAMENT_RESPONSE_QUERIES)
+        self.assertEqual(counts[0], TOURNAMENT_RESPONSE_QUERIES)
 
 
 class FreshCallerTests(TransactionTestCase):

@@ -1,17 +1,13 @@
-import pytest
-from django.conf import settings
 from django.test import TestCase, override_settings
 
 from app.models import CustomUser, League, Organization, PositionsModel
 from league.models import LeagueUser
-from org.models import OrgUser
 from steam.functions.mmr_calculation import (
     calculate_mmr_adjustment,
-    get_league_avg_gpm,
-    get_league_avg_kda,
     update_user_league_mmr,
 )
 from steam.models import LeaguePlayerStats
+from tests.populate.utils import ensure_org_user
 
 
 class TestMMRCalculation(TestCase):
@@ -29,9 +25,7 @@ class TestMMRCalculation(TestCase):
             organization=self.org,
             steam_league_id=12345,
         )
-        self.org_user = OrgUser.objects.create(
-            user=self.user, organization=self.org, mmr=4000
-        )
+        self.org_user = ensure_org_user(self.user, self.org, mmr=4000)
         self.league_user = LeagueUser.objects.create(
             user=self.user, org_user=self.org_user, league=self.league, mmr=0
         )
@@ -156,8 +150,7 @@ class TestMMRCalculation(TestCase):
 
     def test_update_user_league_mmr_no_base_mmr(self):
         """Should set league_mmr to 0 if user has no base mmr."""
-        self.org_user.mmr = 0
-        self.org_user.save()
+        ensure_org_user(self.user, self.org, mmr=0)
         update_user_league_mmr(self.user, organization=self.org, league=self.league)
         self.league_user.refresh_from_db()
         self.assertEqual(self.league_user.mmr, 0)
