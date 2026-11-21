@@ -1,9 +1,10 @@
-"""Team-draft timer lifecycle: helpers, endpoints, pick matrix, undo, auto-pause, tick payload (spec §2)."""
+"""Team-draft timer lifecycle: helpers, endpoints, pick matrix, undo, auto-pause, tick payload."""
 
 import asyncio
 import threading
 import time
 from datetime import timedelta
+from typing import Any
 from unittest.mock import PropertyMock, patch
 
 import redis
@@ -15,17 +16,18 @@ from channels.testing import WebsocketCommunicator
 from django.db import connection, transaction
 from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
-from django.urls import re_path, resolve, reverse
+from django.urls import ResolverMatch, re_path, resolve, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory
 
-from app.consumers import DraftConsumer
-from app.functions import teamdraft
-from app.models import Draft, DraftEvent, DraftOptions, Team, TeamDraftState
-from app.tasks import teamdraft_tick
-from app.tests.teamdraft_fixtures import TimedDraftFixture
-from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
+from app.models import Team
+from backend import asgi
+from discordbot.activity_auth import ActivitySocketMiddleware
+from draft.consumers.team import DraftConsumer
+from draft.models import Draft, DraftEvent, DraftOptions, TeamDraftState
+from draft.services import team as teamdraft
 from draft.tasks import draft_tick
+from draft.tasks import team_tick as teamdraft_tick
 from draft.tasks.draft_tick import (
     TickDriver,
     captain_channel_key,
@@ -35,6 +37,8 @@ from draft.tasks.draft_tick import (
     heartbeat_key,
     registry_for,
 )
+from draft.tests.team_fixtures import TimedDraftFixture
+from draft.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 from tests.test_teamdraft import expire_draft_clock, stale_draft_heartbeat
 
 
@@ -59,7 +63,7 @@ class LifecycleHelperTests(TestCase):
         self.assertEqual(teamdraft.team_payload(None)["captain_id"], None)
 
     def test_emit_event_broadcasts_only_after_commit(self):
-        with patch("app.broadcast.broadcast_event") as mock_bc:
+        with patch("draft.services.team_broadcast.broadcast_event") as mock_bc:
             with self.captureOnCommitCallbacks(execute=True) as callbacks:
                 ev = teamdraft.emit_event(
                     self.fx.draft,
@@ -260,6 +264,112 @@ class EndpointTestBase(TestCase):
             return self.post(user or self.fx.staff, path)
 
 
+EXPECTED_API_ROOT_KEYS: frozenset[str] = frozenset(
+    {
+        "claim-requests",
+        "draftrounds",
+        "drafts",
+        "games",
+        "leagues",
+        "organizations",
+        "teams",
+        "tournaments",
+        "tournaments-basic",
+        "tournaments-list",
+        "users",
+    }
+)
+
+TEAM_HTTP_ROUTES: tuple[tuple[str, str, str | None, str], ...] = (
+    (
+        "/api/draft/get-style-mmrs",
+        "draft.views.team_setup",
+        "get-draft-style-mmrs",
+        "get_draft_style_mmrs",
+    ),
+    ("/api/draft/register", "draft.views.team_api", None, "DraftCreateView"),
+    ("/api/draftround/register", "draft.views.team_api", None, "DraftRoundCreateView"),
+    (
+        "/api/tournaments/init-draft",
+        "draft.views.team_setup",
+        "init-draft",
+        "generate_draft_rounds",
+    ),
+    (
+        "/api/tournaments/draft-rebuild",
+        "draft.views.team_setup",
+        "draft-rebuild",
+        "rebuild_team",
+    ),
+    (
+        "/api/tournaments/pick_player",
+        "draft.views.team_picks",
+        "pick_player",
+        "pick_player_for_round",
+    ),
+    (
+        "/api/tournaments/undo-pick",
+        "draft.views.team_picks",
+        "undo-pick",
+        "undo_last_pick",
+    ),
+    (
+        "/api/draft/1/ready/",
+        "draft.views.team",
+        "teamdraft_ready",
+        "teamdraft_set_ready",
+    ),
+    ("/api/draft/1/start/", "draft.views.team", "teamdraft_start", "teamdraft_start"),
+    ("/api/draft/1/pause/", "draft.views.team", "teamdraft_pause", "teamdraft_pause"),
+    (
+        "/api/draft/1/resume/",
+        "draft.views.team",
+        "teamdraft_resume",
+        "teamdraft_resume",
+    ),
+    ("/api/drafts/", "draft.views.team_api", "drafts-list", "DraftView"),
+    ("/api/drafts/1/", "draft.views.team_api", "drafts-detail", "DraftView"),
+    ("/api/drafts.json", "draft.views.team_api", "drafts-list", "DraftView"),
+    ("/api/drafts/1.json", "draft.views.team_api", "drafts-detail", "DraftView"),
+    ("/api/draftrounds/", "draft.views.team_api", "draftrounds-list", "DraftRoundView"),
+    (
+        "/api/draftrounds/1/",
+        "draft.views.team_api",
+        "draftrounds-detail",
+        "DraftRoundView",
+    ),
+    (
+        "/api/draftrounds.json",
+        "draft.views.team_api",
+        "draftrounds-list",
+        "DraftRoundView",
+    ),
+    (
+        "/api/draftrounds/1.json",
+        "draft.views.team_api",
+        "draftrounds-detail",
+        "DraftRoundView",
+    ),
+)
+
+
+def _websocket_route(path: str) -> Any:
+    router: Any = asgi.application.application_mapping["websocket"]
+    while not isinstance(router, URLRouter):
+        router = getattr(router, "inner", None) or router.application
+    for route in router.routes:
+        if route.pattern.match(path):
+            return route.callback
+    return None
+
+
+def _view_target(match: ResolverMatch) -> tuple[str, str]:
+    view = getattr(match.func, "cls", None) or getattr(match.func, "view_class", None)
+    if view is not None:
+        return view.__module__, view.__name__
+    return match.func.__module__, match.func.__name__
+
+
 class RouteResolutionTests(TestCase):
     def test_hero_and_team_routes_resolve_to_their_own_views(self):
         for path in (
@@ -268,18 +378,36 @@ class RouteResolutionTests(TestCase):
             "/api/herodraft/1/resume/",
         ):
             self.assertEqual(resolve(path).func.__module__, "draft.views.hero", path)
-        for path, name in (
-            ("ready", "teamdraft_set_ready"),
-            ("start", "teamdraft_start"),
-            ("pause", "teamdraft_pause"),
-            ("resume", "teamdraft_resume"),
-        ):
-            func = resolve(f"/api/draft/1/{path}/").func
-            self.assertEqual(
-                (func.__module__, func.cls.__name__),
-                ("app.functions.teamdraft_views", name),
-                path,
-            )
+
+    def test_team_http_routes_resolve_with_unchanged_names(self) -> None:
+        for path, module, url_name, view in TEAM_HTTP_ROUTES:
+            match = resolve(path)
+            self.assertEqual(_view_target(match), (module, view), path)
+            self.assertEqual(match.url_name, url_name, path)
+
+    def test_team_draft_sockets_route_to_draft_consumer(self) -> None:
+        plain = _websocket_route("api/draft/1/")
+        self.assertEqual(
+            (plain.consumer_class.__module__, plain.consumer_class.__name__),
+            ("draft.consumers.team", "DraftConsumer"),
+        )
+        activity = _websocket_route("api/discord/activity/team-draft/1/")
+        self.assertIsInstance(activity, ActivitySocketMiddleware)
+        self.assertEqual(activity.kind, "team")
+        self.assertEqual(
+            (
+                activity.app.consumer_class.__module__,
+                activity.app.consumer_class.__name__,
+            ),
+            ("draft.consumers.team", "DraftConsumer"),
+        )
+        tournament = _websocket_route("api/tournament/1/")
+        self.assertEqual(tournament.consumer_class.__module__, "app.consumers")
+
+    def test_api_root_lists_draft_routers(self) -> None:
+        response = APIClient().get("/api/", HTTP_ACCEPT="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(frozenset(response.json()), EXPECTED_API_ROOT_KEYS)
 
     def test_moved_and_interleaved_routes_resolve(self) -> None:
         self.assertEqual(
@@ -595,7 +723,7 @@ class PickMatrixTests(EndpointTestBase):
 
     def test_broadcasts_are_deferred_to_commit(self):
         rnd = self.start()
-        with patch("app.broadcast.broadcast_event") as mock_bc:
+        with patch("draft.services.team_broadcast.broadcast_event") as mock_bc:
             with self.captureOnCommitCallbacks(execute=False) as callbacks:
                 self.assertEqual(self.fx.pick(rnd, rnd.captain).status_code, 201)
                 mock_bc.assert_not_called()
@@ -635,7 +763,7 @@ class PickTimingTests(TestCase):
     def test_client_picked_at_within_window_is_honoured(self):
         early = (self.rnd.started_at + timedelta(milliseconds=500)).isoformat()
         with patch(
-            "app.functions.draft_picks.timezone.now",
+            "draft.views.team_picks.timezone.now",
             return_value=self.rnd.started_at + timedelta(seconds=1),
         ):
             with self.captureOnCommitCallbacks(execute=True):
@@ -1005,7 +1133,7 @@ class TickPayloadTests(TestCase):
         )
         rnd.started_at = timezone.now()
         rnd.save()
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
+        with patch("draft.tasks.team_tick.get_connection_count", return_value=1):
             self.assertEqual(
                 teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, "")
             )
@@ -1020,7 +1148,7 @@ class TickPayloadTests(TestCase):
             teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
             (False, "no_connections"),
         )
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
+        with patch("draft.tasks.team_tick.get_connection_count", return_value=1):
             self.assertEqual(
                 teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, "")
             )
@@ -1110,7 +1238,7 @@ class AutoPauseTests(TransactionTestCase):
         self.r.set(self.hb, str(time.time()))
         self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
         freshness = async_to_sync(teamdraft_tick.broadcast_paused_freshness)
-        with patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=Layer()):
+        with patch("draft.tasks.team_tick.get_channel_layer", return_value=Layer()):
             freshness(self.fx.draft.pk)
             sent.clear()
             freshness(self.fx.draft.pk)
@@ -1143,7 +1271,7 @@ class AutoPauseTests(TransactionTestCase):
         self.r.delete(self.hb)
         self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
         freshness = async_to_sync(teamdraft_tick.broadcast_paused_freshness)
-        with patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=Layer()):
+        with patch("draft.tasks.team_tick.get_channel_layer", return_value=Layer()):
             freshness(self.fx.draft.pk)
             freshness(self.fx.draft.pk)
         mine = [m["fresh"] for m in sent if m["captain_id"] == self.rnd.captain_id]
@@ -1166,7 +1294,7 @@ class AutoPauseTests(TransactionTestCase):
         self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
         freshness = async_to_sync(teamdraft_tick.broadcast_paused_freshness)
         with (
-            patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=Layer()),
+            patch("draft.tasks.team_tick.get_channel_layer", return_value=Layer()),
             patch.object(teamdraft_tick.log, "error") as logged,
         ):
             freshness(self.fx.draft.pk)
@@ -1200,8 +1328,10 @@ class AutoPauseTests(TransactionTestCase):
         driver = teamdraft_tick.TeamDraftTickDriver()
         self.addCleanup(driver.forget, self.fx.draft.pk)
         with (
-            patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0),
-            patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=None),
+            patch(
+                "draft.tasks.team_tick.get_connection_count", return_value=0
+            ) as count,
+            patch("draft.tasks.team_tick.get_channel_layer", return_value=None),
         ):
             self.assertEqual(self.tick(driver), (True, ""))
             self.assertEqual(self.state(), TeamDraftState.DRAFTING)
@@ -1211,14 +1341,18 @@ class AutoPauseTests(TransactionTestCase):
             self.assertEqual(
                 driver.should_continue(self.fx.draft.pk), (False, "no_connections")
             )
+        count.assert_called()
 
     def test_no_connections_and_absent_active_captain_stops(self):
         self.assertFalse(self.active_team.draft_has_connected)
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0):
+        with patch(
+            "draft.tasks.team_tick.get_connection_count", return_value=0
+        ) as count:
             self.assertEqual(
                 teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
                 (False, "no_connections"),
             )
+        count.assert_called()
 
     def test_a_timeout_check_far_from_due_takes_no_write_lock(self):
         self.assertTrue(Draft.objects.get(pk=self.fx.draft.pk).clock_armed)
@@ -1237,8 +1371,8 @@ class AutoPauseTests(TransactionTestCase):
         driver = teamdraft_tick.TeamDraftTickDriver()
         self.addCleanup(driver.forget, self.fx.draft.pk)
         with (
-            patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1),
-            patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=None),
+            patch("draft.tasks.team_tick.get_connection_count", return_value=1),
+            patch("draft.tasks.team_tick.get_channel_layer", return_value=None),
             patch.object(
                 teamdraft_tick.transaction, "atomic", wraps=transaction.atomic
             ) as atomic,
@@ -1255,10 +1389,13 @@ class AutoPauseTests(TransactionTestCase):
         draft.state = TeamDraftState.PAUSED
         draft.save()
         driver = teamdraft_tick.TeamDraftTickDriver()
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0):
+        with patch(
+            "draft.tasks.team_tick.get_connection_count", return_value=0
+        ) as count:
             self.assertEqual(
                 driver.should_continue(self.fx.draft.pk), (False, "no_connections")
             )
+        count.assert_called()
 
     def test_resume_countdown_locks_only_when_due(self):
         draft = Draft.objects.get(pk=self.fx.draft.pk)
@@ -1283,8 +1420,8 @@ class AutoPauseTests(TransactionTestCase):
         driver = teamdraft_tick.TeamDraftTickDriver()
         self.addCleanup(driver.forget, self.fx.draft.pk)
         with (
-            patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1),
-            patch("app.tasks.teamdraft_tick.broadcast_paused_freshness") as freshness,
+            patch("draft.tasks.team_tick.get_connection_count", return_value=1),
+            patch("draft.tasks.team_tick.broadcast_paused_freshness") as freshness,
         ):
             self.tick(driver)
         freshness.assert_not_called()
@@ -1293,10 +1430,13 @@ class AutoPauseTests(TransactionTestCase):
         draft_pk = self.fx.draft.pk
         teamdraft_tick._paused_freshness[draft_pk] = {self.rnd.captain_id: True}
         stop = threading.Event()
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0):
+        with patch(
+            "draft.tasks.team_tick.get_connection_count", return_value=0
+        ) as count:
             async_to_sync(draft_tick.run_tick_loop)(
                 teamdraft_tick.TEAM_TICK_DRIVER, draft_pk, stop
             )
+        count.assert_called()
         self.assertNotIn(draft_pk, teamdraft_tick._paused_freshness)
 
     def test_unarmed_or_resuming_is_ignored(self):
@@ -1335,7 +1475,7 @@ class AutoPauseTests(TransactionTestCase):
         draft.save()
         with patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.assertEqual(self.fx.undo(self.fx.staff).status_code, 200)
-        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
+        with patch("draft.tasks.team_tick.get_connection_count", return_value=1):
             self.assertEqual(
                 teamdraft_tick.should_continue_ticking(draft.pk), (True, "")
             )

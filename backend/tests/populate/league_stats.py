@@ -15,15 +15,13 @@ from django.db import transaction
 
 from app.models import (
     CustomUser,
-    Draft,
-    DraftOptions,
     League,
     Organization,
     PositionsModel,
     Team,
-    TeamDraftState,
     Tournament,
 )
+from draft.models import Draft, DraftOptions, TeamDraftState
 from league.models import LeagueUser
 from steam.functions.stats_update import update_all_league_stats_for_league
 from steam.models import LeaguePlayerStats, Match, PlayerMatchStats

@@ -1,18 +1,9 @@
-"""
-WebSocket URL routing for draft events.
-"""
+"""Tournament WebSocket route; composed with draft.routing in backend/asgi.py."""
 
-from django.urls import path
+from django.urls import URLPattern, path
 
-from discordbot.activity_auth import ActivitySocketMiddleware
+from app.consumers import TournamentConsumer
 
-from . import consumers
-
-websocket_urlpatterns = [
-    path(
-        "api/discord/activity/team-draft/<int:draft_id>/",
-        ActivitySocketMiddleware(consumers.DraftConsumer.as_asgi(), "team"),
-    ),
-    path("api/draft/<int:draft_id>/", consumers.DraftConsumer.as_asgi()),
-    path("api/tournament/<int:tournament_id>/", consumers.TournamentConsumer.as_asgi()),
+websocket_urlpatterns: list[URLPattern] = [
+    path("api/tournament/<int:tournament_id>/", TournamentConsumer.as_asgi()),
 ]

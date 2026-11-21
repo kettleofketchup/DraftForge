@@ -21,16 +21,17 @@ backend/
 │   ├── permissions.py     # DRF permissions
 │   ├── serializers.py     # DRF serializers
 │   └── views.py           # API views
-├── draft/                 # Draft app (hero draft now; team draft next)
-│   ├── models/            # hero.py: HeroDraft, DraftTeam, rounds, events
-│   ├── services/          # Hero draft logic, state queryset, broadcasts
-│   ├── tasks/             # hero_tick.py (driver for app/tasks/draft_tick.py)
-│   ├── consumers/         # HeroDraftConsumer
-│   ├── serializers/       # Hero draft serializers
-│   ├── views/             # Hero draft HTTP, SSR and internal views
-│   ├── urls.py            # Public hero draft routes
+├── draft/                 # Draft app: hero draft and team draft
+│   ├── models/            # hero.py: HeroDraft, DraftTeam, rounds, events; team.py: Draft, DraftRound, DraftEvent, DraftOptions
+│   ├── services/          # hero_* and team_* logic, state querysets, broadcasts; shuffle.py, team_timeout.py, team_reset.py
+│   ├── tasks/             # draft_tick.py (shared tick runner), hero_tick.py and team_tick.py (drivers)
+│   ├── consumers/         # base.py (BaseDraftConsumer), hero.py (HeroDraftConsumer), team.py (DraftConsumer)
+│   ├── serializers/       # Hero and team draft serializers
+│   ├── views/             # Hero draft HTTP/SSR/internal views; team draft actions, picks, setup and REST viewsets
+│   ├── permissions.py     # CanEditDraft, CanEditDraftRound
+│   ├── urls.py            # Public hero and team draft routes
 │   ├── internal_urls.py   # Internal hero draft routes
-│   └── routing.py         # Hero draft WebSocket routes
+│   └── routing.py         # Hero and team draft WebSocket routes
 ├── backend/               # Django project settings
 │   ├── settings.py        # Main settings
 │   ├── urls.py            # URL routing
@@ -94,7 +95,7 @@ Aggregated player statistics per league:
 - Computed properties: `win_rate`, `avg_kda`, `avg_gpm`, `avg_xpm`
 
 ### Draft
-Draft configuration for tournaments:
+Draft configuration for tournaments (`draft.models.team`, table `app_draft`):
 
 - `tournament` - Associated tournament
 - `draft_style` - Style: `snake`, `normal`, or `shuffle`
@@ -254,13 +255,13 @@ The `ProtocolTypeRouter` in `backend/asgi.py` automatically routes connections b
 ```python
 # backend/app/routing.py
 websocket_urlpatterns = [
-    path("api/draft/<int:draft_id>/", DraftConsumer.as_asgi()),
     path("api/tournament/<int:tournament_id>/", TournamentConsumer.as_asgi()),
 ]
 
 # backend/draft/routing.py
 websocket_urlpatterns = [
     path("api/herodraft/<int:draft_id>/", HeroDraftConsumer.as_asgi()),
+    path("api/draft/<int:draft_id>/", DraftConsumer.as_asgi()),
 ]
 ```
 

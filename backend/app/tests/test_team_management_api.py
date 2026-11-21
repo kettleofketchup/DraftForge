@@ -52,12 +52,12 @@ from app.services import team_management
 from app.services.team_audit import log_snapshot_fields
 from app.services.team_references import team_references, team_usage
 from app.services.team_signals import TeamRosterChange, team_roster_changed
-from app.tests.test_draft_state_queries import make_fixture
 from app.tests.test_team_management import TeamManagementFixture
-from app.tournament_state import build_draft_state
 from app.views_main import TeamView
 from draft.models import DraftTeam, HeroDraft
 from draft.serializers.hero import HeroDraftSerializer
+from draft.services.team_state import build_draft_state
+from draft.tests.team_fixtures import mid_draft_fixture
 from events.models import EventTeam
 from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
 from user.tests.test_cacheops_integration import _redis_reachable
@@ -251,7 +251,7 @@ class ResponseSerializerTests(TeamManagementFixture, TestCase):
         self.assertNotIn("teams", user_data)
         self.assertNotIn("leadership_problems", _dumps(user_data))
 
-        fx = make_fixture(4, "lp4")
+        fx = mid_draft_fixture(4, "lp4")
         state = build_draft_state(fx.draft.pk, fresh=True)
         self.assertNotIn("leadership_problems", _dumps(state))
 

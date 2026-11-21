@@ -162,7 +162,7 @@ The store captures `serverClockOffsetMs = server_time - Date.now()` once on ever
 
 ### Shared tick runner
 
-`app/tasks/draft_tick.py` owns the Redis-locked 1 Hz loop, the prefix-keyed Redis keys (`<prefix>:connections:<id>`, `<prefix>:tick_lock:<id>`, `<prefix>:<id>:captain:<uid>:heartbeat`) and a per-prefix in-process registry. `draft/tasks/hero_tick.py` binds it to `"herodraft"` through `HeroDraftTickDriver`, so span names stay `herodraft.tick.*` and payloads are unchanged.
+`draft/tasks/draft_tick.py` owns the Redis-locked 1 Hz loop, the prefix-keyed Redis keys (`<prefix>:connections:<id>`, `<prefix>:tick_lock:<id>`, `<prefix>:<id>:captain:<uid>:heartbeat`) and a per-prefix in-process registry. `draft/tasks/hero_tick.py` binds it to `"herodraft"` through `HeroDraftTickDriver`, so span names stay `herodraft.tick.*` and payloads are unchanged. `draft/tasks/team_tick.py` binds the same runner to `"teamdraft"` for the team draft.
 
 `BaseDraftConsumer` splits `get_room_group_prefix()` (channel group) from `get_redis_prefix()` (Redis keys). The team draft (`DraftConsumer`) uses prefix `teamdraft` and shares the same base. The frontend countdown math lives in `~/lib/draftClock` (`captureClockOffset`, `remaining`, `useAnimationFrameClock`, `startHeartbeatLoop`).
 
@@ -231,11 +231,11 @@ Every WS-lifecycle span carries `ws.conn_id` (plus `ws.draft_id` and `user.id` w
 
 | Span | Emitted by | Useful attributes |
 |------|-----------|-------------------|
-| `ws.connect`, `ws.disconnect`, `ws.heartbeat`, `ws.message` | `consumers_base.py` | `ws.conn_id`, `ws.draft_id`, `user.id`, `ws.consumer` |
-| `ws.captain_register`, `ws.captain_unregister` | `consumers_base.py` | same base attrs; unregister also tags `ws.captain_unregistered` (bool) and `ws.skipped_reason` |
+| `ws.connect`, `ws.disconnect`, `ws.heartbeat`, `ws.message` | `draft/consumers/base.py` | `ws.conn_id`, `ws.draft_id`, `user.id`, `ws.consumer` |
+| `ws.captain_register`, `ws.captain_unregister` | `draft/consumers/base.py` | same base attrs; unregister also tags `ws.captain_unregistered` (bool) and `ws.skipped_reason` |
 | `herodraft.submit_pick` | `draft/services/hero.py` | `ws.draft_id`, `draft.team_id`, `draft.hero_id`, `draft.client_picked_at`, `draft.round_number`, `draft.action_type`, `draft.elapsed_ms`, `draft.grace_used_ms`, `draft.reserve_used_ms`, `draft.reserve_before_ms`, `draft.reserve_after_ms`, `draft.pick_time_source` (`client` or `server_now`), `draft.pick_time_age_ms`, `draft.next_round_number`, `draft.completed` |
-| `herodraft.tick.iteration` | `app/tasks/draft_tick.py` (loop) / `draft/tasks/hero_tick.py` (driver) | `ws.draft_id`, `tick.iteration`, `tick.duration_s`, `tick.outcome`, `tick.stop_reason` |
-| `herodraft.tick.<step>` | `app/tasks/draft_tick.py` (loop) / `draft/tasks/hero_tick.py` (driver) | child of `tick.iteration`. Steps: `resume_countdown`, `captain_heartbeats`, `broadcast_tick`, `check_timeout`, `extend_lock`. Each carries `tick.step_duration_s` |
+| `herodraft.tick.iteration` | `draft/tasks/draft_tick.py` (loop) / `draft/tasks/hero_tick.py` (driver) | `ws.draft_id`, `tick.iteration`, `tick.duration_s`, `tick.outcome`, `tick.stop_reason` |
+| `herodraft.tick.<step>` | `draft/tasks/draft_tick.py` (loop) / `draft/tasks/hero_tick.py` (driver) | child of `tick.iteration`. Steps: `resume_countdown`, `captain_heartbeats`, `broadcast_tick`, `check_timeout`, `extend_lock`. Each carries `tick.step_duration_s` |
 
 `herodraft.submit_pick` runs inside the parent `ws.message` span, so a single trace shows: client message arrives → handler dispatches → pick logic → DB commit → broadcast. Look for the trace by `ws.draft_id` or via the `traceID` derived field on any associated log line.
 
@@ -701,7 +701,7 @@ All components have `data-testid` attributes for Playwright testing:
 ### Backend Tests
 
 ```bash
-just test::run 'python manage.py test draft.tests.test_hero_consumers draft.tests.test_hero_stale_connection app.tests.test_draft_tick -v 2'
+just test::run 'python manage.py test draft.tests.test_hero_consumers draft.tests.test_hero_stale_connection draft.tests.test_draft_tick -v 2'
 ```
 
 Key test: `test_pause_resume_timing_adjustment` - verifies that pause duration + countdown is correctly added to `started_at`.

@@ -14,11 +14,11 @@ from django.urls import re_path
 from django.utils import timezone
 
 from app.models import Game, Team, Tournament
-from app.tests.ws_helpers import read_until_type
 from draft.consumers.hero import HeroDraftConsumer
 from draft.models import DraftTeam, HeroDraft, HeroDraftRound, HeroDraftState
 from draft.tasks import hero_tick
 from draft.tasks.hero_tick import HERO_TICK_DRIVER
+from draft.tests.ws_helpers import read_until_type
 
 User = get_user_model()
 

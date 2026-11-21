@@ -13,23 +13,14 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app.models import (
-    CustomUser,
-    Draft,
-    Game,
-    League,
-    Organization,
-    Team,
-    TeamDraftState,
-    Tournament,
-)
+from app.models import CustomUser, Game, League, Organization, Team, Tournament
 from discordbot.activity_auth import issue_activity_token
 from discordbot.activity_intent import peek_intent, record_intent
 from discordbot.activity_roles import draft_role
 from discordbot.activity_views import ActivityViewsThrottle
 from discordbot.models import DraftActivityInstance
 from discordbot.tests.activity_helpers import ClearIntentsMixin
-from draft.models import DraftTeam, HeroDraft, HeroDraftState
+from draft.models import Draft, DraftTeam, HeroDraft, HeroDraftState, TeamDraftState
 
 URL = "/api/discord/activity/drafts/"
 VIEWS_URL = "/api/discord/activity/views/"

@@ -1,17 +1,18 @@
-"""Team-draft timeout actions (spec §2)."""
+"""Team-draft timeout actions."""
 
 from collections.abc import Callable
 
 from django.utils import timezone
 
-from app.functions.shuffle_draft import reassign_round_captain
-from app.functions.teamdraft import (
+from app.models import Team
+from draft.models import Draft, DraftRound, TimeoutAction
+from draft.services.shuffle import reassign_round_captain
+from draft.services.team import (
     activate_round,
     emit_event,
     team_for_round,
     team_payload,
 )
-from app.models import Draft, DraftRound, Team, TimeoutAction
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

@@ -8,7 +8,6 @@ from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from app.models import CustomUser, Game, Team, Tournament
-from app.services.draft_reset import reset_draft_teams
 from app.services.team_management import follow_captain
 from draft.models import (
     HeroDraft,
@@ -23,6 +22,7 @@ from draft.services.hero_chat import (
     resolve_chat_viewer,
     visible_messages,
 )
+from draft.services.team_reset import reset_draft_teams
 from draft.views.hero import reset_draft
 from tests.test_demo import _reset_demo_herodraft
 from tests.test_herodraft import (
