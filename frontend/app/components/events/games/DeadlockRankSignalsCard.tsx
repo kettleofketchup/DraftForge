@@ -25,6 +25,7 @@ export function DeadlockRankSignalsCard({
         {rank ? (
           <span className="flex items-center">
             <Badge
+              data-testid="rank-signals-deadlock-rank-value"
               variant="outline"
               className="px-1.5 py-0 text-xs font-medium text-rank-ranked border-rank-ranked/30"
             >
