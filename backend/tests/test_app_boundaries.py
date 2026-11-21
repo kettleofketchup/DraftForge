@@ -349,10 +349,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "LeagueSerializer.organization_id and UserSerializer."
             "default_organization read Organization at class definition",
         ),
-        "app/services/match_finalization.py": BackEdge(
-            frozenset({"LEAGUE_GAME", "org_mmr_map"}),
-            "league rating creation seeds base MMR from the league org's Dota 2 org MMR",
-        ),
         "app/services/team_leadership.py": BackEdge(
             frozenset({"OrgUser", "OrgUserGameMmr", "game_for_tournament"}),
             "captain succession falls back to the highest org MMR (tournament game) "
