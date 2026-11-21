@@ -13,6 +13,7 @@ import {
 } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { OrgFeatureAccess } from '~/features/org-features';
+import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import {
   createManualAward,
   deleteManualAward,
@@ -74,16 +75,11 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
 });
 
-const base: OrgFeatureAccess = {
-  settled: true,
+const base: OrgFeatureAccess = makeOrgFeatureAccess({
   viewerPk: 5,
-  canUsePromotion: false,
-  canManageTemplates: false,
-  canManagePromoters: false,
   canViewContributions: true,
   canViewContributors: true,
-  canManageContributions: false,
-};
+});
 const admin: OrgFeatureAccess = { ...base, canManageContributions: true };
 
 const pointValues: PointValueRow[] = [

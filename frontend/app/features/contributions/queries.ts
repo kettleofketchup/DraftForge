@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query';
 import {
   contributionsKeys,
+  invalidateContributionQueries,
   type OrgFeatureAccess,
 } from '~/features/org-features';
 import {
@@ -103,9 +104,7 @@ function useInvalidateContributions(
 ): () => Promise<void> {
   const queryClient = useQueryClient();
   return () =>
-    queryClient.invalidateQueries({
-      queryKey: contributionsKeys.all(orgId, access.viewerPk),
-    });
+    invalidateContributionQueries(queryClient, orgId, access.viewerPk);
 }
 
 export function useSetPointValue(

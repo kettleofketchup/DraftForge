@@ -1,10 +1,13 @@
 import type { QueryClient } from '@tanstack/react-query';
+import type { TrackKey } from '~/features/standing/schemas';
 
 type ViewerPk = number | null;
 type Filters = object;
 
 const CONTRIBUTIONS = 'org-contributions';
 const PROMOTION = 'org-promotion';
+const STANDING = 'org-standing';
+const CONDUCT = 'org-conduct';
 
 export const contributionsKeys = {
   all: (orgId: number, viewerPk: ViewerPk) =>
@@ -50,6 +53,55 @@ export const promotionKeys = {
     ] as const,
 };
 
+export const standingKeys = {
+  all: (orgId: number, viewerPk: ViewerPk) =>
+    [STANDING, orgId, viewerPk] as const,
+  track: (orgId: number, viewerPk: ViewerPk, track: TrackKey) =>
+    [...standingKeys.all(orgId, viewerPk), track] as const,
+  leaderboard: (
+    orgId: number,
+    viewerPk: ViewerPk,
+    track: TrackKey,
+    metricKey: string,
+    period: string,
+  ) =>
+    [
+      ...standingKeys.track(orgId, viewerPk, track),
+      'leaderboard',
+      metricKey,
+      period,
+    ] as const,
+};
+
+export const conductKeys = {
+  all: (orgId: number, viewerPk: ViewerPk) =>
+    [CONDUCT, orgId, viewerPk] as const,
+  member: (
+    orgId: number,
+    viewerPk: ViewerPk,
+    orgUserPk: number,
+    page: { limit: number; offset: number },
+  ) =>
+    [...conductKeys.all(orgId, viewerPk), 'member', orgUserPk, page] as const,
+  settings: (orgId: number, viewerPk: ViewerPk) =>
+    [...conductKeys.all(orgId, viewerPk), 'settings'] as const,
+};
+
+export async function invalidateContributionQueries(
+  queryClient: QueryClient,
+  orgId: number,
+  viewerPk: ViewerPk,
+): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: contributionsKeys.all(orgId, viewerPk),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: standingKeys.track(orgId, viewerPk, 'contribution'),
+    }),
+  ]);
+}
+
 export const orgFeaturesKey = (orgId: number) =>
   ['org-features', orgId] as const;
 
@@ -59,5 +111,7 @@ export function removeFeatureQueries(
 ): void {
   queryClient.removeQueries({ queryKey: [CONTRIBUTIONS, orgId] });
   queryClient.removeQueries({ queryKey: [PROMOTION, orgId] });
+  queryClient.removeQueries({ queryKey: [STANDING, orgId] });
+  queryClient.removeQueries({ queryKey: [CONDUCT, orgId] });
   queryClient.removeQueries({ queryKey: orgFeaturesKey(orgId) });
 }

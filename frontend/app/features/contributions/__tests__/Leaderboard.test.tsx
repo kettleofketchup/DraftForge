@@ -10,6 +10,7 @@ import {
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { OrgFeatureAccess } from '~/features/org-features';
+import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { getLeaderboard, getMemberBreakdown } from '../api';
 import { ContributionsTab } from '../ContributionsTab';
 import type { LeaderboardRow } from '../schemas';
@@ -27,16 +28,11 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
 });
 
-const access: OrgFeatureAccess = {
-  settled: true,
+const access: OrgFeatureAccess = makeOrgFeatureAccess({
   viewerPk: 5,
-  canUsePromotion: false,
-  canManageTemplates: false,
-  canManagePromoters: false,
   canViewContributions: true,
   canViewContributors: true,
-  canManageContributions: false,
-};
+});
 
 function row(
   orgUserPk: number,
