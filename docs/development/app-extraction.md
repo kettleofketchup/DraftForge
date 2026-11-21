@@ -284,14 +284,14 @@ Here the model name `draft` is the same as the app label. The `model__in` filter
 For the organization slice, the clean rollback is:
 
 ```bash
-python manage.py migrate app 0109
-python manage.py migrate events 0033
+python manage.py migrate app 0110
+python manage.py migrate events 0034
 python manage.py migrate opsnotices 0002
-python manage.py migrate org 0012
+python manage.py migrate org 0013
 python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='org', model__in=['organization', 'orglog']).delete()"
 ```
 
-`migrate app 0109` reverses the relabel first. Never delete `app_label='org'` alone: `org` holds many other models (`OrgUser`, `OrgFeature`, `OrgSettings` and more), and the delete would cascade through all their permissions and grants. If the prep PR (3a) shipped and the model-move PR (3b) is rolled back, 3a stays: it has no migrations.
+`migrate app 0110` reverses the relabel first. Never delete `app_label='org'` alone: `org` holds many other models (`OrgUser`, `OrgFeature`, `OrgSettings` and more), and the delete would cascade through all their permissions and grants. If the prep PR (3a) shipped and the model-move PR (3b) is rolled back, 3a stays: it has no migrations.
 
 !!! danger "Never delete by `app_label` alone"
     `ContentType.objects.filter(app_label='<new_app>').delete()` also hits every other model in the destination app, including slices moved earlier. The delete cascades through `auth_permission`, `auth_user_user_permissions` and `auth_group_permissions`, so their real grants are wiped, and `django_admin_log.content_type` is set to NULL for their log entries. Always filter on the moved model names.
@@ -318,9 +318,10 @@ python manage.py shell -c "from django.contrib.contenttypes.models import Conten
 - **Serializers used at class-definition time in the source app stay until their consumer moves**, even when their own domain has left. `OrganizationsSerializer` stays in `app.serializers` because `LeagueSerializer` and `LeaguesSerializer` declare it as a field.
 - **Shared pipelines with one front door per domain move whole when the last foreign door leaves.** `app/views/csv_import.py` serves both the org and the tournament import, so it stays in `app` until the tournament slice.
 - **Check whether the moved models are registered in admin before promising admin URL changes.** Neither `Organization` nor `OrgLog` has an admin, so no admin URL changed.
-- **Inbound FK retargets inside the target app go in the target app's create migration, after the `CreateModel`s.** `org/0013` creates `Organization` and `OrgLog` and then retargets the seven `org` FKs; `events/0034` and `opsnotices/0003` depend on it, and `app/0110` depends on all three.
+- **Inbound FK retargets inside the target app go in the target app's create migration, after the `CreateModel`s.** `org/0014` creates `Organization` and `OrgLog` and then retargets the nine `org` FKs; `events/0035` and `opsnotices/0003` depend on it, and `app/0111` depends on all three.
 - **Expect a long first back-edge list when the target app already exists.** The guard counts pre-existing source-to-target imports (`app` importing `org.models.OrgUser`, `org.membership` and so on) as back-edges, so the first `ALLOWED_BACK_EDGES["org"]` list is long by construction and shrinks as later slices leave `app`.
 - **Split slices into an existing app as prep plus model move.** The prep PR adds the slice's guard entry with the code-move `moved` names, `retired_modules`, empty `model_labels`/`cached_labels` and the full pre-existing back-edge list. The model-move PR adds the model labels, cache labels and model `moved` pairs. That keeps the prep PR protected while it sits on `main`.
-- **An existing target app's migrations are not exempt from the ancestry check; only the source app's are.** `org` already had migrations naming `app.organization`. A later `org` migration cut from pre-move `main` that still points at `app.organization` must be an ancestor of `app/0110`, or `migrate` fails with an unresolved lazy reference.
+- **An existing target app's migrations are not exempt from the ancestry check; only the source app's are.** `org` already had migrations naming `app.organization`. A later `org` migration cut from pre-move `main` that still points at `app.organization` must be an ancestor of `app/0111`, or `migrate` fails with an unresolved lazy reference. `org/0013_conduct` landed on `main` mid-slice with two FKs to `app.organization`; `org/0014` depends on it, which puts it before the move.
+- **A source-app migration that alters a moved model lands in the move's `CreateModel`.** `app/0110_orglog_conduct_actions` added three `OrgLog.action` choices on `main` while the slice was open. The move migrations follow it (`org/0014` and `app/0111` depend on it), and `org/0014`'s `CreateModel(OrgLog)` carries the same choices, so `makemigrations --check` stays clean.
 - **When a source module is renamed, carry every earlier slice's `moved` entries for it over to the new path.** The guard's redefinition and patch-string checks are keyed on the module path, so `TEAM_DRAFT.moved` lists `CanEditDraft` and `CanEditDraftRound` under both `app.permissions_org` and `app.permissions_tournament`.
 - **Lazy FK strings from the source app to the new app are not import edges.** `"org.Organization"` in `app/models.py` is not in `ALLOWED_BACK_EDGES`. List such strings in the slice's spec and in the slice table note above.

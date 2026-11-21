@@ -24,17 +24,20 @@ REFERRING_TABLES = (
     "org_orguser",
     "events_event",
     "opsnotices_opsnotice",
+    "org_orgconductsettings",
+    "org_attendanceoutcome",
 )
 BEFORE_MOVE = [
-    ("app", "0109_move_team_draft_models_to_draft"),
-    ("org", "0012_merge_orgsettings_rank_declared_at"),
-    ("events", "0033_eventsignup_eligibility_checked_at_and_more"),
+    ("app", "0110_orglog_conduct_actions"),
+    ("org", "0013_conduct"),
+    ("events", "0034_event_conduct_finalized_at"),
     ("opsnotices", "0002_opsnotice_emit_id_uniq"),
 ]
-MOVE_MIGRATION = ("app", "0110_move_organization_models_to_org")
+MOVE_MIGRATION = ("app", "0111_move_organization_models_to_org")
 RETARGETS = (
-    ("org", "0013_move_organization_models_from_app"),
-    ("events", "0034_retarget_organization_to_org"),
+    ("org", "0013_conduct"),
+    ("org", "0014_move_organization_models_from_app"),
+    ("events", "0035_retarget_organization_to_org"),
     ("opsnotices", "0003_retarget_organization_to_org"),
 )
 APP = "app"
@@ -120,6 +123,12 @@ class OrganizationMoveMigrationTests(TransactionTestCase):
         OrgLog.objects.create(
             organization=org, actor=owner, action="add_admin", target_user=admin
         )
+        OrgLog.objects.create(
+            organization=org,
+            actor=owner,
+            action="finalize_attendance",
+            details={"event_id": 1, "outcomes": 3},
+        )
         OrgUser.objects.create(user=admin, organization=org)
         League.objects.create(
             name="Org Move League", organization=org, steam_league_id=99111
@@ -147,7 +156,7 @@ class OrganizationMoveMigrationTests(TransactionTestCase):
                 "app_organization_admins": 1,
                 "app_organization_staff": 1,
                 "app_organization_promoters": 1,
-                "app_orglog": 1,
+                "app_orglog": 2,
             },
         )
         sql_before = _table_sql()
@@ -169,7 +178,15 @@ class OrganizationMoveMigrationTests(TransactionTestCase):
         self.assertEqual(
             League.objects.get(steam_league_id=99111).organization_id, org.pk
         )
-        self.assertEqual(OrgLog.objects.get(organization=org).action, "add_admin")
+        self.assertEqual(
+            sorted(
+                OrgLog.objects.filter(organization=org).values_list("action", "details")
+            ),
+            [
+                ("add_admin", {}),
+                ("finalize_attendance", {"event_id": 1, "outcomes": 3}),
+            ],
+        )
 
     def test_duplicate_contenttypes_survive_both_directions(self) -> None:
         original, _ = ContentType.objects.get_or_create(
@@ -191,7 +208,7 @@ class OrganizationMoveMigrationTests(TransactionTestCase):
         self.assertEqual(self._labels(ids), expected)
         self._assert_grant(perm, user, group, original.pk)
 
-    def test_retargets_precede_app_0110(self) -> None:
+    def test_retargets_precede_app_0111(self) -> None:
         plan = MigrationLoader(connection).graph.forwards_plan(MOVE_MIGRATION)
         for retarget in RETARGETS:
             self.assertIn(retarget, plan)
