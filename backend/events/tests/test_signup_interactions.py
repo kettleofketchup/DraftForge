@@ -5,10 +5,13 @@ from structlog.contextvars import clear_contextvars
 
 from app.models import CustomUser, GameType
 from events.constants import EventState
+from events.discord import handle_previous_rank_submit, handle_rank_medal_select
 from events.models import EventSignup
 from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
+
+DISCORD_ID = "100000000000000001"
 
 
 class HandleSignupButtonTest(EventTestCase):
@@ -355,6 +358,27 @@ class HandleRankMedalSelectTest(EventTestCase):
         self.assertIsInstance(patch_arg, SignupInputPatch)
         self.assertEqual(patch_arg.rank_medal, "Legend 3")
 
+    def test_active_rank_without_screenshot_needs_screenshot(self) -> None:
+        self.event.discord_require_rank_screenshot = True
+        self.event.save()
+
+        result = handle_rank_medal_select(self.event.pk, DISCORD_ID, "Legend 3")
+
+        self.assertEqual(
+            result, {"action": "needs_screenshot", "screenshot_type": "rank"}
+        )
+
+    def test_previous_rank_never_needs_screenshot(self) -> None:
+        self.event.discord_require_rank_screenshot = True
+        self.event.save()
+        PlayerDotaProfile.objects.filter(org_user=self.org_user).update(
+            rank_status="previous"
+        )
+
+        result = handle_rank_medal_select(self.event.pk, DISCORD_ID, "Legend 3")
+
+        self.assertEqual(result["action"], "signed_up")
+
 
 class HandleRankStatusSelectTest(EventTestCase):
     def setUp(self):
@@ -429,6 +453,19 @@ class HandlePreviousRankSubmitTest(EventTestCase):
         patch_arg = spy.call_args.kwargs["patch"]
         self.assertIsInstance(patch_arg, SignupInputPatch)
         self.assertEqual(patch_arg.rank_medal, "Legend 4")
+
+    def test_previous_rank_never_needs_screenshot(self) -> None:
+        self.event.discord_require_rank_screenshot = True
+        self.event.save()
+        PlayerDotaProfile.objects.create(
+            org_user=self.org_user, rank_status="previous", pos_1=True
+        )
+
+        result = handle_previous_rank_submit(
+            self.event.pk, DISCORD_ID, "Legend 4", "2024"
+        )
+
+        self.assertEqual(result["action"], "signed_up")
 
 
 class HandleBattleCupSubmitTest(EventTestCase):

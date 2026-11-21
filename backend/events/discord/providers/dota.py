@@ -44,6 +44,15 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
+def _awaiting_rank_screenshot(event: Event, profile: PlayerDotaProfile) -> bool:
+    """A medal pick is an active or previous rank; an unset status counts as active."""
+    status = "previous" if profile.rank_status == "previous" else "active"
+    return (
+        dota_require_screenshot(status, DotaModalConfig.from_event(event))
+        and not profile.rank_screenshot
+    )
+
+
 def _check_dota_profile_complete(org_user: OrgUser, event: Event | None = None) -> bool:
     """Check if OrgUser has a complete Dota 2 profile for the given event."""
     try:
@@ -161,7 +170,7 @@ class DotaHandler:
             pass
 
     def rank_medal_select(self, event: Event, discord_user_id: str, medal: str) -> dict:
-        """Handle active rank medal selection. Saves medal and signs up."""
+        """Handle an active or previous rank medal pick. Saves medal and signs up."""
         from events.services import apply_signup_input
 
         org_user, user = _get_org_user(event, discord_user_id)
@@ -183,7 +192,7 @@ class DotaHandler:
             return {"action": "error", "message": msg}
 
         # Check if screenshot required before completing signup
-        if event.discord_require_rank_screenshot and not profile.rank_screenshot:
+        if _awaiting_rank_screenshot(event, profile):
             _log_interaction(event.pk, "awaiting_rank_screenshot", discord_user_id)
             return {
                 "action": "needs_screenshot",
@@ -235,7 +244,7 @@ class DotaHandler:
             return {"action": "error", "message": msg}
 
         # Check if screenshot required before completing signup
-        if event.discord_require_rank_screenshot and not profile.rank_screenshot:
+        if _awaiting_rank_screenshot(event, profile):
             _log_interaction(event.pk, "awaiting_rank_screenshot", discord_user_id)
             return {
                 "action": "needs_screenshot",
