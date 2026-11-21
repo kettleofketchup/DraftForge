@@ -13,6 +13,7 @@ from org.contributions.queries import (
     leaderboard,
     member_entries,
     member_monthly,
+    member_overview,
     member_totals,
     org_total,
 )
@@ -246,6 +247,20 @@ class ContributionQueriesTest(TestCase):
             member_totals(self._org_user(self.carol, self.other_org), now=NOW),
             {"all_time": 100, "this_month": 100},
         )
+
+    def test_member_overview_matches_totals_and_monthly(self) -> None:
+        self._seed()
+        for ou in (
+            self._org_user(self.alice),
+            self._org_user(self.carol, self.other_org),
+        ):
+            self.assertEqual(
+                member_overview(ou, now=NOW),
+                {
+                    "totals": member_totals(ou, now=NOW),
+                    "monthly": member_monthly(ou, now=NOW),
+                },
+            )
 
     def test_bad_timezone_org_still_works(self) -> None:
         self._seed()

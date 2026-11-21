@@ -231,6 +231,14 @@ urlpatterns = [
         include("org.contributions.urls"),
     ),
     path(
+        "api/organizations/<int:org_id>/standing/",
+        include("org.standing.urls"),
+    ),
+    path(
+        "api/organizations/<int:org_id>/conduct/",
+        include("org.conduct.urls"),
+    ),
+    path(
         "api/organizations/<int:org_id>/promotion/",
         include("org.promotion.urls"),
     ),

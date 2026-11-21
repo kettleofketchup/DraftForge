@@ -9,6 +9,7 @@ import { heroMatchesSearch } from '~/lib/dota/heroes';
 import { cn } from '~/lib/utils';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
 import { HeroSuggestMenu } from './chat/HeroSuggestMenu';
+import { isOverlaidByOtherLayer } from './keyboardLayers';
 
 // Memoized hero button to prevent re-renders
 // IMPORTANT: Don't pass searchQuery directly - pass pre-computed booleans instead
@@ -80,19 +81,11 @@ interface HeroGridProps {
   showActionButton: boolean;
   /** Current action type (ban or pick) for visual feedback */
   currentAction?: 'ban' | 'pick';
-  /** Whether it's the current user's turn */
   isMyTurn?: boolean;
   canSuggest?: boolean;
 }
 
 const KEYDOWN_IGNORE_SELECTOR = '[data-herodraft-chat], [role="menu"]';
-
-function isOverlaidByOtherLayer(grid: HTMLElement | null): boolean {
-  const layers = document.querySelectorAll(
-    '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
-  );
-  return Array.from(layers).some((layer) => !layer.contains(grid));
-}
 
 type HeroAttribute = 'str' | 'agi' | 'int' | 'all';
 
@@ -137,7 +130,6 @@ export function HeroGrid({
   // Auto-focus search when typing anywhere (unless in a dialog/input)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Skip if already focused on an input or textarea
       const activeEl = document.activeElement;
       if (
         activeEl instanceof HTMLInputElement ||
@@ -155,12 +147,10 @@ export function HeroGrid({
 
       // Only handle printable characters (single character, no ctrl/alt/meta)
       if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        // Focus the input and let the keypress naturally type into it
         searchInputRef.current?.focus();
         // Don't prevent default - let the key go through to the now-focused input
       }
 
-      // Handle Escape to clear search
       if (e.key === 'Escape') {
         e.preventDefault();
         setSearchQuery('');
@@ -172,7 +162,6 @@ export function HeroGrid({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [setSearchQuery]);
 
-  // Memoize used hero IDs to prevent recalculation unless rounds change
   const usedHeroIds = useMemo(() => {
     if (!draftRounds) return [];
     return draftRounds
@@ -213,7 +202,6 @@ export function HeroGrid({
     [setSelectedHeroId, onHeroClick],
   );
 
-  // Determine overlay color based on current action when it's user's turn
   const actionOverlay =
     isMyTurn && currentAction
       ? currentAction === 'ban'

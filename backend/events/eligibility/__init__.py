@@ -43,6 +43,8 @@ from events.eligibility.store import (
     clear_eligibility,
     eligibility_values,
     recheck_signup,
+    refresh_members_eligibility,
+    refresh_org_eligibility,
     refresh_unmet_requirements,
     stamp_eligibility,
 )
@@ -85,6 +87,8 @@ __all__ = [
     "has_steam_id",
     "is_skill_gated",
     "recheck_signup",
+    "refresh_members_eligibility",
+    "refresh_org_eligibility",
     "refresh_unmet_requirements",
     "stamp_eligibility",
     "steam_friend_id_from_profiles",

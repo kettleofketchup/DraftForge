@@ -195,7 +195,7 @@ The eight entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`
 
 `promoter` is a member of `Organization.promoters`. The role only does anything while
 the org's **Promotion** feature is unlocked: then it opens the Promotion dashboard and
-nothing else. In the auth matrix org (pk=8) Contributions and Promotion both stay
+nothing else. In the auth matrix org (pk=8) Contributions, Promotion and Conduct all stay
 **locked**, so the `promoter` column above reads the same as `orgMember`. For a private
 member list a promoter also counts as a plain member.
 
@@ -203,7 +203,7 @@ The locked-feature gates are checked against the dedicated org-features test dat
 (orgs 40-42, users 7300-7307; see
 [Organization Locked Features](../../features/organization-locked-features.md)) by the
 backend permission tests (`org/tests/test_features_api.py`, `test_promoters.py`,
-`test_contributions_api.py`, `test_promotion_api.py`,
+`test_contributions_api.py`, `test_promotion_api.py`, `test_conduct_api.py`,
 `events/tests/test_event_staff_api.py`) and the Playwright specs in
 `frontend/tests/playwright/e2e/19-org-features/`, which log in with
 `loginOrgFeatures(context, role)`.
@@ -226,8 +226,26 @@ earns no points from promo sends. A denial from a switched endpoint is a `403` w
 the axios interceptor skips the "Session expired" toast for both. The frontend reads
 the per-viewer flags on the org detail (`can_use_promotion`,
 `can_manage_promotion_templates`, `can_manage_promoters`, `can_view_contributions`,
-`can_view_contributors`, `can_manage_contributions`) through `useOrgFeatureAccess`, and
+`can_view_contributors`, `can_manage_contributions`, `can_view_conduct`,
+`can_view_own_conduct`, `can_view_conduct_details`, `can_manage_conduct`) through
+`useOrgFeatureAccess`, and
 `user_can_manage_event_staff` on the event payload.
+
+### Conduct
+
+| Action | Who | Switch |
+| ------ | --- | ------ |
+| Edit conduct settings (scoring, late cancel, visibility, enforcement) | org owner, admin | Conduct |
+| Conduct ranking (public) | anyone; ranked rows need `can_view_org_members`, others see their own row | Conduct |
+| Conduct ranking (private) | org staff and above; members see only their own row; non-members `not_permitted` | Conduct |
+| A member's attendance history | the member themselves, or org staff and above | Conduct |
+| Staff reasons and editor on history rows | org staff and above | Conduct |
+| Attendance panel: view and edit outcomes, add walk-ins | event staff (`has_event_staff_access`: org staff and above, or league staff of the event's league) | Conduct |
+| Turnout forecast and show-rate badges | event staff | Conduct |
+| Override Block or Require approval | whoever may staff-add or approve the signup | Conduct |
+
+The event page shows the forecast, badges and Attendance panel when the event payload's
+`user_can_manage` is true and the event's org has `conduct` in `features`.
 
 ## Adding a New Gate
 

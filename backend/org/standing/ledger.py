@@ -1,5 +1,6 @@
 from collections.abc import Collection
 from datetime import datetime
+from typing import Literal
 
 from django.db.models import Count, Q, QuerySet, Sum
 
@@ -52,15 +53,18 @@ def total(org_id: int, *, track: TrackKey, period: Period) -> int:
     return qs.aggregate(total=Sum("points"))["total"] or 0
 
 
+SortField = Literal["total", "entries"]
+
+
 def sum_by_member(
-    org_id: int, *, track: TrackKey, period: Period
+    org_id: int, *, track: TrackKey, period: Period, sort: SortField = "total"
 ) -> QuerySet[ContributionEntry]:
     return (
         in_period(_track_entries(org_id, track=track), period)
         .values("org_user")
         .annotate(total=Sum("points"), entries=Count("pk"))
         .filter(~Q(total=0))
-        .order_by("-total", "org_user__user__username", "org_user")
+        .order_by(f"-{sort}", "org_user__user__username", "org_user")
     )
 
 

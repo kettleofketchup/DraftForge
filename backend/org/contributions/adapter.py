@@ -6,11 +6,10 @@ from django.contrib.auth.models import AnonymousUser
 from django.db.models import QuerySet
 
 from app.models import CustomUser, Organization
-from app.permissions_org import can_view_org_members
 from events.models import Event
 from org.contributions.kinds import EVENT_STAFF_KINDS
 from org.contributions.queries import leaderboard as contribution_leaderboard
-from org.contributions.queries import org_total
+from org.contributions.queries import member_overview, org_total
 from org.contributions.services import (
     delete_user_entries,
     reassign_member,
@@ -33,7 +32,13 @@ from org.standing.types import (
     OutputKeys,
     TrackAccess,
     TrackOutput,
+    ViewerRoles,
 )
+
+_SORT_FIELDS: Mapping[str, ledger.SortField] = {
+    "points": "total",
+    "entries": "entries",
+}
 
 STAFF_FIELDS: frozenset[str] = frozenset(
     {"scheduled_at", "ends_at", "name", "host", "helpers"}
@@ -54,6 +59,7 @@ class ContributionTrack(TrackBase):
     feature = FeatureKey.CONTRIBUTIONS
     metrics = (
         Metric(key="points", label="Points", format="int", periodic=True, default=True),
+        Metric(key="entries", label="Entries", format="int", periodic=True),
     )
     reopen_reset_fields = ("contributions_awarded_at",)
     output_keys: Mapping[HookName, OutputKeys] = {
@@ -123,12 +129,31 @@ class ContributionTrack(TrackBase):
 
     @override
     def access(
-        self, org_id: int, *, viewer: CustomUser | AnonymousUser | None
+        self,
+        org_id: int,
+        *,
+        viewer: CustomUser | AnonymousUser | None,
+        roles: ViewerRoles,
     ) -> TrackAccess:
         return TrackAccess(
-            can_view_rows=viewer is not None and can_view_org_members(viewer, org_id),
+            can_view_rows=roles.can_view_members,
             can_view_own=bool(viewer is not None and viewer.is_authenticated),
         )
+
+    @override
+    def member_standing(
+        self,
+        org_user: OrgUser,
+        *,
+        viewer: CustomUser | AnonymousUser | None,
+        roles: ViewerRoles,
+        now: datetime,
+    ) -> Mapping[str, object] | None:
+        if viewer is None or not viewer.is_authenticated:
+            return None
+        if org_user.user_id != viewer.pk and not roles.can_view_members:
+            return None
+        return member_overview(org_user, now=now)
 
     @override
     def leaderboard(
@@ -149,11 +174,13 @@ class ContributionTrack(TrackBase):
                     member={
                         k: v for k, v in row.items() if k not in ("points", "entries")
                     },
-                    value=row["points"],
+                    value=row["entries"] if metric.key == "entries" else row["points"],
                     sample=row["entries"],
                     status="ranked",
                 )
-                for row in contribution_leaderboard(org, period)
+                for row in contribution_leaderboard(
+                    org, period, sort=_SORT_FIELDS[metric.key]
+                )
             ]
             if access.can_view_rows
             else []

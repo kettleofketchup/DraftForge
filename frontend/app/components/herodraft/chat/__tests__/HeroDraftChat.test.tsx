@@ -253,6 +253,163 @@ describe('HeroDraftChat log', () => {
   });
 });
 
+describe('HeroDraftChat Enter keybind', () => {
+  const panel = () => screen.queryByTestId('herodraft-chat-panel');
+  const hint = () => screen.queryByTestId('herodraft-chat-enter-hint');
+
+  it('opens the panel and focuses the composer', () => {
+    seed(member);
+    render(<HeroDraftChat draftState="drafting" />);
+    expect(panel()).toBeNull();
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+    expect(panel()).toBeInTheDocument();
+    expect(document.activeElement).toBe(input());
+  });
+
+  it('reopens after Escape blurs the composer', () => {
+    seed(member);
+    render(<HeroDraftChat draftState="drafting" />);
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+    fireEvent.keyDown(input(), { key: 'Escape' });
+    expect(panel()).toBeNull();
+    expect(document.activeElement).not.toBe(input());
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+    expect(panel()).toBeInTheDocument();
+    expect(document.activeElement).toBe(input());
+  });
+
+  it('leaves Enter alone inside the composer so it submits', () => {
+    seed(member);
+    render(<HeroDraftChat draftState="drafting" />);
+    input().focus();
+    fireEvent.change(input(), { target: { value: 'hi' } });
+    const event = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    });
+    input().dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('ignores Enter while typing in another input', () => {
+    seed(member);
+    render(
+      <>
+        <input data-testid="other" />
+        <HeroDraftChat draftState="drafting" />
+      </>,
+    );
+    const other = screen.getByTestId('other');
+    other.focus();
+    fireEvent.keyDown(other, { key: 'Enter' });
+    expect(panel()).toBeNull();
+    expect(document.activeElement).toBe(other);
+  });
+
+  it.each([
+    { focusVisible: true, opens: false },
+    { focusVisible: false, opens: true },
+  ])(
+    'focused button with focus-visible=$focusVisible opens chat: $opens',
+    ({ focusVisible, opens }) => {
+      seed(member);
+      render(
+        <>
+          <button type="button" data-testid="hero">
+            hero
+          </button>
+          <HeroDraftChat draftState="drafting" />
+        </>,
+      );
+      const button = screen.getByTestId('hero');
+      const matches = button.matches.bind(button);
+      vi.spyOn(button, 'matches').mockImplementation((sel) =>
+        sel === ':focus-visible' ? focusVisible : matches(sel),
+      );
+      button.focus();
+      fireEvent.keyDown(button, { key: 'Enter' });
+      expect(panel() !== null).toBe(opens);
+      expect(document.activeElement).toBe(opens ? input() : button);
+    },
+  );
+
+  it('ignores Enter with a modifier', () => {
+    seed(member);
+    render(<HeroDraftChat draftState="drafting" />);
+    fireEvent.keyDown(document.body, { key: 'Enter', ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: 'Enter', shiftKey: true });
+    expect(panel()).toBeNull();
+  });
+
+  it('ignores Enter when another dialog is layered over the draft', () => {
+    seed(member);
+    render(
+      <>
+        <HeroDraftChat draftState="drafting" />
+        <div role="dialog" data-state="open" />
+      </>,
+    );
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+    expect(panel()).toBeNull();
+  });
+
+  it('still works when the chat sits inside the open draft dialog', () => {
+    seed(member);
+    render(
+      <div role="dialog" data-state="open">
+        <HeroDraftChat draftState="drafting" />
+      </div>,
+    );
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+    expect(panel()).toBeInTheDocument();
+  });
+
+  it('ignores Enter while a menu is open', () => {
+    seed(member);
+    render(
+      <>
+        <HeroDraftChat draftState="drafting" />
+        <div role="menu" />
+      </>,
+    );
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+    expect(panel()).toBeNull();
+  });
+
+  it('opens read-only chat for spectators without focusing', () => {
+    seed(spectator);
+    render(<HeroDraftChat draftState="drafting" />);
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+    expect(panel()).toBeInTheDocument();
+    expect(document.activeElement).not.toBe(input());
+  });
+
+  it('shows the Enter hint on an empty enabled composer only', () => {
+    seed(member);
+    render(<HeroDraftChat draftState="drafting" />);
+    expect(hint()).toHaveTextContent('Enter');
+    expect(input()).toHaveAttribute('aria-keyshortcuts', 'Enter');
+    fireEvent.change(input(), { target: { value: 'x' } });
+    expect(hint()).toBeNull();
+  });
+
+  it('hides the Enter hint for spectators', () => {
+    seed(spectator);
+    render(<HeroDraftChat draftState="drafting" />);
+    expect(hint()).toBeNull();
+  });
+
+  it('opens the sheet below md', () => {
+    isDesktop = false;
+    seed(member);
+    render(<HeroDraftChat draftState="drafting" />);
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+    expect(screen.getByTestId('herodraft-chat-sheet')).toBeInTheDocument();
+    expect(document.activeElement).toBe(input());
+  });
+});
+
 describe('HeroDraftChat below md', () => {
   it('renders only the toggle until opened, then one composer in a sheet', () => {
     isDesktop = false;

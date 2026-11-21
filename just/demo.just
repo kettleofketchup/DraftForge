@@ -51,12 +51,17 @@ snapshots:
 gifs *args:
     {{demo}} gifs "$@"
 
+# Cut short animated WebP clips, e.g. herodraft_chat.webp (--fps, --width, --duration, --quality)
+[group('demo')]
+clips *args:
+    {{demo}} clips "$@"
+
 # Trim the loading screen from demo videos (--trim-start S, --no-auto)
 [group('demo')]
 trim *args:
     {{demo}} trim "$@"
 
-# Record, trim, then convert to GIFs (--duration, --fps, --width)
+# Record, trim, convert to GIFs, then cut WebP clips (--duration, --fps, --width)
 [group('demo')]
 quick *args:
     {{demo}} quick "$@"

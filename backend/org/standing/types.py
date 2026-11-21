@@ -1,5 +1,6 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Literal, Protocol, runtime_checkable
 
 TrackKey = Literal["contribution", "conduct", "leadership"]
@@ -68,20 +69,57 @@ class TrackInfo:
     metrics: tuple[Metric, ...]
     can_view_rows: bool
     can_view_own: bool
+    board_open: bool
     can_manage: bool
+
+
+RoleCheck = Callable[[], bool]
+
+
+class ViewerRoles:
+    def __init__(
+        self, *, is_admin: RoleCheck, is_staff: RoleCheck, can_view_members: RoleCheck
+    ) -> None:
+        self._is_admin = is_admin
+        self._is_staff = is_staff
+        self._can_view_members = can_view_members
+
+    @classmethod
+    def fixed(
+        cls, is_admin: bool, is_staff: bool, can_view_members: bool
+    ) -> "ViewerRoles":
+        return cls(
+            is_admin=lambda: is_admin,
+            is_staff=lambda: is_staff,
+            can_view_members=lambda: can_view_members,
+        )
+
+    @cached_property
+    def is_admin(self) -> bool:
+        return self._is_admin()
+
+    @cached_property
+    def is_staff(self) -> bool:
+        return self._is_staff()
+
+    @cached_property
+    def can_view_members(self) -> bool:
+        return self._can_view_members()
 
 
 @dataclass(frozen=True, slots=True)
 class TrackAccess:
     can_view_rows: bool
     can_view_own: bool
+    allowed: bool = True
+    board_open: bool = True
 
 
 @dataclass(frozen=True, slots=True)
 class LeaderboardRow:
     org_user_id: int
     member: Mapping[str, object]
-    value: float | int
+    value: float | int | None
     sample: int
     status: Literal["ranked", "new"]
 

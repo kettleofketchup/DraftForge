@@ -16,6 +16,7 @@ from app.serializers import TournamentUserSerializer
 from org.feature_errors import not_permitted, require_org_admin
 from org.features import FeatureKey, set_org_feature
 from org.models import OrgFeature, OrgUser
+from org.standing import api as standing
 from telemetry.logging import get_logger
 from user.querysets import with_user_profiles
 
@@ -71,13 +72,16 @@ def org_features(request: Request, org_id: int) -> Response:
         serializer = OrgFeatureSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        set_org_feature(
-            org,
-            FeatureKey(data["feature"]),
-            enabled=data["enabled"],
-            actor=request.user,
-            notes=data.get("notes"),
-        )
+        feature = FeatureKey(data["feature"])
+        with transaction.atomic():
+            set_org_feature(
+                org,
+                feature,
+                enabled=data["enabled"],
+                actor=request.user,
+                notes=data.get("notes"),
+            )
+            standing.on_feature_toggled(org.pk, feature, enabled=data["enabled"])
 
     return Response(_feature_rows(org))
 

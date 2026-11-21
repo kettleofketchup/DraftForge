@@ -9,17 +9,38 @@ from django.test import SimpleTestCase
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 STANDING_DIR = BACKEND_DIR / "org" / "standing"
 CONTRIBUTIONS_DIR = BACKEND_DIR / "org" / "contributions"
+CONDUCT_DIR = BACKEND_DIR / "org" / "conduct"
+CONDUCT_CHECK = "events.eligibility.checks.conduct"
+CONDUCT_CHECK_IMPORTS = frozenset({"org.conduct.eligibility", "org.standing.cache"})
+CONDUCT_CHECK_TARGET = "org.conduct.eligibility"
+CONDUCT_MODELS = frozenset({"AttendanceOutcome", "OrgConductSettings"})
+FEATURE_TOGGLE_CALLERS = ("views_features.py", "admin.py")
 
-LEAVES = ("types", "errors", "cache", "periods", "kinds", "ledger", "scoring", "base")
+LEAVES = (
+    "types",
+    "errors",
+    "cache",
+    "periods",
+    "kinds",
+    "ledger",
+    "scoring",
+    "base",
+    "restamp",
+    "serializers",
+)
 DISPATCHERS = (
     "org.standing.api",
     "org.standing.registry",
     "org.contributions.adapter",
+    "org.conduct.adapter",
+    "org.standing.views",
+    "org.standing.urls",
 )
 LEAF_FORBIDDEN = (
     *DISPATCHERS,
     "org.contributions.services",
     "org.contributions.queries",
+    "org.conduct",
 )
 EVENT_FLOWS = (
     "events.services",
@@ -30,6 +51,8 @@ EVENT_FLOWS = (
     "events.eligibility",
 )
 PUBLIC_STANDING = ("org.standing.api", "org.standing.cache")
+RESTAMP = "org.standing.restamp"
+RESTAMP_IMPORTER = "events.eligibility.store"
 LEDGER_MODELS = frozenset({"ContributionEntry", "ContributionPointValue"})
 SKIPPED_DIRS = frozenset({"tests", "migrations", "__pycache__"})
 
@@ -156,6 +179,15 @@ def _caller_files(package: str) -> list[Path]:
     )
 
 
+def _module_all(path: Path) -> set[str]:
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets
+        ):
+            return {ast.literal_eval(e) for e in node.value.elts}
+    return set()
+
+
 class StandingLayeringTest(SimpleTestCase):
     def test_init_is_empty(self) -> None:
         tree = ast.parse((STANDING_DIR / "__init__.py").read_text())
@@ -178,7 +210,11 @@ class StandingLayeringTest(SimpleTestCase):
                 )
 
     def test_adapters_avoid_event_flows(self) -> None:
-        paths = [*CONTRIBUTIONS_DIR.glob("*.py"), *STANDING_DIR.glob("*.py")]
+        paths = [
+            *CONTRIBUTIONS_DIR.glob("*.py"),
+            *CONDUCT_DIR.glob("*.py"),
+            *STANDING_DIR.glob("*.py"),
+        ]
         for path in sorted(paths):
             for name in _imported_modules(path):
                 with self.subTest(module=_module_name(path), imported=name):
@@ -199,7 +235,9 @@ class StandingLayeringTest(SimpleTestCase):
                             f"{module} imports {imported} {members}",
                         )
                         for target in targets:
-                            if _matches(target, "org.standing") and target != (
+                            if _matches(target, RESTAMP):
+                                self.assertEqual(module, RESTAMP_IMPORTER)
+                            elif _matches(target, "org.standing") and target != (
                                 "org.standing"
                             ):
                                 self.assertTrue(
@@ -211,6 +249,25 @@ class StandingLayeringTest(SimpleTestCase):
                                 LEDGER_MODELS & set(members),
                                 f"{module} imports {members} from org.models",
                             )
+
+    def test_only_conduct_check_imports_conduct(self) -> None:
+        paths = [
+            *(path for package in ("events", "app") for path in _caller_files(package)),
+            *(BACKEND_DIR / "org" / name for name in FEATURE_TOGGLE_CALLERS),
+        ]
+        for path in paths:
+            module = _module_name(path)
+            for imported, members in _imports(path):
+                with self.subTest(module=module, imported=imported):
+                    if _matches(imported, "org.conduct"):
+                        self.assertEqual(
+                            (module, imported), (CONDUCT_CHECK, CONDUCT_CHECK_TARGET)
+                        )
+                    if imported in ("org.models", "org.models_conduct"):
+                        self.assertFalse(
+                            CONDUCT_MODELS & set(members),
+                            f"{module} imports {members} from {imported}",
+                        )
 
     def test_graph_resolves_known_edges(self) -> None:
         self.assertIn("org.standing.registry", _graph()["org.standing.api"])
@@ -229,3 +286,34 @@ class StandingLayeringTest(SimpleTestCase):
         reached = _closure("org.standing.registry")
         bad = sorted(name for name in reached if _matches_any(name, EVENT_FLOWS))
         self.assertFalse(bad, f"org.standing.registry reaches {bad}")
+
+    def test_conduct_check_imports_only_the_sanctioned_modules(self) -> None:
+        path = BACKEND_DIR / "events" / "eligibility" / "checks" / "conduct.py"
+        org_imports = {
+            module
+            for module, _ in _imports(path)
+            if _matches(module, "org") or _matches(module, "app")
+        }
+        self.assertEqual(org_imports, CONDUCT_CHECK_IMPORTS)
+
+    def test_api_never_imports_the_http_layer(self) -> None:
+        for name in _imported_modules(STANDING_DIR / "api.py"):
+            with self.subTest(imported=name):
+                self.assertFalse(
+                    _matches_any(name, ("org.standing.views", "org.standing.urls")),
+                    f"api imports {name}",
+                )
+
+    def test_api_exports_payloads_not_serializers(self) -> None:
+        exported = _module_all(STANDING_DIR / "api.py")
+        self.assertIn("tracks_payload", exported)
+        self.assertIn("ViewerRoles", exported)
+        self.assertFalse({"track_info_data", "leaderboard_data"} & exported)
+
+    def test_registry_reaches_conduct_adapter(self) -> None:
+        self.assertIn("org.conduct.adapter", _graph()["org.standing.registry"])
+
+    def test_finalize_and_reopen_register_the_restamp_slot(self) -> None:
+        for module in ("events.completion", "events.reopen"):
+            with self.subTest(module=module):
+                self.assertIn(RESTAMP_IMPORTER, _graph()[module])

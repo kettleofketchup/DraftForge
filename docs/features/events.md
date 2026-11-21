@@ -183,7 +183,9 @@ Org owners and admins (`has_org_admin_access`) see **Complete** on an event in
 1. moves the state with a conditional update, so a Complete press and the cleanup job
    racing on the same event close it once; the loser gets `closed: false`;
 2. writes host and helper ledger entries and sets `contributions_awarded_at`;
-3. invalidates the cached event after commit.
+3. finalizes the event's attendance outcomes and sets `conduct_finalized_at` (see
+   [Attendance outcomes](#attendance-outcomes));
+4. invalidates the cached event after commit.
 
 The event payload carries `user_can_manage_event_staff`, which gates the Complete button
 and the staff editor. `state`, `host`, `helpers` and `contributions_awarded_at` are
@@ -202,6 +204,27 @@ day after it starts). It calls `POST /api/internal/events/{id}/auto-close/`:
 
 The admin's manual **Cancel**, the generic internal `/transition/` endpoint and
 `cleanup_stale_repeater_events` never award points.
+
+### Attendance outcomes
+
+Events in an organization with [Conduct](organization-conduct.md) record an attendance
+outcome for each expected member. The event lifecycle drives them:
+
+| Action | Attendance outcomes |
+|---|---|
+| **Complete** or auto-close to `completed` | Finalized: members without an outcome become `attended` (default), except roll-call members who never confirmed, who stay pending for staff. Sets `conduct_finalized_at`. |
+| **Cancel** or auto-close to `cancelled` | Voided, late cancels included. The event is read-only for conduct. Sets `conduct_finalized_at`. |
+| **Reopen** | Clears `conduct_finalized_at`. Staff edits and late cancels are kept and unfinalized; default and automatic outcomes are deleted and worked out again at the next completion. The `reopen_event` log entry records `attendance_reopened`. |
+| **Delete** | Unfinalized outcomes are deleted; finalized ones are voided and kept in member history as "Removed". |
+
+Finalize and void each run once per event, inside the close's transaction, so a
+Complete press racing the cleanup job does not double-process. They run whether or not
+Conduct is unlocked; while it is locked they only finalize or void outcomes that already
+exist. `conduct_finalized_at` is read-only on `EventSerializer`. The generic internal
+`/transition/` endpoint and `cleanup_stale_repeater_events` skip these hooks.
+
+A member's own cancel within the org's late-cancel window (or after the start) before
+the event closes is recorded as a late cancel or no-show; staff actions never are.
 
 ### Host and helpers
 
@@ -237,8 +260,8 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/events/{id}/open_signups/` | Transition to signups_open |
 | POST | `/api/events/{id}/start_roll_call/` | Transition to roll_call |
 | POST | `/api/events/{id}/start_tournament/` | Start tournament with the confirmed roster |
-| POST | `/api/events/{id}/cancel/` | Cancel event. Deletes the linked tournament **and** the event's live Discord scheduled event, then clears `scheduled_event_id` so the 60-second `sync-discord-events` beat can't resurrect it. |
-| POST | `/api/events/{id}/complete/` | Complete the event from `roll_call` or `in_progress` and award host/helper points (org admin). Returns the event; `400` from any other state or when another close won the race. |
+| POST | `/api/events/{id}/cancel/` | Cancel event. Deletes the linked tournament **and** the event's live Discord scheduled event, then clears `scheduled_event_id` so the 60-second `sync-discord-events` beat can't resurrect it. Voids the event's attendance outcomes. |
+| POST | `/api/events/{id}/complete/` | Complete the event from `roll_call` or `in_progress`, award host/helper points and finalize attendance outcomes (org admin). Returns the event; `400` from any other state or when another close won the race. |
 | PUT | `/api/events/{id}/staff/` | Set host and helpers (org admin). Body: `{"host_id": <int\|null>, "helper_ids": [<int>, ...]}`. Returns the event. `400` if the host is also a helper or a user doesn't exist. Writes an `OrgLog` `set_event_staff` entry. |
 | GET | `/api/events/{id}/discord-logs/` | Discord notification audit log for the event's tournament |
 | GET | `/api/events/{id}/lobby-password/` | The event's lobby password. Org staff get `{mode, password, source, can_manage}`, registered players (approved or confirmed signup, or rostered) get `{password}`, anyone else `404`. Never cached. |

@@ -6,7 +6,9 @@ announcement messages. These are synchronous functions — the bot calls
 them from async handlers via sync_to_async or database_sync_to_async.
 """
 
+from events.constants import SignupMeans
 from events.discord._shared import _discord_self_serve_refusal
+from events.ledger import SignupActor
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -136,7 +138,10 @@ def handle_reaction_cancel(
 
     try:
         signup = EventSignup.objects.get(event=event, user=user)
-        cancel_signup(signup)
+        cancel_signup(
+            signup,
+            actor=SignupActor.discord(user, means=SignupMeans.DISCORD_REACTION),
+        )
         logger.info(
             "reaction_signup_cancelled",
             system="events",

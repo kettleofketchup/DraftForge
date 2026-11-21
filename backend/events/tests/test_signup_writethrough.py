@@ -280,7 +280,9 @@ class SignupSteamSyncOrderingTest(EventTestCase):
     def _recording_check(
         self, seen: list[int | None]
     ) -> Callable[..., EligibilityResult]:
-        def record(event: Event, user: CustomUser) -> EligibilityResult:
+        def record(
+            event: Event, user: CustomUser, **_kwargs: object
+        ) -> EligibilityResult:
             seen.append(user.steam_account_id)
             return EligibilityResult()
 

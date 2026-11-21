@@ -62,6 +62,13 @@ SEAT_HOLDING_STATUSES: frozenset[str] = frozenset(
     }
 )
 
+# Signup statuses that can put a player in the event's tournament.
+# An allow-list, so DROPPED is excluded on purpose.
+REGISTERED_SIGNUP_STATUSES: tuple[str, ...] = (
+    SignupStatus.APPROVED,
+    SignupStatus.CONFIRMED,
+)
+
 # Signups whose stored unmet_requirements follow profile changes.
 UNMET_TRACKED_STATUSES: frozenset[str] = frozenset(
     {

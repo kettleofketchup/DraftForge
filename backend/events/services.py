@@ -19,6 +19,8 @@ from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
+    REGISTERED_SIGNUP_STATUSES,
+    ActorRole,
     Commitment,
     EventState,
     RepeatFrequency,
@@ -42,6 +44,7 @@ from events.eligibility import (
     sync_steam_account_from_profiles,
     validate_friend_id,
 )
+from events.ledger import SignupActor
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -76,6 +79,7 @@ from org.mmr import game_for_event, set_org_mmr
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 from org.standing import api as standing
+from org.standing.cache import StandingCache
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -145,7 +149,7 @@ def _validate_screenshot_url(url: str | None) -> None:
 
 def check_requirements(event: Event, user: CustomUser) -> bool:
     """Check if user meets event confirmation requirements."""
-    return not evaluate_signup(event, user).approval
+    return evaluate_signup(event, user, for_staff_placement=True).clean
 
 
 def _first_fields_carry(existing: EventSignup | None) -> dict[str, Any]:
@@ -164,7 +168,7 @@ def _decide_signup_status(event: Event, result: EligibilityResult) -> SignupStat
     events leave everyone at RSVP."""
     if not event.auto_approve:
         return SignupStatus.RSVP
-    if result.approval:
+    if result.approval or result.blocking:
         return SignupStatus.PENDING_APPROVAL
     if event.auto_confirm:
         return SignupStatus.CONFIRMED
@@ -203,7 +207,11 @@ def _roster_remove_if_left(signup: EventSignup) -> None:
 
 @transaction.atomic
 def _create_signup(
-    event: Event, user: CustomUser, event_team: EventTeam | None = None
+    event: Event,
+    user: CustomUser,
+    event_team: EventTeam | None = None,
+    *,
+    for_staff_placement: bool = False,
 ) -> EventSignup:
     """Internal: create a signup with no state check.
 
@@ -251,7 +259,7 @@ def _create_signup(
 
     signup_type = SignupType.TEAM if event_team else SignupType.USER
     _sync_signup_steam_account(event, user)
-    result = evaluate_signup(event, user)
+    result = evaluate_signup(event, user, for_staff_placement=for_staff_placement)
     eligibility = eligibility_values(result)
 
     if not has_free_seat(lock_event(event)):
@@ -318,7 +326,7 @@ def process_rsvp(
         event_id=event.pk,
         user_id=user.pk,
     )
-    ensure_self_serve(event, user)
+    ensure_self_serve(event, user, intent=Commitment.MAIN)
     signup = _create_signup(event, user, event_team=event_team)
     # Defer signup_created log until the outermost atomic commits — otherwise
     # rollback paths produce a log claiming a signup that doesn't persist.
@@ -337,7 +345,9 @@ def process_rsvp(
 
 
 @transaction.atomic
-def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
+def create_tentative_signup(
+    event: Event, user: CustomUser, *, actor: SignupActor | None = None
+) -> EventSignup:
     """Create a TENTATIVE EventSignup, upgrading any active signup to tentative.
 
     Funnel point for both the DRF action and the Discord tentative button.
@@ -353,7 +363,7 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
         (cancel_signup also schedules one when invoked; we skip registering
         a duplicate in that case).
     """
-    ensure_self_serve(event, user)
+    ensure_self_serve(event, user, intent=Commitment.MAYBE)
 
     existing = EventSignup.objects.filter(event=event, user=user).first()
     carry = _first_fields_carry(existing)
@@ -364,7 +374,7 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
         if existing.status == SignupStatus.DROPPED:
             raise ValueError(DROPPED_SIGNUP_MESSAGE)
         if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
-            cancel_signup(existing)
+            cancel_signup(existing, actor=actor)
             notify_scheduled_by_cancel = True
         EventSignup.objects.filter(pk=existing.pk).delete()
 
@@ -380,7 +390,9 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
 
 
 @transaction.atomic
-def decline_signup(event: Event, user: CustomUser) -> EventSignup:
+def decline_signup(
+    event: Event, user: CustomUser, *, actor: SignupActor | None = None
+) -> EventSignup:
     """Record that a user declined an event.
 
     Cancels an existing active/tentative signup, or creates a CANCELLED row so
@@ -391,7 +403,7 @@ def decline_signup(event: Event, user: CustomUser) -> EventSignup:
     if existing:
         if existing.status in REMOVED_SIGNUP_STATUSES:
             raise ValueError("Already declined")
-        return cancel_signup(existing)
+        return cancel_signup(existing, actor=actor)
 
     signup = EventSignup.objects.create(
         event=event, user=user, status=SignupStatus.CANCELLED
@@ -560,7 +572,7 @@ def staff_add_signup(
     # has somewhere to live before they're approved.
     if event.organization_id:
         resolve_or_create_org_user(user, event.organization)
-    return _create_signup(event, user, event_team=event_team)
+    return _create_signup(event, user, event_team=event_team, for_staff_placement=True)
 
 
 APPROVABLE_STATUSES = [
@@ -626,13 +638,18 @@ def confirm_signup(signup: EventSignup) -> EventSignup:
 
 
 @transaction.atomic
-def cancel_signup(signup: EventSignup) -> EventSignup:
+def cancel_signup(
+    signup: EventSignup, *, actor: SignupActor | None = None
+) -> EventSignup:
     """Cancel a signup."""
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
     signup.save(update_fields=["status", "updated_at"])
+    standing.on_signup_withdrawn(
+        signup, prior_status=prior_status, by_member=_by_member(actor)
+    )
     _roster_remove_if_left(signup)
     if prior_status in seat_holding_statuses(signup.event):
         _promote_from_waitlist(signup.event)
@@ -665,30 +682,43 @@ def _sync_signup_steam_account(event: Event, user: CustomUser) -> None:
         invalidate_after_commit(event.tournament)
 
 
+def _by_member(actor: SignupActor | None) -> bool:
+    return actor is not None and actor.role == ActorRole.MEMBER
+
+
+def _promote_one(
+    locked: Event, signup: EventSignup, *, cache: StandingCache
+) -> EventSignup:
+    signup.waitlist_position = None
+    _sync_signup_steam_account(locked, signup.user)
+    result = evaluate_signup(
+        locked, signup.user, for_staff_placement=True, standing_cache=cache
+    )
+    stamped = stamp_eligibility(signup, result)
+    signup.status = _decide_signup_status(locked, result)
+    _roster_add_if_joins(signup)
+    signup.save(update_fields=["status", "waitlist_position", *stamped, "updated_at"])
+    invalidate_after_commit(signup)
+    return signup
+
+
 def _promote_from_waitlist(event: Event) -> list[EventSignup]:
-    """Promote waitlisted signups, in waitlist order, into every free seat."""
+    """Promote waitlisted signups into every free seat, in waitlist order as
+    reordered by the org's standing tracks."""
     locked = lock_event(event)
     promoted: list[EventSignup] = []
-    while has_free_seat(locked):
-        next_waitlisted = (
+    if has_free_seat(locked):
+        candidates = list(
             EventSignup.objects.nocache()
             .filter(event=locked, status=SignupStatus.WAITLISTED)
+            .select_related("user")
             .order_by("waitlist_position")
-            .first()
         )
-        if next_waitlisted is None:
-            break
-        next_waitlisted.waitlist_position = None
-        _sync_signup_steam_account(locked, next_waitlisted.user)
-        result = evaluate_signup(locked, next_waitlisted.user)
-        stamped = stamp_eligibility(next_waitlisted, result)
-        next_waitlisted.status = _decide_signup_status(locked, result)
-        _roster_add_if_joins(next_waitlisted)
-        next_waitlisted.save(
-            update_fields=["status", "waitlist_position", *stamped, "updated_at"]
-        )
-        invalidate_after_commit(next_waitlisted)
-        promoted.append(next_waitlisted)
+        cache = StandingCache()
+        for candidate in standing.promotion_order(locked, candidates, cache=cache):
+            if not has_free_seat(locked):
+                break
+            promoted.append(_promote_one(locked, candidate, cache=cache))
     if promoted:
         invalidate_after_commit(locked)
     return promoted
@@ -728,7 +758,9 @@ def demote_to_waitlist(signup: EventSignup) -> EventSignup:
 
 
 @transaction.atomic
-def reinstate_signup(signup: EventSignup) -> EventSignup:
+def reinstate_signup(
+    signup: EventSignup, *, for_staff_placement: bool = True
+) -> EventSignup:
     """Bring a removed signup back into the active list.
 
     Behavior depends on event state:
@@ -767,7 +799,9 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
         raise ValueError(NOT_ACCEPTING_MESSAGE)
     locked = lock_event(event)
     _sync_signup_steam_account(locked, signup.user)
-    result = evaluate_signup(locked, signup.user)
+    result = evaluate_signup(
+        locked, signup.user, for_staff_placement=for_staff_placement
+    )
     if not has_free_seat(locked):
         max_pos = (
             EventSignup.objects.filter(
@@ -1085,6 +1119,43 @@ def ensure_tournament_with_signups(
     return sync_event_roster(event, phase or start_phase(event)).tournament
 
 
+@transaction.atomic
+def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
+    # Function-local: events.tasks imports events.services.
+    from discordbot.models import DiscordEvent
+    from events.tasks import delete_discord_scheduled_event
+
+    if event.tournament:
+        tournament = event.tournament
+        event.tournament = None
+        event.save(update_fields=["tournament", "updated_at"])
+        tournament.delete()
+    event.transition_state(EventState.CANCELLED)
+    event.refresh_from_db(from_queryset=Event.objects.nocache().all())
+    standing.on_event_closed(event, cancelled=True, source="cancel", actor=actor)
+    try:
+        discord_event = event.discord_event
+    except DiscordEvent.DoesNotExist:
+        discord_event = None
+    if discord_event is not None and discord_event.scheduled_event_id:
+        guild_id = discord_event.guild_id
+        scheduled_event_id = discord_event.scheduled_event_id
+        transaction.on_commit(
+            lambda: delete_discord_scheduled_event.delay(guild_id, scheduled_event_id)
+        )
+        # Clearing the id stops the 60s sync_discord_events resurrecting it.
+        discord_event.scheduled_event_id = None
+        discord_event.save(update_fields=["scheduled_event_id"])
+        log.info(
+            "event_cancel_discord_scheduled_event_deleted",
+            system="events",
+            subsystem="services",
+            event_id=event.pk,
+            guild_id=discord_event.guild_id,
+        )
+    return event
+
+
 def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
     """Delete an event and everything Discord/tournament-related it owns.
 
@@ -1135,11 +1206,6 @@ def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
 # password; each event stores its effective password and copies it onto its
 # tournament. A lobby keeps the password it was created with, so a change
 # only affects lobbies created afterwards.
-
-# Signup statuses that put a player in the event's tournament
-# (approve_signup / confirm_signup call add_user_to_tournament).
-# An allow-list, so DROPPED is excluded on purpose.
-REGISTERED_SIGNUP_STATUSES = (SignupStatus.APPROVED, SignupStatus.CONFIRMED)
 
 
 def is_registered_for_event(
