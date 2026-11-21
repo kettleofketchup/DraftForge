@@ -12,6 +12,9 @@ from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
 
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.decorators import (
@@ -24,11 +27,25 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
+from app.models import CustomUser, Game, Tournament
+from discordbot.models import (
+    ChannelType,
+    DiscordEvent,
+    DiscordEventDM,
+    DiscordEventLog,
+    DiscordEventMsgAnnouncement,
+    DiscordEventMsgSignup,
+    DiscordMessageLog,
+    DiscordTournamentLog,
+    ScheduledEvent,
+)
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import EventState
-from events.models import Event
+from events.models import Event, EventRepeater, RepeaterSubscription
 from events.serializers import EventSerializer
+from events.services import clear_signup_dedup_state, generate_events_for_repeater
+from org.models import OrgUser
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -63,7 +80,6 @@ def create_discord_message_log(request: Request) -> Response:
     with the same source+source_id already exists, returns it instead
     of creating a duplicate.
     """
-    from discordbot.models import DiscordMessageLog
 
     ALLOWED_FIELDS = {
         "channel_id",
@@ -123,9 +139,6 @@ def claim_discord_message_log(request: Request) -> Response:
     this (source, source_id) — we catch it and return 409 so the worker
     short-circuits before the Discord HTTP send.
     """
-    from django.db import IntegrityError, transaction
-
-    from discordbot.models import DiscordMessageLog
 
     err = _validate_required(
         request.data, ["source", "source_id", "channel_id", "embed_data"]
@@ -163,7 +176,6 @@ def finalize_discord_message_log(request: Request, log_id: int) -> Response:
     Returns 200 on update or 410 Gone if the row was already swept by
     sweep_stale_discord_leases (worker took >5 min between claim and finalize).
     """
-    from discordbot.models import DiscordMessageLog
 
     err = _validate_required(request.data, ["success"])
     if err:
@@ -194,9 +206,6 @@ def check_message_log_exists(request: Request) -> Response:
     in the fire path — the actual idempotency guarantee is the DB constraint
     on the claim endpoint above.
     """
-    from django.db.models import Q
-
-    from discordbot.models import DiscordMessageLog
 
     source = request.query_params.get("source")
     source_id = request.query_params.get("source_id")
@@ -222,7 +231,6 @@ def search_message_logs(request: Request) -> Response:
     Query params: source, source_id, success, source__in (comma-separated),
     order_by (default: -created_at), limit (default: 10)
     """
-    from discordbot.models import DiscordMessageLog
 
     qs = DiscordMessageLog.objects.all()
     params = request.query_params
@@ -265,12 +273,6 @@ def search_message_logs(request: Request) -> Response:
 @permission_classes(_perm)
 def get_discord_event_state(request: Request, event_id: int) -> Response:
     """Get DiscordEvent + related records for an event (celery reads)."""
-    from discordbot.models import (
-        DiscordEvent,
-        DiscordEventDM,
-        DiscordEventLog,
-        DiscordEventMsgSignup,
-    )
 
     result = {
         "has_discord_event": False,
@@ -322,14 +324,6 @@ def get_sync_discord_state(request: Request) -> Response:
     Returns event IDs that have: signup posts, scheduled events, recent log attempts.
     Replaces 4 separate queries in sync_discord_events task.
     """
-    from discordbot.models import (
-        DiscordEvent,
-        DiscordEventLog,
-        DiscordEventMsgSignup,
-        DiscordMessageLog,
-    )
-    from events.constants import EventState
-    from events.models import Event
 
     now = tz.now()
 
@@ -405,8 +399,6 @@ def get_sync_discord_state(request: Request) -> Response:
 @permission_classes(_perm)
 def get_repeater_subscribers(request: Request, repeater_id: int) -> Response:
     """Get subscribers for a repeater with Discord IDs and org membership."""
-    from events.models import RepeaterSubscription
-    from org.models import OrgUser
 
     subs = RepeaterSubscription.objects.filter(
         event_repeater_id=repeater_id
@@ -435,7 +427,6 @@ def get_repeater_subscribers(request: Request, repeater_id: int) -> Response:
 @permission_classes(_perm)
 def get_due_scheduled_events(request: Request) -> Response:
     """Get ScheduledEvents that are due for posting."""
-    from discordbot.models import ScheduledEvent
 
     now = tz.now()
     due = ScheduledEvent.objects.filter(
@@ -496,7 +487,6 @@ def get_event_for_task(request: Request, event_id: int) -> Response:
 @permission_classes(_perm)
 def create_discord_event_log(request: Request) -> Response:
     """Create a DiscordEventLog audit entry."""
-    from discordbot.models import DiscordEvent, DiscordEventLog
 
     err = _validate_required(
         request.data, ["discord_event_id", "action", "target_type"]
@@ -529,7 +519,6 @@ def create_discord_event_log(request: Request) -> Response:
 @permission_classes(_perm)
 def create_tournament_log(request: Request) -> Response:
     """Create DiscordTournamentLog entry."""
-    from discordbot.models import DiscordTournamentLog
 
     ALLOWED_FIELDS = {
         "tournament_id",
@@ -557,7 +546,6 @@ TOURNAMENT_LOG_UPDATE_FIELDS = {"recipient_count", "message", "success"}
 @permission_classes(_perm)
 def update_tournament_log(request: Request, pk: int) -> Response:
     """Update DiscordTournamentLog entry (recipient_count, message, success)."""
-    from discordbot.models import DiscordTournamentLog
 
     log = DiscordTournamentLog.objects.get(pk=pk)
     for field in TOURNAMENT_LOG_UPDATE_FIELDS:
@@ -583,7 +571,6 @@ DISCORD_EVENT_UPDATE_FIELDS = {
 @permission_classes(_perm)
 def get_or_create_discord_event(request: Request) -> Response:
     """Get or create a DiscordEvent for an event."""
-    from discordbot.models import DiscordEvent
 
     err = _validate_required(request.data, ["event_id"])
     if err:
@@ -605,7 +592,6 @@ def get_or_create_discord_event(request: Request) -> Response:
 @permission_classes(_perm)
 def update_discord_event(request: Request, pk: int) -> Response:
     """Update DiscordEvent fields (whitelisted only)."""
-    from discordbot.models import DiscordEvent
 
     de = DiscordEvent.objects.get(pk=pk)
     changed = False
@@ -649,7 +635,6 @@ def clear_event_signup_state(request: Request) -> Response:
         deleted posts)
       - fire_event_task for task_name="signup_post" (admin "repost" button)
     """
-    from events.services import clear_signup_dedup_state
 
     err = _validate_required(request.data, ["event_id"])
     if err:
@@ -673,7 +658,6 @@ def clear_event_signup_state(request: Request) -> Response:
 @permission_classes(_perm)
 def create_or_update_signup_message(request: Request) -> Response:
     """Create/update DiscordEventMsgSignup (whitelisted fields only)."""
-    from discordbot.models import ChannelType, DiscordEventMsgSignup
 
     err = _validate_required(request.data, ["event_id", "channel_id"])
     if err:
@@ -715,7 +699,6 @@ ANNOUNCEMENT_UPDATE_FIELDS = {
 @permission_classes(_perm)
 def create_or_update_announcement(request: Request) -> Response:
     """Create/update DiscordEventMsgAnnouncement (whitelisted fields only)."""
-    from discordbot.models import ChannelType, DiscordEventMsgAnnouncement
 
     err = _validate_required(request.data, ["event_id", "channel_id"])
     if err:
@@ -750,7 +733,6 @@ def create_or_update_announcement(request: Request) -> Response:
 @permission_classes(_perm)
 def create_event_dm(request: Request) -> Response:
     """Create DiscordEventDM record (crash-safe: create before send)."""
-    from discordbot.models import DiscordEventDM
 
     DM_CREATE_FIELDS = {"discord_event", "org_user", "dm_type", "delivered"}
     err = _validate_required(request.data, ["discord_event", "org_user", "dm_type"])
@@ -774,7 +756,6 @@ DM_UPDATE_FIELDS = {"message_id", "sent_at", "delivered"}
 @permission_classes(_perm)
 def update_event_dm(request: Request, pk: int) -> Response:
     """Update DiscordEventDM delivery status (whitelisted fields only)."""
-    from discordbot.models import DiscordEventDM
 
     dm = DiscordEventDM.objects.get(pk=pk)
     for field in DM_UPDATE_FIELDS:
@@ -796,7 +777,6 @@ SCHEDULED_EVENT_UPDATE_FIELDS = {"discord_message_id", "next_post_at"}
 @permission_classes(_perm)
 def update_scheduled_event(request: Request, pk: int) -> Response:
     """Update ScheduledEvent fields (whitelisted only)."""
-    from discordbot.models import ScheduledEvent
 
     se = ScheduledEvent.objects.get(pk=pk)
     for field in SCHEDULED_EVENT_UPDATE_FIELDS:
@@ -872,7 +852,6 @@ def auto_close_event(request: Request, pk: int) -> Response:
 @permission_classes(_perm)
 def get_tournament_for_task(request: Request, tournament_id: int) -> Response:
     """Get tournament config data for Celery tasks."""
-    from app.models import Tournament
 
     try:
         t = Tournament.objects.get(pk=tournament_id)
@@ -904,7 +883,6 @@ def get_tournament_participants(request: Request, tournament_id: int) -> Respons
     (``Team.members``) would miss the undrafted pool: at draft-start time
     only captains have been seeded onto team rosters.
     """
-    from app.models import CustomUser
 
     users = (
         CustomUser.objects.filter(
@@ -932,7 +910,6 @@ def get_tournament_participants(request: Request, tournament_id: int) -> Respons
 @permission_classes(_perm)
 def get_match_participants(request: Request, game_id: int) -> Response:
     """Get players from both teams in a match (for hero draft DMs)."""
-    from app.models import CustomUser, Game
 
     try:
         game = Game.objects.select_related("radiant_team", "dire_team").get(pk=game_id)
@@ -975,7 +952,6 @@ def list_users_for_avatar_check(request: Request) -> Response:
         limit: max results (default 100)
         offset: pagination offset (default 0)
     """
-    from django.contrib.auth import get_user_model
 
     User = get_user_model()
 
@@ -988,8 +964,6 @@ def list_users_for_avatar_check(request: Request) -> Response:
             base_profile__avatar=""
         )
     elif has_avatar == "false":
-        from django.db.models import Q
-
         qs = qs.filter(
             Q(base_profile__avatar__isnull=True) | Q(base_profile__avatar="")
         )
@@ -1019,7 +993,6 @@ def update_user_avatar(request: Request, pk: int) -> Response:
 
     Body: {"avatar": "new_avatar_hash"} or {"avatar": null} to clear.
     """
-    from django.contrib.auth import get_user_model
 
     User = get_user_model()
 
@@ -1063,7 +1036,6 @@ def update_user_avatar(request: Request, pk: int) -> Response:
 @permission_classes(_perm)
 def get_active_repeaters(request: Request) -> Response:
     """List active repeaters for event generation task."""
-    from events.models import EventRepeater
 
     repeaters = EventRepeater.objects.filter(is_active=True).select_related(
         "organization", "tournament_league", "created_by"
@@ -1085,8 +1057,6 @@ def get_active_repeaters(request: Request) -> Response:
 @permission_classes(_perm)
 def generate_repeater_events(request: Request, repeater_id: int) -> Response:
     """Generate upcoming events for a specific repeater."""
-    from events.models import EventRepeater
-    from events.services import generate_events_for_repeater
 
     try:
         repeater = EventRepeater.objects.select_related(
@@ -1163,8 +1133,6 @@ def sweep_stale_discord_leases(request: Request) -> Response:
 
     Returns {pending_swept, failed_swept, total}.
     """
-
-    from discordbot.models import DiscordMessageLog
 
     pending_minutes, err = _parse_nonneg_int(
         request.data.get("pending_threshold_minutes"),
