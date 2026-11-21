@@ -1,8 +1,10 @@
 import contextvars
 import copy
+import faulthandler
 import multiprocessing
 import os
 import secrets
+import signal
 import tempfile
 import time
 from multiprocessing.reduction import ForkingPickler
@@ -34,6 +36,7 @@ TEST_DB_PREFIX = "draftforge-test-"
 TEST_DB_SUFFIX = ".sqlite3"
 KEEPDB_TEST_DB_NAME = f"{TEST_DB_PREFIX}keepdb{TEST_DB_SUFFIX}"
 STALE_TEST_DB_SECONDS = 24 * 60 * 60
+HANG_DUMP_ENV = "DF_TEST_HANG_DUMP_SECONDS"
 
 
 def reduce_context(
@@ -171,6 +174,17 @@ def isolate_worker_redis_namespace() -> None:
         setting_changed.send(sender=None, setting=name, value=value, enter=True)
 
 
+def install_hang_diagnostics() -> None:
+    """SIGUSR1 dumps every thread's stack; DF_TEST_HANG_DUMP_SECONDS adds a one-shot dump.
+
+    Each process installs its own: fork drops the watchdog thread, spawn drops both.
+    """
+    faulthandler.register(signal.SIGUSR1, all_threads=True)
+    seconds = float(os.environ.get(HANG_DUMP_ENV) or 0)
+    if seconds > 0:
+        faulthandler.dump_traceback_later(seconds)
+
+
 def flush_run_cache_after_transaction_tests() -> None:
     """Drop this run's cache keys whenever a TransactionTestCase flushes the DB.
 
@@ -209,6 +223,7 @@ def init_worker(
         counter.value += 1
         django_runner._worker_id = counter.value
     worker_id: int = django_runner._worker_id
+    install_hang_diagnostics()
 
     start_method = multiprocessing.get_start_method()
     if start_method == "spawn":
@@ -273,6 +288,7 @@ class BackendDiscoverRunner(DiscoverRunner):
 
     def setup_test_environment(self, **kwargs: Any) -> None:
         super().setup_test_environment(**kwargs)
+        install_hang_diagnostics()
         flush_run_cache_after_transaction_tests()
         self._dota_lobby_env = {
             key: os.environ.pop(key)

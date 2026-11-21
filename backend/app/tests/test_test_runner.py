@@ -5,16 +5,18 @@ the top-level directory up to / and imports `app.backend...`, which fails.
 """
 
 import contextvars
+import faulthandler
 import json
 import multiprocessing
 import os
 import pickle
+import signal
 import sqlite3
 import sys
 import tempfile
 import time
 import unittest
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
 from types import SimpleNamespace
@@ -31,6 +33,7 @@ from django.test.runner import DiscoverRunner, RemoteTestResult
 from django.test.utils import get_runner
 
 from backend.test_runner import (
+    HANG_DUMP_ENV,
     KEEPDB_TEST_DB_NAME,
     STALE_TEST_DB_SECONDS,
     BackendDiscoverRunner,
@@ -369,3 +372,60 @@ class WalCloneTests(SimpleTestCase):
             finally:
                 clone.close()
             self.assertIn(("migrated",), tables)
+
+
+def _forked_stderr(setup: Callable[[], None], after: Callable[[], None]) -> str:
+    """Fork a child without hang diagnostics, run setup then after, return its stderr."""
+    with tempfile.TemporaryFile() as err:
+        pid = os.fork()
+        if pid == 0:
+            status = 1
+            try:
+                os.dup2(err.fileno(), 2)
+                faulthandler.unregister(signal.SIGUSR1)
+                faulthandler.cancel_dump_traceback_later()
+                signal.signal(signal.SIGUSR1, signal.SIG_DFL)
+                setup()
+                after()
+                status = 0
+            finally:
+                os._exit(status)
+        _, status = os.waitpid(pid, 0)
+        assert os.waitstatus_to_exitcode(status) == 0, f"child died: {status}"
+        err.seek(0)
+        return err.read().decode(errors="replace")
+
+
+def _sigusr1_self() -> None:
+    os.kill(os.getpid(), signal.SIGUSR1)
+    time.sleep(0.2)
+
+
+def _worker_init() -> None:
+    init_worker(multiprocessing.Value("i", 0), used_aliases=set())
+
+
+def _parent_setup() -> None:
+    with mock.patch.object(DiscoverRunner, "setup_test_environment"):
+        BackendDiscoverRunner().setup_test_environment()
+
+
+class HangDiagnosticsTests(SimpleTestCase):
+    """A hung run must leave every process's stacks behind."""
+
+    def test_sigusr1_dumps_stacks_in_workers_and_the_parent(self) -> None:
+        for setup in (_worker_init, _parent_setup):
+            with self.subTest(setup=setup.__name__):
+                out = _forked_stderr(setup, _sigusr1_self)
+                self.assertIn("most recent call first", out)
+
+    @mock.patch.dict(os.environ, {HANG_DUMP_ENV: "0.2"})
+    def test_watchdog_dumps_after_the_env_timeout(self) -> None:
+        out = _forked_stderr(_worker_init, lambda: time.sleep(1))
+        self.assertIn("Timeout (0:00:00.2", out)
+
+    def test_watchdog_is_off_by_default(self) -> None:
+        env = {k: v for k, v in os.environ.items() if k != HANG_DUMP_ENV}
+        with mock.patch.dict(os.environ, env, clear=True):
+            out = _forked_stderr(_worker_init, lambda: time.sleep(0.5))
+        self.assertNotIn("Timeout", out)
