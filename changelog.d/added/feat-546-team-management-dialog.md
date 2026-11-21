@@ -1,2 +1,0 @@
-- Teams: staff can manage a tournament team's captain, deputy, stand-ins and dropouts from the team modal, with a reason for every change and a change history (#546).
-- Teams: staff see which teams have a captain or deputy who is not a member, or a deputy who is also the captain, on the Teams tab, team cards and team modal, and can fix them from the management dialog (#546).
