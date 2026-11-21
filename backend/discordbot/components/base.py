@@ -18,6 +18,7 @@ from asgiref.sync import sync_to_async
 from discord import ui
 from django.conf import settings
 
+from app.models import GameType
 from discordbot.custom_ids import (
     CustomId,
     DeclineId,
@@ -85,15 +86,28 @@ async def send_modal_v2(interaction: discord.Interaction, modal: ui.Modal) -> No
     interaction.response._response_type = discord.InteractionResponseType.modal
 
 
+DOTA_FRIEND_ID_PLACEHOLDER = "Your Friend ID (number from your Dotabuff URL)"
+STEAM_FRIEND_ID_PLACEHOLDER = "Your Steam Friend Code (Friends > Add a Friend)"
+
+
 def build_friend_id_input(
-    event_id: int, prefill: dict, required: bool
+    event_id: int,
+    prefill: dict,
+    required: bool,
+    *,
+    game_type: GameType | None,
 ) -> ui.TextInput | None:
     """Shared Steam Friend ID field; returns None when already known or not required."""
     if not required or prefill.get("unverified_friend_id"):
         return None
+    placeholder = (
+        DOTA_FRIEND_ID_PLACEHOLDER
+        if game_type == GameType.DOTA2
+        else STEAM_FRIEND_ID_PLACEHOLDER
+    )
     return ui.TextInput(
         label="Steam Friend ID",
-        placeholder="Your Friend ID (number from your Dotabuff URL)",
+        placeholder=placeholder,
         custom_id=SignupFriendId(event_id=event_id).encode(),
         required=True,
         max_length=20,

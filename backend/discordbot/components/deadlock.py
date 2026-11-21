@@ -64,7 +64,7 @@ class DeadlockSignupModal(ui.Modal):
 
         require_friend_id = (self.event_config or {}).get("require_steam_id", True)
         self.friend_id_input = build_friend_id_input(
-            event_id, prefill, require_friend_id
+            event_id, prefill, require_friend_id, game_type=GameType.DEADLOCK
         )
         if self.friend_id_input is not None:
             self.add_item(self.friend_id_input)
