@@ -15,6 +15,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from common.utils import isTestEnvironment
+from draft.services.hero_chat import reset_draft_chat
 
 # Demo tournament names (must match populate.py)
 DEMO_TOURNAMENTS = {
@@ -156,6 +157,7 @@ def _reset_demo_herodraft(tournament):
     # Delete all rounds and events
     herodraft.rounds.all().delete()
     herodraft.events.all().delete()
+    reset_draft_chat(herodraft)
 
     # Reset draft state
     herodraft.state = "waiting_for_captains"

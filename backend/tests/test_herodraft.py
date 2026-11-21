@@ -24,6 +24,7 @@ from draft.models import DraftTeam, HeroDraft, HeroDraftEvent
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero import auto_random_pick, build_draft_rounds, trigger_roll
 from draft.services.hero_broadcast import broadcast_herodraft_state
+from draft.services.hero_chat import reset_draft_chat
 from draft.tasks.draft_tick import get_redis_client
 from draft.tasks.hero_tick import captain_heartbeat_key
 from telemetry.logging import get_logger
@@ -163,6 +164,7 @@ def reset_herodraft(request, draft_pk):
 
     # Delete all events
     draft.events.all().delete()
+    reset_draft_chat(draft)
 
     # Reset draft state
     draft.state = "waiting_for_captains"
@@ -412,6 +414,7 @@ def get_herodraft_by_key(request, key: str):
             "is_ready": dt.is_ready,
             "is_radiant": dt.is_radiant,
             "is_first_pick": dt.is_first_pick,
+            "member_pks": sorted(m.pk for m in dt.tournament_team.members.all()),
         }
         for dt in draft.draft_teams.all()
     ]
@@ -428,7 +431,12 @@ def _setup_draft_state(draft: HeroDraft, target_state: str) -> None:
     # Reset to clean state first
     draft.rounds.all().delete()
     draft.events.all().delete()
+    reset_draft_chat(draft)
     draft.roll_winner = None
+    draft.paused_at = None
+    draft.resuming_until = None
+    draft.is_manual_pause = False
+    draft.save()
 
     # Reset draft teams
     for dt in draft.draft_teams.all():
@@ -487,7 +495,17 @@ def _setup_draft_state(draft: HeroDraft, target_state: str) -> None:
             winner.is_radiant = False
             winner.save()
 
-        # Build draft rounds
-        build_draft_rounds(draft)
+            # No socket is open yet; a stale True makes the tick loop pause
+            # the draft for a missing heartbeat before the captain connects.
+            for dt in (winner, loser):
+                dt.is_connected = False
+                dt.save()
+
+            build_draft_rounds(draft, winner, loser)
+            first_round = draft.rounds.order_by("round_number").first()
+            first_round.state = "active"
+            first_round.started_at = timezone.now()
+            first_round.save()
+
         draft.state = "drafting"
         draft.save()

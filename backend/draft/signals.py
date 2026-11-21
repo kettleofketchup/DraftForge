@@ -1,15 +1,63 @@
 from asgiref.sync import async_to_sync
 from channels import layers
 from django.db import transaction
-from django.db.models.signals import pre_save
+from django.db.models.signals import m2m_changed, pre_save
 from django.dispatch import receiver
 
 from app.cache_utils import invalidate_after_commit
-from app.models import Game
+from app.models import CustomUser, Game, Team
 from draft.models import DraftTeam, HeroDraft, HeroDraftRound, HeroDraftState
+from draft.services.hero_chat import (
+    chat_roster_field,
+    reconcile_draft_memberships,
+    repoint_draft_memberships,
+    schedule_roster_tenure,
+)
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
+
+
+@receiver(
+    m2m_changed,
+    sender="app.Team_members",
+    dispatch_uid="draft_herodraft_chat_roster_tenure",
+)
+def herodraft_chat_roster_tenure(
+    sender: type,
+    instance: Team | CustomUser,
+    action: str,
+    pk_set: set[int] | None,
+    reverse: bool = False,
+    **kwargs: object,
+) -> None:
+    """Write chat tenure for every roster edit, forward and reverse."""
+    if action == "pre_clear":
+        if reverse:
+            before = (
+                Team.members.through.objects.nocache()
+                .filter(customuser=instance)
+                .values_list("team_id", flat=True)
+            )
+        else:
+            before = (
+                Team.members.through.objects.nocache()
+                .filter(team=instance)
+                .values_list("customuser_id", flat=True)
+            )
+        instance._chat_tenure_before_clear = set(before)  # type: ignore[union-attr]
+        return
+    if action not in ("post_add", "post_remove", "post_clear"):
+        return
+    if action == "post_clear":
+        changed: set[int] = set(getattr(instance, "_chat_tenure_before_clear", set()))
+        instance._chat_tenure_before_clear = set()  # type: ignore[union-attr]
+    else:
+        changed = set(pk_set or ())
+    if reverse:
+        schedule_roster_tenure(changed, [instance.pk])
+    else:
+        schedule_roster_tenure([instance.pk], changed)
 
 
 @receiver(
@@ -140,6 +188,13 @@ def reset_herodraft_on_team_change(
         dt.save()
         updated_draft_teams.append(dt)
 
+    repoint_draft_memberships(
+        draft.pk,
+        [prior.radiant_team_id, prior.dire_team_id],
+        [instance.radiant_team_id, instance.dire_team_id],
+    )
+    reconcile_draft_memberships(draft.pk)
+
     # Wipe picks/bans — they belong to the wrong captain. `draft.herodraftround`
     # is NOT in CACHEOPS so the bulk delete doesn't need cache invalidation
     # of its own; the parent HeroDraft invalidation below covers any
@@ -195,6 +250,7 @@ def _broadcast_draft_event(draft_pk: int, event_type: str, game_id: int) -> None
                     "game_id": game_id,
                 },
                 "timestamp": None,
+                **chat_roster_field(draft_pk, event_type),
             },
         )
     except Exception as exc:

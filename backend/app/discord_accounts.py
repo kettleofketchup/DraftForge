@@ -21,6 +21,7 @@ from social_django.models import UserSocialAuth
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
+from draft.services.hero_chat import repoint_chat_attribution
 from events.staff import dedupe_host_helpers
 from org.accounts import repoint_org_attribution
 from org.models import OrgUser
@@ -32,7 +33,7 @@ logger = get_logger(__name__)
 
 # Discord identity / profile fields copied from the duplicate onto the kept
 # account when the kept account is missing them. Split into two groups because
-# after T1 (BaseUserProfile epic) `avatar` is a `@property` on CustomUser that
+# `avatar` is a `@property` on CustomUser that
 # proxies to base_profile.avatar — its setter persists immediately via
 # `bp.save(update_fields=["avatar"])`, so it MUST NOT appear in the column-
 # level `keep.save(update_fields=...)` call below (Django would raise
@@ -78,8 +79,8 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             # ``keep`` already has an equivalent row; the duplicate is junk.
             obj.delete()
 
-    # Snapshot carryover values BEFORE the related-objects loop. After T1
-    # the loop walks the reverse-O2O to BaseUserProfile, hits an IntegrityError
+    # Snapshot carryover values BEFORE the related-objects loop. The loop
+    # walks the reverse-O2O to BaseUserProfile, hits an IntegrityError
     # (keep already has one), and deletes drop.base_profile. The
     # `drop.avatar` getter reads drop.base_profile.avatar, so after that
     # delete the carryover would silently read None and the kept account
@@ -108,6 +109,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
                 pairs.append((drop_ou, keep_ou))
         standing.merge_users(drop, keep, member_pairs=pairs)
         repoint_org_attribution(drop, keep)
+        repoint_chat_attribution(drop, keep)
         for drop_ou, _ in pairs:
             drop_ou.delete()
         demote_colliding_earning_sends(keep, drop)

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.http import HttpRequest
 
-from draft.models import HeroDraft, HeroDraftEvent
+from draft.models import HeroDraft, HeroDraftChatMessage, HeroDraftEvent
 
 
 class HeroDraftEventInline(admin.TabularInline):
@@ -55,5 +55,25 @@ class HeroDraftEventAdmin(admin.ModelAdmin):
     get_captain.short_description = "Captain"
 
 
+class HeroDraftChatMessageAdmin(admin.ModelAdmin):
+    list_display = ("draft", "channel", "team", "sender", "kind", "created_at")
+    list_select_related = ("draft", "team", "sender")
+    list_filter = ("channel", "kind")
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(
+        self, request: HttpRequest, obj: HeroDraftChatMessage | None = None
+    ) -> bool:
+        return False
+
+    def has_delete_permission(
+        self, request: HttpRequest, obj: HeroDraftChatMessage | None = None
+    ) -> bool:
+        return False
+
+
 admin.site.register(HeroDraft, HeroDraftAdmin)
 admin.site.register(HeroDraftEvent, HeroDraftEventAdmin)
+admin.site.register(HeroDraftChatMessage, HeroDraftChatMessageAdmin)

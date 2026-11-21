@@ -5,6 +5,7 @@ from channels.layers import get_channel_layer
 
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent
 from draft.serializers.hero import DraftTeamSerializerFull, HeroDraftSerializer
+from draft.services.hero_chat import chat_roster_field
 from draft.services.hero_state import herodraft_state_queryset
 from telemetry.logging import get_logger
 
@@ -52,6 +53,7 @@ def broadcast_herodraft_event(
         "draft_team": DraftTeamSerializerFull(draft_team).data if draft_team else None,
         "metadata": metadata or {},  # Include metadata for hero_id, action_type etc
         "timestamp": event.created_at.isoformat(),
+        **chat_roster_field(draft.id, event_type),
     }
 
     try:
@@ -125,6 +127,7 @@ def broadcast_herodraft_state(
     payload = {
         "type": "herodraft.event",
         "event_type": event_type,
+        **chat_roster_field(draft.id, event_type),
     }
 
     if metadata:

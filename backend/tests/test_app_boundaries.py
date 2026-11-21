@@ -88,6 +88,14 @@ MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT,)
 # target app -> production file (relative to backend/) -> what it may import from that app
 ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
     "draft": {
+        "app/discord_accounts.py": BackEdge(
+            frozenset({"repoint_chat_attribution"}),
+            "Discord account merge repoints hero draft chat authorship",
+        ),
+        "app/services/draft_reset.py": BackEdge(
+            frozenset({"delete_team_chat"}),
+            "tournament team reset wipes the reset teams' live hero draft chat",
+        ),
         "app/tournament_state.py": BackEdge(
             frozenset({"HeroDraft"}),
             "tournament prefetch plan prefetches games__herodraft",
@@ -102,10 +110,12 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "DraftTeam",
                     "HeroDraft",
                     "HeroDraftState",
+                    "apply_captain_tenure",
                     "broadcast_herodraft_state",
                 }
             ),
-            "team management resets and rebroadcasts the hero drafts of a changed team",
+            "team management resets and rebroadcasts the hero drafts of a changed"
+            " team and moves chat membership with captaincy",
         ),
         "app/services/team_references.py": BackEdge(
             frozenset({"DraftTeam", "HeroDraft"}),

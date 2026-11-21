@@ -15,6 +15,8 @@ from draft.models import (
     HeroDraftRound,
     HeroDraftState,
 )
+from draft.services.hero_chat import seed_draft_memberships
+from draft.services.heroes import ALL_HERO_IDS, get_available_heroes  # noqa: F401
 from draft.tasks.draft_tick import evaluate_client_pick_time
 from telemetry.logging import get_logger
 
@@ -68,6 +70,7 @@ def new_herodraft_for_game(game: Game) -> HeroDraft:
         DraftTeam.objects.create(
             draft=draft, tournament_team=team, reserve_time_remaining=reserve
         )
+    seed_draft_memberships(draft)
     return draft
 
 
@@ -407,148 +410,6 @@ def submit_pick(
             active_span.set_attribute("draft.completed", True)
 
         return current_round
-
-
-def get_available_heroes(draft: HeroDraft) -> list[int]:
-    """Return list of hero IDs not yet picked or banned."""
-    # All valid Dota 2 hero IDs from dotaconstants (as of Jan 2025)
-    # Hero IDs are not sequential - there are gaps (e.g., 24 doesn't exist, 139-144, 146-154 don't exist)
-    # This list should be updated when new heroes are added to Dota 2
-    ALL_HERO_IDS = [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17,
-        18,
-        19,
-        20,
-        21,
-        22,
-        23,
-        25,
-        26,
-        27,
-        28,
-        29,
-        30,
-        31,
-        32,
-        33,
-        34,
-        35,
-        36,
-        37,
-        38,
-        39,
-        40,
-        41,
-        42,
-        43,
-        44,
-        45,
-        46,
-        47,
-        48,
-        49,
-        50,
-        51,
-        52,
-        53,
-        54,
-        55,
-        56,
-        57,
-        58,
-        59,
-        60,
-        61,
-        62,
-        63,
-        64,
-        65,
-        66,
-        67,
-        68,
-        69,
-        70,
-        71,
-        72,
-        73,
-        74,
-        75,
-        76,
-        77,
-        78,
-        79,
-        80,
-        81,
-        82,
-        83,
-        84,
-        85,
-        86,
-        87,
-        88,
-        89,
-        90,
-        91,
-        92,
-        93,
-        94,
-        95,
-        96,
-        97,
-        98,
-        99,
-        100,
-        101,
-        102,
-        103,
-        104,
-        105,
-        106,
-        107,
-        108,
-        109,
-        110,
-        111,
-        112,
-        113,
-        114,
-        119,
-        120,
-        121,
-        123,  # Newer heroes with gaps
-        126,
-        128,
-        129,
-        131,
-        135,
-        136,
-        137,
-        138,
-        145,
-        155,  # Recent heroes including Largo (155)
-    ]
-
-    used_heroes = set(
-        draft.rounds.exclude(hero_id=None).values_list("hero_id", flat=True)
-    )
-
-    return [h for h in ALL_HERO_IDS if h not in used_heroes]
 
 
 def auto_random_pick(draft: HeroDraft, team: DraftTeam) -> HeroDraftRound:

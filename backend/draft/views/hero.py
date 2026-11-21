@@ -25,6 +25,7 @@ from draft.services.hero import (
     trigger_roll,
 )
 from draft.services.hero_broadcast import broadcast_herodraft_event
+from draft.services.hero_chat import reconcile_draft_memberships
 from draft.tasks import hero_tick
 from events.discord.tournament_dispatch import notify_herodraft_created
 from telemetry.logging import get_logger
@@ -623,6 +624,7 @@ def reset_draft(request: Request, draft_pk: int) -> Response:
     draft.paused_at = None
     draft.is_manual_pause = False
     draft.save()
+    reconcile_draft_memberships(draft.pk)
 
     log.info(
         "herodraft_reset",
