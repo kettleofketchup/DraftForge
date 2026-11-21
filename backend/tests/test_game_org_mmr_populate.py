@@ -3,11 +3,11 @@ from unittest.mock import patch
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, League, Tournament
 from common.game import GameType
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
-from org.models import OrgUser, OrgUserGameMmr
+from org.models import Organization, OrgUser, OrgUserGameMmr
 from org.models_profiles import PlayerDeadlockProfile
 from tests.data.game_org_mmr import (
     GAME_MMR_APPROVE_RANK,

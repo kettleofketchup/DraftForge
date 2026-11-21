@@ -14,13 +14,13 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_model, invalidate_obj
-from app.models import CustomUser, League, Organization, PositionsModel, Tournament
+from app.models import CustomUser, League, PositionsModel, Tournament
 from common.game import GameType
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import create_tournament_for_event
 from org.mmr import set_org_mmr
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile
 from tests.data.game_org_mmr import (
     GAME_MMR_APPROVE_DOTA,
