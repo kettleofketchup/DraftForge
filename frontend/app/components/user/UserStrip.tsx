@@ -62,7 +62,8 @@ export interface UserStripProps {
   /**
    * Show MMR badges (default true). Set false in contexts where MMR is
    * irrelevant (e.g. Discord DM history, claim approval lists). When true,
-   * the org and League MMR badges still auto-hide when 0/undefined.
+   * each badge still auto-hides when 0/undefined, and the League badge also
+   * hides when `showsLeagueMmr(gameType)` is false.
    */
   showMmr?: boolean;
 
@@ -294,7 +295,7 @@ export const UserStrip = memo(
           {showPositions && <div className="mt-0.5">{positions}</div>}
         </div>
 
-        {/* Column 3: MMR (stacked vertically - Base on top, League below) */}
+        {/* Column 3: MMR (stacked vertically - org on top, League below) */}
         {showMmr && (orgMmr || leagueMmrValue) ? (
           <div className="flex flex-col justify-center gap-0.5 shrink-0">
             {orgMmr ? baseMmrBadge : null}

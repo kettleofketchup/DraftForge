@@ -281,7 +281,7 @@ class UserSerializerTeamsTests(NumericDiscordFixtures, TestCase):
 
 
 class ClaimRequestPayloadTests(TestCase):
-    # One OrgUserGameMmr query per row, the same count as the OrgUser.get it replaced.
+    # One OrgUserGameMmr query per row.
     LIST_QUERIES_THREE_ROWS: int = 21
 
     def setUp(self) -> None:

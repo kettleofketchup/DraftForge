@@ -357,8 +357,7 @@ export const UserCard: React.FC<Props> = memo(
               {/* MMR row — only meaningful inside an org or league context.
                   On the global /users grid neither id is provided, so the
                   whole row is hidden (there's no "base" MMR concept).
-                  flex-wrap so a single MMR tile takes the full width when
-                  the other isn't shown. */}
+                  flex-wrap so the shown MMR tiles share the full width. */}
               {(organizationId || leagueId) && (
                 <div className="flex flex-wrap gap-1 w-full">
                   {organizationId &&
