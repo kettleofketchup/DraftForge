@@ -9,10 +9,12 @@ import {
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import {
+  conductKeys,
   contributionsKeys,
   orgFeaturesKey,
   promotionKeys,
   removeFeatureQueries,
+  standingKeys,
 } from '../queryKeys';
 import { useOrgFeatureAccess } from '../useOrgFeatureAccess';
 
@@ -30,6 +32,29 @@ const allTrue = {
   can_view_contributions: true,
   can_view_contributors: true,
   can_manage_contributions: true,
+  can_view_conduct: true,
+  can_view_own_conduct: true,
+  can_view_conduct_details: true,
+  can_manage_conduct: true,
+  standing_tracks: [
+    {
+      key: 'conduct',
+      label: 'Conduct',
+      metrics: [
+        {
+          key: 'show_rate',
+          label: 'Show rate',
+          format: 'percent',
+          periodic: false,
+          default: true,
+        },
+      ],
+      can_view_rows: true,
+      can_view_own: true,
+      board_open: true,
+      can_manage: true,
+    },
+  ],
 };
 
 function org(viewerPk: number | null): OrganizationType {
@@ -49,6 +74,11 @@ const allFalseFlags = {
   canViewContributions: false,
   canViewContributors: false,
   canManageContributions: false,
+  canViewConduct: false,
+  canViewOwnConduct: false,
+  canViewConductDetails: false,
+  canManageConduct: false,
+  standingTracks: [],
 };
 
 describe('OrganizationSchema feature fields', () => {
@@ -61,12 +91,30 @@ describe('OrganizationSchema feature fields', () => {
     expect(parsed.can_view_contributions).toBe(false);
     expect(parsed.can_view_contributors).toBe(false);
     expect(parsed.can_manage_contributions).toBe(false);
+    expect(parsed.can_view_conduct).toBe(false);
+    expect(parsed.can_view_own_conduct).toBe(false);
+    expect(parsed.can_view_conduct_details).toBe(false);
+    expect(parsed.can_manage_conduct).toBe(false);
+    expect(parsed.standing_tracks).toEqual([]);
   });
 
   it('keeps flags the backend sent', () => {
     const parsed = OrganizationSchema.parse({ name: 'Org', ...allTrue });
     expect(parsed.features).toEqual(['contributions', 'promotion']);
     expect(parsed.can_manage_contributions).toBe(true);
+    expect(parsed.can_view_conduct).toBe(true);
+    expect(parsed.can_view_own_conduct).toBe(true);
+    expect(parsed.can_view_conduct_details).toBe(true);
+    expect(parsed.can_manage_conduct).toBe(true);
+    expect(parsed.standing_tracks.map((t) => t.key)).toEqual(['conduct']);
+  });
+
+  it('rejects a malformed standing track', () => {
+    const result = OrganizationSchema.safeParse({
+      name: 'Org',
+      standing_tracks: [{ key: 'karma', label: 'Karma', metrics: [] }],
+    });
+    expect(result.success).toBe(false);
   });
 });
 
@@ -105,6 +153,11 @@ describe('useOrgFeatureAccess', () => {
       canViewContributions: true,
       canViewContributors: true,
       canManageContributions: true,
+      canViewConduct: true,
+      canViewOwnConduct: true,
+      canViewConductDetails: true,
+      canManageConduct: true,
+      standingTracks: allTrue.standing_tracks,
     });
   });
 
@@ -119,6 +172,7 @@ describe('useOrgFeatureAccess', () => {
     expect(result.current.viewerPk).toBeNull();
     expect(result.current.canViewContributions).toBe(true);
     expect(result.current.canUsePromotion).toBe(false);
+    expect(result.current.standingTracks).toEqual(allTrue.standing_tracks);
   });
 
   it('drops flags as soon as the viewer logs out', () => {
@@ -147,6 +201,16 @@ describe('removeFeatureQueries', () => {
     qc.setQueryData(['organization', 7], { pk: 7 });
     qc.setQueryData(orgFeaturesKey(7), ['f']);
     qc.setQueryData(contributionsKeys.leaderboard(8, 5, 'all'), ['other']);
+    qc.setQueryData(
+      standingKeys.leaderboard(7, 5, 'conduct', 'show_rate', 'current'),
+      ['s'],
+    );
+    qc.setQueryData(conductKeys.member(7, 5, 11, { limit: 20, offset: 0 }), [
+      'h',
+    ]);
+    qc.setQueryData(conductKeys.settings(7, 5), ['cs']);
+    qc.setQueryData(standingKeys.track(8, 5, 'conduct'), ['other-s']);
+    qc.setQueryData(conductKeys.settings(8, 5), ['other-c']);
 
     removeFeatureQueries(qc, 7);
 
@@ -158,9 +222,11 @@ describe('removeFeatureQueries', () => {
       expect.arrayContaining([
         ['organization', 7],
         contributionsKeys.leaderboard(8, 5, 'all'),
+        standingKeys.track(8, 5, 'conduct'),
+        conductKeys.settings(8, 5),
       ]),
     );
-    expect(remaining).toHaveLength(2);
+    expect(remaining).toHaveLength(4);
   });
 
   it('nests every contributions and promotion key under its all() prefix', () => {
@@ -182,6 +248,29 @@ describe('removeFeatureQueries', () => {
       promotionKeys.candidates(7, 5, 1, {}),
     ]) {
       expect(key.slice(0, pAll.length)).toEqual(pAll);
+    }
+  });
+
+  it('nests every standing and conduct key under its all() prefix', () => {
+    const sAll = standingKeys.all(7, 5);
+    const cAll = conductKeys.all(7, 5);
+    expect(sAll).toEqual(['org-standing', 7, 5]);
+    expect(cAll).toEqual(['org-conduct', 7, 5]);
+    const track = standingKeys.track(7, 5, 'contribution');
+    expect(track.slice(0, sAll.length)).toEqual(sAll);
+    const board = standingKeys.leaderboard(
+      7,
+      5,
+      'contribution',
+      'points',
+      '2026-10',
+    );
+    expect(board.slice(0, track.length)).toEqual(track);
+    for (const key of [
+      conductKeys.member(7, 5, 1, { limit: 20, offset: 0 }),
+      conductKeys.settings(7, 5),
+    ]) {
+      expect(key.slice(0, cAll.length)).toEqual(cAll);
     }
   });
 });

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { UserType } from '~/components/user/types';
+import { TrackInfoSchema } from '~/features/standing/schemas';
 
 export const OrganizationSchema = z.object({
   pk: z.number().optional(),
@@ -26,6 +27,11 @@ export const OrganizationSchema = z.object({
   can_view_contributions: z.boolean().optional().default(false),
   can_view_contributors: z.boolean().optional().default(false),
   can_manage_contributions: z.boolean().optional().default(false),
+  can_view_conduct: z.boolean().optional().default(false),
+  can_view_own_conduct: z.boolean().optional().default(false),
+  can_view_conduct_details: z.boolean().optional().default(false),
+  can_manage_conduct: z.boolean().optional().default(false),
+  standing_tracks: z.array(TrackInfoSchema).optional().default([]),
   owner_id: z.number().nullable().optional(),
   admin_ids: z.array(z.number()).optional(),
   staff_ids: z.array(z.number()).optional(),

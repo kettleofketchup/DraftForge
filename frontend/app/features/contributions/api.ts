@@ -5,14 +5,12 @@ import {
   AdminEntrySchema,
   ENTRIES_PAGE_SIZE,
   EntriesPageSchema,
-  LeaderboardResponseSchema,
   MemberBreakdownSchema,
   PointValueRowSchema,
   PointValueUpdateResultSchema,
   type AdminEntry,
   type EntriesFilters,
   type EntriesPage,
-  type LeaderboardResponse,
   type ManualAwardInput,
   type MemberBreakdown,
   type PointValueRow,
@@ -23,19 +21,6 @@ import {
 
 function periodParams(period: string): { period?: string } {
   return period && period !== ALL_TIME ? { period } : {};
-}
-
-export async function getLeaderboard(
-  orgId: number,
-  period: string,
-): Promise<LeaderboardResponse> {
-  const response = await api.get(
-    `/organizations/${orgId}/contributions/leaderboard/`,
-    {
-      params: periodParams(period),
-    },
-  );
-  return LeaderboardResponseSchema.parse(response.data);
 }
 
 export async function getMemberBreakdown(

@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { OrgFeatureAccess } from '~/features/org-features';
+import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { createI18nInstance } from '~/i18n/config';
 import { renderPromo, sendPromo } from '../api';
 import { ComposePanel } from '../ComposePanel';
@@ -22,16 +23,11 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
 });
 
-const access: OrgFeatureAccess = {
-  settled: true,
+const access: OrgFeatureAccess = makeOrgFeatureAccess({
   viewerPk: 5,
   canUsePromotion: true,
-  canManageTemplates: false,
-  canManagePromoters: false,
   canViewContributions: true,
-  canViewContributors: false,
-  canManageContributions: false,
-};
+});
 
 const event: PromoEvent = {
   id: 9,

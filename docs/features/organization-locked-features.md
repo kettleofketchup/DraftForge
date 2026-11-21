@@ -135,7 +135,9 @@ earn no points and are not added as org members.
 ## Contributions
 
 The **Contributions** tab shows the org-wide points total and a leaderboard, for all
-time or a single month. Months are calendar months in the organization's timezone (UTC
+time or a single month. A **Points** / **Entries** switcher ranks members by points or
+by number of entries; the chosen month carries over, and the org total is always in
+points. Members with the same value and entry count share a rank. Months are calendar months in the organization's timezone (UTC
 if the timezone is missing or invalid), so a game at 11pm on Oct 31 Eastern counts
 toward October.
 
