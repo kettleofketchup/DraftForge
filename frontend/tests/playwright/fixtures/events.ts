@@ -164,17 +164,21 @@ export async function loginEventPlayer4(context: BrowserContext) {
   return resp.json();
 }
 
-/** TEST: Set OrgUser.mmr for a given (orgPk, userPk). Invalidates cacheops. */
+/**
+ * TEST: Set the org MMR of (orgPk, userPk) for one game (default Dota 2).
+ * 0 clears it. Invalidates cacheops.
+ */
 export async function setApprovedMmr(
   context: BrowserContext,
   orgPk: number,
   userPk: number,
   mmr: number,
+  gameType?: number,
 ) {
   const resp = await context.request.post(
     `${API_URL}/tests/org/${orgPk}/user/${userPk}/set-approved-mmr/`,
     {
-      data: { mmr },
+      data: gameType == null ? { mmr } : { mmr, game_type: gameType },
       headers: { 'Content-Type': 'application/json' },
     },
   );

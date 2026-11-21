@@ -69,6 +69,7 @@ Read `steps` in `populate_all()` for the exact current order.
 | `populate_dota_lobby_data` | dota_lobby.py | Lobby Test Org/League (steam 17940), "Lobby Test Series" (fixed password, paused) with one upcoming event + 4-team tournament, "Lobby Random Event" (random password) + 2-team tournament, "Lobby Lifecycle Tournament" (in progress). Manual lobby mode everywhere; users 7200-7233 with Steam account IDs. `reset_dota_lobby_data` and `dota_lobby_test_data` serve the test endpoints |
 | `populate_org_features_data` | org_features.py | Features Test / Locked Features / Private Features orgs + leagues (pk=40-42, steam=17941-17943), role users 7300-7307, Discord-linked players 7310-7319 and past tournaments 260-263, then `reset_org_features_data` (feature switches, ledger, templates, events). `org_features_test_data` serves the `e2e/19-org-features` specs |
 | `populate_tournament_discovery` | tournament_discovery.py | Discovery Home/Away/Open orgs + leagues (pk=30-32, steam=17950-17952), `discovery_member` (pk=1100, OrgUser of org 30 only) and tournaments 900-906 (home live/soon/later/finished/stale, away cup, open-signups cup whose source event is SIGNUPS_OPEN) with absolute 2099/2020 dates. Fixture for `e2e/03-tournaments/04-discovery.spec.ts` |
+| `populate_game_org_mmr_data` | game_org_mmr.py | Game MMR Org/League (pk=50, steam=17944), users 8000-8007 with Dota 2 and Deadlock org MMRs in different orders (8007: Dota only, Deadlock rank "Phantom 4 (e2e)"), "Game MMR Dota Cup" and "Game MMR Deadlock Cup" (from the "Game MMR Deadlock Night" event). Runs last in `populate_all`. `reset_game_org_mmr_approve` (POST `/api/tests/game-org-mmr/approve-setup/`) rebuilds a Deadlock event with a pending signup for 8007; `game_org_mmr_test_data` serves GET `/api/tests/game-org-mmr/data/`. Fixture for `e2e/11-org-mmr/04-game-org-mmr` and `e2e/16-events/16-deadlock-org-mmr-approve` |
 | `populate_events_data` | events.py | Creates Events Test Org (pk=7), league (pk=7), 21 users (pk=5000-5020), "Weekly Inhouse" repeater, "E2E Signup Event" |
 | `populate_league_stats_data` | league_stats.py | Strip Stats Org/League (pk=20, steam=17938): 10 users with exact ticket-game sequences for rank, tie, streak, unranked and zero-game cases. The fixture the league-stats tests assert against |
 | `populate_league_stats_showcase` | league_stats.py | League Stats Showcase Org/League (pk=21, steam=17939): 60 seeded users, 160 5v5 ticket matches (54 ranked, 3 newcomers, 3 idle) and an untimed 8-captain draft. For demos and manual checks; tests assert its shape, not exact values |
@@ -76,7 +77,7 @@ Read `steps` in `populate_all()` for the exact current order.
 ### Shared Utilities (`backend/tests/populate/utils.py`)
 
 - `create_user(user_data, organization=None)` - Create user from Discord data, optionally with OrgUser
-- `ensure_org_user(user, organization, mmr)` - Get or create OrgUser
+- `ensure_org_user(user, organization, mmr=None, guild_nickname=None, game_mmrs=None)` - Get or create OrgUser; `mmr` is the Dota 2 org MMR, `game_mmrs` maps GameType to value (0 clears)
 - `ensure_league_user(user, org_user, league)` - Get or create LeagueUser
 - `flush_redis_cache()` - Flush Redis after population
 - `generate_mock_discord_members(count)` - Create mock Discord member data
