@@ -62,10 +62,10 @@ Note: Use `DISABLE_CACHE=true` when Redis is unavailable.
 just test::run 'python manage.py test app.tests -v 2'
 
 # Specific module
-just test::run 'python manage.py test app.tests.test_shuffle_draft -v 2'
+just test::run 'python manage.py test draft.tests.test_team_shuffle -v 2'
 
 # Specific test class
-just test::run 'python manage.py test app.tests.test_shuffle_draft.GetTeamTotalMmrTest -v 2'
+just test::run 'python manage.py test draft.tests.test_team_shuffle.GetTeamTotalMmrTest -v 2'
 ```
 
 ### Backend Tests (Local)

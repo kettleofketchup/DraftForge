@@ -174,7 +174,8 @@ def populate_demo_captaindraft_tournament(force=False):
     """
     from django.utils import timezone
 
-    from app.models import Draft, DraftOptions, League, Tournament
+    from app.models import League, Tournament
+    from draft.models import Draft, DraftOptions
 
     TOURNAMENT_NAME = "Demo Captain Draft Tournament"
 
@@ -242,7 +243,8 @@ def populate_demo_snake_draft_tournament(force=False):
     """
     from django.utils import timezone
 
-    from app.models import Draft, DraftOptions, League, Team, Tournament
+    from app.models import League, Team, Tournament
+    from draft.models import Draft, DraftOptions
 
     TOURNAMENT_NAME = "Demo Snake Draft Tournament"
 
@@ -327,7 +329,8 @@ def populate_demo_shuffle_draft_tournament(force=False):
     """
     from django.utils import timezone
 
-    from app.models import Draft, DraftOptions, League, Team, Tournament
+    from app.models import League, Team, Tournament
+    from draft.models import Draft, DraftOptions
 
     TOURNAMENT_NAME = "Demo Shuffle Draft Tournament"
 

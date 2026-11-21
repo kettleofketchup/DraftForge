@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from channels.db import database_sync_to_async
 
 CONSUMER_DB_THREADS: int = 16
-_consumer_db_executor = ThreadPoolExecutor(
+_consumer_db_executor: ThreadPoolExecutor = ThreadPoolExecutor(
     max_workers=CONSUMER_DB_THREADS, thread_name_prefix="ws-db"
 )
 

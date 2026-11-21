@@ -17,9 +17,9 @@ from django.test import TransactionTestCase
 from django.urls import re_path
 
 from app.models import Game, Team, Tournament
-from app.tests.ws_helpers import read_until_type
 from draft.consumers.hero import HeroDraftConsumer
 from draft.models import DraftTeam, HeroDraft, HeroDraftState
+from draft.tests.ws_helpers import read_until_type
 
 User = get_user_model()
 

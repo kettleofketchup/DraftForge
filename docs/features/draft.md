@@ -161,7 +161,7 @@ Staff may still pick while paused (captains get 403 `paused_staff_only`); the ne
 
 ## Timeout actions
 
-When grace plus reserve is exhausted the tick loop calls the action registered in `TIMEOUT_ACTIONS[options.timeout_action]` (`app.functions.teamdraft_timeout`). It emits `pick_timed_out`, stamps `timed_out_at`, and runs the action. Pick-vs-timeout races are resolved under the draft row lock: whichever commits first wins.
+When grace plus reserve is exhausted the tick loop calls the action registered in `TIMEOUT_ACTIONS[options.timeout_action]` (`draft.services.team_timeout`). It emits `pick_timed_out`, stamps `timed_out_at`, and runs the action. Pick-vs-timeout races are resolved under the draft row lock: whichever commits first wins.
 
 `skip_turn` (snake and normal) swaps the expired pick with the next eligible pick:
 
@@ -195,7 +195,7 @@ All carry `pick_number` (the lowest unpicked round, or `null`) except `draft_lob
 ### Backend tests
 
 ```bash
-just test::run 'python manage.py test app.tests.test_draft_options app.tests.test_teamdraft_timer app.tests.test_teamdraft_timeout -v 2'
+just test::run 'python manage.py test draft.tests.test_team_options draft.tests.test_team_timer draft.tests.test_team_timeout -v 2'
 ```
 
 ## Data Models

@@ -20,25 +20,7 @@ from draft.consumers.base import BaseDraftConsumer
 from draft.consumers.hero import HeroDraftConsumer
 from draft.tasks.draft_tick import TickDriver, heartbeat_key
 from draft.tasks.hero_tick import HERO_TICK_DRIVER, HeroDraftTickDriver
-
-
-class ConcreteDraftConsumer(BaseDraftConsumer):
-    """Minimal concrete implementation for testing BaseDraftConsumer."""
-
-    def get_room_group_prefix(self):
-        return "testdraft"
-
-    async def draft_exists(self, draft_id):
-        return True
-
-    async def get_initial_state_data(self, draft_id):
-        return {"type": "initial_state", "state": "drafting", "draft_id": draft_id}
-
-    async def get_captain_draft_team(self, draft_id, user):
-        return None
-
-    def get_active_draft_state_values(self):
-        return ["drafting"]
+from draft.tests.ws_helpers import ConcreteDraftConsumer
 
 
 class TestAbstractInterface(SimpleTestCase):
