@@ -178,6 +178,8 @@ Add a `MovedSlice` to `backend/tests/test_app_boundaries.py` and append it to `M
 
 Do not touch `GuardSelfTests` to add a slice. They run against a synthetic fixture slice and back-edge map, not the live ones.
 
+The guard also flags `get_model("<source_app>", "<Moved>")` outside migrations and migration tests, and any top-level class or function in the source app named after a moved name. A name that genuinely collides goes in `ALLOWED_NAME_COLLISIONS` with a reason (for example the worker HTTP helper `create_herodraft_for_game` in `app/internal_client`).
+
 Update `ALLOWED_BACK_EDGES[<new_app>]` with each production file in the source app that still imports from the new app. Each entry is a `BackEdge(names, reason, type_only)`. Test modules are exempt. The rules:
 
 - The list must match reality exactly. The guard fails on an unlisted file or name and on a listed name that is no longer imported.
