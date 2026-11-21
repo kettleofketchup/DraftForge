@@ -66,7 +66,6 @@ MMRS_8: list[int] = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
 # organization (2), OrgUser lookup, missing-OrgUser probe, OrgUser profiles,
 # league memberships, game MMRs (5), bulk _users core (1). latest_round,
 # active_round and clock_armed read the prefetched rounds.
-# +1: OrgUserGameMmr prefetch
 DRAFT_STATE_QUERIES: int = 18
 # Ready = the post-commit broadcast + the tournament response (with its
 # league/source_event/games/captains/draft lookups) + the view's own captain
@@ -78,15 +77,15 @@ READY_ENDPOINT_QUERIES: int = 41
 # auth, locks, the pick, timing, next-round activation and two event inserts
 # (+BEGIN/COMMIT), 18 for the one shared broadcast state behind both events,
 # 2 data_version stamps (build + reuse), BEGIN/COMMIT around the autocommit
-# build, 24 for the tournament response, 1 for the hero draft chat tenure
+# build, 23 for the tournament response, 1 for the hero draft chat tenure
 # lookup the roster change triggers on commit. The broadcast state and the
 # tournament response each include one OrgUserGameMmr prefetch.
 PICK_QUERIES: int = 74
 # The draft state plus the broadcast's data_version stamp.
 BROADCAST_EVENT_QUERIES: int = DRAFT_STATE_QUERIES + 1
-# +1: OrgUserGameMmr prefetch in the users dict
+# Includes the OrgUserGameMmr prefetch in the users dict.
 TOURNAMENT_RESPONSE_QUERIES: int = 24
-# +2: OrgUserGameMmr prefetch in the broadcast state and the tournament response
+# Includes the OrgUserGameMmr prefetch in the broadcast state and tournament response.
 RESUME_ENDPOINT_QUERIES: int = 56
 # Includes the hero draft chat tenure lookup the roster change triggers.
 UNDO_ENDPOINT_QUERIES: int = 68
