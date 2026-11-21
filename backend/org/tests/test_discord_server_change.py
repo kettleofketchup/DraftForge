@@ -3,9 +3,9 @@ from unittest import mock
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from org.discord_names import reset_org_guild_nicknames
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 LOCMEM = {
     "default": {

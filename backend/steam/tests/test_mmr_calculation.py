@@ -1,14 +1,10 @@
-import pytest
-from django.conf import settings
 from django.test import TestCase, override_settings
 
-from app.models import CustomUser, League, Organization, PositionsModel
+from app.models import CustomUser, League, PositionsModel
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from steam.functions.mmr_calculation import (
     calculate_mmr_adjustment,
-    get_league_avg_gpm,
-    get_league_avg_kda,
     update_user_league_mmr,
 )
 from steam.models import LeaguePlayerStats

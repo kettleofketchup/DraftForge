@@ -4,7 +4,8 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Organization
+from app.models import CustomUser, League
+from org.models import Organization
 
 
 class LeagueAPITest(TestCase):

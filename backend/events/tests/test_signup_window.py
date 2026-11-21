@@ -4,11 +4,12 @@ from typing import Any
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from app.models import CustomUser, League, Organization, PositionsModel, Tournament
+from app.models import CustomUser, League, PositionsModel, Tournament
 from events.constants import EventState
 from events.models import Event
 from events.services import process_rsvp
 from events.signup_window import user_signups_open_tournament_ids
+from org.models import Organization
 
 
 @override_settings(CACHEOPS_ENABLED=False)

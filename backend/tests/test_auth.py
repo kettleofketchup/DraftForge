@@ -21,9 +21,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from common.utils import isTestEnvironment
 from draft.models import Draft
+from org.models import Organization
 from tests.data.tournaments import (
     BRACKET_UNSET_WINNER_TOURNAMENT,
     SHUFFLE_TIE_TOURNAMENT,
@@ -581,7 +582,6 @@ def login_org_admin(request):
     user, created = createOrgAdminTestUser()
 
     # Make this user an admin of org 1 (DTX) if not already
-    from app.models import Organization
 
     org = Organization.objects.filter(pk=1).first()
     if org and user not in org.admins.all():
@@ -604,7 +604,6 @@ def login_org_staff(request):
     user, created = createOrgStaffTestUser()
 
     # Make this user staff of org 1 (DTX) if not already
-    from app.models import Organization
 
     org = Organization.objects.filter(pk=1).first()
     if org and user not in org.staff.all():
@@ -629,7 +628,6 @@ def login_org_member(request):
     # Make this user a member (NOT admin or staff) of org 1 (DTX) by
     # ensuring an OrgUser row — that's the actual "member of org"
     # relationship; Organization.users isn't a field.
-    from app.models import Organization
     from tests.populate.utils import ensure_org_user
 
     org = Organization.objects.filter(pk=1).first()
@@ -1187,8 +1185,6 @@ def reset_org_admin_team(request, org_pk: int):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from app.models import Organization
-
     try:
         org = Organization.objects.get(pk=org_pk)
     except Organization.DoesNotExist:
@@ -1252,7 +1248,7 @@ def create_claim_request(request):
 
     import uuid
 
-    from app.models import Organization, ProfileClaimRequest
+    from app.models import ProfileClaimRequest
 
     organization_id = request.data.get("organization_id", 1)
     try:

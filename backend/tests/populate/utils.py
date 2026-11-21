@@ -15,8 +15,8 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 
-from app.models import CustomUser, Organization, PositionsModel
-from org.models import OrgUser, PromoSend
+from app.models import CustomUser, PositionsModel
+from org.models import Organization, OrgUser, PromoSend
 from org.standing import api as standing
 
 from .avatars import apply_committed_avatars
@@ -266,7 +266,6 @@ REAL_TOURNAMENT_USERS = {
 
 def get_or_create_demo_user(username, user_data, organization=None):
     """Get or create a user for demo tournaments with real position data."""
-    from app.models import Organization
 
     steam_account_id = user_data.get("steam_id")  # 32-bit Friend ID
     pos_data = user_data.get("positions", {})

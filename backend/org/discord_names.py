@@ -9,10 +9,10 @@ from django.core.cache import cache
 from django.db import transaction
 
 from app.cache_utils import invalidate_after_commit, invalidate_model
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from discordbot.services.member_names import MemberNames, normalise_name
 from org.activity import enqueue_org_name_sync
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

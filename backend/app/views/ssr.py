@@ -7,11 +7,10 @@ for server-side rendering of meta tags and above-the-fold content.
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import AllowAny
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, League, Tournament
 from app.serializers_ssr import (
     EventSerializerSSR,
     LeagueSerializerSSR,
-    OrganizationSerializerSSR,
     TournamentSerializerSSR,
     UserSerializerSSR,
 )
@@ -22,12 +21,6 @@ class TournamentSSRView(RetrieveAPIView):
     serializer_class = TournamentSerializerSSR
     permission_classes = [AllowAny]
     queryset = Tournament.objects.select_related("league__organization")
-
-
-class OrganizationSSRView(RetrieveAPIView):
-    serializer_class = OrganizationSerializerSSR
-    permission_classes = [AllowAny]
-    queryset = Organization.objects.all()
 
 
 class LeagueSSRView(RetrieveAPIView):

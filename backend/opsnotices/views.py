@@ -9,13 +9,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import Organization
-from app.permissions_org import has_event_staff_access, has_org_staff_access
+from app.permissions_tournament import has_event_staff_access
 from events.models import Event
 from opsnotices.models import OPEN_STATES, OpsNotice
 from opsnotices.registry import NoticeCategory
 from opsnotices.serializers import OpsNoticeSerializer
 from opsnotices.services import CLOSE_NOTE_MAX, resolve_notice_by_id
+from org.models import Organization
+from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

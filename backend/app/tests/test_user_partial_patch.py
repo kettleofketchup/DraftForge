@@ -14,8 +14,8 @@ on transaction.on_commit hooks fired by invalidate_after_commit.
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, PositionsModel
-from org.models import OrgUser
+from app.models import CustomUser, PositionsModel
+from org.models import Organization, OrgUser
 
 
 class PartialUserPatchTests(TestCase):
@@ -52,7 +52,9 @@ class PartialUserPatchTests(TestCase):
         self.assertEqual(self.target_positions.soft_support, 2)
         self.assertEqual(self.target_positions.hard_support, 2)
 
-    def test_partial_positions_patch_via_global_endpoint_passes_serializer_validation(self):
+    def test_partial_positions_patch_via_global_endpoint_passes_serializer_validation(
+        self,
+    ):
         """PATCH /users/:pk/ {positions: {carry: 3}} must return 200, not trip required-field validation."""
         url = f"/api/users/{self.target.pk}/"
         resp = self.client.patch(url, {"positions": {"carry": 3}}, format="json")
@@ -68,8 +70,8 @@ class PartialUserPatchTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_partial_mmr_patch_via_org_endpoint_does_not_clear_nickname(self):
-        """PATCH {mmr: 6500} must leave nickname unchanged — proves the safety property
-        the spec relies on for concurrent edits."""
+        """PATCH {mmr: 6500} must leave nickname unchanged — concurrent edits rely
+        on this."""
         url = f"/api/organizations/{self.org.pk}/users/{self.org_user.pk}/"
         resp = self.client.patch(url, {"mmr": 6500}, format="json")
         self.assertEqual(resp.status_code, 200, resp.content)
