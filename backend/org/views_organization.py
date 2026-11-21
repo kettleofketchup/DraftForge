@@ -16,7 +16,8 @@ from app.models import CustomUser, League, Tournament
 from app.serializers import OrganizationsSerializer
 from org.features import FeatureKey, active_features
 from org.membership import member_access
-from org.models import Organization, OrgUser
+from org.mmr import game_mmrs_prefetch
+from org.models import Organization, OrgUser, OrgUserGameMmr
 from org.permissions import (
     IsOrgAdmin,
     IsOrgOwner,
@@ -162,6 +163,7 @@ class OrganizationView(viewsets.ModelViewSet):
 
         @cached_as(
             OrgUser,
+            OrgUserGameMmr,
             CustomUser,
             BaseUserProfile,
             DotaUserProfile,
@@ -171,8 +173,10 @@ class OrganizationView(viewsets.ModelViewSet):
         def get_data() -> Any:
             org_users = with_user_profiles(
                 OrgUser.objects.filter(organization=org), "user", dota=True
+            ).prefetch_related(game_mmrs_prefetch(fresh=False))
+            serializer = OrgUserSerializer(
+                org_users, many=True, context={"include_game_mmrs": True}
             )
-            serializer = OrgUserSerializer(org_users, many=True)
             return serializer.data
 
         data = get_data()

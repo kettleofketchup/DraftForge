@@ -24,6 +24,7 @@ from app.models import CustomUser
 from draft.services.hero_chat import repoint_chat_attribution
 from events.staff import dedupe_host_helpers
 from org.accounts import repoint_org_attribution
+from org.mmr import merge_org_mmrs
 from org.models import OrgUser
 from org.promotion.services import demote_colliding_earning_sends
 from org.standing import api as standing
@@ -106,6 +107,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
                     keep_ou.guild_nickname = drop_ou.guild_nickname
                     keep_ou.save(update_fields=["guild_nickname"])
                     invalidate_after_commit(keep)
+                merge_org_mmrs(drop_ou, keep_ou)
                 pairs.append((drop_ou, keep_ou))
         standing.merge_users(drop, keep, member_pairs=pairs)
         repoint_org_attribution(drop, keep)

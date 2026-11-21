@@ -1,17 +1,26 @@
 """Match finalization service for league ratings."""
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import List
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils import timezone
+
+from org.mmr import LEAGUE_GAME, org_mmr_map
+
+if TYPE_CHECKING:
+    from app.models import CustomUser, Game, League, LeagueMatch
 
 
 class LeagueMatchService:
     """Service for managing league matches and rating updates."""
 
     @classmethod
-    def create_from_game(cls, league, game, bracket_slot=None):
+    def create_from_game(
+        cls, league: League, game: Game, bracket_slot: str | None = None
+    ) -> LeagueMatch:
         """Create a LeagueMatch from an existing Game object."""
         from app.models import LeagueMatch
 
@@ -26,7 +35,13 @@ class LeagueMatchService:
 
     @classmethod
     @transaction.atomic
-    def finalize(cls, match, winners: List, losers: List, winning_side: str):
+    def finalize(
+        cls,
+        match: LeagueMatch,
+        winners: list[CustomUser],
+        losers: list[CustomUser],
+        winning_side: str,
+    ) -> LeagueMatch:
         """
         Finalize a match and update all participant ratings.
 
@@ -60,28 +75,18 @@ class LeagueMatchService:
             ).select_for_update()
         }
 
-        # Create missing ratings
-        # Get organization for MMR lookup
-        org = league.organization
-
-        for player in all_players:
-            if player.pk not in existing_ratings:
-                # Get MMR from OrgUser if organization exists
-                base_mmr = 0
-                if org:
-                    from org.models import OrgUser
-
-                    try:
-                        org_user = OrgUser.objects.get(user=player, organization=org)
-                        base_mmr = org_user.mmr or 0
-                    except OrgUser.DoesNotExist:
-                        base_mmr = 0
-                else:
-                    base_mmr = 0
-
-                existing_ratings[player.pk] = LeagueRating.objects.create(
-                    league=league, player=player, base_mmr=base_mmr
-                )
+        missing = list(
+            {p.pk: p for p in all_players if p.pk not in existing_ratings}.values()
+        )
+        base_mmrs = (
+            org_mmr_map(league.organization_id, [p.pk for p in missing], LEAGUE_GAME)
+            if league.organization_id
+            else {}
+        )
+        for player in missing:
+            existing_ratings[player.pk] = LeagueRating.objects.create(
+                league=league, player=player, base_mmr=base_mmrs.get(player.pk, 0)
+            )
 
         winner_ratings = [existing_ratings[p.pk] for p in winners]
         loser_ratings = [existing_ratings[p.pk] for p in losers]
@@ -154,7 +159,7 @@ class LeagueMatchService:
         return match
 
     @classmethod
-    def calculate_age_decay(cls, league, played_at: datetime) -> float:
+    def calculate_age_decay(cls, league: League, played_at: datetime) -> float:
         """Calculate age decay factor for a match."""
         if not league.age_decay_enabled:
             return 1.0
@@ -177,7 +182,7 @@ class LeagueMatchService:
 
     @classmethod
     @transaction.atomic
-    def recalculate(cls, match):
+    def recalculate(cls, match: LeagueMatch) -> LeagueMatch:
         """
         Recalculate ratings for a finalized match.
 

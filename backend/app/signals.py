@@ -36,6 +36,7 @@ from app.services.team_signals import (
 from app.services.team_signals import team_roster_changed as team_roster_changed
 from app.services.tournament_completion import sync_tournament_completion
 from league.models import LeagueUser
+from org.mmr import LEAGUE_GAME, org_mmr_map
 from org.models import OrgUser
 from telemetry.logging import get_logger
 
@@ -269,13 +270,18 @@ def handle_tournament_user_addition(
 
     # Get the users that were added
     added_users = CustomUser.objects.filter(pk__in=added_pks)
+    seeded = set(
+        LeagueUser.objects.filter(league=league, user_id__in=added_pks).values_list(
+            "user_id", flat=True
+        )
+    )
+    league_mmrs = org_mmr_map(org.pk, set(added_pks or ()) - seeded, LEAGUE_GAME)
 
     for user in added_users:
         # Step 1: Create OrgUser if it doesn't exist
         org_user, org_created = OrgUser.objects.get_or_create(
             user=user,
             organization=org,
-            defaults={"mmr": 0},
         )
         if org_created:
             log.info(
@@ -293,7 +299,7 @@ def handle_tournament_user_addition(
             league=league,
             defaults={
                 "org_user": org_user,
-                "mmr": org_user.mmr,
+                "mmr": league_mmrs.get(user.pk, 0),
             },
         )
         if league_created:

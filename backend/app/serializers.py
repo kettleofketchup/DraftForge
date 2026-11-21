@@ -22,6 +22,7 @@ from events.overrides import (
     OverrideRequestSerializer,
 )
 from league.models import LeagueUser
+from org.mmr import LEAGUE_GAME, game_for_tournament, game_mmrs_prefetch, org_mmr_map
 from org.models import Organization, OrgUser
 from telemetry.logging import get_logger
 from user.querysets import with_user_profiles
@@ -122,21 +123,29 @@ def _tournament_organization(
 
 
 def _serialize_users_with_mmr(
-    users_qs: QuerySet[CustomUser], tournament: Tournament | None
+    users_qs: QuerySet[CustomUser],
+    tournament: Tournament | None,
+    *,
+    game_type: int | None = None,
+    fresh: bool = False,
 ) -> ReturnList:
     """Serialize users with org-scoped MMR if tournament has a league/org."""
     # local: org.serializers imports app.serializers
     from org.serializers import OrgUserSerializer
 
     league = tournament.league if tournament else None
-    org = _tournament_organization(tournament)
+    org = _tournament_organization(tournament, fresh=fresh)
 
     if not org:
         return TournamentUserSerializer(users_qs, many=True).data
 
+    if fresh:
+        users_qs = users_qs.nocache()
+    org_user_qs = OrgUser.objects.nocache() if fresh else OrgUser.objects.all()
+    league_user_qs = LeagueUser.objects.nocache() if fresh else LeagueUser.objects.all()
     # Auto-create OrgUser records for tournament users missing from the org
     existing_user_pks = set(
-        OrgUser.objects.filter(user__in=users_qs, organization=org).values_list(
+        org_user_qs.filter(user__in=users_qs, organization=org).values_list(
             "user_id", flat=True
         )
     )
@@ -154,27 +163,35 @@ def _serialize_users_with_mmr(
     ).prefetch_related(
         Prefetch(
             "league_memberships",
-            queryset=LeagueUser.objects.filter(league_id=league.pk if league else None),
-        )
+            queryset=league_user_qs.filter(league_id=league.pk if league else None),
+        ),
+        game_mmrs_prefetch(fresh=fresh),
     )
+    if game_type is None:
+        game_type = game_for_tournament(tournament)
     return OrgUserSerializer(
-        org_users, many=True, context={"league_id": league.pk if league else None}
+        org_users,
+        many=True,
+        context={"league_id": league.pk if league else None, "game_type": game_type},
     ).data
 
 
 def _serialize_user_with_mmr(
-    user: CustomUser | None, tournament: Tournament | None
+    user: CustomUser | None,
+    tournament: Tournament | None,
+    game_type: int | None = None,
 ) -> dict | None:
     """Serialize a single user with org-scoped MMR. Returns None if user is None."""
     if user is None:
         return None
     results = _serialize_users_with_mmr(
-        type(user).objects.filter(pk=user.pk), tournament
+        type(user).objects.filter(pk=user.pk), tournament, game_type=game_type
     )
     return results[0] if results else TournamentUserSerializer(user).data
 
 
 TEAM_USER_INDEX = "team_user_index"
+TEAM_MMR_MAPS = "team_mmr_maps"
 TEAM_ROSTER_FIELDS: tuple[str, ...] = ("members", "dropin_members", "left_members")
 
 
@@ -239,7 +256,8 @@ def build_team_user_index(
             Prefetch(
                 "league_memberships",
                 queryset=LeagueUser.objects.filter(league_id=league_id),
-            )
+            ),
+            game_mmrs_prefetch(fresh=False),
         )
         .order_by("user_id")
     )
@@ -252,7 +270,9 @@ def build_team_user_index(
         )
         org_users = list(org_users_qs.all())
     serialized = OrgUserSerializer(
-        org_users, many=True, context={"league_id": league_id}
+        org_users,
+        many=True,
+        context={"league_id": league_id, "game_type": game_for_tournament(tournament)},
     ).data
     return TeamUserIndex({row["pk"]: row for row in serialized}, rosters)
 
@@ -282,7 +302,7 @@ def _collect_tournament_user_pks(tournament: Tournament) -> set[int]:
 
 # Org-context-only keys that OrgUserSerializer adds on top of the cached core
 # (which already carries discordNickname).
-_CONTEXT_MMR_KEYS = ("orgUserPk", "guildNickname", "mmr", "league_mmr")
+_CONTEXT_MMR_KEYS = ("orgUserPk", "guildNickname", "mmr", "league_mmr", "mmr_game_type")
 
 
 def _collect_context_mmr(
@@ -290,7 +310,7 @@ def _collect_context_mmr(
 ) -> dict:
     """Per-request contextual org/league overlay keyed by user pk.
 
-    Returns ``{pk: {orgUserPk, guildNickname, mmr, league_mmr}}`` for a
+    Returns ``{pk: {orgUserPk, guildNickname, mmr, league_mmr, mmr_game_type}}`` for a
     tournament whose league has an organization, else an empty dict (non-org
     tournaments carry no MMR). Reuses OrgUserSerializer so the values and the
     league_mmr computation are identical to the legacy path.
@@ -342,10 +362,16 @@ def _collect_org_mmr(
         Prefetch(
             "league_memberships",
             queryset=league_user_qs.filter(league_id=league.pk if league else None),
-        )
+        ),
+        game_mmrs_prefetch(fresh=fresh),
     )
     serialized = OrgUserSerializer(
-        org_users, many=True, context={"league_id": league.pk if league else None}
+        org_users,
+        many=True,
+        context={
+            "league_id": league.pk if league else None,
+            "game_type": game_for_tournament(tournament),
+        },
     ).data
     return {row["pk"]: {k: row[k] for k in _CONTEXT_MMR_KEYS} for row in serialized}
 
@@ -1098,39 +1124,24 @@ class TeamSerializer(serializers.ModelSerializer):
         return instance
 
     def get_total_mmr(self, obj: Team) -> int:
-        """Sum of captain MMR + all member MMRs (excluding captain from members to avoid double-counting)."""
-        from org.models import OrgUser
-
-        # Get organization from team's tournament's league
+        """Org MMR of the captain plus members, for the tournament's game."""
         tournament = obj.tournament
-        org = None
-        if tournament and tournament.league:
-            org = tournament.league.organization
-
-        # If no organization, can't determine MMR
-        if not org:
+        org_id = (
+            tournament.league.organization_id
+            if tournament and tournament.league
+            else None
+        )
+        if not org_id:
             return 0
-
-        # Use OrgUser MMR
-        total = 0
-        captain_pk = getattr(obj.captain, "pk", None)
-
-        if obj.captain:
-            try:
-                org_user = OrgUser.objects.get(user=obj.captain, organization=org)
-                total += org_user.mmr or 0
-            except OrgUser.DoesNotExist:
-                pass
-
-        for member in obj.members.all():
-            if member.pk != captain_pk:
-                try:
-                    org_user = OrgUser.objects.get(user=member, organization=org)
-                    total += org_user.mmr or 0
-                except OrgUser.DoesNotExist:
-                    pass
-
-        return total
+        game = game_for_tournament(tournament)
+        user_ids = team_mmr_user_ids(obj)
+        maps: dict[tuple[int, int], dict[int, int]] | None = self.context.get(
+            TEAM_MMR_MAPS
+        )
+        mmrs = maps.get((org_id, int(game))) if maps is not None else None
+        if mmrs is None:
+            mmrs = org_mmr_map(org_id, user_ids, game)
+        return sum(mmrs.get(user_id, 0) for user_id in user_ids)
 
     class Meta:
         model = Team
@@ -1154,6 +1165,37 @@ class TeamSerializer(serializers.ModelSerializer):
             "total_mmr",
             "placement",
         )
+
+
+def team_mmr_user_ids(team: Team) -> set[int]:
+    ids = {user.pk for user in team.members.all()}
+    if team.captain_id:
+        ids.add(team.captain_id)
+    return ids
+
+
+def build_team_mmr_maps(
+    teams: Collection[Team],
+) -> dict[tuple[int, int], dict[int, int]]:
+    """One org_mmr_map per (org, game) over every captain/member of `teams`.
+
+    Expects teams with `tournament__league` selected and `members` prefetched.
+    """
+    wanted: dict[tuple[int, int], set[int]] = {}
+    for team in teams:
+        tournament = team.tournament
+        if (
+            not tournament
+            or not tournament.league
+            or not tournament.league.organization_id
+        ):
+            continue
+        key = (tournament.league.organization_id, int(game_for_tournament(tournament)))
+        wanted.setdefault(key, set()).update(team_mmr_user_ids(team))
+    return {
+        (org_id, game): org_mmr_map(org_id, user_ids, game)
+        for (org_id, game), user_ids in wanted.items()
+    }
 
 
 def _leadership_problem_rows(team: Team) -> list[dict[str, str]]:
@@ -1443,9 +1485,6 @@ class TournamentSerializer(serializers.ModelSerializer):
                 if added_users and instance.league:
                     org = instance.league.organization
                     if org:
-                        from league.models import LeagueUser
-                        from org.models import OrgUser
-
                         # Get existing OrgUsers for these users in this org
                         existing_org_users = {
                             ou.user_id: ou
@@ -1459,11 +1498,7 @@ class TournamentSerializer(serializers.ModelSerializer):
                         for user in added_users:
                             if user.pk not in existing_org_users:
                                 new_org_users.append(
-                                    OrgUser(
-                                        user=user,
-                                        organization=org,
-                                        mmr=0,
-                                    )
+                                    OrgUser(user=user, organization=org)
                                 )
                         if new_org_users:
                             OrgUser.objects.bulk_create(new_org_users)
@@ -1483,6 +1518,15 @@ class TournamentSerializer(serializers.ModelSerializer):
                         )
 
                         # Create missing LeagueUsers in bulk
+                        league_mmrs = org_mmr_map(
+                            org.pk,
+                            [
+                                u.pk
+                                for u in added_users
+                                if u.pk not in existing_league_users
+                            ],
+                            LEAGUE_GAME,
+                        )
                         new_league_users = []
                         for user in added_users:
                             if user.pk not in existing_league_users:
@@ -1493,7 +1537,7 @@ class TournamentSerializer(serializers.ModelSerializer):
                                             user=user,
                                             org_user=org_user,
                                             league=instance.league,
-                                            mmr=org_user.mmr,
+                                            mmr=league_mmrs.get(user.pk, 0),
                                         )
                                     )
                         if new_league_users:
