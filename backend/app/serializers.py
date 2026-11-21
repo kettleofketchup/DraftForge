@@ -113,7 +113,7 @@ class TournamentUserSerializer(serializers.ModelSerializer):
         )
 
 
-def _tournament_organization(
+def tournament_organization(
     tournament: Tournament | None, *, fresh: bool = False
 ) -> Organization | None:
     """League's org, else the org of the event that spawned the tournament."""
@@ -134,7 +134,7 @@ def _serialize_users_with_mmr(
     from org.serializers import OrgUserSerializer
 
     league = tournament.league if tournament else None
-    org = _tournament_organization(tournament)
+    org = tournament_organization(tournament)
 
     if not org:
         return TournamentUserSerializer(users_qs, many=True).data
@@ -167,7 +167,7 @@ def _serialize_users_with_mmr(
     ).data
 
 
-def _serialize_user_with_mmr(
+def serialize_user_with_mmr(
     user: CustomUser | None, tournament: Tournament | None
 ) -> dict | None:
     """Serialize a single user with org-scoped MMR. Returns None if user is None."""
@@ -225,7 +225,7 @@ def build_team_user_index(
 
     if not user_pks:
         return TeamUserIndex({}, rosters)
-    org = _tournament_organization(tournament)
+    org = tournament_organization(tournament)
     if not org:
         users_qs = with_user_profiles(
             CustomUser.objects.filter(pk__in=user_pks), dota=True
@@ -262,7 +262,7 @@ def build_team_user_index(
     return TeamUserIndex({row["pk"]: row for row in serialized}, rosters)
 
 
-def _collect_tournament_user_pks(tournament: Tournament) -> set[int]:
+def collect_tournament_user_pks(tournament: Tournament) -> set[int]:
     """Collect all unique user PKs from a tournament and its teams.
 
     Includes: users, team members, captains, deputy captains,
@@ -290,7 +290,7 @@ def _collect_tournament_user_pks(tournament: Tournament) -> set[int]:
 _CONTEXT_MMR_KEYS = ("orgUserPk", "guildNickname", "mmr", "league_mmr")
 
 
-def _collect_org_mmr(
+def collect_org_mmr(
     tournament: Tournament | None,
     org: Organization | None,
     seen_pks: set[int],
@@ -342,7 +342,7 @@ def _collect_org_mmr(
     return {row["pk"]: {k: row[k] for k in _CONTEXT_MMR_KEYS} for row in serialized}
 
 
-def _build_users_dict(tournament: Tournament, *, fresh: bool = False) -> dict:
+def build_users_dict(tournament: Tournament, *, fresh: bool = False) -> dict:
     """Build a deduplicated ``{pk: serialized_user}`` dict for a tournament."""
     return build_users_dict_with_org(tournament, fresh=fresh)[0]
 
@@ -350,7 +350,7 @@ def _build_users_dict(tournament: Tournament, *, fresh: bool = False) -> dict:
 def build_users_dict_with_org(
     tournament: Tournament, *, fresh: bool = False
 ) -> tuple[dict, Organization | None]:
-    """``_build_users_dict`` plus the organization its overlay used.
+    """``build_users_dict`` plus the organization its overlay used.
 
     Shape-preserving: the CORE half comes from one bulk uncached query
     (``serialize_users_core``, same shape as the per-user ``serialize_user_core``)
@@ -363,9 +363,9 @@ def build_users_dict_with_org(
     # local: app.user_cache imports app.serializers
     from app.user_cache import serialize_users_core
 
-    seen_pks = _collect_tournament_user_pks(tournament)
-    org = _tournament_organization(tournament, fresh=fresh)
-    mmr_map = _collect_org_mmr(tournament, org, seen_pks, fresh=fresh)
+    seen_pks = collect_tournament_user_pks(tournament)
+    org = tournament_organization(tournament, fresh=fresh)
+    mmr_map = collect_org_mmr(tournament, org, seen_pks, fresh=fresh)
     cores = serialize_users_core(seen_pks)
 
     result: dict = {}
@@ -431,7 +431,7 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
             return None
         if index is not None and user_id in index.users:
             return index.users[user_id]
-        return _serialize_user_with_mmr(getattr(team, field), team.tournament)
+        return serialize_user_with_mmr(getattr(team, field), team.tournament)
 
     def get_members(self, team: Team) -> list[dict[str, Any]]:
         return self._roster(team, "members")
@@ -768,7 +768,7 @@ class LeaguesSerializer(serializers.ModelSerializer):
         return first_org.name if first_org else None
 
 
-def _users_remaining_pks(draft: Draft) -> list[int]:
+def users_remaining_pks(draft: Draft) -> list[int]:
     """``Draft.users_remaining`` pks, taking the exclusions from prefetched rounds/teams."""
     tournament = draft.tournament
     draft_cache = getattr(draft, "_prefetched_objects_cache", {})
@@ -833,14 +833,12 @@ class DraftRoundForDraftSerializer(serializers.ModelSerializer):
     team = TeamSerializerForTournament(many=False, read_only=True)
 
     def get_captain(self, draft_round: DraftRound) -> dict | None:
-        return _serialize_user_with_mmr(
+        return serialize_user_with_mmr(
             draft_round.captain, draft_round.draft.tournament
         )
 
     def get_choice(self, draft_round: DraftRound) -> dict | None:
-        return _serialize_user_with_mmr(
-            draft_round.choice, draft_round.draft.tournament
-        )
+        return serialize_user_with_mmr(draft_round.choice, draft_round.draft.tournament)
 
     class Meta:
         model = DraftRound
@@ -930,7 +928,7 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
 
     def get_users_remaining(self, draft: Draft) -> list[int]:
         """Return user PKs only — full data provided via _users dict."""
-        return _users_remaining_pks(draft)
+        return users_remaining_pks(draft)
 
     def get_clock_armed(self, draft: Draft) -> bool:
         return draft.is_clock_armed(
@@ -967,7 +965,7 @@ class DraftSerializerSlim(DraftSerializerForTournament):
     users_remaining = serializers.SerializerMethodField()
 
     def get_users_remaining(self, draft: Draft) -> list[int]:
-        return _users_remaining_pks(draft)
+        return users_remaining_pks(draft)
 
 
 class GameSerializerForTournament(serializers.ModelSerializer):
@@ -1062,10 +1060,10 @@ class TeamSerializer(serializers.ModelSerializer):
         return _serialize_users_with_mmr(team.dropin_members.all(), team.tournament)
 
     def get_captain(self, team: Team) -> dict | None:
-        return _serialize_user_with_mmr(team.captain, team.tournament)
+        return serialize_user_with_mmr(team.captain, team.tournament)
 
     def get_deputy_captain(self, team: Team) -> dict | None:
-        return _serialize_user_with_mmr(team.deputy_captain, team.tournament)
+        return serialize_user_with_mmr(team.deputy_captain, team.tournament)
 
     tournament_id = serializers.PrimaryKeyRelatedField(
         source="tournament",
@@ -1348,7 +1346,7 @@ class TournamentSerializer(serializers.ModelSerializer):
 
     def get_organization_pk(self, tournament: Tournament) -> int | None:
         """Return the primary organization's PK for this tournament."""
-        org = _tournament_organization(
+        org = tournament_organization(
             tournament, fresh=self.context.get("fresh", False)
         )
         return org.pk if org else None

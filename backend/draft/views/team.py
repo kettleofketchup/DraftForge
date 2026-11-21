@@ -12,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
-from app.functions.tournament import _serialize_tournament
+from app.functions.tournament import serialize_tournament
 from app.models import Team
 from app.permissions_org import can_edit_tournament
 from draft.models import Draft, DraftOptions, DraftRound, TeamDraftState
@@ -41,7 +41,7 @@ def _wrong_state(draft: Draft) -> Response:
 
 
 def _ok(draft: Draft) -> Response:
-    return Response(_serialize_tournament(draft.tournament))
+    return Response(serialize_tournament(draft.tournament))
 
 
 def _is_armed(draft: Draft, options: DraftOptions, active: DraftRound | None) -> bool:

@@ -20,12 +20,12 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.functions.tournament import _serialize_tournament
+from app.functions.tournament import serialize_tournament
 from app.models import CustomUser, Organization, Team, Tournament
 from app.serializers import (
     DraftSerializerSlim,
     TournamentSerializer,
-    _tournament_organization,
+    tournament_organization,
 )
 from app.tournament_state import tournament_state_queryset
 from draft.consumers.team import DraftConsumer
@@ -77,7 +77,7 @@ UNDO_ENDPOINT_QUERIES: int = 66
 
 
 def organization_pk(tournament: Tournament) -> int | None:
-    org = _tournament_organization(tournament)
+    org = tournament_organization(tournament)
     return org.pk if org else None
 
 
@@ -129,7 +129,7 @@ class DraftStateOutputTests(TestCase):
         self.assertEqual(dumps(initial_state(self.fx.draft.pk)), expected)
 
     def test_state_carries_the_overlay_organization(self) -> None:
-        org = _tournament_organization(self.fx.tournament)
+        org = tournament_organization(self.fx.tournament)
         self.assertIsNotNone(org)
         for fresh in (True, False):
             with self.subTest(fresh=fresh):
@@ -704,7 +704,7 @@ class DraftStateFreshReadTests(TransactionTestCase):
 
     def serialize_all(self, fx: TimedDraftFixture) -> None:
         build_draft_state(fx.draft.pk, fresh=True)
-        _serialize_tournament(fx.tournament)
+        serialize_tournament(fx.tournament)
 
     def test_fresh_payloads_make_no_cached_reads(self) -> None:
         for label, make in (("org", self.org_fixture), ("event", self.event_fixture)):
@@ -717,7 +717,7 @@ class DraftStateFreshReadTests(TransactionTestCase):
         fx = self.org_fixture("frdo")
         tournament_pk = fx.tournament.pk
         build_draft_state(fx.draft.pk, fresh=False)
-        _serialize_tournament(fx.tournament)
+        serialize_tournament(fx.tournament)
         with connection.cursor() as cursor:
             cursor.execute(
                 "UPDATE app_draftoptions SET grace_time_ms = %s "
@@ -726,6 +726,6 @@ class DraftStateFreshReadTests(TransactionTestCase):
             )
         state = build_draft_state(fx.draft.pk, fresh=True)
         self.assertEqual(state["draft_options"]["grace_time_ms"], 12345)
-        response = _serialize_tournament(fx.tournament)
+        response = serialize_tournament(fx.tournament)
         self.assertEqual(response["draft_options"]["grace_time_ms"], 12345)
         self.assertEqual(response["draft"]["draft_options"]["grace_time_ms"], 12345)

@@ -11,7 +11,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
-from app.functions.tournament import _serialize_tournament
+from app.functions.tournament import serialize_tournament
 from app.models import CustomUser, Team, Tournament
 from app.permissions_org import can_edit_tournament
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound, TeamDraftState
@@ -306,7 +306,7 @@ def pick_player_for_round(request: Request) -> Response:
     if isinstance(result, Response):
         return result
     tournament, tie_data = result
-    response_data = _serialize_tournament(tournament)
+    response_data = serialize_tournament(tournament)
     if tie_data:
         response_data["tie_resolution"] = tie_data
     return Response(response_data, status=201)
@@ -474,4 +474,4 @@ def undo_last_pick(request: Request) -> Response:
         draft.save()
         invalidate_after_commit(tournament, draft)
 
-    return Response(_serialize_tournament(tournament), status=200)
+    return Response(serialize_tournament(tournament), status=200)

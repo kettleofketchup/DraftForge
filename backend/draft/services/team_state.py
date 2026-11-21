@@ -36,7 +36,7 @@ def build_draft_state(draft_id: int, *, fresh: bool) -> dict | None:
     snapshot. Under the configured ``BEGIN IMMEDIATE`` that holds the write
     lock for the build: other writers wait (busy timeout) rather than commit
     mid-build. DEFERRED is not used: the OrgUser auto-create write in
-    _collect_org_mmr would then fail with SQLITE_BUSY_SNAPSHOT whenever
+    collect_org_mmr would then fail with SQLITE_BUSY_SNAPSHOT whenever
     another connection committed after the build's first read. Cached builds
     (every websocket connect) promise no freshness and stay plain autocommit
     reads, so spectators never queue on the write lock.

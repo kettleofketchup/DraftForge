@@ -147,8 +147,8 @@ from .serializers import (
     TournamentSerializer,
     TournamentsSerializer,
     UserSerializer,
-    _build_users_dict,
-    _tournament_organization,
+    build_users_dict,
+    tournament_organization,
 )
 from .steam_accounts import steam_account_id_holder, steam_account_id_identity
 from .user_cache import serialize_user_core
@@ -521,7 +521,7 @@ class TournamentView(viewsets.ModelViewSet):
             data = serializer.data
 
             # Deduplicated user dict for frontend entity cache
-            data["_users"] = _build_users_dict(instance)
+            data["_users"] = build_users_dict(instance)
 
             return data
 
@@ -753,7 +753,7 @@ class TeamView(viewsets.ModelViewSet):
         return self._manager_fields(team)
 
     def _manager_fields(self, team: Team) -> dict[str, Any]:
-        org = _tournament_organization(team.tournament, fresh=True)
+        org = tournament_organization(team.tournament, fresh=True)
         return {
             "can_manage_team": True,
             "organization_pk": org.pk if org else None,
