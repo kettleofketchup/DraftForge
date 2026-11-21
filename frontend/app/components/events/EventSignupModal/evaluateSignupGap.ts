@@ -65,12 +65,23 @@ export function isRankSectionComplete(
 
 export type SteamGateOptions = { steamAccountId?: number | null };
 
+/** The Friend ID on any game profile, as the backend resolves it. */
+export function profileFriendId(
+  profile: DotaProfileData | null | undefined,
+): string {
+  return (
+    profile?.resolved_friend_id?.trim() ||
+    profile?.unverified_friend_id?.trim() ||
+    ''
+  );
+}
+
 /** A profile friend ID or a linked Steam account satisfies "Require Friend ID". */
 export function hasFriendId(
   profile: DotaProfileData | null | undefined,
   opts: SteamGateOptions = {},
 ): boolean {
-  return !!(profile?.unverified_friend_id?.trim() || opts.steamAccountId);
+  return !!(profileFriendId(profile) || opts.steamAccountId);
 }
 
 /**

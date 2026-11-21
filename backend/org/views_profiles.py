@@ -11,7 +11,11 @@ from rest_framework.response import Response
 from app.cache_utils import invalidate_obj
 from app.models import Organization
 from app.permissions_org import has_org_staff_access
-from events.eligibility import refresh_unmet_requirements, validate_friend_id
+from events.eligibility import (
+    refresh_unmet_requirements,
+    steam_friend_id_from_profiles,
+    validate_friend_id,
+)
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 
@@ -44,6 +48,7 @@ def _serialize_dota_profile(profile: PlayerDotaProfile) -> dict[str, Any]:
         "rank_screenshot": profile.rank_screenshot or None,
         "battlecup_screenshot": profile.battlecup_screenshot or None,
         "unverified_friend_id": profile.unverified_friend_id,
+        "resolved_friend_id": steam_friend_id_from_profiles(profile.org_user),
         "pos_1": profile.pos_1,
         "pos_2": profile.pos_2,
         "pos_3": profile.pos_3,

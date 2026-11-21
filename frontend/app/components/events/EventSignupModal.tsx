@@ -32,7 +32,10 @@ import { PositionFormFields } from '~/pages/profile/forms/position';
 import { selectPositions } from '~/store/selectPositions';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
-import { isRankSectionComplete } from './EventSignupModal/evaluateSignupGap';
+import {
+  isRankSectionComplete,
+  profileFriendId,
+} from './EventSignupModal/evaluateSignupGap';
 import { FriendIdField } from './EventSignupModal/FriendIdField';
 import { PrefilledSummaryChip } from './EventSignupModal/PrefilledSummaryChip';
 import { RankDetailFields } from './EventSignupModal/RankDetailFields';
@@ -142,6 +145,7 @@ export function EventSignupModal({
       event.discord_require_rank_screenshot,
       event.discord_require_battlecup_screenshot,
       profile?.unverified_friend_id != null,
+      profileFriendId(profile),
       steamAccountId != null,
       profile?.rank_status,
       profile?.rank_medal != null,
@@ -167,8 +171,7 @@ export function EventSignupModal({
   };
 
   const knownFriendId =
-    profile?.unverified_friend_id?.trim() ||
-    (steamAccountId ? String(steamAccountId) : '');
+    profileFriendId(profile) || (steamAccountId ? String(steamAccountId) : '');
 
   const splitMedal = useMemo(() => {
     const m = profile?.rank_medal ?? '';

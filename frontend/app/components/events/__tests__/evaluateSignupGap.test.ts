@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { GAME_TYPE } from '~/components/game/constants';
-import { evaluateSignupGap } from '../EventSignupModal/evaluateSignupGap';
+import {
+  evaluateSignupGap,
+  profileFriendId,
+} from '../EventSignupModal/evaluateSignupGap';
 
 const baseEvent = {
   id: 1,
@@ -113,5 +116,39 @@ describe('evaluateSignupGap', () => {
         steamAccountId: null,
       }),
     ).toEqual(['friend_id']);
+  });
+});
+
+describe('Friend ID from another game profile', () => {
+  const deadlockEvent = {
+    ...baseEvent,
+    game_type: GAME_TYPE.DEADLOCK,
+    require_steam_id: true,
+  };
+
+  it('accepts a Friend ID resolved from the Deadlock profile', () => {
+    const profile = {
+      ...completeProfile,
+      unverified_friend_id: '',
+      resolved_friend_id: '616161',
+    };
+    expect(evaluateSignupGap(deadlockEvent as never, profile as never)).toBe(
+      'complete',
+    );
+  });
+
+  it('prefills the resolved Friend ID', () => {
+    expect(
+      profileFriendId({
+        ...completeProfile,
+        unverified_friend_id: '',
+        resolved_friend_id: '616161',
+      } as never),
+    ).toBe('616161');
+  });
+
+  it('falls back to the Dota profile value', () => {
+    expect(profileFriendId({ ...completeProfile } as never)).toBe('123');
+    expect(profileFriendId(null)).toBe('');
   });
 });

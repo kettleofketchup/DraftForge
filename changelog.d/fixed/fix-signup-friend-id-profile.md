@@ -1,1 +1,1 @@
-- Web signups for Deadlock events save your Friend ID to your Deadlock profile, as Discord signups already did, instead of your Dota 2 profile (#709).
+- Web signups for Deadlock events save your Friend ID to your Deadlock profile, as Discord signups already did, instead of your Dota 2 profile. The event page's signup form now finds a Friend ID saved on either game profile, so it doesn't ask for it again (#709).
