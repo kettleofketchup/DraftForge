@@ -120,7 +120,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
     def test_dota_modal_writes_rank_status_and_returns_needs_rank_details(self):
         """Dota modal submit persists rank_status and friend ID, returns needs_rank_details.
 
-        Positions are no longer written by the modal — they flow through
+        Positions are not written by the modal — they flow through
         PositionConfirmButton.callback after the modal closes.
         """
         from events.discord import handle_signup_modal_submit

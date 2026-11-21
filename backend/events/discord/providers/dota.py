@@ -118,7 +118,7 @@ class DotaHandler:
         # NOTE: positions are collected in the follow-up PositionConfirmButton
         # flow, not in this modal.
         rank_status = values.get("rank_status") or None
-        # Coerce legacy non-canonical values to "never" (matches prior behavior).
+        # Coerce legacy non-canonical values to "never".
         if rank_status and rank_status not in ("active", "previous", "never"):
             rank_status = "never"
 
@@ -166,7 +166,7 @@ class DotaHandler:
                 patch=SignupInputPatch(rank_status=rank_status),
             )
         except DjangoValidationError:
-            # Fail silently per existing behavior (function returns None either way).
+            # Swallowed: the caller gets None on success and failure alike.
             pass
 
     def rank_medal_select(self, event: Event, discord_user_id: str, medal: str) -> dict:
@@ -194,7 +194,6 @@ class DotaHandler:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
             return {"action": "error", "message": msg}
 
-        # Check if screenshot required before completing signup
         if _awaiting_rank_screenshot(event, profile):
             _log_interaction(event.pk, "awaiting_rank_screenshot", discord_user_id)
             return {
@@ -250,7 +249,6 @@ class DotaHandler:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
             return {"action": "error", "message": msg}
 
-        # Check if screenshot required before completing signup
         if (
             event.discord_require_battlecup_screenshot
             and not profile.battlecup_screenshot
@@ -291,7 +289,6 @@ class DotaHandler:
         """Validate and save screenshot URL to PlayerDotaProfile, then sign up."""
         from events.services import apply_signup_input
 
-        # Validate URL
         if not attachment_url:
             return {"success": False, "message": "No file provided."}
 
