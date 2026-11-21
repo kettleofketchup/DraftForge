@@ -6,11 +6,11 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization, OrgLog, PositionsModel, Tournament
+from app.models import CustomUser, PositionsModel, Tournament
 from common.game import GameType
 from events.models import Event
 from events.services import create_tournament_for_event
-from org.models import OrgUser, OrgUserGameMmr
+from org.models import Organization, OrgLog, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
 from user.tests.test_cacheops_integration import _redis_reachable
 
