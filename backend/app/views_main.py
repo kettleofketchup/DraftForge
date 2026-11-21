@@ -512,6 +512,7 @@ class TournamentView(viewsets.ModelViewSet):
             Game,
             Draft,
             DraftRound,
+            OrgUserGameMmr,
             extra=cache_key,
             timeout=60 * 10,
             # Every draft event refetches this; a read that straddles a commit
@@ -739,6 +740,7 @@ class TeamView(viewsets.ModelViewSet):
             Game,
             Draft,
             DraftRound,
+            OrgUserGameMmr,
             # No keep_fresh: team detail ships member nickname/avatar/positions;
             # keep_fresh would serve stale members after a profile edit, same as
             # the user list/detail blocks above.

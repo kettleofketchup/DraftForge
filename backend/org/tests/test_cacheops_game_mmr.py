@@ -56,6 +56,13 @@ class GameMmrCachedAsGuardrailTest(SimpleTestCase):
             offenders, [], "cached_as lists OrgUser without OrgUserGameMmr"
         )
 
+    def test_detail_payloads_with_org_mmr_list_game_mmr(self) -> None:
+        text = (BACKEND_ROOT / "app" / "views_main.py").read_text()
+        for key in ("team_detail:", "tournament_detail_v2:"):
+            block_start = text.index("@cached_as", text.index(key))
+            args = next(_cached_as_args(text[block_start:]))[1]
+            self.assertIn("OrgUserGameMmr", args, key)
+
     def test_mmr_module_has_no_event_defaults(self) -> None:
         source = (BACKEND_ROOT / "org" / "mmr.py").read_text()
         self.assertNotIn("OrgEventDefaults", source)
