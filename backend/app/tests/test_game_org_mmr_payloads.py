@@ -9,7 +9,6 @@ from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from app.draft_state import build_draft_state
 from app.functions.tournament import _serialize_tournament
 from app.models import (
     CustomUser,
@@ -25,6 +24,7 @@ from app.schemas import TournamentUserSchema
 from app.serializers import UserSerializer
 from app.tests.test_draft_state_queries import make_fixture
 from app.tests.test_game_org_mmr_drafts import GameOrgMmrFixtures
+from app.tournament_state import build_draft_state
 from common.game import GameType
 from org.mmr import game_mmrs_prefetch, set_org_mmr
 from org.models import OrgUser
