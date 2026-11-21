@@ -55,7 +55,14 @@ class Clip:
     videos: tuple[str, ...]
     metadata: str
     key: str
+    labels: tuple[str, ...] = ()
 
+
+TEAM_VIEW_LABELS: tuple[str, ...] = ("Team 1 View", "Team 2 View")
+LABEL_BAR_PX = 64
+LABEL_FONT_PX = 30
+LABEL_BAR_COLOR = "0x0b1020"
+LABEL_TEXT_COLOR = "white"
 
 # Cut from the raw recordings in demo-results/, whose clock the spec's
 # timestamps use; docs/assets/videos/ copies may already be trimmed.
@@ -65,12 +72,14 @@ DEMO_CLIPS = [
         videos=("captain1_herodraft.webm", "captain2_herodraft.webm"),
         metadata="herodraft.demo.yaml",
         key="chat_clip",
+        labels=TEAM_VIEW_LABELS,
     ),
     Clip(
         output="herodraft_chat_picks.webp",
         videos=("captain1_herodraft.webm", "captain2_herodraft.webm"),
         metadata="herodraft.demo.yaml",
         key="chat_picks_clip",
+        labels=TEAM_VIEW_LABELS,
     ),
 ]
 
@@ -372,6 +381,31 @@ def load_clip_window(clip: Clip) -> tuple[list[float], float] | None:
         return None
 
 
+def _drawtext_escape(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
+
+
+def clip_filter(count: int, labels: tuple[str, ...], fps: int, width: int) -> str:
+    """Stack the inputs side by side, each under a title bar when labelled."""
+    if labels and len(labels) != count:
+        raise ValueError(f"{len(labels)} labels for {count} videos")
+    panels: list[str] = []
+    for i in range(count):
+        if labels:
+            text = _drawtext_escape(labels[i])
+            panels.append(
+                f"[{i}:v]pad=iw:ih+{LABEL_BAR_PX}:0:{LABEL_BAR_PX}:color={LABEL_BAR_COLOR},"
+                f"drawtext=font=Sans:text='{text}':fontsize={LABEL_FONT_PX}:"
+                f"fontcolor={LABEL_TEXT_COLOR}:x=(w-text_w)/2:y=({LABEL_BAR_PX}-text_h)/2"
+                f"[p{i}]"
+            )
+        else:
+            panels.append(f"[{i}:v]null[p{i}]")
+    streams = "".join(f"[p{i}]" for i in range(count))
+    stack = f"{streams}hstack=inputs={count}," if count > 1 else f"{streams}"
+    return ";".join(panels) + ";" + f"{stack}fps={fps},scale={width}:-2:flags=lanczos"
+
+
 def clips(
     fps: int = 15,
     width: int = 1200,
@@ -409,15 +443,13 @@ def clips(
         inputs: list[str] = []
         for video, start in zip(videos, starts, strict=True):
             inputs += ["-ss", f"{start:.2f}", "-t", f"{length:.2f}", "-i", str(video)]
-        streams = "".join(f"[{i}:v]" for i in range(len(videos)))
-        stack = f"{streams}hstack=inputs={len(videos)}," if len(videos) > 1 else ""
         result = subprocess.run(
             [
                 "ffmpeg",
                 "-y",
                 *inputs,
                 "-filter_complex",
-                f"{stack}fps={fps},scale={width}:-2:flags=lanczos",
+                clip_filter(len(videos), clip.labels, fps, width),
                 "-an",
                 "-c:v",
                 "libwebp_anim",
