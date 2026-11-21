@@ -42,8 +42,8 @@ import { cn } from '~/lib/utils';
 const LARGE_CHANGE_THRESHOLD = 0.2;
 
 const mmrSchema = z.object({
-  // zod 4 dropped the `{ coerce: true }` option on z.number; use z.coerce.number()
-  // so the resolver still parses string inputs from the <Input> element.
+  // The Input's onChange already passes valueAsNumber, so mmr reaches the
+  // resolver as a number; coerce is only a fallback for non-number values.
   mmr: z.coerce
     .number()
     .int()

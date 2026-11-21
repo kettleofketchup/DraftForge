@@ -10,9 +10,9 @@ from django.db import transaction
 from app.models import CustomUser, Game, PositionsModel, Team
 from tests.data.models import DynamicTournamentConfig, TestUser
 
-from .constants import DTX_STEAM_LEAGUE_ID, TEST_STEAM_LEAGUE_ID, TOURNAMENT_USERS
+from .avatars import apply_committed_avatars
+from .constants import DTX_STEAM_LEAGUE_ID, TEST_STEAM_LEAGUE_ID
 from .utils import (
-    REAL_TOURNAMENT_USERS,
     ensure_league_user,
     ensure_org_user,
     flush_redis_cache,
@@ -211,7 +211,7 @@ def populate_tournaments(force=False):
         return
 
     # Create all dynamic tournaments from Pydantic configs
-    tournaments = create_dyn_tournaments(force=force)
+    create_dyn_tournaments(force=force)
 
     print(f"Total tournaments in database: {Tournament.objects.count()}")
 
@@ -353,6 +353,7 @@ def populate_real_tournament_38(force=False):
                 user.positions.save()
             user.save()
 
+        apply_committed_avatars([user])
         return user
 
     # Parse date from config
