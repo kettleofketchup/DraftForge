@@ -285,7 +285,10 @@ A slot's **last activity** is the latest of:
 - the reservation's `last_used` (written on every allocation, `test::up`/`upd` and
   `test::run`);
 - the project's containers: each one's start and finish time, plus the timestamp of
-  the last log line of each running container;
+  the last log line of each running `backend`, `frontend` and `nginx` container
+  (matched by the `com.docker.compose.service` label). Redis and celery logs are
+  ignored: redis logs every periodic RDB save and celery runs scheduled tasks, so
+  both write logs on an idle stack;
 - the owner worktree (and the working dir of each container): mtimes of its git
   `index`, `HEAD` and `logs/HEAD`, `docker/.env.slot`, `frontend/test-results`,
   `frontend/playwright-report`, and every modified or untracked file

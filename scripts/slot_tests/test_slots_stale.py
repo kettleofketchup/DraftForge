@@ -1,6 +1,7 @@
 import os
 import subprocess
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -333,8 +334,9 @@ def test_container_activity_uses_inspect_and_last_log_line(
     outputs = {
         "ps": "aaa\nbbb\n",
         "inspect": (
-            "aaa\ttrue\t2026-11-06 17:04:14.0 -0500 EST\t0001-01-01 00:00:00 +0000 UTC\n"
-            "bbb\tfalse\t2026-11-01T00:00:00Z\t2026-11-02T00:00:00Z\n"
+            "aaa\ttrue\t2026-11-06 17:04:14.0 -0500 EST\t0001-01-01 00:00:00 +0000 UTC"
+            "\tbackend\n"
+            "bbb\tfalse\t2026-11-01T00:00:00Z\t2026-11-02T00:00:00Z\tnginx\n"
         ),
         "logs": "2026-11-07T00:00:00.5Z GET /api/healthz/\n",
     }
@@ -352,3 +354,87 @@ def test_container_activity_uses_inspect_and_last_log_line(
         ["logs", "--timestamps", "--tail", "1", "aaa"]
     ]
     assert "label=com.docker.compose.project=df-s3" in seen[0]
+
+
+def _iso(ts: float) -> str:
+    return datetime.fromtimestamp(ts, UTC).isoformat().replace("+00:00", "Z")
+
+
+def _fake_stack(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    started: float,
+    last_log: dict[str, float],
+) -> list[str]:
+    """Running df-s3 stack; ``last_log`` maps service to its last log line time."""
+    services = ["backend", "frontend", "nginx", "redis", "celery-worker"]
+    inspect = "".join(
+        f"{svc}-id\ttrue\t{_iso(started)}\t0001-01-01T00:00:00Z\t{svc}\n"
+        for svc in services
+    )
+    logged: list[str] = []
+
+    def fake_docker(args: list[str]) -> subprocess.CompletedProcess[str]:
+        out = ""
+        if args[0] == "ps":
+            out = "".join(f"{svc}-id\n" for svc in services)
+        elif args[0] == "inspect":
+            out = inspect
+        elif args[0] == "logs":
+            svc = args[-1].removesuffix("-id")
+            logged.append(svc)
+            if svc in last_log:
+                out = f"{_iso(last_log[svc])} some line\n"
+        return subprocess.CompletedProcess(args, 0, out, "")
+
+    monkeypatch.setattr(slots, "_docker", fake_docker)
+    return logged
+
+
+def _real_activity_sweep(
+    fake_host: FakeHost, make_worktree: MakeWt, monkeypatch: pytest.MonkeyPatch
+) -> list[int]:
+    me, other = make_worktree("me"), make_worktree("other")
+    reserve(_reg(fake_host), 3, other, "t", int(NOW - 48 * H))
+    fake_host.projects["df-s3"] = [owner(project="df-s3", wd=other)]
+    monkeypatch.setattr(fake_host, "container_activity", slots._container_activity)
+    return _sweep(fake_host, me)
+
+
+def test_redis_and_celery_logs_do_not_keep_idle_stack_alive(
+    fake_host: FakeHost, make_worktree: MakeWt, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    logged = _fake_stack(
+        monkeypatch,
+        started=NOW - 100 * H,
+        last_log={
+            "backend": NOW - 90 * H,
+            "nginx": NOW - 91 * H,
+            "redis": NOW - 1 * H,
+            "celery-worker": NOW - 2 * H,
+        },
+    )
+    assert slots._container_activity("df-s3") == pytest.approx(NOW - 90 * H)
+    assert sorted(set(logged)) == ["backend", "frontend", "nginx"]
+    assert _real_activity_sweep(fake_host, make_worktree, monkeypatch) == [3]
+    assert fake_host.compose_calls == [DOWN_S3]
+
+
+def test_fresh_backend_log_keeps_stack_alive(
+    fake_host: FakeHost, make_worktree: MakeWt, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_stack(
+        monkeypatch,
+        started=NOW - 100 * H,
+        last_log={"backend": NOW - 1 * H, "redis": NOW - 1 * H},
+    )
+    assert _real_activity_sweep(fake_host, make_worktree, monkeypatch) == []
+    assert fake_host.compose_calls == []
+
+
+def test_recent_container_restart_keeps_stack_alive(
+    fake_host: FakeHost, make_worktree: MakeWt, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_stack(monkeypatch, started=NOW - 2 * H, last_log={})
+    assert slots._container_activity("df-s3") == pytest.approx(NOW - 2 * H)
+    assert _real_activity_sweep(fake_host, make_worktree, monkeypatch) == []
