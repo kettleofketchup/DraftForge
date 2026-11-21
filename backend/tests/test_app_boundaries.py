@@ -1039,8 +1039,6 @@ class AppBoundaryTests(SimpleTestCase):
                     self.assertNotIn(f"{s.source_app}.{label}", keys)
 
     def test_new_cacheops_keys_present(self) -> None:
-        if not settings.CACHEOPS:
-            self.skipTest("CACHEOPS is empty (DISABLE_CACHE)")
         for s in MOVED_SLICES:
             for label in s.cached_labels:
                 with self.subTest(label=label):
