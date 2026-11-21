@@ -125,6 +125,16 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import {
+  ATTENDANCE_STATES,
+  AttendancePanel,
+  ConductBadge,
+  ConductForecastCard,
+  eventConductEnabled,
+  FORECAST_STATES,
+  useForecast,
+  type ForecastMember,
+} from '~/features/conduct';
+import {
   removeFeatureQueries,
   useOrgFeatureAccess,
 } from '~/features/org-features';
@@ -182,6 +192,14 @@ export default function EventPage() {
   const isAdmin = event?.user_can_manage ?? false;
   const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
   const canComplete = canCompleteEvent(event, eventOrgAccess);
+  const conductEnabled = eventConductEnabled(event, eventOrg, eventOrgAccess);
+  const conductForecast = useForecast(
+    event?.organization ?? 0,
+    eventOrgAccess,
+    event?.id ?? 0,
+    conductEnabled,
+  );
+  const conductMembers = conductForecast.data?.members;
   const showCompletePointsNote =
     eventOrgAccess.canViewContributions ||
     eventOrgAccess.canManageContributions;
@@ -640,6 +658,31 @@ export default function EventPage() {
 
           <TabsContent value="details">
             {isAdmin && <OpsNoticesCard eventId={event.id} />}
+            {conductEnabled &&
+              event.organization != null &&
+              FORECAST_STATES.has(event.state) && (
+                <div className="mb-4">
+                  <ConductForecastCard
+                    orgId={event.organization}
+                    eventId={event.id}
+                    access={eventOrgAccess}
+                    enabled={conductEnabled}
+                  />
+                </div>
+              )}
+            {conductEnabled &&
+              event.organization != null &&
+              ATTENDANCE_STATES.has(event.state) && (
+                <div className="mb-4">
+                  <AttendancePanel
+                    orgId={event.organization}
+                    eventId={event.id}
+                    eventState={event.state}
+                    access={eventOrgAccess}
+                    enabled={conductEnabled}
+                  />
+                </div>
+              )}
             <DetailsTab
               event={event}
               signedIn={!!currentUser?.pk}
@@ -665,6 +708,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              conductMembers={conductMembers}
               eventId={event.id}
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
@@ -678,6 +722,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              conductMembers={conductMembers}
               state={event.state}
             />
           </TabsContent>
@@ -688,6 +733,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              conductMembers={conductMembers}
               state={event.state}
             />
           </TabsContent>
@@ -698,6 +744,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              conductMembers={conductMembers}
               state={event.state}
             />
           </TabsContent>
@@ -906,7 +953,9 @@ function SignupsTab({
   hasDiscordServer,
   state,
   autoApprove = true,
+  conductMembers,
 }: {
+  conductMembers?: Record<string, ForecastMember>;
   signups: EventSignupType[];
   autoApprove?: boolean;
   isAdmin: boolean;
@@ -1225,7 +1274,14 @@ function SignupsTab({
                 user={user}
                 dotaProfile={stripProfile}
                 selfReportedRank={signup.self_reported_rank}
-                contextSlot={statusSlot}
+                contextSlot={
+                  <>
+                    {statusSlot}
+                    <ConductBadge
+                      member={conductMembers?.[String(signup.user)]}
+                    />
+                  </>
+                }
                 actionSlot={adminActions}
               />
             );

@@ -67,6 +67,13 @@ import { Kbd } from '~/components/ui/kbd';
 import { UserStrip } from '~/components/user';
 import { DisplayName } from '~/components/user/avatar';
 import {
+  ConductBadge,
+  eventConductEnabled,
+  useForecast,
+  type ForecastMember,
+} from '~/features/conduct';
+import { useOrgFeatureAccess } from '~/features/org-features';
+import {
   useEvent,
   useEventActionMutation,
   useEventSignupUsers,
@@ -96,6 +103,14 @@ export default function RollCallPage() {
     event?.organization ?? undefined,
   );
   const isAdmin = event?.user_can_manage ?? false;
+  const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
+  const conductEnabled = eventConductEnabled(event, eventOrg, eventOrgAccess);
+  const conductMembers = useForecast(
+    event?.organization ?? 0,
+    eventOrgAccess,
+    event?.id ?? 0,
+    conductEnabled,
+  ).data?.members;
 
   const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
   useEffect(() => {
@@ -296,6 +311,7 @@ export default function RollCallPage() {
       signup={signup}
       userMap={userMap}
       isAdmin={isAdmin}
+      conductMember={conductMembers?.[String(signup.user)]}
       leaguePk={event.tournament_league ?? null}
       pending={pendingIds.has(signup.id)}
       focused={isAdmin && signup.id === activeId}
@@ -664,7 +680,9 @@ const SignupStrip = memo(function SignupStrip({
   onRequestReject,
   onRequestCancel,
   onRequestRestore,
+  conductMember,
 }: {
+  conductMember?: ForecastMember;
   signup: EventSignupType;
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
@@ -694,6 +712,7 @@ const SignupStrip = memo(function SignupStrip({
         />
       )}
       <EventStateBadge state={signup.status} />
+      <ConductBadge member={conductMember} />
     </span>
   );
 

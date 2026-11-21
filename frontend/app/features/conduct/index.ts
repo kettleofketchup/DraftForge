@@ -1,4 +1,5 @@
 export { getAttendance, getForecast, putAttendance } from './api';
+export { AttendancePanel, type AttendancePanelProps } from './AttendancePanel';
 export { ConductBadge } from './ConductBadge';
 export {
   ConductForecastCard,

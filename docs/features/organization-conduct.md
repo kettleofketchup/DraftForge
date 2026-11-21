@@ -39,6 +39,29 @@ private ranking get no tab, and a `?tab=conduct` link falls back to the default 
   weigh less, and why new members lean on the org's baseline. The formula below is the
   reference.
 
+## On the event page
+
+Event staff and org staff of an org with Conduct unlocked see two extra cards on an
+event's **Details** tab. Nobody else sees them.
+
+- **Turnout forecast.** Before the event starts (upcoming, signups open, roll call)
+  the card reads like "30 signed up · expect ~24 (21–27)", with the number of signups
+  waiting for approval and, when the event has a cap, the expected open seats.
+- **Attendance.** From roll call on, a table lists every expected member with their
+  outcome, its source, any flag (such as **Did not confirm at roll call**) and their
+  show rate. A member nobody has marked yet shows **Attended (default)**. Tick rows
+  and use **Mark attended**, **Mark no-show**, **Late cancel** or **Excuse**, or change
+  one row's outcome directly. **Add walk-in** searches the org's members and adds
+  someone who played without signing up as attended. **Save** asks for a reason (at
+  least 3 characters), and every edit is audited. On a cancelled event, or one whose
+  attendance was never tracked, the table is read-only and says why.
+- **Reliability badges.** On the signup tabs and the roll-call page, staff see each
+  member's show rate (or **New**) next to their name, and a **Needs approval** badge
+  when enforcement would hold their signup for review.
+
+Signups, cancels, roll call, completing or reopening the event, and attendance saves
+all refresh the forecast, the attendance table and the Conduct ranking.
+
 ### Conduct settings
 
 Org admins open **Organization Settings > Conduct**; other roles do not see the
