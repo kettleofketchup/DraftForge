@@ -9,15 +9,24 @@ import {
 } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getMemberBreakdown } from '~/features/contributions/api';
+import { periodOptions } from '~/features/contributions/timezone';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
-import { getLeaderboard, getMemberBreakdown } from '../api';
-import { ContributionsTab } from '../ContributionsTab';
-import type { LeaderboardRow } from '../schemas';
-import { periodOptions, safeTimeZone } from '../timezone';
+import { getStandingLeaderboard } from '../api';
+import type {
+  Metric,
+  StandingLeaderboard,
+  StandingRow,
+  TrackInfo,
+} from '../schemas';
+import { TrackTab } from '../TrackTab';
 
 vi.mock('../api', () => ({
-  getLeaderboard: vi.fn(),
+  getStandingLeaderboard: vi.fn(),
+}));
+
+vi.mock('~/features/contributions/api', () => ({
   getMemberBreakdown: vi.fn(),
 }));
 
@@ -27,6 +36,24 @@ beforeAll(() => {
   Element.prototype.releasePointerCapture ??= () => {};
   Element.prototype.scrollIntoView ??= () => {};
 });
+
+const POINTS: Metric = {
+  key: 'points',
+  label: 'Points',
+  format: 'int',
+  periodic: true,
+  default: true,
+};
+
+const TRACK: TrackInfo = {
+  key: 'contribution',
+  label: 'Contributions',
+  metrics: [POINTS],
+  can_view_rows: true,
+  can_view_own: true,
+  board_open: true,
+  can_manage: false,
+};
 
 const access: OrgFeatureAccess = makeOrgFeatureAccess({
   viewerPk: 5,
@@ -39,15 +66,33 @@ function row(
   userPk: number,
   username: string,
   points: number,
-): LeaderboardRow {
+): StandingRow {
   return {
-    org_user_pk: orgUserPk,
-    user_pk: userPk,
-    username,
-    nickname: null,
-    avatarUrl: null,
-    points,
-    entries: 1,
+    member: {
+      org_user_pk: orgUserPk,
+      user_pk: userPk,
+      username,
+      nickname: null,
+      avatarUrl: null,
+    },
+    value: points,
+    sample: 1,
+    status: 'ranked',
+  };
+}
+
+function board(
+  overrides: Partial<StandingLeaderboard> = {},
+): StandingLeaderboard {
+  return {
+    track: 'contribution',
+    metric: POINTS,
+    period: 'all',
+    total: 0,
+    rows_visible: true,
+    rows: [],
+    own_row: null,
+    ...overrides,
   };
 }
 
@@ -63,8 +108,9 @@ function renderTab(
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
   return render(
-    <ContributionsTab
+    <TrackTab
       orgId={7}
+      track={TRACK}
       timeZone={timeZone}
       membersPrivate={membersPrivate}
       access={viewer}
@@ -74,19 +120,15 @@ function renderTab(
 }
 
 afterEach(() => {
-  vi.mocked(getLeaderboard).mockReset();
+  vi.mocked(getStandingLeaderboard).mockReset();
   vi.mocked(getMemberBreakdown).mockReset();
 });
 
 describe('ContributionsTab leaderboard', () => {
   it('shows the private note without an own-standing promise to a non-member of a private org', async () => {
-    vi.mocked(getLeaderboard).mockResolvedValue({
-      period: 'all',
-      total: 42,
-      rows_visible: false,
-      rows: [],
-      own_row: null,
-    });
+    vi.mocked(getStandingLeaderboard).mockResolvedValue(
+      board({ total: 42, rows_visible: false }),
+    );
     renderTab();
     expect(
       await screen.findByTestId('contributions-org-total'),
@@ -95,17 +137,18 @@ describe('ContributionsTab leaderboard', () => {
     expect(note).toHaveTextContent('Members are private in this organization.');
     expect(note).not.toHaveTextContent('your own standing');
     expect(screen.queryByTestId('contributions-empty')).not.toBeInTheDocument();
-    expect(getLeaderboard).toHaveBeenCalledWith(7, 'all');
+    expect(getStandingLeaderboard).toHaveBeenCalledWith(
+      7,
+      'contribution',
+      POINTS,
+      'all',
+    );
   });
 
   it('asks an anonymous viewer of a public org to sign in, not that members are private', async () => {
-    vi.mocked(getLeaderboard).mockResolvedValue({
-      period: 'all',
-      total: 42,
-      rows_visible: false,
-      rows: [],
-      own_row: null,
-    });
+    vi.mocked(getStandingLeaderboard).mockResolvedValue(
+      board({ total: 42, rows_visible: false }),
+    );
     renderTab('UTC', {
       membersPrivate: false,
       viewer: { ...access, viewerPk: null },
@@ -120,13 +163,9 @@ describe('ContributionsTab leaderboard', () => {
   });
 
   it('tells a signed-in outsider of a public org that only members see the leaderboard', async () => {
-    vi.mocked(getLeaderboard).mockResolvedValue({
-      period: 'all',
-      total: 42,
-      rows_visible: false,
-      rows: [],
-      own_row: null,
-    });
+    vi.mocked(getStandingLeaderboard).mockResolvedValue(
+      board({ total: 42, rows_visible: false }),
+    );
     renderTab('UTC', { membersPrivate: false });
     expect(
       await screen.findByTestId('contributions-members-only'),
@@ -140,13 +179,7 @@ describe('ContributionsTab leaderboard', () => {
   });
 
   it('still shows the empty state when the visible leaderboard has no rows', async () => {
-    vi.mocked(getLeaderboard).mockResolvedValue({
-      period: 'all',
-      total: 0,
-      rows_visible: true,
-      rows: [],
-      own_row: null,
-    });
+    vi.mocked(getStandingLeaderboard).mockResolvedValue(board());
     renderTab('UTC', { membersPrivate: false });
     expect(await screen.findByTestId('contributions-empty')).toHaveTextContent(
       'No contributions in this period',
@@ -154,13 +187,13 @@ describe('ContributionsTab leaderboard', () => {
   });
 
   it('highlights the viewer own row in the visible leaderboard', async () => {
-    vi.mocked(getLeaderboard).mockResolvedValue({
-      period: 'all',
-      total: 30,
-      rows_visible: true,
-      rows: [row(11, 9, 'alice', 20), row(12, 5, 'me', 10)],
-      own_row: row(12, 5, 'me', 10),
-    });
+    vi.mocked(getStandingLeaderboard).mockResolvedValue(
+      board({
+        total: 30,
+        rows: [row(11, 9, 'alice', 20), row(12, 5, 'me', 10)],
+        own_row: row(12, 5, 'me', 10),
+      }),
+    );
     renderTab();
     const own = await screen.findByTestId('contributions-row-12');
     expect(own).toHaveAttribute('data-own', 'true');
@@ -174,13 +207,13 @@ describe('ContributionsTab leaderboard', () => {
   });
 
   it('shows only the own row, highlighted, to a member of a private org', async () => {
-    vi.mocked(getLeaderboard).mockResolvedValue({
-      period: 'all',
-      total: 30,
-      rows_visible: false,
-      rows: [],
-      own_row: row(12, 5, 'me', 10),
-    });
+    vi.mocked(getStandingLeaderboard).mockResolvedValue(
+      board({
+        total: 30,
+        rows_visible: false,
+        own_row: row(12, 5, 'me', 10),
+      }),
+    );
     renderTab();
     const own = await screen.findByTestId('contributions-row-12');
     expect(own).toHaveAttribute('data-own', 'true');
@@ -193,13 +226,7 @@ describe('ContributionsTab leaderboard', () => {
   });
 
   it('renders period labels without throwing for an invalid org timezone', async () => {
-    vi.mocked(getLeaderboard).mockResolvedValue({
-      period: 'all',
-      total: 0,
-      rows_visible: true,
-      rows: [],
-      own_row: null,
-    });
+    vi.mocked(getStandingLeaderboard).mockResolvedValue(board());
     renderTab('Not/AZone');
     const trigger = await screen.findByTestId('contributions-period-select');
     expect(trigger).toHaveTextContent('All time');
@@ -211,13 +238,13 @@ describe('ContributionsTab leaderboard', () => {
   });
 
   it('opens the breakdown on row click and formats entry dates for an invalid org timezone', async () => {
-    vi.mocked(getLeaderboard).mockResolvedValue({
-      period: 'all',
-      total: 30,
-      rows_visible: true,
-      rows: [row(11, 9, 'alice', 20), row(12, 5, 'me', 10)],
-      own_row: row(12, 5, 'me', 10),
-    });
+    vi.mocked(getStandingLeaderboard).mockResolvedValue(
+      board({
+        total: 30,
+        rows: [row(11, 9, 'alice', 20), row(12, 5, 'me', 10)],
+        own_row: row(12, 5, 'me', 10),
+      }),
+    );
     vi.mocked(getMemberBreakdown).mockResolvedValue({
       member: {
         org_user_pk: 11,
@@ -241,7 +268,7 @@ describe('ContributionsTab leaderboard', () => {
     });
     renderTab('Not/AZone', { membersPrivate: false });
     const alice = await screen.findByRole('button', {
-      name: "View alice's contributions",
+      name: "Open alice's details",
     });
     expect(
       screen.queryByTestId('contributions-breakdown'),
@@ -257,13 +284,15 @@ describe('ContributionsTab leaderboard', () => {
   });
 
   it("keeps a private-org member's own breakdown open for a period without own entries", async () => {
-    vi.mocked(getLeaderboard).mockImplementation(async (_orgId, period) => ({
-      period,
-      total: 30,
-      rows_visible: false,
-      rows: [],
-      own_row: period === 'all' ? row(12, 5, 'me', 10) : null,
-    }));
+    vi.mocked(getStandingLeaderboard).mockImplementation(
+      async (_orgId, _track, _metric, period) =>
+        board({
+          period,
+          total: 30,
+          rows_visible: false,
+          own_row: period === 'all' ? row(12, 5, 'me', 10) : null,
+        }),
+    );
     vi.mocked(getMemberBreakdown).mockResolvedValue({
       member: {
         org_user_pk: 12,
@@ -297,31 +326,5 @@ describe('ContributionsTab leaderboard', () => {
       ).not.toBeInTheDocument(),
     );
     expect(screen.getByTestId('contributions-breakdown')).toBeInTheDocument();
-  });
-});
-
-describe('safeTimeZone', () => {
-  it('falls back to UTC for an invalid zone', () => {
-    expect(safeTimeZone('Not/AZone')).toBe('UTC');
-  });
-
-  it('falls back to UTC for a missing zone and keeps a valid one', () => {
-    expect(safeTimeZone(undefined)).toBe('UTC');
-    expect(safeTimeZone('America/New_York')).toBe('America/New_York');
-  });
-});
-
-describe('periodOptions', () => {
-  it('lists all time then the last 12 months in the org timezone', () => {
-    const now = new Date('2026-11-01T03:00:00Z');
-    const ny = periodOptions('America/New_York', now);
-    expect(ny[0]).toEqual({ value: 'all', label: 'All time' });
-    expect(ny).toHaveLength(13);
-    expect(ny[1]).toEqual({ value: '2026-10', label: 'October 2026' });
-    expect(ny[12].value).toBe('2025-11');
-    expect(periodOptions('Not/AZone', now)[1]).toEqual({
-      value: '2026-11',
-      label: 'November 2026',
-    });
   });
 });

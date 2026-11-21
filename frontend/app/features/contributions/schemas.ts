@@ -29,21 +29,6 @@ export const MemberSummarySchema = z.object({
 });
 export type MemberSummary = z.infer<typeof MemberSummarySchema>;
 
-export const LeaderboardRowSchema = MemberSummarySchema.extend({
-  points: z.number(),
-  entries: z.number(),
-});
-export type LeaderboardRow = z.infer<typeof LeaderboardRowSchema>;
-
-export const LeaderboardResponseSchema = z.object({
-  period: z.string(),
-  total: z.number(),
-  rows_visible: z.boolean(),
-  rows: z.array(LeaderboardRowSchema),
-  own_row: LeaderboardRowSchema.nullable(),
-});
-export type LeaderboardResponse = z.infer<typeof LeaderboardResponseSchema>;
-
 export const ContributionEntrySchema = z.object({
   pk: z.number(),
   kind: ContributionKindSchema,

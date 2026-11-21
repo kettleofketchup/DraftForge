@@ -73,13 +73,13 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
-import { ContributionsTab } from '~/features/contributions';
 import {
   LockedFeaturesPanel,
   removeFeatureQueries,
   useOrgFeatureAccess,
 } from '~/features/org-features';
 import { PromotionTab } from '~/features/promotion';
+import { TrackTab } from '~/features/standing';
 import {
   useEvent,
   useEventRepeaters,
@@ -420,6 +420,9 @@ export default function OrganizationDetailPage() {
 
   const featureAccess = useOrgFeatureAccess(organization ?? undefined);
   const canViewContributions = featureAccess.canViewContributions;
+  const contributionTrack = featureAccess.standingTracks.find(
+    (t) => t.key === 'contribution',
+  );
   useEffect(() => {
     if (
       featureAccess.settled &&
@@ -802,11 +805,12 @@ export default function OrganizationDetailPage() {
             </TabsContent>
           )}
 
-          {canViewContributions && pk && (
+          {canViewContributions && contributionTrack && pk && (
             <TabsContent value="contributions">
-              <ContributionsTab
+              <TrackTab
                 key={pk}
                 orgId={pk}
+                track={contributionTrack}
                 timeZone={organization.timezone}
                 membersPrivate={organization.members_private ?? false}
                 access={featureAccess}

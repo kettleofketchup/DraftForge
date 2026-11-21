@@ -15,7 +15,6 @@ import {
   createManualAward,
   deleteManualAward,
   getEntries,
-  getLeaderboard,
   getMemberBreakdown,
   getPointValues,
   setPointValue,
@@ -26,7 +25,6 @@ import type {
   AdminEntry,
   EntriesFilters,
   EntriesPage,
-  LeaderboardResponse,
   ManualAwardInput,
   MemberBreakdown,
   PointValueRow,
@@ -34,23 +32,6 @@ import type {
   PointValueUpdateResult,
   RatedKind,
 } from './schemas';
-
-export function useLeaderboard(
-  orgId: number,
-  access: OrgFeatureAccess,
-  period: string,
-): UseQueryResult<LeaderboardResponse> {
-  return useQuery({
-    queryKey: contributionsKeys.leaderboard(orgId, access.viewerPk, period),
-    queryFn: () => getLeaderboard(orgId, period),
-    enabled: access.settled && access.canViewContributions,
-    placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[1] === orgId &&
-      previousQuery.queryKey[2] === access.viewerPk
-        ? previous
-        : undefined,
-  });
-}
 
 export function useMemberBreakdown(
   orgId: number,
