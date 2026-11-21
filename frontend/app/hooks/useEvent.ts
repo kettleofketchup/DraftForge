@@ -55,6 +55,7 @@ import {
 } from '~/components/events/signupOptimistic';
 import type { GameTypeValue } from '~/components/game/constants';
 import type { UserType } from '~/components/user/types';
+import { invalidateOrgContributionQueries } from '~/features/org-features/queryKeys';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
@@ -167,9 +168,7 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
-        queryClient.invalidateQueries({
-          queryKey: ['org-contributions', data.organization],
-        });
+        void invalidateOrgContributionQueries(queryClient, data.organization);
       },
     }),
     setEventStaff: useMutation({
@@ -177,9 +176,7 @@ export function useEventActionMutation(eventId: number) {
         setEventStaffAPI(eventId, payload),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
-        queryClient.invalidateQueries({
-          queryKey: ['org-contributions', data.organization],
-        });
+        void invalidateOrgContributionQueries(queryClient, data.organization);
       },
     }),
   };

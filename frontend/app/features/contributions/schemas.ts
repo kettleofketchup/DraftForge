@@ -1,6 +1,11 @@
 import { z } from 'zod';
+import { MemberSummarySchema } from '~/features/standing/members';
 
-export const ALL_TIME = 'all';
+export {
+  MemberSummarySchema,
+  type MemberSummary,
+} from '~/features/standing/members';
+export { ALL_TIME } from '~/features/standing/periods';
 
 export const CONTRIBUTION_KINDS = [
   'promo_message',
@@ -17,32 +22,6 @@ export const KIND_LABELS: Record<ContributionKind, string> = {
   event_helper: 'Event helper',
   manual: 'Manual award',
 };
-
-export const MemberSummarySchema = z.object({
-  org_user_pk: z.number(),
-  user_pk: z.number(),
-  username: z.string(),
-  nickname: z.string().nullable(),
-  discordNickname: z.string().nullish(),
-  guildNickname: z.string().nullish(),
-  avatarUrl: z.string().nullable(),
-});
-export type MemberSummary = z.infer<typeof MemberSummarySchema>;
-
-export const LeaderboardRowSchema = MemberSummarySchema.extend({
-  points: z.number(),
-  entries: z.number(),
-});
-export type LeaderboardRow = z.infer<typeof LeaderboardRowSchema>;
-
-export const LeaderboardResponseSchema = z.object({
-  period: z.string(),
-  total: z.number(),
-  rows_visible: z.boolean(),
-  rows: z.array(LeaderboardRowSchema),
-  own_row: LeaderboardRowSchema.nullable(),
-});
-export type LeaderboardResponse = z.infer<typeof LeaderboardResponseSchema>;
 
 export const ContributionEntrySchema = z.object({
   pk: z.number(),

@@ -3,10 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  contributionsKeys,
-  type OrgFeatureAccess,
-} from '~/features/org-features';
+import { contributionsKeys, standingKeys } from '~/features/org-features';
+import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { sendPromo, undoPromoSend } from '../api';
 import { useSendPromo, useUndoPromoSend } from '../queries';
 
@@ -15,18 +13,20 @@ vi.mock('../api', () => ({
   undoPromoSend: vi.fn(),
 }));
 
-const access: OrgFeatureAccess = {
-  settled: true,
+const access = makeOrgFeatureAccess({
   viewerPk: 5,
   canUsePromotion: true,
-  canManageTemplates: false,
-  canManagePromoters: false,
   canViewContributions: true,
-  canViewContributors: false,
-  canManageContributions: false,
-};
+});
 
 const LEADERBOARD = contributionsKeys.leaderboard(1, 5, 'all');
+const STANDING = standingKeys.leaderboard(
+  1,
+  5,
+  'contribution',
+  'points',
+  'all',
+);
 
 function setup(): {
   qc: QueryClient;
@@ -36,6 +36,7 @@ function setup(): {
     defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
   });
   qc.setQueryData(LEADERBOARD, { total: 120 });
+  qc.setQueryData(STANDING, { total: 120 });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
@@ -66,9 +67,10 @@ describe('promotion mutations', () => {
         text: 'Hi',
       });
     });
-    await waitFor(() =>
-      expect(qc.getQueryState(LEADERBOARD)?.isInvalidated).toBe(true),
-    );
+    await waitFor(() => {
+      expect(qc.getQueryState(LEADERBOARD)?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(STANDING)?.isInvalidated).toBe(true);
+    });
   });
 
   it('marks cached contributions stale after an undo', async () => {
@@ -80,8 +82,9 @@ describe('promotion mutations', () => {
     await act(async () => {
       await result.current.mutateAsync(77);
     });
-    await waitFor(() =>
-      expect(qc.getQueryState(LEADERBOARD)?.isInvalidated).toBe(true),
-    );
+    await waitFor(() => {
+      expect(qc.getQueryState(LEADERBOARD)?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(STANDING)?.isInvalidated).toBe(true);
+    });
   });
 });

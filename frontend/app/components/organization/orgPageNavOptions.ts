@@ -5,7 +5,7 @@ export interface OrgPageNavInput {
   eventsCount: number;
   userCountDisplay: number | string;
   canViewMembers: boolean;
-  canViewContributions: boolean;
+  standingTabs: readonly { value: string; label: string }[];
   canUsePromotion: boolean;
   canViewClaims: boolean;
 }
@@ -21,8 +21,8 @@ export function buildOrgPageNavOptions(
   if (input.canViewMembers) {
     opts.push({ value: 'users', label: `Users (${input.userCountDisplay})` });
   }
-  if (input.canViewContributions) {
-    opts.push({ value: 'contributions', label: 'Contributions' });
+  for (const tab of input.standingTabs) {
+    opts.push({ value: tab.value, label: tab.label });
   }
   if (input.canUsePromotion) {
     opts.push({ value: 'promotion', label: 'Promotion' });

@@ -13,7 +13,7 @@ import {
 } from '../../fixtures';
 import { BASE_URL } from '../../fixtures/base-url';
 
-const ROWS = '[data-testid^="contributions-row-"]';
+const ROWS = 'tr[data-testid^="contributions-row-"]';
 
 function collectGets(
   page: Page,
@@ -85,7 +85,7 @@ test.describe('Org features: viewer changes @cicd', () => {
 
     const refetches = collectGets(page, (p) =>
       p.endsWith(
-        `/organizations/${data.orgs.private.pk}/contributions/leaderboard/`,
+        `/organizations/${data.orgs.private.pk}/standing/contribution/leaderboard/`,
       ),
     );
     await logoutWithoutReload(page);
@@ -132,7 +132,7 @@ test.describe('Org features: viewer changes @cicd', () => {
 
     const refetches = collectGets(page, (p) =>
       p.endsWith(
-        `/organizations/${data.orgs.features.pk}/contributions/leaderboard/`,
+        `/organizations/${data.orgs.features.pk}/standing/contribution/leaderboard/`,
       ),
     );
     await logoutWithoutReload(page);
