@@ -22,8 +22,11 @@ from rest_framework.test import APIClient, APIRequestFactory
 from app.consumers import DraftConsumer
 from app.functions import teamdraft
 from app.models import Draft, DraftEvent, DraftOptions, Team, TeamDraftState
-from app.tasks import draft_tick, teamdraft_tick
-from app.tasks.draft_tick import (
+from app.tasks import teamdraft_tick
+from app.tests.teamdraft_fixtures import TimedDraftFixture
+from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
+from draft.tasks import draft_tick
+from draft.tasks.draft_tick import (
     TickDriver,
     captain_channel_key,
     conn_count_key,
@@ -32,8 +35,6 @@ from app.tasks.draft_tick import (
     heartbeat_key,
     registry_for,
 )
-from app.tests.teamdraft_fixtures import TimedDraftFixture
-from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 from tests.test_teamdraft import expire_draft_clock, stale_draft_heartbeat
 
 
@@ -226,7 +227,7 @@ class LifecycleHelperTests(TestCase):
 
     def test_evaluate_client_pick_time_tags_logs_with_caller_taxonomy(self):
         now = timezone.now()
-        with patch("app.tasks.draft_tick.log") as mock_log:
+        with patch("draft.tasks.draft_tick.log") as mock_log:
             evaluate_client_pick_time(
                 now,
                 now + timedelta(seconds=1),
@@ -255,7 +256,7 @@ class EndpointTestBase(TestCase):
 
     def armed(self, path="start", user=None):
         """POST start/ or resume/ with the real broadcaster patched out (no tick thread from inside a TestCase)."""
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+        with patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             return self.post(user or self.fx.staff, path)
 
 
@@ -338,7 +339,7 @@ class ReadyEndpointTests(EndpointTestBase):
 
 
 class StartEndpointTests(EndpointTestBase):
-    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     def test_start_all_ready_emits_started_by_staff(self, mock_start):
         for cap in self.fx.captains:
             self.post(cap, "ready", {"ready": True})
@@ -354,7 +355,7 @@ class StartEndpointTests(EndpointTestBase):
         mock_start.assert_called_once()
         self.assertEqual(mock_start.call_args.args[1], self.fx.draft.pk)
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     def test_force_start_lists_not_ready_and_arms_first_round(self, mock_start):
         self.post(self.fx.captains[0], "ready", {"ready": True})
         r = self.post(self.fx.staff, "start")
@@ -388,7 +389,7 @@ class StartEndpointTests(EndpointTestBase):
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.data["code"], "timer_disabled")
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     def test_start_arms_legacy_unarmed_drafting_draft(self, mock_start):
         self.fx.draft.state = TeamDraftState.DRAFTING
         self.fx.draft.save()
@@ -401,7 +402,7 @@ class StartEndpointTests(EndpointTestBase):
         self.assertEqual(r.status_code, 409)
         self.assertEqual(r.data["code"], "already_armed")
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     def test_start_seeds_null_reserve_pools(self, mock_start):
         self.fx.draft.state = TeamDraftState.DRAFTING
         self.fx.draft.save()
@@ -441,7 +442,7 @@ class PauseResumeEndpointTests(EndpointTestBase):
         self.assertEqual(ev.payload["pick_number"], 1)
 
         with patch(
-            "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+            "draft.tasks.draft_tick.start_tick_broadcaster", return_value=True
         ) as mock_start:
             r = self.post(self.fx.staff, "resume")
         self.assertEqual(r.status_code, 200, r.data)
@@ -462,7 +463,7 @@ class PauseResumeEndpointTests(EndpointTestBase):
         rnd = self.fx.draft.active_round
         rnd.started_at = None
         rnd.save()
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+        with patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             r = self.post(self.fx.staff, "resume")
         self.assertEqual(r.status_code, 200, r.data)
         self.fx.draft.refresh_from_db()
@@ -480,7 +481,7 @@ class PauseResumeEndpointTests(EndpointTestBase):
 
     def test_pause_during_resuming_is_400(self):
         self.post(self.fx.staff, "pause")
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+        with patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.post(self.fx.staff, "resume")
         r = self.post(self.fx.staff, "pause")
         self.assertEqual(r.status_code, 400)
@@ -506,7 +507,7 @@ class PauseResumeEndpointTests(EndpointTestBase):
 class PickMatrixTests(EndpointTestBase):
     def start(self):
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             return self.fx.start()
@@ -608,7 +609,7 @@ class PickTimingTests(TestCase):
     def setUp(self):
         self.fx = TimedDraftFixture(grace_time_ms=1000, reserve_time_ms=5000)
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             self.rnd = self.fx.start(now=timezone.now() - timedelta(seconds=3))
@@ -651,7 +652,9 @@ class PickTimingTests(TestCase):
         ):
             fx = TimedDraftFixture(grace_time_ms=1000, prefix=prefix)
             with (
-                patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+                patch(
+                    "draft.tasks.draft_tick.start_tick_broadcaster", return_value=True
+                ),
                 self.captureOnCommitCallbacks(execute=True),
             ):
                 rnd = fx.start(now=timezone.now() - timedelta(seconds=2))
@@ -665,7 +668,7 @@ class PickTimingTests(TestCase):
         fx = TimedDraftFixture(prefix="sp")
         now = timezone.now()
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             rnd = fx.start(now=now - timedelta(seconds=5))
@@ -682,7 +685,7 @@ class PickTimingTests(TestCase):
     def test_last_pick_completes_draft(self):
         fx = TimedDraftFixture(num_teams=1, prefix="one")
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             fx.start()
@@ -701,7 +704,7 @@ class UndoTests(TestCase):
     def armed_fixture(self, **kw: object) -> TimedDraftFixture:
         fx = TimedDraftFixture(**kw)
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             fx.start()
@@ -712,7 +715,7 @@ class UndoTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             fx.pick(fx.draft.active_round, fx.staff)
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             fx.undo(fx.staff)
@@ -736,7 +739,7 @@ class UndoTests(TestCase):
             fx.pick(fx.draft.active_round, fx.staff)
         rnd2_captain = fx.round(2).captain_id
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             r = fx.undo(fx.staff)
@@ -771,7 +774,7 @@ class UndoTests(TestCase):
         self.assertEqual(fx.draft.state, TeamDraftState.COMPLETED)
         with (
             patch(
-                "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+                "draft.tasks.draft_tick.start_tick_broadcaster", return_value=True
             ) as mock_start,
             self.captureOnCommitCallbacks(execute=True),
         ):
@@ -810,7 +813,7 @@ class UndoTests(TestCase):
         spent = team.draft_reserve_ms
         self.assertLess(spent, 30000)
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             fx.undo(fx.staff)
@@ -825,7 +828,7 @@ class UndoTests(TestCase):
         fx.draft.save()
         with (
             patch(
-                "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+                "draft.tasks.draft_tick.start_tick_broadcaster", return_value=True
             ) as mock_start,
             self.captureOnCommitCallbacks(execute=True),
         ):
@@ -857,7 +860,7 @@ class UndoTests(TestCase):
         client = APIClient()
         client.force_authenticate(fx.staff)
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             self.assertEqual(
@@ -899,7 +902,7 @@ class TickPayloadTests(TestCase):
 
     def test_drafting_payload_shape_and_heartbeat_derived_is_connected(self):
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             rnd = self.fx.start()
@@ -966,7 +969,7 @@ class TickPayloadTests(TestCase):
 
     def test_resuming_payload_keeps_anchors(self):
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             self.fx.start()
@@ -986,7 +989,7 @@ class TickPayloadTests(TestCase):
             (False, "draft_state_pending"),
         )
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             rnd = self.fx.start()
@@ -1040,7 +1043,7 @@ class AutoPauseTests(TransactionTestCase):
     def setUp(self):
         self.fx = TimedDraftFixture(prefix="ap")
         self.r = get_redis_client()
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+        with patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.rnd = self.fx.start()
         self.active_team = self.fx.team_of(self.rnd.captain)
         self.hb = heartbeat_key("teamdraft", self.fx.draft.pk, self.rnd.captain_id)
@@ -1330,7 +1333,7 @@ class AutoPauseTests(TransactionTestCase):
         draft.state = TeamDraftState.RESUMING
         draft.resuming_until = timezone.now() + timedelta(seconds=3)
         draft.save()
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+        with patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.assertEqual(self.fx.undo(self.fx.staff).status_code, 200)
         with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
             self.assertEqual(
@@ -1388,7 +1391,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
         initial_events = await read_until_type(comm, "initial_events")
         return comm, initial_state, initial_events
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     async def test_captain_connect_emits_event_and_sets_flags(self, mock_start):
         comm, _, _ = await self.connect(self.cap)
         frame = await read_until_type(comm, "draft_event")
@@ -1401,7 +1404,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
         mock_start.assert_not_called()
         await comm.disconnect()
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     async def test_armed_draft_starts_team_driver(self, mock_start):
         await database_sync_to_async(self.fx.start)()
         comm, _, _ = await self.connect(self.fx.players[0])
@@ -1413,7 +1416,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
         self.assertIs(mock_start.call_args.args[0], teamdraft_tick.TEAM_TICK_DRIVER)
         await comm.disconnect()
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     async def test_unarmed_drafting_draft_starts_nothing(self, mock_start):
         draft = await database_sync_to_async(Draft.objects.get)(pk=self.fx.draft.pk)
         draft.state = TeamDraftState.DRAFTING
@@ -1427,7 +1430,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
             draft_id=self.fx.draft.pk, event_type="captain_disconnected"
         ).count()
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     async def test_second_tab_closing_is_silent_last_tab_emits_disconnected(
         self, mock_start
     ):
@@ -1515,7 +1518,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
             if frame["captain_id"] == self.cap.pk:
                 return frame["fresh"]
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     async def test_paused_captain_reconnecting_then_going_stale_is_announced(
         self, mock_start
     ) -> None:
@@ -1560,7 +1563,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
         self.assertGreater(self.r.ttl(key), 5)
         await comm.disconnect()
 
-    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    @patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     async def test_heartbeat_after_rebuild_restores_presence_and_auto_pause(
         self, mock_start
     ):
@@ -1617,7 +1620,7 @@ class TestEndpointTests(TestCase):
     def setUp(self):
         self.fx = TimedDraftFixture(prefix="te")
         with (
-            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            patch("draft.tasks.draft_tick.start_tick_broadcaster", return_value=True),
             self.captureOnCommitCallbacks(execute=True),
         ):
             self.rnd = self.fx.start()

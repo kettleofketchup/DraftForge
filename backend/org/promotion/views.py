@@ -11,9 +11,10 @@ from rest_framework.response import Response
 from app.models import CustomUser, Organization
 from app.permissions_org import has_org_staff_access
 from events.models import Event
+from org.contributions.services import promo_points
 from org.feature_errors import not_permitted, require_org_staff, require_promoter
 from org.features import FeatureKey, org_has_feature
-from org.models import ContributionEntry, PromoSend, PromoTemplate
+from org.models import PromoSend, PromoTemplate
 from org.promotion.recipients import CandidateRow, candidates, clamp_pool_n
 from org.promotion.render import (
     PLACEHOLDERS,
@@ -252,10 +253,7 @@ def promotion_sends(request: Request, org_id: int, event_id: int) -> Response:
     except PromoSendError as exc:
         raise ValidationError({exc.field: [str(exc)]}) from exc
     points = (
-        ContributionEntry.objects.nocache()
-        .filter(promo_send=send)
-        .values_list("points", flat=True)
-        .first()
+        promo_points(send)
         if send.earns_points and org_has_feature(org, FeatureKey.CONTRIBUTIONS)
         else None
     )

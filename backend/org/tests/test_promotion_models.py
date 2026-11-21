@@ -7,8 +7,8 @@ from django.utils import timezone
 from app.models import CustomUser, League, Organization
 from common.discord_format import discord_timestamp
 from events.models import Event
+from org.accounts import repoint_org_attribution
 from org.contributions.kinds import ContributionKind
-from org.contributions.services import repoint_user_attribution
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.models import ContributionEntry, OrgUser, PromoSend, PromoTemplate
@@ -170,12 +170,12 @@ class StarterTemplateTest(_PromoFixture):
         self.assertIsNone(seed_starter_template(self.org, self.admin))
         self.assertEqual(PromoTemplate.objects.filter(organization=self.org).count(), 1)
 
-    def test_repoint_user_attribution_moves_template_author(self) -> None:
+    def test_repoint_org_attribution_moves_template_author(self) -> None:
         template = PromoTemplate.objects.create(
             organization=self.org, name="Mine", body="x", created_by=self.sender
         )
 
-        changed = repoint_user_attribution(self.sender, self.recipient)
+        changed = repoint_org_attribution(self.sender, self.recipient)
 
         self.assertEqual(changed, 1)
         template.refresh_from_db()

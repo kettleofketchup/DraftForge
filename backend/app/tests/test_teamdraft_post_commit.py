@@ -42,7 +42,7 @@ class PostCommitFailureTests(TransactionTestCase):
 
     def setUp(self) -> None:
         draft_tick_patch = patch(
-            "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+            "draft.tasks.draft_tick.start_tick_broadcaster", return_value=True
         )
         self.tick_start = draft_tick_patch.start()
         self.addCleanup(draft_tick_patch.stop)
@@ -152,7 +152,7 @@ class PostCommitFailureTests(TransactionTestCase):
         self.post(fx, fx.staff, "pause")
         with (
             patch(
-                "app.tasks.draft_tick.start_tick_broadcaster",
+                "draft.tasks.draft_tick.start_tick_broadcaster",
                 side_effect=ConnectionError("redis down"),
             ),
             capture_logs() as logs,

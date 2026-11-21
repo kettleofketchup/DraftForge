@@ -15,9 +15,9 @@ from channels.layers import get_channel_layer
 from django.db import DEFAULT_DB_ALIAS, connection, connections, transaction
 from django.db.backends.base.base import BaseDatabaseWrapper
 
-from app.draft_state import build_draft_state
 from app.models import Draft
 from app.serializers import DraftEventSerializer
+from app.tournament_state import build_draft_state
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:

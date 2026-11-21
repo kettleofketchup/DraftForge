@@ -12,8 +12,12 @@ from app.permissions_org import (
 from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind
-from org.contributions.services import award_entry
-from org.models import ContributionEntry, PromoSend, PromoTemplate
+from org.contributions.services import (
+    award_entry,
+    has_promo_entry,
+    revoke_promo_entry,
+)
+from org.models import PromoSend, PromoTemplate
 from org.promotion.recipients import in_pool
 from telemetry.logging import get_logger
 
@@ -169,7 +173,7 @@ def _promote_next_send(
         return None
     promoted.earns_points = True
     promoted.save(update_fields=["earns_points"])
-    if not ContributionEntry.objects.nocache().filter(promo_send=promoted).exists():
+    if not has_promo_entry(promoted):
         _award_send(promoted, event, promoted.sender)
     return promoted
 
@@ -218,7 +222,7 @@ def undo_promo_send(send: PromoSend, *, actor: CustomUser | None) -> None:
     was_earning = send.earns_points
     send_id = send.pk
     recipient_id = send.recipient_id
-    ContributionEntry.objects.nocache().filter(promo_send=send).delete()
+    revoke_promo_entry(send)
     send.delete()
 
     promoted: PromoSend | None = None

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Outputs SHA256 of all files that affect test DB content
+# Usage: hash-test-db-sources.sh [repo-root]  (default: the checkout holding this script)
 set -euo pipefail
 
-cd "$(git rev-parse --show-toplevel)"
+cd "${1:-$(git -C "$(dirname "${BASH_SOURCE[0]}")/.." rev-parse --show-toplevel)}"
 
 find backend -type f \( \
     -path "backend/tests/populate.py" -o \

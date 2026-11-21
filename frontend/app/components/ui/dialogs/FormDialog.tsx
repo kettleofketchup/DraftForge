@@ -1,4 +1,9 @@
 import * as React from 'react';
+import {
+  DIALOG_MOBILE_FULL_CSS,
+  DIALOG_SCREEN_CSS,
+  DIALOG_SCREEN_SCROLL_CSS,
+} from '~/components/reusable/modal';
 import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
 import {
   Dialog,
@@ -249,7 +254,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
         className={
           scrollClassName ??
           (isScreen
-            ? 'flex-1 min-h-0 overflow-hidden -mx-6 px-6'
+            ? DIALOG_SCREEN_SCROLL_CSS
             : 'max-h-[calc(100svh-10rem)] sm:max-h-[60vh] pr-4')
         }
       >
@@ -274,16 +279,14 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
           ref={setContentRef}
           onKeyDown={handleContentKeyDown}
           className={cn(
-            // Full-screen on mobile
-            'h-full max-w-full rounded-none top-0 left-0 translate-x-0 translate-y-0',
-            // Centered dialog on sm+
-            'sm:max-w-[calc(100%-2rem)] sm:rounded-lg sm:top-[50%] sm:left-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%]',
-            // 'screen' matches reusable/modal DIALOG_CSS plus the ScrollArea clipping contract
             isScreen
-              ? 'flex flex-col overflow-hidden min-w-full xl:min-w-[98%] sm:h-[95vh] sm:max-h-[95vh]'
-              : 'sm:h-auto',
-            // Disable zoom animation for large dialogs - causes expensive layout calculations
-            'data-[state=open]:!zoom-in-100 data-[state=closed]:!zoom-out-100',
+              ? DIALOG_SCREEN_CSS
+              : cn(
+                  DIALOG_MOBILE_FULL_CSS,
+                  'sm:h-auto',
+                  // Disable zoom animation for large dialogs - causes expensive layout calculations
+                  'data-[state=open]:!zoom-in-100 data-[state=closed]:!zoom-out-100',
+                ),
             sizeClasses[size],
             className,
           )}

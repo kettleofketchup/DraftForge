@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from django.db import transaction
 from django.test import TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -55,7 +56,7 @@ class ClaimMergeLeagueSummaryTests(TransactionTestCase):
 
     def test_match_stats_reassignment_invalidates_without_user_delete(self) -> None:
         get_league_summary(STEAM_LEAGUE, 5)
-        with patch.object(CustomUser, "delete"):
+        with patch.object(CustomUser, "delete"), transaction.atomic():
             ClaimRequestViewSet()._merge_profiles(self.claimer, self.target)
         players = get_league_summary(STEAM_LEAGUE, 5)["players"]
         self.assertEqual(players[str(self.claimer.pk)]["games"], 5)

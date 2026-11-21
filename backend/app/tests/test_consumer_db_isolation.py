@@ -14,21 +14,23 @@ from django.db import close_old_connections, transaction
 from django.test import SimpleTestCase, TransactionTestCase
 from django.urls import re_path
 
+from app import consumer_db as consumer_db_module
 from app import consumers
 from app.channel_layers import (
     CancelSafeChannelLock,
     LoopSafeRedisChannelLayer,
     PerLoopChannelLock,
 )
+from app.consumer_db import CONSUMER_DB_THREADS, consumer_db
 from app.consumers import DraftConsumer
-from app.consumers_base import consumer_db
 from app.models import Draft, Game, Team, Tournament
-from app.tasks.draft_tick import get_redis_client
 from app.tasks.teamdraft_tick import captain_conn_key
 from app.tests.ws_helpers import read_until_type
+from draft.consumers import base as consumers_base
 from draft.consumers import hero as hero_consumers
 from draft.consumers.hero import HeroDraftConsumer
 from draft.models import DraftTeam, HeroDraft
+from draft.tasks.draft_tick import get_redis_client
 
 User = get_user_model()
 
@@ -249,6 +251,15 @@ class ConsumerDbContentionTests(TransactionTestCase):
                 await writer
 
         self.assertEqual(asyncio.run(scenario()), 1)
+
+
+class ConsumerDbExecutorTests(SimpleTestCase):
+    def test_consumer_db_has_one_shared_executor(self) -> None:
+        self.assertEqual(
+            consumer_db_module._consumer_db_executor._max_workers, CONSUMER_DB_THREADS
+        )
+        self.assertEqual(CONSUMER_DB_THREADS, 16)
+        self.assertFalse(hasattr(consumers_base, "_consumer_db_executor"))
 
 
 class ConsumerDbConnectionCleanupTests(SimpleTestCase):

@@ -1,8 +1,10 @@
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Any
 
 from cacheops import cached_as
 from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import FieldDoesNotExist
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models, transaction
 from django.db.models import (
@@ -100,10 +102,10 @@ from events.services import (
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS
 from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
-from org.contributions.services import should_sync_staff, sync_event_staff_entries
 from org.feature_errors import not_permitted
 from org.mmr import OrgMmrError, game_for_event, validate_org_mmr
 from org.models import OrgUser, OrgUserGameMmr
+from org.standing import api as standing
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile
 from user.querysets import with_user_profiles
@@ -555,6 +557,18 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
 _CONCURRENTLY_WRITTEN_EVENT_FIELDS = ["state", "contributions_awarded_at", "host"]
 
 
+def _event_field_values(event: Event, names: Iterable[str]) -> dict[str, object]:
+    values: dict[str, object] = {}
+    for name in names:
+        try:
+            field = Event._meta.get_field(name)
+        except FieldDoesNotExist:
+            continue
+        if field.concrete and not field.many_to_many:
+            values[name] = getattr(event, field.attname)
+    return values
+
+
 _SIGNUP_INTENT_COMMITMENT: dict[str, Commitment] = {
     "rsvp": Commitment.MAIN,
     "tentative": Commitment.MAYBE,
@@ -733,10 +747,8 @@ class EventViewSet(viewsets.ModelViewSet):
         previous_draft_options = event_draft_option_values(serializer.instance)
         previous_allow_user_signups = serializer.instance.allow_user_signups
         previous_roll_call_enabled = serializer.instance.roll_call_enabled
-        previous_ledger_fields = (
-            serializer.instance.scheduled_at,
-            serializer.instance.ends_at,
-            serializer.instance.name,
+        previous_values = _event_field_values(
+            serializer.instance, serializer.validated_data
         )
         with transaction.atomic():
             event = serializer.save()
@@ -744,12 +756,13 @@ class EventViewSet(viewsets.ModelViewSet):
                 from_queryset=Event.objects.nocache().select_for_update(),
                 fields=_CONCURRENTLY_WRITTEN_EVENT_FIELDS,
             )
-            if (
-                event.scheduled_at,
-                event.ends_at,
-                event.name,
-            ) != previous_ledger_fields and should_sync_staff(event):
-                sync_event_staff_entries(event)
+            changed_fields = frozenset(
+                name
+                for name, value in _event_field_values(event, previous_values).items()
+                if value != previous_values[name]
+            )
+            if changed_fields:
+                standing.on_event_changed(event, fields=changed_fields)
         invalidate_after_commit(event)
         if event.allow_user_signups != previous_allow_user_signups:
             transaction.on_commit(lambda: notify_signup_changed(event))
@@ -1137,9 +1150,9 @@ class EventViewSet(viewsets.ModelViewSet):
             event.host_id = host_id
             event.save(update_fields=["host", "updated_at"])
             event.helpers.set(helper_ids)
-            synced = should_sync_staff(event)
-            if synced:
-                sync_event_staff_entries(event)
+            staff_result = standing.on_event_changed(
+                event, fields=frozenset({"host", "helpers"})
+            )
             OrgLog.objects.create(
                 organization=org,
                 actor=request.user,
@@ -1162,7 +1175,7 @@ class EventViewSet(viewsets.ModelViewSet):
             actor_id=request.user.pk,
             host_id=host_id,
             helper_count=len(helper_ids),
-            synced=synced,
+            **staff_result.log_fields(),
         )
         return Response(_event_payload(event.pk, request.user))
 

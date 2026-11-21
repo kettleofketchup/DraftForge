@@ -7,7 +7,7 @@ from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
 from app.models import CustomUser, Organization
-from org.contributions.periods import (
+from org.standing.periods import (
     Period,
     local_day_start_utc,
     local_noon_utc,
@@ -72,7 +72,7 @@ class OrgPeriodsTest(TestCase):
         self.assertEqual(len(warnings), 1)
         self.assertEqual(warnings[0]["log_level"], "warning")
         self.assertEqual(warnings[0]["system"], "org")
-        self.assertEqual(warnings[0]["subsystem"], "contributions")
+        self.assertEqual(warnings[0]["subsystem"], "standing")
         period = parse_period(self.org, "2026-10")
         self.assertEqual(period.start, datetime(2026, 10, 1, tzinfo=UTC))
         self.assertEqual(period.end, datetime(2026, 11, 1, tzinfo=UTC))

@@ -1,4 +1,4 @@
-"""Team-draft tick driver bound to the shared runner in app.tasks.draft_tick."""
+"""Team-draft tick driver bound to the shared runner in draft.tasks.draft_tick."""
 
 import time
 from datetime import datetime
@@ -14,8 +14,8 @@ from app.functions.teamdraft import emit_event, team_for_round, team_payload
 from app.functions.teamdraft_timeout import TIMEOUT_ACTIONS
 from app.models import Draft, DraftRound, Team, TeamDraftState
 from app.redis_keys import namespaced_key
-from app.tasks import draft_tick
-from app.tasks.draft_tick import (
+from draft.tasks import draft_tick
+from draft.tasks.draft_tick import (
     CAPTAIN_CHANNEL_TTL,
     HEARTBEAT_STALE_SECONDS,
     get_connection_count,

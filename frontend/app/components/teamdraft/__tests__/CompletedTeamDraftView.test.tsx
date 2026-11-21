@@ -127,6 +127,23 @@ describe('TeamCard roster roles and leadership flags', () => {
     ).toBeTruthy();
   });
 
+  it('uses one badge family, right-aligned, for every roster role', () => {
+    renderCard(roster);
+    const placements = [
+      ['team-card-member-7', 'roster-status-captain'],
+      ['team-card-member-8', 'roster-status-deputy'],
+      ['team-card-standin-60', 'roster-status-standin'],
+      ['team-card-dropout-61', 'roster-status-dropout'],
+    ] as const;
+    for (const [row, badge] of placements) {
+      const el = within(screen.getByTestId(row)).getByTestId(badge);
+      expect(el.parentElement).toHaveClass('justify-end');
+    }
+    for (const el of screen.getAllByText('Captain')) {
+      expect(el).toHaveAttribute('data-testid', 'roster-status-captain');
+    }
+  });
+
   it('shows the leadership badge only when canEdit', () => {
     const { unmount } = renderCard(ghostTeam);
     expect(screen.queryByTestId('team-leadership-problem')).toBeNull();

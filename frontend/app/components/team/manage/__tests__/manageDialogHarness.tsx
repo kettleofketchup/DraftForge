@@ -126,13 +126,17 @@ export const invalidatedKeys = (invalidate: {
     (call) => (call[0] as { queryKey: unknown }).queryKey,
   );
 
-/** Opens the reason dialog from a roster row button. */
+/** Opens the reason dialog from a roster row's actions menu. */
 export async function requestRowAction(
   rowTestId: string,
   label: string,
 ): Promise<void> {
   const row = await screen.findByTestId(rowTestId);
-  fireEvent.click(within(row).getByRole('button', { name: label }));
+  fireEvent.pointerDown(
+    within(row).getByRole('button', { name: /^Actions for / }),
+    { button: 0, ctrlKey: false, pointerType: 'mouse' },
+  );
+  fireEvent.click(await screen.findByRole('menuitem', { name: label }));
   await screen.findByTestId('team-action-dialog');
 }
 

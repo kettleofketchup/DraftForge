@@ -62,7 +62,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `app` | `signals` | — | `app/signals.py`, `draft/signals.py` | Model signal handlers (org/league user create, herodraft cleanup) |
 | `internal_client` | `http` | — | `app/internal_client/` (`transport.py` and per-domain modules) | Internal HTTP client errors and JSON-parse failures |
 | `discord` | `bot`, `utils`, `views`, `channels`, `roles`, `users` | — | `discordbot/**` | Bot lifecycle, message utils, slash views, channel/role/user services |
-| `events` | `tasks`, `services`, `views`, `dispatch` | — | `events/**` | Event task lifecycle, signup services, manual fire, tournament-link dispatch |
+| `events` | `tasks`, `services`, `views`, `dispatch` | — | `events/**` | Event task lifecycle, signup services, manual fire, tournament-link dispatch, `event_staff_deduped` (host/helper dedupe after merges) |
 | `events` | `overrides` | — | `events/overrides.py` | Staff override policy check (`override_checked`) and blocks (`override_blocked`) |
 | `steam` | `api`, `game_linking`, `match`, `mmr`, `stats`, `model`, `league_sync`, `retry`, `ingest` | — | `steam/**` | Steam API, account/game linking, match fetch/store, MMR/stats, league sync, retry, internal store_match ingest |
 | `bracket` | `generate`, `model` | — | `bracket/**` | Bracket generation + model-level cache logging |
@@ -70,7 +70,8 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `org` | `features` | — | `org/features.py` | Locked feature switch writes (`org_feature_set`, after commit) |
 | `org` | `settings` | — | `org/settings_service.py` | OrgSettings lazy create and admin updates |
 | `org` | `promoters` | — | `org/views_features.py` | Promoter add/remove (`org_promoter_added`, `org_promoter_removed`) |
-| `org` | `contributions` | — | `org/contributions/services.py`, `org/contributions/periods.py` | Ledger writes: awards, host/helper sync, manual award edit/delete, point values and rescores, merge reassign/dedupe, user-delete cleanup; invalid org timezone fallback (`org_timezone_invalid`) |
+| `org` | `contributions` | — | `org/contributions/services.py` | Ledger writes: awards, host/helper sync, manual award edit/delete, point values and rescores, merge reassign, user-delete cleanup |
+| `org` | `standing` | — | `org/standing/periods.py` | Invalid org timezone fallback (`org_timezone_invalid`) |
 | `org` | `promotion` | — | `org/promotion/services.py`, `org/promotion/views.py`, `org/promotion/starter.py` | Promo send record/undo, merge demotions, template create/update/delete, starter template seeding. Never message text |
 | `org` | `mmr` | — | `org/mmr.py`, `org/signals.py` | Per-game org MMR writes, claim merge, unprefetched-read tripwire (`org_mmr_set`, `org_mmr_merged`, `org_mmr_unprefetched`) |
 | `lobby` | `client` | — | `lobby/client.py` | dota_lobby API calls: failed requests with the problem `code`, `retryable` and retry attempt (never bodies, passwords or the API key) |

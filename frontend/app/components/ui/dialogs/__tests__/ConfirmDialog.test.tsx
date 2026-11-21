@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { ConfirmDialog } from '../ConfirmDialog';
 
@@ -64,7 +64,9 @@ describe('ConfirmDialog additive props', () => {
       />,
       { wrapper: Wrapper },
     );
-    expect(container.querySelector('[data-testid="confirm-dialog-body-slot"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="confirm-dialog-body-slot"]'),
+    ).toBeNull();
   });
 
   it('disables the confirm button when confirmDisabled is true', () => {
@@ -82,4 +84,42 @@ describe('ConfirmDialog additive props', () => {
     );
     expect(screen.getByTestId('cd-confirm')).toBeDisabled();
   });
+});
+
+describe('ConfirmDialog surface', () => {
+  const translucentBg = /(^|\s)bg-[a-z-]+(-\d+)?\/\d+/;
+
+  it.each([
+    [
+      'default',
+      'bg-success-surface',
+      '[background-image:var(--brand-success-bg)]',
+    ],
+    [
+      'destructive',
+      'bg-background',
+      '[background-image:var(--brand-destructive-bg)]',
+    ],
+    ['warning', 'bg-background', '[background-image:var(--brand-warning-bg)]'],
+  ] as const)(
+    '%s variant sits on an opaque background',
+    (variant, base, tint) => {
+      render(
+        <ConfirmDialog
+          open
+          onOpenChange={() => {}}
+          title="t"
+          description="d"
+          onConfirm={() => {}}
+          variant={variant}
+          contentTestId="surface"
+        />,
+        { wrapper: Wrapper },
+      );
+      const className = screen.getByTestId('surface').className;
+      expect(className).not.toMatch(translucentBg);
+      expect(className.split(/\s+/)).toContain(base);
+      expect(className.split(/\s+/)).toContain(tint);
+    },
+  );
 });

@@ -425,8 +425,8 @@ sequenceDiagram
 | `backend/org/mmr.py` | Per-game org MMR reads, writes and prefetch |
 | `backend/league/serializers.py` | `LeagueUserSerializer` (league-scoped MMR) |
 | `backend/app/views_main.py` | Injects `_users` dict on tournament/draft GET responses |
-| `backend/app/consumers.py` | Injects `_users` dict on team-draft WebSocket state (via `app/draft_state.py`) |
-| `backend/app/broadcast.py` | Injects `_users` dict on team-draft broadcast events (via `app/draft_state.py`) |
+| `backend/app/consumers.py` | Injects `_users` dict on team-draft WebSocket state (via `app/tournament_state.py`) |
+| `backend/app/broadcast.py` | Injects `_users` dict on team-draft broadcast events (via `app/tournament_state.py`) |
 
 ### Frontend
 

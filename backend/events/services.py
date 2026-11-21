@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.teamdraft import apply_draft_options
-from app.models import CustomUser, Organization, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel, Team, Tournament
 from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
 from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
@@ -71,9 +71,11 @@ from events.roster import (
 from events.schemas import DotaModalConfig
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
 from lobby.passwords import PasswordMode, generate_password
+from org.membership import resolve_or_create_org_user
 from org.mmr import game_for_event, set_org_mmr
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
+from org.standing import api as standing
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -144,21 +146,6 @@ def _validate_screenshot_url(url: str | None) -> None:
 def check_requirements(event: Event, user: CustomUser) -> bool:
     """Check if user meets event confirmation requirements."""
     return not evaluate_signup(event, user).approval
-
-
-def resolve_or_create_org_user(
-    user: CustomUser, organization: Organization
-) -> "OrgUser":
-    """Get or create OrgUser for (user, organization).
-
-    Single source of truth for "user joins org by signing up." Used by:
-      - the web /signup/ endpoint
-      - Discord adapters via _get_org_user()
-      - staff_add_signup()
-      - approve_signup()
-    """
-    org_user, _ = OrgUser.objects.get_or_create(user=user, organization=organization)
-    return org_user
 
 
 def _first_fields_carry(existing: EventSignup | None) -> dict[str, Any]:
@@ -1098,7 +1085,7 @@ def ensure_tournament_with_signups(
     return sync_event_roster(event, phase or start_phase(event)).tournament
 
 
-def teardown_event(event: Event) -> None:
+def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
     """Delete an event and everything Discord/tournament-related it owns.
 
     Dispatches deletion of the live Discord scheduled event (nothing else in the
@@ -1112,6 +1099,7 @@ def teardown_event(event: Event) -> None:
     from events.tasks import delete_discord_scheduled_event
 
     with transaction.atomic():
+        standing.on_event_deleted(event, actor=actor)
         invalidate_after_commit(event)
         if event.tournament:
             tournament = event.tournament

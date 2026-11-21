@@ -130,9 +130,17 @@ def run(tmp_path: Path) -> Runner:
         stub = bin_dir / name
         stub.write_text(RECORDER.format(log=str(log)))
         stub.chmod(0o755)
+    # A present test DB keeps test::up/upd's ensure-db off docker and populate.
+    test_db = tmp_path / "test.db.sqlite3"
+    test_db.write_bytes(b"x")
+    db_dir = tmp_path / "dbs"
+    db_dir.mkdir()
     env = {
         **os.environ,
         "DF_JUST_PYTHON": str(bin_dir / "python"),
+        "DF_TEST_DB_FILE": str(test_db),
+        "DF_DB_DIR": str(db_dir),
+        "DF_BACKEND_ENV_FILE": str(tmp_path / "backend.env"),
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
     }
     for key in (
@@ -325,6 +333,16 @@ def test_dev_debug_migrates_with_dev_env_then_starts_dev(run: Runner) -> None:
         "--remove-orphans",
     ]
     assert up.test == "false"
+
+
+DB_FILES = {"test.db.sqlite3", "dev.db.sqlite3", "prod.db.sqlite3"}
+
+
+def test_touch_dbs_creates_the_dbs_in_df_db_dir(run: Runner) -> None:
+    before = {p.name for p in (ROOT / "backend").iterdir()}
+    assert run("db::touch-dbs").returncode == 0
+    assert {p.name for p in Path(run.env["DF_DB_DIR"]).iterdir()} == DB_FILES
+    assert {p.name for p in (ROOT / "backend").iterdir()} == before
 
 
 def test_migrate_all_uses_each_env(run: Runner) -> None:
