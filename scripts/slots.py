@@ -348,6 +348,11 @@ def _docker(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+# Only these services log in response to use; redis RDB saves and celery
+# periodic tasks write logs on an idle stack.
+LOG_ACTIVITY_SERVICES: Final = frozenset({"backend", "frontend", "nginx"})
+
+
 def _container_activity(project: str) -> float | None:
     r = _docker(
         ["ps", "-aq", "--filter", f"label=com.docker.compose.project={project}"]
@@ -357,7 +362,15 @@ def _container_activity(project: str) -> float | None:
     ids = r.stdout.split()
     if not ids:
         return None
-    fmt = "{{.Id}}\t{{.State.Running}}\t{{.State.StartedAt}}\t{{.State.FinishedAt}}"
+    fmt = "\t".join(
+        [
+            "{{.Id}}",
+            "{{.State.Running}}",
+            "{{.State.StartedAt}}",
+            "{{.State.FinishedAt}}",
+            '{{index .Config.Labels "com.docker.compose.service"}}',
+        ]
+    )
     r = _docker(["inspect", "--format", fmt, *ids])
     if r.returncode != 0:
         raise SlotError(f"docker inspect failed ({r.returncode}): {r.stderr.strip()}")
@@ -366,9 +379,13 @@ def _container_activity(project: str) -> float | None:
         fields = line.split("\t")
         if len(fields) < 4:
             continue
-        cid, running, started, finished = fields[:4]
+        fields += [""] * (5 - len(fields))
+        cid, running, started, finished, service = fields[:5]
         stamps += [t for t in (parse_ts(started), parse_ts(finished)) if t is not None]
-        if running.strip().lower() == "true":
+        if (
+            running.strip().lower() == "true"
+            and service.strip() in LOG_ACTIVITY_SERVICES
+        ):
             logs = _docker(["logs", "--timestamps", "--tail", "1", cid])
             for out in (logs.stdout, logs.stderr):
                 stamps += [

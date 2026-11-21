@@ -31,7 +31,11 @@ vi.mock('~/store/userStore', async () => {
   };
 });
 
-const NOW = new Date('2026-11-10T12:00:00Z');
+const LOGO = 'https://example.test/logo-a.png';
+const OTHER_LOGO = 'https://example.test/logo-b.png';
+
+// The card derives its state from the current time; the fixture's date_played is a week later.
+const NOW = new Date('2026-06-01T12:00:00Z');
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -42,14 +46,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const LOGO = 'https://example.test/logo-a.png';
-const OTHER_LOGO = 'https://example.test/logo-b.png';
-
 function tournament(overrides: Partial<TournamentType> = {}): TournamentType {
   return {
     pk: 900,
     name: 'Discovery Cup',
-    date_played: '2026-11-20T18:00:00Z',
+    date_played: '2026-06-08T18:00:00Z',
     timezone: 'UTC',
     tournament_type: 'double_elimination',
     state: 'future',
@@ -85,16 +86,6 @@ function renderCard(t: TournamentType, bucket?: TournamentBucket) {
 function orgMedia(): HTMLElement {
   return screen.getByTestId('tournament-card-org-media');
 }
-
-// The card derives its state from the current time; pin it before the fixture's date_played.
-beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-11-14T12:00:00Z'));
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-});
 
 describe('TournamentCard (non-staff)', () => {
   it('shows the org logo in an aria-hidden media box', () => {

@@ -47,6 +47,10 @@ jobs:
     - name: Convert videos to GIFs
       run: just demo::gifs
 
+    # demo::herodraft already cuts them; this covers `all`. Skips clips with no recording.
+    - name: Cut animated WebP clips
+      run: just demo::clips
+
     # Keep the recorded videos even if GIF conversion failed.
     - name: Upload demo artifacts
       if: ${{ !cancelled() }}

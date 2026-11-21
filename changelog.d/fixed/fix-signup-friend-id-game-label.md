@@ -1,0 +1,1 @@
+- The event signup Friend ID field on Deadlock events now reads "Steam Friend ID" and points to the Steam Friend Code instead of a Dotabuff URL; the event "Require Friend ID" setting no longer says Dota 2 (#704).

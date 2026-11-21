@@ -26,6 +26,7 @@ from rich.console import Console
 
 from tests.helpers.tournament_config import populate_test_tournaments
 from tests.populate.auth_matrix import populate_auth_matrix_data
+from tests.populate.avatars import populate_committed_avatars
 
 # Re-export commonly used functions for backwards compatibility
 from tests.populate.bracket import (
@@ -115,6 +116,7 @@ def populate_all(force: bool = False) -> None:
         ("Tournament Discovery Data", populate_tournament_discovery),
         # After every pk-sensitive step: these users take auto-incremented pks.
         ("Discord Name Sync Users", populate_discord_name_sync_users),
+        ("Discord Avatars", populate_committed_avatars),
     ]
 
     console = Console()
@@ -152,6 +154,7 @@ __all__ = [
     "populate_discord_name_sync_users",
     "populate_users",
     "populate_test_auth_users",
+    "populate_committed_avatars",
     "populate_tournaments",
     "populate_real_tournament_38",
     "populate_shuffle_tie_data",
