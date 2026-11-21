@@ -310,6 +310,35 @@ test.describe('@cicd HeroDraft chat', () => {
     }
   });
 
+  test('Enter opens chat and Escape closes it', async ({ browser }) => {
+    test.setTimeout(120000);
+    await setUp(browser, DESKTOP);
+    const page = memberA.page;
+    const panel = page.getByTestId('herodraft-chat-panel');
+    const input = chatInput(page);
+
+    await expect(input).toBeEnabled({ timeout: 15000 });
+    await expect(page.getByTestId('herodraft-chat-enter-hint')).toBeVisible();
+    await expect(panel).toBeHidden();
+
+    await page.keyboard.press('Enter');
+    await expect(panel).toBeVisible();
+    await expect(input).toBeFocused();
+    await expect(page.getByTestId('herodraft-chat-enter-hint')).toBeHidden();
+
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+    await expect(input).not.toBeFocused();
+
+    await page.keyboard.press('Enter');
+    await expect(input).toBeFocused();
+    const sentinel = sentinelFor('enter');
+    await page.keyboard.type(sentinel);
+    await page.keyboard.press('Enter');
+    await expect(input).toHaveValue('');
+    await expect(chatRow(page, sentinel)).toBeVisible();
+  });
+
   test('spectator composer is read-only', async ({ browser }) => {
     test.setTimeout(120000);
     await setUp(browser);
