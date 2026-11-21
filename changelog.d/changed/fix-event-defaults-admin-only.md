@@ -1,1 +1,0 @@
-- Only org admins, the org owner and site admins can change an organization's event defaults through the API. Org staff can still read them, so creating events still fills in the defaults.

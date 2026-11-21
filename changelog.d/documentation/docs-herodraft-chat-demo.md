@@ -1,1 +1,0 @@
-- Hero Draft demo: the recording now shows team chat, `/all` chat, pick/ban suggestions from team members and opening chat with Enter, plus a short side-by-side `herodraft_chat.webp` clip of both captains' team chats (`just demo::clips`).
