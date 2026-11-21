@@ -6,6 +6,7 @@ from django.conf import settings
 from django.db.models import Avg, Max
 
 from common.game import GameType
+from league.models import LeagueUser
 from org.mmr import org_mmr_for
 from telemetry.logging import get_logger
 
@@ -100,8 +101,6 @@ def update_user_league_mmr(
     if not base_mmr:
         # No base MMR - update LeagueUser if we have league context
         if league:
-            from league.models import LeagueUser
-
             try:
                 league_user = LeagueUser.objects.get(user=user, league=league)
                 league_user.mmr = 0
@@ -124,8 +123,6 @@ def update_user_league_mmr(
 
     # Update LeagueUser if league context provided
     if league:
-        from league.models import LeagueUser
-
         try:
             league_user = LeagueUser.objects.get(user=user, league=league)
             league_user.mmr = calculated_league_mmr
