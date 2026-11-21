@@ -5,6 +5,7 @@ These endpoints are only available when TEST_ENDPOINTS=true in settings.
 Used by `just demo::*` tasks to reset demo data before recording videos.
 """
 
+from cacheops import invalidate_obj
 from rest_framework import status
 from rest_framework.decorators import (
     api_view,
@@ -14,8 +15,15 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from app.models import CustomUser, Tournament
+from app.serializers import TournamentSerializer
+from bracket.models import TournamentBracket
 from common.utils import isTestEnvironment
+from draft.models import Draft, DraftRound
+from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero_chat import reset_draft_chat
+from league.models import LeagueUser
+from org.models import OrgUser
 
 # Demo tournament names (must match populate.py)
 DEMO_TOURNAMENTS = {
@@ -47,8 +55,6 @@ def reset_demo_tournament(request, key: str):
     """
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
-
-    from app.models import Tournament
 
     tournament_name = DEMO_TOURNAMENTS.get(key)
     if not tournament_name:
@@ -97,9 +103,6 @@ def _reset_demo_csv_import():
     The demo creates the tournament via UI, so there may be zero or multiple.
     Deletes ALL tournaments named "Demo CSV Import" and all associated data.
     """
-    from app.models import CustomUser, Tournament
-    from league.models import LeagueUser
-    from org.models import OrgUser
 
     tournament_name = DEMO_TOURNAMENTS["demo_csv_import"]
 
@@ -192,7 +195,6 @@ def _reset_demo_herodraft(tournament):
 
 def _reset_demo_captaindraft(tournament):
     """Reset Captain Draft tournament to initial state."""
-    from draft.models import Draft
 
     # Delete all teams (captain draft creates them)
     tournament.teams.all().delete()
@@ -231,7 +233,6 @@ def _reset_demo_draft(tournament, draft_style: str):
     Clears all draft rounds and resets draft to pending state.
     Teams and captains are preserved (they're created during populate).
     """
-    from draft.models import Draft, DraftRound
 
     # Find and reset the draft
     draft = Draft.objects.filter(tournament=tournament).first()
@@ -250,8 +251,6 @@ def _reset_demo_draft(tournament, draft_style: str):
 
     # Rebuild rounds for fresh draft
     draft.build_rounds()
-
-    from cacheops import invalidate_obj
 
     invalidate_obj(draft)
     invalidate_obj(tournament)
@@ -288,9 +287,6 @@ def generate_demo_bracket(request, tournament_pk: int):
     """
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
-
-    from app.models import Tournament
-    from bracket.models import TournamentBracket
 
     try:
         tournament = Tournament.objects.get(pk=tournament_pk)
@@ -339,11 +335,6 @@ def get_demo_tournament(request, key: str):
     """
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
-
-    from app.models import Tournament
-    from app.serializers import TournamentSerializer
-    from draft.models import Draft
-    from draft.serializers.hero import HeroDraftSerializer
 
     tournament_name = DEMO_TOURNAMENTS.get(key)
     if not tournament_name:

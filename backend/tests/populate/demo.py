@@ -4,6 +4,15 @@ Demo tournament population functions for video recording.
 
 import random
 
+from django.utils import timezone
+
+from app.models import CustomUser, Game, League, Organization, Team, Tournament
+from draft.models import Draft, DraftOptions, DraftTeam, HeroDraft
+from tests.data.leagues import DEMO_CSV_LEAGUE
+from tests.data.organizations import DEMO_CSV_ORG
+from tests.data.tournaments import DEMO_HERODRAFT_TOURNAMENT
+from tests.data.users import ADMIN_USER
+
 from .constants import DTX_STEAM_LEAGUE_ID, TOURNAMENT_USERS
 from .utils import (
     REAL_TOURNAMENT_USERS,
@@ -25,11 +34,6 @@ def populate_demo_herodraft_tournament(force=False):
     Args:
         force: If True, recreate the tournament even if it exists
     """
-    from django.utils import timezone
-
-    from app.models import Game, League, Team, Tournament
-    from draft.models import DraftTeam, HeroDraft
-    from tests.data.tournaments import DEMO_HERODRAFT_TOURNAMENT
 
     # Use Pydantic config for tournament (single source of truth)
     tournament_config = DEMO_HERODRAFT_TOURNAMENT
@@ -172,10 +176,6 @@ def populate_demo_captaindraft_tournament(force=False):
     Args:
         force: If True, recreate the tournament even if it exists
     """
-    from django.utils import timezone
-
-    from app.models import League, Tournament
-    from draft.models import Draft, DraftOptions
 
     TOURNAMENT_NAME = "Demo Captain Draft Tournament"
 
@@ -241,10 +241,6 @@ def populate_demo_snake_draft_tournament(force=False):
     Args:
         force: If True, recreate the tournament even if it exists
     """
-    from django.utils import timezone
-
-    from app.models import League, Team, Tournament
-    from draft.models import Draft, DraftOptions
 
     TOURNAMENT_NAME = "Demo Snake Draft Tournament"
 
@@ -327,10 +323,6 @@ def populate_demo_shuffle_draft_tournament(force=False):
     Args:
         force: If True, recreate the tournament even if it exists
     """
-    from django.utils import timezone
-
-    from app.models import League, Team, Tournament
-    from draft.models import Draft, DraftOptions
 
     TOURNAMENT_NAME = "Demo Shuffle Draft Tournament"
 
@@ -409,10 +401,6 @@ def populate_demo_csv_org(force=False):
     Separate from CSV Import Org (used by E2E tests) to avoid clobbering test data.
     Admin user is added as org admin so the demo can create tournaments.
     """
-    from app.models import CustomUser, League, Organization
-    from tests.data.leagues import DEMO_CSV_LEAGUE
-    from tests.data.organizations import DEMO_CSV_ORG
-    from tests.data.users import ADMIN_USER
 
     demo_org, created = Organization.objects.update_or_create(
         name=DEMO_CSV_ORG.name,
