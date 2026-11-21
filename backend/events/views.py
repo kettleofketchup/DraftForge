@@ -113,7 +113,7 @@ from org.permissions import (
 )
 from org.standing import api as standing
 from telemetry.logging import get_logger
-from user.models import BaseUserProfile
+from user.models import BaseUserProfile, DotaUserProfile
 from user.querysets import with_user_profiles
 
 logger = get_logger(__name__)
@@ -724,6 +724,7 @@ class EventViewSet(viewsets.ModelViewSet):
             EventSignup,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             OrgUser,
             Organization,
             keep_fresh=True,
@@ -1193,6 +1194,8 @@ class EventViewSet(viewsets.ModelViewSet):
             DiscordEventDM,
             DiscordMessageLog,
             CustomUser,
+            BaseUserProfile,
+            DotaUserProfile,
             OrgUser,
             Organization,
             extra=f"discord_state:{pk}",
