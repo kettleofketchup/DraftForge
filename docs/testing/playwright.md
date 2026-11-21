@@ -142,6 +142,18 @@ The Playwright config defines three projects:
 | `mobile-chrome` | Mobile viewport tests | Fully parallel |
 | `herodraft` | Multi-browser draft scenarios | Sequential |
 
+### HeroDraft chat spec
+
+`e2e/herodraft/herodraft-chat.spec.ts` (`@cicd`, `herodraft` project) covers team chat, `/all` chat and hero suggestions. Each test opens four headless contexts (team A captain, a team A member, team B captain and a spectator) on the shared `drafting_phase` draft and records every WebSocket frame they receive. Privacy checks first wait for an `/all` message to reach the outsiders, then assert that no frame they received contains the team message or a suggestion.
+
+The team A member comes from `member_pks`, which `GET /api/tests/herodraft-by-key/<key>/` returns for each draft team (sorted pks of the tournament team's members). Pick a member that is not the captain and not on the other team rather than hard-coding a pk.
+
+Run it on its own with a pattern anchored on `e2e/`, because the pattern is a regex on the absolute path:
+
+```bash
+just test::pw::spec 'e2e/herodraft/herodraft-chat\.spec' --project=herodraft
+```
+
 ## Authentication
 
 > **Full documentation:** See [Authentication Test Fixtures](auth/fixtures.md) for complete details on all login fixtures, usage examples, and how to add new test users.

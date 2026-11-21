@@ -12,7 +12,7 @@ export interface CreateHeroDraftOptions {
 
 export async function createHeroDraft(
   gameId: number,
-  options?: CreateHeroDraftOptions
+  options?: CreateHeroDraftOptions,
 ): Promise<HeroDraft> {
   const response = await api.post(`/games/${gameId}/create-herodraft/`, {
     radiant_team_id: options?.radiantTeamId,
@@ -39,7 +39,7 @@ export async function triggerRoll(draftId: number): Promise<HeroDraft> {
 export async function submitChoice(
   draftId: number,
   choiceType: 'pick_order' | 'side',
-  value: 'first' | 'second' | 'radiant' | 'dire'
+  value: 'first' | 'second' | 'radiant' | 'dire',
 ): Promise<HeroDraft> {
   const response = await api.post(`/herodraft/${draftId}/submit-choice/`, {
     choice_type: choiceType,
@@ -50,7 +50,7 @@ export async function submitChoice(
 
 export async function submitPick(
   draftId: number,
-  heroId: number
+  heroId: number,
 ): Promise<HeroDraft> {
   // `client_picked_at` is in SERVER-clock reference (via offset learned
   // from tick.server_time), not raw browser time. This way a client
@@ -94,15 +94,19 @@ export interface HeroDraftEventResponse {
   created_at: string;
 }
 
-export async function listEvents(draftId: number): Promise<HeroDraftEventResponse[]> {
+export async function listEvents(
+  draftId: number,
+): Promise<HeroDraftEventResponse[]> {
   const response = await api.get(`/herodraft/${draftId}/list-events/`);
   return response.data;
 }
 
 export async function listAvailableHeroes(
-  draftId: number
+  draftId: number,
 ): Promise<{ available_heroes: number[] }> {
-  const response = await api.get(`/herodraft/${draftId}/list-available-heroes/`);
+  const response = await api.get(
+    `/herodraft/${draftId}/list-available-heroes/`,
+  );
   return response.data;
 }
 

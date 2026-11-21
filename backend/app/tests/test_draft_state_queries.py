@@ -78,16 +78,18 @@ READY_ENDPOINT_QUERIES: int = 41
 # auth, locks, the pick, timing, next-round activation and two event inserts
 # (+BEGIN/COMMIT), 18 for the one shared broadcast state behind both events,
 # 2 data_version stamps (build + reuse), BEGIN/COMMIT around the autocommit
-# build, 24 for the tournament response. The broadcast state and the tournament
-# response each include one OrgUserGameMmr prefetch.
-PICK_QUERIES: int = 73
+# build, 24 for the tournament response, 1 for the hero draft chat tenure
+# lookup the roster change triggers on commit. The broadcast state and the
+# tournament response each include one OrgUserGameMmr prefetch.
+PICK_QUERIES: int = 74
 # The draft state plus the broadcast's data_version stamp.
 BROADCAST_EVENT_QUERIES: int = DRAFT_STATE_QUERIES + 1
 # +1: OrgUserGameMmr prefetch in the users dict
 TOURNAMENT_RESPONSE_QUERIES: int = 24
 # +2: OrgUserGameMmr prefetch in the broadcast state and the tournament response
 RESUME_ENDPOINT_QUERIES: int = 56
-UNDO_ENDPOINT_QUERIES: int = 67
+# Includes the hero draft chat tenure lookup the roster change triggers.
+UNDO_ENDPOINT_QUERIES: int = 68
 
 
 def legacy_users_dict(tournament: Tournament) -> dict:

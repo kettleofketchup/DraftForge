@@ -172,6 +172,11 @@ class TeamResetTests(TeamResetFixture, TestCase):
     def test_teamlog_not_a_reference_key(self) -> None:
         self.assertNotIn("app.TeamLog.team", all_reference_keys())
 
+    def test_herodraft_chat_not_a_reference_key(self) -> None:
+        keys = all_reference_keys()
+        self.assertNotIn("draft.HeroDraftChatMessage.team", keys)
+        self.assertNotIn("draft.HeroDraftChatMembership.team", keys)
+
     def test_reset_drops_audited_ineligible_team(self) -> None:
         self.team.members.set([self.x])
         self.team.captain = self.x

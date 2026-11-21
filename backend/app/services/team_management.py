@@ -37,6 +37,7 @@ from app.services.team_signals import (
 )
 from draft.models import DraftTeam, HeroDraft, HeroDraftState
 from draft.services.hero_broadcast import broadcast_herodraft_state
+from draft.services.hero_chat import apply_captain_tenure
 from events.eligibility import unmet_codes, unmet_labels
 from events.overrides import (
     REASON_MAX_LENGTH,
@@ -235,6 +236,16 @@ def follow_captain(
         draft_teams = list(DraftTeam.objects.nocache().filter(draft__in=herodrafts))
         transaction.on_commit(
             partial(_refresh_herodrafts, team, herodrafts, draft_teams)
+        )
+        transaction.on_commit(
+            partial(
+                apply_captain_tenure,
+                team.pk,
+                [d.pk for d in herodrafts],
+                old.pk if old is not None else None,
+                new.pk,
+            ),
+            robust=True,
         )
 
     log.info(

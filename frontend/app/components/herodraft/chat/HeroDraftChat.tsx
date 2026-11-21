@@ -1,0 +1,306 @@
+import { MessageSquare } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { RemoveIconButton, SecondaryButton } from '~/components/ui/buttons';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from '~/components/ui/sheet';
+import { VisuallyHidden } from '~/components/ui/visually-hidden';
+import { useMediaQuery } from '~/hooks/useMediaQuery';
+import { heroDraftSelectors, useHeroDraftStore } from '~/store/heroDraftStore';
+import { useUserStore } from '~/store/userStore';
+import { ChatComposer } from './ChatComposer';
+import { chatErrorText } from './chatErrors';
+import { ChatLog } from './ChatLog';
+import { ChatPreview } from './ChatPreview';
+import {
+  expirePreview,
+  nextPreviewBoundary,
+  type PreviewLine,
+  pushPreview,
+  shouldPreview,
+  teamRoster,
+} from './chatPreview';
+import { composerState } from './composerState';
+import { parseChatInput } from './parseChatInput';
+
+const PAUSED_STATES = new Set(['paused', 'resuming']);
+
+export interface HeroDraftChatProps {
+  draftState: string;
+}
+
+export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+  const chat = useHeroDraftStore((s) => s.chat);
+  const connected = useHeroDraftStore(heroDraftSelectors.isConnected);
+  const sendChat = useHeroDraftStore((s) => s.sendChat);
+  const setChatPanelOpen = useHeroDraftStore((s) => s.setChatPanelOpen);
+  const clearChatError = useHeroDraftStore((s) => s.clearChatError);
+  const setSelectedHeroId = useHeroDraftStore((s) => s.setSelectedHeroId);
+  const setChatPanelInset = useHeroDraftStore((s) => s.setChatPanelInset);
+  const draftTeams = useHeroDraftStore((s) => s.draft?.draft_teams);
+  const selfId = useUserStore((s) => s.currentUser?.pk ?? undefined);
+
+  const [raw, setRaw] = useState('');
+  const rawRef = useRef(raw);
+  rawRef.current = raw;
+  const [restoredError, setRestoredError] =
+    useState<typeof chat.lastError>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<PreviewLine[]>([]);
+  const [previewNow, setPreviewNow] = useState(0);
+
+  const { viewer, lastError, panelOpen, unread, messages, unavailable, live } =
+    chat;
+  const roster = useMemo(
+    () => teamRoster(draftTeams, viewer?.team_id),
+    [draftTeams, viewer?.team_id],
+  );
+  const state = composerState({
+    viewer,
+    draftState,
+    connected,
+    raw,
+    unavailable,
+  });
+  const target = viewer?.can_post_team ? parseChatInput(raw).channel : null;
+
+  useEffect(() => {
+    if (lastError?.text && rawRef.current === '') {
+      setRaw(lastError.text);
+      setRestoredError(lastError);
+    }
+  }, [lastError]);
+
+  const seenLive = useRef(live);
+  useEffect(() => {
+    if (live === seenLive.current) return;
+    seenLive.current = live;
+    if (!live || !isDesktop || panelOpen) return;
+    if (!shouldPreview(live.message, { viewer, selfId, roster })) return;
+    const now = Date.now();
+    setPreviewNow(now);
+    setPreview((lines) => pushPreview(lines, live.message, now));
+  }, [live, isDesktop, panelOpen, viewer, selfId, roster]);
+
+  useEffect(() => {
+    if (panelOpen) setPreview([]);
+  }, [panelOpen]);
+
+  useEffect(() => {
+    const at = nextPreviewBoundary(preview, Date.now());
+    if (at === null) return;
+    const id = setTimeout(() => {
+      const now = Date.now();
+      setPreviewNow(now);
+      setPreview((lines) => expirePreview(lines, now));
+    }, at - Date.now());
+    return () => clearTimeout(id);
+  }, [preview, previewNow]);
+
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current;
+    const root = rootRef.current;
+    if (!isDesktop || !panelOpen || !overlay || !root) return;
+    const measure = () =>
+      setChatPanelInset(
+        Math.max(
+          0,
+          Math.ceil(
+            root.getBoundingClientRect().top -
+              overlay.getBoundingClientRect().top,
+          ),
+        ),
+      );
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(overlay);
+    return () => {
+      observer.disconnect();
+      setChatPanelInset(0);
+    };
+  }, [isDesktop, panelOpen, setChatPanelInset]);
+
+  useEffect(() => {
+    if (!isDesktop || !panelOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      // Right-clicks and the portaled suggest menu must not close chat.
+      if (e.button !== 0) return;
+      const target = e.target as Element;
+      if (rootRef.current?.contains(target)) return;
+      if (target.closest?.('[data-radix-popper-content-wrapper]')) return;
+      setChatPanelOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [isDesktop, panelOpen, setChatPanelOpen]);
+
+  const submit = useCallback(() => {
+    clearChatError();
+    if (sendChat(raw) !== null) setRaw('');
+  }, [clearChatError, sendChat, raw]);
+
+  const focusInput = () => {
+    if (inputRef.current && !inputRef.current.disabled)
+      inputRef.current.focus();
+  };
+
+  const toggle = () => {
+    const next = !panelOpen;
+    setChatPanelOpen(next);
+    if (next && isDesktop) focusInput();
+  };
+
+  const emptyText = viewer?.can_post_team
+    ? 'No messages yet. Type /all to talk to everyone.'
+    : 'No messages yet.';
+
+  const errorLine = lastError && (
+    <div
+      role="alert"
+      className="pointer-events-auto flex items-start gap-1 rounded-md bg-destructive/15 py-1 pl-2 pr-1 text-xs text-destructive"
+      data-testid="herodraft-chat-error"
+    >
+      <p className="min-w-0 flex-1">
+        {chatErrorText(lastError.code)}
+        {lastError.text && restoredError !== lastError && (
+          <span className="text-muted-foreground">
+            {' — not sent: '}
+            <span className="whitespace-pre-wrap">{lastError.text}</span>
+          </span>
+        )}
+      </p>
+      <RemoveIconButton
+        label="Dismiss chat error"
+        onClick={clearChatError}
+        className="shrink-0"
+        data-testid="herodraft-chat-error-dismiss"
+      />
+    </div>
+  );
+
+  const composer = (className?: string) => (
+    <ChatComposer
+      className={className}
+      inputRef={inputRef}
+      value={raw}
+      onValueChange={setRaw}
+      onSubmit={submit}
+      state={state}
+      target={target}
+      onFocus={isDesktop ? () => setChatPanelOpen(true) : undefined}
+      onEscape={() => setChatPanelOpen(false)}
+    />
+  );
+
+  const toggleButton = (
+    <SecondaryButton
+      type="button"
+      size="icon"
+      onClick={toggle}
+      aria-label={panelOpen ? 'Hide chat' : 'Show chat'}
+      aria-expanded={panelOpen}
+      className="relative shrink-0"
+      data-testid="herodraft-chat-toggle"
+    >
+      <MessageSquare className="size-4" />
+      {unread > 0 && (
+        <span
+          className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-[10px] leading-4 text-primary-foreground"
+          data-testid="herodraft-chat-unread"
+        >
+          {unread > 99 ? '99+' : unread}
+        </span>
+      )}
+    </SecondaryButton>
+  );
+
+  const log = (props: { className?: string; viewportClassName?: string }) => (
+    <ChatLog
+      messages={messages}
+      emptyText={emptyText}
+      onHeroClick={setSelectedHeroId}
+      {...props}
+    />
+  );
+
+  if (!isDesktop) {
+    return (
+      <>
+        {toggleButton}
+        <div className="flex-1" />
+        <Sheet open={panelOpen} onOpenChange={setChatPanelOpen}>
+          <SheetContent
+            side="bottom"
+            className="flex h-[70vh] flex-col gap-2 p-3 pt-10"
+            onOpenAutoFocus={(e) => {
+              if (inputRef.current && !inputRef.current.disabled) {
+                e.preventDefault();
+                inputRef.current.focus();
+              }
+            }}
+            data-herodraft-chat=""
+            data-testid="herodraft-chat-sheet"
+          >
+            <VisuallyHidden>
+              <SheetTitle>Draft chat</SheetTitle>
+              <SheetDescription>
+                Team and all chat for this draft
+              </SheetDescription>
+            </VisuallyHidden>
+            {log({ className: 'flex-1' })}
+            {errorLine}
+            {composer('flex-none')}
+          </SheetContent>
+        </Sheet>
+      </>
+    );
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className="relative flex min-w-0 max-w-xl flex-1 items-center gap-2"
+      data-herodraft-chat=""
+    >
+      {(panelOpen || errorLine || preview.length > 0) && (
+        <div
+          ref={overlayRef}
+          className="pointer-events-none absolute bottom-full left-0 right-0 z-20 mb-2 flex flex-col gap-1"
+          data-testid="herodraft-chat-overlay"
+        >
+          {!panelOpen && preview.length > 0 && (
+            <ChatPreview lines={preview} now={previewNow} />
+          )}
+          {panelOpen && (
+            <div
+              className="pointer-events-auto overflow-hidden rounded-md border border-border bg-card/95 shadow-lg backdrop-blur"
+              data-testid="herodraft-chat-panel"
+            >
+              {log({
+                viewportClassName: PAUSED_STATES.has(draftState)
+                  ? 'max-h-[25vh]'
+                  : 'max-h-[40vh]',
+              })}
+            </div>
+          )}
+          {errorLine}
+        </div>
+      )}
+      {toggleButton}
+      {composer()}
+    </div>
+  );
+}

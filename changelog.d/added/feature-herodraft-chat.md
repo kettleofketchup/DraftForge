@@ -1,0 +1,1 @@
+- Hero Draft: team chat, all chat (/all) and right-click hero pick/ban suggestions visible only to your team, with a click-through preview of your team's new messages while the chat is closed.

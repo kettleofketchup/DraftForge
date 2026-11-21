@@ -97,6 +97,19 @@ Clients connect via WebSocket to `/api/herodraft/<draft_id>/`. The `HeroDraftCon
 | `round_started` | New round began | `{draft_state: {...}}` |
 | `hero_selected` | Hero picked/banned | `{draft_state: {...}}` |
 | `draft_completed` | Draft finished | `{draft_state: {...}}` |
+| `chat_history` | Chat messages this viewer may see, sent right after `initial_state` and again on resync | `{viewer: {...}, messages: [ChatMessage]}` |
+| `chat_message` | One live chat message (team or all) | `{message: ChatMessage}` |
+| `chat_ack` | Sender only: the server stored a message | `{client_msg_id?, id}` |
+| `chat_error` | A chat send was refused, or chat failed on the server for this socket | `{code, client_msg_id?, viewer?}` |
+
+### Messages (Client → Server)
+
+Besides the existing draft actions, the client sends two chat messages. See [Chat](#chat) for the rules.
+
+| Message Type | Payload |
+|--------------|---------|
+| `chat_send` | `{body: "<raw composer text>", client_msg_id?}` |
+| `chat_suggest` | `{kind, hero_id, client_msg_id?}`, where `kind` is `suggest_pick` or `suggest_ban` |
 
 ### Tick Updates
 
@@ -293,6 +306,133 @@ The Loki datasource is configured (see [`docs/dev/telemetry/datasources/grafanac
 
 When debugging a pause complaint, the typical loop is: open Loki → filter by `draft_id` → find the `draft_paused` event → click its `trace_id` → see the `ws.message` → `herodraft.submit_pick` (or pause-endpoint) span in Tempo.
 
+## Chat
+
+The bottom toolbar of the draft modal has a chat composer with a message panel above it. Chat runs over the same draft WebSocket (`/api/herodraft/<id>/`); there is no separate chat endpoint and REST responses never include chat.
+
+### Channels
+
+Each draft has three channels:
+
+- **Team chat**, one per team. Only the captain and members of that team can read or post.
+- **All chat**, one per draft. Everyone viewing the draft can read it, spectators and logged-out viewers included. Only players on either team can post.
+
+A team member's messages go to their team chat by default. To post to all chat, start the message with `/all ` (case-insensitive); the prefix is removed before the message is stored. A badge next to the input shows `TEAM` or `ALL` while you type, and every message in the log carries a `[TEAM]` or `[ALL]` badge.
+
+The server decides where a message goes from the raw text. The client only previews the routing, so a client cannot post to all chat without the `/all` prefix, or into another team's chat.
+
+### Hero suggestions
+
+During the ban/pick phase (`drafting`), a team member can right-click a hero in the grid and choose **Suggest pick** or **Suggest ban**. The suggestion is posted to their team chat only and shows the hero's icon and name. Heroes that are already picked or banned cannot be suggested; the menu items are disabled and the server refuses them. Clicking a suggestion in the log selects that hero in the grid.
+
+Spectators get the browser's normal right-click menu. Suggestions are not available while the draft is paused, because the pause overlay covers the grid.
+
+### Panel and preview (md and up)
+
+The chat panel opens from the toggle button or by focusing the composer; it never opens by itself. While it is open, the hero grid gets bottom padding equal to the panel's height, so every hero row can be scrolled up above the panel.
+
+While the panel is closed, new live messages show in a preview strip above the composer:
+
+- At most two lines, one per message, cut off with an ellipsis. A new line pushes out the oldest, and each line fades out after about 4.5 seconds (it disappears without fading when reduced motion is on).
+- Consecutive messages from the same sender merge into one line showing the latest text and a `×N` count.
+- The strip ignores the mouse, so heroes under it can still be clicked and right-clicked.
+- A team member only sees previews from their own team: team chat, suggestions, and all-chat messages whose sender is on their team (read from the draft's rosters). All-chat messages from the other team still count towards unread but are not previewed. Spectators see a preview of all chat.
+- Your own suggestions show in the preview as confirmation; your own text messages do not.
+- History and resyncs never preview, and there is no preview while the panel is open or below md (the bottom sheet is used there).
+
+### Who sees what
+
+| Viewer | Own team chat | Other team's chat | All chat | Can post |
+|--------|---------------|-------------------|----------|----------|
+| Team captain or member | Read and post | Never | Read and post | Team, all, suggestions |
+| Player on **both** rosters | None | Never | Read only | Nothing (ask an admin to fix the roster) |
+| Spectator / logged out | n/a | Never | Read only | Nothing |
+| Staff, org admin, superuser | Only if on a roster | Never | Read only | Same as their roster role |
+
+Staff get no extra chat access through the app. Team chat can only be read by others through the Django admin.
+
+Privacy is enforced on the server:
+
+- Team messages are sent only to the WebSocket group of that team, and each delivery is checked again against the current roster before it is sent. A socket reuses a passed roster check for up to 5 seconds (its login session is still checked on every frame); any roster change resync or failed check clears it.
+- History (the last 100 messages you may see) is filtered per user by a database query when you connect.
+- A player only sees team messages posted after they joined the team. A player who is removed from a team stops receiving its chat straight away, and gets a fresh history without it.
+- Logging in, logging out or switching account with the draft open reconnects the socket as the new user and starts chat from scratch: the log, unread count, panel state and any error from the previous user are dropped. Closing the draft does the same.
+- Logging out with the draft open reconnects the socket as a spectator and clears the log.
+- Team chat stays private after the draft ends.
+- A forced team reset (re-initialising the tournament draft) deletes the team chat of the reset teams' drafts that are still in play. Completed and abandoned drafts keep their team chat; players the reset removed lose access to it, and anyone added to the team later only sees messages from after they joined.
+
+### Limits
+
+| Rule | Value |
+|------|-------|
+| Message length | 1-500 characters, after removing control characters and invisible format characters (bidi overrides, zero-width spaces; ZWJ and ZWNJ are kept) and trimming (the `/all ` prefix does not count) |
+| Rate limit | Per user per draft, in two separate buckets: team chat (text and suggestions combined) 8 per 10 seconds, all chat 4 per 10 seconds |
+| History on connect | Last 100 visible messages |
+| Messages kept in the client | 200 |
+| Text chat | Open in every state until the draft ends, including while paused |
+| Suggestions | Only while `drafting` |
+| Completed or abandoned draft | Read-only; history stays visible to the same people |
+
+Messages are plain text. Newlines and Unicode line or paragraph separators become spaces, and markdown and links are not rendered.
+
+### Error codes
+
+`chat_error.code` is one of:
+
+| Code | Meaning |
+|------|---------|
+| `not_participant` | Sender is not on either team (spectators are read-only) |
+| `ambiguous_team` | Sender is on both rosters |
+| `empty` / `too_long` | Body is empty or over 500 characters |
+| `rate_limited` | Over 8 team messages, or 4 all-chat messages, in 10 seconds |
+| `draft_closed` | Draft is completed or abandoned |
+| `draft_inactive` | Suggestion sent outside `drafting` |
+| `hero_unavailable` | Hero does not exist or is already picked or banned |
+| `bad_request` | Malformed message |
+| `unavailable` | Chat failed on the server (including the rate limiter being down); the draft socket stays open |
+
+If `unavailable` arrives before chat history, chat failed to start for that socket: the composer shows "Chat unavailable" and is disabled until the socket reconnects. Any later send or suggestion clears the inline error, and the error has a dismiss button.
+
+If a roster lookup fails later (for example the database is briefly locked), the server fails closed: it holds the socket as a spectator, delivers no team messages to it, and sends `unavailable` once with `viewer` set to the spectator role so the composer turns read-only. The next team message or send retries the lookup; when it succeeds the socket gets a fresh `chat_history` with its real role, which includes any team messages it missed.
+
+### Chat message shape
+
+```json
+{
+  "id": "6f0c2c9e-0d3a-4c51-9b7a-2f1e6b8d3c10",
+  "channel": "team",
+  "team_id": 12,
+  "kind": "suggest_ban",
+  "hero_id": 74,
+  "body": "",
+  "created_at": "2026-11-20T18:01:02.123456Z",
+  "sender": {"pk": 3000, "username": "...", "nickname": "...", "avatarUrl": "...", "discordId": "..."}
+}
+```
+
+`id` is a public UUID; the database id is never sent. `team_id` is the `Team` pk and is `null` for all chat. `chat_history.viewer` is `{role: "member" | "spectator" | "ambiguous", team_id, can_post_team, can_post_all}`.
+
+### Data model
+
+Chat is stored in `HeroDraftChatMessage` (draft, channel, team, sender, kind, hero_id, body, public_id). `HeroDraftChatMembership` records when each user joined and left a team for a draft, which limits what history they can see. Neither model is cached by cacheops. Both live in the `draft` app (`backend/draft/models/hero_chat.py`), and the rules live in `backend/draft/services/hero_chat.py`.
+
+### Chat log events
+
+All chat logs use `system="herodraft"`, `subsystem="chat"`. Message text and hero ids are never logged.
+
+| Event | Level | Trigger |
+|-------|-------|---------|
+| `herodraft_chat_sent` | info | Message stored; carries `channel` and `length` |
+| `herodraft_chat_publish_failed` | error | Message was stored but the channel layer refused it; the sender still gets the ack and their own copy, so they do not resend |
+| `herodraft_chat_rejected` | info / error | Send refused; carries `code` (`rate_limited` included; error level for `unavailable`) |
+| `herodraft_chat_rejections_throttled` | warning | A socket passed 8 refused frames in 10 s; its further `herodraft_chat_rejected` and `ws_malformed_message` logs are dropped until the window ends |
+| `herodraft_chat_rate_limit_redis_unavailable` | warning | Redis failed; the send is refused. Carries the `channel` bucket |
+| `herodraft_chat_delivery_revoked` | info | A team frame was dropped because the user is no longer on that team |
+| `herodraft_chat_ambiguous_membership` | warning | User is on both rosters |
+| `herodraft_chat_bootstrap_failed` | error | Chat history or a roster lookup failed; the socket stays open as a spectator until a later lookup succeeds |
+| `herodraft_chat_resync_broadcast_failed` / `herodraft_chat_roster_failed` / `herodraft_chat_resync_roster_failed` | warning | Roster change could not be pushed to open sockets |
+| `herodraft_chat_membership_open_race` | warning | Two connects opened the same membership row at once |
+
 ## API Endpoints
 
 ### Get Draft State
@@ -348,11 +488,12 @@ POST /api/herodraft/<draft_id>/choose/
 ```
 frontend/app/
 ├── components/herodraft/
-│   ├── HeroDraftModal.tsx      # Main modal container (612 lines)
+│   ├── HeroDraftModal.tsx      # Main modal container
 │   ├── DraftTopBar.tsx         # Team info, avatars, timers
 │   ├── HeroGrid.tsx            # Hero selection with search
 │   ├── DraftPanel.tsx          # Draft timeline visualization
 │   ├── HeroDraftHistoryModal.tsx # Event history display
+│   ├── chat/                   # Chat panel, composer, log, suggest menu, pure reducer/parser
 │   ├── hooks/
 │   │   └── useHeroDraftWebSocket.ts  # WebSocket connection hook
 │   ├── api.ts                  # HTTP API functions
@@ -531,6 +672,23 @@ All components have `data-testid` attributes for Playwright testing:
 | `herodraft-reconnecting` | Connection status indicator |
 | `herodraft-hero-{id}` | Hero buttons in grid |
 | `herodraft-confirm-dialog` | Pick confirmation dialog |
+| `herodraft-chat-input` | Chat composer input |
+| `herodraft-chat-send` | Chat send button |
+| `herodraft-chat-target` | `TEAM` / `ALL` badge for the message being typed |
+| `herodraft-chat-error` | Inline chat error under the composer |
+| `herodraft-chat-error-dismiss` | Dismiss button on the inline chat error |
+| `herodraft-chat-panel` | Chat panel above the toolbar (md and up) |
+| `herodraft-chat-preview` / `herodraft-chat-preview-line` | Closed-panel preview strip and its lines (md and up) |
+| `herodraft-chat-preview-count` | `×N` count on a merged preview line |
+| `herodraft-chat-sheet` | Chat bottom sheet (below md) |
+| `herodraft-chat-log` | Message list |
+| `herodraft-chat-message-{id}` | A chat message; has `data-channel`, `data-kind`, `data-hero-id` |
+| `herodraft-chat-suggestion-{id}` | A hero suggestion row |
+| `herodraft-chat-new-messages` | "New messages" jump button |
+| `herodraft-chat-toggle` | Button that opens the chat panel or sheet |
+| `herodraft-chat-unread` | Unread count on the toggle; your own messages never count. Kept across reconnects of the same user, and messages that arrived during the gap are added |
+| `herodraft-hero-suggest-menu` | Right-click menu on a hero |
+| `herodraft-hero-suggest-pick` / `herodraft-hero-suggest-ban` | Suggest pick / ban menu items |
 
 ## Testing
 
@@ -541,6 +699,14 @@ just test::run 'python manage.py test draft.tests.test_hero_consumers draft.test
 ```
 
 Key test: `test_pause_resume_timing_adjustment` - verifies that pause duration + countdown is correctly added to `started_at`.
+
+Chat tests:
+
+```bash
+just test::run 'python manage.py test draft.tests.test_hero_chat_models draft.tests.test_hero_chat_functions draft.tests.test_hero_chat_tenure draft.tests.test_hero_chat_consumers draft.tests.test_hero_chat_leaks -v 2'
+```
+
+`test_hero_chat_leaks` and the consumer tests check every way team chat could reach the wrong user: REST and SSR responses, history, live frames, logs and spans, Discord Activity sockets, roster changes and staff accounts.
 
 ### Frontend E2E Tests (Playwright)
 

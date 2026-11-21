@@ -6,6 +6,17 @@
  */
 
 import { create } from 'zustand';
+import {
+  addPending,
+  applyChatAck,
+  applyChatError,
+  applyChatHistory,
+  applyChatMessage,
+  initialChatState,
+  resetChatOnDisconnect,
+  type ChatState,
+} from '~/components/herodraft/chat/chatState';
+import { parseChatInput } from '~/components/herodraft/chat/parseChatInput';
 import { HeroDraftWebSocketMessageSchema } from '~/components/herodraft/schemas';
 import type {
   DraftTeam,
@@ -24,8 +35,12 @@ import { getLogger } from '~/lib/logger';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
 import { getWebSocketManager } from '~/lib/websocket';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('heroDraftStore');
+const chatLog = getLogger('herodraft:chat');
+
+export type HeroSuggestionKind = 'suggest_pick' | 'suggest_ban';
 
 function ingestDraftUsers(draft: HeroDraft): void {
   const users = draft.draft_teams.flatMap((t) => [
@@ -64,11 +79,16 @@ interface HeroDraftState {
   selectedHeroId: number | null;
   searchQuery: string;
   lastEvent: HeroDraftEvent | null;
+  chat: ChatState;
+  /** Pixels of the hero grid's bottom covered by the open desktop chat panel. */
+  chatPanelInset: number;
 
   // Internal tracking
   _connectionId: string | null;
   _unsubscribe: Unsubscribe | null;
   _currentDraftId: number | null;
+  // Survives disconnect so a same-draft reconnect keeps its chat.
+  _chatDraftId: number | null;
   _stopHeartbeat: (() => void) | null;
   // Receive-side tick gap detection. Server logs `tick_loop_stalled`
   // when the broadcaster itself stalls; this catches the COMPLEMENTARY
@@ -85,6 +105,11 @@ interface HeroDraftState {
   stopHeartbeat: () => void;
   setSelectedHeroId: (heroId: number | null) => void;
   setSearchQuery: (query: string) => void;
+  sendChat: (raw: string) => string | null;
+  suggestHero: (kind: HeroSuggestionKind, heroId: number) => string | null;
+  setChatPanelOpen: (open: boolean) => void;
+  setChatPanelInset: (px: number) => void;
+  clearChatError: () => void;
   reset: () => void;
 
   // Computed helpers
@@ -105,9 +130,12 @@ const initialState = {
   selectedHeroId: null,
   searchQuery: '',
   lastEvent: null,
+  chat: initialChatState,
+  chatPanelInset: 0,
   _connectionId: null,
   _unsubscribe: null,
   _currentDraftId: null,
+  _chatDraftId: null,
   _stopHeartbeat: null,
   _lastTickReceivedAtMs: null,
   _offsetSamples: [] as number[],
@@ -153,10 +181,20 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
 
     const connectionId = manager.connect(url, {
       onStateChange: (state) => {
+        const prev = get();
+        const lostConnection =
+          prev.status === 'connected' && state.status !== 'connected';
+        if (lostConnection && Object.keys(prev.chat.pending).length > 0) {
+          chatLog.warn('chat_pending_lost_on_disconnect', {
+            draft_id: draftId,
+            pending: Object.keys(prev.chat.pending).length,
+          });
+        }
         set({
           status: state.status,
           error: state.error,
           reconnectAttempts: state.reconnectAttempts,
+          ...(lostConnection ? { chat: resetChatOnDisconnect(prev.chat) } : {}),
         });
       },
       staleTimeoutMs: 3000, // Server pings every 1s; 3 missed pings = stale
@@ -366,9 +404,48 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             wasKicked: true,
             error: 'Connection replaced by new tab',
             status: 'disconnected',
+            chat: resetChatOnDisconnect(get().chat),
           });
           break;
         }
+
+        case 'chat_history':
+          set({
+            chat: applyChatHistory(
+              get().chat,
+              message.viewer,
+              message.messages,
+              chatSelfId(),
+            ),
+          });
+          break;
+
+        case 'chat_message':
+          set({
+            chat: applyChatMessage(get().chat, message.message, chatSelfId()),
+          });
+          break;
+
+        case 'chat_ack':
+          if (message.client_msg_id !== undefined) {
+            set({ chat: applyChatAck(get().chat, message.client_msg_id) });
+          }
+          break;
+
+        case 'chat_error':
+          chatLog.info('chat_rejected', {
+            draft_id: get()._currentDraftId,
+            code: message.code,
+          });
+          set({
+            chat: applyChatError(
+              get().chat,
+              message.code,
+              message.client_msg_id,
+              message.viewer,
+            ),
+          });
+          break;
       }
     });
 
@@ -378,13 +455,15 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       _connectionId: connectionId,
       _unsubscribe: unsubscribe,
       _currentDraftId: draftId,
+      _chatDraftId: draftId,
+      ...(get()._chatDraftId === draftId ? {} : { chat: initialChatState }),
       wasKicked: false,
       status: 'connecting',
     });
   },
 
   disconnect: () => {
-    const { _connectionId, _unsubscribe } = get();
+    const { _connectionId, _unsubscribe, _chatDraftId, chat } = get();
 
     // Stop heartbeat first
     get().stopHeartbeat();
@@ -400,6 +479,8 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
 
     set({
       ...initialState,
+      _chatDraftId,
+      chat: resetChatOnDisconnect(chat),
     });
   },
 
@@ -447,8 +528,30 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
   setSelectedHeroId: (heroId) => set({ selectedHeroId: heroId }),
   setSearchQuery: (query) => set({ searchQuery: query }),
 
+  sendChat: (raw) => {
+    if (parseChatInput(raw).body === '') return null;
+    return sendChatFrame(raw, { type: 'chat_send', body: raw });
+  },
+
+  suggestHero: (kind, heroId) =>
+    sendChatFrame('', { type: 'chat_suggest', kind, hero_id: heroId }),
+
+  setChatPanelOpen: (open) => {
+    const { chat } = get();
+    set({
+      chat: { ...chat, panelOpen: open, unread: open ? 0 : chat.unread },
+    });
+  },
+
+  setChatPanelInset: (px) => {
+    if (get().chatPanelInset !== px) set({ chatPanelInset: px });
+  },
+
+  clearChatError: () => set({ chat: { ...get().chat, lastError: null } }),
+
   reset: () => {
     get().disconnect();
+    set({ chat: initialChatState, chatPanelInset: 0, _chatDraftId: null });
   },
 
   // Computed helpers
@@ -477,6 +580,40 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       .map((r) => r.hero_id as number);
   },
 }));
+
+function chatSelfId(): number | undefined {
+  return useUserStore.getState().currentUser?.pk ?? undefined;
+}
+
+function sendChatFrame(
+  raw: string,
+  frame:
+    | { type: 'chat_send'; body: string }
+    | { type: 'chat_suggest'; kind: HeroSuggestionKind; hero_id: number },
+): string | null {
+  const { _connectionId, _currentDraftId, status, chat } =
+    useHeroDraftStore.getState();
+  if (!_connectionId || status !== 'connected') return null;
+  const clientMsgId = crypto.randomUUID();
+  const sent = getWebSocketManager().send(_connectionId, {
+    ...frame,
+    client_msg_id: clientMsgId,
+  });
+  if (!sent) {
+    chatLog.warn('chat_send_refused', {
+      draft_id: _currentDraftId,
+      type: frame.type,
+    });
+    return null;
+  }
+  useHeroDraftStore.setState({
+    chat: {
+      ...addPending(chat, { clientMsgId, raw, sentAt: Date.now() }),
+      lastError: null,
+    },
+  });
+  return clientMsgId;
+}
 
 // ─────────────────────────────────────────────────────────────────
 // Selectors

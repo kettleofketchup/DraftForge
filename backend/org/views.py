@@ -28,6 +28,7 @@ from app.models import (
     Team,
 )
 from app.permissions_org import IsOrgStaff
+from draft.services.hero_chat import repoint_chat_attribution
 from events.models import Event
 from events.staff import dedupe_host_helpers
 from league.models import LeagueUser
@@ -240,6 +241,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 org_user.save()
         standing.merge_users(target_user, claimer, member_pairs=pairs)
         repoint_org_attribution(target_user, claimer)
+        repoint_chat_attribution(target_user, claimer)
         for org_user, _ in pairs:
             org_user.delete()
 

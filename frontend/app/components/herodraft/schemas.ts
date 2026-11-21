@@ -122,6 +122,66 @@ export const PingSchema = z.object({
   type: z.literal('ping'),
 });
 
+// The chat sender payload carries no legacy `avatar` field.
+export const ChatSenderSchema = DraftTeamCaptainSchema.extend({
+  avatar: z.string().nullable().optional(),
+});
+
+export const ChatErrorCodeSchema = z.enum([
+  'not_participant',
+  'ambiguous_team',
+  'empty',
+  'too_long',
+  'rate_limited',
+  'draft_closed',
+  'draft_inactive',
+  'hero_unavailable',
+  'bad_request',
+  'unavailable',
+]);
+
+export const ChatMessageSchema = z.object({
+  id: z.uuid(),
+  channel: z.enum(['team', 'all']),
+  team_id: z.number().nullable(),
+  kind: z.enum(['text', 'suggest_pick', 'suggest_ban']),
+  hero_id: z.number().nullable(),
+  body: z.string(),
+  created_at: z.string(),
+  sender: ChatSenderSchema,
+});
+
+export const ChatViewerSchema = z.object({
+  role: z.enum(['member', 'spectator', 'ambiguous']),
+  team_id: z.number().nullable(),
+  can_post_team: z.boolean(),
+  can_post_all: z.boolean(),
+});
+
+export const ChatHistoryMessageSchema = z.object({
+  type: z.literal('chat_history'),
+  viewer: ChatViewerSchema,
+  messages: z.array(ChatMessageSchema),
+});
+
+export const ChatMessageWsSchema = z.object({
+  type: z.literal('chat_message'),
+  message: ChatMessageSchema,
+});
+
+export const ChatAckSchema = z.object({
+  type: z.literal('chat_ack'),
+  client_msg_id: z.string().optional(),
+  id: z.uuid(),
+});
+
+export const ChatErrorSchema = z.object({
+  type: z.literal('chat_error'),
+  code: ChatErrorCodeSchema,
+  client_msg_id: z.string().optional(),
+  viewer: ChatViewerSchema.optional(),
+});
+
 // Discriminated union for all WebSocket message types
 export const HeroDraftWebSocketMessageSchema = z.discriminatedUnion('type', [
   InitialStateMessageSchema,
@@ -129,4 +189,8 @@ export const HeroDraftWebSocketMessageSchema = z.discriminatedUnion('type', [
   HeroDraftTickSchema,
   HeroDraftKickedSchema,
   PingSchema,
+  ChatHistoryMessageSchema,
+  ChatMessageWsSchema,
+  ChatAckSchema,
+  ChatErrorSchema,
 ]);
