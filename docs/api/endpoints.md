@@ -160,7 +160,7 @@ tournament's signups are open as defined above.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/teams/` | List teams |
-| POST | `/api/teams/` | Create team |
+| POST | `/api/teams/` | Create team (tournament staff; site staff for a team with no tournament) |
 | GET | `/api/teams/{id}/` | Get team |
 | PATCH / PUT | `/api/teams/{id}/` | Update team (tournament staff) |
 | DELETE | `/api/teams/{id}/` | Delete team (tournament staff) |

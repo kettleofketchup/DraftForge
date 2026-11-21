@@ -164,6 +164,15 @@ def can_edit_tournament(
     return False
 
 
+def can_create_team(
+    user: CustomUser | AnonymousUser, tournament: Tournament | None
+) -> bool:
+    """Tournament staff create teams in their tournament; only site staff create loose teams."""
+    if tournament is None:
+        return user.is_authenticated and (user.is_superuser or user.is_staff)
+    return can_edit_tournament(user, tournament)
+
+
 def _league_change_error(message: str) -> serializers.ValidationError:
     return serializers.ValidationError({"league_id_write": message})
 

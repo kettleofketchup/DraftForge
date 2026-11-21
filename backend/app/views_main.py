@@ -118,6 +118,7 @@ from .permissions_tournament import (
     CanEditTournament,
     CanManageGame,
     IsLeagueAdmin,
+    can_create_team,
     can_edit_tournament,
     can_manage_game,
     can_view_league_members,
@@ -781,6 +782,10 @@ class TeamView(viewsets.ModelViewSet):
         else:
             self.permission_classes = [IsAuthenticated]
         return super(TeamView, self).get_permissions()
+
+    def perform_create(self, serializer: BaseSerializer) -> None:
+        _check_can_create_team(self.request.user, serializer)
+        serializer.save()
 
     def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == "history":
@@ -1695,12 +1700,18 @@ class LeagueView(viewsets.ModelViewSet):
         return Response(data)
 
 
+def _check_can_create_team(user: CustomUser, serializer: BaseSerializer) -> None:
+    if not can_create_team(user, serializer.validated_data.get("tournament")):
+        raise PermissionDenied("You do not have permission to create teams here.")
+
+
 class TeamCreateView(generics.CreateAPIView):
     serializer_class = TeamSerializer
-    permission_classes = [IsStaff]
+    permission_classes = [IsAuthenticated]
 
     @transaction.atomic
     def perform_create(self, serializer: TeamSerializer) -> None:
+        _check_can_create_team(self.request.user, serializer)
         serializer.save()
 
 
