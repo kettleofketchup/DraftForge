@@ -5,7 +5,7 @@ from structlog.contextvars import clear_contextvars
 
 from app.models import CustomUser, GameType
 from events.constants import EventState
-from events.discord import handle_previous_rank_submit, handle_rank_medal_select
+from events.discord import handle_rank_medal_select
 from events.models import EventSignup
 from events.tests.base import EventTestCase
 from org.models import OrgUser
@@ -415,57 +415,6 @@ class HandleRankStatusSelectTest(EventTestCase):
         patch_arg = spy.call_args.kwargs["patch"]
         self.assertIsInstance(patch_arg, SignupInputPatch)
         self.assertEqual(patch_arg.rank_status, "active")
-
-
-class HandlePreviousRankSubmitTest(EventTestCase):
-    def setUp(self):
-        super().setUp()
-        clear_contextvars()
-        self.event.state = EventState.SIGNUPS_OPEN
-        self.event.auto_approve = True
-        self.event.save()
-        self.user.discordId = "100000000000000001"
-        self.user.save()
-        self.org_user = OrgUser.objects.create(
-            user=self.user,
-            organization=self.event.organization,
-        )
-
-    def tearDown(self):
-        clear_contextvars()
-        super().tearDown()
-
-    def test_handle_previous_rank_submit_calls_apply_signup_input(self):
-        """rank_medal write (previous rank flow) flows through apply_signup_input."""
-        from unittest.mock import patch as mock_patch
-
-        from events.discord import handle_previous_rank_submit
-        from events.schemas import SignupInputPatch
-
-        with mock_patch("events.services.apply_signup_input") as spy:
-            handle_previous_rank_submit(
-                event_id=self.event.pk,
-                discord_user_id="100000000000000001",
-                medal="Legend 4",
-                date_text="2024",
-            )
-        spy.assert_called_once()
-        patch_arg = spy.call_args.kwargs["patch"]
-        self.assertIsInstance(patch_arg, SignupInputPatch)
-        self.assertEqual(patch_arg.rank_medal, "Legend 4")
-
-    def test_previous_rank_never_needs_screenshot(self) -> None:
-        self.event.discord_require_rank_screenshot = True
-        self.event.save()
-        PlayerDotaProfile.objects.create(
-            org_user=self.org_user, rank_status="previous", pos_1=True
-        )
-
-        result = handle_previous_rank_submit(
-            self.event.pk, DISCORD_ID, "Legend 4", "2024"
-        )
-
-        self.assertEqual(result["action"], "signed_up")
 
 
 class HandleBattleCupSubmitTest(EventTestCase):

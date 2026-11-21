@@ -11,7 +11,6 @@ from events.discord.components import build_announcement_components
 from events.discord.embeds import STATE_NOTICES, build_announcement_v2
 from events.discord.handlers import (
     handle_battle_cup_submit,
-    handle_previous_rank_submit,
     handle_rank_medal_select,
     handle_rank_status_select,
     handle_screenshot_upload,
@@ -111,7 +110,6 @@ class DiscordFollowUpAdmissionTests(EventTestCase):
         self.assertIsNone(handle_rank_status_select(pk, DISCORD_ID, "active"))
         for result in (
             handle_rank_medal_select(pk, DISCORD_ID, "Legend"),
-            handle_previous_rank_submit(pk, DISCORD_ID, "Legend", "2024"),
             handle_battle_cup_submit(pk, DISCORD_ID, "3"),
         ):
             self.assertEqual(

@@ -219,49 +219,6 @@ class DotaHandler:
             )
             return {"action": "error", "message": str(e)}
 
-    def previous_rank_submit(
-        self, event: Event, discord_user_id: str, medal: str, date_text: str
-    ) -> dict:
-        """Handle previous rank modal submission. Saves rank info and signs up."""
-        from events.services import apply_signup_input
-
-        org_user, user = _get_org_user(event, discord_user_id)
-        if org_user is not None:
-            bind_contextvars(org_user_id=org_user.pk)
-        if user is not None:
-            bind_contextvars(user_id=user.pk)
-        if not org_user:
-            return {"action": "error", "message": "Not found."}
-
-        try:
-            profile = apply_signup_input(
-                org_user=org_user,
-                event=event,
-                patch=SignupInputPatch(rank_medal=medal),
-            )
-        except DjangoValidationError as exc:
-            msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-            return {"action": "error", "message": msg}
-
-        # Check if screenshot required before completing signup
-        if _awaiting_rank_screenshot(event, profile):
-            _log_interaction(event.pk, "awaiting_rank_screenshot", discord_user_id)
-            return {
-                "action": "needs_screenshot",
-                "screenshot_type": "rank",
-            }
-
-        try:
-            return _direct_signup(event, user)
-        except ValueError as e:
-            log.warning(
-                "signup_rejected",
-                system="discord",
-                subsystem="interaction",
-                reason=str(e),
-            )
-            return {"action": "error", "message": str(e)}
-
     def battle_cup_submit(self, event: Event, discord_user_id: str, tier: str) -> dict:
         """Handle battle cup modal submission. Saves tier and signs up."""
         from events.services import apply_signup_input
