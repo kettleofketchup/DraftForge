@@ -334,7 +334,10 @@ export function EventSignupModal({
               friendIdPrefilled,
               knownFriendId,
               'signup-prefilled-summary-friend-id',
-              <FriendIdField control={form.control as never} />,
+              <FriendIdField
+                control={form.control as never}
+                gameType={event.game_type}
+              />,
             )}
           </section>
         )}

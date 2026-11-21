@@ -5,8 +5,11 @@ from typing import Protocol
 from django.db.models import Q
 
 from app.models import CustomUser
-from events.constants import EventState
+from events.constants import Commitment, EventState
+from events.eligibility.evaluate import evaluate_signup
+from events.eligibility.reasons import EligibilityResult
 from events.models import Event
+from org.standing.cache import StandingCache
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -49,19 +52,44 @@ def self_serve_refusal(event: SupportsAdmission) -> str | None:
     return None
 
 
-def ensure_self_serve(event: Event, user: CustomUser) -> None:
+class SignupRefused(ValueError):
+    """Self sign-up refused by a blocking eligibility reason."""
+
+    def __init__(self, message: str, result: EligibilityResult) -> None:
+        super().__init__(message)
+        self.result = result
+
+
+def ensure_self_serve(
+    event: Event,
+    user: CustomUser,
+    *,
+    intent: Commitment = Commitment.MAIN,
+    standing_cache: StandingCache | None = None,
+) -> None:
     """Raise ValueError when ``user`` may not add themselves to ``event``."""
     reason = self_serve_refusal(event)
-    if reason is None:
+    if reason is not None:
+        log.info(
+            "signup_self_serve_refused",
+            system="events",
+            subsystem="services",
+            tags=["events", "signup"],
+            tags_csv="events,signup",
+            event_id=event.pk,
+            user_id=user.pk,
+            reason=reason,
+        )
+        raise ValueError(reason)
+    result = evaluate_signup(event, user, intent=intent, standing_cache=standing_cache)
+    if result.admissible:
         return
     log.info(
-        "signup_self_serve_refused",
+        "signup_eligibility_refused",
         system="events",
         subsystem="services",
-        tags=["events", "signup"],
-        tags_csv="events,signup",
         event_id=event.pk,
         user_id=user.pk,
-        reason=reason,
+        codes=result.codes,
     )
-    raise ValueError(reason)
+    raise SignupRefused(result.blocking[0].message, result)

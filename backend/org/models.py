@@ -1,6 +1,10 @@
 from django.db import models
 from django.utils import timezone
 
+from org.models_conduct import (
+    AttendanceOutcome,  # noqa: F401
+    OrgConductSettings,  # noqa: F401
+)
 from org.models_contributions import (
     ContributionEntry,  # noqa: F401
     ContributionPointValue,  # noqa: F401

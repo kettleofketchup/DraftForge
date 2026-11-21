@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const FEATURE_KEYS = ['contributions', 'promotion'] as const;
+export const FEATURE_KEYS = ['conduct', 'contributions', 'promotion'] as const;
 export const FeatureKeySchema = z.enum(FEATURE_KEYS);
 export type FeatureKey = z.infer<typeof FeatureKeySchema>;
 

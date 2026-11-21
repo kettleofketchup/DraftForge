@@ -51,6 +51,7 @@ import {
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
 import { canRestoreSignup } from '~/components/events/signupPartitions';
+import type { GameTypeValue } from '~/components/game/constants';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -74,6 +75,7 @@ import {
 } from '~/hooks/useEvent';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { cn } from '~/lib/utils';
+import { useGameTypeStore } from '~/store/gameTypeStore';
 
 export default function RollCallPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -94,6 +96,16 @@ export default function RollCallPage() {
     event?.organization ?? undefined,
   );
   const isAdmin = event?.user_can_manage ?? false;
+
+  const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
+  useEffect(() => {
+    if (event?.game_type) {
+      setCurrentGameType(event.game_type as GameTypeValue);
+    }
+    return () => {
+      setCurrentGameType(null);
+    };
+  }, [event?.game_type, setCurrentGameType]);
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -440,7 +452,7 @@ export default function RollCallPage() {
         )}
       </div>
 
-      {/* MMR approval modal — opens for Dota2 events so previously-approved MMR is shown */}
+      {/* MMR approval modal — shows the previously-approved MMR */}
       <MmrApprovalModal
         signup={approvalSignup}
         open={!!approvalSignup}

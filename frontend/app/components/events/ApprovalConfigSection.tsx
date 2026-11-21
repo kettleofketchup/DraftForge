@@ -199,7 +199,7 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
           control={control}
           name="require_steam_id"
           label="Require Friend ID"
-          description="Player must provide their Dota 2 Friend ID"
+          description="Player must provide their Steam Friend ID"
         />
 
         {isDota && (

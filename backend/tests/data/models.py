@@ -7,6 +7,8 @@ Individual data files import these models and define specific instances.
 
 from pydantic import BaseModel
 
+from tests.data.discord_avatars import DISCORD_AVATARS
+
 # =============================================================================
 # User Models
 # =============================================================================
@@ -37,6 +39,11 @@ class TestUser(BaseModel):
     org_id: int | None = None  # For org role users
     league_id: int | None = None  # For league role users
     positions: TestPositions | None = None
+
+    @property
+    def avatar(self) -> str | None:
+        """Committed Discord avatar hash (tests/data/discord_avatars.py)."""
+        return DISCORD_AVATARS.get(self.discord_id or "")
 
     def get_steam_id_64(self) -> int | None:
         """Get 64-bit Steam ID, converting from 32-bit if needed."""

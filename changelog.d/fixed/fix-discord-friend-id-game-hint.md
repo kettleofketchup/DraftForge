@@ -1,0 +1,1 @@
+- The Discord signup modal no longer points Deadlock and other non-Dota players to a Dotabuff URL for their Friend ID; they see the Steam Friend Code hint instead, while Dota 2 events keep the Dotabuff hint (#708).

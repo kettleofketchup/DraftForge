@@ -1224,6 +1224,7 @@ function SignupsTab({
                 data-testid={`event-signup-row-${signup.id}`}
                 user={user}
                 dotaProfile={stripProfile}
+                selfReportedRank={signup.self_reported_rank}
                 contextSlot={statusSlot}
                 actionSlot={adminActions}
               />

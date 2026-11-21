@@ -1,5 +1,5 @@
-import { BASE_URL } from './tests/playwright/fixtures/base-url';
 import { defineConfig, devices } from '@playwright/test';
+import { BASE_URL } from './tests/playwright/fixtures/base-url';
 
 /**
  * Playwright configuration for demo video recording.
@@ -52,8 +52,8 @@ export default defineConfig({
   projects: [
     {
       name: 'demo-chromium',
-      // Exclude herodraft tests (run in demo-herodraft project)
-      testIgnore: /herodraft/i,
+      // Matched on the file name: the absolute path can contain "herodraft" (worktree names).
+      testIgnore: /(^|\/)herodraft[^/]*\.demo\.ts$/i,
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
@@ -70,7 +70,7 @@ export default defineConfig({
     },
     {
       name: 'demo-herodraft',
-      testMatch: /herodraft.*\.demo\.ts/,
+      testMatch: /(^|\/)herodraft[^/]*\.demo\.ts$/i,
       use: {
         ...devices['Desktop Chrome'],
         // Headless for CI/automated recording

@@ -16,8 +16,10 @@ from django.db import transaction
 from django.db.models import Q
 
 from app.models import CustomUser, Organization, PositionsModel
-from org.models import ContributionEntry, OrgUser, PromoSend
+from org.models import OrgUser, PromoSend
+from org.standing import api as standing
 
+from .avatars import apply_committed_avatars
 from .constants import (
     BRACKET_STEAM_ID_BASE,
     BRACKET_USER_COUNT,
@@ -174,11 +176,12 @@ def ensure_org_user(
 def delete_ledger_for_users(pks: Iterable[int]) -> None:
     """Drop these users' ledger rows and promo sends so the users can be deleted.
 
-    ContributionEntry.org_user is RESTRICT: deleting a user whose OrgUser
-    holds ledger rows raises RestrictedError.
+    Standing ledger rows are RESTRICT: deleting a user whose OrgUser holds
+    them raises RestrictedError.
     """
     pks = list(pks)
-    ContributionEntry.objects.nocache().filter(org_user__user_id__in=pks).delete()
+    for blockers in standing.deletion_blockers(pks):
+        blockers.delete()
     PromoSend.objects.nocache().filter(
         Q(sender_id__in=pks) | Q(recipient_id__in=pks)
     ).delete()
@@ -325,6 +328,7 @@ def get_or_create_demo_user(username, user_data, organization=None):
     if organization:
         ensure_org_user(user, organization, mmr=mmr)
 
+    apply_committed_avatars([user])
     return user
 
 
@@ -356,8 +360,13 @@ def _get_discord_avatar_cache() -> dict[str, str]:
     return _discord_avatar_cache
 
 
-def fetch_discord_avatars_for_users(users):
-    """Update avatars for users using cached bulk guild member data."""
+def fetch_discord_avatars_for_users(users: Iterable[CustomUser]) -> None:
+    """Apply committed avatars, then any newer ones from the live guild fetch.
+
+    The live fetch only sets non-empty hashes, so it never wipes a committed one.
+    """
+    users = list(users)
+    apply_committed_avatars(users)
     avatar_map = _get_discord_avatar_cache()
     if not avatar_map:
         return
@@ -368,7 +377,7 @@ def fetch_discord_avatars_for_users(users):
             continue
         avatar_hash = avatar_map.get(user.discordId)
         if avatar_hash and user.avatar != avatar_hash:
-            # T1.5+: avatar is a property over base_profile.avatar; the setter
+            # avatar is a property over base_profile.avatar; the setter
             # persists via bp.save(update_fields=["avatar"]) internally, so an
             # explicit CustomUser.save(update_fields=["avatar"]) crashes since
             # `avatar` is no longer a model field.

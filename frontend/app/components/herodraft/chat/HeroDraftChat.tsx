@@ -18,6 +18,11 @@ import { VisuallyHidden } from '~/components/ui/visually-hidden';
 import { useMediaQuery } from '~/hooks/useMediaQuery';
 import { heroDraftSelectors, useHeroDraftStore } from '~/store/heroDraftStore';
 import { useUserStore } from '~/store/userStore';
+import {
+  isMenuOpen,
+  isOverlaidByOtherLayer,
+  ownsEnterKey,
+} from '../keyboardLayers';
 import { ChatComposer } from './ChatComposer';
 import { chatErrorText } from './chatErrors';
 import { ChatLog } from './ChatLog';
@@ -59,6 +64,7 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const [preview, setPreview] = useState<PreviewLine[]>([]);
   const [previewNow, setPreviewNow] = useState(0);
 
@@ -147,6 +153,22 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [isDesktop, panelOpen, setChatPanelOpen]);
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || e.defaultPrevented || e.isComposing) return;
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+      if (ownsEnterKey(document.activeElement)) return;
+      if (e.target instanceof Element && ownsEnterKey(e.target)) return;
+      if (isMenuOpen() || isOverlaidByOtherLayer(toggleRef.current)) return;
+      e.preventDefault();
+      setChatPanelOpen(true);
+      if (inputRef.current && !inputRef.current.disabled)
+        inputRef.current.focus();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [setChatPanelOpen]);
+
   const submit = useCallback(() => {
     clearChatError();
     if (sendChat(raw) !== null) setRaw('');
@@ -201,12 +223,17 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
       state={state}
       target={target}
       onFocus={isDesktop ? () => setChatPanelOpen(true) : undefined}
-      onEscape={() => setChatPanelOpen(false)}
+      onEscape={() => {
+        setChatPanelOpen(false);
+        inputRef.current?.blur();
+      }}
+      enterHint={isDesktop}
     />
   );
 
   const toggleButton = (
     <SecondaryButton
+      ref={toggleRef}
       type="button"
       size="icon"
       onClick={toggle}

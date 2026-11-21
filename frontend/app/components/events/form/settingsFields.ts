@@ -186,7 +186,7 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     require_steam_id: {
       label: 'Require Friend ID',
-      description: 'Player must provide their Dota 2 Friend ID',
+      description: 'Player must provide their Steam Friend ID',
       keywords: ['steam'],
     },
     require_mmr_verified: {

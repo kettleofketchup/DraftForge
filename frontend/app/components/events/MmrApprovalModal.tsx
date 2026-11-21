@@ -42,8 +42,8 @@ import { cn } from '~/lib/utils';
 const LARGE_CHANGE_THRESHOLD = 0.2;
 
 const mmrSchema = z.object({
-  // zod 4 dropped the `{ coerce: true }` option on z.number; use z.coerce.number()
-  // so the resolver still parses string inputs from the <Input> element.
+  // The Input's onChange already passes valueAsNumber, so mmr reaches the
+  // resolver as a number; coerce is only a fallback for non-number values.
   mmr: z.coerce
     .number()
     .int()
@@ -81,8 +81,8 @@ export function MmrApprovalModal({
     defaultValues: { mmr: 0 },
   });
 
-  // Reset form when signup changes. suggested_mmr is now self-report-first
-  // (see backend events.mmr_suggestions.suggest_mmr).
+  // Reset when the signup or open state changes. suggested_mmr is
+  // self-report-first (see backend events.mmr_suggestions.suggest_mmr).
   useEffect(() => {
     if (signup && open) {
       form.reset({ mmr: signup.suggested_mmr });
@@ -116,9 +116,7 @@ export function MmrApprovalModal({
     profile?.rank_screenshot ?? profile?.battlecup_screenshot ?? null;
 
   // Rank-status badge — values come from PlayerDotaProfile.rank_status:
-  // 'active' | 'previous' | 'never'. Earlier mapping checked for 'ranked' /
-  // 'expired' (never set anywhere) and fell every profile through to "Never
-  // Ranked" — including active and previously-ranked players.
+  // 'active' | 'previous' | 'never'.
   const rankStatusBadge = profile ? (
     profile.rank_status === 'active' ? (
       <Badge
@@ -215,14 +213,18 @@ export function MmrApprovalModal({
                   {playerName}
                 </DialogTitle>
                 <DialogDescription className="flex items-center gap-1.5 mt-0.5">
-                  {rankStatusBadge ?? 'No Dota profile'}
+                  {gameType === GAME_TYPE.DOTA2
+                    ? (rankStatusBadge ?? 'No Dota profile')
+                    : null}
                 </DialogDescription>
               </div>
-              <DotabuffButton
-                steamAccountId={user?.steam_account_id}
-                responsive={false}
-                size="sm"
-              />
+              {gameType === GAME_TYPE.DOTA2 && (
+                <DotabuffButton
+                  steamAccountId={user?.steam_account_id}
+                  responsive={false}
+                  size="sm"
+                />
+              )}
             </div>
           </DialogHeader>
 

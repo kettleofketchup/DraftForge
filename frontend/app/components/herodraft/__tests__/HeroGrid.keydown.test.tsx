@@ -43,6 +43,12 @@ describe('HeroGrid global keydown', () => {
     expect(document.activeElement).toBe(search());
   });
 
+  it('leaves Enter to the chat keybind', () => {
+    render(grid);
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+    expect(document.activeElement).not.toBe(search());
+  });
+
   it('still focuses search when the grid itself sits inside an open dialog', () => {
     render(
       <div role="dialog" data-state="open">

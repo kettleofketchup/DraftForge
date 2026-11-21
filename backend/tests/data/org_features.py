@@ -160,6 +160,29 @@ ORG_FEATURES_TOURNAMENTS: Final[list[tuple[int, str, int, list[TestUser]]]] = [
 ORG_FEATURES_UPCOMING_EVENT_NAME: Final[str] = "Features Upcoming Event"
 ORG_FEATURES_UPCOMING2_EVENT_NAME: Final[str] = "Features Second Upcoming Event"
 ORG_FEATURES_COMPLETED_EVENT_NAME: Final[str] = "Features Completed Event"
+ORG_FEATURES_CONDUCT_EVENT_NAME: Final[str] = "Features Conduct Event"
+ORG_FEATURES_CONDUCT_PAST_EVENT_NAMES: Final[tuple[str, ...]] = (
+    "Features Past Event 1",
+    "Features Past Event 2",
+)
+
+# Outcomes on the completed event, all finalized.
+ORG_FEATURES_CONDUCT_OUTCOMES: Final[list[tuple[TestUser, str]]] = [
+    (ORG_FEATURES_PLAYERS[0], "attended"),
+    (ORG_FEATURES_PLAYERS[1], "no_show"),
+    (ORG_FEATURES_PLAYERS[2], "late_cancel"),
+    (ORG_FEATURES_PLAYERS[3], "excused"),
+    (OF_MEMBER, "attended"),
+]
+# Attended both past events: with the completed-event row, 3 counted (ranked).
+ORG_FEATURES_CONDUCT_RANKED: Final[list[TestUser]] = [
+    *ORG_FEATURES_PLAYERS[0:3],
+    OF_MEMBER,
+]
+# Attended the first past event only: 1 counted (new member).
+ORG_FEATURES_CONDUCT_NEW_MEMBER: Final[TestUser] = ORG_FEATURES_PLAYERS[9]
+# Approved on the forecast event.
+ORG_FEATURES_CONDUCT_SIGNUPS: Final[list[TestUser]] = ORG_FEATURES_PLAYERS[0:6]
 
 ORG_FEATURES_TEMPLATES: Final[list[tuple[str, str]]] = [
     (
