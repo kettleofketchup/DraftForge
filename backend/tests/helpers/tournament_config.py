@@ -40,9 +40,6 @@ class TestTournamentConfig(BaseModel):
     """
     Configuration for a test tournament scenario.
 
-    Each config represents a specific test scenario with explicit typing
-    and documentation of its purpose.
-
     Example:
         config = TestTournamentConfig(
             key="draft_captain_turn",
