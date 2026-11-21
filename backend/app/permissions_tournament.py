@@ -121,17 +121,6 @@ class IsLeagueAdmin(permissions.BasePermission):
         return has_league_admin_access(request.user, obj)
 
 
-class IsLeagueStaff(permissions.BasePermission):
-    """Permission check for league staff access."""
-
-    def has_permission(self, request: Request, view: object) -> bool:
-        """Allow authenticated users to proceed to object-level check."""
-        return request.user and request.user.is_authenticated
-
-    def has_object_permission(self, request: Request, view: object, obj: Any) -> bool:
-        return has_league_staff_access(request.user, obj)
-
-
 # Tournament and Game level permission helpers
 
 
