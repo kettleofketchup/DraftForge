@@ -8,7 +8,7 @@ from rest_framework import serializers
 
 from app.auth import InternalServiceUser
 from app.display_names import user_display_name
-from app.models import CustomUser, League, Organization
+from app.models import CustomUser, GameType, League, Organization
 from app.permissions_org import (
     can_view_org_members,
     check_lobby_steam_league_id,
@@ -50,7 +50,7 @@ from lobby.passwords import MAX_LENGTH as LOBBY_PASSWORD_MAX_LENGTH
 from lobby.passwords import PasswordMode, validate_password
 from org.display_names import guild_nicknames, org_nicknames_public
 from org.models import OrgUser
-from org.models_profiles import PlayerDotaProfile
+from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
 # The lobby password is write-only on every events serializer: event and
 # series payloads are cached, public and handed to Celery. Staff and
@@ -813,6 +813,8 @@ class EventSignupSerializer(serializers.ModelSerializer):
     user_data = serializers.SerializerMethodField()
     dota_profile = serializers.SerializerMethodField()
     org_user_mmr = serializers.SerializerMethodField()
+    self_reported_rank = serializers.SerializerMethodField()
+    self_reported_rank_date = serializers.SerializerMethodField()
     org_user_pk = serializers.SerializerMethodField()
     organization = serializers.IntegerField(
         source="event.organization_id", read_only=True
@@ -837,6 +839,8 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "user_data",
             "dota_profile",
             "org_user_mmr",
+            "self_reported_rank",
+            "self_reported_rank_date",
             "org_user_pk",
             "suggested_mmr",
             "suggested_mmr_range",
@@ -914,7 +918,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
                     user_id__in={user_id for user_id, _ in keys},
                     organization_id__in={org_id for _, org_id in keys},
                 )
-                .select_related("dota_profile")
+                .select_related("dota_profile", "deadlock_profile")
             )
             for org_user in found:
                 pair = (org_user.user_id, org_user.organization_id)
@@ -925,6 +929,8 @@ class EventSignupSerializer(serializers.ModelSerializer):
         return memo[key]
 
     def _dota_profile(self, obj: EventSignup) -> PlayerDotaProfile | None:
+        if obj.event.game_type != GameType.DOTA2:
+            return None
         org_user = self._org_user(obj)
         if org_user is None:
             return None
@@ -1008,7 +1014,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
         return list(signup.eligibility_reasons or [])
 
     def get_dota_profile(self, obj: EventSignup) -> dict[str, Any] | None:
-        """Return DotaProfile data if the user has one for this event's org."""
+        """DotaProfile data for Dota 2 events only, if the user has one in the org."""
         profile = self._dota_profile(obj)
         if profile is None:
             return None
@@ -1040,6 +1046,29 @@ class EventSignupSerializer(serializers.ModelSerializer):
             return None
         org_user = self._org_user(obj)
         return org_user.mmr if org_user and org_user.mmr else None
+
+    def _deadlock_profile(self, obj: EventSignup) -> PlayerDeadlockProfile | None:
+        if obj.event.game_type != GameType.DEADLOCK:
+            return None
+        if not self._viewer_sees_org_mmr(obj):
+            return None
+        org_user = self._org_user(obj)
+        if org_user is None:
+            return None
+        try:
+            return org_user.deadlock_profile
+        except PlayerDeadlockProfile.DoesNotExist:
+            return None
+
+    def get_self_reported_rank(self, obj: EventSignup) -> str | None:
+        profile = self._deadlock_profile(obj)
+        return (profile.rank or None) if profile else None
+
+    def get_self_reported_rank_date(self, obj: EventSignup) -> str | None:
+        profile = self._deadlock_profile(obj)
+        if profile is None or profile.rank_date is None:
+            return None
+        return profile.rank_date.isoformat()
 
     def _viewer_sees_org_mmr(self, obj: EventSignup) -> bool:
         request = self.context.get("request")

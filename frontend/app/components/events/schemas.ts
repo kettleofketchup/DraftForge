@@ -327,6 +327,8 @@ export const eventSignupSchema = z.object({
     })
     .nullable(),
   org_user_mmr: z.number().nullable().default(null),
+  self_reported_rank: z.string().nullable().optional(),
+  self_reported_rank_date: z.string().nullable().optional(),
   org_user_pk: z.number().nullable().default(null),
   organization: z.number().nullable().default(null),
   suggested_mmr: z.number().int(),
