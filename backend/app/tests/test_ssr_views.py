@@ -27,17 +27,6 @@ class SSREndpointTests(TestCase):
         resp = self.client.get("/api/tournaments/99999/ssr/")
         self.assertEqual(resp.status_code, 404)
 
-    def test_organization_ssr_returns_200(self):
-        from app.models import Organization
-
-        org = Organization.objects.create(name="Test Org", description="A test org")
-        resp = self.client.get(f"/api/organizations/{org.pk}/ssr/")
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.data["name"], "Test Org")
-        self.assertEqual(resp.data["description"], "A test org")
-        self.assertNotIn("admins", resp.data)
-        self.assertNotIn("staff", resp.data)
-
     def test_league_ssr_returns_200(self):
         from app.models import League, Organization
 

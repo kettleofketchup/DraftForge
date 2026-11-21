@@ -14,7 +14,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.models import CustomUser, Game, Team
-from app.permissions_org import IsTournamentStaff, can_edit_tournament
+from app.permissions_tournament import (
+    IsTournamentStaff,
+    can_edit_tournament,
+)
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 from draft.serializers.hero import HeroDraftEventSerializer, HeroDraftSerializer
 from draft.services.hero import (

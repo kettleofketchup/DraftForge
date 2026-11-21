@@ -14,7 +14,6 @@ from app.models import (
     Organization,
 )
 from app.permissions import IsStaff
-from app.permissions_org import has_org_staff_access
 from backend import settings
 
 # Re-exported for existing importers; celery imports discord_members directly.
@@ -26,6 +25,7 @@ from discordbot.services.discord_members import (  # noqa: F401
 from discordbot.services.member_names import members_from_discord_payload
 from org.activity import guild_sync_lock, release_guild_sync_lock
 from org.discord_names import apply_guild_member_names, org_ids_for_guild
+from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

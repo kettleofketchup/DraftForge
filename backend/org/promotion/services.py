@@ -4,11 +4,6 @@ from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
 
 from app.models import CustomUser
-from app.permissions_org import (
-    has_org_promoter_access,
-    has_org_staff_access,
-    is_org_role_holder,
-)
 from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind
@@ -18,6 +13,11 @@ from org.contributions.services import (
     revoke_promo_entry,
 )
 from org.models import PromoSend, PromoTemplate
+from org.permissions import (
+    has_org_promoter_access,
+    has_org_staff_access,
+    is_org_role_holder,
+)
 from org.promotion.recipients import in_pool
 from telemetry.logging import get_logger
 

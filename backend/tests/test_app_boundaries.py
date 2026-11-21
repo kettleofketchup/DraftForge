@@ -119,6 +119,8 @@ TEAM_DRAFT = MovedSlice(
             ("app.views", "DraftRoundCreateView"),
             ("app.permissions_org", "CanEditDraft"),
             ("app.permissions_org", "CanEditDraftRound"),
+            ("app.permissions_tournament", "CanEditDraft"),
+            ("app.permissions_tournament", "CanEditDraftRound"),
             ("app.functions.tournament", "generate_draft_rounds"),
             ("app.functions.tournament", "rebuild_team"),
             ("app.functions.tournament", "get_draft_style_mmrs"),
@@ -155,7 +157,70 @@ TEAM_DRAFT = MovedSlice(
     cached_labels=frozenset({"draft", "draftoptions", "draftround"}),
 )
 
-MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT)
+_ORG_PERMISSION_NAMES = (
+    "is_org_owner",
+    "has_org_admin_access",
+    "has_org_staff_access",
+    "is_site_admin",
+    "is_org_role_holder",
+    "has_org_promoter_access",
+    "can_view_org_members",
+    "_payload_lists_user",
+    "_payload_has_user",
+    "org_admin_staff_from_payload",
+    "can_view_org_members_from_payload",
+    "IsOrgOwner",
+    "IsOrgAdmin",
+    "IsOrgStaff",
+)
+
+ORG = MovedSlice(
+    name="org",
+    source_app="app",
+    new_app="org",
+    moved=frozenset(
+        {
+            ("app.views_main", "OrganizationView"),
+            ("app.views_main", "_feature_access"),
+            ("app.views_main", "_org_viewer_access"),
+            ("app.views_main", "_member_access"),
+            ("app.serializers", "OrganizationSerializer"),
+            ("app.serializers", "_known_timezones"),
+            ("app.serializers_ssr", "OrganizationSerializerSSR"),
+            ("app.views.ssr", "OrganizationSSRView"),
+            ("app.views.admin_team", "add_org_admin"),
+            ("app.views.admin_team", "remove_org_admin"),
+            ("app.views.admin_team", "add_org_staff"),
+            ("app.views.admin_team", "remove_org_staff"),
+            ("app.views.admin_team", "transfer_org_ownership"),
+            ("app.views.admin_team", "add_org_member"),
+            ("app.views.admin_team", "update_org_user"),
+            ("app.views.admin_team", "_find_member"),
+            ("app.views.admin_team", "_cached_guild_member"),
+            ("app.views.admin_team", "_member_nick"),
+            ("app.views.admin_team", "_resolve_user"),
+            ("app.signals", "track_org_discord_server_id"),
+            ("app.signals", "reset_guild_nicknames_on_server_change"),
+            *(
+                (module, name)
+                for module in ("app.permissions_org", "app.permissions_tournament")
+                for name in _ORG_PERMISSION_NAMES
+            ),
+        }
+    ),
+    retired_modules=frozenset(
+        {
+            "app.permissions_org",
+            "app.tests.test_organization",
+            "app.tests.test_org_role_fields",
+        }
+    ),
+    model_labels=frozenset(),
+    move_migration=("app", "0110_move_organization_models_to_org"),
+    cached_labels=frozenset(),
+)
+
+MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG)
 
 # target app -> production file (relative to backend/) -> what it may import from that app
 ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
@@ -207,9 +272,9 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"recent_draft_events"}),
             "TournamentConsumer replays a tournament's recent team-draft events",
         ),
-        "app/permissions_org.py": BackEdge(
+        "app/permissions_tournament.py": BackEdge(
             frozenset({"HeroDraft"}),
-            "org permission check resolves a hero draft's tournament",
+            "tournament staff check resolves a hero draft's tournament",
         ),
         "app/views/bracket.py": BackEdge(
             frozenset({"HeroDraft"}),
@@ -222,6 +287,108 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         "app/management/commands/sync_prod_tournaments.py": BackEdge(
             frozenset({"Draft", "DraftOptions", "DraftRound"}),
             "tournament sync tooling copies a tournament's team draft",
+        ),
+    },
+    "org": {
+        "app/admin.py": BackEdge(
+            frozenset({"api", "release_earning_sends"}),
+            "CustomUser admin delete checks standing blockers, releases promo "
+            "earning sends and records standing on user deletion",
+        ),
+        "app/discord_accounts.py": BackEdge(
+            frozenset(
+                {
+                    "OrgUser",
+                    "api",
+                    "demote_colliding_earning_sends",
+                    "repoint_org_attribution",
+                }
+            ),
+            "user account merge pairs org memberships, merges standing and "
+            "repoints org contribution and promo attribution",
+        ),
+        "app/functions/tournament.py": BackEdge(
+            frozenset({"guild_nicknames", "org_nicknames_public"}),
+            "tournament player payloads show the league org's guild nicknames",
+        ),
+        "app/management/commands/sync_prod_users.py": BackEdge(
+            frozenset({"AttendanceOutcome", "ContributionEntry", "PromoSend"}),
+            "prod user sync clears org conduct, contribution and promo rows before "
+            "reloading users",
+        ),
+        "app/permissions_tournament.py": BackEdge(
+            frozenset(
+                {
+                    "_payload_lists_user",
+                    "can_view_org_members",
+                    "has_org_admin_access",
+                    "has_org_staff_access",
+                }
+            ),
+            "league access and member-visibility checks fall back to the league "
+            "org's roles; leaves with the league slice",
+        ),
+        "app/serializers.py": BackEdge(
+            frozenset({"OrgUser", "OrgUserSerializer"}),
+            "tournament and league user serializers auto-create OrgUser rows and "
+            "embed org MMR via OrgUserSerializer",
+        ),
+        "app/services/match_finalization.py": BackEdge(
+            frozenset({"OrgUser"}),
+            "league rating creation seeds base MMR from the league org's OrgUser",
+        ),
+        "app/services/team_leadership.py": BackEdge(
+            frozenset({"OrgUser"}),
+            "captain succession falls back to the highest-MMR OrgUser of the league org",
+        ),
+        "app/services/team_management.py": BackEdge(
+            frozenset({"OrgSettings", "OrgUser", "get_org_settings"}),
+            "roster rules read the league org's settings; member adds report OrgUser creation",
+        ),
+        "app/signals.py": BackEdge(
+            frozenset({"OrgUser"}),
+            "tournament user auto-add creates the league org's OrgUser",
+        ),
+        "app/views/admin_team.py": BackEdge(
+            frozenset(
+                {
+                    "OrgUser",
+                    "has_org_admin_access",
+                    "has_org_staff_access",
+                    "member_nick",
+                    "resolve_member_user",
+                    "user_name_q",
+                }
+            ),
+            "user search and league/tournament member adds use org roles, the "
+            "org guild member cache and OrgUser; leaves with the league and "
+            "tournament slices",
+        ),
+        "app/views/csv_import.py": BackEdge(
+            frozenset({"OrgUser", "has_org_staff_access"}),
+            "shared CSV import pipeline, including the org door, writes OrgUser "
+            "MMR; moves whole with the tournament slice",
+        ),
+        "app/views/internal.py": BackEdge(
+            frozenset({"OrgUser"}),
+            "repeater subscriber endpoint reports each subscriber's org membership",
+        ),
+        "app/views_main.py": BackEdge(
+            frozenset(
+                {
+                    "OrgUser",
+                    "api",
+                    "has_org_staff_access",
+                    "member_access",
+                    "member_organization_ids",
+                    "not_permitted",
+                    "release_earning_sends",
+                    "viewer_member_organization_ids",
+                }
+            ),
+            "UserView org-staff checks, profile claims and deletion standing; "
+            "TeamView feature errors and team log scope; current_user and "
+            "tournament list membership ids; LeagueView member flag",
         ),
     },
 }
@@ -453,7 +620,7 @@ def find_migration_ancestry_violations(
         before_move: set[tuple[str, str]] | None = None
         for path, source in files:
             key = _migration_key(path)
-            if key[0] in {s.source_app, s.new_app}:
+            if key[0] == s.source_app:
                 continue
             lines = sorted(set(_references_moved_model(ast.parse(source, path), s)))
             if not lines:
@@ -665,7 +832,7 @@ class GuardSelfTests(SimpleTestCase):
                     [],
                 )
 
-    def test_migration_ancestry_ignores_unrelated_and_own_apps(self) -> None:
+    def test_migration_ancestry_ignores_unrelated_and_source_app(self) -> None:
         self.assertEqual(
             self.ancestry(
                 'apps.get_model("src", "Other")\n', set(), FIXTURE_MIGRATION_PATH
@@ -678,11 +845,20 @@ class GuardSelfTests(SimpleTestCase):
             ),
             [],
         )
-        for path in ("src/migrations/0003_x.py", "dst/migrations/0003_x.py"):
-            with self.subTest(path=path):
-                self.assertEqual(
-                    self.ancestry('apps.get_model("src", "Moved")\n', set(), path), []
-                )
+        self.assertEqual(
+            self.ancestry(
+                'apps.get_model("src", "Moved")\n', set(), "src/migrations/0003_x.py"
+            ),
+            [],
+        )
+
+    def test_migration_ancestry_checks_new_app_migrations(self) -> None:
+        path = "dst/migrations/0003_x.py"
+        source = 'apps.get_model("src", "Moved")\n'
+        violations = self.ancestry(source, set(), path)
+        self.assertEqual(len(violations), 1)
+        self.assertIn(path, violations[0])
+        self.assertEqual(self.ancestry(source, {("dst", "0003_x")}, path), [])
 
 
 class AppBoundaryTests(SimpleTestCase):
@@ -704,6 +880,7 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("app/models.py", rels)
         self.assertIn("draft/models/hero.py", rels)
         self.assertIn("draft/models/team.py", rels)
+        self.assertIn("org/permissions.py", rels)
         self.assertNotIn(GUARD_FILE, rels)
         self.assertFalse(any("/migrations/" in rel for rel in rels))
 
