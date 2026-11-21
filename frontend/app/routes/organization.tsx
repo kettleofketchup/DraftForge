@@ -1,6 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Award,
   Building2,
   Calendar,
   CalendarDays,
@@ -79,7 +78,11 @@ import {
   useOrgFeatureAccess,
 } from '~/features/org-features';
 import { PromotionTab } from '~/features/promotion';
-import { TrackTab } from '~/features/standing';
+import {
+  isStandingTabValue,
+  TrackTab,
+  visibleStandingTabs,
+} from '~/features/standing';
 import {
   useEvent,
   useEventRepeaters,
@@ -419,19 +422,19 @@ export default function OrganizationDetailPage() {
   }, [memberAccessSettled, canViewMembers, activeTab, setActiveTab]);
 
   const featureAccess = useOrgFeatureAccess(organization ?? undefined);
-  const canViewContributions = featureAccess.canViewContributions;
-  const contributionTrack = featureAccess.standingTracks.find(
-    (t) => t.key === 'contribution',
+  const standingTabs = useMemo(
+    () => visibleStandingTabs(featureAccess.standingTracks),
+    [featureAccess.standingTracks],
   );
   useEffect(() => {
     if (
       featureAccess.settled &&
-      !canViewContributions &&
-      activeTab === 'contributions'
+      isStandingTabValue(activeTab) &&
+      !standingTabs.some((t) => t.value === activeTab)
     ) {
       setActiveTab('leagues');
     }
-  }, [featureAccess.settled, canViewContributions, activeTab, setActiveTab]);
+  }, [featureAccess.settled, standingTabs, activeTab, setActiveTab]);
   const canUsePromotion = featureAccess.canUsePromotion;
   useEffect(() => {
     if (
@@ -501,7 +504,7 @@ export default function OrganizationDetailPage() {
         eventsCount: events.length,
         userCountDisplay,
         canViewMembers,
-        canViewContributions,
+        standingTabs,
         canUsePromotion,
         canViewClaims,
       }),
@@ -510,7 +513,7 @@ export default function OrganizationDetailPage() {
       events.length,
       userCountDisplay,
       canViewMembers,
-      canViewContributions,
+      standingTabs,
       canUsePromotion,
       canViewClaims,
     ],
@@ -630,15 +633,16 @@ export default function OrganizationDetailPage() {
                 Users ({userCountDisplay})
               </TabsTrigger>
             )}
-            {canViewContributions && (
+            {standingTabs.map(({ value, label, icon: Icon }) => (
               <TabsTrigger
-                value="contributions"
-                data-testid="org-tab-contributions"
+                key={value}
+                value={value}
+                data-testid={`org-tab-${value}`}
               >
-                <Award className="w-4 h-4 mr-2" />
-                Contributions
+                <Icon className="w-4 h-4 mr-2" />
+                {label}
               </TabsTrigger>
-            )}
+            ))}
             {canUsePromotion && (
               <TabsTrigger value="promotion" data-testid="org-tab-promotion">
                 <Megaphone className="w-4 h-4 mr-2" />
@@ -805,18 +809,19 @@ export default function OrganizationDetailPage() {
             </TabsContent>
           )}
 
-          {canViewContributions && contributionTrack && pk && (
-            <TabsContent value="contributions">
-              <TrackTab
-                key={pk}
-                orgId={pk}
-                track={contributionTrack}
-                timeZone={organization.timezone}
-                membersPrivate={organization.members_private ?? false}
-                access={featureAccess}
-              />
-            </TabsContent>
-          )}
+          {pk &&
+            standingTabs.map((t) => (
+              <TabsContent key={t.value} value={t.value}>
+                <TrackTab
+                  key={pk}
+                  orgId={pk}
+                  track={t.track}
+                  timeZone={organization.timezone}
+                  membersPrivate={organization.members_private ?? false}
+                  access={featureAccess}
+                />
+              </TabsContent>
+            ))}
 
           {canUsePromotion && pk && (
             <TabsContent value="promotion">
