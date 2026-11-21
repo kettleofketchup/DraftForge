@@ -86,7 +86,6 @@ class EventsCachedAsDepsTest(TestCase):
             "/api/events/": {"CustomUser", "League", "Tournament"},
             f"/api/events/{self.event.pk}/": {"League", "Tournament"},
             f"/api/events/{self.event.pk}/discord/": set(),
-            # is_subscribed is per user and merged after the cache lookup.
             "/api/events/repeaters/": {"CustomUser", "League"},
             f"/api/events/repeaters/{self.repeater.pk}/": {"CustomUser", "League"},
         }
