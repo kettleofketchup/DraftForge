@@ -1,1 +1,0 @@
-- Team draft now uses the shared domain-color tokens for picks and the pick clock. The current pick, current captain and "your turn" highlights stay green through a new `current-pick` token; "picked" and double-pick hints use the pick green; the clock running out shows in the error color, pauses in the warning color, and connection dots use the online/offline colors.
