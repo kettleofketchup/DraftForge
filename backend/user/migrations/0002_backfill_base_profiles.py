@@ -2,10 +2,7 @@ from django.db import migrations
 
 
 def copy_nickname_avatar_to_base_profile(apps, schema_editor):
-    """Backfill BaseUserProfile rows from CustomUser.nickname / .avatar.
-
-    Explicitly invalidates the affected models at the end.
-    """
+    """Backfill BaseUserProfile rows from CustomUser.nickname / .avatar."""
     CustomUser = apps.get_model("app", "CustomUser")
     BaseUserProfile = apps.get_model("user", "BaseUserProfile")
 
@@ -40,8 +37,7 @@ def reverse_copy(apps, schema_editor):
     """Reverse: copy BaseUserProfile nickname/avatar back onto CustomUser.
 
     Only used in tests / rollback. Production reverses by re-adding the
-    columns and re-running this reverse path; see migration 00XX in
-    backend/app/migrations/.
+    columns and re-running this reverse path; see app/0095.
     """
     CustomUser = apps.get_model("app", "CustomUser")
     BaseUserProfile = apps.get_model("user", "BaseUserProfile")

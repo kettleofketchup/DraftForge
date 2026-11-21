@@ -28,8 +28,7 @@ def backfill_game_profiles(apps, schema_editor):
     DotaUserProfile.objects.bulk_create(dota_to_create, ignore_conflicts=True)
     DeadlockUserProfile.objects.bulk_create(deadlock_to_create, ignore_conflicts=True)
 
-    # bulk_create bypasses post_save signals — invalidate explicitly (lesson:
-    # bulk_update/bulk_create invariant).
+    # bulk_create bypasses post_save signals, so invalidate explicitly.
     try:
         from cacheops import invalidate_model
 
