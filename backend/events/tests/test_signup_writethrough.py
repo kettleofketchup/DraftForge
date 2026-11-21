@@ -9,6 +9,7 @@ from django.test import TestCase
 from django.utils import timezone as tz
 
 from app.models import CustomUser, PositionsModel
+from common.game import GameType
 from events.constants import SignupStatus
 from events.eligibility import claim_friend_id
 from events.models import Event, EventSignup
@@ -16,6 +17,7 @@ from events.schemas import SignupInputPatch
 from events.services import _create_signup, apply_signup_input, process_rsvp
 from events.tests.base import EventTestCase
 from org.membership import resolve_or_create_org_user
+from org.mmr import org_mmr_for, set_org_mmr
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
 
@@ -104,9 +106,7 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
     """MMR isolation + transaction atomicity (#196a)."""
 
     def test_mmr_is_not_touched_on_signup_save(self):
-        # Set OrgUser.mmr to a known value
-        self.org_user.mmr = 4500
-        self.org_user.save(update_fields=["mmr"])
+        set_org_mmr(self.org_user, GameType.DOTA2, 4500, mark_verified=False)
 
         # Signup with a different "submitted" MMR on the profile
         profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=self.org_user)
@@ -114,9 +114,8 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
         profile.save()
 
         self._signup_with_positions(pos_1=True)
-        self.org_user.refresh_from_db()
-        # OrgUser MMR untouched — only approve_signup(mmr_override=...) writes it.
-        self.assertEqual(self.org_user.mmr, 4500)
+        # Org MMR untouched — only approve_signup(mmr_override=...) writes it.
+        self.assertEqual(org_mmr_for(self.org.pk, self.user.pk, GameType.DOTA2), 4500)
 
     def test_signup_input_rolls_back_with_the_signup(self):
         with patch(

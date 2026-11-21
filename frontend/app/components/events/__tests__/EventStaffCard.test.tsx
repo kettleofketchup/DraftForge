@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getPointValues } from '~/features/contributions/api';
 import type { OrgFeatureAccess } from '~/features/org-features';
+import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { setDisplayOrgQueryClient } from '~/lib/displayOrg';
 import type { EventType } from '../schemas';
 
@@ -80,16 +81,11 @@ const event = {
   user_can_manage_event_staff: true,
 } as unknown as EventType;
 
-const access: OrgFeatureAccess = {
-  settled: true,
+const access: OrgFeatureAccess = makeOrgFeatureAccess({
   viewerPk: 5,
-  canUsePromotion: false,
-  canManageTemplates: false,
-  canManagePromoters: false,
   canViewContributions: true,
   canViewContributors: true,
-  canManageContributions: false,
-};
+});
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({

@@ -12,6 +12,7 @@ import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { OrgFeatureAccess } from '~/features/org-features';
+import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { createI18nInstance } from '~/i18n/config';
 import {
   getCandidates,
@@ -37,16 +38,11 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
 });
 
-const access: OrgFeatureAccess = {
-  settled: true,
+const access: OrgFeatureAccess = makeOrgFeatureAccess({
   viewerPk: 5,
   canUsePromotion: true,
-  canManageTemplates: false,
-  canManagePromoters: false,
   canViewContributions: true,
-  canViewContributors: false,
-  canManageContributions: false,
-};
+});
 
 function makeEvent(id: number, name: string): PromoEvent {
   return {

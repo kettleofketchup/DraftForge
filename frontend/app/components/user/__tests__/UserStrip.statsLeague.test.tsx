@@ -60,7 +60,7 @@ const entryUser: UserEntry = {
   pk: 43,
   username: 'bob',
   discordNickname: 'Bob',
-  orgData: { 5: { id: 1, mmr: 3000, _fetchedAt: 0 } },
+  orgData: { 5: { id: 1, mmrs: { 1: 3000 }, mmr: 3000, _fetchedAt: 0 } },
   leagueData: { 7: { id: 2, mmr: 1700, _fetchedAt: 0 } },
   _fetchedAt: 0,
 };

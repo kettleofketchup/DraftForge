@@ -60,6 +60,20 @@ describe('useOrgSettingsAccess', () => {
     });
   });
 
+  it('shows the conduct section only with can_manage_conduct', () => {
+    expect(access(org({ owner_id: VIEWER, can_manage_conduct: true }))).toEqual(
+      {
+        settled: true,
+        canOpen: true,
+        visibleSectionIds: ['staff-placement', 'conduct'],
+      },
+    );
+    expect(
+      access(org({ owner_id: VIEWER, can_manage_conduct: false }))
+        .visibleSectionIds,
+    ).toEqual(['staff-placement']);
+  });
+
   it('allows an org admin', () => {
     expect(access(org({ admin_ids: [VIEWER] })).canOpen).toBe(true);
   });
