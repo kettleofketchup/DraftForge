@@ -1,0 +1,1 @@
+- The avatar ring in the player profile is no longer cut off at the top and left edges (#696).

@@ -199,8 +199,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
       size="lg"
       showClose={false}
     >
-      {/* User Card Section */}
-      <div className="space-y-4">
+      {/* p-1 keeps the avatar's ring-2 inside the scroll viewport's clip edge */}
+      <div className="space-y-4 p-1">
         {/* Header with avatar and name */}
         <div className="flex items-center gap-4">
           <UserAvatar user={displayPlayer} size="xl" border="primary" />
