@@ -55,7 +55,7 @@ export type EditUserInput = Omit<
   game_mmrs?: Record<string, number | null | undefined>;
 };
 
-// gameType: the context game (tournament/event); unset = every game.
+// gameType: the context game (tournament/event); unset = every game (org) or the default game (league).
 export type EditUserScope =
   | { kind: 'org'; organization: OrganizationType; gameType?: GameTypeValue }
   | {
