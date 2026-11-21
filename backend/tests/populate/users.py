@@ -8,6 +8,7 @@ from django.conf import settings
 
 from app.models import CustomUser, Organization
 
+from .avatars import apply_committed_avatars
 from .constants import DTX_ORG_NAME
 from .utils import create_user, ensure_org_user, generate_mock_discord_members
 
@@ -132,7 +133,6 @@ def populate_test_auth_users(force=False):
         nickname = user_data.nickname or username
         is_staff = user_data.is_staff
         is_superuser = user_data.is_superuser
-        mmr = user_data.mmr or random.randint(2000, 6000)
 
         # Check if user already exists with this PK
         user = CustomUser.objects.filter(pk=pk).first()
@@ -167,6 +167,8 @@ def populate_test_auth_users(force=False):
             user.save()
             print(f"  Created: {nickname or username} (pk={pk})")
 
+        apply_committed_avatars([user])
+
         # Create social auth for users with Discord ID (so they can log in)
         if discord_id and not is_claimable:
             UserSocialAuth.objects.update_or_create(
@@ -187,13 +189,13 @@ def populate_test_auth_users(force=False):
         return user
 
     # Create site-level users
-    admin = create_user_with_pk(ADMIN_USER)
-    staff = create_user_with_pk(STAFF_USER)
-    regular = create_user_with_pk(REGULAR_USER)
+    create_user_with_pk(ADMIN_USER)
+    create_user_with_pk(STAFF_USER)
+    create_user_with_pk(REGULAR_USER)
 
     # Create claim profile test users
-    claimable = create_user_with_pk(CLAIMABLE_USER, is_claimable=True)
-    claimer = create_user_with_pk(USER_CLAIMER)
+    create_user_with_pk(CLAIMABLE_USER, is_claimable=True)
+    create_user_with_pk(USER_CLAIMER)
 
     # Create org role users
     org_admin = create_user_with_pk(ORG_ADMIN_USER)

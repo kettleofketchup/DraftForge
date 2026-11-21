@@ -15,6 +15,11 @@ from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 
+import tests.populate.utils as populate_utils
+from app.models import CustomUser
+from tests.data.discord_avatars import DISCORD_AVATARS
+from tests.populate import populate_all
+
 
 def _is_internal(address):
     if not isinstance(address, tuple):
@@ -35,9 +40,6 @@ def _is_internal(address):
 )
 class PopulateAllOfflineTest(TestCase):
     def test_populate_all_makes_no_outbound_connection(self):
-        import tests.populate.utils as populate_utils
-        from tests.populate import populate_all
-
         attempts = []
         real_connect = socket.socket.connect
 
@@ -61,3 +63,9 @@ class PopulateAllOfflineTest(TestCase):
             "populate_all attempted outbound connections:\n"
             + "\n".join(f"{addr!r}\n{stack}" for addr, stack in attempts),
         )
+
+        avatars = {
+            u.discordId: u.avatar
+            for u in CustomUser.objects.filter(discordId__in=list(DISCORD_AVATARS))
+        }
+        self.assertEqual(avatars, DISCORD_AVATARS)
