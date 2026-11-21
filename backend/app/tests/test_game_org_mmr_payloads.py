@@ -13,7 +13,6 @@ from app.functions.tournament import _serialize_tournament
 from app.models import (
     CustomUser,
     League,
-    Organization,
     PositionsModel,
     ProfileClaimRequest,
     Team,
@@ -27,7 +26,7 @@ from draft.models import Draft
 from draft.services.team_state import build_draft_state
 from draft.tests.team_fixtures import mid_draft_fixture
 from org.mmr import game_mmrs_prefetch, set_org_mmr
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.serializers import OrgUserSerializer
 from tests.populate.utils import ensure_org_user
 
