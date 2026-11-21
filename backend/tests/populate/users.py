@@ -6,7 +6,8 @@ import random
 
 from django.conf import settings
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
+from org.models import Organization
 
 from .avatars import apply_committed_avatars
 from .constants import DTX_ORG_NAME
@@ -97,7 +98,7 @@ def populate_test_auth_users(force=False):
     """
     from social_django.models import UserSocialAuth
 
-    from app.models import League, Organization
+    from app.models import League
     from tests.data.users import (
         ADMIN_USER,
         AUTH_MATRIX_LEAGUE_ADMIN_USER,

@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from discordbot.models import (
     DiscordEvent,
     DiscordEventDM,
@@ -13,7 +13,7 @@ from discordbot.models import (
     DMType,
 )
 from events.models import Event, EventRepeater, RepeaterSubscription
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from tests.cache import flush_run_cache
 
 

@@ -9,8 +9,8 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Organization
-from org.models import OrgUser
+from app.models import CustomUser
+from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 from telemetry.logging import get_logger
 

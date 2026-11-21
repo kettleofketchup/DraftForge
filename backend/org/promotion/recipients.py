@@ -4,11 +4,11 @@ from typing import Final, TypedDict
 from django.db.models import Count, OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 
-from app.models import CustomUser, Organization, Tournament
+from app.models import CustomUser, Tournament
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from org.display_names import guild_nicknames
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_promotion import PromoSend
 from org.promotion.render import player_name
 from org.user_search import user_name_q

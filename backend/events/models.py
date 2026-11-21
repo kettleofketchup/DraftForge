@@ -437,7 +437,7 @@ class EventRepeater(
     DotaLobbyConfigMixin,
 ):
     organization = models.ForeignKey(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="event_repeaters",
     )
@@ -488,7 +488,7 @@ class Event(
     DotaLobbyConfigMixin,
 ):
     organization = models.ForeignKey(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="events",
     )
@@ -973,7 +973,7 @@ class SignupLedgerEntry(models.Model):
         related_name="ledger_entries",
     )
     organization = models.ForeignKey(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.DO_NOTHING,
         db_constraint=False,
         null=True,
@@ -1098,7 +1098,7 @@ class OrgEventDefaults(
     """
 
     organization = models.OneToOneField(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="event_defaults",
     )

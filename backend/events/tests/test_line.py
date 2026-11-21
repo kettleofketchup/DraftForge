@@ -11,7 +11,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from events import line
 from events.constants import Commitment, EventState, RsvpClass, SignupStatus
 from events.exceptions import ImmutableFieldError
@@ -27,6 +27,7 @@ from events.line import (
 from events.models import Event, EventSignup
 from events.schemas import SignupSnapshot
 from events.tests.base import EventTestCase
+from org.models import Organization
 
 FIRST_COLUMNS = {"first_signed_up_at", "first_commitment", "first_rsvp_class"}
 

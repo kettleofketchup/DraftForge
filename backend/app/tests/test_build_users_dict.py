@@ -1,8 +1,9 @@
 from django.test import TransactionTestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, League, Tournament
 from app.serializers import _build_users_dict, _serialize_users_with_mmr
+from org.models import Organization
 
 # Hardcoded pre-change ground-truth key sets (from reading OrgUserSerializer /
 # TournamentUserSerializer). The shape-parity assertions below ALSO diff against

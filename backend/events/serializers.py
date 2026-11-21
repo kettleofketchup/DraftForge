@@ -8,9 +8,8 @@ from rest_framework import serializers
 
 from app.auth import InternalServiceUser
 from app.display_names import user_display_name
-from app.models import CustomUser, GameType, League, Organization
-from app.permissions_org import (
-    can_view_org_members,
+from app.models import CustomUser, GameType, League
+from app.permissions_tournament import (
     check_lobby_steam_league_id,
     has_event_staff_access,
     request_user,
@@ -49,8 +48,9 @@ from events.signup_schedule import (
 from lobby.passwords import MAX_LENGTH as LOBBY_PASSWORD_MAX_LENGTH
 from lobby.passwords import PasswordMode, validate_password
 from org.display_names import guild_nicknames, org_nicknames_public
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
+from org.permissions import can_view_org_members
 
 # The lobby password is write-only on every events serializer: event and
 # series payloads are cached, public and handed to Celery. Staff and

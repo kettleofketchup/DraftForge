@@ -2,7 +2,7 @@
 
 `backend/app` started as the only Django app and still holds most of the backend. We are splitting it into domain apps one slice per PR, models included. Each PR moves one slice, and `app/` only ever gets smaller.
 
-The first slice moved the hero draft family into the new `draft` app, and the second moved the team draft family into the same app. This page is the recipe both followed, written so later slices can repeat it step by step.
+The first slice moved the hero draft family into the new `draft` app, and the second moved the team draft family into the same app. The third moved `Organization`, `OrgLog` and the org permissions into the existing `org` app. This page is the recipe they followed, written so later slices can repeat it step by step.
 
 Planned slices, in order:
 
@@ -10,11 +10,15 @@ Planned slices, in order:
 |-------|-----------|------------|
 | Hero draft (done) | `app` | `draft` |
 | Team draft (done: `Draft`, `DraftRound`, `DraftEvent`, `DraftOptions`, teamdraft/shuffle/draft_picks, `draft_tick`, `teamdraft_tick`) | `app` | `draft` |
-| Leagues, ratings, matches | `app` | per domain |
-| Org and league logs | `app` | per domain |
+| Organization (done: `Organization`, `OrgLog`, org permissions) | `app` | `org` |
+| League (next) | `app` | `league` |
+| Ratings, matches | `app` | per domain |
+| League logs | `app` | per domain |
 | Bracket and tournament | `bracket` | `tournament` |
 
 `CustomUser` stays in `app` (it is `AUTH_USER_MODEL`).
+
+League goes to `league` next. `app/models.py` already points at `org` through three lazy `"org.Organization"` FK strings: `CustomUser.default_organization`, `League.organization` and `ProfileClaimRequest.organization`. Lazy strings are not import edges, so they are not in `ALLOWED_BACK_EDGES`; the League slice moves `League.organization` with the model.
 
 ## Rules for every slice
 
@@ -97,6 +101,13 @@ Not every source app is `app`:
 - `bracket` is its own app (label `bracket`, `bracket.apps.TournamentConfig`, tables `bracket_*`). The bracket/tournament slice uses `source_app="bracket"`, and its tables keep the `bracket_` prefix.
 - `backend/tournament/` holds only a stray 0-byte `models.py` and no `__init__.py`. The tournament slice must create the app properly or delete that file first.
 
+To extend an existing app (as the organization slice did with `org`):
+
+- Check it is already in `MODEL_APPS`, the `just` app lists and the labeler. If not, add it as for a new app.
+- If signal receivers move, add a `ready()` to its `AppConfig` that imports `<app>.signals` (`org/apps.py`, `draft/apps.py`).
+- Fit the moved code into the app's existing module layout. `org` keeps flat `models.py` plus `models_*.py` files, so `Organization` and `OrgLog` went into `org/models.py`, not a new `models/` package.
+- Check that the app's model files are covered by the test-db hash globs (see the last lesson below). `org`'s flat `models_*.py` files were not, until the organization slice added `backend/*/models_*.py`.
+
 ### 3. Land prep commits first
 
 Behaviour-neutral prep goes in separate commits before anything moves: decoupling edges from shared code into the slice, deleting dead code, adding `dispatch_uid` to receivers that will move, and infra list fixes. That keeps the move commits mechanical and easy to review.
@@ -177,6 +188,8 @@ Add a `MovedSlice` to `backend/tests/test_app_boundaries.py` and append it to `M
 - `cached_labels`: the moved models that have a `CACHEOPS` profile. The guard checks that `"<new_app>.<label>"` is present.
 
 Do not touch `GuardSelfTests` to add a slice. They run against a synthetic fixture slice and back-edge map, not the live ones.
+
+The guard also flags `get_model("<source_app>", "<Moved>")` outside migrations and migration tests, and any top-level class or function in the source app named after a moved name. A name that genuinely collides goes in `ALLOWED_NAME_COLLISIONS` with a reason (for example the worker HTTP helper `create_herodraft_for_game` in `app/internal_client`).
 
 Update `ALLOWED_BACK_EDGES[<new_app>]` with each production file in the source app that still imports from the new app. Each entry is a `BackEdge(names, reason, type_only)`. Test modules are exempt. The rules:
 
@@ -270,6 +283,18 @@ python manage.py shell -c "from django.contrib.contenttypes.models import Conten
 
 Here the model name `draft` is the same as the app label. The `model__in` filter handles that correctly; it is not a typo.
 
+For the organization slice, the clean rollback is:
+
+```bash
+python manage.py migrate app 0110
+python manage.py migrate events 0034
+python manage.py migrate opsnotices 0002
+python manage.py migrate org 0013
+python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='org', model__in=['organization', 'orglog']).delete()"
+```
+
+`migrate app 0110` reverses the relabel first. Never delete `app_label='org'` alone: `org` holds many other models (`OrgUser`, `OrgFeature`, `OrgSettings` and more), and the delete would cascade through all their permissions and grants. If the prep PR (3a) shipped and the model-move PR (3b) is rolled back, 3a stays: it has no migrations.
+
 !!! danger "Never delete by `app_label` alone"
     `ContentType.objects.filter(app_label='<new_app>').delete()` also hits every other model in the destination app, including slices moved earlier. The delete cascades through `auth_permission`, `auth_user_user_permissions` and `auth_group_permissions`, so their real grants are wiped, and `django_admin_log.content_type` is set to NULL for their log entries. Always filter on the moved model names.
 
@@ -287,4 +312,18 @@ Here the model name `draft` is the same as the app label. The `model__in` filter
 - **Rename source-app modules whose name would attract the moved code back.** `app/draft_state.py` became `app/tournament_state.py` once the draft functions left it.
 - **Test-only cross-app edges are stated, not claimed gone.** `draft/tests` imports nothing from `app.tests`. `app/tests` imports `draft.tests.team_fixtures` and `draft.tests.ws_helpers`, the same direction as the production back-edges.
 - **Team-domain helpers stay with Team** even when draft code is their only caller. `app/services/team_references.py` stays in `app`, and `draft/services/team_reset.py` imports it forward. `app/services/team_management.py` also stays; its imports of the team draft models and `emit_event` are a recorded back-edge.
-- The test-db image hash covers `backend/*/models/*.py` and every migration, so any change to `draft/models/` busts the cache and CI runs a fresh populate.
+- The test-db image hash covers `models.py`, `backend/*/models/*.py`, `backend/*/models_*.py` and every migration, so any change to `draft/models/` busts the cache and CI runs a fresh populate.
+
+## What the organization slice learned
+
+- **A mixed helper module splits.** The domain part moves, and the remainder is renamed after what will remain once the next slice leaves: `app/permissions_org.py` became `org/permissions.py` plus `app/permissions_tournament.py`.
+- **Serializers used at class-definition time in the source app stay until their consumer moves**, even when their own domain has left. `OrganizationsSerializer` stays in `app.serializers` because `LeagueSerializer` and `LeaguesSerializer` declare it as a field.
+- **Shared pipelines with one front door per domain move whole when the last foreign door leaves.** `app/views/csv_import.py` serves both the org and the tournament import, so it stays in `app` until the tournament slice.
+- **Check whether the moved models are registered in admin before promising admin URL changes.** Neither `Organization` nor `OrgLog` has an admin, so no admin URL changed.
+- **Inbound FK retargets inside the target app go in the target app's create migration, after the `CreateModel`s.** `org/0014` creates `Organization` and `OrgLog` and then retargets the nine `org` FKs; `events/0035` and `opsnotices/0003` depend on it, and `app/0111` depends on all three.
+- **Expect a long first back-edge list when the target app already exists.** The guard counts pre-existing source-to-target imports (`app` importing `org.models.OrgUser`, `org.membership` and so on) as back-edges, so the first `ALLOWED_BACK_EDGES["org"]` list is long by construction and shrinks as later slices leave `app`.
+- **Split slices into an existing app as prep plus model move.** The prep PR adds the slice's guard entry with the code-move `moved` names, `retired_modules`, empty `model_labels`/`cached_labels` and the full pre-existing back-edge list. The model-move PR adds the model labels, cache labels and model `moved` pairs. That keeps the prep PR protected while it sits on `main`.
+- **An existing target app's migrations are not exempt from the ancestry check; only the source app's are.** `org` already had migrations naming `app.organization`. A later `org` migration cut from pre-move `main` that still points at `app.organization` must be an ancestor of `app/0111`, or `migrate` fails with an unresolved lazy reference. `org/0013_conduct` landed on `main` mid-slice with two FKs to `app.organization`; `org/0014` depends on it, which puts it before the move.
+- **A source-app migration that alters a moved model lands in the move's `CreateModel`.** `app/0110_orglog_conduct_actions` added three `OrgLog.action` choices on `main` while the slice was open. The move migrations follow it (`org/0014` and `app/0111` depend on it), and `org/0014`'s `CreateModel(OrgLog)` carries the same choices, so `makemigrations --check` stays clean.
+- **When a source module is renamed, carry every earlier slice's `moved` entries for it over to the new path.** The guard's redefinition and patch-string checks are keyed on the module path, so `TEAM_DRAFT.moved` lists `CanEditDraft` and `CanEditDraftRound` under both `app.permissions_org` and `app.permissions_tournament`.
+- **Lazy FK strings from the source app to the new app are not import edges.** `"org.Organization"` in `app/models.py` is not in `ALLOWED_BACK_EDGES`. List such strings in the slice's spec and in the slice table note above.

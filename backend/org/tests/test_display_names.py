@@ -1,8 +1,8 @@
 from django.test import TestCase
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
 from org.display_names import guild_nicknames, org_display_name, org_nicknames_public
-from org.models import OrgUser
+from org.models import Organization, OrgUser
 
 
 class GuildNicknamesTest(TestCase):

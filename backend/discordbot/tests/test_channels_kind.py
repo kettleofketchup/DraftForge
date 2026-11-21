@@ -5,7 +5,8 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
+from org.models import Organization
 
 GUILD = "424242"
 URL_TEMPLATE = "/api/discord/organizations/{pk}/channels/"

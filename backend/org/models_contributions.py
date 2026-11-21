@@ -8,7 +8,7 @@ class ContributionPointValue(models.Model):
     """Per-org override of a contribution kind's default points."""
 
     organization = models.ForeignKey(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="point_values",
     )
@@ -45,7 +45,7 @@ class ContributionEntry(models.Model):
         related_name="contribution_entries",
     )
     organization = models.ForeignKey(
-        "app.Organization",
+        "org.Organization",
         on_delete=models.CASCADE,
         related_name="contribution_entries",
     )

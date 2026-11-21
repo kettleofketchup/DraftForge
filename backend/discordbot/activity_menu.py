@@ -9,7 +9,7 @@ from django.db.models import Prefetch, Q
 from django.utils import timezone
 
 from app.models import CustomUser, Team, Tournament
-from app.permissions_org import can_edit_tournament
+from app.permissions_tournament import can_edit_tournament
 from discordbot.activity_auth import (
     ActivityIdentity,
     Pin,

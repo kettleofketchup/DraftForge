@@ -7,8 +7,8 @@ from django.db.models import Count, QuerySet, Sum
 from django.utils import timezone
 
 from app.display_names import first_name
-from app.models import CustomUser, Organization
-from org.models import ContributionEntry, OrgUser
+from app.models import CustomUser
+from org.models import ContributionEntry, Organization, OrgUser
 from org.standing import ledger
 from org.standing.periods import Period, month_period, resolve_org_tz
 from user.querysets import with_user_profiles

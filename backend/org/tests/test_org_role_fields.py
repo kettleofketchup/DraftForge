@@ -8,7 +8,8 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser
+from org.models import Organization
 
 
 class OrganizationRoleFieldsTest(TestCase):
