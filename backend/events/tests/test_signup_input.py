@@ -423,8 +423,6 @@ class SignupViewFriendIdTests(EventTestCase):
 
 
 class FriendIdGameProfileTests(EventTestCase):
-    """The Friend ID goes to the profile of the event's game."""
-
     def _org_user(self, user: CustomUser) -> OrgUser:
         return OrgUser.objects.get(user=user, organization=self.org)
 
