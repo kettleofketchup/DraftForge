@@ -2,7 +2,8 @@ from unittest import mock
 
 from django.test import TestCase
 
-from app.models import Draft, League, Organization, Team, TeamDraftState, Tournament
+from app.models import League, Organization, Team, Tournament
+from draft.models import Draft, TeamDraftState
 from league.models import LeagueUser
 from steam.functions.league_summary import compute_league_summary
 from steam.models import LeaguePlayerStats, Match, PlayerMatchStats

@@ -26,14 +26,13 @@ from datetime import date
 
 from app.models import (
     CustomUser,
-    Draft,
-    DraftOptions,
     League,
     Organization,
     PositionsModel,
     Team,
     Tournament,
 )
+from draft.models import Draft, DraftOptions
 from tests.data.leagues import SHUFFLE_TIE_LEAGUE
 from tests.data.organizations import SHUFFLE_TIE_ORG
 from tests.data.tournaments import SHUFFLE_TIE_TOURNAMENT

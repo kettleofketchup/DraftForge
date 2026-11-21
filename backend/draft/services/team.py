@@ -1,21 +1,13 @@
-"""Team-draft timer lifecycle helpers (spec §2)."""
+"""Team-draft timer lifecycle helpers."""
 
 from datetime import datetime, timedelta
 
 from django.db import transaction
 
-from app.broadcast import broadcast_event_after_commit
 from app.cache_utils import invalidate_after_commit
-from app.models import (
-    CustomUser,
-    Draft,
-    DraftEvent,
-    DraftOptions,
-    DraftRound,
-    Team,
-    TeamDraftState,
-    Tournament,
-)
+from app.models import CustomUser, Team, Tournament
+from draft.models import Draft, DraftEvent, DraftOptions, DraftRound, TeamDraftState
+from draft.services.team_broadcast import broadcast_event_after_commit
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

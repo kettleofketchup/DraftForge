@@ -8,16 +8,18 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.functions import shuffle_draft, teamdraft
-from app.functions.teamdraft_timeout import (
+from app.models import Team
+from draft.models import Draft, DraftRound, TeamDraftState
+from draft.services import shuffle as shuffle_draft
+from draft.services import team as teamdraft
+from draft.services.team_timeout import (
     TIMEOUT_ACTIONS,
     find_swap_target,
     recompute_pick_phase,
     skip_turn,
 )
-from app.models import Draft, DraftRound, Team, TeamDraftState
-from app.tasks import teamdraft_tick
-from app.tests.teamdraft_fixtures import TimedDraftFixture
+from draft.tasks import team_tick as teamdraft_tick
+from draft.tests.team_fixtures import TimedDraftFixture
 
 CAPTAIN_MMRS = [
     1000,
@@ -38,7 +40,7 @@ class ReassignRoundCaptainTests(TestCase):
         rnd.tie_roll_data = {"x": 1}
         rnd.save()
         with (
-            patch("app.broadcast.broadcast_event") as mock_bc,
+            patch("draft.services.team_broadcast.broadcast_event") as mock_bc,
             self.captureOnCommitCallbacks(execute=True),
         ):
             tie = shuffle_draft.reassign_round_captain(
@@ -498,9 +500,10 @@ class PickTimeoutOrderingTests(TransactionTestCase):
     def test_stale_pre_read_writes_nothing(self):
         stale = (self.rnd.pk, self.rnd.started_at - timedelta(seconds=1))
         with patch(
-            "app.tasks.teamdraft_tick.read_timeout_candidate", return_value=stale
-        ):
+            "draft.tasks.team_tick.read_timeout_candidate", return_value=stale
+        ) as candidate:
             self.assertIsNone(self.check())
+        candidate.assert_called()
         self.rnd.refresh_from_db()
         self.assertIsNone(self.rnd.timed_out_at)
         self.assertFalse(self.fx.events("pick_timed_out").exists())
@@ -534,7 +537,7 @@ class ShufflePickTimeoutOrderingTests(TransactionTestCase):
             return False
 
         with patch(
-            "app.functions.draft_picks.can_edit_tournament", side_effect=skip_then_deny
+            "draft.views.team_picks.can_edit_tournament", side_effect=skip_then_deny
         ):
             r = self.fx.pick(self.rnd, captain_a)
         self.assertEqual((r.status_code, r.data["code"]), (409, "not_active_round"))

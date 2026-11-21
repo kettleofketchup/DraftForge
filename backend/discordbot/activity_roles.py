@@ -2,9 +2,9 @@ from typing import Literal
 
 from django.db.models import QuerySet
 
-from app.models import CustomUser, Draft, Team, Tournament
+from app.models import CustomUser, Team, Tournament
 from app.permissions_org import can_edit_tournament
-from draft.models import HeroDraft
+from draft.models import Draft, HeroDraft
 
 Role = Literal["captain", "player", "staff", "spectator"]
 DraftKind = Literal["hero", "team"]

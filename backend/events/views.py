@@ -43,7 +43,7 @@ from app.permissions_org import (
     has_org_admin_access,
     has_org_staff_access,
 )
-from draft.models import HeroDraft
+from draft.models import Draft, HeroDraft
 from events.admission import ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
@@ -1881,8 +1881,6 @@ def fire_event_task(request: Request, event_id: int, task_name: str) -> Response
             return Response(
                 {"error": "No tournament linked"}, status=status.HTTP_400_BAD_REQUEST
             )
-        from app.models import Draft
-
         draft = Draft.objects.filter(tournament=event.tournament).first()
         if not draft:
             return Response(

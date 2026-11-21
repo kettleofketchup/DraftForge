@@ -1,8 +1,6 @@
 """Tests for Team Draft WebSocket consumer (DraftConsumer)."""
 
-import json
 from datetime import date
-from unittest.mock import patch
 
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
@@ -12,9 +10,10 @@ from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 from django.urls import re_path
 
-from app.consumers import DraftConsumer
-from app.models import Draft, DraftEvent, DraftRound, Team, Tournament
-from app.tests.ws_helpers import (
+from app.models import Team, Tournament
+from draft.consumers.team import DraftConsumer
+from draft.models import Draft, DraftEvent, DraftRound
+from draft.tests.ws_helpers import (
     assert_no_frame_except_ping,
     next_non_ping_output,
     read_until_type,

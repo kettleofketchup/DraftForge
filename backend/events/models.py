@@ -20,8 +20,8 @@ from app.models import (
     DraftStyles,
     GameMode,
     GameType,
-    TimeoutAction,
 )
+from draft.models import TimeoutAction
 from events import line
 from events.constants import (  # noqa: F401 — re-exported for backward compat
     EVENT_STATE_TRANSITIONS,

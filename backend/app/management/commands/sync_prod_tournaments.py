@@ -6,15 +6,8 @@ import requests
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
-from app.models import (
-    CustomUser,
-    Draft,
-    DraftOptions,
-    DraftRound,
-    Game,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, Game, Team, Tournament
+from draft.models import Draft, DraftOptions, DraftRound
 
 logger = logging.getLogger(__name__)
 

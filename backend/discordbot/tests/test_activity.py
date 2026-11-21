@@ -26,7 +26,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 from structlog.contextvars import clear_contextvars, get_contextvars
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Draft, DraftRound, Game, Team, Tournament
+from app.models import CustomUser, Game, Team, Tournament
 from discordbot.activity import activity_session, launch_message, resolve_instance
 from discordbot.activity_auth import (
     HERO_SUFFIXES,
@@ -52,7 +52,7 @@ from discordbot.activity_menu import (
 )
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 from discordbot.tests.activity_helpers import ClearIntentsMixin
-from draft.models import DraftTeam, HeroDraft, HeroDraftState
+from draft.models import Draft, DraftRound, DraftTeam, HeroDraft, HeroDraftState
 
 
 @override_settings(DISCORD_ACTIVITY_ENABLED=True)

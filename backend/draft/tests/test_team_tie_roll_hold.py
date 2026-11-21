@@ -8,12 +8,12 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from app.functions.shuffle_draft import TIE_ROLL_HOLD_MS
-from app.functions.teamdraft_timeout import skip_turn
-from app.functions.teamdraft_views import teamdraft_pause, teamdraft_resume
-from app.models import DraftRound
-from app.tasks import teamdraft_tick
-from app.tests.teamdraft_fixtures import TimedDraftFixture
+from draft.models import DraftRound
+from draft.services.shuffle import TIE_ROLL_HOLD_MS
+from draft.services.team_timeout import skip_turn
+from draft.tasks import team_tick as teamdraft_tick
+from draft.tests.team_fixtures import TimedDraftFixture
+from draft.views.team import teamdraft_pause, teamdraft_resume
 
 HOLD = timedelta(milliseconds=TIE_ROLL_HOLD_MS)
 SLACK = timedelta(seconds=2)
@@ -37,7 +37,7 @@ class NoTickThreadTestCase(TestCase):
 
 
 def _started(fx: TimedDraftFixture) -> TimedDraftFixture:
-    with patch("app.functions.shuffle_draft.roll_until_winner") as roll:
+    with patch("draft.services.shuffle.roll_until_winner") as roll:
         roll.side_effect = lambda teams: (
             teams[0],
             [[{"team_id": t.id, "roll": 6 - i} for i, t in enumerate(teams)]],
@@ -161,7 +161,7 @@ class TieRollHoldPauseTests(NoTickThreadTestCase):
     def _call(self, view, now: datetime) -> Response:
         request = self.factory.post(f"/api/draft/{self.fx.draft.pk}/x/")
         force_authenticate(request, user=self.fx.staff)
-        with patch("app.functions.teamdraft_views.timezone.now", return_value=now):
+        with patch("draft.views.team.timezone.now", return_value=now):
             with self.captureOnCommitCallbacks(execute=True):
                 return view(request, self.fx.draft.pk)
 
