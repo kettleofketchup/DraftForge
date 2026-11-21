@@ -51,7 +51,7 @@ const entry: UserEntry = {
   pk: 10,
   username: 'incomplete',
   steam_account_id: null,
-  orgData: { 8: { id: 77, mmr: 0, _fetchedAt: 0 } },
+  orgData: { 8: { id: 77, mmrs: { 1: 0 }, _fetchedAt: 0 } },
   leagueData: { 8: { id: 77, mmr: 0, _fetchedAt: 0 } },
   _fetchedAt: 0,
 };
@@ -220,7 +220,7 @@ describe('hasErrors edit user carries the scope-gating link (finding 4)', () => 
       name: 'orgData link',
       source: {
         ...entry,
-        orgData: { 8: { id: 171, mmr: 0, _fetchedAt: 0 } },
+        orgData: { 8: { id: 171, mmrs: { 1: 0 }, _fetchedAt: 0 } },
         leagueData: {},
       },
       store: 'org',

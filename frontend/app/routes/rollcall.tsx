@@ -51,6 +51,7 @@ import {
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
 import { canRestoreSignup } from '~/components/events/signupPartitions';
+import { toGameType } from '~/components/game/constants';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -86,7 +87,11 @@ export default function RollCallPage() {
     signups,
     pendingIds,
   } = useOptimisticEventSignups(id, event?.state);
-  useEventSignupUsers(serverSignups, event?.organization ?? null);
+  useEventSignupUsers(
+    serverSignups,
+    event?.organization ?? null,
+    toGameType(event?.game_type),
+  );
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
 
@@ -480,6 +485,7 @@ export default function RollCallPage() {
                     user={stripUser}
                     showBorder={false}
                     organizationId={event?.organization ?? undefined}
+                    gameType={toGameType(event?.game_type)}
                     className={brandDialogPanel}
                     data-testid="rollcall-confirm-user-strip"
                   />
@@ -529,6 +535,7 @@ export default function RollCallPage() {
                     user={stripUser}
                     showBorder={false}
                     organizationId={event?.organization ?? undefined}
+                    gameType={toGameType(event?.game_type)}
                     className={brandDialogPanel}
                     data-testid="rollcall-reject-user-strip"
                   />
@@ -577,6 +584,7 @@ export default function RollCallPage() {
                     user={stripUser}
                     showBorder={false}
                     organizationId={event?.organization ?? undefined}
+                    gameType={toGameType(event?.game_type)}
                     className={brandDialogPanel}
                     data-testid="rollcall-cancel-user-strip"
                   />

@@ -1,5 +1,6 @@
 import { UserPlus } from 'lucide-react';
 import React, { memo, useEffect } from 'react';
+import { toGameType } from '~/components/game/constants';
 import { Badge } from '~/components/ui/badge';
 import {
   DotabuffButton,
@@ -23,6 +24,7 @@ import { getLogger } from '~/lib/logger';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
+import { selectOrgMmr } from '~/store/selectOrgMmr';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import type { PositionsType } from '~/store/userCacheTypes';
 import { isUserEntry } from '~/store/userCacheTypes';
@@ -94,14 +96,13 @@ export const UserCard: React.FC<Props> = memo(
         : undefined,
     );
     const orgSource = isUserEntry(user) ? user : cachedEntry;
-    const orgEntry = organizationId
-      ? orgSource?.orgData[organizationId]
-      : undefined;
-    const mmr = isUserEntry(user)
-      ? organizationId
-        ? orgEntry?.mmr
-        : undefined
-      : (orgEntry?.mmr ?? user.mmr);
+    const mmrGame = useTournamentMmrGame(organizationId);
+    const cachedOrgMmr = selectOrgMmr(
+      orgSource,
+      organizationId,
+      toGameType(mmrGame),
+    );
+    const mmr = isUserEntry(user) ? cachedOrgMmr : (cachedOrgMmr ?? user.mmr);
     // Same resolution as UserStrip: scoped map for cache entries, flat field
     // for raw payloads.
     const leagueMmr = isUserEntry(user)
@@ -118,7 +119,6 @@ export const UserCard: React.FC<Props> = memo(
     const linkPk =
       resolveOrgUserLink(orgSource ?? user, { organizationId, leagueId }) ??
       resolveOrgUserLink(user, { organizationId, leagueId });
-    const mmrGame = useTournamentMmrGame(organizationId);
     const editScope = React.useMemo<EditUserScope>(
       () =>
         resolveEditScope(
@@ -148,12 +148,12 @@ export const UserCard: React.FC<Props> = memo(
           linkPk != null
             ? {
                 ...user,
-                mmr: orgEntry ? orgEntry.mmr : user.mmr,
+                mmr: cachedOrgMmr ?? user.mmr,
                 orgUserPk: linkPk,
               }
             : user,
         ),
-      [user, linkPk, orgEntry?.mmr],
+      [user, linkPk, cachedOrgMmr],
     );
 
     const handleViewProfile = () => {

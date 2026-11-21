@@ -4,6 +4,7 @@
  * API functions for organization-related operations.
  */
 
+import type { GameTypeValue } from '~/components/game/constants';
 import type {
   OrganizationType,
   OrganizationsType,
@@ -146,7 +147,10 @@ export async function getOrganizationUsers(orgId: number): Promise<UserType[]> {
 export async function updateOrgUser(
   organizationId: number,
   orgUserId: number,
-  data: Partial<UserType> & { mmr_game_type?: number },
+  data: Omit<Partial<UserType>, 'game_mmrs'> & {
+    mmr_game_type?: number;
+    game_mmrs?: Partial<Record<GameTypeValue, number | null>>;
+  },
   gameType?: number,
 ): Promise<UserType> {
   const response = await axios.patch<UserType>(
@@ -178,6 +182,7 @@ export interface ProfileClaimRequest {
   target_nickname: string | null;
   target_steamid: number | null;
   target_mmr: number | null;
+  target_game_mmrs?: Record<string, number> | null;
   organization: number;
   organization_name: string;
   status: 'pending' | 'approved' | 'rejected';
@@ -299,6 +304,7 @@ export type MMRTarget = 'organization' | 'league';
 export interface CSVImportOptions {
   update_mmr?: boolean;
   mmr_target?: MMRTarget;
+  game_type?: GameTypeValue;
 }
 
 export interface CSVImportResultRow {

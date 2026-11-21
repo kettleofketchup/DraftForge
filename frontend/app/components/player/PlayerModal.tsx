@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { claimUserProfile, fetchUser } from '~/components/api/api';
+import { toGameType } from '~/components/game/constants';
 import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
 import { Badge } from '~/components/ui/badge';
 import {
@@ -122,15 +123,19 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     cachedUserEntry && isUserEntry(cachedUserEntry) && orgLookupPk != null
       ? cachedUserEntry.orgData[orgLookupPk]
       : undefined;
+  const orgEntryGame = toGameType(
+    editScope.kind === 'global' ? undefined : editScope.gameType,
+  );
+  const orgEntryMmr = orgEntry?.mmrs[orgEntryGame];
 
   const editUser = React.useMemo(() => {
     const base = (fullUserData || player) as UserType;
     const merged =
       orgEntry !== undefined
-        ? { ...base, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
+        ? { ...base, mmr: orgEntryMmr, orgUserPk: orgEntry.id }
         : base;
     return new User(merged);
-  }, [fullUserData, player, orgEntry?.id, orgEntry?.mmr]);
+  }, [fullUserData, player, orgEntry?.id, orgEntryMmr]);
 
   // Can claim if: target HAS steam_account_id (manually added profile with steam identifier),
   // target has NO discordId (can't log in), and current user HAS discordId (can log in).

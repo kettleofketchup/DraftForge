@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
+import { GAME_TYPES, toGameType } from '~/components/game/constants';
+import { parseGameMmrs, type GameMmrs } from '~/components/game/gameMmrs';
 import type { CoreUserType } from '~/components/user/schemas';
 import { CoreUserSchema } from '~/components/user/schemas';
 import type { UserType } from '~/components/user/types';
@@ -59,6 +61,16 @@ function hasCoreChanged(existing: UserEntry, incoming: UserEntry): boolean {
   );
 }
 
+function sameMmrs(a: GameMmrs | undefined, b: GameMmrs | undefined): boolean {
+  return GAME_TYPES.every((g) => a?.[g] === b?.[g]);
+}
+
+function incomingMmrs(raw: UserType): GameMmrs | null {
+  if (raw.game_mmrs != null) return parseGameMmrs(raw.game_mmrs);
+  if (raw.mmr != null) return { [toGameType(raw.mmr_game_type)]: raw.mmr };
+  return null;
+}
+
 function hasScopedChanged(
   existing: UserEntry,
   incoming: UserEntry,
@@ -69,7 +81,7 @@ function hasScopedChanged(
   if (context?.orgId) {
     const a = existing.orgData[context.orgId];
     const b = incoming.orgData[context.orgId];
-    if (a?.mmr !== b?.mmr || a?.id !== b?.id) return true;
+    if (a?.id !== b?.id || !sameMmrs(a?.mmrs, b?.mmrs)) return true;
     if (
       existing.orgNicknames?.[context.orgId] !==
       incoming.orgNicknames?.[context.orgId]
@@ -109,12 +121,14 @@ function toUserEntry(
   let leagueData = existing?.leagueData ?? {};
   let orgNicknames = existing?.orgNicknames ?? {};
 
-  if (context?.orgId && raw.mmr != null && raw.orgUserPk != null) {
+  const mmrs = context?.orgId ? incomingMmrs(raw) : null;
+  if (context?.orgId && mmrs && raw.orgUserPk != null) {
+    const prev = orgData[context.orgId];
     orgData = {
       ...orgData,
       [context.orgId]: {
         id: raw.orgUserPk,
-        mmr: raw.mmr,
+        mmrs: prev?.id === raw.orgUserPk ? { ...prev.mmrs, ...mmrs } : mmrs,
         _fetchedAt: now,
       },
     };

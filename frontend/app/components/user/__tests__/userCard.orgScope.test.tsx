@@ -158,7 +158,7 @@ describe('UserCard with a stale store org (finding 3)', () => {
     pk: 43,
     username: 'stale',
     nickname: 'Stale',
-    orgData: { [STALE_ORG_PK]: { id: 88, mmr: 3000, _fetchedAt: 0 } },
+    orgData: { [STALE_ORG_PK]: { id: 88, mmrs: { 1: 3000 }, _fetchedAt: 0 } },
     leagueData: {},
     _fetchedAt: 0,
   } as UserEntry;
@@ -297,7 +297,7 @@ describe('UserCard edit for cache entries (finding 4)', () => {
       pk: 50,
       username: 'org',
       nickname: 'Org',
-      orgData: { [ORG_PK]: { id: 60, mmr: 3000, _fetchedAt: 0 } },
+      orgData: { [ORG_PK]: { id: 60, mmrs: { 1: 3000 }, _fetchedAt: 0 } },
       leagueData: {},
       _fetchedAt: 0,
     });
@@ -334,7 +334,7 @@ describe('UserCard edit for cache entries (finding 4)', () => {
       pk: 51,
       username: 'lg',
       nickname: 'Lg',
-      orgData: { [ORG_PK]: { id: 61, mmr: 2000, _fetchedAt: 0 } },
+      orgData: { [ORG_PK]: { id: 61, mmrs: { 1: 2000 }, _fetchedAt: 0 } },
       leagueData: {},
       _fetchedAt: 0,
     });
@@ -439,7 +439,7 @@ describe('UserCard edit user carries the scope-gating link', () => {
         pk: 71,
         username: 'org',
         nickname: 'Org',
-        orgData: { 8: { id: 171, mmr: 1000, _fetchedAt: 0 } },
+        orgData: { 8: { id: 171, mmrs: { 1: 1000 }, _fetchedAt: 0 } },
         leagueData: {},
         _fetchedAt: 0,
       },
@@ -545,7 +545,7 @@ describe('UserCard edit gate follows a same-pk org refresh (MA-5)', () => {
       pk: 80,
       username: 'staffed',
       nickname: 'Staffed',
-      orgData: { [ORG_PK]: { id: 180, mmr: 1000, _fetchedAt: 0 } },
+      orgData: { [ORG_PK]: { id: 180, mmrs: { 1: 1000 }, _fetchedAt: 0 } },
       leagueData: {},
       _fetchedAt: 0,
     });

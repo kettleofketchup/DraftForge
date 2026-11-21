@@ -307,6 +307,7 @@ export const eventSignupSchema = z.object({
         .nullable(),
       steam_account_id: z.number().nullable(),
       avatarUrl: z.string().nullable(),
+      mmr_game_type: z.number().nullable().optional(),
     })
     .nullable(),
   dota_profile: z
@@ -327,6 +328,12 @@ export const eventSignupSchema = z.object({
     })
     .nullable(),
   org_user_mmr: z.number().nullable().default(null),
+  org_user_game_mmrs: z
+    .record(z.string(), z.number().int().min(0))
+    .nullable()
+    .optional(),
+  self_reported_rank: z.string().nullable().optional(),
+  self_reported_rank_date: z.string().nullable().optional(),
   org_user_pk: z.number().nullable().default(null),
   organization: z.number().nullable().default(null),
   suggested_mmr: z.number().int().nullable(),

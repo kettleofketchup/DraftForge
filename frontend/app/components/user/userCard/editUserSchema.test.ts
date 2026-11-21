@@ -59,7 +59,9 @@ describe('resolveOrgUserLink', () => {
   });
 
   it('falls back to orgData[orgId].id for a UserEntry without a flat field', () => {
-    const u = entry({ orgData: { 2: { id: 110, mmr: 0, _fetchedAt: 0 } } });
+    const u = entry({
+      orgData: { 2: { id: 110, mmrs: { 1: 0 }, _fetchedAt: 0 } },
+    });
     expect(resolveOrgUserLink(u, { organizationId: 2 })).toBe(110);
   });
 
@@ -156,7 +158,9 @@ describe('resolveEditScope', () => {
   });
 
   it('UserEntry orgData-only link -> org', () => {
-    const u = entry({ orgData: { 2: { id: 110, mmr: 0, _fetchedAt: 0 } } });
+    const u = entry({
+      orgData: { 2: { id: 110, mmrs: { 1: 0 }, _fetchedAt: 0 } },
+    });
     expect(
       resolveEditScope(u, {
         organizationId: 2,
@@ -167,7 +171,9 @@ describe('resolveEditScope', () => {
   });
 
   it('link present but MMR is 0 -> still scope-aware (gate keys on id, not mmr)', () => {
-    const u = entry({ orgData: { 2: { id: 110, mmr: 0, _fetchedAt: 0 } } });
+    const u = entry({
+      orgData: { 2: { id: 110, mmrs: { 1: 0 }, _fetchedAt: 0 } },
+    });
     expect(
       resolveEditScope(u, {
         organizationId: 2,
@@ -179,7 +185,9 @@ describe('resolveEditScope', () => {
   });
 
   it('/users invariant: link in orgData but NO org/league context + stale currentOrg -> global', () => {
-    const u = entry({ orgData: { 2: { id: 110, mmr: 0, _fetchedAt: 0 } } });
+    const u = entry({
+      orgData: { 2: { id: 110, mmrs: { 1: 0 }, _fetchedAt: 0 } },
+    });
     expect(
       resolveEditScope(u, { currentOrg: org, currentLeague: null }),
     ).toEqual({ kind: 'global' });

@@ -1,3 +1,4 @@
+import type { GameMmrs } from '~/components/game/gameMmrs';
 import type { ActiveDraftType } from '~/components/user/schemas';
 import type { PositionsType, UserType } from '~/components/user/types';
 
@@ -5,7 +6,8 @@ export type { PositionsType };
 
 export interface OrgUserData {
   id: number; // OrgUser.pk (for PATCH operations)
-  mmr: number; // Org-scoped MMR
+  /** Org MMR per game; read via selectOrgMmr/useOrgMmr. */
+  mmrs: GameMmrs;
   _fetchedAt: number;
 }
 

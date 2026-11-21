@@ -96,7 +96,12 @@ import {
   signupHoldReason,
   signupSuccessMessage,
 } from '~/components/events/unmetRequirements';
-import type { GameTypeValue } from '~/components/game/constants';
+import {
+  GAME_LABEL,
+  isGameType,
+  toGameType,
+  type GameTypeValue,
+} from '~/components/game/constants';
 import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
@@ -145,6 +150,7 @@ import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { useGameTypeStore } from '~/store/gameTypeStore';
 import { useOrgStore } from '~/store/orgStore';
+import { selectOrgMmr } from '~/store/selectOrgMmr';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
@@ -158,7 +164,7 @@ export default function EventPage() {
 
   const { data: event, isLoading, error } = useEvent(id);
   const { data: signups } = useEventSignups(id);
-  useEventSignupUsers(signups);
+  useEventSignupUsers(signups, undefined, toGameType(event?.game_type));
   const currentUser = useUserStore((state) => state.currentUser);
 
   const [activeTab, setActiveTab] = useState(tab || 'details');
@@ -201,7 +207,7 @@ export default function EventPage() {
   const queryClient = useQueryClient();
 
   // Populate the org users cache so signup rows can read per-org MMR via the
-  // user entity adapter (UserEntry.orgData[orgId].mmr). Viewers without member
+  // user entity adapter (selectOrgMmr). Viewers without member
   // access fall back to signup.org_user_mmr.
   const eventOrgPk = event?.organization ?? null;
   const onMemberViewerChange = useCallback(() => {
@@ -844,7 +850,11 @@ function DetailsTab({
           />
           <Stat
             label="Game"
-            value={event.game_type === 1 ? 'Dota 2' : 'Deadlock'}
+            value={
+              isGameType(event.game_type)
+                ? GAME_LABEL[event.game_type]
+                : 'Unknown'
+            }
           />
         </CardContent>
       </Card>
@@ -1188,13 +1198,13 @@ function SignupsTab({
           );
 
           if (user) {
-            // Prefer the org-approved MMR via the user entity adapter
-            // (UserEntry.orgData[orgId].mmr) over self-reported dota_profile.mmr.
+            // Prefer the org-approved MMR for the event's game via the user
+            // entity adapter over self-reported dota_profile.mmr.
             // Fall back to signup.org_user_mmr from the API if the cache is cold.
             const baseProfile = signup.dota_profile as DotaProfileData | null;
             const orgMmr =
-              (orgId && isUserEntry(user)
-                ? user.orgData[orgId]?.mmr
+              (isUserEntry(user)
+                ? selectOrgMmr(user, orgId, toGameType(gameType))
                 : undefined) ??
               signup.org_user_mmr ??
               null;
