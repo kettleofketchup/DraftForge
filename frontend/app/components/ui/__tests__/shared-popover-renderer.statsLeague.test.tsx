@@ -34,12 +34,16 @@ vi.mock('../shared-popover-context', () => ({
   }),
 }));
 
-vi.mock('~/components/player/PlayerLeagueSummary', () => ({ PlayerLeagueSummary: () => null }));
+vi.mock('~/components/player/PlayerLeagueSummary', () => ({
+  PlayerLeagueSummary: () => null,
+}));
 vi.mock('~/components/user/positions', () => ({ RolePositions: () => null }));
 vi.mock('~/components/user/UserAvatar', () => ({ UserAvatar: () => null }));
 vi.mock('~/components/player/PlayerModal', () => ({ PlayerModal: () => null }));
 vi.mock('~/components/team/TeamModal', () => ({ TeamModal: () => null }));
-vi.mock('~/components/team/TeamPopoverContent', () => ({ TeamPopoverContent: () => null }));
+vi.mock('~/components/team/TeamPopoverContent', () => ({
+  TeamPopoverContent: () => null,
+}));
 
 afterEach(() => vi.clearAllMocks());
 

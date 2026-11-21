@@ -14,12 +14,12 @@
 
 import {
   expect,
+  hasSimulator,
   loginDotaLobby,
   openBracket,
   openMatchModal,
   requestLobby,
   resetDotaLobbyData,
-  hasSimulator,
   seedLobbyRow,
   test,
   visitAndWaitForHydration,
@@ -89,10 +89,9 @@ test.describe('Dota lobby: password visibility (e2e)', () => {
     });
 
     await visitAndWaitForHydration(page, `/events/${data.series_event.pk}`);
-    await expect(page.locator('[data-testid="event-lobby-password-value"]')).toHaveText(
-      data.fixed_password,
-      { timeout: 15_000 },
-    );
+    await expect(
+      page.locator('[data-testid="event-lobby-password-value"]'),
+    ).toHaveText(data.fixed_password, { timeout: 15_000 });
 
     // Not on a team of this game: the lobby API leaves the password out.
     const body = await gameLobby(context);
@@ -117,12 +116,23 @@ test.describe('Dota lobby: password visibility (e2e)', () => {
   });
 
   const hidden: { role: DotaLobbyRole; title: string; manages: boolean }[] = [
-    { role: 'unregistered', title: 'a user who is not registered', manages: false },
-    { role: 'league-staff', title: 'league staff who are not org staff', manages: true },
+    {
+      role: 'unregistered',
+      title: 'a user who is not registered',
+      manages: false,
+    },
+    {
+      role: 'league-staff',
+      title: 'league staff who are not org staff',
+      manages: true,
+    },
   ];
 
   for (const { role, title, manages } of hidden) {
-    test(`@cicd ${title} never sees the password`, async ({ context, page }) => {
+    test(`@cicd ${title} never sees the password`, async ({
+      context,
+      page,
+    }) => {
       await loginDotaLobby(context, role);
       expect((await eventPasswordStatus(context)).status).toBe(404);
 
@@ -135,25 +145,35 @@ test.describe('Dota lobby: password visibility (e2e)', () => {
       // check cannot pass on a page that has not asked yet.
       const passwordPath = `/api/events/${data.series_event.pk}/lobby-password/`;
       const passwordResponse = page.waitForResponse(
-        (r) => new URL(r.url()).pathname === passwordPath && r.request().method() === 'GET',
+        (r) =>
+          new URL(r.url()).pathname === passwordPath &&
+          r.request().method() === 'GET',
         { timeout: 20_000 },
       );
       await visitAndWaitForHydration(page, `/events/${data.series_event.pk}`);
-      await expect(page.locator('[data-testid="event-tab-details"]')).toBeVisible({
+      await expect(
+        page.locator('[data-testid="event-tab-details"]'),
+      ).toBeVisible({
         timeout: 15_000,
       });
       expect((await passwordResponse).status()).toBe(404);
-      await expect(page.locator('[data-testid="event-lobby-password"]')).toHaveCount(0);
+      await expect(
+        page.locator('[data-testid="event-lobby-password"]'),
+      ).toHaveCount(0);
 
       await openBracket(page, data.series_event.tournament.pk);
       const dialog = await openMatchModal(page, gamePk);
-      await expect(dialog.locator('[data-testid="lobby-state-badge"]')).toBeVisible({
+      await expect(
+        dialog.locator('[data-testid="lobby-state-badge"]'),
+      ).toBeVisible({
         timeout: 15_000,
       });
-      await expect(dialog.locator('[data-testid="lobby-staff-controls"]')).toHaveCount(
-        manages ? 1 : 0,
-      );
-      await expect(dialog.locator('[data-testid="lobby-password"]')).toHaveCount(0);
+      await expect(
+        dialog.locator('[data-testid="lobby-staff-controls"]'),
+      ).toHaveCount(manages ? 1 : 0);
+      await expect(
+        dialog.locator('[data-testid="lobby-password"]'),
+      ).toHaveCount(0);
     });
   }
 });

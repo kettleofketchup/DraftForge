@@ -1,13 +1,16 @@
-import type { SignupInputPatch } from './schema';
 import type { DotaProfileData } from '~/components/user';
+import type { SignupInputPatch } from './schema';
 
-type UserPositions = {
-  carry?: number;
-  mid?: number;
-  offlane?: number;
-  soft_support?: number;
-  hard_support?: number;
-} | null | undefined;
+type UserPositions =
+  | {
+      carry?: number;
+      mid?: number;
+      offlane?: number;
+      soft_support?: number;
+      hard_support?: number;
+    }
+  | null
+  | undefined;
 
 const POSITION_KEYS = [
   'carry',

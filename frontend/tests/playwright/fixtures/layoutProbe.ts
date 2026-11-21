@@ -90,7 +90,9 @@ interface ProbeConfig {
  * Measures one viewport across every requested state. Slow timers are deferred while a state
  * is measured, so the probe's own waits are rAF-driven.
  */
-export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport> {
+export async function layoutProbeMain(
+  config: ProbeConfig,
+): Promise<LayoutReport> {
   const t0 = performance.now();
   const elapsed = (): number => performance.now() - t0;
 
@@ -145,7 +147,8 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
     unprobeable: number;
   }
 
-  const area = (b: Box): number => Math.max(0, b.x2 - b.x1) * Math.max(0, b.y2 - b.y1);
+  const area = (b: Box): number =>
+    Math.max(0, b.x2 - b.x1) * Math.max(0, b.y2 - b.y1);
   const intersect = (p: Box, q: Box): Box => ({
     x1: Math.max(p.x1, q.x1),
     y1: Math.max(p.y1, q.y1),
@@ -205,14 +208,19 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
   };
 
   const label = (el: Element): string => {
-    const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    const text = (el.textContent ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 40);
     const testid = el.getAttribute('data-testid');
     return `<${el.tagName.toLowerCase()}${testid ? ` data-testid="${testid}"` : ''}>${text}`;
   };
 
   // Resolved by layout before any measure; probes inside this band would hit the sticky navbar.
   const navEl = document.querySelector('[data-testid=nav-root]');
-  const navbarHeightPx = navEl ? Math.max(0, Math.round(navEl.getBoundingClientRect().bottom)) : 0;
+  const navbarHeightPx = navEl
+    ? Math.max(0, Math.round(navEl.getBoundingClientRect().bottom))
+    : 0;
 
   const ledger: LayoutLedger = {
     candidates: 0,
@@ -235,7 +243,12 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
     const els = document.body.querySelectorAll('*');
     for (let i = 0; i < els.length; i += 1) {
       const r = els[i].getBoundingClientRect();
-      const v = [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)];
+      const v = [
+        Math.round(r.x),
+        Math.round(r.y),
+        Math.round(r.width),
+        Math.round(r.height),
+      ];
       for (let k = 0; k < 4; k += 1) h = Math.imul(h ^ v[k], 16777619);
     }
     return h >>> 0;
@@ -245,19 +258,28 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
   // counting it would mark every state busy.
   const inViewport = (el: Element): boolean => {
     const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 &&
-      r.top < window.innerHeight && r.left < window.innerWidth;
+    return (
+      r.width > 0 &&
+      r.height > 0 &&
+      r.bottom > 0 &&
+      r.right > 0 &&
+      r.top < window.innerHeight &&
+      r.left < window.innerWidth
+    );
   };
 
   const isBusy = (): boolean => {
-    const pending = document.querySelectorAll('[aria-busy="true"],[data-slot="skeleton"]');
+    const pending = document.querySelectorAll(
+      '[aria-busy="true"],[data-slot="skeleton"]',
+    );
     for (let i = 0; i < pending.length; i += 1) {
       if (inViewport(pending[i])) return true;
     }
     const imgs = document.images;
     for (let i = 0; i < imgs.length; i += 1) {
       const img = imgs[i];
-      if (img.getAttribute('src') && !img.complete && inViewport(img)) return true;
+      if (img.getAttribute('src') && !img.complete && inViewport(img))
+        return true;
     }
     return false;
   };
@@ -265,7 +287,10 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
   // Three identical geometry samples, not two: one lull between renders is a single equal pair.
   // `quietMs` additionally holds out for that long since the last change, which is what lets a
   // debounced resize handler land after a viewport change.
-  const settle = (capMs: number, quietMs: number): Promise<'stable' | 'capped' | 'busy'> =>
+  const settle = (
+    capMs: number,
+    quietMs: number,
+  ): Promise<'stable' | 'capped' | 'busy'> =>
     new Promise((resolve) => {
       const start = performance.now();
       const cap = Math.max(capMs, quietMs + capMs);
@@ -340,11 +365,19 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
     const frameOf = new Map<Element, Element | null>();
     const collisionCandidates: Element[] = [];
     const escapeCandidates: Element[] = [];
-    const unclipped: Clip = { box: { x1: -FAR, y1: -FAR, x2: FAR, y2: FAR }, host: null };
+    const unclipped: Clip = {
+      box: { x1: -FAR, y1: -FAR, x2: FAR, y2: FAR },
+      host: null,
+    };
 
     // <body>/<html> are not clip hosts: a viewport term here would silently limit the detector
     // to the first screen of every route.
-    const walk = (node: Element, ctx: Ctx, frame: Element | null, colBlocked: boolean): void => {
+    const walk = (
+      node: Element,
+      ctx: Ctx,
+      frame: Element | null,
+      colBlocked: boolean,
+    ): void => {
       for (let i = 0; i < node.children.length; i += 1) {
         const child = node.children[i];
         if (child.matches(IGNORE)) continue;
@@ -355,8 +388,10 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
         const painted = cs.visibility !== 'hidden';
 
         const pos = cs.position;
-        const own = pos === 'fixed' ? ctx.fix : pos === 'absolute' ? ctx.abs : ctx.stat;
-        const positioned = pos === 'fixed' || pos === 'absolute' || pos === 'sticky';
+        const own =
+          pos === 'fixed' ? ctx.fix : pos === 'absolute' ? ctx.abs : ctx.stat;
+        const positioned =
+          pos === 'fixed' || pos === 'absolute' || pos === 'sticky';
         const childFrame = positioned ? child : frame;
         styleOf.set(child, cs);
         clipOf.set(child, own);
@@ -369,7 +404,12 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
 
         // An <svg> is one object: lucide's `X` is two crossing <path>s that would otherwise
         // collide with each other at exactly minOverlapArea.
-        if (bigEnough && !positioned && !colBlocked && (ownsText(child) || isSvg || child.children.length === 0)) {
+        if (
+          bigEnough &&
+          !positioned &&
+          !colBlocked &&
+          (ownsText(child) || isSvg || child.children.length === 0)
+        ) {
           collisionCandidates.push(child);
         }
         if (bigEnough && own.host !== null) escapeCandidates.push(child);
@@ -377,7 +417,9 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
         if (isSvg) continue;
 
         const clips = cs.overflowX !== 'visible' || cs.overflowY !== 'visible';
-        const base: Clip = clips ? { box: intersect(own.box, paddingBox(cs, r)), host: child } : own;
+        const base: Clip = clips
+          ? { box: intersect(own.box, paddingBox(cs, r)), host: child }
+          : own;
         walk(
           child,
           {
@@ -393,7 +435,12 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
         );
       }
     };
-    walk(document.body, { stat: unclipped, abs: unclipped, fix: unclipped }, null, false);
+    walk(
+      document.body,
+      { stat: unclipped, abs: unclipped, fix: unclipped },
+      null,
+      false,
+    );
     return { styleOf, clipOf, frameOf, collisionCandidates, escapeCandidates };
   };
 
@@ -404,15 +451,30 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
     const keys: string[] = [];
     for (const el of s.collisionCandidates) {
       keys.push(key(el));
-      const clip = (s.clipOf.get(el) ?? { box: { x1: -FAR, y1: -FAR, x2: FAR, y2: FAR }, host: null }).box;
+      const clip = (
+        s.clipOf.get(el) ?? {
+          box: { x1: -FAR, y1: -FAR, x2: FAR, y2: FAR },
+          host: null,
+        }
+      ).box;
       const rects = el.getClientRects();
       const frame = s.frameOf.get(el) ?? null;
       for (let i = 0; i < rects.length; i += 1) {
         const r = rects[i];
         if (r.width < 2 || r.height < 2) continue;
-        const b = intersect({ x1: r.left, y1: r.top, x2: r.right, y2: r.bottom }, clip);
+        const b = intersect(
+          { x1: r.left, y1: r.top, x2: r.right, y2: r.bottom },
+          clip,
+        );
         if (b.x2 - b.x1 < 2 || b.y2 - b.y1 < 2) continue;
-        boxes.push({ el, frame, top: b.y1, bottom: b.y2, left: b.x1, right: b.x2 });
+        boxes.push({
+          el,
+          frame,
+          top: b.y1,
+          bottom: b.y2,
+          left: b.x1,
+          right: b.x2,
+        });
       }
     }
     boxes.sort((p, q) => p.top - q.top);
@@ -425,7 +487,8 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
       for (let j = i + 1; j < boxes.length; j += 1) {
         const b = boxes[j];
         if (b.top >= a.bottom) break;
-        if (a.el === b.el || a.el.contains(b.el) || b.el.contains(a.el)) continue;
+        if (a.el === b.el || a.el.contains(b.el) || b.el.contains(a.el))
+          continue;
         if (a.frame !== b.frame) continue;
         const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
         const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
@@ -434,13 +497,21 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
         if (px < config.minOverlapArea) continue;
         // Document order, so the pair's key does not depend on which line box sorted first.
         const [first, second] =
-          a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? [a.el, b.el] : [b.el, a.el];
+          a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING
+            ? [a.el, b.el]
+            : [b.el, a.el];
         const keyA = key(first);
         const keyB = key(second);
         const pairKey = `${keyA} ${keyB}`;
         const prior = byPair.get(pairKey);
         if (prior && prior.area >= px) continue;
-        byPair.set(pairKey, { a: label(first), b: label(second), keyA, keyB, area: px });
+        byPair.set(pairKey, {
+          a: label(first),
+          b: label(second),
+          keyA,
+          keyB,
+          area: px,
+        });
       }
     }
     return { hits: Array.from(byPair.values()), keys };
@@ -464,16 +535,30 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
    */
   const paintable = (el: Element, cs: CSSStyleDeclaration): boolean => {
     const tag = el.tagName.toLowerCase();
-    if (tag === 'svg' || tag === 'img' || tag === 'canvas' || tag === 'video' || tag === 'input' ||
-        tag === 'textarea' || tag === 'select' || tag === 'hr') {
+    if (
+      tag === 'svg' ||
+      tag === 'img' ||
+      tag === 'canvas' ||
+      tag === 'video' ||
+      tag === 'input' ||
+      tag === 'textarea' ||
+      tag === 'select' ||
+      tag === 'hr'
+    ) {
       return true;
     }
     if (ownsText(el)) return true;
     const bg = cs.backgroundColor;
-    if (bg && bg !== 'transparent' && !/rgba\(\s*0,\s*0,\s*0,\s*0\s*\)/.test(bg)) return true;
+    if (
+      bg &&
+      bg !== 'transparent' &&
+      !/rgba\(\s*0,\s*0,\s*0,\s*0\s*\)/.test(bg)
+    )
+      return true;
     if (cs.backgroundImage && cs.backgroundImage !== 'none') return true;
     if (cs.boxShadow && cs.boxShadow !== 'none') return true;
-    if ((parseFloat(cs.outlineWidth) || 0) > 0 && cs.outlineStyle !== 'none') return true;
+    if ((parseFloat(cs.outlineWidth) || 0) > 0 && cs.outlineStyle !== 'none')
+      return true;
     const border =
       (parseFloat(cs.borderTopWidth) || 0) +
       (parseFloat(cs.borderRightWidth) || 0) +
@@ -511,11 +596,18 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
     return null;
   };
 
-  const findEscapes = (s: Scan): { hits: Escape[]; geometricKeys: string[]; unprobeable: number } => {
+  const findEscapes = (
+    s: Scan,
+  ): { hits: Escape[]; geometricKeys: string[]; unprobeable: number } => {
     const hits: Escape[] = [];
     const geometricKeys: string[] = [];
     let unprobeable = 0;
-    const probeBand: Box = { x1: 1, y1: navbarHeightPx + 1, x2: window.innerWidth - 1, y2: window.innerHeight - 1 };
+    const probeBand: Box = {
+      x1: 1,
+      y1: navbarHeightPx + 1,
+      x2: window.innerWidth - 1,
+      y2: window.innerHeight - 1,
+    };
 
     for (const el of s.escapeCandidates) {
       const info = s.clipOf.get(el);
@@ -534,7 +626,10 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
           const a = area(slab);
           if (!best || a > area(best)) best = slab;
           const probeable = intersect(slab, probeBand);
-          if (area(probeable) > 0 && (!bestProbe || area(probeable) > area(bestProbe))) {
+          if (
+            area(probeable) > 0 &&
+            (!bestProbe || area(probeable) > area(bestProbe))
+          ) {
             bestProbe = probeable;
             bestProbeSlab = slab;
           }
@@ -594,11 +689,15 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
 
   const overBudget = (): boolean => {
     if (elapsed() <= config.budgetMs) return false;
-    if (ledger.budgetExceededMs === null) ledger.budgetExceededMs = Math.round(elapsed());
+    if (ledger.budgetExceededMs === null)
+      ledger.budgetExceededMs = Math.round(elapsed());
     return true;
   };
 
-  const timerGate = window as unknown as { __layoutFreeze?: () => void; __layoutThaw?: () => void };
+  const timerGate = window as unknown as {
+    __layoutFreeze?: () => void;
+    __layoutThaw?: () => void;
+  };
 
   const runState = async (state: string): Promise<void> => {
     try {
@@ -612,7 +711,10 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
   const runStateFrozen = async (state: string): Promise<void> => {
     const started = performance.now();
     // Timers run while settling, so debounced handlers and query retries land first.
-    const settled = await settle(config.settleCapMs, state === 'base' ? config.baseQuietMs : 0);
+    const settled = await settle(
+      config.settleCapMs,
+      state === 'base' ? config.baseQuietMs : 0,
+    );
     timerGate.__layoutFreeze?.();
     let candidates = 0;
     let escapeCandidates = 0;
@@ -640,7 +742,9 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
         await waitMs(config.stabilityMs);
         const second = measure();
         restabilised = true;
-        const heldC = new Set(second.collisions.map((c) => `${c.keyA} ${c.keyB}`));
+        const heldC = new Set(
+          second.collisions.map((c) => `${c.keyA} ${c.keyB}`),
+        );
         const heldE = new Set(second.escapes.map((e) => e.elKey));
         collisions = collisions.filter((c) => heldC.has(`${c.keyA} ${c.keyB}`));
         escapes = escapes.filter((e) => heldE.has(e.elKey));
@@ -649,9 +753,12 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
       if (state === 'base') {
         ledger.candidates = candidates;
         ledger.escapeCandidates = escapeCandidates;
-        docOverflow = Math.round(document.documentElement.scrollWidth - window.innerWidth);
+        docOverflow = Math.round(
+          document.documentElement.scrollWidth - window.innerWidth,
+        );
       }
-      if (collisions.length + escapes.length > 0) findings.push({ state, collisions, escapes });
+      if (collisions.length + escapes.length > 0)
+        findings.push({ state, collisions, escapes });
     }
 
     stateRecords.push({
@@ -670,7 +777,11 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
     const own = anchorName(el);
     if (own) return own.slice(1);
     const kind = el.getAttribute('data-slot') ?? el.tagName.toLowerCase();
-    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    for (
+      let p = el.parentElement;
+      p && p !== document.body;
+      p = p.parentElement
+    ) {
       const named = anchorName(p);
       if (named) return `${named.slice(1)}>${kind}`;
     }
@@ -692,10 +803,22 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
       if (el.closest(IGNORE)) continue;
       const cs = getComputedStyle(el);
       if (cs.display === 'none' || cs.visibility === 'hidden') continue;
-      const maxY = (cs.overflowY === 'auto' || cs.overflowY === 'scroll') ? el.scrollHeight - el.clientHeight : 0;
-      const maxX = (cs.overflowX === 'auto' || cs.overflowX === 'scroll') ? el.scrollWidth - el.clientWidth : 0;
+      const maxY =
+        cs.overflowY === 'auto' || cs.overflowY === 'scroll'
+          ? el.scrollHeight - el.clientHeight
+          : 0;
+      const maxX =
+        cs.overflowX === 'auto' || cs.overflowX === 'scroll'
+          ? el.scrollWidth - el.clientWidth
+          : 0;
       if (maxY <= 8 && maxX <= 8) continue;
-      found.push({ el, extent: Math.max(maxY, maxX), maxY, maxX, label: scrollerLabel(el) });
+      found.push({
+        el,
+        extent: Math.max(maxY, maxX),
+        maxY,
+        maxX,
+        label: scrollerLabel(el),
+      });
     }
     // Two unnamed ScrollArea viewports under one anchor would otherwise share a state name,
     // and a quarantine row for one would cover the other. Suffixes follow document order.

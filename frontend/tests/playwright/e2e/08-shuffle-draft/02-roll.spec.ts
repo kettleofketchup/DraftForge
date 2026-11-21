@@ -9,10 +9,10 @@
  */
 
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   getTournamentByKey,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
 
 test.describe('Shuffle Draft - Roll Results Display', () => {
@@ -52,7 +52,9 @@ test.describe('Shuffle Draft - Roll Results Display', () => {
       console.log('Draft event FAB is visible');
     } else {
       // FAB not integrated yet - skip this test gracefully
-      console.log('Draft event FAB not found - component may not be integrated yet');
+      console.log(
+        'Draft event FAB not found - component may not be integrated yet',
+      );
     }
   });
 
@@ -94,7 +96,9 @@ test.describe('Shuffle Draft - Roll Results Display', () => {
       }
 
       // Check for the modal title
-      await expect(dialog.locator('[data-testid="draft-event-history-title"]')).toBeVisible();
+      await expect(
+        dialog.locator('[data-testid="draft-event-history-title"]'),
+      ).toBeVisible();
 
       // Close the modal
       const closeButton = dialog.locator('button[aria-label="Close"]');
@@ -140,7 +144,7 @@ test.describe('Shuffle Draft - Roll Results Display', () => {
         expect(
           lowerTieText.includes('rolled') ||
             lowerTieText.includes('roll') ||
-            lowerTieText.includes('vs')
+            lowerTieText.includes('vs'),
         ).toBe(true);
       }
 

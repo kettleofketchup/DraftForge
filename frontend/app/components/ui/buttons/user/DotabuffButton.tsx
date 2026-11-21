@@ -1,10 +1,12 @@
 import * as React from 'react';
-import { SecondaryButton } from '../SecondaryButton';
 import type { SecondaryButtonProps } from '../SecondaryButton';
+import { SecondaryButton } from '../SecondaryButton';
 import { DotabuffIconButton } from './DotabuffIconButton';
 
-export interface DotabuffButtonProps
-  extends Omit<SecondaryButtonProps, 'children' | 'asChild' | 'color'> {
+export interface DotabuffButtonProps extends Omit<
+  SecondaryButtonProps,
+  'children' | 'asChild' | 'color'
+> {
   /** Steam Friend ID (32-bit account ID). Used to build the Dotabuff URL. */
   steamAccountId: number | null | undefined;
   /** Override the rendered label text. Defaults to "Dotabuff". */

@@ -7,15 +7,15 @@
 
 import type { Browser } from '@playwright/test';
 import {
-  test,
+  captainsOf,
+  draftStateOf,
   expect,
   loginAsUser,
-  resetTimerTournament,
-  readyUp,
-  captainsOf,
-  openDraftModal,
   openCaptainPage,
-  draftStateOf,
+  openDraftModal,
+  readyUp,
+  resetTimerTournament,
+  test,
   type TimerTournament,
 } from '../../fixtures';
 
@@ -24,7 +24,7 @@ const KEY = 'draft_timer_ready';
 async function readyCaptains(
   browser: Browser,
   t: TimerTournament,
-  indices: number[]
+  indices: number[],
 ): Promise<void> {
   const captains = captainsOf(t);
   for (const i of indices) {
@@ -54,7 +54,10 @@ test.describe.serial('Team draft ready screen', () => {
     }
   });
 
-  test('@cicd captain toggles ready and unready', async ({ page, loginUser }) => {
+  test('@cicd captain toggles ready and unready', async ({
+    page,
+    loginUser,
+  }) => {
     await loginUser();
     await openDraftModal(page, t.pk);
     await expect(page.getByTestId('draft-lobby')).toBeVisible();
@@ -64,7 +67,10 @@ test.describe.serial('Team draft ready screen', () => {
     const toggle = page.getByTestId('lobby-ready-toggle');
     const sent: boolean[] = [];
     page.on('request', (req) => {
-      if (req.method() === 'POST' && /\/api\/draft\/\d+\/ready\/$/.test(req.url())) {
+      if (
+        req.method() === 'POST' &&
+        /\/api\/draft\/\d+\/ready\/$/.test(req.url())
+      ) {
         sent.push(req.postDataJSON().ready);
       }
     });
@@ -101,10 +107,9 @@ test.describe.serial('Team draft ready screen', () => {
     await expect(page.getByTestId('draft-lobby')).toBeVisible();
 
     const notReadyTeam = teamsInOrder(t)[3];
-    await expect(page.getByTestId(`lobby-ready-check-${notReadyTeam.pk}`)).toHaveAttribute(
-      'data-state',
-      'not-ready'
-    );
+    await expect(
+      page.getByTestId(`lobby-ready-check-${notReadyTeam.pk}`),
+    ).toHaveAttribute('data-state', 'not-ready');
 
     const start = page.getByTestId('lobby-start-button');
     await expect(start).toHaveText('Force start');
@@ -131,7 +136,9 @@ test.describe.serial('Team draft ready screen', () => {
 
     await loginAdmin();
     await openDraftModal(page, t.pk);
-    await expect(page.getByTestId('lobby-start-button')).toHaveText('Start draft');
+    await expect(page.getByTestId('lobby-start-button')).toHaveText(
+      'Start draft',
+    );
   });
 
   test('@cicd Start draft emits draft_started_by_staff and shows the clock', async ({
@@ -151,9 +158,12 @@ test.describe.serial('Team draft ready screen', () => {
 
       await expect(page.getByTestId('draft-lobby')).toBeHidden();
       await expect(page.getByTestId('draft-clock-bar')).toBeVisible();
-      await expect(page.getByTestId('draft-clock-grace')).toHaveText(/0:(1[5-9]|20)/, {
-        timeout: 5_000,
-      });
+      await expect(page.getByTestId('draft-clock-grace')).toHaveText(
+        /0:(1[5-9]|20)/,
+        {
+          timeout: 5_000,
+        },
+      );
 
       await expect.poll(() => draftStateOf(context, KEY)).toBe('drafting');
       await expect(page.getByTestId('draft-paused-overlay')).toHaveCount(0);
@@ -162,14 +172,21 @@ test.describe.serial('Team draft ready screen', () => {
       await page.getByTestId('draft-history-button').click();
       await expect(page.getByTestId('draft-event-history-title')).toBeVisible();
       await expect(
-        page.getByTestId('draft-event-row-draft_started_by_staff').first().getByTestId('draft-event-text')
+        page
+          .getByTestId('draft-event-row-draft_started_by_staff')
+          .first()
+          .getByTestId('draft-event-text'),
       ).toContainText('Draft started by');
     } finally {
       await a.context.close();
     }
   });
 
-  test('@cicd Force start emits draft_force_started', async ({ page, browser, loginAdmin }) => {
+  test('@cicd Force start emits draft_force_started', async ({
+    page,
+    browser,
+    loginAdmin,
+  }) => {
     const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
     let fresh: TimerTournament;
     try {
@@ -181,14 +198,19 @@ test.describe.serial('Team draft ready screen', () => {
 
     await loginAdmin();
     await openDraftModal(page, fresh.pk);
-    await expect(page.getByTestId('lobby-start-button')).toHaveText('Force start');
+    await expect(page.getByTestId('lobby-start-button')).toHaveText(
+      'Force start',
+    );
     await page.getByTestId('lobby-start-button').click();
     await page.getByTestId('lobby-force-start-confirm').click();
 
     await expect(page.getByTestId('draft-lobby')).toBeHidden();
     await page.getByTestId('draft-history-button').click();
     await expect(
-      page.getByTestId('draft-event-row-draft_force_started').first().getByTestId('draft-event-text')
+      page
+        .getByTestId('draft-event-row-draft_force_started')
+        .first()
+        .getByTestId('draft-event-text'),
     ).toContainText(/force-started by .* \(2 not ready\)/);
   });
 });

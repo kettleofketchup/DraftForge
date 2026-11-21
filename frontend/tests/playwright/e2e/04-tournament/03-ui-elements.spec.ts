@@ -6,9 +6,9 @@
  */
 
 import {
-  test,
   expect,
   getTournamentByKey,
+  test,
   TournamentPage,
 } from '../../fixtures';
 
@@ -68,14 +68,18 @@ test.describe('Tournament UI Elements (e2e)', () => {
     // Open the add player dropdown/modal
     await tournamentPage.addPlayerButton.scrollIntoViewIfNeeded();
     await expect(tournamentPage.addPlayerButton).toBeVisible();
-    await tournamentPage.addPlayerButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+    await tournamentPage.addPlayerButton.evaluate((btn) =>
+      (btn as HTMLButtonElement).click(),
+    );
 
     // Wait for modal dialog to appear
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 10000 });
 
     // Verify the search input appears (users may still be loading)
-    await expect(tournamentPage.playerSearchInput).toBeVisible({ timeout: 10000 });
+    await expect(tournamentPage.playerSearchInput).toBeVisible({
+      timeout: 10000,
+    });
 
     // Wait a moment for users to load in the background
     await page.waitForLoadState('networkidle');
@@ -85,7 +89,9 @@ test.describe('Tournament UI Elements (e2e)', () => {
     await expect(tournamentPage.playerSearchInput).toHaveValue('test');
 
     // Close the dialog - use data-testid for the cancel button, fall back to escape
-    const closeButton = dialog.locator('[data-testid="modal-cancel-button"], [data-testid="dialog-close-button"]');
+    const closeButton = dialog.locator(
+      '[data-testid="modal-cancel-button"], [data-testid="dialog-close-button"]',
+    );
     if (await closeButton.isVisible().catch(() => false)) {
       await closeButton.click({ force: true });
     } else {
@@ -124,7 +130,7 @@ test.describe('Tournament UI Elements (e2e)', () => {
 
     // Verify the user card is no longer visible
     await expect(
-      page.locator(`[data-testid="usercard-${username}"]`)
+      page.locator(`[data-testid="usercard-${username}"]`),
     ).not.toBeVisible();
   });
 });

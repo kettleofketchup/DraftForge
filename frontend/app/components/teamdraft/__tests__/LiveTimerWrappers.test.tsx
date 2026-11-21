@@ -12,8 +12,18 @@ const draft = (o: Record<string, unknown> = {}) => ({
   state: 'drafting',
   clock_armed: true,
   latest_round: 21,
-  draft_rounds: [{ pk: 21, pick_number: 1, captain: user(7), started_at: new Date(T0 - 5_000).toISOString(), grace_time_ms: 20_000 }],
-  tournament: { teams: [{ pk: 1, captain: user(7), draft_reserve_ms: 30_000 }] },
+  draft_rounds: [
+    {
+      pk: 21,
+      pick_number: 1,
+      captain: user(7),
+      started_at: new Date(T0 - 5_000).toISOString(),
+      grace_time_ms: 20_000,
+    },
+  ],
+  tournament: {
+    teams: [{ pk: 1, captain: user(7), draft_reserve_ms: 30_000 }],
+  },
   ...o,
 });
 
@@ -50,7 +60,10 @@ describe('live timer wrappers', () => {
   afterEach(() => vi.useRealTimers());
 
   it('LiveDraftClockBar derives and ticks the countdown from the store', () => {
-    useDraftWebSocketStore.setState({ draftState: draft() as never, tick: null });
+    useDraftWebSocketStore.setState({
+      draftState: draft() as never,
+      tick: null,
+    });
     render(<LiveDraftClockBar {...clockProps} />);
     expect(screen.getByTestId('draft-clock-grace')).toHaveTextContent('0:15');
     act(() => {
@@ -61,15 +74,23 @@ describe('live timer wrappers', () => {
 
   it('LiveDraftPauseOverlay derives the resuming countdown from the store', () => {
     useDraftWebSocketStore.setState({
-      draftState: draft({ state: 'resuming', resuming_until: new Date(T0 + 2_400).toISOString() }) as never,
+      draftState: draft({
+        state: 'resuming',
+        resuming_until: new Date(T0 + 2_400).toISOString(),
+      }) as never,
       tick: null,
     });
     render(<LiveDraftPauseOverlay {...overlayProps} draftStatus="resuming" />);
-    expect(screen.getByTestId('draft-resuming-countdown')).toHaveTextContent('Resuming in 3');
+    expect(screen.getByTestId('draft-resuming-countdown')).toHaveTextContent(
+      'Resuming in 3',
+    );
   });
 
   it('LiveDraftPauseOverlay does not re-render on animation frames while drafting', () => {
-    useDraftWebSocketStore.setState({ draftState: draft() as never, tick: null });
+    useDraftWebSocketStore.setState({
+      draftState: draft() as never,
+      tick: null,
+    });
     const onRender = vi.fn();
     render(
       <Profiler id="overlay" onRender={onRender}>
@@ -84,16 +105,30 @@ describe('live timer wrappers', () => {
   });
 
   it('LiveDraftPauseOverlay counts down once the draft turns to resuming', () => {
-    useDraftWebSocketStore.setState({ draftState: draft() as never, tick: null });
-    const { rerender } = render(<LiveDraftPauseOverlay {...overlayProps} draftStatus="drafting" />);
     useDraftWebSocketStore.setState({
-      draftState: draft({ state: 'resuming', resuming_until: new Date(T0 + 2_400).toISOString() }) as never,
+      draftState: draft() as never,
+      tick: null,
     });
-    rerender(<LiveDraftPauseOverlay {...overlayProps} draftStatus="resuming" />);
-    expect(screen.getByTestId('draft-resuming-countdown')).toHaveTextContent('Resuming in 3');
+    const { rerender } = render(
+      <LiveDraftPauseOverlay {...overlayProps} draftStatus="drafting" />,
+    );
+    useDraftWebSocketStore.setState({
+      draftState: draft({
+        state: 'resuming',
+        resuming_until: new Date(T0 + 2_400).toISOString(),
+      }) as never,
+    });
+    rerender(
+      <LiveDraftPauseOverlay {...overlayProps} draftStatus="resuming" />,
+    );
+    expect(screen.getByTestId('draft-resuming-countdown')).toHaveTextContent(
+      'Resuming in 3',
+    );
     act(() => {
       vi.advanceTimersByTime(1_500);
     });
-    expect(screen.getByTestId('draft-resuming-countdown')).toHaveTextContent('Resuming in 1');
+    expect(screen.getByTestId('draft-resuming-countdown')).toHaveTextContent(
+      'Resuming in 1',
+    );
   });
 });

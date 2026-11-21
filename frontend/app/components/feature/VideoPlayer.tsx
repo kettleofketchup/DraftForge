@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { cn } from '~/lib/utils';
 
 interface VideoPlayerProps {
@@ -35,13 +35,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       // Use requestIdleCallback to load during browser idle time
       // Falls back to setTimeout for browsers without support
-      const scheduleLoad = window.requestIdleCallback || ((cb) => setTimeout(cb, 50));
+      const scheduleLoad =
+        window.requestIdleCallback || ((cb) => setTimeout(cb, 50));
 
-      idleCallbackId = scheduleLoad(() => {
-        if (!cancelled) {
-          setDeferredSrc(src);
-        }
-      }, { timeout: 200 }) as number; // Max wait 200ms before forcing load
+      idleCallbackId = scheduleLoad(
+        () => {
+          if (!cancelled) {
+            setDeferredSrc(src);
+          }
+        },
+        { timeout: 200 },
+      ) as number; // Max wait 200ms before forcing load
     };
 
     // Use IntersectionObserver to only load when visible
@@ -52,7 +56,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           observer.disconnect();
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
 
     observer.observe(container);
@@ -117,7 +121,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, [autoPlay, isLoading]);
 
   return (
-    <div ref={containerRef} className={cn('relative rounded-lg overflow-hidden', className)}>
+    <div
+      ref={containerRef}
+      className={cn('relative rounded-lg overflow-hidden', className)}
+    >
       {/* Loading skeleton - uses aspect-video to match typical video dimensions */}
       {isLoading && !hasError && (
         <div className="aspect-video rounded-lg bg-base-300 flex items-center justify-center">
@@ -143,7 +150,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         playsInline
         controls
         preload="metadata"
-        className={cn('w-full h-auto max-h-[inherit] object-contain', (isLoading || hasError) && 'opacity-0')}
+        className={cn(
+          'w-full h-auto max-h-[inherit] object-contain',
+          (isLoading || hasError) && 'opacity-0',
+        )}
       />
     </div>
   );

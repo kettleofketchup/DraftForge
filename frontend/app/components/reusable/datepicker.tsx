@@ -31,7 +31,12 @@ export const DatePicker: React.FC<DatePickerDemoProps> = ({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0">
-        <Calendar mode="single" selected={date} onSelect={setDate} required={false} />
+        <Calendar
+          mode="single"
+          selected={date}
+          onSelect={setDate}
+          required={false}
+        />
       </PopoverContent>
     </Popover>
   );

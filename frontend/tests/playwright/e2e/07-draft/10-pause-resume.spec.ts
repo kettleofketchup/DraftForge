@@ -9,22 +9,22 @@
 
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import {
-  test,
+  activeRound,
+  captainsOf,
+  draftStateOf,
   expect,
+  fetchTimerTournament,
   loginAdmin,
   loginAsUser,
-  resetTimerTournament,
-  fetchTimerTournament,
-  readyUp,
-  startDraftAsStaff,
-  resumeDraftAsStaff,
-  staleDraftHeartbeat,
-  suppressDraftHeartbeats,
-  captainsOf,
-  activeRound,
   openCaptainPage,
   openDraftModal,
-  draftStateOf,
+  readyUp,
+  resetTimerTournament,
+  resumeDraftAsStaff,
+  staleDraftHeartbeat,
+  startDraftAsStaff,
+  suppressDraftHeartbeats,
+  test,
   type TimerTournament,
 } from '../../fixtures';
 
@@ -37,7 +37,7 @@ function parseClock(text: string | null): number {
 }
 
 async function resetReadyAndStart(
-  browser: Browser
+  browser: Browser,
 ): Promise<{ t: TimerTournament; admin: BrowserContext }> {
   const admin = await browser.newContext({ ignoreHTTPSErrors: true });
   await loginAdmin(admin);
@@ -66,7 +66,9 @@ test.describe.serial('Team draft pause and resume', () => {
     if ((await draftStateOf(admin, KEY)) === 'paused') {
       await resumeDraftAsStaff(admin, t.draft.pk);
     }
-    await expect.poll(() => draftStateOf(admin, KEY), { timeout: 8_000 }).toBe('drafting');
+    await expect
+      .poll(() => draftStateOf(admin, KEY), { timeout: 8_000 })
+      .toBe('drafting');
   }
 
   test.beforeAll(async ({ browser }) => {
@@ -80,7 +82,9 @@ test.describe.serial('Team draft pause and resume', () => {
     await admin?.close().catch(() => undefined);
   });
 
-  test('@cicd manual pause freezes the clock and resume counts down', async ({ browser }) => {
+  test('@cicd manual pause freezes the clock and resume counts down', async ({
+    browser,
+  }) => {
     // precondition: no captain page open
     const a = await openCaptainPage(browser, captainA, t.pk);
     try {
@@ -90,7 +94,7 @@ test.describe.serial('Team draft pause and resume', () => {
       await a.page.getByTestId('draft-clock-pause-button').click();
       await expect(a.page.getByTestId('draft-paused-overlay')).toBeVisible();
       await expect(a.page.getByTestId('draft-paused-message')).toHaveText(
-        'Paused by captain or staff'
+        'Paused by captain or staff',
       );
 
       const first = await grace.textContent();
@@ -99,9 +103,11 @@ test.describe.serial('Team draft pause and resume', () => {
 
       await a.page.getByTestId('draft-resume-button').click();
       await expect(a.page.getByTestId('draft-resuming-countdown')).toHaveText(
-        /^Resuming in [1-3]…$/
+        /^Resuming in [1-3]…$/,
       );
-      await expect(a.page.getByTestId('draft-paused-overlay')).toHaveCount(0, { timeout: 5_000 });
+      await expect(a.page.getByTestId('draft-paused-overlay')).toHaveCount(0, {
+        timeout: 5_000,
+      });
 
       const resumed = parseClock(await grace.textContent());
       await expect
@@ -118,33 +124,46 @@ test.describe.serial('Team draft pause and resume', () => {
     // precondition: captain pages closed; staff page open
     await staleDraftHeartbeat(admin, t.draft.pk, captainA, 'delete');
 
-    await expect(staffPage.getByTestId('draft-paused-overlay')).toBeVisible({ timeout: 4_000 });
+    await expect(staffPage.getByTestId('draft-paused-overlay')).toBeVisible({
+      timeout: 4_000,
+    });
     await expect(staffPage.getByTestId('draft-paused-message')).toHaveText(
-      / is disconnected — pick for them or wait$/
+      / is disconnected — pick for them or wait$/,
     );
     await expect(staffPage.getByTestId('draft-resume-button')).toBeDisabled();
-    await expect(staffPage.getByTestId('draft-pick-for-captain-button')).toBeVisible();
+    await expect(
+      staffPage.getByTestId('draft-pick-for-captain-button'),
+    ).toBeVisible();
 
     await staffPage.getByTestId('draft-history-button').click();
     await expect(
       staffPage
         .getByTestId('draft-event-row-draft_paused')
         .first()
-        .getByTestId('draft-event-text')
+        .getByTestId('draft-event-text'),
     ).toHaveText(/Draft paused — .* disconnected/);
     await staffPage.keyboard.press('Escape');
-    await expect(staffPage.getByTestId('draft-event-row-draft_paused')).toHaveCount(0);
+    await expect(
+      staffPage.getByTestId('draft-event-row-draft_paused'),
+    ).toHaveCount(0);
     await expect(staffPage.getByTestId('close-draft-modal')).toBeVisible();
     await expect(staffPage.getByTestId('draft-paused-overlay')).toBeVisible();
 
     const a = await openCaptainPage(browser, captainA, t.pk);
     try {
-      await expect(staffPage.getByTestId('draft-resume-button')).toBeEnabled({ timeout: 5_000 });
+      await expect(staffPage.getByTestId('draft-resume-button')).toBeEnabled({
+        timeout: 5_000,
+      });
       await staffPage.getByTestId('draft-resume-button').click();
-      await expect(staffPage.getByTestId('draft-paused-overlay')).toHaveCount(0, {
+      await expect(staffPage.getByTestId('draft-paused-overlay')).toHaveCount(
+        0,
+        {
+          timeout: 8_000,
+        },
+      );
+      await expect(a.page.getByTestId('draft-paused-overlay')).toHaveCount(0, {
         timeout: 8_000,
       });
-      await expect(a.page.getByTestId('draft-paused-overlay')).toHaveCount(0, { timeout: 8_000 });
     } finally {
       await a.context.close();
     }
@@ -163,21 +182,30 @@ test.describe.serial('Team draft pause and resume', () => {
 
       await staleDraftHeartbeat(admin, t.draft.pk, captainA, 'delete');
 
-      await expect(staffPage.getByTestId('draft-paused-overlay')).toBeVisible({ timeout: 4_000 });
+      await expect(staffPage.getByTestId('draft-paused-overlay')).toBeVisible({
+        timeout: 4_000,
+      });
       await expect(staffPage.getByTestId('draft-resume-button')).toBeDisabled();
 
       hb.resume();
-      await expect(staffPage.getByTestId('draft-resume-button')).toBeEnabled({ timeout: 6_000 });
-      await staffPage.getByTestId('draft-resume-button').click();
-      await expect(staffPage.getByTestId('draft-paused-overlay')).toHaveCount(0, {
-        timeout: 8_000,
+      await expect(staffPage.getByTestId('draft-resume-button')).toBeEnabled({
+        timeout: 6_000,
       });
+      await staffPage.getByTestId('draft-resume-button').click();
+      await expect(staffPage.getByTestId('draft-paused-overlay')).toHaveCount(
+        0,
+        {
+          timeout: 8_000,
+        },
+      );
     } finally {
       await context.close();
     }
   });
 
-  test('@cicd a non-active captain going stale does not pause', async ({ browser }) => {
+  test('@cicd a non-active captain going stale does not pause', async ({
+    browser,
+  }) => {
     // precondition: captain A page open for the whole test; B has connected and left
     // Two captain page loads plus the fixed 12 s hold ran 27-30 s on CI, at the default 30 s budget.
     test.setTimeout(60_000);
@@ -209,7 +237,9 @@ test.describe.serial('Team draft pause and resume', () => {
     const before = activeRound(await fetchTimerTournament(admin, KEY));
 
     await staleDraftHeartbeat(admin, t.draft.pk, captainA, 'delete');
-    await expect(staffPage.getByTestId('draft-paused-overlay')).toBeVisible({ timeout: 12_000 });
+    await expect(staffPage.getByTestId('draft-paused-overlay')).toBeVisible({
+      timeout: 12_000,
+    });
 
     await staffPage.getByTestId('draft-pick-for-captain-button').click();
     await expect(staffPage.getByTestId('draft-paused-overlay')).toHaveCount(0);
@@ -226,7 +256,8 @@ test.describe.serial('Team draft pause and resume', () => {
         return {
           picked: picked?.choice != null,
           state: cur.draft.state,
-          nextStartedAt: next.pk !== before.pk ? next.started_at ?? null : 'same-round',
+          nextStartedAt:
+            next.pk !== before.pk ? (next.started_at ?? null) : 'same-round',
         };
       })
       .toEqual({ picked: true, state: 'paused', nextStartedAt: null });

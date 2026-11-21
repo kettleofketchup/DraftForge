@@ -1,8 +1,8 @@
 import { Crown, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
-import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import type { TeamType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
@@ -122,7 +122,11 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
           className={triggerClass}
           size={triggerSize}
           onClick={() => setShowConfirm(true)}
-          aria-label={compact ? `${msg()} captain ${user.username ?? ''}`.trim() : undefined}
+          aria-label={
+            compact
+              ? `${msg()} captain ${user.username ?? ''}`.trim()
+              : undefined
+          }
           data-testid={`captain-action-${user.pk}`}
         >
           {compact ? <X /> : `${msg()} Captain`}
@@ -132,7 +136,11 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
           className={triggerClass}
           size={triggerSize}
           onClick={() => setShowConfirm(true)}
-          aria-label={compact ? `${msg()} captain ${user.username ?? ''}`.trim() : undefined}
+          aria-label={
+            compact
+              ? `${msg()} captain ${user.username ?? ''}`.trim()
+              : undefined
+          }
           data-testid={`captain-action-${user.pk}`}
         >
           {compact ? <Crown /> : `${msg()} Captain`}

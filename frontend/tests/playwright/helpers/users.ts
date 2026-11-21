@@ -1,4 +1,4 @@
-import type { Page, Locator } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 /**
  * Get the user card element for a specific username.
@@ -32,7 +32,7 @@ export function getUserRemoveButton(page: Page, username: string): Locator {
 export async function waitForUserCard(
   page: Page,
   username: string,
-  timeout = 10000
+  timeout = 10000,
 ): Promise<void> {
   await getUserCard(page, username).waitFor({
     state: 'visible',

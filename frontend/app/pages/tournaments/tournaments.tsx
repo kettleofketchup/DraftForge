@@ -41,17 +41,26 @@ export default function TournamentsPage() {
   const rawOrganization = searchParams.get('organization');
   const scope = parseOrgScope(rawOrganization, membership.isLoggedIn);
   // Without an explicit scope the default depends on who is logged in.
-  const scopeReady = !membership.membershipPending || isExplicitOrgScope(rawOrganization);
+  const scopeReady =
+    !membership.membershipPending || isExplicitOrgScope(rawOrganization);
   const league = parseFilterId(searchParams.get('league'));
   const [searchInput, setSearchInput] = useState('');
   const search = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS);
 
   const upcoming = useUpcomingTournaments(
-    { ...orgScopeRequest(scope, 'upcoming', membership.memberOrgIds), league, search },
+    {
+      ...orgScopeRequest(scope, 'upcoming', membership.memberOrgIds),
+      league,
+      search,
+    },
     { enabled: scopeReady && tab === 'upcoming' },
   );
   const archived = useArchivedTournaments(
-    { ...orgScopeRequest(scope, 'archived', membership.memberOrgIds), league, search },
+    {
+      ...orgScopeRequest(scope, 'archived', membership.memberOrgIds),
+      league,
+      search,
+    },
     { enabled: scopeReady && tab === 'archived' },
   );
 

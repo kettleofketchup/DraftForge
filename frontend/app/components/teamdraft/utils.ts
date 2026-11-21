@@ -38,15 +38,25 @@ export interface ViewedRoundResult {
 export function resolveViewedRound(
   rounds: ReadonlyArray<DraftRoundType>,
   viewed: DraftRoundType | null | undefined,
-  opts: { autoAdvance: boolean; latestRoundPk: number | null | undefined; forceJumpToRoundPk: number | null },
+  opts: {
+    autoAdvance: boolean;
+    latestRoundPk: number | null | undefined;
+    forceJumpToRoundPk: number | null;
+  },
 ): ViewedRoundResult {
   const refreshed = rounds.find((r) => r.pk === viewed?.pk) ?? null;
   if (opts.forceJumpToRoundPk != null) {
     const target = rounds.find((r) => r.pk === opts.forceJumpToRoundPk);
     if (target) {
       const moved =
-        refreshed && viewed && refreshed.pick_number != null && refreshed.pick_number !== viewed.pick_number
-          ? { captain: (refreshed.captain ?? null) as UserType | null, pickNumber: refreshed.pick_number }
+        refreshed &&
+        viewed &&
+        refreshed.pick_number != null &&
+        refreshed.pick_number !== viewed.pick_number
+          ? {
+              captain: (refreshed.captain ?? null) as UserType | null,
+              pickNumber: refreshed.pick_number,
+            }
           : null;
       return { round: target, moved };
     }

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { eventSchema } from '~/components/events/schemas'
+import { describe, expect, it } from 'vitest';
+import { eventSchema } from '~/components/events/schemas';
 
 const baseEvent = (overrides = {}) => ({
   id: 1,
@@ -69,31 +69,33 @@ const baseEvent = (overrides = {}) => ({
   min_mmr: null,
   user_can_manage: false,
   ...overrides,
-})
+});
 
 describe('eventSchema — single-event signup_reminder rejection', () => {
   it('rejects discord_signup_reminder=true when event_repeater is null', () => {
     const bad = baseEvent({
       event_repeater: null,
       discord_signup_reminder: true,
-    })
-    expect(() => eventSchema.parse(bad)).toThrow(/signup reminder.*subscribers/i)
-  })
+    });
+    expect(() => eventSchema.parse(bad)).toThrow(
+      /signup reminder.*subscribers/i,
+    );
+  });
 
   it('accepts discord_signup_reminder=false on single events', () => {
     const ok = baseEvent({
       event_repeater: null,
       discord_signup_reminder: false,
-    })
-    expect(() => eventSchema.parse(ok)).not.toThrow()
-  })
+    });
+    expect(() => eventSchema.parse(ok)).not.toThrow();
+  });
 
   it('accepts discord_signup_reminder=true when event_repeater is set', () => {
     const ok = baseEvent({
       event_repeater: 42,
       event_repeater_name: 'Weekly Series',
       discord_signup_reminder: true,
-    })
-    expect(() => eventSchema.parse(ok)).not.toThrow()
-  })
-})
+    });
+    expect(() => eventSchema.parse(ok)).not.toThrow();
+  });
+});

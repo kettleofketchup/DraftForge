@@ -5,7 +5,8 @@ vi.mock('sonner', () => ({ toast }));
 
 import { runTimerAction } from '../timer/runTimerAction';
 
-const rejected = () => Promise.reject({ response: { status: 409, data: { code: 'wrong_state' } } });
+const rejected = () =>
+  Promise.reject({ response: { status: 409, data: { code: 'wrong_state' } } });
 
 describe('runTimerAction', () => {
   beforeEach(() => {
@@ -14,19 +15,28 @@ describe('runTimerAction', () => {
   });
 
   it('resolves with the action result', async () => {
-    await expect(runTimerAction(() => Promise.resolve(5), 'Failed')).resolves.toBe(5);
+    await expect(
+      runTimerAction(() => Promise.resolve(5), 'Failed'),
+    ).resolves.toBe(5);
     expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('never rejects and toasts the mapped error once', async () => {
-    await expect(runTimerAction(rejected, 'Failed to pause')).resolves.toBeUndefined();
+    await expect(
+      runTimerAction(rejected, 'Failed to pause'),
+    ).resolves.toBeUndefined();
     expect(toast.error).toHaveBeenCalledTimes(1);
-    expect(toast.error).toHaveBeenCalledWith('Draft is not in the right state for that');
+    expect(toast.error).toHaveBeenCalledWith(
+      'Draft is not in the right state for that',
+    );
   });
 
   it('leaves the error toast to toast.promise when progress messages are given', async () => {
     await expect(
-      runTimerAction(rejected, 'Failed to pause', { loading: 'Pausing…', success: 'Draft paused' }),
+      runTimerAction(rejected, 'Failed to pause', {
+        loading: 'Pausing…',
+        success: 'Draft paused',
+      }),
     ).resolves.toBeUndefined();
     expect(toast.promise).toHaveBeenCalledTimes(1);
     expect(toast.error).not.toHaveBeenCalled();

@@ -12,7 +12,9 @@ vi.mock('@sentry/react-router', () => ({
 describe('resolveSentryDsn', () => {
   it('is off when VITE_SENTRY_ENABLED is unset (dev servers, tests)', () => {
     expect(resolveSentryDsn({})).toBeNull();
-    expect(resolveSentryDsn({ VITE_SENTRY_DSN: 'https://k@example.test/1' })).toBeNull();
+    expect(
+      resolveSentryDsn({ VITE_SENTRY_DSN: 'https://k@example.test/1' }),
+    ).toBeNull();
   });
 
   it('is off for any value other than true', () => {
@@ -22,15 +24,20 @@ describe('resolveSentryDsn', () => {
   });
 
   it('uses the project DSN when enabled without an override', () => {
-    expect(resolveSentryDsn({ VITE_SENTRY_ENABLED: 'true' })).toBe(DEFAULT_SENTRY_DSN);
-    expect(resolveSentryDsn({ VITE_SENTRY_ENABLED: 'TRUE', VITE_SENTRY_DSN: ' ' })).toBe(
+    expect(resolveSentryDsn({ VITE_SENTRY_ENABLED: 'true' })).toBe(
       DEFAULT_SENTRY_DSN,
     );
+    expect(
+      resolveSentryDsn({ VITE_SENTRY_ENABLED: 'TRUE', VITE_SENTRY_DSN: ' ' }),
+    ).toBe(DEFAULT_SENTRY_DSN);
   });
 
   it('uses VITE_SENTRY_DSN when enabled with an override', () => {
     expect(
-      resolveSentryDsn({ VITE_SENTRY_ENABLED: 'true', VITE_SENTRY_DSN: 'https://k@example.test/1' }),
+      resolveSentryDsn({
+        VITE_SENTRY_ENABLED: 'true',
+        VITE_SENTRY_DSN: 'https://k@example.test/1',
+      }),
     ).toBe('https://k@example.test/1');
   });
 });

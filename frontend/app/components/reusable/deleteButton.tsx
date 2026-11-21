@@ -1,6 +1,6 @@
 import React, { memo, useState } from 'react';
-import { ConfirmDialog } from '~/components/ui/dialogs';
 import { TrashIconButton } from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { TooltipContent } from '~/components/ui/tooltip';
 
 interface DeleteButtonProps {

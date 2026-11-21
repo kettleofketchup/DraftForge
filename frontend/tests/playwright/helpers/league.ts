@@ -1,7 +1,6 @@
-import { API_URL } from '../fixtures/base-url';
+import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
-import type { Page, Locator, BrowserContext } from '@playwright/test';
-
+import { API_URL } from '../fixtures/base-url';
 
 /**
  * League data returned from the API.
@@ -78,7 +77,9 @@ export class LeaguePage {
 
     // Tab navigation
     this.infoTab = page.locator('[data-testid="league-tab-info"]');
-    this.tournamentsTab = page.locator('[data-testid="league-tab-tournaments"]');
+    this.tournamentsTab = page.locator(
+      '[data-testid="league-tab-tournaments"]',
+    );
     this.matchesTab = page.locator('[data-testid="league-tab-matches"]');
 
     // Edit modal elements
@@ -86,13 +87,17 @@ export class LeaguePage {
     this.editModal = page.locator('[data-testid="edit-league-modal"]');
     this.nameInput = page.locator('[data-testid="league-name-input"]');
     this.prizeInput = page.locator('[data-testid="league-prize-input"]');
-    this.descriptionInput = page.locator('[data-testid="league-description-input"]');
+    this.descriptionInput = page.locator(
+      '[data-testid="league-description-input"]',
+    );
     this.rulesInput = page.locator('[data-testid="league-rules-input"]');
     this.submitButton = page.locator('[data-testid="form-dialog-submit"]');
     this.cancelButton = page.locator('[data-testid="modal-cancel-button"]');
 
     // Matches tab elements
-    this.steamLinkedFilterButton = page.locator('[data-testid="steam-filter-button"]');
+    this.steamLinkedFilterButton = page.locator(
+      '[data-testid="steam-filter-button"]',
+    );
     this.matchCards = page.locator('[data-testid^="league-match-card"]');
   }
 
@@ -255,7 +260,7 @@ export class LeaguePage {
 
     // Wait for success message (sonner toast)
     await expect(
-      this.page.locator('[data-sonner-toast][data-type="success"]')
+      this.page.locator('[data-sonner-toast][data-type="success"]'),
     ).toBeVisible({ timeout: 10000 });
 
     // Wait for modal to close
@@ -395,7 +400,7 @@ export class LeaguePage {
 export async function navigateToLeague(
   page: Page,
   leaguePk: number,
-  tab?: LeagueTab
+  tab?: LeagueTab,
 ): Promise<void> {
   const path = tab ? `/leagues/${leaguePk}/${tab}` : `/leagues/${leaguePk}`;
   await page.goto(path);
@@ -410,7 +415,10 @@ export async function navigateToLeague(
  * @param page - Playwright Page instance
  * @param tabName - The tab to click
  */
-export async function clickLeagueTab(page: Page, tabName: LeagueTab): Promise<void> {
+export async function clickLeagueTab(
+  page: Page,
+  tabName: LeagueTab,
+): Promise<void> {
   const tabTestIds: Record<LeagueTab, string> = {
     info: 'league-tab-info',
     tournaments: 'league-tab-tournaments',
@@ -442,7 +450,9 @@ export async function openLeagueEditModal(page: Page): Promise<void> {
   const editButton = page.locator('[data-testid="edit-league-button"]');
   await editButton.waitFor({ state: 'visible' });
   await editButton.click();
-  await page.locator('[data-testid="edit-league-modal"]').waitFor({ state: 'visible' });
+  await page
+    .locator('[data-testid="edit-league-modal"]')
+    .waitFor({ state: 'visible' });
 }
 
 /**
@@ -454,11 +464,11 @@ export async function openLeagueEditModal(page: Page): Promise<void> {
  */
 export async function getLeagueByPk(
   context: BrowserContext,
-  leaguePk: number
+  leaguePk: number,
 ): Promise<LeagueData | null> {
   const response = await context.request.get(
     `${API_URL}/leagues/${leaguePk}/`,
-    { failOnStatusCode: false }
+    { failOnStatusCode: false },
   );
 
   if (!response.ok()) {
@@ -476,12 +486,11 @@ export async function getLeagueByPk(
  * @returns First league data or null if no leagues exist
  */
 export async function getFirstLeague(
-  context: BrowserContext
+  context: BrowserContext,
 ): Promise<LeagueData | null> {
-  const response = await context.request.get(
-    `${API_URL}/leagues/`,
-    { failOnStatusCode: false }
-  );
+  const response = await context.request.get(`${API_URL}/leagues/`, {
+    failOnStatusCode: false,
+  });
 
   if (!response.ok()) {
     return null;
@@ -493,7 +502,11 @@ export async function getFirstLeague(
   }
 
   // Handle paginated response
-  if (leagues.results && Array.isArray(leagues.results) && leagues.results.length > 0) {
+  if (
+    leagues.results &&
+    Array.isArray(leagues.results) &&
+    leagues.results.length > 0
+  ) {
     return leagues.results[0];
   }
 

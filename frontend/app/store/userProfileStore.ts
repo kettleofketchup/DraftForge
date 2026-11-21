@@ -40,7 +40,10 @@ function sameOrgProfiles(
  * Default schema-only equality would silently drop nested updates.
  * Mirrors userCacheStore.ts:41-60 (hasScopedChanged).
  */
-function hasChanged(existing: UserProfileEntry, incoming: UserProfileEntry): boolean {
+function hasChanged(
+  existing: UserProfileEntry,
+  incoming: UserProfileEntry,
+): boolean {
   return (
     !sameBase(existing.base, incoming.base) ||
     !sameGameUser(existing.gameUser, incoming.gameUser) ||

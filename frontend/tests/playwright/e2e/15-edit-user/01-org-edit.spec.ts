@@ -7,17 +7,17 @@
  * Uses isolated "User Edit Org" data — does not touch other test entities.
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
+  fillEditField,
   openEditModal,
   readEditField,
-  fillEditField,
-  saveEditModal,
   restoreUserField,
+  saveEditModal,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 const USER_EDIT_ORG_NAME = 'User Edit Org';
 
@@ -30,9 +30,14 @@ test.describe('Edit User on Organization Page (@cicd)', () => {
     // Look up User Edit Org by name
     const orgsResp = await context.request.get(`${API_URL}/organizations/`);
     const orgs = await orgsResp.json();
-    const orgList = Array.isArray(orgs) ? orgs : orgs.results ?? [];
-    const editOrg = orgList.find((o: { name: string }) => o.name === USER_EDIT_ORG_NAME);
-    if (!editOrg) throw new Error(`Org "${USER_EDIT_ORG_NAME}" not found. Run just db::populate::all`);
+    const orgList = Array.isArray(orgs) ? orgs : (orgs.results ?? []);
+    const editOrg = orgList.find(
+      (o: { name: string }) => o.name === USER_EDIT_ORG_NAME,
+    );
+    if (!editOrg)
+      throw new Error(
+        `Org "${USER_EDIT_ORG_NAME}" not found. Run just db::populate::all`,
+      );
     orgPk = editOrg.pk;
 
     await context.close();
@@ -46,7 +51,9 @@ test.describe('Edit User on Organization Page (@cicd)', () => {
   // races with every other 15-edit-user spec that also picks index 0.
   const TARGET_USERNAME = 'edit_user_org';
 
-  test('@cicd smoke: edit user nickname via org user card', async ({ page }) => {
+  test('@cicd smoke: edit user nickname via org user card', async ({
+    page,
+  }) => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
 
@@ -55,17 +62,22 @@ test.describe('Edit User on Organization Page (@cicd)', () => {
     await expect(usersTab).toBeVisible({ timeout: 5000 });
     await usersTab.click();
 
-    const targetCard = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
+    const targetCard = page.locator(
+      `[data-testid="usercard-${TARGET_USERNAME}"]`,
+    );
     await expect(targetCard).toBeVisible({ timeout: 10000 });
 
     await openEditModal(page, targetCard);
     const originalNickname = await readEditField(page, 'nickname');
-    const newNickname = originalNickname === 'TestNick' ? 'TestNickAlt' : 'TestNick';
+    const newNickname =
+      originalNickname === 'TestNick' ? 'TestNickAlt' : 'TestNick';
 
     await fillEditField(page, 'nickname', newNickname);
     await saveEditModal(page);
 
-    await expect(targetCard.getByText(newNickname).first()).toBeVisible({ timeout: 5000 });
+    await expect(targetCard.getByText(newNickname).first()).toBeVisible({
+      timeout: 5000,
+    });
 
     await restoreUserField(page, targetCard, 'nickname', originalNickname);
   });

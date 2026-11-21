@@ -13,17 +13,26 @@
  * Pipeline: just demo::roll-call → just demo::trim → just demo::gifs
  */
 
+import {
+  chromium,
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
+import { API_URL, loginAdmin, waitForHydration } from '../fixtures/auth';
 import { BASE_URL } from '../fixtures/base-url';
 import { isCsrfCookie } from '../fixtures/cookies';
-import { test, expect, chromium, type Page, type Locator } from '@playwright/test';
-import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
 import { waitForDemoReady } from '../fixtures/demo-utils';
-import * as path from 'path';
-import * as fs from 'fs';
 
 const VIDEO_OUTPUT_DIR = 'demo-results/videos/roll_call';
 const FINAL_VIDEO_DIR = '../docs/assets/videos';
-const DEMO_METADATA_FILE = path.join('demo-results/videos', 'roll_call.demo.yaml');
+const DEMO_METADATA_FILE = path.join(
+  'demo-results/videos',
+  'roll_call.demo.yaml',
+);
 
 const PLAYER_PKS = Array.from({ length: 20 }, (_, i) => 5001 + i);
 
@@ -38,12 +47,18 @@ function cursorInitScript() {
     const el = document.createElement('div');
     el.id = 'demo-cursor';
     el.style.cssText = [
-      'position:fixed', 'width:20px', 'height:20px', 'border-radius:50%',
-      'background:rgba(239,68,68,0.55)', 'border:2px solid white',
+      'position:fixed',
+      'width:20px',
+      'height:20px',
+      'border-radius:50%',
+      'background:rgba(239,68,68,0.55)',
+      'border:2px solid white',
       'box-shadow:0 0 6px rgba(0,0,0,0.4)',
-      'pointer-events:none', 'z-index:999999',
+      'pointer-events:none',
+      'z-index:999999',
       'transform:translate(-50%,-50%)',
-      'left:-40px', 'top:-40px',
+      'left:-40px',
+      'top:-40px',
     ].join(';');
     document.body.appendChild(el);
     document.addEventListener('mousemove', (e) => {
@@ -68,7 +83,10 @@ async function moveTo(page: Page, locator: Locator, durationMs = 500) {
     ({ tx, ty, ms }) => {
       return new Promise<void>((resolve) => {
         const cursor = document.getElementById('demo-cursor');
-        if (!cursor) { resolve(); return; }
+        if (!cursor) {
+          resolve();
+          return;
+        }
         const fromX = parseFloat(cursor.style.left) || 500;
         const fromY = parseFloat(cursor.style.top) || 400;
         const steps = Math.max(12, Math.round(ms / 16));
@@ -148,7 +166,8 @@ test.describe('Roll Call Demo', () => {
       fs.mkdirSync(videoDir, { recursive: true });
     }
 
-    let executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
+    let executablePath =
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
     if (executablePath === '/usr/bin/chromium-browser') {
       executablePath = '/usr/lib/chromium/chromium';
     }
@@ -201,11 +220,16 @@ test.describe('Roll Call Demo', () => {
     // Find the Events Test Org and league dynamically
     const orgsResp = await context.request.get(`${API_URL}/organizations/`);
     const orgs = await orgsResp.json();
-    const eventsOrg = orgs.find((o: { name: string }) => o.name === 'Events Test Org');
-    if (!eventsOrg) throw new Error('Events Test Org not found — run just db::populate::all');
+    const eventsOrg = orgs.find(
+      (o: { name: string }) => o.name === 'Events Test Org',
+    );
+    if (!eventsOrg)
+      throw new Error('Events Test Org not found — run just db::populate::all');
     const orgPk = eventsOrg.pk;
 
-    const leaguesResp = await context.request.get(`${API_URL}/leagues/?organization=${orgPk}`);
+    const leaguesResp = await context.request.get(
+      `${API_URL}/leagues/?organization=${orgPk}`,
+    );
     const leagues = await leaguesResp.json();
     const leaguePk = leagues[0]?.pk ?? orgPk;
 
@@ -234,7 +258,9 @@ test.describe('Roll Call Demo', () => {
 
     if (!createEventResp.ok()) {
       const err = await createEventResp.text();
-      throw new Error(`Failed to create demo event: ${createEventResp.status()} ${err}`);
+      throw new Error(
+        `Failed to create demo event: ${createEventResp.status()} ${err}`,
+      );
     }
     const signupEvent = await createEventResp.json();
 
@@ -312,7 +338,9 @@ test.describe('Roll Call Demo', () => {
     // Step 6 — Click "Start Roll Call" button
     // =========================================================================
     console.log('Step 6: Click Start Roll Call');
-    const startRollCallBtn = page.locator('[data-testid="event-start-rollcall-btn"]');
+    const startRollCallBtn = page.locator(
+      '[data-testid="event-start-rollcall-btn"]',
+    );
     await startRollCallBtn.waitFor({ state: 'visible', timeout: 10000 });
     await demoClick(page, startRollCallBtn, 300);
 
@@ -364,13 +392,17 @@ test.describe('Roll Call Demo', () => {
       await confirmPlayerBtn.waitFor({ state: 'visible', timeout: 5000 });
       await demoClick(page, confirmPlayerBtn, 200);
 
-      const attendanceConfirmBtn = page.getByTestId('rollcall-confirm-dialog-confirm');
+      const attendanceConfirmBtn = page.getByTestId(
+        'rollcall-confirm-dialog-confirm',
+      );
       await attendanceConfirmBtn.waitFor({ state: 'visible', timeout: 5000 });
       await page.waitForTimeout(250);
       await demoClick(page, attendanceConfirmBtn, 200);
 
       await expect(attendanceSummary).toHaveCount(0, { timeout: 5000 });
-      await expect(confirmedSection).toHaveText(new RegExp(`\\(${i}\\)`), { timeout: 5000 });
+      await expect(confirmedSection).toHaveText(new RegExp(`\\(${i}\\)`), {
+        timeout: 5000,
+      });
       await page.waitForTimeout(200);
     }
 
@@ -395,7 +427,9 @@ test.describe('Roll Call Demo', () => {
     // Step 15 — Click "Start Tournament"
     // =========================================================================
     console.log('Step 15: Click Start Tournament');
-    const startTournamentBtn = page.locator('[data-testid="rollcall-start-btn"]');
+    const startTournamentBtn = page.locator(
+      '[data-testid="rollcall-start-btn"]',
+    );
     await startTournamentBtn.waitFor({ state: 'visible', timeout: 10000 });
     await demoClick(page, startTournamentBtn, 300);
 
@@ -403,7 +437,9 @@ test.describe('Roll Call Demo', () => {
     // Step 16 — Wait for confirmation dialog
     // =========================================================================
     console.log('Step 16: Start Tournament confirmation dialog');
-    const tournamentConfirmBtn = page.getByTestId('rollcall-start-dialog-confirm');
+    const tournamentConfirmBtn = page.getByTestId(
+      'rollcall-start-dialog-confirm',
+    );
     await tournamentConfirmBtn.waitFor({ state: 'visible', timeout: 10000 });
     await page.waitForTimeout(500);
 
@@ -427,10 +463,15 @@ test.describe('Roll Call Demo', () => {
     await page.close();
     await context.close();
 
-    const videoFiles = fs.readdirSync(videoDir).filter((f) => f.endsWith('.webm'));
+    const videoFiles = fs
+      .readdirSync(videoDir)
+      .filter((f) => f.endsWith('.webm'));
     if (videoFiles.length > 0) {
       const sorted = videoFiles
-        .map((f) => ({ name: f, time: fs.statSync(path.join(videoDir, f)).mtimeMs }))
+        .map((f) => ({
+          name: f,
+          time: fs.statSync(path.join(videoDir, f)).mtimeMs,
+        }))
         .sort((a, b) => b.time - a.time);
       const src = path.join(videoDir, sorted[0].name);
       // Copy to docs/assets/videos/ which is OUTSIDE Playwright's outputDir

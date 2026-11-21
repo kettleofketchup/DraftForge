@@ -6,10 +6,10 @@
  */
 
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
+  test,
   TournamentPage,
+  visitAndWaitForHydration,
 } from '../../fixtures';
 
 test.describe('Tournament API: User', () => {

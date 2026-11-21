@@ -8,8 +8,9 @@ export function getTotalMMR(team: TeamType): number {
   const captainMMR = team.captain?.mmr ?? 0;
   const membersMMR =
     team.members?.reduce(
-      (sum: number, m: NonNullable<TeamType['members']>[number]) => sum + (m.mmr ?? 0),
-      0
+      (sum: number, m: NonNullable<TeamType['members']>[number]) =>
+        sum + (m.mmr ?? 0),
+      0,
     ) ?? 0;
   return captainMMR + membersMMR;
 }
@@ -25,7 +26,9 @@ export function seedByMMR(teams: TeamType[]): TeamType[] {
  * Sort teams by captain MMR (highest first)
  */
 export function seedByCaptainMMR(teams: TeamType[]): TeamType[] {
-  return [...teams].sort((a, b) => (b.captain?.mmr ?? 0) - (a.captain?.mmr ?? 0));
+  return [...teams].sort(
+    (a, b) => (b.captain?.mmr ?? 0) - (a.captain?.mmr ?? 0),
+  );
 }
 
 /**
@@ -43,7 +46,10 @@ export function seedRandom(teams: TeamType[]): TeamType[] {
 /**
  * Apply seeding method to teams
  */
-export function applySeedingMethod(teams: TeamType[], method: SeedingMethod): TeamType[] {
+export function applySeedingMethod(
+  teams: TeamType[],
+  method: SeedingMethod,
+): TeamType[] {
   switch (method) {
     case 'mmr_total':
       return seedByMMR(teams);
@@ -63,7 +69,9 @@ export function applySeedingMethod(teams: TeamType[], method: SeedingMethod): Te
  * For 8 teams: 1v8, 4v5, 2v7, 3v6
  * This ensures highest seeds don't meet until later rounds.
  */
-export function getFirstRoundPairings(seededTeams: TeamType[]): [TeamType | undefined, TeamType | undefined][] {
+export function getFirstRoundPairings(
+  seededTeams: TeamType[],
+): [TeamType | undefined, TeamType | undefined][] {
   const n = seededTeams.length;
   const bracketSize = Math.pow(2, Math.ceil(Math.log2(n)));
   const pairings: [TeamType | undefined, TeamType | undefined][] = [];
@@ -106,7 +114,7 @@ function generateBracketPositions(size: number): number[] {
  */
 export function applyTeamsToFirstRound(
   matches: BracketMatch[],
-  seededTeams: TeamType[]
+  seededTeams: TeamType[],
 ): BracketMatch[] {
   const pairings = getFirstRoundPairings(seededTeams);
 

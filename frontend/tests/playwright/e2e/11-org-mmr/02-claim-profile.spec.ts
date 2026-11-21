@@ -24,13 +24,23 @@ interface ClaimableUser {
 }
 
 /** Fetch claimable user from the API by known attributes */
-async function getClaimableUser(
-  context: { request: { get: (url: string) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }> } }
-): Promise<ClaimableUser | null> {
+async function getClaimableUser(context: {
+  request: {
+    get: (
+      url: string,
+    ) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }>;
+  };
+}): Promise<ClaimableUser | null> {
   const response = await context.request.get(`${API_URL}/users/`);
   if (!response.ok()) return null;
   const users = (await response.json()) as ClaimableUser[];
-  return users.find(u => u.nickname === 'Claimable Profile' || u.steam_account_id === 76561198099999999) ?? null;
+  return (
+    users.find(
+      (u) =>
+        u.nickname === 'Claimable Profile' ||
+        u.steam_account_id === 76561198099999999,
+    ) ?? null
+  );
 }
 
 /** Navigate to /users and wait for user cards to fully render */
@@ -42,7 +52,10 @@ async function goToUsersPage(page: import('@playwright/test').Page) {
 }
 
 /** Search for a user by name and wait for results to settle */
-async function searchForUser(page: import('@playwright/test').Page, query: string) {
+async function searchForUser(
+  page: import('@playwright/test').Page,
+  query: string,
+) {
   const searchInput = page.getByTestId('userSearchInput');
   await searchInput.fill(query);
   // Wait for debounce (300ms) + filter + re-render to settle
@@ -79,12 +92,16 @@ test.describe('Claim Profile Feature', () => {
     await loginAdmin();
 
     // Find any user WITH Discord ID (who isn't the admin)
-    const currentUserResp = await context.request.get(`${API_URL}/current_user`);
+    const currentUserResp = await context.request.get(
+      `${API_URL}/current_user`,
+    );
     const currentUser = (await currentUserResp.json()) as { pk: number };
 
     const usersResp = await context.request.get(`${API_URL}/users/`);
     const users = (await usersResp.json()) as ClaimableUser[];
-    const userWithDiscord = users.find(u => u.discordId !== null && u.pk !== currentUser.pk);
+    const userWithDiscord = users.find(
+      (u) => u.discordId !== null && u.pk !== currentUser.pk,
+    );
 
     if (!userWithDiscord) {
       test.skip(true, 'No other user with Discord ID found');
@@ -97,7 +114,9 @@ test.describe('Claim Profile Feature', () => {
     }
 
     // Claim button should NOT be visible — target already has Discord ID
-    const claimBtn = page.getByTestId(`claim-profile-btn-${userWithDiscord.pk}`);
+    const claimBtn = page.getByTestId(
+      `claim-profile-btn-${userWithDiscord.pk}`,
+    );
     await expect(claimBtn).not.toBeVisible({ timeout: 2000 });
   });
 
@@ -156,7 +175,9 @@ test.describe('Claim Profile Feature', () => {
     }
     await expect(modal).toBeVisible({ timeout: 5000 });
 
-    const claimBtnInModal = page.getByTestId(`claim-profile-modal-btn-${claimable.pk}`);
+    const claimBtnInModal = page.getByTestId(
+      `claim-profile-modal-btn-${claimable.pk}`,
+    );
     await expect(claimBtnInModal).toBeVisible({ timeout: 5000 });
   });
 });

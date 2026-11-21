@@ -11,17 +11,17 @@
  * Uses isolated "User Edit Tournament" data — does not touch other test entities.
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
+  fillEditField,
   openEditModal,
   readEditField,
-  fillEditField,
-  saveEditModal,
   restoreUserField,
+  saveEditModal,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 const USER_EDIT_LEAGUE_NAME = 'User Edit League';
 const USER_EDIT_TOURNAMENT_NAME = 'User Edit Tournament';
@@ -35,16 +35,32 @@ test.describe('Edit User on Tournament Page (@cicd)', () => {
     // Look up User Edit League, then find the tournament under it
     const leaguesResp = await context.request.get(`${API_URL}/leagues/`);
     const leagues = await leaguesResp.json();
-    const leagueList = Array.isArray(leagues) ? leagues : leagues.results ?? [];
-    const editLeague = leagueList.find((l: { name: string }) => l.name === USER_EDIT_LEAGUE_NAME);
-    if (!editLeague) throw new Error(`League "${USER_EDIT_LEAGUE_NAME}" not found. Run just db::populate::all`);
+    const leagueList = Array.isArray(leagues)
+      ? leagues
+      : (leagues.results ?? []);
+    const editLeague = leagueList.find(
+      (l: { name: string }) => l.name === USER_EDIT_LEAGUE_NAME,
+    );
+    if (!editLeague)
+      throw new Error(
+        `League "${USER_EDIT_LEAGUE_NAME}" not found. Run just db::populate::all`,
+      );
 
     // Fetch tournaments for this league
-    const tournamentsResp = await context.request.get(`${API_URL}/tournaments/?league=${editLeague.pk}`);
+    const tournamentsResp = await context.request.get(
+      `${API_URL}/tournaments/?league=${editLeague.pk}`,
+    );
     const tournaments = await tournamentsResp.json();
-    const tournamentList = Array.isArray(tournaments) ? tournaments : tournaments.results ?? [];
-    const editTournament = tournamentList.find((t: { name: string }) => t.name === USER_EDIT_TOURNAMENT_NAME);
-    if (!editTournament) throw new Error(`Tournament "${USER_EDIT_TOURNAMENT_NAME}" not found. Run just db::populate::all`);
+    const tournamentList = Array.isArray(tournaments)
+      ? tournaments
+      : (tournaments.results ?? []);
+    const editTournament = tournamentList.find(
+      (t: { name: string }) => t.name === USER_EDIT_TOURNAMENT_NAME,
+    );
+    if (!editTournament)
+      throw new Error(
+        `Tournament "${USER_EDIT_TOURNAMENT_NAME}" not found. Run just db::populate::all`,
+      );
     tournamentPk = editTournament.pk;
 
     await context.close();
@@ -57,16 +73,23 @@ test.describe('Edit User on Tournament Page (@cicd)', () => {
   // Dedicated user — see USER_EDIT_USERS in backend/tests/data/users.py.
   const TARGET_USERNAME = 'edit_user_tournament';
 
-  test('@cicd smoke: edit user nickname via tournament player card', async ({ page }) => {
+  test('@cicd smoke: edit user nickname via tournament player card', async ({
+    page,
+  }) => {
     await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
-    await expect(page.locator('[data-testid="tournamentDetailPage"]')).toBeVisible({ timeout: 15000 });
+    await expect(
+      page.locator('[data-testid="tournamentDetailPage"]'),
+    ).toBeVisible({ timeout: 15000 });
 
-    const targetCard = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
+    const targetCard = page.locator(
+      `[data-testid="usercard-${TARGET_USERNAME}"]`,
+    );
     await expect(targetCard).toBeVisible({ timeout: 10000 });
 
     await openEditModal(page, targetCard);
     const originalNickname = await readEditField(page, 'nickname');
-    const newNickname = originalNickname === 'TestNick' ? 'TestNickAlt' : 'TestNick';
+    const newNickname =
+      originalNickname === 'TestNick' ? 'TestNickAlt' : 'TestNick';
 
     await fillEditField(page, 'nickname', newNickname);
     await saveEditModal(page);

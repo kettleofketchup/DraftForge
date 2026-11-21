@@ -61,8 +61,8 @@ export const ActiveDraftBanner: React.FC = () => {
           className="font-medium hover:underline"
         >
           You have an active{' '}
-          {activeDrafts[0].type === 'team_draft' ? 'team' : 'hero'} draft - Click
-          to join
+          {activeDrafts[0].type === 'team_draft' ? 'team' : 'hero'} draft -
+          Click to join
         </Link>
       ) : (
         // Multiple drafts: dropdown

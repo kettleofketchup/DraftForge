@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
-import { ConfirmDialog } from '~/components/ui/dialogs';
+import { buildDiscordLoginUrl } from '~/components/navbar/login';
+import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { Button } from '~/components/ui/button';
 import { PrimaryButton } from '~/components/ui/buttons';
-import { AdminOnlyButton } from '~/components/reusable/adminButton';
-import { buildDiscordLoginUrl } from '~/components/navbar/login';
-import type { UserType } from '~/index';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
+import type { UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
-import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
+import {
+  draftWsSelectors,
+  useDraftWebSocketStore,
+} from '~/store/draftWebSocketStore';
 import { useUserStore } from '~/store/userStore';
 import { choosePlayerHook } from '../hooks/choosePlayerHook';
 import { isCaptainOf } from '../isCaptainOf';
@@ -48,7 +51,8 @@ export const ChoosePlayerButton: React.FC<{
     currentUser.pk === curDraftRound.captain.pk;
   const canPick =
     isStaff() ||
-    (isCaptainForRound && (!timerEnabled || curDraftRound.pk === activeRoundPk));
+    (isCaptainForRound &&
+      (!timerEnabled || curDraftRound.pk === activeRoundPk));
   const pickAlreadyMade = !!curDraftRound?.choice;
 
   useEffect(() => {}, [tournament.draft, tournament.teams]);

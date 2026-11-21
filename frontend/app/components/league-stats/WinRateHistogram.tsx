@@ -87,14 +87,19 @@ export const WinRateHistogram: React.FC<{
                         className="flex h-full flex-1 items-end rounded-[2px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {b.count === 0 ? (
-                          <div data-empty="true" className="h-px w-full bg-border" />
+                          <div
+                            data-empty="true"
+                            className="h-px w-full bg-border"
+                          />
                         ) : (
                           <svg
                             data-fill
                             aria-hidden="true"
                             width="100%"
                             height={`${(b.count / maxCount) * 100}%`}
-                            data-highlighted={isHighlighted ? 'true' : undefined}
+                            data-highlighted={
+                              isHighlighted ? 'true' : undefined
+                            }
                             className={cn(
                               'block min-h-[4px] rounded-t-[4px]',
                               isHighlighted
@@ -117,7 +122,9 @@ export const WinRateHistogram: React.FC<{
             <span>100%</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            {highlighted ? `bucket ${bucketRange(highlighted)}` : 'not ranked yet'}
+            {highlighted
+              ? `bucket ${bucketRange(highlighted)}`
+              : 'not ranked yet'}
           </p>
           <table className="sr-only">
             <caption>Players per win-rate bucket</caption>

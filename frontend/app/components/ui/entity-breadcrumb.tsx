@@ -18,7 +18,12 @@ const TYPE_CONFIG: Record<EntityType, { label: string; listHref: string }> = {
   tournament: { label: 'Tournament', listHref: '/tournaments' },
 };
 
-export type EntityType = 'organization' | 'league' | 'event-series' | 'event' | 'tournament';
+export type EntityType =
+  | 'organization'
+  | 'league'
+  | 'event-series'
+  | 'event'
+  | 'tournament';
 
 export interface BreadcrumbSegment {
   type: EntityType;
@@ -42,7 +47,11 @@ interface EntityBreadcrumbProps {
   className?: string;
 }
 
-export function EntityBreadcrumb({ segments, currentLabel, className }: EntityBreadcrumbProps) {
+export function EntityBreadcrumb({
+  segments,
+  currentLabel,
+  className,
+}: EntityBreadcrumbProps) {
   if (segments.length === 0 && !currentLabel) return null;
 
   // When currentLabel is set, every segment is a link; otherwise the last

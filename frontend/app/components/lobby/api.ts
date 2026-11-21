@@ -16,7 +16,10 @@ export interface CreateLobbyOptions {
   replay?: boolean;
 }
 
-export type InviteRequest = { missing: true } | { players: number[] } | Record<string, never>;
+export type InviteRequest =
+  | { missing: true }
+  | { players: number[] }
+  | Record<string, never>;
 
 export async function getGameLobby(gameId: number): Promise<GameLobbyResponse> {
   const response = await api.get(`/games/${gameId}/lobby/`);
@@ -34,7 +37,9 @@ export async function createGameLobby(
   });
 }
 
-export async function closeGameLobby(gameId: number): Promise<GameLobbyResponse> {
+export async function closeGameLobby(
+  gameId: number,
+): Promise<GameLobbyResponse> {
   const response = await api.delete(`/games/${gameId}/lobby/`);
   return GameLobbyResponseSchema.parse(response.data);
 }
@@ -67,18 +72,26 @@ async function getPasswordInfo(url: string): Promise<LobbyPasswordInfo | null> {
 }
 
 /** The event's lobby password, for its staff and registered players. */
-export function getEventLobbyPassword(eventId: number): Promise<LobbyPasswordInfo | null> {
+export function getEventLobbyPassword(
+  eventId: number,
+): Promise<LobbyPasswordInfo | null> {
   return getPasswordInfo(`/events/${eventId}/lobby-password/`);
 }
 
 /** The series' password mode and fixed password (staff only). */
-export function getRepeaterLobbyPassword(repeaterId: number): Promise<LobbyPasswordInfo | null> {
+export function getRepeaterLobbyPassword(
+  repeaterId: number,
+): Promise<LobbyPasswordInfo | null> {
   return getPasswordInfo(`/events/repeaters/${repeaterId}/lobby-password/`);
 }
 
 /** A new random password for the event (staff, random mode only). */
-export async function regenerateEventLobbyPassword(eventId: number): Promise<LobbyPasswordInfo> {
-  const response = await api.post(`/events/${eventId}/lobby-password/regenerate/`);
+export async function regenerateEventLobbyPassword(
+  eventId: number,
+): Promise<LobbyPasswordInfo> {
+  const response = await api.post(
+    `/events/${eventId}/lobby-password/regenerate/`,
+  );
   return LobbyPasswordInfoSchema.parse(response.data);
 }
 
@@ -101,10 +114,12 @@ const ERROR_TEXT: Record<string, string> = {
   conflict: 'Another lobby already uses this game.',
   unsupported_game_mode: 'Custom Lobby tournaments cannot get a hosted lobby.',
   unsupported_game_type: 'Only Dota 2 tournaments can get a hosted lobby.',
-  unknown_game_mode: "The lobby service does not know this tournament's game mode.",
+  unknown_game_mode:
+    "The lobby service does not know this tournament's game mode.",
   unknown_region: "The lobby service does not know this tournament's region.",
   invalid_request: 'The lobby service rejected the request.',
-  password_unavailable: 'The lobby password was unavailable. Create a new lobby.',
+  password_unavailable:
+    'The lobby password was unavailable. Create a new lobby.',
   lobby_disabled: 'Hosted lobbies are turned off.',
   lobby_mode_off: 'Hosted lobbies are off for this tournament.',
   active_lobby_exists: 'This game already has a lobby.',
@@ -120,7 +135,10 @@ const ERROR_TEXT: Record<string, string> = {
   no_tournament: 'This game has no tournament.',
 };
 
-export function lobbyErrorText(code: string | null | undefined, fallback?: string): string {
+export function lobbyErrorText(
+  code: string | null | undefined,
+  fallback?: string,
+): string {
   if (code && ERROR_TEXT[code]) return ERROR_TEXT[code];
   return fallback || code || 'Unknown error';
 }
@@ -128,7 +146,9 @@ export function lobbyErrorText(code: string | null | undefined, fallback?: strin
 /** `{error, code}` from a failed lobby request, as display text. */
 export function lobbyRequestErrorText(error: unknown): string {
   if (isAxiosError(error)) {
-    const data = error.response?.data as { code?: string; error?: string } | undefined;
+    const data = error.response?.data as
+      | { code?: string; error?: string }
+      | undefined;
     if (data?.code || data?.error) return lobbyErrorText(data.code, data.error);
     return error.message;
   }

@@ -52,7 +52,10 @@ export const POSITION_LABELS: Record<PositionKey, string> = {
 };
 
 /** Icon component per role. */
-export const positionIcons: Record<PositionKey, React.FC<{ className?: string }>> = {
+export const positionIcons: Record<
+  PositionKey,
+  React.FC<{ className?: string }>
+> = {
   carry: CarrySVG,
   mid: MidSVG,
   offlane: OfflaneSVG,

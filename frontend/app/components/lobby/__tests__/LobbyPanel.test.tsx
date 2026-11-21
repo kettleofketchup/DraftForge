@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance } from '~/i18n/config';
-import { useUserStore } from '~/store/userStore';
 import type { UserType } from '~/index';
+import { useUserStore } from '~/store/userStore';
 import { createGameLobby } from '../api';
 import { LobbyPanelBody } from '../LobbyPanel';
 import { GameLobbyResponseSchema, type GameLobbyResponse } from '../schemas';
-import { privateLobby, publicLobby, players } from './fixtures';
+import { players, privateLobby, publicLobby } from './fixtures';
 
 // Uses @testing-library/react like ConfirmDialog.test.tsx: the panel holds
 // mutation hooks and Radix dialogs, so it needs a real DOM. The mutations
@@ -46,7 +46,9 @@ function Wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-function response(overrides: Partial<Record<keyof GameLobbyResponse, unknown>>) {
+function response(
+  overrides: Partial<Record<keyof GameLobbyResponse, unknown>>,
+) {
   return GameLobbyResponseSchema.parse({
     game_id: 1,
     enabled: true,
@@ -59,7 +61,9 @@ function response(overrides: Partial<Record<keyof GameLobbyResponse, unknown>>) 
 }
 
 function renderPanel(data: GameLobbyResponse) {
-  return render(<LobbyPanelBody gameId={1} data={data} />, { wrapper: Wrapper });
+  return render(<LobbyPanelBody gameId={1} data={data} />, {
+    wrapper: Wrapper,
+  });
 }
 
 const seated = players.map((p, i) => ({
@@ -81,24 +85,40 @@ describe('LobbyPanel', () => {
 
   it('shows the state but no password or roster to other users', () => {
     renderPanel(response({}));
-    expect(screen.getByTestId('lobby-state-badge')).toHaveTextContent('Waiting for players');
+    expect(screen.getByTestId('lobby-state-badge')).toHaveTextContent(
+      'Waiting for players',
+    );
     expect(screen.queryByTestId('lobby-password')).not.toBeInTheDocument();
     expect(screen.queryByTestId('lobby-players')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('lobby-staff-controls')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('lobby-staff-controls'),
+    ).not.toBeInTheDocument();
     expect(screen.queryByTestId('lobby-invite-me')).not.toBeInTheDocument();
   });
 
   it('shows the password, roster and self-invite to a rostered player', () => {
     renderPanel(response({ is_player: true, lobby: privateLobby }));
-    expect(screen.getByTestId('lobby-password')).toHaveTextContent('abcd2345efgh');
-    expect(screen.getByTestId('lobby-name')).toHaveTextContent('Ravens vs Owls');
-    expect(screen.getByTestId('lobby-player-1')).toHaveTextContent('Seated · Radiant 1 · Ready');
-    expect(screen.getByTestId('lobby-player-2')).toHaveTextContent('Invited (2×)');
-    expect(screen.getByTestId('lobby-player-3')).toHaveTextContent('No Steam account');
+    expect(screen.getByTestId('lobby-password')).toHaveTextContent(
+      'abcd2345efgh',
+    );
+    expect(screen.getByTestId('lobby-name')).toHaveTextContent(
+      'Ravens vs Owls',
+    );
+    expect(screen.getByTestId('lobby-player-1')).toHaveTextContent(
+      'Seated · Radiant 1 · Ready',
+    );
+    expect(screen.getByTestId('lobby-player-2')).toHaveTextContent(
+      'Invited (2×)',
+    );
+    expect(screen.getByTestId('lobby-player-3')).toHaveTextContent(
+      'No Steam account',
+    );
     expect(screen.getByTestId('lobby-invite-me')).toBeInTheDocument();
     // Re-invite buttons are staff-only.
     expect(screen.queryByTestId('lobby-reinvite-2')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('lobby-staff-controls')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('lobby-staff-controls'),
+    ).not.toBeInTheDocument();
   });
 
   it('gives staff invite, launch and close for a waiting lobby', () => {
@@ -129,8 +149,12 @@ describe('LobbyPanel', () => {
         eligibility: { ok: true, code: null, details: {} },
       }),
     );
-    expect(screen.getByTestId('lobby-error')).toHaveTextContent(/admin of this tournament's Dota league/);
-    expect(screen.getByTestId('lobby-create-btn')).toHaveTextContent('Retry lobby');
+    expect(screen.getByTestId('lobby-error')).toHaveTextContent(
+      /admin of this tournament's Dota league/,
+    );
+    expect(screen.getByTestId('lobby-create-btn')).toHaveTextContent(
+      'Retry lobby',
+    );
     expect(screen.queryByTestId('lobby-close-btn')).not.toBeInTheDocument();
     expect(screen.queryByTestId('lobby-password')).not.toBeInTheDocument();
   });
@@ -140,11 +164,16 @@ describe('LobbyPanel', () => {
     renderPanel(
       response({
         can_manage: true,
-        lobby: endedLobby('finished', { provisional_scored: true, match_id: '8000000001' }),
+        lobby: endedLobby('finished', {
+          provisional_scored: true,
+          match_id: '8000000001',
+        }),
         eligibility: { ok: true, code: null, details: {} },
       }),
     );
-    expect(screen.getByTestId('lobby-create-btn')).toHaveTextContent('Retry lobby');
+    expect(screen.getByTestId('lobby-create-btn')).toHaveTextContent(
+      'Retry lobby',
+    );
     expect(screen.queryByTestId('lobby-replay-btn')).not.toBeInTheDocument();
   });
 
@@ -156,7 +185,9 @@ describe('LobbyPanel', () => {
         eligibility: { ok: false, code: 'lobby_match_played', details: {} },
       }),
     );
-    expect(screen.getByTestId('lobby-eligibility')).toHaveTextContent('Confirm the winner');
+    expect(screen.getByTestId('lobby-eligibility')).toHaveTextContent(
+      'Confirm the winner',
+    );
     expect(screen.queryByTestId('lobby-create-btn')).not.toBeInTheDocument();
     expect(screen.getByTestId('lobby-replay-btn')).toBeInTheDocument();
   });
@@ -173,7 +204,9 @@ describe('LobbyPanel', () => {
     fireEvent.click(screen.getByTestId('lobby-replay-btn'));
     expect(createGameLobby).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByTestId('lobby-replay-confirm'));
-    await waitFor(() => expect(createGameLobby).toHaveBeenCalledWith(1, { replay: true }));
+    await waitFor(() =>
+      expect(createGameLobby).toHaveBeenCalledWith(1, { replay: true }),
+    );
   });
 
   it.each([
@@ -181,34 +214,51 @@ describe('LobbyPanel', () => {
     ['timed_out', {}],
     ['closed', {}],
     ['finished', { provisional_scored: false }],
-  ])('offers a retry after a %s lobby without a played match', (state, extra) => {
-    renderPanel(
-      response({
-        can_manage: true,
-        lobby: endedLobby(state, extra),
-        eligibility: { ok: true, code: null, details: {} },
-      }),
-    );
-    expect(screen.getByTestId('lobby-create-btn')).toHaveTextContent('Retry lobby');
-  });
+  ])(
+    'offers a retry after a %s lobby without a played match',
+    (state, extra) => {
+      renderPanel(
+        response({
+          can_manage: true,
+          lobby: endedLobby(state, extra),
+          eligibility: { ok: true, code: null, details: {} },
+        }),
+      );
+      expect(screen.getByTestId('lobby-create-btn')).toHaveTextContent(
+        'Retry lobby',
+      );
+    },
+  );
 
   it('hides invite missing when every player is in the lobby', () => {
     renderPanel(
-      response({ can_manage: true, lobby: { ...privateLobby, state: 'ready', players: seated } }),
+      response({
+        can_manage: true,
+        lobby: { ...privateLobby, state: 'ready', players: seated },
+      }),
     );
-    expect(screen.queryByTestId('lobby-invite-missing-btn')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('lobby-invite-missing-btn'),
+    ).not.toBeInTheDocument();
     expect(screen.queryByTestId('lobby-reinvite-2')).not.toBeInTheDocument();
     expect(screen.getByTestId('lobby-launch-btn')).toBeInTheDocument();
   });
 
   it('hides invite missing when the only absentee has no Steam account', () => {
     const roster = seated.map((p) =>
-      p.user_id === 3 ? { ...p, account_id: null, status: '', seat: null, ready: false } : p,
+      p.user_id === 3
+        ? { ...p, account_id: null, status: '', seat: null, ready: false }
+        : p,
     );
     renderPanel(
-      response({ can_manage: true, lobby: { ...privateLobby, players: roster } }),
+      response({
+        can_manage: true,
+        lobby: { ...privateLobby, players: roster },
+      }),
     );
-    expect(screen.queryByTestId('lobby-invite-missing-btn')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('lobby-invite-missing-btn'),
+    ).not.toBeInTheDocument();
   });
 
   it('does not offer a self-invite to a player already in the lobby', () => {
@@ -224,20 +274,35 @@ describe('LobbyPanel', () => {
   });
 
   it('puts each name on its own line above the status', () => {
-    const long = 'A very long display name that would not fit next to its status';
-    const roster = players.map((p) => (p.user_id === 1 ? { ...p, name: long } : p));
-    renderPanel(response({ is_player: true, lobby: { ...privateLobby, players: roster } }));
+    const long =
+      'A very long display name that would not fit next to its status';
+    const roster = players.map((p) =>
+      p.user_id === 1 ? { ...p, name: long } : p,
+    );
+    renderPanel(
+      response({
+        is_player: true,
+        lobby: { ...privateLobby, players: roster },
+      }),
+    );
     const name = screen.getByTestId('lobby-player-name-1');
     expect(name).toHaveTextContent(long);
     expect(name.className).not.toMatch(/\btruncate\b/);
     expect(screen.getByTestId('lobby-player-status-1')).toHaveTextContent(
       'Seated · Radiant 1 · Ready',
     );
-    expect(name.parentElement).toBe(screen.getByTestId('lobby-player-status-1').parentElement);
+    expect(name.parentElement).toBe(
+      screen.getByTestId('lobby-player-status-1').parentElement,
+    );
   });
 
   it('puts the status and seat of each player on its roster row', () => {
-    renderPanel(response({ is_player: true, lobby: { ...privateLobby, players: seated } }));
+    renderPanel(
+      response({
+        is_player: true,
+        lobby: { ...privateLobby, players: seated },
+      }),
+    );
     const row = screen.getByTestId(`lobby-player-${seated[0].user_id}`);
     expect(row).toHaveAttribute('data-status', 'joined');
     expect(row).toHaveAttribute('data-seat', seated[0].seat);
@@ -246,14 +311,28 @@ describe('LobbyPanel', () => {
   it('leaves the seat off a player who is not seated', () => {
     renderPanel(response({ is_player: true, lobby: privateLobby }));
     // Bob (user 2) is invited, not in the lobby.
-    expect(screen.getByTestId('lobby-player-2')).toHaveAttribute('data-status', 'invited');
-    expect(screen.getByTestId('lobby-player-2')).not.toHaveAttribute('data-seat');
+    expect(screen.getByTestId('lobby-player-2')).toHaveAttribute(
+      'data-status',
+      'invited',
+    );
+    expect(screen.getByTestId('lobby-player-2')).not.toHaveAttribute(
+      'data-seat',
+    );
   });
 
   it('labels a pending player with a capitalised status', () => {
-    const roster = players.map((p) => (p.user_id === 2 ? { ...p, status: 'pending' } : p));
-    renderPanel(response({ is_player: true, lobby: { ...privateLobby, players: roster } }));
-    expect(screen.getByTestId('lobby-player-status-2')).toHaveTextContent('Invite pending');
+    const roster = players.map((p) =>
+      p.user_id === 2 ? { ...p, status: 'pending' } : p,
+    );
+    renderPanel(
+      response({
+        is_player: true,
+        lobby: { ...privateLobby, players: roster },
+      }),
+    );
+    expect(screen.getByTestId('lobby-player-status-2')).toHaveTextContent(
+      'Invite pending',
+    );
   });
 
   it('names the players without Steam before the first lobby', () => {
@@ -270,7 +349,9 @@ describe('LobbyPanel', () => {
       }),
     );
     expect(screen.getByTestId('lobby-state-none')).toBeInTheDocument();
-    expect(screen.getByTestId('lobby-missing-players')).toHaveTextContent('Carol');
+    expect(screen.getByTestId('lobby-missing-players')).toHaveTextContent(
+      'Carol',
+    );
     expect(screen.getByTestId('lobby-create-btn')).toHaveTextContent(
       'Create lobby without missing players',
     );
@@ -284,7 +365,9 @@ describe('LobbyPanel', () => {
         eligibility: { ok: false, code: 'teams_missing', details: {} },
       }),
     );
-    expect(screen.getByTestId('lobby-eligibility')).toHaveTextContent('Both teams must be set');
+    expect(screen.getByTestId('lobby-eligibility')).toHaveTextContent(
+      'Both teams must be set',
+    );
     expect(screen.queryByTestId('lobby-create-btn')).not.toBeInTheDocument();
   });
 
@@ -304,12 +387,21 @@ describe('LobbyPanel', () => {
     expect(screen.getByTestId('lobby-provisional-result')).toHaveTextContent(
       'Lobby reported: Owls (Dire) win, provisional',
     );
-    expect(screen.getByTestId('lobby-match-id')).toHaveTextContent('8000000001');
+    expect(screen.getByTestId('lobby-match-id')).toHaveTextContent(
+      '8000000001',
+    );
   });
 
   it('reports an unscored match', () => {
     renderPanel(
-      response({ lobby: { ...publicLobby, state: 'finished', ended: true, provisional_scored: false } }),
+      response({
+        lobby: {
+          ...publicLobby,
+          state: 'finished',
+          ended: true,
+          provisional_scored: false,
+        },
+      }),
     );
     expect(screen.getByTestId('lobby-provisional-result')).toHaveTextContent(
       'without a scored result',
