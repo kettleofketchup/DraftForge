@@ -1,5 +1,10 @@
 from rest_framework import serializers
 
+from app.models import League
+from common.game import GameType
+from league.models import LeagueUser
+from org.mmr import org_mmr_for
+
 from .constants import LEAGUE_ID
 from .models import LeaguePlayerStats, Match, PlayerMatchStats
 
@@ -192,32 +197,22 @@ class LinkMatchRequestSerializer(serializers.Serializer):
 # =============================================================================
 
 
-def _get_league_for_stats(obj):
+def _get_league_for_stats(obj: LeaguePlayerStats) -> League | None:
     """Look up the League object from a LeaguePlayerStats' league_id (Steam league ID)."""
-    from app.models import League
-
     try:
         return League.objects.get(steam_league_id=obj.league_id)
     except League.DoesNotExist:
         return None
 
 
-def _get_base_mmr(obj):
-    from org.models import OrgUser
-
+def _get_base_mmr(obj: LeaguePlayerStats) -> int:
     league = _get_league_for_stats(obj)
-    if not league or not league.organization:
+    if not league or not league.organization_id:
         return 0
-    try:
-        org_user = OrgUser.objects.get(user=obj.user, organization=league.organization)
-        return org_user.mmr or 0
-    except OrgUser.DoesNotExist:
-        return 0
+    return org_mmr_for(league.organization_id, obj.user_id, GameType.DOTA2)
 
 
-def _get_league_mmr(obj):
-    from league.models import LeagueUser
-
+def _get_league_mmr(obj: LeaguePlayerStats) -> int:
     league = _get_league_for_stats(obj)
     if not league:
         return 0
@@ -257,10 +252,10 @@ class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
             "last_updated",
         ]
 
-    def get_base_mmr(self, obj):
+    def get_base_mmr(self, obj: LeaguePlayerStats) -> int:
         return _get_base_mmr(obj)
 
-    def get_league_mmr(self, obj):
+    def get_league_mmr(self, obj: LeaguePlayerStats) -> int:
         return _get_league_mmr(obj)
 
 
@@ -291,13 +286,19 @@ class LeaderboardSerializer(serializers.ModelSerializer):
             "avg_xpm",
         ]
 
-    def get_base_mmr(self, obj):
-        return _get_base_mmr(obj)
+    def get_base_mmr(self, obj: LeaguePlayerStats) -> int:
+        base_mmr_map: dict[int, int] | None = self.context.get("base_mmr_map")
+        if base_mmr_map is None:
+            return _get_base_mmr(obj)
+        return base_mmr_map.get(obj.user_id, 0)
 
-    def get_league_mmr(self, obj):
-        return _get_league_mmr(obj)
+    def get_league_mmr(self, obj: LeaguePlayerStats) -> int:
+        league_mmr_map: dict[int, int] | None = self.context.get("league_mmr_map")
+        if league_mmr_map is None:
+            return _get_league_mmr(obj)
+        return league_mmr_map.get(obj.user_id, 0)
 
-    def get_avg_kda(self, obj):
+    def get_avg_kda(self, obj: LeaguePlayerStats) -> float:
         if obj.avg_deaths == 0:
             return obj.avg_kills + obj.avg_assists
         return round((obj.avg_kills + obj.avg_assists) / obj.avg_deaths, 2)

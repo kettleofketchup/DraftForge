@@ -4,11 +4,14 @@ from rest_framework import serializers
 
 from app.models import ProfileClaimRequest
 from app.serializers import PositionsSerializer
+from common.game import GameType
+from league.models import LeagueUser
 from org import settings_constants
+from org.mmr import get_org_mmrs, resolve_game_type
 from org.settings_constants import StaffOverridePolicy
 from org.settings_service import normalize_warning_codes
 
-from .models import OrgSettings, OrgUser
+from .models import OrgSettings, OrgUser, OrgUserGameMmr
 
 
 class OrgUserSerializer(serializers.ModelSerializer):
@@ -17,6 +20,10 @@ class OrgUserSerializer(serializers.ModelSerializer):
 
     Context:
         league_id: Optional league ID to include league_mmr from LeagueUser
+        game_type: GameType `mmr` is resolved for (default Dota 2)
+        include_game_mmrs: emit `game_mmrs`; only gated endpoints set it
+
+    Instances must carry the `game_mmrs` prefetch (org.mmr.game_mmrs_prefetch).
     """
 
     orgUserPk = serializers.IntegerField(
@@ -38,8 +45,28 @@ class OrgUserSerializer(serializers.ModelSerializer):
         source="user.steam_account_id", read_only=True
     )
     avatarUrl = serializers.CharField(source="user.avatarUrl", read_only=True)
-    mmr = serializers.IntegerField(read_only=True)  # From OrgUser.mmr
+    mmr = serializers.SerializerMethodField()
+    mmr_game_type = serializers.SerializerMethodField()
+    game_mmrs = serializers.SerializerMethodField()
     league_mmr = serializers.SerializerMethodField()
+
+    def get_fields(self) -> dict[str, serializers.Field]:
+        fields = super().get_fields()
+        if not self.context.get("include_game_mmrs"):
+            fields.pop("game_mmrs")
+        return fields
+
+    def _game_type(self) -> int:
+        return int(resolve_game_type(self.context.get("game_type")))
+
+    def get_mmr(self, org_user: OrgUser) -> int:
+        return get_org_mmrs(org_user)[self._game_type()]
+
+    def get_mmr_game_type(self, org_user: OrgUser) -> int:
+        return self._game_type()
+
+    def get_game_mmrs(self, org_user: OrgUser) -> dict[str, int]:
+        return {str(game): mmr for game, mmr in get_org_mmrs(org_user).items()}
 
     def get_league_mmr(self, org_user: OrgUser) -> int | None:
         """Get MMR from LeagueUser if league_id is in context.
@@ -65,8 +92,6 @@ class OrgUserSerializer(serializers.ModelSerializer):
             return None
 
         # Fallback to query (will cause N+1 if not prefetched)
-        from league.models import LeagueUser
-
         try:
             league_user = LeagueUser.objects.get(org_user=org_user, league_id=league_id)
             return league_user.mmr
@@ -88,6 +113,8 @@ class OrgUserSerializer(serializers.ModelSerializer):
             "steam_account_id",
             "avatarUrl",
             "mmr",
+            "mmr_game_type",
+            "game_mmrs",
             "league_mmr",
         )
 
@@ -114,6 +141,7 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
         source="target_user.steamid", read_only=True
     )
     target_mmr = serializers.SerializerMethodField()
+    target_game_mmrs = serializers.SerializerMethodField()
 
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
@@ -137,6 +165,7 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             "target_discordNickname",
             "target_steamid",
             "target_mmr",
+            "target_game_mmrs",
             "organization",
             "organization_name",
             "status",
@@ -158,14 +187,26 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             "reviewed_at",
         )
 
-    def get_target_mmr(self, obj: ProfileClaimRequest) -> int:
-        try:
-            org_user = OrgUser.objects.get(
-                user=obj.target_user, organization=obj.organization
+    def _target_mmrs(self, obj: ProfileClaimRequest) -> dict[int, int]:
+        memo: dict[int, dict[int, int]] = self.__dict__.setdefault(
+            "_target_mmrs_memo", {}
+        )
+        if obj.pk not in memo:
+            mmrs = {game: 0 for game in GameType.values}
+            mmrs.update(
+                OrgUserGameMmr.objects.filter(
+                    org_user__user_id=obj.target_user_id,
+                    org_user__organization_id=obj.organization_id,
+                ).values_list("game_type", "mmr")
             )
-            return org_user.mmr or 0
-        except OrgUser.DoesNotExist:
-            return 0
+            memo[obj.pk] = mmrs
+        return memo[obj.pk]
+
+    def get_target_mmr(self, obj: ProfileClaimRequest) -> int:
+        return self._target_mmrs(obj)[GameType.DOTA2]
+
+    def get_target_game_mmrs(self, obj: ProfileClaimRequest) -> dict[str, int]:
+        return {str(game): mmr for game, mmr in self._target_mmrs(obj).items()}
 
 
 class OrgSettingsSerializer(serializers.ModelSerializer):

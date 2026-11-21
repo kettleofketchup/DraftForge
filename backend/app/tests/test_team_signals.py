@@ -31,7 +31,7 @@ from app.services.team_signals import (
     team_roster_changed,
 )
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
-from org.models import OrgUser
+from tests.populate.utils import ensure_org_user
 
 
 class TeamMemberRemovalTests(TestCase):
@@ -602,8 +602,8 @@ class SuccessorAfterRemovalTests(TestCase):
         )
 
     def test_org_mmr_when_no_deputy(self) -> None:
-        OrgUser.objects.create(user=self.users[2], organization=self.org, mmr=1000)
-        OrgUser.objects.create(user=self.users[3], organization=self.org, mmr=5000)
+        ensure_org_user(self.users[2], self.org, mmr=1000)
+        ensure_org_user(self.users[3], self.org, mmr=5000)
         removed = {self.users[0].pk, self.users[1].pk}
         self._remove_rows(self.users[0], self.users[1])
 

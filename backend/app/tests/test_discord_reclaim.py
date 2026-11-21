@@ -20,10 +20,11 @@ from app.discord_accounts import (
 )
 from app.models import CustomUser, Organization
 from app.pipelines import associate_by_discord_id, save_discord
+from common.game import GameType
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from org.contributions.kinds import ContributionKind
-from org.models import ContributionEntry, OrgUser
+from org.models import ContributionEntry, OrgUser, OrgUserGameMmr
 
 DISCORD_ID = "555000111222333444"
 
@@ -206,6 +207,39 @@ class MergeDiscordAccountsTest(TestCase):
         self.assertEqual(
             OrgUser.objects.nocache().get(pk=keep_ou.pk).guild_nickname, "KeepNick"
         )
+
+    def test_merge_keeps_per_game_org_mmrs(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        keep_ou = OrgUser.objects.create(user=keep, organization=self.org)
+        OrgUser.objects.filter(pk=keep_ou.pk).update(
+            has_active_dota_mmr=False, dota_mmr_last_verified=None
+        )
+        drop_ou = OrgUser.objects.create(user=drop, organization=self.org)
+        OrgUserGameMmr.objects.create(
+            org_user=keep_ou, game_type=GameType.DOTA2, mmr=4000
+        )
+        OrgUserGameMmr.objects.create(
+            org_user=drop_ou, game_type=GameType.DOTA2, mmr=25000
+        )
+        OrgUserGameMmr.objects.create(
+            org_user=drop_ou, game_type=GameType.DEADLOCK, mmr=2500
+        )
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        self.assertEqual(
+            dict(
+                OrgUserGameMmr.objects.nocache()
+                .filter(org_user_id=keep_ou.pk)
+                .values_list("game_type", "mmr")
+            ),
+            {GameType.DOTA2: 25000, GameType.DEADLOCK: 2500},
+        )
+        kept = OrgUser.objects.nocache().get(pk=keep_ou.pk)
+        self.assertFalse(kept.has_active_dota_mmr)
+        self.assertIsNone(kept.dota_mmr_last_verified)
 
     def test_guild_nickname_not_carried_over_as_column(self) -> None:
         self.assertNotIn("guildNickname", _CARRYOVER_COLUMN_FIELDS)

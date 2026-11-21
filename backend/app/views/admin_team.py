@@ -1,10 +1,11 @@
 """Admin Team API views for organization and league permission management."""
 
+from typing import Any
+
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404
-from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -15,6 +16,7 @@ from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.tournament import _serialize_tournament
 from app.models import (
     CustomUser,
+    GameType,
     League,
     LeagueLog,
     Organization,
@@ -37,7 +39,17 @@ from app.steam_accounts import (
 from discordbot.services.member_names import normalise_name
 from events.eligibility import refresh_unmet_requirements
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.mmr import (
+    LEAGUE_GAME,
+    OrgMmrError,
+    game_mmrs_prefetch,
+    mark_dota_mmr_verified,
+    org_mmr_for,
+    resolve_game_type,
+    set_org_mmr,
+    validate_org_mmr,
+)
+from org.models import OrgUser, OrgUserGameMmr
 from org.serializers import OrgUserSerializer
 from org.user_search import user_name_q
 from user.querysets import with_user_profiles
@@ -737,7 +749,7 @@ def add_org_member(request: Request, org_id: int) -> Response:
 def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response:
     """Update an OrgUser and/or its underlying CustomUser.
 
-    OrgUser fields (e.g. mmr) are updated directly.
+    Org MMR is written per game via ``game_mmrs`` (or ``mmr`` + ``mmr_game_type``).
     Base user fields (nickname, steam_account_id, etc.) are forwarded
     to the CustomUser model so edits from the org page work end-to-end.
     """
@@ -755,23 +767,9 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
         organization=org,
     )
 
-    # --- OrgUser-level fields ---
-    ORG_USER_FIELDS = {"mmr"}
-    org_updated = []
-    for field in ORG_USER_FIELDS:
-        if field in request.data:
-            setattr(org_user, field, request.data[field])
-            org_updated.append(field)
-
-    # An admin-set MMR should count as an active, verified value so it shows
-    # up wherever org_user_mmr is read (event signups, etc.). approve_signup
-    # already does this; mirror it here.
-    if "mmr" in request.data:
-        org_user.has_active_dota_mmr = True
-        org_user.dota_mmr_last_verified = tz.now()
-        for f in ("has_active_dota_mmr", "dota_mmr_last_verified"):
-            if f not in org_updated:
-                org_updated.append(f)
+    mmr_changes = _parse_mmr_patch(request.data)
+    if isinstance(mmr_changes, str):
+        return Response({"error": mmr_changes}, status=status.HTTP_400_BAD_REQUEST)
 
     # --- Base CustomUser fields ---
     USER_FIELDS = {"nickname", "steam_account_id"}
@@ -807,15 +805,39 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
         if user_updated:
             positions_instance.save()
 
-    if not org_updated and not user_updated:
+    if not mmr_changes and not user_updated:
         return Response(
             {"error": "No valid fields to update"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     with transaction.atomic():
-        if org_updated:
-            org_user.save(update_fields=org_updated)
+        current_mmrs: dict[int, int | None] = (
+            dict(
+                OrgUserGameMmr.objects.nocache()
+                .filter(org_user_id=org_user.pk)
+                .values_list("game_type", "mmr")
+            )
+            if mmr_changes
+            else {}
+        )
+        for game_type, value in mmr_changes.items():
+            if (value or 0) == current_mmrs.get(game_type, 0):
+                if game_type == GameType.DOTA2:
+                    mark_dota_mmr_verified(org_user)
+                continue
+            set_org_mmr(org_user, game_type, value, mark_verified=True)
+            OrgLog.objects.create(
+                organization=org,
+                actor=request.user,
+                action="set_mmr",
+                target_user=user,
+                details={
+                    "game_type": game_type,
+                    "mmr": value,
+                    "source": "org_user_patch",
+                },
+            )
         if user_updated:
             user.save()  # Full save triggers steamid sync
         refresh_unmet_requirements(org_user)
@@ -832,7 +854,64 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
             *(lu.league for lu in league_users),
         )
 
-    return Response(OrgUserSerializer(org_user).data)
+    written = (
+        with_user_profiles(OrgUser.objects.nocache(), "user", dota=True)
+        .prefetch_related(game_mmrs_prefetch(fresh=True))
+        .get(pk=org_user.pk)
+    )
+    context_game = resolve_game_type(_query_int(request.query_params.get("game_type")))
+    return Response(
+        OrgUserSerializer(
+            written,
+            context={"game_type": context_game, "include_game_mmrs": True},
+        ).data
+    )
+
+
+def _query_int(raw: str | None) -> int | None:
+    try:
+        return int(raw) if raw is not None else None
+    except ValueError:
+        return None
+
+
+def _valid_game_type(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value in GameType.values else None
+
+
+def _parse_mmr_patch(data: Any) -> dict[int, int | None] | str:
+    changes: dict[int, int | None] = {}
+    if "game_mmrs" in data:
+        raw = data["game_mmrs"]
+        if not isinstance(raw, dict):
+            return "game_mmrs must be an object of game_type to mmr"
+        for key, value in raw.items():
+            key_str = str(key)
+            game = (
+                _valid_game_type(int(key_str))
+                if key_str.isascii() and key_str.isdigit()
+                else None
+            )
+            if game is None:
+                return f"Unknown game_type: {key!r}"
+            changes[game] = value
+    if "mmr" in data:
+        # Temporary: a bare mmr is the legacy Dota 2 value until the edit form
+        # sends mmr_game_type; rejected once OrgUser.mmr is dropped.
+        game = _valid_game_type(data.get("mmr_game_type", GameType.DOTA2))
+        if game is None:
+            return f"Unknown game_type: {data['mmr_game_type']!r}"
+        if game in changes and changes[game] != data["mmr"]:
+            return "mmr and game_mmrs disagree for the same game"
+        changes[game] = data["mmr"]
+    for game, value in changes.items():
+        try:
+            validate_org_mmr(game, value)
+        except OrgMmrError as exc:
+            return str(exc)
+    return changes
 
 
 @api_view(["POST"])
@@ -863,7 +942,12 @@ def add_league_member(request: Request, league_id: int) -> Response:
             if org_user.guild_nickname is None and nick is not None:
                 org_user.guild_nickname = nick
                 org_user.save(update_fields=["guild_nickname"])
-            LeagueUser.objects.create(user=user, org_user=org_user, league=league)
+            LeagueUser.objects.create(
+                user=user,
+                org_user=org_user,
+                league=league,
+                mmr=org_mmr_for(league.organization_id, user.pk, LEAGUE_GAME),
+            )
             invalidate_after_commit(user)
     except IntegrityError:
         return Response(
