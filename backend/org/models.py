@@ -91,8 +91,6 @@ class Organization(models.Model):
         # cacheops' post_save handles invalidation.
 
     def delete(self, *args: object, **kwargs: object) -> None:
-        # Invalidate related leagues before deletion
-
         for league in self.leagues.all():
             invalidate_obj(league)
         super().delete(*args, **kwargs)
