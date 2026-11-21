@@ -9,27 +9,15 @@ import {
   getMemberConduct,
   patchConductSettings,
 } from '../api';
-import { HISTORY_PAGE_SIZE, type ConductSettingsValues } from '../schemas';
-import { memberConduct } from './fixtures';
+import { HISTORY_PAGE_SIZE } from '../schemas';
+import {
+  conductSettings,
+  conductSettingsValues,
+  memberConduct,
+} from './fixtures';
 
-const VALUES: ConductSettingsValues = {
-  late_cancel_hours: 24,
-  late_cancel_weight: 0.5,
-  half_life_days: 90,
-  max_age_days: 365,
-  prior_show_rate: 0.85,
-  prior_strength: 3,
-  min_events: 3,
-  leaderboard_public: true,
-  back_of_line_enabled: false,
-  back_of_line_below: 0.7,
-  require_approval_enabled: false,
-  require_approval_below: 0.5,
-  block_enabled: false,
-  block_below: 0.3,
-  enforce_on_new_members: false,
-};
-const SETTINGS = { ...VALUES, defaults: VALUES };
+const SETTINGS = conductSettings();
+const VALUES = conductSettingsValues();
 
 beforeEach(() => {
   get.mockReset();

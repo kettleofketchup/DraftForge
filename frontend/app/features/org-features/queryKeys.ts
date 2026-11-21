@@ -81,8 +81,9 @@ export const conductKeys = {
     viewerPk: ViewerPk,
     orgUserPk: number,
     page: { limit: number; offset: number },
-  ) =>
-    [...conductKeys.all(orgId, viewerPk), 'member', orgUserPk, page] as const,
+  ) => [...conductKeys.members(orgId, viewerPk), orgUserPk, page] as const,
+  members: (orgId: number, viewerPk: ViewerPk) =>
+    [...conductKeys.all(orgId, viewerPk), 'member'] as const,
   settings: (orgId: number, viewerPk: ViewerPk) =>
     [...conductKeys.all(orgId, viewerPk), 'settings'] as const,
 };

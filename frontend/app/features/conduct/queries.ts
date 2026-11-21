@@ -69,10 +69,21 @@ export function usePatchConductSettings(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body) => patchConductSettings(orgId, body),
-    onSettled: () =>
+    onSuccess: (saved) => {
+      queryClient.setQueryData(
+        conductKeys.settings(orgId, access.viewerPk),
+        saved,
+      );
+    },
+    onSettled: (_saved, error) =>
       Promise.all([
+        error
+          ? queryClient.invalidateQueries({
+              queryKey: conductKeys.settings(orgId, access.viewerPk),
+            })
+          : undefined,
         queryClient.invalidateQueries({
-          queryKey: conductKeys.all(orgId, access.viewerPk),
+          queryKey: conductKeys.members(orgId, access.viewerPk),
         }),
         queryClient.invalidateQueries({
           queryKey: standingKeys.track(orgId, access.viewerPk, 'conduct'),

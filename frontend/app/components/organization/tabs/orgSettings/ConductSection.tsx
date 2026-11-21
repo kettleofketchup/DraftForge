@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, RotateCcw } from 'lucide-react';
 import { useEffect, useState, type ReactNode, type RefObject } from 'react';
 import {
@@ -39,14 +38,18 @@ import { Input } from '~/components/ui/input';
 import { Skeleton } from '~/components/ui/skeleton';
 import { Switch } from '~/components/ui/switch';
 import {
+  CONDUCT_SETTINGS_FIELDS,
   ConductSettingsFormSchema,
+  conductSettingsFieldErrors,
+  isConductSettingsField,
+  pickConductFormValues,
   useConductSettings,
   usePatchConductSettings,
   type ConductSettingsField,
   type ConductSettingsForm,
   type ConductSettingsValues,
 } from '~/features/conduct';
-import { conductKeys, useOrgFeatureAccess } from '~/features/org-features';
+import { useOrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
@@ -64,24 +67,6 @@ type ToggleField = {
     : never;
 }[ConductSettingsField];
 
-const FIELDS: readonly ConductSettingsField[] = [
-  'late_cancel_hours',
-  'late_cancel_weight',
-  'half_life_days',
-  'max_age_days',
-  'prior_show_rate',
-  'prior_strength',
-  'min_events',
-  'leaderboard_public',
-  'back_of_line_enabled',
-  'back_of_line_below',
-  'require_approval_enabled',
-  'require_approval_below',
-  'block_enabled',
-  'block_below',
-  'enforce_on_new_members',
-];
-
 const ENFORCEMENT_TOGGLES: readonly ToggleField[] = [
   'back_of_line_enabled',
   'require_approval_enabled',
@@ -96,48 +81,6 @@ const ENFORCEMENT_FIELDS: ReadonlySet<ConductSettingsField> = new Set([
   'enforce_on_new_members',
 ]);
 
-function isSettingsField(key: string): key is ConductSettingsField {
-  return (FIELDS as readonly string[]).includes(key);
-}
-
-/** DRF `{field: [msg]}` entries that name a settings field. */
-function settingsFieldErrors(err: unknown): [ConductSettingsField, string][] {
-  const data: unknown =
-    typeof err === 'object' && err !== null && 'response' in err
-      ? (err as { response?: { data?: unknown } }).response?.data
-      : undefined;
-  if (typeof data !== 'object' || data === null) return [];
-  return Object.entries(data).flatMap(
-    ([key, value]): [ConductSettingsField, string][] => {
-      if (!isSettingsField(key)) return [];
-      const message = Array.isArray(value) ? value[0] : value;
-      return typeof message === 'string' ? [[key, message]] : [];
-    },
-  );
-}
-
-export function pickConductFormValues(
-  s: ConductSettingsValues,
-): ConductSettingsForm {
-  return {
-    late_cancel_hours: s.late_cancel_hours,
-    late_cancel_weight: s.late_cancel_weight,
-    half_life_days: s.half_life_days,
-    max_age_days: s.max_age_days,
-    prior_show_rate: s.prior_show_rate,
-    prior_strength: s.prior_strength,
-    min_events: s.min_events,
-    leaderboard_public: s.leaderboard_public,
-    back_of_line_enabled: s.back_of_line_enabled,
-    back_of_line_below: s.back_of_line_below,
-    require_approval_enabled: s.require_approval_enabled,
-    require_approval_below: s.require_approval_below,
-    block_enabled: s.block_enabled,
-    block_below: s.block_below,
-    enforce_on_new_members: s.enforce_on_new_members,
-  };
-}
-
 const SECTION_ID = 'conduct';
 
 export function useConductSection(
@@ -145,7 +88,6 @@ export function useConductSection(
   enabled: boolean,
   sectionsRef: RefObject<SettingsDialogHandle<string> | null>,
 ): { content: ReactNode; unit: SettingsFormUnit } {
-  const queryClient = useQueryClient();
   const { organization } = useOrganization(
     enabled ? organizationId : undefined,
   );
@@ -174,7 +116,7 @@ export function useConductSection(
 
   const revealEnforcement = (fields: Iterable<string>) => {
     for (const field of fields) {
-      if (isSettingsField(field) && ENFORCEMENT_FIELDS.has(field)) {
+      if (isConductSettingsField(field) && ENFORCEMENT_FIELDS.has(field)) {
         setEnforcementOpen(true);
         return;
       }
@@ -186,20 +128,16 @@ export function useConductSection(
     async (values: ConductSettingsForm): Promise<boolean> => {
       const dirty = form.formState.dirtyFields;
       const changes: Partial<ConductSettingsForm> = {};
-      for (const field of FIELDS) {
+      for (const field of CONDUCT_SETTINGS_FIELDS) {
         if (dirty[field]) Object.assign(changes, { [field]: values[field] });
       }
       try {
         const saved = await mutation.mutateAsync(changes);
-        queryClient.setQueryData(
-          conductKeys.settings(organizationId, access.viewerPk),
-          saved,
-        );
         form.reset(pickConductFormValues(saved));
         return true;
       } catch (err) {
         log.error('Failed to save conduct settings', { organizationId, err });
-        const fieldErrors = settingsFieldErrors(err);
+        const fieldErrors = conductSettingsFieldErrors(err);
         for (const [field, message] of fieldErrors) {
           form.setError(field, { message });
         }
