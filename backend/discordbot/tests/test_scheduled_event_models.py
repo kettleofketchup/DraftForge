@@ -215,13 +215,13 @@ def _due(pk, *, is_recurring=False, next_post_at=None, include_rsvp=True):
     )
 
 
-@patch("app.internal_client.update_scheduled_event")
-@patch("discordbot.utils.sync_add_reactions")
-@patch("discordbot.utils.sync_send_embed")
+@patch("discordbot.tasks.update_scheduled_event")
+@patch("discordbot.tasks.sync_add_reactions")
+@patch("discordbot.tasks.sync_send_embed")
 class CheckScheduledEventsTaskTest(SimpleTestCase):
     """check_scheduled_events posts what the internal API reports as due."""
 
-    @patch("app.internal_client.get_due_scheduled_events")
+    @patch("discordbot.tasks.get_due_scheduled_events")
     def test_posts_due_event_and_stores_message_id(
         self, mock_due, mock_send, mock_reactions, mock_update
     ):
@@ -235,7 +235,7 @@ class CheckScheduledEventsTaskTest(SimpleTestCase):
         mock_reactions.assert_called_once_with("123456789012345678", "999888777")
         mock_update.assert_called_once_with(7, discord_message_id="999888777")
 
-    @patch("app.internal_client.get_due_scheduled_events", return_value=[])
+    @patch("discordbot.tasks.get_due_scheduled_events", return_value=[])
     def test_nothing_due_posts_nothing(
         self, mock_due, mock_send, mock_reactions, mock_update
     ):
@@ -244,7 +244,7 @@ class CheckScheduledEventsTaskTest(SimpleTestCase):
         mock_send.assert_not_called()
         mock_update.assert_not_called()
 
-    @patch("app.internal_client.get_due_scheduled_events")
+    @patch("discordbot.tasks.get_due_scheduled_events")
     def test_recurring_event_reschedules_a_week_later(
         self, mock_due, mock_send, mock_reactions, mock_update
     ):
@@ -262,7 +262,7 @@ class CheckScheduledEventsTaskTest(SimpleTestCase):
             next_post_at=(original + timedelta(days=7)).isoformat(),
         )
 
-    @patch("app.internal_client.get_due_scheduled_events")
+    @patch("discordbot.tasks.get_due_scheduled_events")
     def test_failed_post_is_not_marked_posted(
         self, mock_due, mock_send, mock_reactions, mock_update
     ):
