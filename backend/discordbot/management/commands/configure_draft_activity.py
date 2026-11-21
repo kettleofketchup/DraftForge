@@ -6,10 +6,9 @@ from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
 
-from app.models import Draft
 from discordbot.activity import launch_message
 from discordbot.models import DraftActivityChannel
-from draft.models import HeroDraft
+from draft.models import Draft, HeroDraft
 
 
 class Command(BaseCommand):

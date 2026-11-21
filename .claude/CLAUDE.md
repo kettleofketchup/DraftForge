@@ -51,13 +51,13 @@ WebSocket routes live in `backend/app/routing.py` and `backend/draft/routing.py`
 ```python
 # backend/app/routing.py
 websocket_urlpatterns = [
-    path("api/draft/<int:draft_id>/", DraftConsumer.as_asgi()),
     path("api/tournament/<int:tournament_id>/", TournamentConsumer.as_asgi()),
 ]
 
 # backend/draft/routing.py
 websocket_urlpatterns = [
     path("api/herodraft/<int:draft_id>/", HeroDraftConsumer.as_asgi()),
+    path("api/draft/<int:draft_id>/", DraftConsumer.as_asgi()),
 ]
 ```
 
@@ -272,7 +272,7 @@ npm run dev
 just test::run 'python manage.py test app.tests -v 2'
 
 # Run specific test module
-just test::run 'python manage.py test app.tests.test_shuffle_draft -v 2'
+just test::run 'python manage.py test draft.tests.test_team_shuffle -v 2'
 ```
 
 **Backend (Local - via pytest)**:

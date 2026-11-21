@@ -17,9 +17,11 @@ CACHEOPS = {
     "app.tournament": {"ops": "all", "timeout": 60 * 60},
     "app.team": {"ops": "all", "timeout": 60 * 60},
     "app.customuser": {"ops": "all", "timeout": 60 * 60},
-    "app.draft": {"ops": "all", "timeout": 60 * 60},
     "app.game": {"ops": "all", "timeout": 60 * 60},
-    "app.draftround": {"ops": "all", "timeout": 60 * 60},
+    "draft.draft": {"ops": "all", "timeout": 60 * 60},
+    "draft.draftround": {"ops": "all", "timeout": 60 * 60},
+    "draft.draftoptions": {"ops": "all", "timeout": 60 * 60},
+    # ...abbreviated; the full block is CACHEOPS in backend/backend/settings.py
 }
 ```
 

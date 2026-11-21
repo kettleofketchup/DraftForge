@@ -2,10 +2,6 @@
 # This allows imports like `from app.views import UserView` to work
 
 from app.views_main import (  # ViewSets; Create views; Functions
-    DraftCreateView,
-    DraftRoundCreateView,
-    DraftRoundView,
-    DraftView,
     GameCreateView,
     GameView,
     TeamCreateView,
@@ -40,8 +36,6 @@ __all__ = [
     "TournamentView",
     "TournamentListView",
     "TeamView",
-    "DraftView",
-    "DraftRoundView",
     "GameView",
     "TournamentsBasicView",
     # Create views
@@ -49,8 +43,6 @@ __all__ = [
     "GameCreateView",
     "TeamCreateView",
     "TournamentCreateView",
-    "DraftCreateView",
-    "DraftRoundCreateView",
     # Functions
     "bulk_users",
     "logout",

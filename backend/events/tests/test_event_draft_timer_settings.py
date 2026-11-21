@@ -6,7 +6,8 @@ from django.utils import timezone as tz
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import Draft, DraftOptions, Team, TimeoutAction, Tournament
+from app.models import Team, Tournament
+from draft.models import Draft, DraftOptions, TimeoutAction
 from events.constants import RepeatFrequency
 from events.models import Event, EventRepeater, OrgEventDefaults
 from events.services import (
