@@ -136,7 +136,7 @@ async function typeChat(page: Page, text: string): Promise<void> {
   await expect(input).toHaveValue('');
 }
 
-/** Clicks into the composer (which opens the panel) and types a message. */
+/** Clicks into the composer (which opens the panel) and sends a message. */
 async function captainSay(page: Page, text: string): Promise<void> {
   const input = chatInput(page);
   if (!(await input.evaluate((el) => el === document.activeElement))) {
