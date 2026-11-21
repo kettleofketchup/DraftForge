@@ -1,6 +1,6 @@
 """Dota 2 signup handler: profile gating, modal config, modal submit, rank flow.
 
-``DotaHandler`` carries the four common operations plus the eight Dota-only
+``DotaHandler`` carries the four common operations plus the seven Dota-only
 rank-flow operations the thin dispatcher in ``handlers.py`` delegates to.
 
 CACHE GUARDRAIL (#268): ``set_position`` writes ``PlayerDotaProfile`` (a
