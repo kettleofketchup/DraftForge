@@ -6,13 +6,14 @@ from events.discord.providers.deadlock import DeadlockHandler
 from events.discord.providers.dota import DotaHandler
 from events.models import EventSignup, SignupStatus
 from events.tests.base import EventTestCase
+from org.membership import resolve_or_create_org_user
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
 
 class FriendIdModalTests(EventTestCase):
     def _org_user(self, user: CustomUser) -> OrgUser:
-        return OrgUser.objects.get(user=user, organization=self.org)
+        return resolve_or_create_org_user(user, self.org)
 
     def _taken_friend_id(self) -> str:
         other = self.make_user()
@@ -30,7 +31,7 @@ class FriendIdModalTests(EventTestCase):
                     ev,
                     ou,
                     u,
-                    {"unverified_friend_id": fid, "deadlock_rank": "Ritualist"},
+                    {"friend_id": fid, "deadlock_rank": "Ritualist"},
                 )
                 self.assertEqual(result["action"], "error")
                 self.assertTrue(result["message"])
@@ -47,13 +48,71 @@ class FriendIdModalTests(EventTestCase):
             ev,
             ou,
             u,
-            {"unverified_friend_id": " 515151 ", "deadlock_rank": "Ritualist"},
+            {"friend_id": " 515151 ", "deadlock_rank": "Ritualist"},
         )
         self.assertEqual(result["action"], "signed_up")
-        self.assertEqual(
-            PlayerDeadlockProfile.objects.get(org_user=ou).unverified_friend_id,
-            "515151",
+        u.refresh_from_db()
+        self.assertEqual(u.steam_account_id, 515151)
+        self.assertEqual(u.steamid, 515151 + CustomUser.STEAM_ID_64_BASE)
+
+    def test_modals_fill_the_user_with_ids_above_signed_32_bit(self) -> None:
+        cases = (
+            (DeadlockHandler(), GameType.DEADLOCK, {"deadlock_rank": "Ritualist"}),
+            (DotaHandler(), GameType.DOTA2, {"rank_status": "active"}),
         )
+        for offset, (handler, game_type, extra) in enumerate(cases):
+            with self.subTest(game_type=game_type):
+                ev = self.make_event(game_type=game_type)
+                u = self.make_user()
+                fid = 2**32 - 1 - offset
+                result = handler.apply_modal_submit(
+                    ev, self._org_user(u), u, {"friend_id": str(fid), **extra}
+                )
+                self.assertNotEqual(result["action"], "error", result)
+                u.refresh_from_db()
+                self.assertEqual(u.steam_account_id, fid)
+
+    def test_modals_refuse_a_different_friend_id(self) -> None:
+        cases = (
+            (DeadlockHandler(), GameType.DEADLOCK, {"deadlock_rank": "Ritualist"}),
+            (DotaHandler(), GameType.DOTA2, {"rank_status": "active"}),
+        )
+        for offset, (handler, game_type, extra) in enumerate(cases):
+            with self.subTest(game_type=game_type):
+                ev = self.make_event(game_type=game_type)
+                u = self.make_user()
+                u.steam_account_id = 909090 + offset
+                u.save()
+                result = handler.apply_modal_submit(
+                    ev, self._org_user(u), u, {"friend_id": "121212", **extra}
+                )
+                self.assertEqual(result["action"], "error")
+                self.assertIn("already set", result["message"])
+                u.refresh_from_db()
+                self.assertEqual(u.steam_account_id, 909090 + offset)
+                self.assertFalse(EventSignup.objects.filter(event=ev, user=u).exists())
+
+    def test_modals_accept_the_same_friend_id(self) -> None:
+        ev = self.make_event(game_type=GameType.DEADLOCK)
+        u = self.make_user()
+        u.steam_account_id = 343434
+        u.save()
+        result = DeadlockHandler().apply_modal_submit(
+            ev, self._org_user(u), u, {"friend_id": "343434", "deadlock_rank": "R"}
+        )
+        self.assertEqual(result["action"], "signed_up")
+        u.refresh_from_db()
+        self.assertEqual(u.steam_account_id, 343434)
+
+    def test_prefill_reads_the_user(self) -> None:
+        u = self.make_user()
+        ou = self._org_user(u)
+        self.assertEqual(DotaHandler().prefill(ou), {"friend_id": ""})
+        u.steam_account_id = 3000000000
+        u.save()
+        for handler in (DotaHandler(), DeadlockHandler()):
+            with self.subTest(handler=type(handler).__name__):
+                self.assertEqual(handler.prefill(ou), {"friend_id": "3000000000"})
 
     def test_deadlock_friend_id_refreshes_codes_on_other_signups(self) -> None:
         dota_ev = self.make_event(auto_approve=False, require_steam_id=True)
@@ -68,7 +127,7 @@ class FriendIdModalTests(EventTestCase):
             self.make_event(game_type=GameType.DEADLOCK),
             self._org_user(u),
             u,
-            {"unverified_friend_id": "535353", "deadlock_rank": "Ritualist"},
+            {"friend_id": "535353", "deadlock_rank": "Ritualist"},
         )
         self.assertEqual(result["action"], "signed_up")
         held.refresh_from_db()
@@ -81,7 +140,7 @@ class FriendIdModalTests(EventTestCase):
                 u = self.make_user()
                 ou = self._org_user(u)
                 result = DotaHandler().apply_modal_submit(
-                    ev, ou, u, {"unverified_friend_id": fid, "rank_status": "active"}
+                    ev, ou, u, {"friend_id": fid, "rank_status": "active"}
                 )
                 self.assertEqual(result["action"], "error")
                 self.assertTrue(result["message"])
@@ -92,14 +151,14 @@ class FriendIdModalTests(EventTestCase):
 class FriendIdModalLoggingTests(EventTestCase):
     def _assert_logged(self, module: str, handler: object, ev: object) -> None:
         u = self.make_user()
-        ou = OrgUser.objects.get(user=u, organization=self.org)
+        ou = resolve_or_create_org_user(u, self.org)
         with patch(f"events.discord.providers.{module}.log") as log:
             result = handler.apply_modal_submit(
                 ev,
                 ou,
                 u,
                 {
-                    "unverified_friend_id": "abc",
+                    "friend_id": "abc",
                     "deadlock_rank": "Ritualist",
                     "rank_status": "active",
                 },
@@ -127,10 +186,8 @@ class DotaModalDirectSignupTests(EventTestCase):
     def test_fresh_friend_id_then_direct_signup_is_approved(self) -> None:
         ev = self.make_event(require_steam_id=True)
         u = self.make_user()
-        ou = OrgUser.objects.get(user=u, organization=self.org)
-        result = DotaHandler().apply_modal_submit(
-            ev, ou, u, {"unverified_friend_id": "626262"}
-        )
+        ou = resolve_or_create_org_user(u, self.org)
+        result = DotaHandler().apply_modal_submit(ev, ou, u, {"friend_id": "626262"})
         self.assertEqual(result["action"], "needs_rank_status")
         reply = _direct_signup(ev, u)
         self.assertEqual(reply["status"], SignupStatus.APPROVED)
