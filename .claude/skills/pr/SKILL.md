@@ -11,6 +11,7 @@ Drive a PR from "branch pushed" to an actionable report without the user babysit
 2. Post before/after screenshots of visual changes as a PR comment, or a one-line comment saying there are none.
 3. Watch GitHub Actions checks until none are pending (up to 30 min).
 4. Pull the failed jobs' error lines and report findings with next steps.
+5. Offer pre-existing problems the branch found as GitHub issues and separate fix PRs.
 
 ## When to trigger
 
@@ -65,6 +66,10 @@ Narrate in single lines. Polling detail and timeout handling: [references/monito
 
 For each failed run, `gh run view <id> --log-failed`, keep the error lines (max 10 per failed step), tag likely causes, and flag failures in files the diff doesn't touch as pre-existing bugs (never "flaky"). Report format: [references/analyzing-results.md](references/analyzing-results.md).
 
+### Phase 6 — Pre-existing problems
+
+Always run this, even when CI is green. Collect every problem the branch's work found that was already on `main` (tests failing there, "reported only" bugs from spec/review/verification, deferred items), confirm each on `origin/main` with `file:line`, and present them to the user. Offer per problem: GitHub issue only; issue plus a subagent fix in its own worktree/branch/PR (a workflow for larger fixes); fix in this PR; or skip. File nothing without the user's pick. Review every issue body for sensitive information before `gh issue create`, and every fix PR body must contain `Closes #<issue>` so merging it closes the issue. Procedure and checklist: [references/preexisting-problems.md](references/preexisting-problems.md).
+
 ## Scope
 
 - Pushes only through the creation pre-flight; a dirty or unpushed branch is reported to the user.
@@ -77,3 +82,4 @@ For each failed run, `gh run view <id> --log-failed`, keep the error lines (max 
 - [screenshots.md](references/screenshots.md) — before/after capture, test stack slots, `pr-assets/<n>` branch, comment format
 - [monitoring-ci.md](references/monitoring-ci.md) — watch/poll loop, timeout
 - [analyzing-results.md](references/analyzing-results.md) — CI log extraction, root-cause table, report format
+- [preexisting-problems.md](references/preexisting-problems.md) — pre-existing bugs → reviewed GitHub issues and `Closes #N` fix PRs
