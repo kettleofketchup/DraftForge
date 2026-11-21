@@ -82,7 +82,6 @@ function hasScopedChanged(
     const a = existing.orgData[context.orgId];
     const b = incoming.orgData[context.orgId];
     if (a?.id !== b?.id || !sameMmrs(a?.mmrs, b?.mmrs)) return true;
-    if (a?.mmr !== b?.mmr) return true;
     if (
       existing.orgNicknames?.[context.orgId] !==
       incoming.orgNicknames?.[context.orgId]
@@ -130,7 +129,6 @@ function toUserEntry(
       [context.orgId]: {
         id: raw.orgUserPk,
         mmrs: prev?.id === raw.orgUserPk ? { ...prev.mmrs, ...mmrs } : mmrs,
-        mmr: raw.mmr ?? (prev?.id === raw.orgUserPk ? prev.mmr : undefined),
         _fetchedAt: now,
       },
     };

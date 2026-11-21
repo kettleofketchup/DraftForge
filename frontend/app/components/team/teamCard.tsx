@@ -1,12 +1,14 @@
 import { motion } from 'framer-motion';
 import type { FormEvent } from 'react';
 import React, { memo, useMemo, useState } from 'react';
+import type { GameTypeValue } from '~/components/game/constants';
 import type { TeamType } from '~/components/tournament/types';
 import type { UserType } from '../user/types';
 import { TeamTable } from './teamTable/teamTable';
 
 interface Props {
   team: TeamType;
+  gameType: GameTypeValue;
   edit?: boolean;
   compact?: boolean;
   removeCallBack?: (e: FormEvent, user: UserType) => void;
@@ -16,6 +18,7 @@ interface Props {
 export const TeamCard: React.FC<Props> = memo(
   ({
     team,
+    gameType,
     edit,
     compact,
     removeCallBack,
@@ -56,7 +59,7 @@ export const TeamCard: React.FC<Props> = memo(
       if (!team.members || team.members.length === 0) return <></>;
       return (
         <div className="flex items-center gap-2 w-full">
-          <TeamTable team={team} />
+          <TeamTable team={team} gameType={gameType} />
         </div>
       );
     };

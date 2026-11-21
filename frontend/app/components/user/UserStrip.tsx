@@ -1,4 +1,11 @@
 import { memo, useMemo } from 'react';
+import {
+  GAME_LABEL,
+  GAME_SHORT_LABEL,
+  GAME_TYPE,
+  type GameTypeValue,
+  showsLeagueMmr,
+} from '~/components/game/constants';
 import { PlayerPopover } from '~/components/player';
 import { Badge } from '~/components/ui/badge';
 import {
@@ -10,10 +17,14 @@ import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { cn } from '~/lib/utils';
+import { selectOrgMmr } from '~/store/selectOrgMmr';
 import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import { RolePositions } from './positions';
-import { type StatsBreakpoint, UserStripLeagueStats } from './UserStripLeagueStats';
 import type { UserType } from './types';
+import {
+  type StatsBreakpoint,
+  UserStripLeagueStats,
+} from './UserStripLeagueStats';
 
 export interface UserStripProps {
   user: UserType | UserEntry;
@@ -29,6 +40,9 @@ export interface UserStripProps {
 
   /** Optional organization ID for context-specific stats in mini profile */
   organizationId?: number;
+
+  /** Game of the surface; picks and labels the org MMR badge. */
+  gameType: GameTypeValue;
 
   /** League pk for the ticket-match stats column; independent of the L: badge */
   statsLeagueId?: number | null;
@@ -48,8 +62,8 @@ export interface UserStripProps {
   /**
    * Show MMR badges (default true). Set false in contexts where MMR is
    * irrelevant (e.g. Discord DM history, claim approval lists). When true,
-   * the Base MMR badge still auto-hides when the value is 0/undefined and
-   * the League MMR badge auto-hides when the value is 0/undefined.
+   * each badge still auto-hides when 0/undefined, and the League badge also
+   * hides when `showsLeagueMmr(gameType)` is false.
    */
   showMmr?: boolean;
 
@@ -68,6 +82,11 @@ export interface UserStripProps {
   'data-testid'?: string;
 }
 
+// Dota keeps the legacy "B:" text that Playwright layout probes match on.
+function orgMmrPrefix(gameType: GameTypeValue): string {
+  return gameType === GAME_TYPE.DOTA2 ? 'B:' : `${GAME_SHORT_LABEL[gameType]}:`;
+}
+
 export const userStripPropsAreEqual = (
   prev: UserStripProps,
   next: UserStripProps,
@@ -82,6 +101,7 @@ export const userStripPropsAreEqual = (
   // Context IDs
   if (prev.leagueId !== next.leagueId) return false;
   if (prev.organizationId !== next.organizationId) return false;
+  if (prev.gameType !== next.gameType) return false;
   if (prev.statsLeagueId !== next.statsLeagueId) return false;
   if (prev.statsBreakpoint !== next.statsBreakpoint) return false;
 
@@ -105,6 +125,7 @@ export const UserStrip = memo(
     actionSlot,
     leagueId,
     organizationId,
+    gameType,
     statsLeagueId,
     statsBreakpoint = 'default',
     compact = false,
@@ -127,16 +148,20 @@ export const UserStrip = memo(
 
     // Memoize MMR values to prevent badge re-renders
     const orgMmr = isUserEntry(user)
-      ? (organizationId ? user.orgData[organizationId]?.mmr : undefined)
+      ? selectOrgMmr(user, organizationId, gameType)
       : user.mmr;
     const baseMmr = useMemo(
       () => (orgMmr ?? 0).toLocaleString().padStart(6, '\u2007'),
       [orgMmr],
     );
 
-    const leagueMmrValue = isUserEntry(user)
-      ? (leagueId ? user.leagueData[leagueId]?.mmr : undefined)
-      : (user as UserType & { league_mmr?: number }).league_mmr;
+    const leagueMmrValue = !showsLeagueMmr(gameType)
+      ? undefined
+      : isUserEntry(user)
+        ? leagueId
+          ? user.leagueData[leagueId]?.mmr
+          : undefined
+        : (user as UserType & { league_mmr?: number }).league_mmr;
     const leagueMmr = useMemo(
       () => (leagueMmrValue ?? 0).toLocaleString().padStart(6, '\u2007'),
       [leagueMmrValue],
@@ -150,8 +175,9 @@ export const UserStrip = memo(
             <Badge
               variant="outline"
               className="px-1.5 py-0 text-xs font-mono cursor-help text-white"
+              data-testid="user-strip-org-mmr"
             >
-              <span>B:</span>
+              <span>{orgMmrPrefix(gameType)}</span>
               <span className="ml-0.5 inline-block min-w-[6ch] text-right">
                 {baseMmr}
               </span>
@@ -161,12 +187,13 @@ export const UserStrip = memo(
             side="top"
             className="text-xs bg-popover text-popover-foreground"
           >
-            <p className="font-semibold text-foreground">Base MMR</p>
-            <p className="text-muted-foreground">Dota 2 ranked MMR</p>
+            <p className="font-semibold text-foreground">
+              {GAME_LABEL[gameType]} org MMR
+            </p>
           </TooltipContent>
         </Tooltip>
       ),
-      [baseMmr],
+      [baseMmr, gameType],
     );
 
     const leagueMmrBadge = useMemo(
@@ -188,9 +215,7 @@ export const UserStrip = memo(
             className="text-xs bg-popover text-popover-foreground"
           >
             <p className="font-semibold text-foreground">League MMR</p>
-            <p className="text-muted-foreground">
-              Performance-adjusted rating
-            </p>
+            <p className="text-muted-foreground">Performance-adjusted rating</p>
           </TooltipContent>
         </Tooltip>
       ),
@@ -200,7 +225,8 @@ export const UserStrip = memo(
     // Reactive gameType-aware positions over the list-populated entity adapter
     // (fall back to the passed user.positions off-Dota / pre-cache). RolePositions
     // re-resolves internally too; subscribing here keeps the memo dep reactive.
-    const playerPositions = usePlayerPositions(user?.pk ?? -1) ?? user?.positions;
+    const playerPositions =
+      usePlayerPositions(user?.pk ?? -1) ?? user?.positions;
     const showStats = statsLeagueId != null;
 
     // Memoize positions to prevent re-renders
@@ -222,7 +248,11 @@ export const UserStrip = memo(
         data-testid={testId}
       >
         {/* Column 1: Avatar */}
-        <PlayerPopover player={user} statsLeagueId={statsLeagueId}>
+        <PlayerPopover
+          player={user}
+          statsLeagueId={statsLeagueId}
+          gameType={gameType}
+        >
           <UserAvatar
             user={user}
             size={compact ? 'md' : 'lg'}
@@ -233,7 +263,11 @@ export const UserStrip = memo(
         {/* Column 2: Name + Positions (grouped) */}
         <div className="min-w-0 flex flex-col justify-center">
           {/* Row 1: Name */}
-          <PlayerPopover player={user} statsLeagueId={statsLeagueId}>
+          <PlayerPopover
+            player={user}
+            statsLeagueId={statsLeagueId}
+            gameType={gameType}
+          >
             <span
               className={cn(
                 'text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight inline-block truncate',
@@ -247,7 +281,9 @@ export const UserStrip = memo(
               style={
                 nameMaxLength == null
                   ? undefined
-                  : ({ '--name-width': `${nameMaxLength}ch` } as React.CSSProperties)
+                  : ({
+                      '--name-width': `${nameMaxLength}ch`,
+                    } as React.CSSProperties)
               }
               title={fullName.length > 12 ? fullName : undefined}
             >
@@ -259,7 +295,7 @@ export const UserStrip = memo(
           {showPositions && <div className="mt-0.5">{positions}</div>}
         </div>
 
-        {/* Column 3: MMR (stacked vertically - Base on top, League below) */}
+        {/* Column 3: MMR (stacked vertically - org on top, League below) */}
         {showMmr && (orgMmr || leagueMmrValue) ? (
           <div className="flex flex-col justify-center gap-0.5 shrink-0">
             {orgMmr ? baseMmrBadge : null}
@@ -272,6 +308,7 @@ export const UserStrip = memo(
             leaguePk={statsLeagueId}
             player={user}
             breakpoint={statsBreakpoint}
+            gameType={gameType}
           />
         ) : null}
 

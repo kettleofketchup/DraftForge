@@ -46,7 +46,11 @@ describe('PlayerPopoverTrigger statsLeagueId', () => {
     fireEvent.click(trigger());
     expect(actions.openPlayerModal).toHaveBeenCalledWith(
       player,
-      expect.objectContaining({ statsLeagueId: 7, leagueId: 3, organizationId: 9 }),
+      expect.objectContaining({
+        statsLeagueId: 7,
+        leagueId: 3,
+        organizationId: 9,
+      }),
     );
   });
 
@@ -81,5 +85,26 @@ describe('PlayerPopoverTrigger statsLeagueId', () => {
     const ctx = actions.openPlayerModal.mock.calls[0][1];
     expect(ctx).toMatchObject({ leagueId: 3, organizationId: 9 });
     expect(ctx.statsLeagueId).toBeUndefined();
+  });
+});
+
+describe('PlayerPopoverTrigger gameType', () => {
+  it('passes gameType to the hover card and the modal', () => {
+    render(
+      <PlayerPopoverTrigger player={player} gameType={2}>
+        x
+      </PlayerPopoverTrigger>,
+    );
+    fireEvent.mouseEnter(trigger());
+    expect(actions.showPlayerPopover).toHaveBeenCalledWith(
+      player,
+      trigger(),
+      expect.objectContaining({ gameType: 2 }),
+    );
+    fireEvent.click(trigger());
+    expect(actions.openPlayerModal).toHaveBeenCalledWith(
+      player,
+      expect.objectContaining({ gameType: 2 }),
+    );
   });
 });

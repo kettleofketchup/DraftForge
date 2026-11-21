@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { toGameType } from '~/components/game/constants';
 import type { UserClassType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -10,6 +11,9 @@ interface PlayerChoiceViewProps {}
 export const PlayerChoiceView: React.FC<PlayerChoiceViewProps> = () => {
   const draft = useUserStore((state) => state.draft);
   const curRound = useUserStore((state) => state.curDraftRound);
+  const gameType = useUserStore((state) =>
+    toGameType(state.tournament?.game_type),
+  );
   useEffect(() => {
     log.debug('rerender: Current choice updated:', curRound?.choice);
   }, [curRound?.choice]);
@@ -32,7 +36,11 @@ export const PlayerChoiceView: React.FC<PlayerChoiceViewProps> = () => {
     <div className="mb-4">
       <h3 className="text-xl font-bold">Current Choice</h3>
       <div className="flex flex-col items-center justify-center">
-        <UserCard user={curRound?.choice as UserClassType} compact={true} />
+        <UserCard
+          user={curRound?.choice as UserClassType}
+          compact={true}
+          gameType={gameType}
+        />
       </div>
     </div>
   );

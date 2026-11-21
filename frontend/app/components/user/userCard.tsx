@@ -1,5 +1,14 @@
 import { UserPlus } from 'lucide-react';
 import React, { memo, useEffect } from 'react';
+import {
+  GAME_LABEL,
+  GAME_SLUG,
+  GAME_TYPES,
+  showsLeagueMmr,
+  toGameType,
+  type GameTypeValue,
+} from '~/components/game/constants';
+import { parseGameMmrs, type GameMmrs } from '~/components/game/gameMmrs';
 import { Badge } from '~/components/ui/badge';
 import {
   DotabuffButton,
@@ -23,6 +32,7 @@ import { getLogger } from '~/lib/logger';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
+import { selectOrgMmr } from '~/store/selectOrgMmr';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
@@ -50,6 +60,8 @@ interface Props {
   leagueId?: number;
   /** Optional organization ID for context-specific stats in mini profile */
   organizationId?: number;
+  /** Context game (tournament scope); undefined = org scope, every game. */
+  gameType?: GameTypeValue;
 }
 
 export const UserCard: React.FC<Props> = memo(
@@ -61,6 +73,7 @@ export const UserCard: React.FC<Props> = memo(
     animationIndex = 0,
     leagueId,
     organizationId,
+    gameType,
   }) => {
     const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
@@ -74,29 +87,36 @@ export const UserCard: React.FC<Props> = memo(
     // transitions. Avoids cascading every grid card on hover.
     const { openPlayerModal } = useSharedPopoverActions();
 
-    // Plain users (e.g. hydrated tournament players) carry no orgData; read
-    // it from the entity cache the page upserted them into.
+    // Live cache entry: plain users (hydrated tournament players) carry no
+    // orgData, and an entry prop can be a pre-save snapshot.
     const cachedEntry = useUserCacheStore((s) =>
-      !isUserEntry(user) && organizationId && user.pk != null
-        ? s.entities[user.pk]
-        : undefined,
+      organizationId && user.pk != null ? s.entities[user.pk] : undefined,
     );
-    const orgSource = isUserEntry(user) ? user : cachedEntry;
-    const orgEntry = organizationId
-      ? orgSource?.orgData[organizationId]
-      : undefined;
-    const mmr = isUserEntry(user)
-      ? organizationId
-        ? orgEntry?.mmr
-        : undefined
-      : (orgEntry?.mmr ?? user.mmr);
+    const orgSource = cachedEntry ?? (isUserEntry(user) ? user : undefined);
+    // Raw payloads: flat `mmr` is for its `mmr_game_type`, else the context game.
+    const payloadMmrs: GameMmrs = isUserEntry(user)
+      ? {}
+      : {
+          ...(user.mmr != null
+            ? { [toGameType(user.mmr_game_type ?? gameType)]: user.mmr }
+            : {}),
+          ...parseGameMmrs(user.game_mmrs),
+        };
+    const mmrFor = (g: GameTypeValue): number | undefined =>
+      selectOrgMmr(orgSource, organizationId, g) ?? payloadMmrs[g];
+    const tileGames: GameTypeValue[] =
+      gameType != null ? [gameType] : [...GAME_TYPES];
+    const missingMmr = !!organizationId && tileGames.every((g) => !mmrFor(g));
+    const cachedOrgMmr = gameType != null ? mmrFor(gameType) : undefined;
     // Same resolution as UserStrip: scoped map for cache entries, flat field
     // for raw payloads.
-    const leagueMmr = isUserEntry(user)
-      ? leagueId
-        ? user.leagueData[leagueId]?.mmr
-        : undefined
-      : (user as UserType & { league_mmr?: number | null }).league_mmr;
+    const leagueMmr = !showsLeagueMmr(gameType)
+      ? undefined
+      : isUserEntry(user)
+        ? leagueId
+          ? user.leagueData[leagueId]?.mmr
+          : undefined
+        : (user as UserType & { league_mmr?: number | null }).league_mmr;
 
     // Shared resolver (same as the incomplete-profiles card). Gates on the
     // player's OrgUser link (flat orgUserPk on raw payloads, orgData/leagueData
@@ -115,9 +135,10 @@ export const UserCard: React.FC<Props> = memo(
             leagueId,
             currentOrg,
             currentLeague,
+            gameType,
           },
         ),
-      [linkPk, organizationId, leagueId, currentOrg, currentLeague],
+      [linkPk, organizationId, leagueId, currentOrg, currentLeague, gameType],
     );
 
     // Construct the User instance ONCE per stable input set. Doing this
@@ -134,16 +155,20 @@ export const UserCard: React.FC<Props> = memo(
           linkPk != null
             ? {
                 ...user,
-                mmr: orgEntry ? orgEntry.mmr : user.mmr,
+                mmr: cachedOrgMmr ?? user.mmr,
                 orgUserPk: linkPk,
               }
             : user,
         ),
-      [user, linkPk, orgEntry?.mmr],
+      [user, linkPk, cachedOrgMmr],
     );
 
     const handleViewProfile = () => {
-      openPlayerModal(user, { organizationId: currentOrg?.pk, leagueId });
+      openPlayerModal(user, {
+        organizationId: currentOrg?.pk,
+        leagueId,
+        ...(gameType != null ? { gameType } : {}),
+      });
     };
 
     useEffect(() => {
@@ -154,12 +179,7 @@ export const UserCard: React.FC<Props> = memo(
     }, [user.pk, getUsers]);
 
     const hasError = () => {
-      // Only show MMR error when viewing in an org context
-      if (organizationId && !mmr) {
-        return true;
-      }
-
-      return false;
+      return missingMmr;
     };
     const avatar = () => {
       return (
@@ -225,7 +245,7 @@ export const UserCard: React.FC<Props> = memo(
     const errorInfo = () => {
       return (
         <div className="flex flex-col items-end">
-          {organizationId && !mmr && (
+          {missingMmr && (
             <span className="font-semibold text-error">MMR: Not added</span>
           )}
           {!positions && (
@@ -326,26 +346,28 @@ export const UserCard: React.FC<Props> = memo(
               {/* MMR row — only meaningful inside an org or league context.
                   On the global /users grid neither id is provided, so the
                   whole row is hidden (there's no "base" MMR concept).
-                  flex-wrap so a single MMR tile takes the full width when
-                  the other isn't shown. */}
+                  flex-wrap so the shown MMR tiles share the full width. */}
               {(organizationId || leagueId) && (
                 <div className="flex flex-wrap gap-1 w-full">
-                  {organizationId && (
-                    <Item
-                      size="sm"
-                      variant="muted"
-                      className="!p-1 flex-1 min-w-0"
-                    >
-                      <ItemContent className="!gap-0 items-center min-w-0">
-                        <ItemTitle className="!text-xs text-muted-foreground">
-                          Org MMR
-                        </ItemTitle>
-                        <span className="text-sm font-semibold">
-                          {mmr ?? '?'}
-                        </span>
-                      </ItemContent>
-                    </Item>
-                  )}
+                  {organizationId &&
+                    tileGames.map((g) => (
+                      <Item
+                        key={g}
+                        size="sm"
+                        variant="muted"
+                        className="!p-1 flex-1 min-w-0"
+                        data-testid={`usercard-org-mmr-${GAME_SLUG[g]}`}
+                      >
+                        <ItemContent className="!gap-0 items-center min-w-0">
+                          <ItemTitle className="!text-xs text-muted-foreground">
+                            {GAME_LABEL[g]} MMR
+                          </ItemTitle>
+                          <span className="text-sm font-semibold">
+                            {mmrFor(g) || '\u2014'}
+                          </span>
+                        </ItemContent>
+                      </Item>
+                    ))}
                   {leagueId && leagueMmr != null && (
                     <Item
                       size="sm"
@@ -421,7 +443,7 @@ export const UserCard: React.FC<Props> = memo(
           </div>
 
           {/* Error info row */}
-          {((organizationId && !mmr) || !positions) && (
+          {(missingMmr || !positions) && (
             <div className="flex justify-end">{errorInfo()}</div>
           )}
 

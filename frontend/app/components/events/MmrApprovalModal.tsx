@@ -1,11 +1,17 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { RankSignalsCard } from '~/components/events/games/RankSignalsCard';
 import type { EventSignupType } from '~/components/events/schemas';
-import { GAME_TYPE } from '~/components/game/constants';
+import {
+  DEFAULT_MMR_BOUNDS,
+  GAME_LABEL,
+  GAME_MMR_BOUNDS,
+  GAME_TYPE,
+  type GameTypeValue,
+} from '~/components/game/constants';
 import { Badge } from '~/components/ui/badge';
 import {
   CancelButton,
@@ -36,21 +42,33 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserStrip } from '~/components/user/UserStrip';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
-import { useGameType } from '~/hooks/useGameType';
 import { cn } from '~/lib/utils';
 
 const LARGE_CHANGE_THRESHOLD = 0.2;
 
-const mmrSchema = z.object({
-  // The Input's onChange already passes valueAsNumber, so mmr reaches the
-  // resolver as a number; coerce is only a fallback for non-number values.
-  mmr: z.coerce
-    .number()
-    .int()
-    .min(0, 'MMR must be positive')
-    .max(20000, 'MMR too high'),
-});
-type MmrFormValues = z.infer<typeof mmrSchema>;
+// 0 means "Not added" for non-Dota games, so they require at least 1; Dota allows 0.
+function buildMmrSchema(gameType: GameTypeValue) {
+  const [lo, hi] = GAME_MMR_BOUNDS[gameType] ?? DEFAULT_MMR_BOUNDS;
+  const min = gameType === GAME_TYPE.DOTA2 ? lo : Math.max(lo, 1);
+  return z.object({
+    mmr: z.preprocess(
+      (v) =>
+        v === '' || v === null || (typeof v === 'number' && Number.isNaN(v))
+          ? undefined
+          : v,
+      z.coerce
+        .number({ error: 'MMR is required' })
+        .int()
+        .min(
+          min,
+          min > 0 ? `MMR must be at least ${min}` : 'MMR must be positive',
+        )
+        .max(hi, 'MMR too high'),
+    ),
+  });
+}
+type MmrSchema = ReturnType<typeof buildMmrSchema>;
+type MmrFormValues = z.infer<MmrSchema>;
 
 interface MmrApprovalModalProps {
   signup: EventSignupType | null;
@@ -60,6 +78,7 @@ interface MmrApprovalModalProps {
   onReject?: (signupId: number) => void;
   isApproving?: boolean;
   isRejecting?: boolean;
+  gameType: GameTypeValue;
 }
 
 export function MmrApprovalModal({
@@ -70,36 +89,37 @@ export function MmrApprovalModal({
   onReject,
   isApproving = false,
   isRejecting = false,
+  gameType,
 }: MmrApprovalModalProps) {
-  const gameType = useGameType();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [approvedMmr, setApprovedMmr] = useState<number | null>(null);
+  const mmrSchema = useMemo(() => buildMmrSchema(gameType), [gameType]);
   // 3-generic useForm because z.coerce.number() genuinely splits input/output:
   // input is `unknown` (coerce accepts anything), output is `number`.
   // See https://github.com/react-hook-form/resolvers/issues/792.
-  const form = useForm<z.input<typeof mmrSchema>, unknown, MmrFormValues>({
+  const form = useForm<z.input<MmrSchema>, unknown, MmrFormValues>({
     resolver: zodResolver(mmrSchema),
-    defaultValues: { mmr: 0 },
+    defaultValues: { mmr: '' },
   });
 
   // Reset when the signup or open state changes. suggested_mmr is
   // self-report-first (see backend events.mmr_suggestions.suggest_mmr).
   useEffect(() => {
     if (signup && open) {
-      form.reset({ mmr: signup.suggested_mmr });
+      form.reset({ mmr: signup.suggested_mmr ?? '' });
       setConfirmOpen(false);
+      setApprovedMmr(null);
     }
   }, [signup, open]);
 
-  // form.watch returns z.input shape, which for z.coerce.number() is `unknown`
-  // (the resolver coerces at parse time). At runtime the Input's onChange
-  // already calls valueAsNumber, so Number(...)||0 is a safe narrowing.
-  const watchedMmr = Number(form.watch('mmr')) || 0;
+  const rawMmr = form.watch('mmr');
+  const hasValue = typeof rawMmr === 'number' && Number.isFinite(rawMmr);
+  const watchedMmr = hasValue ? rawMmr : 0;
   const priorMmr = signup?.org_user_mmr ?? null;
-  const hasDelta =
-    priorMmr != null && Number.isFinite(watchedMmr) && watchedMmr !== priorMmr;
+  const hasDelta = priorMmr != null && hasValue && watchedMmr !== priorMmr;
   const deltaAmount = hasDelta ? watchedMmr - priorMmr! : 0;
   const deltaPct =
-    priorMmr != null && priorMmr > 0 && Number.isFinite(watchedMmr)
+    priorMmr != null && priorMmr > 0 && hasValue
       ? Math.abs(watchedMmr - priorMmr) / priorMmr
       : 0;
   const isLargeChange = hasDelta && deltaPct >= LARGE_CHANGE_THRESHOLD;
@@ -145,14 +165,14 @@ export function MmrApprovalModal({
   // Form submit opens the confirm dialog rather than approving directly.
   // Final approval is always preceded by an explicit "yes I mean it" step,
   // which doubles as a recap (player + MMR + delta) for the admin.
-  const handleSubmit = (_values: MmrFormValues) => {
+  const handleSubmit = (values: MmrFormValues) => {
+    setApprovedMmr(values.mmr);
     setConfirmOpen(true);
   };
 
   const handleConfirmApproval = () => {
-    // form.getValues returns z.input shape (unknown for coerce fields).
-    // Narrow with Number() — matches onChange's valueAsNumber behavior.
-    onApprove(signup.id, Number(form.getValues('mmr')) || 0);
+    if (approvedMmr == null) return;
+    onApprove(signup.id, approvedMmr);
     setConfirmOpen(false);
   };
 
@@ -189,6 +209,7 @@ export function MmrApprovalModal({
         <UserStrip
           user={stripUser}
           showBorder={false}
+          gameType={gameType}
           className={brandDialogPanel}
           data-testid="mmr-confirm-user-strip"
         />
@@ -228,7 +249,7 @@ export function MmrApprovalModal({
             </div>
           </DialogHeader>
 
-          <RankSignalsCard signup={signup} />
+          <RankSignalsCard signup={signup} gameType={gameType} />
 
           {screenshotUrl && (
             <div className="rounded-lg border border-border overflow-hidden bg-base-800">
@@ -253,7 +274,9 @@ export function MmrApprovalModal({
                 name="mmr"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Approved MMR</FormLabel>
+                    <FormLabel data-testid="mmr-modal-game-title">
+                      Set {GAME_LABEL[gameType]} org MMR
+                    </FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -266,7 +289,9 @@ export function MmrApprovalModal({
                           typeof field.value === 'number' ? field.value : ''
                         }
                         onChange={(e) =>
-                          field.onChange(e.target.valueAsNumber || 0)
+                          field.onChange(
+                            e.target.value === '' ? '' : e.target.valueAsNumber,
+                          )
                         }
                       />
                     </FormControl>

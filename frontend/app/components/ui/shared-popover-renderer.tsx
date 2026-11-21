@@ -6,6 +6,11 @@ import React, {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import {
+  GAME_SHORT_LABEL,
+  toGameType,
+  type GameTypeValue,
+} from '~/components/game/constants';
 import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
 import { PlayerModal } from '~/components/player/PlayerModal';
 import { TeamModal } from '~/components/team/TeamModal';
@@ -22,8 +27,10 @@ import { useSharedPopover } from './shared-popover-context';
 const PlayerPopoverContent: React.FC<{
   player: UserType;
   statsLeagueId?: number | null;
-}> = ({ player, statsLeagueId }) => {
+  gameType?: GameTypeValue;
+}> = ({ player, statsLeagueId, gameType }) => {
   const playerName = player.nickname || player.username || 'Unknown';
+  const mmrGame = gameType ?? toGameType(player.mmr_game_type);
 
   return (
     <div className="flex flex-col gap-3 w-full overflow-hidden">
@@ -35,8 +42,11 @@ const PlayerPopoverContent: React.FC<{
             {playerName}
           </p>
           {player.mmr && (
-            <p className="text-sm text-foreground/70">
-              MMR: {player.mmr.toLocaleString()}
+            <p
+              className="text-sm text-foreground/70"
+              data-testid="player-popover-mmr"
+            >
+              {GAME_SHORT_LABEL[mmrGame]} {player.mmr.toLocaleString()}
             </p>
           )}
         </div>
@@ -142,6 +152,9 @@ export const SharedPopoverRenderer: React.FC = () => {
         organizationId: currentOrg?.pk,
         leagueId: currentLeague?.pk,
         statsLeagueId: state.context?.statsLeagueId,
+        ...(state.context?.gameType != null
+          ? { gameType: state.context.gameType }
+          : {}),
       });
     } else if (state.type === 'team' && state.team) {
       openTeamModal(state.team);
@@ -191,6 +204,7 @@ export const SharedPopoverRenderer: React.FC = () => {
         <PlayerPopoverContent
           player={state.player}
           statsLeagueId={state.context?.statsLeagueId}
+          gameType={state.context?.gameType}
         />
       )}
       {state.type === 'team' && state.team && (

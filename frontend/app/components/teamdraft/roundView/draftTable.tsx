@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useMemo } from 'react';
+import { toGameType } from '~/components/game/constants';
 import { PlayerPopover } from '~/components/player';
 import {
   Table,
@@ -159,7 +160,10 @@ export const DraftTable: React.FC<DraftTableProps> = () => {
                 className={cn(projected?.isDoublePick && 'bg-pick-surface/30')}
               >
                 <TableCell>
-                  <PlayerPopover player={user}>
+                  <PlayerPopover
+                    player={user}
+                    gameType={toGameType(tournament?.game_type)}
+                  >
                     <div className="flex items-center gap-2 hover:text-primary transition-colors">
                       <UserAvatar
                         user={user}

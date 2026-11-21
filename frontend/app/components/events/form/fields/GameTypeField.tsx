@@ -3,7 +3,7 @@ import {
   type Control,
   type FieldValues,
 } from 'react-hook-form';
-import { GAME_TYPE } from '~/components/game/constants';
+import { GAME_LABEL, GAME_TYPE, GAME_TYPES } from '~/components/game/constants';
 import {
   FormControl,
   FormField,
@@ -75,12 +75,15 @@ export function GameTypeField<T extends FieldValues & GameTypeFields>({
               </SelectTrigger>
             </FormControl>
             <SelectContent>
-              <SelectItem value="1" data-testid={`${testId}-option-1`}>
-                Dota 2
-              </SelectItem>
-              <SelectItem value="2" data-testid={`${testId}-option-2`}>
-                Deadlock
-              </SelectItem>
+              {GAME_TYPES.map((g) => (
+                <SelectItem
+                  key={g}
+                  value={String(g)}
+                  data-testid={`${testId}-option-${g}`}
+                >
+                  {GAME_LABEL[g]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <FormMessage />

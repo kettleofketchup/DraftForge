@@ -1,7 +1,12 @@
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { GAME_TYPE } from '~/components/game/constants';
+import {
+  GAME_LABEL,
+  GAME_TYPE,
+  toGameType,
+  type GameTypeValue,
+} from '~/components/game/constants';
 import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
 import {
   Collapsible,
@@ -20,6 +25,7 @@ import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
+import { selectOrgMmr } from '~/store/selectOrgMmr';
 import { selectPositions } from '~/store/selectPositions';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import type { PositionsType, UserEntry } from '~/store/userCacheTypes';
@@ -36,13 +42,15 @@ interface UserIssue {
 /** Convert a UserEntry to a UserType-like object with org-scoped fields flattened. */
 function toUserType(
   entry: UserEntry,
+  gameType: GameTypeValue,
   orgId?: number,
   leagueId?: number,
 ): UserClassType {
   return {
     ...entry,
     orgUserPk: resolveOrgUserLink(entry, { organizationId: orgId, leagueId }),
-    mmr: orgId ? entry.orgData[orgId]?.mmr : undefined,
+    mmr: selectOrgMmr(entry, orgId, gameType),
+    mmr_game_type: gameType,
   } as unknown as UserClassType;
 }
 
@@ -59,6 +67,7 @@ function hasNoPositions(positions: PositionsType | undefined): boolean {
 
 export const hasErrors = () => {
   const tournament = useUserStore((state) => state.tournament);
+  const gameType = toGameType(tournament?.game_type);
   const entities = useUserCacheStore((state) => state.entities);
   const league = useLeagueStore((state) => state.currentLeague);
   // SSR-safe default closed; md+ viewports auto-expand on mount to avoid hydration mismatch.
@@ -111,9 +120,9 @@ export const hasErrors = () => {
       const userIssues: string[] = [];
 
       // Check org-scoped MMR from the entity cache
-      const mmr = orgId ? cached.orgData[orgId]?.mmr : undefined;
+      const mmr = selectOrgMmr(cached, orgId, gameType);
       if (!mmr) {
-        userIssues.push('No MMR');
+        userIssues.push(`No ${GAME_LABEL[gameType]} MMR`);
       }
       if (!cached.steam_account_id) {
         userIssues.push('No Friend ID');
@@ -123,12 +132,13 @@ export const hasErrors = () => {
       }
 
       if (userIssues.length > 0) {
-        const user = toUserType(cached, orgId, leagueId);
+        const user = toUserType(cached, gameType, orgId, leagueId);
         const scope = resolveEditScope(user, {
           organizationId: orgId,
           leagueId,
           currentOrg,
           currentLeague: league,
+          gameType,
         });
         issues.push({ user, scope, issues: userIssues });
       }
@@ -138,6 +148,8 @@ export const hasErrors = () => {
     return issues;
   }, [
     tournament?.users,
+    tournament?.game_type,
+    gameType,
     entities,
     orgId,
     leagueId,

@@ -1,10 +1,13 @@
 import type { ReactNode } from 'react';
 
 import type { EventSignupType } from '~/components/events/schemas';
+import { GAME_LABEL, type GameTypeValue } from '~/components/game/constants';
 
 interface BaseRankSignalsCardProps {
   signup: EventSignupType;
-  /** Game-specific rows rendered after the universal Previously Approved MMR row. */
+  /** Game whose org MMR `signup.org_user_mmr` holds; labels the prior row. */
+  gameType: GameTypeValue;
+  /** Game-specific rows rendered after the universal prior org MMR row. */
   children?: ReactNode;
   /** Optional warning banner rendered after children — for game-specific signal mismatches. */
   warning?: ReactNode;
@@ -12,13 +15,15 @@ interface BaseRankSignalsCardProps {
 
 /**
  * Universal "Rank Signals" card shown for every game. Always renders the prior
- * approved MMR row (driven by `signup.org_user_mmr`, which exists on every
- * OrgUser regardless of game). Game-specific cards (e.g. `Dota2RankSignalsCard`)
- * compose this base and inject their own rows via `children`.
- *
- * The dispatcher (`./RankSignalsCard`) returns this directly for non-Dota games.
+ * org MMR row (`signup.org_user_mmr`, resolved server-side for the event's
+ * game). Game-specific cards compose this base and add rows via `children`.
  */
-export function BaseRankSignalsCard({ signup, children, warning }: BaseRankSignalsCardProps) {
+export function BaseRankSignalsCard({
+  signup,
+  gameType,
+  children,
+  warning,
+}: BaseRankSignalsCardProps) {
   const priorMmr = signup.org_user_mmr;
 
   return (
@@ -30,10 +35,16 @@ export function BaseRankSignalsCard({ signup, children, warning }: BaseRankSigna
         Rank Signals
       </div>
 
-      {/* Previously Approved MMR — universal across games */}
-      <div className="flex justify-between items-center" data-testid="rank-signals-prior-mmr">
-        <span className="text-muted-foreground">Previously Approved MMR</span>
-        <span className={priorMmr != null ? 'font-mono' : 'text-muted-foreground'}>
+      <div
+        className="flex justify-between items-center"
+        data-testid="rank-signals-prior-mmr"
+      >
+        <span className="text-muted-foreground">
+          Prior {GAME_LABEL[gameType]} org MMR
+        </span>
+        <span
+          className={priorMmr != null ? 'font-mono' : 'text-muted-foreground'}
+        >
           {priorMmr != null ? priorMmr.toLocaleString() : '—'}
         </span>
       </div>

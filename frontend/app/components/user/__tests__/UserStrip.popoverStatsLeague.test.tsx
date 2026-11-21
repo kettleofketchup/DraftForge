@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { GAME_TYPE } from '~/components/game/constants';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { UserType } from '~/components/user/types';
 import { UserStrip } from '../UserStrip';
@@ -19,10 +20,19 @@ vi.mock('~/components/ui/shared-popover-context', () => ({
 }));
 
 vi.mock('~/features/league-stats/queries', () => ({
-  usePlayerLeagueSummary: () => ({ data: undefined, isLoading: false, isError: false }),
+  usePlayerLeagueSummary: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  }),
 }));
 
-const user = { pk: 42, username: 'alice', nickname: 'Alice', mmr: 4200 } as UserType;
+const user = {
+  pk: 42,
+  username: 'alice',
+  nickname: 'Alice',
+  mmr: 4200,
+} as UserType;
 
 function wrap(node: ReactNode) {
   return (
@@ -35,14 +45,40 @@ function wrap(node: ReactNode) {
 beforeEach(() => vi.clearAllMocks());
 
 describe('UserStrip popover statsLeagueId', () => {
-  it.each([0, 1])('trigger %i (avatar, name) opens the modal with statsLeagueId', (idx) => {
-    render(wrap(<UserStrip user={user} statsLeagueId={7} />));
-    const triggers = screen.getAllByRole('button', { name: 'View profile for Alice' });
-    expect(triggers).toHaveLength(2);
-    fireEvent.click(triggers[idx]);
+  it.each([0, 1])(
+    'trigger %i (avatar, name) opens the modal with statsLeagueId',
+    (idx) => {
+      render(
+        wrap(
+          <UserStrip
+            gameType={GAME_TYPE.DOTA2}
+            user={user}
+            statsLeagueId={7}
+          />,
+        ),
+      );
+      const triggers = screen.getAllByRole('button', {
+        name: 'View profile for Alice',
+      });
+      expect(triggers).toHaveLength(2);
+      fireEvent.click(triggers[idx]);
+      expect(actions.openPlayerModal).toHaveBeenCalledWith(
+        user,
+        expect.objectContaining({ statsLeagueId: 7 }),
+      );
+    },
+  );
+});
+
+describe('UserStrip popover gameType', () => {
+  it('threads its gameType into the player modal', () => {
+    render(wrap(<UserStrip gameType={GAME_TYPE.DEADLOCK} user={user} />));
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'View profile for Alice' })[0],
+    );
     expect(actions.openPlayerModal).toHaveBeenCalledWith(
       user,
-      expect.objectContaining({ statsLeagueId: 7 }),
+      expect.objectContaining({ gameType: GAME_TYPE.DEADLOCK }),
     );
   });
 });
