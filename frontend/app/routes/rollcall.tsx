@@ -452,7 +452,7 @@ export default function RollCallPage() {
         )}
       </div>
 
-      {/* MMR approval modal — opens for Dota2 events so previously-approved MMR is shown */}
+      {/* MMR approval modal — shows the previously-approved MMR */}
       <MmrApprovalModal
         signup={approvalSignup}
         open={!!approvalSignup}
