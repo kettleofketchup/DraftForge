@@ -287,4 +287,4 @@ Here the model name `draft` is the same as the app label. The `model__in` filter
 - **Rename source-app modules whose name would attract the moved code back.** `app/draft_state.py` became `app/tournament_state.py` once the draft functions left it.
 - **Test-only cross-app edges are stated, not claimed gone.** `draft/tests` imports nothing from `app.tests`. `app/tests` imports `draft.tests.team_fixtures` and `draft.tests.ws_helpers`, the same direction as the production back-edges.
 - **Team-domain helpers stay with Team** even when draft code is their only caller. `app/services/team_references.py` stays in `app`, and `draft/services/team_reset.py` imports it forward. `app/services/team_management.py` also stays; its imports of the team draft models and `emit_event` are a recorded back-edge.
-- The test-db image hash covers `backend/*/models/*.py` and every migration, so any change to `draft/models/` busts the cache and CI runs a fresh populate.
+- The test-db image hash covers `models.py`, `backend/*/models/*.py`, `backend/*/models_*.py` and every migration, so any change to `draft/models/` busts the cache and CI runs a fresh populate.

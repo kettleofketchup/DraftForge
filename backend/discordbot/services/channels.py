@@ -11,7 +11,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.models import Organization
-from app.permissions_org import has_org_staff_access
+from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)

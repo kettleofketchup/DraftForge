@@ -7,9 +7,9 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization, OrgLog
-from app.serializers import OrganizationSerializer
 from org.features import FeatureKey, set_org_feature
 from org.models import OrgUser
+from org.serializers import OrganizationSerializer
 
 
 def promoters_url(org_id: int) -> str:

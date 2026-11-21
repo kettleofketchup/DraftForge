@@ -21,10 +21,11 @@ from app.models import (
     Team,
     Tournament,
 )
-from app.permissions_org import has_org_staff_access
+from app.permissions_tournament import has_league_staff_access
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
 from org.models import OrgUser
+from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -408,8 +409,6 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
     # Check access via league staff (includes org staff + league-specific staff)
     has_access = False
     if tournament.league:
-        from app.permissions_org import has_league_staff_access
-
         has_access = has_league_staff_access(request.user, tournament.league)
     if not has_access and not request.user.is_superuser and not request.user.is_staff:
         return Response(
