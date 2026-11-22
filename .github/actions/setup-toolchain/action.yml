@@ -1,6 +1,6 @@
 name: Setup Toolchain
 description: >
-  GHCR login + Python 3.12 + Poetry 2.2 (with .venv cache) + Just + Docker
+  GHCR login + Just + Python 3.12 + Poetry 2.2 (with .venv cache) + Docker
   Buildx. Shared base layer for every workflow that builds/pushes images or
   drives docker compose. Composed by setup-playwright-stack/action.yml on top
   of this for E2E jobs.
@@ -12,6 +12,18 @@ inputs:
   github-actor:
     description: GitHub actor for GHCR login
     required: true
+  buildx:
+    description: >
+      'false' skips booting a docker-container builder (~10s), for jobs that only
+      pull images; `just ci::buildx-builder` boots one if a fallback build needs it
+    required: false
+    default: 'true'
+  prefetch:
+    description: >
+      'true' starts pulling the images and test DB in the background
+      (`just ci::prefetch-start`) before Python and Poetry are set up
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -22,6 +34,14 @@ runs:
         registry: ghcr.io
         username: ${{ inputs.github-actor }}
         password: ${{ inputs.registry-token }}
+
+    - name: Set up Just
+      uses: extractions/setup-just@v2
+
+    - name: Start image and test-DB prefetch
+      if: inputs.prefetch == 'true'
+      shell: bash
+      run: just ci::prefetch-start
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -45,8 +65,6 @@ runs:
       shell: bash
       run: poetry install --no-interaction --no-ansi
 
-    - name: Set up Just
-      uses: extractions/setup-just@v2
-
     - name: Set up Docker Buildx
+      if: inputs.buildx == 'true'
       uses: docker/setup-buildx-action@v3

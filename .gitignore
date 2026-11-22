@@ -333,3 +333,6 @@ frontend/screenshots/
 
 # Per-worktree test stack slot file
 docker/.env.slot
+
+# just ci::timing output
+/.ci-timing/
