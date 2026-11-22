@@ -15,7 +15,13 @@ from .models import CustomUser, TeamLog
 
 class CustomUserAdmin(admin.ModelAdmin):
     list_display = ["username", "steamid", "is_superuser", "is_staff"]
-    readonly_fields = ["discordNickname"]
+    readonly_fields = [
+        "discordNickname",
+        "steam_account_verified_at",
+        "steam_account_verified_by",
+        "steam_account_verified_org",
+        "steam_account_exists_checked_at",
+    ]
     exclude = ["guildNickname"]
 
     def get_deleted_objects(
