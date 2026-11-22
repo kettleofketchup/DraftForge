@@ -44,6 +44,11 @@ pull:
 pull-pw:
     {{just}} docker::pull-image playwright playwright-runner
 
+# Pull frontend-dev by content hash (the image the test stack runs)
+[group('docker::frontend')]
+pull-dev:
+    {{just}} docker::pull-image frontend frontend-dev
+
 # Run the frontend image interactively
 [group('docker::frontend')]
 run:

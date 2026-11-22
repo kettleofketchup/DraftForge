@@ -26,7 +26,7 @@ prefetch-start:
     rm -rf "$dir" && mkdir -p "$dir"
     just={{quote(just_executable())}}
     justfile={{quote(root / "justfile")}}
-    for task in images:docker::all-pull db:docker::db::pull; do
+    for task in images:docker::test-pull db:docker::db::pull; do
         name="${task%%:*}" recipe="${task#*:}"
         # shellcheck disable=SC2016 # expanded by the inner bash
         nohup bash -c '

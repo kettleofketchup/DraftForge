@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from scripts.slot_tests._docker_stub import DOCKER, PODMAN
+
 ROOT = Path(__file__).resolve().parents[2]
 JUST = shutil.which("just")
 IMAGE = "ghcr.io/kettleofketchup/draftforge/nginx"
@@ -40,10 +42,6 @@ def build(tmp_path: Path, version: str, *flags: str) -> list[str]:
     )
     assert result.returncode == 0, result.stderr
     return log.read_bytes().decode().split("\0")[:-1]
-
-
-DOCKER = "Docker version 27.3.1, build ce12230"
-PODMAN = "podman version 6.1.4"
 
 
 def test_docker_build_uses_registry_cache(tmp_path: Path) -> None:

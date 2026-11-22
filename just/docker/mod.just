@@ -34,6 +34,17 @@ all-pull:
     fi
     {{just}} docker::parallel -- "${recipes[@]}"
 
+# Pull the three images the test stack runs (backend-dev, frontend-dev, nginx) by content hash; with DF_PW_CONTAINER=1 also the Playwright runner
+[group('docker')]
+test-pull:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    recipes=(docker::backend::pull-dev docker::frontend::pull-dev docker::nginx::pull)
+    if [[ "${DF_PW_CONTAINER-}" == 1 ]]; then
+        recipes+=(docker::frontend::pull-pw)
+    fi
+    {{just}} docker::parallel -- "${recipes[@]}"
+
 # Output content hashes for Docker images
 [group('docker')]
 hash service="all":

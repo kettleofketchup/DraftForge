@@ -37,6 +37,11 @@ pull:
     {{just}} docker::pull-image backend backend
     {{just}} docker::pull-image backend backend-dev
 
+# Pull backend-dev by content hash (the image the test stack runs)
+[group('docker::backend')]
+pull-dev:
+    {{just}} docker::pull-image backend backend-dev
+
 # Run the backend image interactively
 [group('docker::backend')]
 run:
