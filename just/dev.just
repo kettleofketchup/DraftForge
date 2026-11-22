@@ -178,6 +178,10 @@ release:
     version=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' {{quote(root / "docker/.env.release")}} | head -n 1)
     echo "pulling release version ${version:-<unset>}"
     {{in_env}} release . {{slots}} compose --stack release pull
+    if ! {{just}} db::manage release makemigrations --check --dry-run; then
+        echo "ERROR: models have changes with no migration; the site is still up. Commit the migration and release again." >&2
+        exit 1
+    fi
     {{in_env}} release . {{slots}} compose --stack release down
     if ! {{just}} db::migrate-env release; then
         echo "ERROR: migration failed; the release stack is down. Fix it, then rerun just dev::release." >&2

@@ -615,6 +615,7 @@ def test_release_pulls_then_stops_migrates_and_starts() -> None:
     ).stderr
     order = [
         text.index("compose --stack release pull"),
+        text.index("makemigrations --check --dry-run"),
         text.index("compose --stack release down"),
         text.index("db::migrate-env release"),
         text.index("compose --stack release up -d"),
