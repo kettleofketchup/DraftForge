@@ -36,7 +36,7 @@ flowchart TB
 
     subgraph Volumes["Persistent Volumes"]
         SSL[("SSL Certs<br/>nginx/data/ssl/")]
-        DB[("SQLite<br/>backend/db.sqlite3")]
+        DB[("SQLite<br/>backend/data/")]
         RedisData[("Redis Data<br/>backend/.redis_data")]
     end
 
@@ -386,8 +386,21 @@ pinned.
   worktree path; a bind mount made a run from another worktree recreate the container.
 
 ### Production Volumes
-- Only database and SSL certificates mounted
+- Only the database directory and SSL certificates mounted
 - No source code access
+
+The prod and release stacks mount `backend/data/` at `/app/backend/data`, and
+`SQLITE_PATH=data/prod.db.sqlite3` in `docker/.env.prod` and `docker/.env.release`
+points Django at the database inside it. A relative `SQLITE_PATH` resolves under
+`backend/`, so host-side `just db::migrate::*` and the container open the same file.
+SQLite runs in WAL mode, so the directory (not just the `.sqlite3` file) must be on the
+host: commits not yet checkpointed live in `prod.db.sqlite3-wal`, and a container
+recreate would lose them if that file sat in the container's writable layer. The
+directory must be writable by uid 1000 (the image's `appuser`).
+
+Back up the database with the backend stopped, copying the `-wal` and `-shm` files
+along with it, or take an online copy with `sqlite3 backend/data/prod.db.sqlite3
+".backup /path/to/backup.sqlite3"`.
 
 ## SSL Certificates
 

@@ -320,8 +320,9 @@ DATABASES = {
         },
     }
 }
-if os.environ.get("SQLITE_PATH"):
-    DATABASES["default"]["NAME"] = Path(os.environ["SQLITE_PATH"])
+# Relative paths resolve under backend/, so the host and the container agree.
+if sqlite_path := os.environ.get("SQLITE_PATH"):
+    DATABASES["default"]["NAME"] = BASE_DIR_PATH / sqlite_path
 
 
 IN_DOCKER = is_docker()
