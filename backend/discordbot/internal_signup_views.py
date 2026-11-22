@@ -45,7 +45,6 @@ from discordbot.schemas import (
     LegacyRsvpRemoveRequest,
     LegacyRsvpSetRequest,
     NotifyButtonRequest,
-    PreviousRankSubmitRequest,
     RankFlowStateRequest,
     RankMedalSelectRequest,
     RankStatusSelectRequest,
@@ -63,7 +62,6 @@ from events.discord.handlers import (
     handle_decline_button,
     handle_get_rank_flow_state,
     handle_notify_button,
-    handle_previous_rank_submit,
     handle_rank_medal_select,
     handle_rank_status_select,
     handle_save_positions,
@@ -171,29 +169,6 @@ def rank_medal_select(request: Request) -> Response:
     result = handle_rank_medal_select(**body.model_dump())
     log.info(
         "internal_rank_medal_select_processed",
-        system="discord",
-        subsystem="dispatch",
-        tags=["events", "signup"],
-        tags_csv="events,signup",
-        event_id=body.event_id,
-        discord_user_id=body.discord_user_id,
-        action=result.get("action"),
-    )
-    return Response(result)
-
-
-@api_view(["POST"])
-@authentication_classes(_auth)
-@permission_classes(_perm)
-def previous_rank_submit(request: Request) -> Response:
-    """Wrap handle_previous_rank_submit. Body: event_id, discord_user_id, medal, date_text."""
-    try:
-        body = PreviousRankSubmitRequest.model_validate(request.data)
-    except ValidationError as exc:
-        return _bad_request(exc)
-    result = handle_previous_rank_submit(**body.model_dump())
-    log.info(
-        "internal_previous_rank_submit_processed",
         system="discord",
         subsystem="dispatch",
         tags=["events", "signup"],

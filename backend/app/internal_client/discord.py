@@ -23,6 +23,26 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+# ---- Activity ----
+
+
+def create_activity_notification_invite(kind: str, draft_id: int) -> str | None:
+    """Long-lived Activity invite for a draft's shared voice channel, if it has one."""
+    resp = transport.post(
+        "/discord/activity-notification-invite/",
+        {"kind": kind, "draft_id": draft_id},
+    )
+    if not resp or not resp.ok:
+        return None
+    try:
+        url = resp.json().get("url")
+    except (ValueError, AttributeError):
+        return None
+    if isinstance(url, str) and url.startswith("https://discord.gg/"):
+        return url
+    return None
+
+
 # ---- Message logs ----
 
 

@@ -158,11 +158,15 @@ export const LoginButton: React.FC = () => {
       asChild
       data-testid="navbarLoginButton"
       aria-label={t('login')}
+      className="h-11 flex-col gap-0.5 px-2 has-[>svg]:px-2 sm:h-9 sm:flex-row sm:gap-2 sm:has-[>svg]:px-3"
     >
       <a href={loginUrl}>
         <DiscordIcon className="h-5 w-5" />
-        {/* Text collapses below sm: so the icon-only button doesn't fight the
-            centered PageNav dropdown for horizontal space on mobile. */}
+        {/* Below sm the label stacks under the icon so the button keeps the
+            icon's width next to the centered PageNav dropdown. */}
+        <span className="text-[10px] leading-none sm:hidden">
+          {t('login_short')}
+        </span>
         <span className="hidden sm:inline">{t('login')}</span>
       </a>
     </PrimaryButton>

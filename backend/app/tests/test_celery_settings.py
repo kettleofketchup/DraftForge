@@ -91,7 +91,7 @@ class SharedSettingsParityTest(SimpleTestCase):
         env = {
             k: v
             for k, v in os.environ.items()
-            if k not in ("RUNNING_TESTS", "REDIS_HOST")
+            if k not in ("RUNNING_TESTS", "DF_RUNNING_TESTS", "REDIS_HOST")
             and not k.startswith("SIGNUP_POST_")
         }
         env.update(self.ENV, DJANGO_SETTINGS_MODULE=module)

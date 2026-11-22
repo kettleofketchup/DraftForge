@@ -7,7 +7,7 @@ from rest_framework.test import APIRequestFactory
 
 from discordbot.utils import DiscordAuthError, _rate_limited_request
 from tests.test_auth import sync_discord_events_test
-from tests.test_events_discord import send_test_notification
+from tests.test_events_discord import discord_status, send_test_notification
 
 
 def _unauthorized_response() -> MagicMock:
@@ -136,3 +136,25 @@ class TestEndpointsDiscordAuthTest(SimpleTestCase):
 
         self.assertEqual(response.status_code, 500)
         self.assertIn("DMs disabled", response.data["error"])
+
+
+class DiscordStatusEndpointTest(SimpleTestCase):
+    factory = APIRequestFactory()
+
+    def _status(self) -> Response:
+        request = self.factory.get("/api/tests/discord/status/")
+        with patch("tests.test_events_discord.isTestEnvironment", return_value=True):
+            return discord_status(request)
+
+    @override_settings(DISCORD_BOT_TOKEN="a-token")
+    def test_reports_configured_token(self) -> None:
+        self.assertEqual(self._status().data, {"bot_token_configured": True})
+
+    @override_settings(DISCORD_BOT_TOKEN=None)
+    def test_reports_missing_token(self) -> None:
+        self.assertEqual(self._status().data, {"bot_token_configured": False})
+
+    def test_not_found_outside_tests(self) -> None:
+        request = self.factory.get("/api/tests/discord/status/")
+        with patch("tests.test_events_discord.isTestEnvironment", return_value=False):
+            self.assertEqual(discord_status(request).status_code, 404)
