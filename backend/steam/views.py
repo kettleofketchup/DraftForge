@@ -11,9 +11,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from app.models import League
 from common.game import GameType
-from league.models import LeagueUser
+from league.models import League, LeagueUser
 from org.mmr import org_mmr_map
 from user.querysets import with_user_profiles
 

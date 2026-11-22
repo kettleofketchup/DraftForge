@@ -14,15 +14,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import (
-    CustomUser,
-    Game,
-    League,
-    PositionsModel,
-    Team,
-    TeamLog,
-    Tournament,
-)
+from app.models import CustomUser, Game, PositionsModel, Team, TeamLog, Tournament
 from app.services.team_leadership import successor_after_removal
 from app.services.team_signals import (
     TeamRosterChange,
@@ -30,6 +22,7 @@ from app.services.team_signals import (
     team_roster_changed,
 )
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
+from league.models import League
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
 

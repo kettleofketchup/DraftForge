@@ -7,9 +7,10 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Tournament
+from app.models import CustomUser, Tournament
 from events.constants import EventState
 from events.models import Event
+from league.models import League
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry
 from org.feature_keys import FeatureKey

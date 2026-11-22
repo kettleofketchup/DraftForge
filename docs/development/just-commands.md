@@ -92,6 +92,7 @@ just db::migrate::dev | test | prod
 just db::migrate::all         # dev, prod, then test
 just db::run-migrate          # Same as db::migrate::dev
 just db::makemigrations [app...]  # Default: every app in `apps` (just/db/mod.just)
+just db::rebase-migration <app>   # Renumber your migration after a max_migration.txt conflict
 
 # Population (test env; add --force to repopulate)
 just db::populate::all        # Build or reuse the cached test-db image, then extract it

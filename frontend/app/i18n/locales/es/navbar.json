@@ -1,4 +1,8 @@
 {
+  "account": {
+    "logged_in": "Sesión iniciada · Ver perfil",
+    "logged_out": "No has iniciado sesión"
+  },
   "aria": {
     "docs_menu": "Documentación y registro de cambios",
     "main_nav": "Navegación principal",
@@ -8,6 +12,7 @@
   },
   "home": "Inicio",
   "login": "Iniciar sesión con Discord",
+  "login_short": "Entrar",
   "logout": "Cerrar sesión",
   "nav": {
     "about": "Acerca de",

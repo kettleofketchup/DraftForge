@@ -1,8 +1,7 @@
 from rest_framework import serializers
 
-from app.models import League
 from common.game import GameType
-from league.models import LeagueUser
+from league.models import League, LeagueUser
 from org.mmr import org_mmr_for
 
 from .constants import LEAGUE_ID

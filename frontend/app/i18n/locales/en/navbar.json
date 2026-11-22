@@ -1,4 +1,8 @@
 {
+  "account": {
+    "logged_in": "Logged in · View profile",
+    "logged_out": "You're not logged in"
+  },
   "aria": {
     "docs_menu": "Docs and changelog",
     "main_nav": "Main navigation",
@@ -8,6 +12,7 @@
   },
   "home": "Home",
   "login": "Login with Discord",
+  "login_short": "Log in",
   "logout": "Logout",
   "nav": {
     "about": "About",

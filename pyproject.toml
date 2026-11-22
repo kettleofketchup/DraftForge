@@ -70,6 +70,7 @@ grafana-foundation-sdk = {git = "https://github.com/grafana/grafana-foundation-s
 jsonschema = "^4.20.0"
 django-test-migrations = "^1.5.0"
 tblib = "^3.2.2"
+django-linear-migrations = "^2.19.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

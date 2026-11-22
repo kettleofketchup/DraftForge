@@ -1,4 +1,4 @@
-# Phase 4 — Watch CI
+# Phase 5 — Watch CI
 
 ## Watch
 
@@ -20,7 +20,7 @@ checks reported": wait a minute and re-run.
 ## Narration
 
 One short line per change in state, e.g. `CI: 14 pass, 3 pending, 1 fail (Playwright shard 2/4)`.
-No full JSON, and no `gh run view --log` output during the watch (that is Phase 5).
+No full JSON, and no `gh run view --log` output during the watch (that is Phase 6).
 
 For a compact snapshot at any point:
 
@@ -34,6 +34,6 @@ gh pr view "$PR" --json statusCheckRollup --jq '
 ## Timeout
 
 If `timeout` ends the watch (exit 124), list the still-pending checks by name and run
-Phase 5 on what completed. Required-status rules can leave an external check pending
+Phase 6 on what completed. Required-status rules can leave an external check pending
 forever; the pending list in the report makes that visible. The user can re-run `/pr`
 to pick up the rest.

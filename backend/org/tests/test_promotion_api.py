@@ -6,9 +6,10 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Tournament
+from app.models import CustomUser, Tournament
 from events.constants import EventState
 from events.models import Event
+from league.models import League
 from org.features import FeatureKey, set_org_feature
 from org.models import (
     ContributionEntry,

@@ -1,6 +1,6 @@
 import { Repeat, Users } from 'lucide-react';
 import { Link } from 'react-router';
-import { GAME_TYPE } from '~/components/game/constants';
+import { GAME_LABEL, isGameType } from '~/components/game/constants';
 import { Button } from '~/components/ui/button';
 import { EditIconButton } from '~/components/ui/buttons';
 import {
@@ -11,11 +11,6 @@ import {
 import { cn } from '~/lib/utils';
 import { EventStateBadge } from './EventStateBadge';
 import { type EventType } from './schemas';
-
-const GAME_LABELS: Record<number, string> = {
-  [GAME_TYPE.DOTA2]: 'Dota 2',
-  [GAME_TYPE.DEADLOCK]: 'Deadlock',
-};
 
 interface EventStripProps {
   event: EventType;
@@ -64,7 +59,11 @@ export function EventStrip({
               minute: '2-digit',
             })}
           </span>
-          <span>{GAME_LABELS[event.game_type] ?? 'Unknown'}</span>
+          <span>
+            {isGameType(event.game_type)
+              ? GAME_LABEL[event.game_type]
+              : 'Unknown'}
+          </span>
           <span className="inline-flex items-center gap-0.5">
             <Users className="h-3 w-3" />
             {event.signup_count}/{event.confirmed_count}

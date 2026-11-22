@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { deleteTournament } from '~/components/api/api';
+import { toGameType } from '~/components/game/constants';
 import { TournamentSettingsModal } from '~/components/tournament/settings/TournamentSettingsModal';
 import type { TournamentType } from '~/components/tournament/types';
 import {
@@ -17,6 +18,7 @@ import {
 } from '~/components/ui/entity-breadcrumb';
 import { PageHeader } from '~/components/ui/page-header';
 import type { UserType } from '~/components/user/types';
+import { useProvideGameType } from '~/hooks/useGameType';
 import { useTournament } from '~/hooks/useTournament';
 import { useTournamentSocket } from '~/hooks/useTournamentSocket';
 import { hydrateTournament } from '~/lib/hydrateTournament';
@@ -191,6 +193,8 @@ export const TournamentDetailPage: React.FC = () => {
       useOrgStore.getState().reset();
     };
   }, [tournament?.organization_pk]);
+
+  useProvideGameType(tournament ? toGameType(tournament.game_type) : null);
 
   // Set league context from tournament
   useEffect(() => {

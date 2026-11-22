@@ -27,6 +27,7 @@ import {
 import { API_URL } from '../../fixtures/base-url';
 
 import {
+  discordBotConfigured,
   postWithCsrf,
   simulateDiscordSignup,
   syncDiscordEvents,
@@ -118,8 +119,9 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
     // =========================================================================
     // 4. Wait for Discord announcement (poll)
     // =========================================================================
+    const discordBot = await discordBotConfigured(context);
     let discordReady = false;
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; discordBot && i < 15; i++) {
       await page.waitForTimeout(2000);
       const discordResp = await context.request.get(
         `${API_URL}/events/${eventId}/discord/`,
@@ -135,9 +137,7 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
       if (i === 3) await syncDiscordEvents(context);
     }
 
-    if (!discordReady) {
-      // Skip Discord-specific assertions if no announcement posted
-      // (bot tokens may not be configured in CI)
+    if (discordBot && !discordReady) {
       console.warn(
         'Discord announcement not posted — skipping Discord verification',
       );
