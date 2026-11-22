@@ -6,4 +6,3 @@ LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/draftf
 WORKDIR /app
 COPY package.json package-lock.json /app/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
-# prepare-images build-path check (temporary)

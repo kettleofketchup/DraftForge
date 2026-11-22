@@ -82,4 +82,3 @@ __all__ = [
     "TOURNAMENT_USERS",
     "MOCK_USERNAMES",
 ]
-# prepare-images build-path check (temporary)
