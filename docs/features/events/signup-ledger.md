@@ -86,7 +86,7 @@ A staff member acting on their own signup is recorded as `member`. When they use
 
 ### Promotions
 
-When a cancel, decline, rejection, switch to tentative, move to the waitlist or account merge frees a seat, the waitlisted signups that take it each get their own `promoted` entry. A signup moved to the waitlist does not take back the seat it left. Its `caused_by` points at the entry for the change that freed the seat, and it shares that entry's correlation id. Promotions from the `rebalance_event_waitlists` command have no cause.
+When a cancel, decline, rejection, switch to tentative or account merge frees a seat, the waitlisted signups that take it each get their own `promoted` entry. Moving a signup to the waitlist promotes nobody; staff fill that seat by hand. Its `caused_by` points at the entry for the change that freed the seat, and it shares that entry's correlation id. Promotions from the `rebalance_event_waitlists` command have no cause.
 
 ### Correlation ids
 

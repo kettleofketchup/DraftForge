@@ -217,13 +217,10 @@ class SignupLineStampingTests(TestCase):
         event = self._event(max_players=3)
         a, _b, _c = (process_rsvp(event, u, actor=SYSTEM) for u in self.users[:3])
         d = process_rsvp(event, self.users[3], actor=SYSTEM)
-        e = process_rsvp(event, self.users[4], actor=SYSTEM)
-        self.assertEqual(e.status, SignupStatus.WAITLISTED)
+        self.assertEqual(d.status, SignupStatus.WAITLISTED)
         demote_to_waitlist(a, actor=SYSTEM)
-        d.refresh_from_db()
-        self.assertNotEqual(d.status, SignupStatus.WAITLISTED)
-        self.assertEqual(self._list_order(event), [a.pk, e.pk])
-        self.assertEqual(self._waitlist_order(event), [e.pk, a.pk])
+        self.assertEqual(self._list_order(event), [a.pk, d.pk])
+        self.assertEqual(self._waitlist_order(event), [d.pk, a.pk])
 
     def test_reinstate_to_waitlist_diverges_line_from_waitlist_order(self) -> None:
         """Pins current behaviour: reinstate onto the waitlist keeps the old line_seq."""

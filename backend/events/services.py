@@ -840,20 +840,15 @@ def _promote_from_waitlist(
     event: Event,
     *,
     cause: SignupLedgerEntry | None,
-    skip: EventSignup | None = None,
 ) -> list[EventSignup]:
     """Promote waitlisted signups into every free seat, in waitlist order as
-    reordered by the org's standing tracks. ``skip`` stays waitlisted."""
+    reordered by the org's standing tracks."""
     locked = lock_event(event)
     promoted: list[EventSignup] = []
     if has_free_seat(locked):
-        waiting = EventSignup.objects.nocache().filter(
-            event=locked, status=SignupStatus.WAITLISTED
-        )
-        if skip is not None:
-            waiting = waiting.exclude(pk=skip.pk)
         candidates = list(
-            waiting.nocache()
+            EventSignup.objects.nocache()
+            .filter(event=locked, status=SignupStatus.WAITLISTED)
             .select_related("user__base_profile")
             .order_by("waitlist_position")
         )
@@ -905,7 +900,8 @@ def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
 
 @transaction.atomic
 def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
-    """Move an active signup to the end of the waitlist."""
+    """Move an active signup to the end of the waitlist. Staff fill the freed
+    seat by hand; nobody is promoted."""
     _reread_signup(signup)
     if signup.status in (*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED):
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
@@ -916,20 +912,17 @@ def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignu
         ).aggregate(max_pos=models.Max("waitlist_position"))["max_pos"]
         or 0
     )
-    prior_status = signup.status
     signup.status = SignupStatus.WAITLISTED
     signup.waitlist_position = max_pos + 1
     signup.save(update_fields=["status", "waitlist_position", "updated_at"])
     _roster_remove_if_left(signup)
-    entry = _record_leaf(
+    _record_leaf(
         signup,
         event=signup.event,
         actor=actor,
         action=SignupAction.DEMOTED,
         before=before,
     )
-    if prior_status in seat_holding_statuses(signup.event):
-        _promote_from_waitlist(signup.event, cause=entry, skip=signup)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
