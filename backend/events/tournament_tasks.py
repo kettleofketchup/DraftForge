@@ -5,6 +5,7 @@ All DB writes via internal API POST/PATCH endpoints.
 """
 
 from celery import shared_task
+from django.conf import settings
 
 from telemetry.logging import get_logger
 
@@ -12,9 +13,10 @@ logger = get_logger(__name__)
 
 
 @shared_task
-def send_tournament_draft_links(tournament_id, draft_id):
+def send_tournament_draft_links(tournament_id: int, draft_id: int | None) -> str:
     """DM draft link to all tournament participants."""
     from app.internal_client import (
+        create_activity_notification_invite,
         create_tournament_log,
         get_tournament_for_task,
         get_tournament_participants,
@@ -31,14 +33,22 @@ def send_tournament_draft_links(tournament_id, draft_id):
     if not tournament.discord_send_draft_link:
         return "Config disabled"
 
+    invite_url = (
+        create_activity_notification_invite("team", draft_id)
+        if draft_id and settings.DISCORD_ACTIVITY_ENABLED
+        else None
+    )
     embed = build_draft_link_embed(
         tournament.name,
         tournament.draft_type,
         tournament_id,
         date_played=tournament.date_played,
         timezone=getattr(tournament, "timezone", None),
+        one_click=invite_url is not None,
     )
-    components = build_draft_link_components(tournament_id, draft_id=draft_id)
+    components = build_draft_link_components(
+        tournament_id, draft_id=draft_id, invite_url=invite_url
+    )
     participants = get_tournament_participants(tournament_id)
 
     # Create the parent log row first so child DiscordMessageLog rows can FK
@@ -97,10 +107,15 @@ def send_tournament_draft_links(tournament_id, draft_id):
 
 @shared_task
 def send_tournament_herodraft_links(
-    tournament_id, herodraft_id, game_id, radiant_name="", dire_name=""
-):
+    tournament_id: int,
+    herodraft_id: int,
+    game_id: int,
+    radiant_name: str = "",
+    dire_name: str = "",
+) -> str:
     """DM hero draft link to match players."""
     from app.internal_client import (
+        create_activity_notification_invite,
         create_tournament_log,
         get_match_participants,
         get_tournament_for_task,
@@ -117,10 +132,19 @@ def send_tournament_herodraft_links(
     if not tournament.discord_send_herodraft_link:
         return "Config disabled"
 
-    embed = build_herodraft_link_embed(
-        tournament.name, herodraft_id, radiant_name, dire_name
+    invite_url = (
+        create_activity_notification_invite("hero", herodraft_id)
+        if settings.DISCORD_ACTIVITY_ENABLED
+        else None
     )
-    components = build_herodraft_link_components(herodraft_id)
+    embed = build_herodraft_link_embed(
+        tournament.name,
+        herodraft_id,
+        radiant_name,
+        dire_name,
+        one_click=invite_url is not None,
+    )
+    components = build_herodraft_link_components(herodraft_id, invite_url=invite_url)
     participants = get_match_participants(game_id)
 
     # Create the parent log row first so child DiscordMessageLog rows can FK

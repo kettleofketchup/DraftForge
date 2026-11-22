@@ -68,7 +68,39 @@ and draft through the existing website workflow before launching an Activity.
 ## Draft notification buttons
 
 When Activities are enabled, hero and team draft DMs contain **Launch / Join
-Activity** beside **Open in Browser**. Join your team's voice channel in the
+Activity** beside **Open in Browser**. The button is one of two kinds, chosen
+when the notification is sent.
+
+### One-click invite (shared channel known)
+
+Before sending, the Celery task asks Django
+(`POST /api/internal/discord/activity-notification-invite/`) for one voice
+channel every recipient can share:
+
+1. the single channel already bound to this draft, or
+2. for a **team** draft only, the voice channel of the event the tournament came
+   from (`event_voice_channel_id`).
+
+Hero drafts never claim the event channel: games of one tournament run at the
+same time, and binding the shared channel to one game would send the other
+game's players into the wrong draft. Several channels bound to one draft also
+count as "no shared channel".
+
+Django checks the channel is a voice channel in the draft's server, binds it to
+the draft (refused with `conflict` or `channel_busy` exactly like a launch), and
+creates one reusable Activity invite (no use limit, 24 hours). The button is a
+link to that invite: one click joins the channel and opens or joins DraftForge.
+The Activity finds the draft through the channel record, so no launch intent is
+stored. Each resolution logs `activity_notification_invite_resolved` with
+`kind`, `draft_id`, `guild_id`, `channel_id`, `source` and `outcome`
+(`invite_created`, `no_bound_channel`, `no_event_channel`,
+`several_bound_channels`, `wrong_channel`, `conflict`, `channel_busy`,
+`discord_error`, ...). Any outcome other than `invite_created` falls back to
+the two-step button below.
+
+### Two-step launch (fallback)
+
+Join your team's voice channel in the
 associated tournament server, then click the notification button. DraftForge
 checks your linked account and draft membership, reads your current voice
 channel from Discord, and returns a five-minute Activity invite. Open that
@@ -194,6 +226,7 @@ and `tournament_id`. Tokens, OAuth codes and `access_token` are never logged.
 | Event | Logged when |
 | --- | --- |
 | `activity_launch_resolved` | a notification launch resolves (see above) |
+| `activity_notification_invite_resolved` | a draft notification is about to be sent and its one-click invite is resolved (see above) |
 | `activity_session_started` | a `first` or legacy handshake: `mode`, `scope`, `initial_kind`, `initial_draft_id`, `source` (`launch_intent`, `involves_me`, `channel_last`, `instance_first`, or `legacy` for the instance's first draft that a 0.14.x bundle shows), `role`, `notice`, `intent_id` |
 | `activity_session_refreshed` | a `refresh` handshake: the client-reported `current_kind`/`current_id` |
 | `activity_view_changed` | a view switch: `from_*` (client-claimed), `to_*`, `trigger`, `role`, `intent_id`, `intent_consumed` |
