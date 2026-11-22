@@ -80,7 +80,7 @@ def restore_key_ids(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ("lobby", "0003_gamelobby_close_pending"),
-        ("app", "0102_tournament_dota_lobby_password"),
+        ("app", "0096_squashed_0106"),
     ]
 
     operations = [

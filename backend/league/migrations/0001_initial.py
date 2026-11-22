@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("app", "0077_add_discord_server_id_to_organization"),
+        ("app", "0070_squashed_0077"),
         ("org", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
