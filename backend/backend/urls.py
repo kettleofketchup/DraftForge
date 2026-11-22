@@ -68,6 +68,8 @@ from league.views_admin_team import (
     remove_league_admin,
     remove_league_staff,
 )
+from org.mmr_requests.urls import league_urlpatterns as mmr_league_urlpatterns
+from org.mmr_requests.urls import org_urlpatterns as mmr_org_urlpatterns
 from org.ssr import OrganizationSSRView
 from org.views import ClaimRequestViewSet
 from org.views_admin_team import (
@@ -241,6 +243,14 @@ urlpatterns = [
     path(
         "api/organizations/<int:org_id>/promotion/",
         include("org.promotion.urls"),
+    ),
+    path(
+        "api/organizations/<int:org_id>/mmr-requests/",
+        include(mmr_org_urlpatterns),
+    ),
+    path(
+        "api/leagues/<int:league_id>/mmr-requests/",
+        include(mmr_league_urlpatterns),
     ),
     # League admin team
     path(

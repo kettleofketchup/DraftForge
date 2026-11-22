@@ -9,12 +9,16 @@ from django.db.models import QuerySet
 from django.utils import timezone
 
 from app.models import CustomUser
+from league.mmr import set_league_mmr
 from league.models import LeagueUser
 from org.mmr import LEAGUE_GAME, OrgMmrError, validate_org_mmr
+from org.mmr_official import apply_official_org_mmr
+from org.mmr_requests.permissions import can_review_mmr_request, may_self_verify
 from org.mmr_requests.screenshots import sanitize_screenshot
 from org.mmr_requests.signals import delete_screenshots_on_commit
 from org.mmr_requests.storage import private_media_storage
 from org.models import MmrChangeRequest, OrgUser, OrgUserGameMmr
+from org.models_mmr_requests import TEXT_MAX_LENGTH
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -28,21 +32,25 @@ class PendingExists(Exception):
         self.request_id = request_id
 
 
+class SelfReview(Exception):
+    pass
+
+
 class NotPending(Exception):
     def __init__(self, status: str) -> None:
         super().__init__(status)
         self.status = status
 
 
-def validate_requested_mmr(game_type: int, value: int) -> None:
+def validate_requested_mmr(
+    game_type: int, value: int, field: str = "requested_mmr"
+) -> None:
     try:
         validate_org_mmr(game_type, value)
     except OrgMmrError as exc:
-        raise ValidationError({"requested_mmr": [str(exc)]}) from exc
+        raise ValidationError({field: [str(exc)]}) from exc
     if value < MIN_REQUESTED_MMR:
-        raise ValidationError(
-            {"requested_mmr": [f"MMR must be at least {MIN_REQUESTED_MMR}"]}
-        )
+        raise ValidationError({field: [f"MMR must be at least {MIN_REQUESTED_MMR}"]})
 
 
 def _pending_qs(
@@ -211,6 +219,218 @@ def cancel_request(req_id: int, user: CustomUser) -> MmrChangeRequest:
         user_id=user.pk,
     )
     return MmrChangeRequest.objects.get(pk=req_id)
+
+
+def _load_for_review(req_id: int) -> MmrChangeRequest:
+    return MmrChangeRequest.objects.select_related(
+        "subject_user",
+        "organization",
+        "league",
+        "league__organization",
+        "org_user",
+        "org_user__organization",
+        "league_user",
+    ).get(pk=req_id)
+
+
+def _check_reviewer(reviewer: CustomUser, req: MmrChangeRequest) -> None:
+    if not may_self_verify(reviewer, req.subject_user_id):
+        raise SelfReview()
+    if not can_review_mmr_request(reviewer, req):
+        raise PermissionDenied("cannot_review")
+
+
+def _current_status(req_id: int) -> str:
+    return (
+        MmrChangeRequest.objects.filter(pk=req_id)
+        .values_list("status", flat=True)
+        .first()
+        or ""
+    )
+
+
+def _write_official(
+    req: MmrChangeRequest, value: int, actor: CustomUser, source: str
+) -> None:
+    if req.target == MmrChangeRequest.Target.LEAGUE:
+        assert req.league_user is not None
+        set_league_mmr(
+            req.league_user,
+            value,
+            actor=actor,
+            verified=True,
+            source=source,
+            request_id=req.pk,
+        )
+        return
+    assert req.org_user is not None
+    apply_official_org_mmr(
+        req.org_user,
+        req.game_type,
+        value,
+        actor=actor,
+        source=source,
+        request=req,
+        extra_log={"requested_mmr": req.requested_mmr},
+    )
+
+
+def approve_request(
+    req_id: int, reviewer: CustomUser, mmr: int | None
+) -> MmrChangeRequest:
+    req = _load_for_review(req_id)
+    _check_reviewer(reviewer, req)
+    value = req.requested_mmr if mmr is None else mmr
+    validate_requested_mmr(req.game_type, value, field="mmr")
+    now = timezone.now()
+    with transaction.atomic():
+        claimed = MmrChangeRequest.objects.filter(
+            pk=req_id, status=MmrChangeRequest.Status.PENDING
+        ).update(
+            status=MmrChangeRequest.Status.APPROVED,
+            reviewed_by=reviewer,
+            reviewed_at=now,
+            approved_mmr=value,
+            updated_at=now,
+        )
+        if claimed == 0:
+            raise NotPending(_current_status(req_id))
+        req = _load_for_review(req_id)
+        _write_official(req, value, reviewer, "mmr_request")
+    log.info(
+        "mmr_request_approved",
+        system="org",
+        subsystem="mmr_requests",
+        request_id=req_id,
+        target=req.target,
+        organization_id=req.organization_id,
+        league_id=req.league_id,
+        approved_mmr=value,
+        adjusted=value != req.requested_mmr,
+        reviewer_id=reviewer.pk,
+    )
+    return req
+
+
+def reject_request(req_id: int, reviewer: CustomUser, reason: str) -> MmrChangeRequest:
+    req = _load_for_review(req_id)
+    _check_reviewer(reviewer, req)
+    reason = reason.strip()
+    if not reason:
+        raise ValidationError({"reason": ["This field is required."]})
+    if len(reason) > TEXT_MAX_LENGTH:
+        raise ValidationError(
+            {
+                "reason": [
+                    f"Ensure this field has no more than {TEXT_MAX_LENGTH} characters."
+                ]
+            }
+        )
+    now = timezone.now()
+    with transaction.atomic():
+        claimed = MmrChangeRequest.objects.filter(
+            pk=req_id, status=MmrChangeRequest.Status.PENDING
+        ).update(
+            status=MmrChangeRequest.Status.REJECTED,
+            reviewed_by=reviewer,
+            reviewed_at=now,
+            rejection_reason=reason,
+            updated_at=now,
+        )
+        if claimed == 0:
+            raise NotPending(_current_status(req_id))
+    log.info(
+        "mmr_request_rejected",
+        system="org",
+        subsystem="mmr_requests",
+        request_id=req_id,
+        target=req.target,
+        organization_id=req.organization_id,
+        league_id=req.league_id,
+        reviewer_id=reviewer.pk,
+    )
+    return MmrChangeRequest.objects.get(pk=req_id)
+
+
+def staff_set_mmr(
+    *,
+    actor: CustomUser,
+    target: str,
+    org_user: OrgUser | None,
+    league_user: LeagueUser | None,
+    game_type: int,
+    mmr: int,
+    screenshot: UploadedFile | None,
+    note: str,
+) -> MmrChangeRequest:
+    if target == MmrChangeRequest.Target.LEAGUE:
+        if league_user is None:
+            raise ValidationError({"league_user": ["This field is required."]})
+        org_user = league_user.org_user
+        league = league_user.league
+        if (
+            league.organization_id is not None
+            and league.organization_id != org_user.organization_id
+        ):
+            raise ValidationError({"league_user": ["league_org_mismatch"]})
+        game_type = LEAGUE_GAME
+    else:
+        if org_user is None:
+            raise ValidationError({"org_user": ["This field is required."]})
+        league = None
+        league_user = None
+
+    now = timezone.now()
+    row = MmrChangeRequest(
+        requester=actor,
+        subject_user=org_user.user,
+        organization=org_user.organization,
+        org_user=org_user,
+        league=league,
+        league_user=league_user,
+        target=target,
+        game_type=game_type,
+        requested_mmr=mmr,
+        approved_mmr=mmr,
+        note=note,
+        status=MmrChangeRequest.Status.APPROVED,
+        source=MmrChangeRequest.Source.STAFF,
+        reviewed_by=actor,
+        reviewed_at=now,
+    )
+    _check_reviewer(actor, row)
+    validate_requested_mmr(game_type, mmr, field="mmr")
+
+    content = None
+    if screenshot is not None:
+        content, row.screenshot_content_type = sanitize_screenshot(screenshot)
+    row.previous_mmr, row.previous_verified = _snapshot(
+        target, org_user, league_user, game_type
+    )
+
+    def _store() -> None:
+        with transaction.atomic():
+            if content is not None:
+                row.screenshot.save(content.name or "upload", content, save=False)
+            row.save()
+            _write_official(row, mmr, actor, "mmr_request")
+
+    store_with_cleanup(row, _store)
+    log.info(
+        "mmr_request_staff_set",
+        system="org",
+        subsystem="mmr_requests",
+        request_id=row.pk,
+        target=target,
+        organization_id=row.organization_id,
+        league_id=row.league_id,
+        game_type=game_type,
+        mmr=mmr,
+        previous_mmr=row.previous_mmr,
+        has_screenshot=content is not None,
+        actor_id=actor.pk,
+    )
+    return row
 
 
 def _supersede_for_merge(ids: list[int]) -> None:
