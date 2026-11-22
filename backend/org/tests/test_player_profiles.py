@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, PositionsModel
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
+from steam.services.account_lookup import SteamLookupRateLimited
 
 
 class PlayerDotaProfileTest(TestCase):
@@ -166,6 +167,29 @@ class DotaProfileFriendIdVerificationTest(TestCase):
         user = CustomUser.objects.get(pk=self.member.pk)
         self.assertEqual(user.steam_account_id, 696970)
         self.assertFalse(user.steam_account_verified)
+
+    def test_friend_id_rate_limit_is_429_with_code(self) -> None:
+        my_url = reverse("update-my-dota-profile", args=[self.org.pk])
+        cases: list[tuple[CustomUser, str]] = [
+            (self.owner, "staff"),
+            (self.member, "self"),
+        ]
+        for actor, label in cases:
+            with self.subTest(path=label):
+                with patch(
+                    "events.eligibility.steam.ensure_steam_account_exists",
+                    side_effect=SteamLookupRateLimited(),
+                ):
+                    if label == "staff":
+                        resp = self._staff_patch(actor, {"steam_account_id": "717272"})
+                    else:
+                        self.client.force_authenticate(actor)
+                        resp = self.client.patch(
+                            my_url, {"steam_account_id": "717272"}, format="json"
+                        )
+                self.assertEqual(resp.status_code, 429, resp.content)
+                self.assertEqual(resp.data["code"], "steam_lookup_rate_limited")
+                self.assertIn("steam_account_id", resp.data)
 
     def test_my_dota_profile_patch_unverified(self) -> None:
         self.member.is_staff = True

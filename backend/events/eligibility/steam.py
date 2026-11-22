@@ -113,13 +113,6 @@ def precheck_friend_id(
     return account_id
 
 
-def _admin_grant(actor: CustomUser | None, user: CustomUser) -> VerifyGrant | None:
-    if user.pk is None:
-        trusted = actor is not None and (actor.is_staff or actor.is_superuser)
-        return VerifyGrant(org_id=None) if trusted else None
-    return can_verify_steam_account(actor, user)
-
-
 def admin_precheck_steam_account_id(
     user: CustomUser, new_id: int | None, *, actor: CustomUser | None
 ) -> None:
@@ -129,7 +122,7 @@ def admin_precheck_steam_account_id(
     """
     if new_id is None or new_id == user.steam_account_id:
         return
-    if _admin_grant(actor, user) is not None:
+    if can_verify_steam_account(actor, user) is not None:
         return
     precheck_friend_id(str(new_id), user, allow_change=True, budget_user=actor or user)
 
@@ -144,9 +137,9 @@ def apply_admin_steam_account_id(
     """
     changed = user.steam_account_id != new_id
     user.steam_account_id = new_id
-    if not changed or new_id is None or actor is None:
+    if not changed or new_id not in STEAM_ACCOUNT_ID_RANGE or actor is None:
         return None
-    grant = _admin_grant(actor, user)
+    grant = can_verify_steam_account(actor, user)
     if grant is not None:
         mark_steam_account_verified(user, actor, org_id=grant.org_id, save=False)
     return grant

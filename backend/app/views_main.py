@@ -286,10 +286,17 @@ class UserView(viewsets.ModelViewSet):
         return self.partial_update(request, *args, **kwargs)
 
     def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        refusal = _admin_friend_id_refusal(request, self.get_object())
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        refusal = _admin_friend_id_refusal(request, instance, serializer)
         if refusal is not None:
             return refusal
-        return super().update(request, *args, **kwargs)
+        self.perform_update(serializer)
+        if getattr(instance, "_prefetched_objects_cache", None):
+            instance._prefetched_objects_cache = {}
+        return Response(serializer.data)
 
     def get_permissions(self) -> list[BasePermission]:
         if self.request.method == "GET":
@@ -1134,16 +1141,13 @@ class TeamView(viewsets.ModelViewSet):
         return Response(self.get_serializer(team).data)
 
 
-def _admin_friend_id_refusal(request: Request, target: CustomUser) -> Response | None:
-    """Steam pre-check for an untrusted staff write, before the serializer's
-    atomic block. Unparseable IDs are left to the serializer."""
-    raw = request.data.get("steam_account_id")
-    if raw is None or raw == "" or isinstance(raw, bool):
+def _admin_friend_id_refusal(
+    request: Request, target: CustomUser, serializer: BaseSerializer
+) -> Response | None:
+    """Steam pre-check on the validated ID, before the serializer's atomic block."""
+    if "steam_account_id" not in serializer.validated_data:
         return None
-    try:
-        new_id = int(str(raw).strip())
-    except ValueError:
-        return None
+    new_id = serializer.validated_data["steam_account_id"]
     try:
         admin_precheck_steam_account_id(target, new_id, actor=request.user)
     except ValidationError as exc:
@@ -1163,10 +1167,16 @@ class UserCreateView(generics.CreateAPIView):
     permission_classes = [IsStaff]
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        refusal = _admin_friend_id_refusal(request, CustomUser())
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        refusal = _admin_friend_id_refusal(request, CustomUser(), serializer)
         if refusal is not None:
             return refusal
-        return super().create(request, *args, **kwargs)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            serializer.data, status=status.HTTP_201_CREATED, headers=headers
+        )
 
 
 @api_view(["GET"])

@@ -38,6 +38,17 @@ DOTA_PROFILE_FIELDS = {
 FRIEND_ID_FIELD = "steam_account_id"
 
 
+def _friend_id_error(exc: ValidationError) -> Response:
+    http_status = (
+        status.HTTP_429_TOO_MANY_REQUESTS
+        if exc.code == "steam_lookup_rate_limited"
+        else status.HTTP_400_BAD_REQUEST
+    )
+    return Response(
+        {FRIEND_ID_FIELD: exc.messages[0], "code": exc.code}, status=http_status
+    )
+
+
 def _serialize_dota_profile(
     profile: PlayerDotaProfile, org_user: OrgUser
 ) -> dict[str, Any]:
@@ -141,10 +152,7 @@ def update_my_dota_profile(request: Request, org_id: int) -> Response:
         precheck_friend_id(_friend_id(request.data), request.user)
         profile = _apply_dota_profile_patch(org_user, request.data, actor=request.user)
     except ValidationError as e:
-        return Response(
-            {FRIEND_ID_FIELD: e.messages[0]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return _friend_id_error(e)
     return Response(_serialize_dota_profile(profile, org_user))
 
 
@@ -205,10 +213,7 @@ def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
             )
         profile = _apply_dota_profile_patch(org_user, request.data, actor=request.user)
     except ValidationError as e:
-        return Response(
-            {FRIEND_ID_FIELD: e.messages[0]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return _friend_id_error(e)
     return Response(_serialize_dota_profile(profile, org_user))
 
 

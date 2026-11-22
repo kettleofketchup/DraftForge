@@ -22,6 +22,7 @@ from app.steam_accounts import (
 )
 from common.game import GameType
 from events.eligibility import (
+    STEAM_ACCOUNT_ID_RANGE,
     admin_precheck_steam_account_id,
     apply_admin_steam_account_id,
     refresh_unmet_requirements,
@@ -489,9 +490,20 @@ def _coerce_steam_account_id(value: Any) -> int | None | Response:
         return None
     if not isinstance(value, bool):
         try:
-            return int(str(value).strip())
+            account_id = int(str(value).strip())
         except ValueError:
             pass
+        else:
+            if account_id in STEAM_ACCOUNT_ID_RANGE:
+                return account_id
+            return Response(
+                {
+                    "error": "Friend ID must be between 1 and "
+                    f"{STEAM_ACCOUNT_ID_RANGE.stop - 1}.",
+                    "code": "invalid_friend_id",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
     return Response(
         {"error": "Friend ID must be a number.", "code": "invalid_friend_id"},
         status=status.HTTP_400_BAD_REQUEST,

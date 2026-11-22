@@ -16,7 +16,10 @@ from app.permissions_tournament import (
 from app.services.team_references import team_references
 from app.steam_accounts import log_steam_verification_change
 from draft.models import Draft, DraftOptions, DraftRound
-from events.eligibility.steam import apply_admin_steam_account_id
+from events.eligibility.steam import (
+    STEAM_ACCOUNT_ID_RANGE,
+    apply_admin_steam_account_id,
+)
 from events.overrides import (
     REASON_MAX_LENGTH,
     OverrideReasonRequired,
@@ -1452,6 +1455,8 @@ class UserSerializer(serializers.ModelSerializer):
     steam_account_id = serializers.IntegerField(
         required=False,
         allow_null=True,
+        min_value=STEAM_ACCOUNT_ID_RANGE.start,
+        max_value=STEAM_ACCOUNT_ID_RANGE.stop - 1,
         validators=[
             UniqueValidator(
                 queryset=CustomUser.objects.all(),

@@ -48,8 +48,10 @@ def _is_site_staff(user: CustomUser) -> bool:
 def can_verify_steam_account(
     actor: CustomUser | AnonymousUser | None, target: CustomUser
 ) -> VerifyGrant | None:
-    if actor is None or not actor.is_authenticated or target.pk is None:
+    if actor is None or not actor.is_authenticated:
         return None
+    if target.pk is None:
+        return VerifyGrant(org_id=None) if _is_site_staff(actor) else None
     if actor.pk == target.pk:
         return None
     if _is_site_staff(actor):

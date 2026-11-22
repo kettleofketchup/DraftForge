@@ -258,6 +258,19 @@ class OrgUserPatchVerificationTests(EventTestCase):
         self.assertEqual(resp.json()["code"], "steam_lookup_rate_limited")
         self.assertIn("error", resp.json())
 
+    def test_trusted_staff_out_of_range_rejected(self) -> None:
+        superuser = CustomUser.objects.create_superuser(
+            username="ov_range_super", password="x"
+        )
+        for raw in (-1, 2**32, "4294967296"):
+            with self.subTest(raw=raw):
+                resp = self._patch(superuser, {"steam_account_id": raw})
+                self.assertEqual(resp.status_code, 400, resp.content)
+                self.assertEqual(resp.json()["code"], "invalid_friend_id")
+                user = _reload(self.target)
+                self.assertIsNone(user.steam_account_id)
+                self.assertFalse(user.steam_account_verified)
+
     def test_actor_is_target_unverified(self) -> None:
         superuser = CustomUser.objects.create_superuser(
             username="ov_super", password="x"
@@ -373,6 +386,41 @@ class UserPatchVerificationTests(TestCase):
         user = _reload(self.target)
         self.assertEqual(user.steam_account_id, 838385)
         self.assertFalse(user.steam_account_verified)
+
+    def test_patch_user_float_id_still_prechecked(self) -> None:
+        actor = CustomUser.objects.create_user(username="up-float", password="x")
+        own_org = Organization.objects.create(name="UP Float Org", owner=actor)
+        own_org.admins.add(actor)
+        OrgUser.objects.create(user=self.target, organization=own_org)
+        OrgUser.objects.create(user=actor, organization=own_org)
+        cases: list[tuple[CustomUser, int, Any]] = [
+            (actor, self.target.pk, 868686.0),
+            (actor, self.target.pk, "868686.0"),
+            (actor, actor.pk, 878787.0),
+        ]
+        for client_user, pk, raw in cases:
+            with self.subTest(pk=pk, raw=raw):
+                self.client.force_authenticate(client_user)
+                with patch(ENSURE, return_value=False) as ensure:
+                    resp = self.client.patch(
+                        f"/api/users/{pk}/", {"steam_account_id": raw}, format="json"
+                    )
+                self.assertEqual(resp.status_code, 400, resp.content)
+                self.assertEqual(resp.json()["code"], "steam_account_not_found")
+                ensure.assert_called_once()
+                self.assertIsNone(CustomUser.objects.get(pk=pk).steam_account_id)
+
+    def test_patch_user_out_of_range_rejected(self) -> None:
+        for raw in (-5, 0, 2**32):
+            with self.subTest(raw=raw):
+                resp = self.client.patch(
+                    self._url(), {"steam_account_id": raw}, format="json"
+                )
+                self.assertEqual(resp.status_code, 400, resp.content)
+                self.assertIn("steam_account_id", resp.json())
+                user = _reload(self.target)
+                self.assertIsNone(user.steam_account_id)
+                self.assertFalse(user.steam_account_verified)
 
     def test_create_user_by_staff_verifies(self) -> None:
         with patch(ENSURE) as ensure:
