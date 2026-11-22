@@ -325,15 +325,6 @@ class UserView(viewsets.ModelViewSet):
             standing.on_user_deleted(instance, actor=self.request.user)
             instance.delete()
 
-    @permission_classes((IsAdminUser,))
-    def delete(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        try:
-            user = self.get_object()
-            user.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except CustomUser.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-
     @action(detail=True, methods=["post"])
     def claim(self, request: Request, pk: str | None = None) -> Response:
         """
