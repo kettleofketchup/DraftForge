@@ -79,7 +79,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const siteResults = siteQuery.data ?? [];
   const discordResults = discordQuery.data ?? [];
 
-  // Render one layout only: CSS-hiding the other left every result in the DOM twice.
+  // Render one layout only; CSS-hiding the other would put every result in the DOM twice.
   const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   // Reset state when modal closes
