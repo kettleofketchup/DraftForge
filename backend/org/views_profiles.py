@@ -3,6 +3,7 @@
 from typing import Any
 
 from django.core.exceptions import ValidationError
+from django.db.models import QuerySet
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.request import Request
@@ -20,6 +21,7 @@ from events.eligibility import (
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
 from org.permissions import has_org_staff_access
+from user.querysets import with_user_profiles
 
 DOTA_PROFILE_FIELDS = {
     "rank_status",
@@ -52,6 +54,7 @@ def _friend_id_error(exc: ValidationError) -> Response:
 def _serialize_dota_profile(
     profile: PlayerDotaProfile, org_user: OrgUser
 ) -> dict[str, Any]:
+    user = org_user.user
     return {
         "id": profile.pk,
         "org_user_id": profile.org_user_id,
@@ -62,13 +65,25 @@ def _serialize_dota_profile(
         "mmr": profile.mmr,
         "rank_screenshot": profile.rank_screenshot or None,
         "battlecup_screenshot": profile.battlecup_screenshot or None,
-        FRIEND_ID_FIELD: org_user.user.steam_account_id,
+        FRIEND_ID_FIELD: user.steam_account_id,
+        "steam_account_verified": user.steam_account_verified,
+        "steam_account_verified_at": (
+            user.steam_account_verified_at.isoformat()
+            if user.steam_account_verified_at
+            else None
+        ),
+        "steam_account_verified_org_name": user.steam_account_verified_org_name,
+        "steam_account_exists_checked": user.steam_account_exists_checked,
         "pos_1": profile.pos_1,
         "pos_2": profile.pos_2,
         "pos_3": profile.pos_3,
         "pos_4": profile.pos_4,
         "pos_5": profile.pos_5,
     }
+
+
+def _org_users() -> QuerySet[OrgUser]:
+    return with_user_profiles(OrgUser.objects.all(), "user", steam_verified_org=True)
 
 
 def _invalid_rank_status(data: dict[str, Any]) -> Response | None:
@@ -121,7 +136,7 @@ def get_my_dota_profile(request: Request, org_id: int) -> Response:
     GET /api/organizations/<org_id>/my-dota-profile/
     """
     try:
-        org_user = OrgUser.objects.get(user=request.user, organization_id=org_id)
+        org_user = _org_users().get(user=request.user, organization_id=org_id)
     except OrgUser.DoesNotExist:
         return Response(
             {"error": "Not a member of this organization"},
@@ -139,7 +154,7 @@ def update_my_dota_profile(request: Request, org_id: int) -> Response:
     PATCH /api/organizations/<org_id>/my-dota-profile/
     """
     try:
-        org_user = OrgUser.objects.get(user=request.user, organization_id=org_id)
+        org_user = _org_users().get(user=request.user, organization_id=org_id)
     except OrgUser.DoesNotExist:
         return Response(
             {"error": "Not a member of this organization"},
@@ -171,7 +186,7 @@ def get_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Respon
         return Response(status=status.HTTP_403_FORBIDDEN)
 
     try:
-        org_user = OrgUser.objects.get(user_id=user_pk, organization_id=org_id)
+        org_user = _org_users().get(user_id=user_pk, organization_id=org_id)
     except OrgUser.DoesNotExist:
         return Response(
             {"error": "User is not a member of this organization"},
@@ -197,7 +212,7 @@ def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
         return Response(status=status.HTTP_403_FORBIDDEN)
 
     try:
-        org_user = OrgUser.objects.get(user_id=user_pk, organization_id=org_id)
+        org_user = _org_users().get(user_id=user_pk, organization_id=org_id)
     except OrgUser.DoesNotExist:
         return Response(
             {"error": "User is not a member of this organization"},
@@ -232,7 +247,7 @@ def delete_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
         return Response(status=status.HTTP_403_FORBIDDEN)
 
     try:
-        org_user = OrgUser.objects.get(user_id=user_pk, organization_id=org_id)
+        org_user = _org_users().get(user_id=user_pk, organization_id=org_id)
     except OrgUser.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 

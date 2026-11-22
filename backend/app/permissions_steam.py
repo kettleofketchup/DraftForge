@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Final
 
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import OuterRef, QuerySet, Subquery
@@ -12,6 +13,11 @@ from app.permissions_tournament import has_event_staff_access
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
 
+VOUCH_EXCLUDED_STATUSES: Final[tuple[str, ...]] = (
+    SignupStatus.CANCELLED,
+    SignupStatus.REJECTED,
+)
+
 
 @dataclass(frozen=True)
 class VerifyGrant:
@@ -20,7 +26,7 @@ class VerifyGrant:
 
 def _self_signups(target: CustomUser) -> QuerySet[EventSignup]:
     return EventSignup.objects.filter(user_id=target.pk, self_made=True).exclude(
-        status__in=(SignupStatus.CANCELLED, SignupStatus.REJECTED)
+        status__in=VOUCH_EXCLUDED_STATUSES
     )
 
 

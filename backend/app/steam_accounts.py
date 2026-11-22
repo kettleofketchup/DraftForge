@@ -197,14 +197,12 @@ def steam_verification_payload(
     user: CustomUser, *, viewer: CustomUser
 ) -> dict[str, Any]:
     account_id = user.steam_account_id
-    org = user.steam_account_verified_org if user.steam_account_verified else None
     return {
         "steam_account_id": account_id,
         "steam_account_verified": user.steam_account_verified,
         "steam_account_verified_at": user.steam_account_verified_at,
-        "steam_account_verified_org_name": org.name if org is not None else None,
-        "steam_account_exists_checked": user.steam_account_exists_checked_at
-        is not None,
+        "steam_account_verified_org_name": user.steam_account_verified_org_name,
+        "steam_account_exists_checked": user.steam_account_exists_checked,
         "steam_profile_url": (
             None
             if account_id is None

@@ -472,7 +472,9 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
         )
 
     written = (
-        with_user_profiles(OrgUser.objects.nocache(), "user", dota=True)
+        with_user_profiles(
+            OrgUser.objects.nocache(), "user", dota=True, steam_verified_org=True
+        )
         .prefetch_related(game_mmrs_prefetch(fresh=True))
         .get(pk=org_user.pk)
     )
@@ -480,7 +482,11 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
     return Response(
         OrgUserSerializer(
             written,
-            context={"game_type": context_game, "include_game_mmrs": True},
+            context={
+                "game_type": context_game,
+                "include_game_mmrs": True,
+                "include_steam_verified_org": True,
+            },
         ).data
     )
 

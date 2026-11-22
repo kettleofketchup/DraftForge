@@ -6,7 +6,11 @@ import nh3
 from rest_framework import serializers
 
 from app.models import ProfileClaimRequest
-from app.serializers import PositionsSerializer, TournamentUserSerializer
+from app.serializers import (
+    STEAM_VERIFICATION_READ_FIELDS,
+    PositionsSerializer,
+    TournamentUserSerializer,
+)
 from common.game import GameType
 from league.models import LeagueUser
 from org import settings_constants
@@ -92,6 +96,8 @@ class OrgUserSerializer(serializers.ModelSerializer):
         league_id: Optional league ID to include league_mmr from LeagueUser
         game_type: GameType `mmr` is resolved for (default Dota 2)
         include_game_mmrs: emit `game_mmrs`; only gated endpoints set it
+        include_steam_verified_org: emit `steam_account_verified_org_name`;
+            load users with with_user_profiles(..., steam_verified_org=True)
 
     Instances must carry the `game_mmrs` prefetch (org.mmr.game_mmrs_prefetch).
     """
@@ -114,6 +120,18 @@ class OrgUserSerializer(serializers.ModelSerializer):
     steam_account_id = serializers.IntegerField(
         source="user.steam_account_id", read_only=True
     )
+    steam_account_verified = serializers.BooleanField(
+        source="user.steam_account_verified", read_only=True
+    )
+    steam_account_verified_at = serializers.DateTimeField(
+        source="user.steam_account_verified_at", read_only=True
+    )
+    steam_account_exists_checked = serializers.BooleanField(
+        source="user.steam_account_exists_checked", read_only=True
+    )
+    steam_account_verified_org_name = serializers.CharField(
+        source="user.steam_account_verified_org_name", read_only=True, allow_null=True
+    )
     avatarUrl = serializers.CharField(source="user.avatarUrl", read_only=True)
     mmr = serializers.SerializerMethodField()
     mmr_game_type = serializers.SerializerMethodField()
@@ -124,6 +142,8 @@ class OrgUserSerializer(serializers.ModelSerializer):
         fields = super().get_fields()
         if not self.context.get("include_game_mmrs"):
             fields.pop("game_mmrs")
+        if not self.context.get("include_steam_verified_org"):
+            fields.pop("steam_account_verified_org_name")
         return fields
 
     def _game_type(self) -> int:
@@ -181,6 +201,8 @@ class OrgUserSerializer(serializers.ModelSerializer):
             "discordId",
             "positions",
             "steam_account_id",
+            *STEAM_VERIFICATION_READ_FIELDS,
+            "steam_account_verified_org_name",
             "avatarUrl",
             "mmr",
             "mmr_game_type",

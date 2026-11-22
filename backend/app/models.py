@@ -180,6 +180,20 @@ class CustomUser(AbstractUser):
     def steam_account_verified(self) -> bool:
         return self.steam_account_verified_at is not None
 
+    @property
+    def steam_account_exists_checked(self) -> bool:
+        return self.steam_account_exists_checked_at is not None
+
+    @property
+    def steam_account_verified_org_name(self) -> str | None:
+        """Needs select_related("steam_account_verified_org") in list paths."""
+        if (
+            not self.steam_account_verified
+            or self.steam_account_verified_org_id is None
+        ):
+            return None
+        return self.steam_account_verified_org.name
+
     @classmethod
     def from_db(
         cls, db: str | None, field_names: Iterable[str], values: Iterable[Any]

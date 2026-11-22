@@ -75,10 +75,20 @@ class PositionsSerializer(serializers.ModelSerializer):
         fields = ["pk", "carry", "mid", "offlane", "soft_support", "hard_support"]
 
 
+STEAM_VERIFICATION_READ_FIELDS: Final[tuple[str, ...]] = (
+    "steam_account_verified",
+    "steam_account_verified_at",
+    "steam_account_exists_checked",
+)
+
+
 class TournamentUserSerializer(serializers.ModelSerializer):
     positions = PositionsSerializer(many=False, read_only=True)
     # Auto-computed 32-bit Steam Account ID from 64-bit Friend ID
     steam_account_id = serializers.IntegerField(read_only=True)
+    steam_account_verified = serializers.BooleanField(read_only=True)
+    steam_account_verified_at = serializers.DateTimeField(read_only=True)
+    steam_account_exists_checked = serializers.BooleanField(read_only=True)
     # nickname/avatar live on BaseUserProfile (T1 epic). Use `source="nickname"`
     # so DRF goes through the CustomUser transitional @property — the getter
     # reads from base_profile, the setter writes to base_profile + invalidates
@@ -107,6 +117,7 @@ class TournamentUserSerializer(serializers.ModelSerializer):
             "discordNickname",
             "positions",
             "steam_account_id",
+            *STEAM_VERIFICATION_READ_FIELDS,
             "avatarUrl",
             "positions",
         )
@@ -1468,6 +1479,9 @@ class UserSerializer(serializers.ModelSerializer):
     # actions without needing a follow-up fetch (e.g. Create Tournament
     # button on the global /tournaments/ page). Empty lists for users with
     # no affiliations — never null.
+    steam_account_verified = serializers.BooleanField(read_only=True)
+    steam_account_verified_at = serializers.DateTimeField(read_only=True)
+    steam_account_exists_checked = serializers.BooleanField(read_only=True)
     admin_organization_ids = serializers.SerializerMethodField()
     staff_organization_ids = serializers.SerializerMethodField()
     admin_league_ids = serializers.SerializerMethodField()
@@ -1501,6 +1515,7 @@ class UserSerializer(serializers.ModelSerializer):
             "avatar",
             "discordId",
             "steam_account_id",
+            *STEAM_VERIFICATION_READ_FIELDS,
             "avatarUrl",
             "email",
             "date_joined",

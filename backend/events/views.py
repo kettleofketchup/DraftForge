@@ -1270,6 +1270,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                 "event__tournament__league__organization", "event_team"
             ),
             "user",
+            steam_verified_org=True,
         )
         event_id = self.request.query_params.get("event")
         if event_id:

@@ -4,6 +4,7 @@ import nh3
 from rest_framework import serializers
 
 from app.serializers import (
+    STEAM_VERIFICATION_READ_FIELDS,
     OrganizationsSerializer,
     PositionsSerializer,
     TournamentUserSerializer,
@@ -36,6 +37,15 @@ class LeagueUserSerializer(serializers.ModelSerializer):
     steam_account_id = serializers.IntegerField(
         source="user.steam_account_id", read_only=True
     )
+    steam_account_verified = serializers.BooleanField(
+        source="user.steam_account_verified", read_only=True
+    )
+    steam_account_verified_at = serializers.DateTimeField(
+        source="user.steam_account_verified_at", read_only=True
+    )
+    steam_account_exists_checked = serializers.BooleanField(
+        source="user.steam_account_exists_checked", read_only=True
+    )
     avatarUrl = serializers.CharField(source="user.avatarUrl", read_only=True)
     mmr = serializers.IntegerField(read_only=True)  # LeagueUser's snapshot MMR
     orgUserPk = serializers.IntegerField(source="org_user_id", read_only=True)
@@ -60,6 +70,7 @@ class LeagueUserSerializer(serializers.ModelSerializer):
             "discordId",
             "positions",
             "steam_account_id",
+            *STEAM_VERIFICATION_READ_FIELDS,
             "avatarUrl",
             "mmr",
             "orgUserPk",
