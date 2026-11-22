@@ -86,6 +86,7 @@ from org.membership import (
 )
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from org.permissions import (
+    can_view_org_members,
     has_org_staff_access,
 )
 from org.promotion.services import release_earning_sends
@@ -1678,6 +1679,8 @@ class LeagueView(viewsets.ModelViewSet):
 
         @cached_as(
             LeagueUser,
+            OrgUser,
+            OrgUserGameMmr,
             CustomUser,
             BaseUserProfile,
             DotaUserProfile,
@@ -1685,13 +1688,30 @@ class LeagueView(viewsets.ModelViewSet):
             timeout=60 * 10,
         )
         def get_data() -> Any:
-            league_users = with_user_profiles(
-                LeagueUser.objects.filter(league=league), "user", dota=True
-            ).select_related("org_user")
+            league_users = (
+                with_user_profiles(
+                    LeagueUser.objects.filter(league=league), "user", dota=True
+                )
+                .select_related("org_user")
+                .prefetch_related("org_user__game_mmrs")
+            )
             serializer = LeagueUserSerializer(league_users, many=True)
             return serializer.data
 
         data = get_data()
+        # Org MMRs follow the org member-list rule; plain members of a private
+        # org's league still see their own.
+        if league.organization_id is None or not can_view_org_members(
+            request.user, league.organization_id
+        ):
+            data = [
+                row
+                if row["pk"] == request.user.pk
+                else {
+                    k: v for k, v in row.items() if k not in ("orgUserPk", "game_mmrs")
+                }
+                for row in data
+            ]
         return Response(data)
 
 

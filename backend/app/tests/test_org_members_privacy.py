@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, GameType, League
 from events.models import Event, EventSignup, EventState, SignupStatus
 from league.models import LeagueUser
+from org.mmr import set_org_mmr
 from org.models import Organization, OrgUser
 from tests.populate.utils import ensure_org_user
 
@@ -177,3 +178,53 @@ class EventSignupOrgMmrPrivacyTest(TestCase):
         self.assertIsNone(self._mmr_for(self.member))
         self.assertEqual(self._mmr_for(self.player), 5100)
         self.assertEqual(self._mmr_for(self.owner), 5100)
+
+
+class LeagueUsersOrgMmrTest(TestCase):
+    def setUp(self) -> None:
+        self.owner = CustomUser.objects.create_user(username="lo_owner", password="x")
+        self.org = Organization.objects.create(name="League MMR Org", owner=self.owner)
+        self.league = League.objects.create(
+            name="League MMR", organization=self.org, steam_league_id=464646
+        )
+        self.player = self._member("lo_player", 5100, 4800)
+        self.other = self._member("lo_other", 3200, 3000)
+        self.client = APIClient()
+        self.url = f"/api/leagues/{self.league.pk}/users/"
+
+    def _member(self, username: str, org_mmr: int, snapshot: int) -> CustomUser:
+        user = CustomUser.objects.create_user(username=username, password="x")
+        org_user = ensure_org_user(user, self.org, mmr=org_mmr)
+        LeagueUser.objects.create(
+            user=user, org_user=org_user, league=self.league, mmr=snapshot
+        )
+        return user
+
+    def _rows_for(self, user: CustomUser) -> dict[int, dict]:
+        self.client.force_authenticate(user=user)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        return {row["pk"]: row for row in resp.json()}
+
+    def test_rows_carry_org_link_game_mmrs_and_league_mmr(self) -> None:
+        row = self._rows_for(self.owner)[self.player.pk]
+        org_user = OrgUser.objects.get(user=self.player, organization=self.org)
+        self.assertEqual(row["orgUserPk"], org_user.pk)
+        self.assertEqual(row["game_mmrs"], {"1": 5100, "2": 0})
+        self.assertEqual(row["league_mmr"], 4800)
+
+    def test_private_org_shows_plain_members_only_their_own_org_mmr(self) -> None:
+        self.org.members_private = True
+        self.org.save()
+        rows = self._rows_for(self.player)
+        self.assertEqual(rows[self.player.pk]["game_mmrs"], {"1": 5100, "2": 0})
+        self.assertNotIn("game_mmrs", rows[self.other.pk])
+        self.assertNotIn("orgUserPk", rows[self.other.pk])
+        self.assertEqual(rows[self.other.pk]["league_mmr"], 3000)
+
+    def test_org_mmr_edit_reaches_the_cached_list(self) -> None:
+        self._rows_for(self.owner)
+        org_user = OrgUser.objects.get(user=self.player, organization=self.org)
+        set_org_mmr(org_user, GameType.DOTA2, 6000, mark_verified=False)
+        row = self._rows_for(self.owner)[self.player.pk]
+        self.assertEqual(row["game_mmrs"]["1"], 6000)
