@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 
 
 class PositionsInvalidationTests(TestCase):
@@ -12,7 +12,7 @@ class PositionsInvalidationTests(TestCase):
         assert pos is not None
         # save() must invalidate the owning dota profile + bubbled parents,
         # NOT raise AttributeError on the now-empty customuser_set.
-        with patch("app.cache_utils.invalidate_after_commit") as mock_inv:
+        with patch("app.models.invalidate_after_commit") as mock_inv:
             pos.carry = 5
             pos.save()
             assert mock_inv.called

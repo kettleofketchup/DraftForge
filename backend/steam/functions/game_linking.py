@@ -1,14 +1,18 @@
-from datetime import datetime
+from datetime import datetime, time
 from datetime import timezone as dt_timezone
+from typing import Any
 
-from app.models import Game, Tournament
+from django.db.models import QuerySet
+
+from app.cache_utils import invalidate_obj
+from app.models import Game, Team, Tournament
 from steam.models import GameMatchSuggestion, Match
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
 
-def check_match_for_games(match):
+def check_match_for_games(match: Match) -> None:
     """
     Called during sync. Check if new match corresponds to any unlinked tournament games.
     Auto-link or create suggestion based on confidence.
@@ -87,9 +91,9 @@ def check_match_for_games(match):
                 )
 
 
-def _get_game_player_steam_ids(game):
+def _get_game_player_steam_ids(game: Game) -> set[int]:
     """Get set of steam_ids for players in both teams of a game."""
-    steam_ids = set()
+    steam_ids: set[int] = set()
 
     if game.radiant_team:
         radiant_ids = game.radiant_team.members.exclude(
@@ -106,7 +110,7 @@ def _get_game_player_steam_ids(game):
     return steam_ids
 
 
-def _determine_winner_from_match(game, match):
+def _determine_winner_from_match(game: Game, match: Match) -> Team | None:
     """
     Determine which tournament team won based on Steam match data.
 
@@ -186,7 +190,7 @@ def _determine_winner_from_match(game, match):
     return winner
 
 
-def _link_game_to_match(game, match):
+def _link_game_to_match(game: Game, match: Match) -> None:
     """
     Link a game to a match and set the winner based on match data.
 
@@ -195,8 +199,6 @@ def _link_game_to_match(game, match):
     - game.winning_team = determined from match.radiant_win and player positions
     - game.status = "completed"
     """
-    from app.cache_utils import invalidate_obj
-
     game.gameid = match.match_id
 
     winner = _determine_winner_from_match(game, match)
@@ -228,7 +230,9 @@ def _link_game_to_match(game, match):
         invalidate_obj(game.tournament)
 
 
-def get_suggestions_for_tournament(tournament_id):
+def get_suggestions_for_tournament(
+    tournament_id: int,
+) -> QuerySet[GameMatchSuggestion]:
     """
     Retrieve all GameMatchSuggestion records for a tournament,
     ordered by confidence score descending.
@@ -243,7 +247,7 @@ def get_suggestions_for_tournament(tournament_id):
     )
 
 
-def get_suggestions_for_game(game_id):
+def get_suggestions_for_game(game_id: int) -> QuerySet[GameMatchSuggestion]:
     """
     Get all match suggestions for a specific tournament game,
     ordered by confidence score descending.
@@ -258,7 +262,7 @@ def get_suggestions_for_game(game_id):
     )
 
 
-def confirm_suggestion(suggestion_id):
+def confirm_suggestion(suggestion_id: int) -> bool:
     """
     Staff confirms a suggestion - sets Game.gameid to the match ID
     and marks suggestion as auto_linked=True.
@@ -284,7 +288,7 @@ def confirm_suggestion(suggestion_id):
     return True
 
 
-def dismiss_suggestion(suggestion_id):
+def dismiss_suggestion(suggestion_id: int) -> bool:
     """
     Staff dismisses a suggestion - deletes the GameMatchSuggestion record.
 
@@ -320,7 +324,9 @@ def _build_captain_match_index(matches: list, captain_steam_ids: set) -> dict:
     return captain_matches
 
 
-def auto_assign_matches_by_time(tournament_id, preview=True, min_overlap=4):
+def auto_assign_matches_by_time(
+    tournament_id: int, preview: bool = True, min_overlap: int = 4
+) -> dict[str, Any]:
     """
     Smart auto-assign Steam matches to tournament games based on:
     1. Tournament day filtering (only matches from tournament date)
@@ -352,11 +358,8 @@ def auto_assign_matches_by_time(tournament_id, preview=True, min_overlap=4):
     # Get tournament date
     tournament_date = tournament.date_played.date()
 
-    from datetime import datetime, time
-    from datetime import timezone as dt_tz
-
-    day_start = datetime.combine(tournament_date, time.min, tzinfo=dt_tz.utc)
-    day_end = datetime.combine(tournament_date, time.max, tzinfo=dt_tz.utc)
+    day_start = datetime.combine(tournament_date, time.min, tzinfo=dt_timezone.utc)
+    day_end = datetime.combine(tournament_date, time.max, tzinfo=dt_timezone.utc)
     start_timestamp = int(day_start.timestamp())
     end_timestamp = int(day_end.timestamp())
 
@@ -536,7 +539,9 @@ def auto_assign_matches_by_time(tournament_id, preview=True, min_overlap=4):
                     captain_assigned_count.get(dire_captain_id, 0) + 1
                 )
 
-            match_time = datetime.fromtimestamp(best_match.start_time, tz=dt_tz.utc)
+            match_time = datetime.fromtimestamp(
+                best_match.start_time, tz=dt_timezone.utc
+            )
             assignments.append(
                 {
                     "game_id": game.id,
@@ -597,7 +602,7 @@ def auto_assign_matches_by_time(tournament_id, preview=True, min_overlap=4):
     }
 
 
-def auto_link_matches_for_tournament(tournament_id):
+def auto_link_matches_for_tournament(tournament_id: int) -> dict[str, int]:
     """
     Scan all games in tournament, find matching Steam matches.
     Auto-link exact matches (10/10 players + correct date),
