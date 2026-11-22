@@ -31,10 +31,10 @@ def _isolated_setup_provider() -> Iterator[None]:
     with (
         mock.patch("opentelemetry.trace.set_tracer_provider"),
         mock.patch("opentelemetry.metrics.set_meter_provider"),
-        mock.patch("opentelemetry.sdk.metrics.export.PeriodicExportingMetricReader"),
-        mock.patch("opentelemetry.instrumentation.celery.CeleryInstrumentor"),
-        mock.patch("opentelemetry.instrumentation.requests.RequestsInstrumentor"),
-        mock.patch("opentelemetry.instrumentation.dbapi.trace_integration"),
+        mock.patch("telemetry.tracing.PeriodicExportingMetricReader"),
+        mock.patch("telemetry.tracing.CeleryInstrumentor"),
+        mock.patch("telemetry.tracing.RequestsInstrumentor"),
+        mock.patch("telemetry.tracing.trace_integration"),
         mock.patch("telemetry.tracing.atexit.register"),
     ):
         try:
@@ -251,9 +251,7 @@ class DjangoInstrumentorHooksTest(TestCase):
 
         with (
             _isolated_setup_provider(),
-            mock.patch(
-                "opentelemetry.instrumentation.django.DjangoInstrumentor"
-            ) as MockInstr,
+            mock.patch("telemetry.tracing.DjangoInstrumentor") as MockInstr,
         ):
             from telemetry.tracing import _setup_provider
 
@@ -278,12 +276,10 @@ class DiagnosticMetricExporterTest(TestCase):
         with (
             _isolated_setup_provider(),
             mock.patch.dict(os.environ, env, clear=False),
-            mock.patch(
-                "opentelemetry.sdk.metrics.export.PeriodicExportingMetricReader"
-            ) as MockReader,
-            mock.patch("opentelemetry.sdk.metrics.MeterProvider"),
+            mock.patch("telemetry.tracing.PeriodicExportingMetricReader") as MockReader,
+            mock.patch("telemetry.tracing.MeterProvider"),
             mock.patch("opentelemetry.metrics.set_meter_provider"),
-            mock.patch("opentelemetry.instrumentation.django.DjangoInstrumentor"),
+            mock.patch("telemetry.tracing.DjangoInstrumentor"),
         ):
             _setup_provider(_build_resource(), mock.MagicMock(), "http://x", {}, 0.1)
         return MockReader.call_args[0][0]
@@ -319,7 +315,7 @@ class DiagnosticMetricExporterTest(TestCase):
 
         with (
             mock.patch.object(OTLPMetricExporter, "_export", lambda self, data: resp),
-            mock.patch("telemetry.logging.get_logger") as mock_get_logger,
+            mock.patch("telemetry.tracing.get_logger") as mock_get_logger,
         ):
             exporter._export(b"payload")
 

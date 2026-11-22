@@ -1,5 +1,7 @@
 from datetime import UTC, datetime, timedelta
+from unittest import mock
 
+from django.db.models import Q
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
@@ -15,7 +17,7 @@ from org.standing.kinds import (
     build_kinds,
     kinds_for,
 )
-from org.standing.ledger import points_for
+from org.standing.ledger import SyncCounts, points_for
 from org.standing.periods import parse_period
 
 OCT_10 = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
@@ -35,7 +37,10 @@ class LedgerKindsTest(SimpleTestCase):
         )
 
     def test_once_per_event_matches_staff_kinds(self) -> None:
-        self.assertEqual(ONCE_PER_EVENT_KINDS, {k.value for k in EVENT_STAFF_KINDS})
+        self.assertEqual(
+            ONCE_PER_EVENT_KINDS & kinds_for("contribution"),
+            {k.value for k in EVENT_STAFF_KINDS},
+        )
 
 
 class LedgerTest(TestCase):
@@ -184,3 +189,174 @@ class LedgerTest(TestCase):
             set(ContributionEntry.objects.values_list("pk", flat=True)),
             {manual.pk, other.pk},
         )
+
+    def _ou(self, user: CustomUser) -> OrgUser:
+        return OrgUser.objects.get_or_create(user=user, organization=self.org)[0]
+
+    def _rows(self, kind: str) -> list[tuple[int, int]]:
+        return list(
+            ContributionEntry.objects.nocache()
+            .filter(event=self.event, kind=kind)
+            .order_by("org_user_id")
+            .values_list("org_user_id", "points")
+        )
+
+    def test_track_entries_filters_track(self) -> None:
+        self._award(self.alice, 3)
+        self._award(self.alice, 5, kind="captained", event=self.event)
+        self.assertEqual(
+            list(
+                ledger.track_entries(self.org.pk, track="leadership").values_list(
+                    "kind", flat=True
+                )
+            ),
+            ["captained"],
+        )
+
+    def test_upsert_event_entry_cycle(self) -> None:
+        ou = self._ou(self.alice)
+
+        def upsert(points: int | None) -> str:
+            return ledger.upsert_event_entry(
+                event=self.event, org_user=ou, kind="captain_rating", points=points
+            )
+
+        self.assertEqual(upsert(4), "created")
+        row = ContributionEntry.objects.nocache().get(kind="captain_rating")
+        self.assertEqual(row.track, "leadership")
+        self.assertEqual(row.occurred_at, self.event.scheduled_at)
+        self.assertEqual(row.event_name, self.event.name)
+        self.assertEqual(upsert(4), "noop")
+        self.assertEqual(upsert(6), "updated")
+        self.assertEqual(self._rows("captain_rating"), [(ou.pk, 6)])
+        self.assertEqual(upsert(0), "deleted")
+        self.assertEqual(upsert(None), "noop")
+        self.assertEqual(self._rows("captain_rating"), [])
+
+    def test_upsert_event_entry_concurrent_create(self) -> None:
+        ou = self._ou(self.alice)
+        real = ledger._existing_entry
+        calls = 0
+
+        def racing(*args: object, **kwargs: object) -> object:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                ContributionEntry.objects.create(
+                    org_user=ou,
+                    organization=self.org,
+                    track="leadership",
+                    kind="captain_rating",
+                    points=2,
+                    event=self.event,
+                    event_name=self.event.name,
+                    occurred_at=self.event.scheduled_at,
+                )
+                return None
+            return real(*args, **kwargs)
+
+        with mock.patch.object(ledger, "_existing_entry", side_effect=racing):
+            outcome = ledger.upsert_event_entry(
+                event=self.event, org_user=ou, kind="captain_rating", points=7
+            )
+        self.assertEqual(outcome, "updated")
+        self.assertEqual(self._rows("captain_rating"), [(ou.pk, 7)])
+
+    def test_sync_event_kinds(self) -> None:
+        alice, bob, carol, owner = (
+            self._ou(u) for u in (self.alice, self.bob, self.carol, self.owner)
+        )
+        for user, kind, points in (
+            (self.alice, "captained", 5),
+            (self.bob, "captained", 5),
+            (self.carol, "placement_1", 10),
+        ):
+            self._award(
+                user,
+                points,
+                self.event.scheduled_at,
+                kind=kind,
+                event=self.event,
+            )
+        manual = self._award(self.carol, 1, event=self.event)
+        counts = ledger.sync_event_kinds(
+            self.event,
+            kinds={"captained", "placement_1"},
+            wanted={
+                (alice.pk, "captained"): 5,
+                (bob.pk, "captained"): 7,
+                (owner.pk, "captained"): 5,
+                (alice.pk, "placement_1"): 10,
+                (carol.pk, "captained"): 0,
+            },
+        )
+        self.assertEqual(counts, SyncCounts(created=2, updated=1, deleted=1))
+        self.assertEqual(
+            sorted(self._rows("captained")),
+            sorted([(alice.pk, 5), (bob.pk, 7), (owner.pk, 5)]),
+        )
+        self.assertEqual(self._rows("placement_1"), [(alice.pk, 10)])
+        self.assertTrue(ContributionEntry.objects.filter(pk=manual.pk).exists())
+        created = ContributionEntry.objects.nocache().get(org_user=owner)
+        self.assertEqual(created.track, "leadership")
+        self.assertEqual(created.occurred_at, self.event.scheduled_at)
+        self.assertEqual(
+            ledger.sync_event_kinds(
+                self.event,
+                kinds={"captained", "placement_1"},
+                wanted={
+                    (alice.pk, "captained"): 5,
+                    (bob.pk, "captained"): 7,
+                    (owner.pk, "captained"): 5,
+                    (alice.pk, "placement_1"): 10,
+                },
+            ),
+            SyncCounts(created=0, updated=0, deleted=0),
+        )
+
+    def test_points_table_override_and_default(self) -> None:
+        ContributionPointValue.objects.create(
+            organization=self.org, kind="captained", points=7
+        )
+        with self.assertNumQueries(1):
+            table = ledger.points_table(self.org, ["captained", "placement_1"])
+        self.assertEqual(table, {"captained": 7, "placement_1": 10})
+        with self.assertRaises(ValueError):
+            ledger.points_table(self.org, ["captain_rating"])
+        with self.assertRaises(ValueError):
+            ledger.points_table(self.org, ["nope"])
+
+    def test_sum_by_member_where(self) -> None:
+        self._award(self.alice, 5)
+        self._award(self.alice, 2, kind="event_host", event=self.event)
+        self._award(self.bob, 4)
+        period = parse_period(self.org, None)
+        rows = list(
+            ledger.sum_by_member(
+                self.org.pk,
+                track="contribution",
+                period=period,
+                where=Q(kind="event_host"),
+            )
+        )
+        self.assertEqual(
+            [(r["org_user"], r["total"]) for r in rows],
+            [(self._ou(self.alice).pk, 2)],
+        )
+        self.assertEqual(
+            ledger.total(
+                self.org.pk,
+                track="contribution",
+                period=period,
+                where=Q(kind="manual"),
+            ),
+            9,
+        )
+
+    def test_user_rows_filters_track(self) -> None:
+        manual = self._award(self.alice, 3)
+        lead = self._award(self.alice, 5, kind="captained", event=self.event)
+        self._award(self.bob, 4)
+        for track, expected in (("contribution", manual), ("leadership", lead)):
+            rows = ledger.user_rows(track, [self.alice.pk])
+            self.assertEqual(set(rows.values_list("pk", flat=True)), {expected.pk})

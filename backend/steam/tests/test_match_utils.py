@@ -204,7 +204,7 @@ class FindMatchesByTeamTest(TestCase):
 
 
 class FindLiveGameByPlayersTest(TestCase):
-    @patch("steam.utils.steam_api_caller.SteamAPI")
+    @patch("steam.functions.match_utils.SteamAPI")
     def test_find_live_game_with_player(self, mock_api_class):
         """Test finding live game with matching player."""
         mock_api = mock_api_class.return_value
@@ -229,7 +229,7 @@ class FindLiveGameByPlayersTest(TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["match_id"], 12345)
 
-    @patch("steam.utils.steam_api_caller.SteamAPI")
+    @patch("steam.functions.match_utils.SteamAPI")
     def test_find_live_game_no_match(self, mock_api_class):
         """Test no matching player in live games."""
         mock_api = mock_api_class.return_value
@@ -243,7 +243,7 @@ class FindLiveGameByPlayersTest(TestCase):
 
         self.assertIsNone(result)
 
-    @patch("steam.utils.steam_api_caller.SteamAPI")
+    @patch("steam.functions.match_utils.SteamAPI")
     def test_find_live_game_empty_steam_ids(self, mock_api_class):
         """Test with empty steam_ids list."""
         result = find_live_game_by_players([])
@@ -251,7 +251,7 @@ class FindLiveGameByPlayersTest(TestCase):
         self.assertIsNone(result)
         mock_api_class.assert_not_called()
 
-    @patch("steam.utils.steam_api_caller.SteamAPI")
+    @patch("steam.functions.match_utils.SteamAPI")
     def test_find_live_game_api_error(self, mock_api_class):
         """Test handling of API error response."""
         mock_api = mock_api_class.return_value

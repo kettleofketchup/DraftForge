@@ -13,6 +13,13 @@ from org.models_contributions import (
     ContributionPointValue,  # noqa: F401
 )
 from org.models_features import OrgFeature  # noqa: F401
+from org.models_leadership import (
+    CaptainReview,  # noqa: F401
+    CaptainTrait,  # noqa: F401
+    CaptainTraitScore,  # noqa: F401
+    EventCaptain,  # noqa: F401
+    OrgLeadershipSettings,  # noqa: F401
+)
 from org.models_profiles import (
     PlayerDeadlockProfile,  # noqa: F401
     PlayerDotaProfile,  # noqa: F401
@@ -168,6 +175,11 @@ class OrgLog(models.Model):
         ("set_attendance", "Set Attendance"),
         ("finalize_attendance", "Finalize Attendance"),
         ("void_attendance", "Void Attendance"),
+        ("void_captain_review", "Void Captain Review"),
+        ("unvoid_captain_review", "Unvoid Captain Review"),
+        ("update_leadership_settings", "Update Leadership Settings"),
+        ("update_captain_traits", "Update Captain Traits"),
+        ("delete_user_leadership", "Delete User Leadership"),
     ]
 
     organization = models.ForeignKey(

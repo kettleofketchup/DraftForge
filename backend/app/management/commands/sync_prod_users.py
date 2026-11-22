@@ -11,7 +11,13 @@ from app.management.prod_payload import (
     steam_account_id,
 )
 from app.models import CustomUser, PositionsModel
-from org.models import AttendanceOutcome, ContributionEntry, Organization, PromoSend
+from org.models import (
+    AttendanceOutcome,
+    ContributionEntry,
+    EventCaptain,
+    Organization,
+    PromoSend,
+)
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -78,6 +84,7 @@ class Command(BaseCommand):
                 f"(keeping {len(kept)} organization owners)..."
             )
             AttendanceOutcome.objects.nocache().all().delete()
+            EventCaptain.objects.nocache().all().delete()
             ContributionEntry.objects.nocache().all().delete()
             PromoSend.objects.all().delete()
             CustomUser.objects.exclude(pk__in=owner_ids).delete()

@@ -3,6 +3,7 @@ from contextlib import contextmanager
 
 from org.conduct.adapter import CONDUCT
 from org.contributions.adapter import CONTRIBUTION
+from org.leadership.adapter import LEADERSHIP
 from org.standing.base import TrackBase
 from org.standing.errors import UnknownTrack
 
@@ -34,7 +35,7 @@ def validate_tracks(tracks: Sequence[TrackBase]) -> None:
                     seen[slot] = (t.key, hook)
 
 
-TRACKS: tuple[TrackBase, ...] = (CONTRIBUTION, CONDUCT)
+TRACKS: tuple[TrackBase, ...] = (CONTRIBUTION, CONDUCT, LEADERSHIP)
 validate_tracks(TRACKS)
 
 _active: tuple[TrackBase, ...] = TRACKS

@@ -87,7 +87,7 @@ def _sum(qs: QuerySet[ContributionEntry]) -> int:
 def member_entries(org_user: OrgUser, period: Period) -> QuerySet[ContributionEntry]:
     return (
         ledger.in_period(
-            ContributionEntry.objects.nocache().filter(org_user=org_user), period
+            ledger.track_rows("contribution").filter(org_user=org_user), period
         )
         .select_related("event")
         .order_by("-occurred_at", "-pk")
@@ -133,7 +133,7 @@ def member_monthly(
     end = month_period(tz, local_now.year, local_now.month).end
     buckets: defaultdict[str, int] = defaultdict(int)
     for occurred_at, points in (
-        ContributionEntry.objects.nocache()
+        ledger.track_rows("contribution")
         .filter(org_user=org_user, occurred_at__gte=start, occurred_at__lt=end)
         .values_list("occurred_at", "points")
     ):
@@ -146,7 +146,7 @@ def member_totals(org_user: OrgUser, *, now: datetime | None = None) -> MemberTo
     tz = resolve_org_tz(org_user.organization)
     local_now = (now or timezone.now()).astimezone(tz)
     this_month = month_period(tz, local_now.year, local_now.month)
-    qs = ContributionEntry.objects.nocache().filter(org_user=org_user)
+    qs = ledger.track_rows("contribution").filter(org_user=org_user)
     return MemberTotals(
         all_time=_sum(qs),
         this_month=_sum(ledger.in_period(qs, this_month)),
@@ -155,7 +155,7 @@ def member_totals(org_user: OrgUser, *, now: datetime | None = None) -> MemberTo
 
 def member_overview(org_user: OrgUser, *, now: datetime) -> MemberOverview:
     monthly = member_monthly(org_user, now=now)
-    all_time = _sum(ContributionEntry.objects.nocache().filter(org_user=org_user))
+    all_time = _sum(ledger.track_rows("contribution").filter(org_user=org_user))
     return MemberOverview(
         totals=MemberTotals(all_time=all_time, this_month=monthly[-1]["points"]),
         monthly=monthly,

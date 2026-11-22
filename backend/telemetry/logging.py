@@ -5,7 +5,9 @@ import sys
 from typing import Literal
 
 import structlog
-from structlog.typing import Processor
+from opentelemetry import trace
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from structlog.typing import EventDict, Processor
 
 # Track if logging has been configured
 _configured = False
@@ -14,29 +16,26 @@ _configured = False
 class _OTelInternalFilter(logging.Filter):
     """Prevent OTel's own log messages from being re-ingested by the OTel handler."""
 
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
         return not record.name.startswith("opentelemetry")
 
 
-def _add_otel_trace_context(logger, method_name, event_dict):
+def _add_otel_trace_context(
+    logger: logging.Logger, method_name: str, event_dict: EventDict
+) -> EventDict:
     """Inject OpenTelemetry trace/span IDs into log events for correlation."""
-    try:
-        from opentelemetry import trace
-
-        span = trace.get_current_span()
-        if span and span.is_recording():
-            ctx = span.get_span_context()
-            event_dict["trace_id"] = format(ctx.trace_id, "032x")
-            event_dict["span_id"] = format(ctx.span_id, "016x")
-    except ImportError:
-        pass
+    span = trace.get_current_span()
+    if span and span.is_recording():
+        ctx = span.get_span_context()
+        event_dict["trace_id"] = format(ctx.trace_id, "032x")
+        event_dict["span_id"] = format(ctx.span_id, "016x")
     return event_dict
 
 
 def configure_logging(
     level: str = "INFO",
     format: Literal["json", "pretty"] = "json",
-    otel_logger_provider=None,
+    otel_logger_provider: LoggerProvider | None = None,
 ) -> None:
     """
     Configure structlog for the application.
@@ -101,8 +100,6 @@ def configure_logging(
 
     # Add OTel log export handler (ships logs to Loki via OTLP)
     if otel_logger_provider is not None:
-        from opentelemetry.sdk._logs import LoggingHandler
-
         otel_handler = LoggingHandler(
             level=logging.INFO,  # Don't export DEBUG to Loki
             logger_provider=otel_logger_provider,

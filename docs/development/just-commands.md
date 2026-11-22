@@ -42,7 +42,7 @@ just dev::run '<cmd>' [svc]  # One-off shell command in a new container (default
 just dev::sync-all [--dry-run]   # sync-users then sync-tournaments from production
 just dev::live               # tmux panes for frontend, backend and nginx
 just dev::local-prod         # Migrate prod, then run the production images locally
-just dev::release            # Deploy: migrate, pull release images, recreate the release stack
+just dev::release            # Deploy: pull the :VERSION images (fail early), stop the stack, migrate, start it
 ```
 
 ## Docker Commands (`just docker::*`)

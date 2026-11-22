@@ -7,6 +7,7 @@ Pure functions that construct embed dicts for the Discord API.
 from collections.abc import Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 
@@ -14,6 +15,7 @@ from app.constants import LOGO_URL
 from app.internal_client import get_event_signups
 from app.models import GameType
 from events.constants import SEAT_HOLDING_STATUSES, EventState
+from events.discord.components import build_announcement_components
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -290,8 +292,6 @@ def build_announcement_v2(event: "EmbedEvent") -> dict[str, Any]:
     open signups, description, event details row,
     signup/declined/tentative row, and event page link.
     """
-    from events.discord.components import build_announcement_components
-
     title = event.discord_event_title or event.name
     desc = event.discord_event_description or event.description or "No description."
 
@@ -304,8 +304,6 @@ def build_announcement_v2(event: "EmbedEvent") -> dict[str, Any]:
 
     # Line 1: Discord date timestamp (renders as "March 20, 2026" in user's locale)
     # Line 2: Discord time timestamp + event timezone time in parentheses
-    from zoneinfo import ZoneInfo
-
     tz = ZoneInfo(event.timezone) if event.timezone else None
     local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
     tz_time = local_dt.strftime("%-I:%M %p %Z")  # "6:00 PM EST"
@@ -452,8 +450,6 @@ def build_announcement_notice(
     """
     title = event.discord_event_title or event.name
 
-    from zoneinfo import ZoneInfo
-
     tz = ZoneInfo(event.timezone) if event.timezone else None
     local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
     date_line = local_dt.strftime("%A, %B %-d")
@@ -512,8 +508,6 @@ def build_signup_update_embed(event: "EmbedEvent") -> dict[str, Any]:
 
 
 def build_new_event_embed(event: "EmbedEvent") -> dict[str, Any]:
-    from zoneinfo import ZoneInfo
-
     desc = f"A new event has been created for **{event.organization.name}**!"
     if url := _event_url(event):
         desc += f"\n\n[Sign Up]({url})"
@@ -556,8 +550,6 @@ def _build_reminder_embed(
     url = _event_url(event)
     active, _confirmed = _signup_counts(event)
     max_display = str(event.max_players) if event.max_players else "\u221e"
-
-    from zoneinfo import ZoneInfo
 
     tz = ZoneInfo(event.timezone) if getattr(event, "timezone", None) else None
     local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at

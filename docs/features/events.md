@@ -101,7 +101,7 @@ While a series is paused, realign is skipped entirely rather than run against a 
 | Pre-day announcement | Post a reminder in a channel before the event |
 | Signup reminder | DM subscribers who haven't signed up (recurring series only) |
 | Profile reminder | DM users to complete their profile (Steam ID, MMR) |
-| Confirm attendance | Require Discord reply to confirm attendance on event day |
+| Attendance reminder | Post a reminder in the announcement channel N hours before the event. Replies aren't tracked; use the [ready check](events/roll-call.md) to require confirmation |
 | Scheduled-event cleanup | Cancelling or deleting an event deletes its Discord scheduled event (`events.tasks.delete_discord_scheduled_event`), so nothing is left orphaned in the guild |
 
 **Discord signup pipeline** (Dota events): clicking *Sign Up* either signs the user up directly (profile complete) or opens a modal with rank-status select → position select view → optional medal+star follow-up → optional screenshot upload. Each step routes through `events.services.apply_signup_input` — the **same service the web `/signup/` endpoint uses** — so the two paths converge on identical writes. Deadlock signups take a separate Discord-only branch that writes `PlayerDeadlockProfile.rank` directly.
