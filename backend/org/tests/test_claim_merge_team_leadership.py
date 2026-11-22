@@ -35,7 +35,9 @@ class ClaimMergeTeamLeadershipTests(TestCase):
         self.team.members.set([self.target, self.other])
 
     def _merge(self) -> None:
-        ClaimRequestViewSet()._merge_profiles(self.claimer, self.target)
+        ClaimRequestViewSet()._merge_profiles(
+            self.claimer, self.target, approver=self.claimer
+        )
         self.team.refresh_from_db()
 
     def test_claimer_inherits_captaincy(self) -> None:

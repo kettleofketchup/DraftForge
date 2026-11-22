@@ -9,6 +9,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
+from app.models import CustomUser
+from app.permissions_steam import can_verify_steam_account
 from events.eligibility import (
     claim_friend_id,
     precheck_friend_id,
@@ -73,20 +75,27 @@ def _invalid_rank_status(data: dict[str, Any]) -> Response | None:
     return None
 
 
+def _friend_id(data: dict[str, Any]) -> str:
+    return str(data.get(FRIEND_ID_FIELD) or "")
+
+
 def _apply_dota_profile_patch(
-    org_user: OrgUser, data: dict[str, Any]
+    org_user: OrgUser, data: dict[str, Any], *, actor: CustomUser
 ) -> PlayerDotaProfile:
-    """Raises ValidationError for a bad friend ID before writing anything."""
+    """Raises ValidationError for a bad friend ID before writing anything.
+
+    The Steam existence pre-check is the caller's job (outside atomic).
+    """
     fields = {f: data[f] for f in DOTA_PROFILE_FIELDS if f in data}
     user = org_user.user
-    friend_id = str(data.get(FRIEND_ID_FIELD) or "")
-    validate_friend_id(friend_id, user)
+    friend_id = _friend_id(data)
+    validate_friend_id(friend_id, user, check_exists=False)
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     previous_status = profile.rank_status
     for field, value in fields.items():
         setattr(profile, field, value)
     profile.sync_rank_declaration(previous_status)
-    claim_friend_id(user, friend_id)
+    claim_friend_id(user, friend_id, verified_by=actor)
     profile.save()
     invalidate_obj(profile)
     invalidate_obj(org_user)
@@ -129,8 +138,8 @@ def update_my_dota_profile(request: Request, org_id: int) -> Response:
     if (error := _invalid_rank_status(request.data)) is not None:
         return error
     try:
-        precheck_friend_id(str(request.data.get(FRIEND_ID_FIELD) or ""), request.user)
-        profile = _apply_dota_profile_patch(org_user, request.data)
+        precheck_friend_id(_friend_id(request.data), request.user)
+        profile = _apply_dota_profile_patch(org_user, request.data, actor=request.user)
     except ValidationError as e:
         return Response(
             {FRIEND_ID_FIELD: e.messages[0]},
@@ -190,7 +199,11 @@ def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
     if (error := _invalid_rank_status(request.data)) is not None:
         return error
     try:
-        profile = _apply_dota_profile_patch(org_user, request.data)
+        if can_verify_steam_account(request.user, org_user.user) is None:
+            precheck_friend_id(
+                _friend_id(request.data), org_user.user, budget_user=request.user
+            )
+        profile = _apply_dota_profile_patch(org_user, request.data, actor=request.user)
     except ValidationError as e:
         return Response(
             {FRIEND_ID_FIELD: e.messages[0]},

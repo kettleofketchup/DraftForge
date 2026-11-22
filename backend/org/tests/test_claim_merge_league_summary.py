@@ -58,7 +58,9 @@ class ClaimMergeLeagueSummaryTests(TransactionTestCase):
     def test_match_stats_reassignment_invalidates_without_user_delete(self) -> None:
         get_league_summary(STEAM_LEAGUE, 5)
         with patch.object(CustomUser, "delete"), transaction.atomic():
-            ClaimRequestViewSet()._merge_profiles(self.claimer, self.target)
+            ClaimRequestViewSet()._merge_profiles(
+                self.claimer, self.target, approver=self.admin
+            )
         players = get_league_summary(STEAM_LEAGUE, 5)["players"]
         self.assertEqual(players[str(self.claimer.pk)]["games"], 5)
         self.assertNotIn(str(self.target.pk), players)

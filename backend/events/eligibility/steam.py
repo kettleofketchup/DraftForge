@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
-from app.permissions_steam import can_verify_steam_account
+from app.permissions_steam import VerifyGrant, can_verify_steam_account
 from app.steam_accounts import (
     log_steam_verification_change,
     mark_steam_account_verified,
@@ -111,6 +111,45 @@ def precheck_friend_id(
     if exists is False:
         raise _not_found_error(account_id)
     return account_id
+
+
+def _admin_grant(actor: CustomUser | None, user: CustomUser) -> VerifyGrant | None:
+    if user.pk is None:
+        trusted = actor is not None and (actor.is_staff or actor.is_superuser)
+        return VerifyGrant(org_id=None) if trusted else None
+    return can_verify_steam_account(actor, user)
+
+
+def admin_precheck_steam_account_id(
+    user: CustomUser, new_id: int | None, *, actor: CustomUser | None
+) -> None:
+    """Steam lookup for an untrusted staff write, charged to the actor.
+
+    Call outside any atomic block. Trusted writes and unchanged IDs skip it.
+    """
+    if new_id is None or new_id == user.steam_account_id:
+        return
+    if _admin_grant(actor, user) is not None:
+        return
+    precheck_friend_id(str(new_id), user, allow_change=True, budget_user=actor or user)
+
+
+def apply_admin_steam_account_id(
+    user: CustomUser, new_id: int | None, *, actor: CustomUser | None
+) -> VerifyGrant | None:
+    """Assign a staff-entered Friend ID; a trusted actor verifies a changed one.
+
+    The caller saves, then logs the returned grant with
+    ``log_steam_verification_change``.
+    """
+    changed = user.steam_account_id != new_id
+    user.steam_account_id = new_id
+    if not changed or new_id is None or actor is None:
+        return None
+    grant = _admin_grant(actor, user)
+    if grant is not None:
+        mark_steam_account_verified(user, actor, org_id=grant.org_id, save=False)
+    return grant
 
 
 def validate_friend_id(

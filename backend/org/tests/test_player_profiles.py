@@ -110,3 +110,73 @@ class MyDotaProfileSteamLookupTest(TestCase):
                 org_user=self.org_user, pos_1=True
             ).exists()
         )
+
+
+@override_settings(
+    STEAM_ACCOUNT_LOOKUP_ENABLED=True,
+    CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
+)
+class DotaProfileFriendIdVerificationTest(TestCase):
+    def setUp(self) -> None:
+        cache.clear()
+        self.owner = CustomUser.objects.create_user(username="dpv_owner", password="x")
+        self.member = CustomUser.objects.create_user(
+            username="dpv_member", password="x"
+        )
+        self.org = Organization.objects.create(name="DPV Org", owner=self.owner)
+        self.org.admins.add(self.owner)
+        self.org_user = OrgUser.objects.create(user=self.member, organization=self.org)
+        self.client = APIClient()
+
+    def _staff_patch(self, actor: CustomUser, data: dict[str, object]) -> object:
+        self.client.force_authenticate(actor)
+        url = reverse("update-user-dota-profile", args=[self.org.pk, self.member.pk])
+        return self.client.patch(url, data, format="json")
+
+    def test_staff_dota_profile_patch_trusted_verifies(self) -> None:
+        staff = CustomUser.objects.create_user(username="dpv_staff", password="x")
+        staff.is_staff = True
+        staff.save()
+        with patch("events.eligibility.steam.ensure_steam_account_exists") as ensure:
+            resp = self._staff_patch(staff, {"steam_account_id": "686868"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        ensure.assert_not_called()
+        user = CustomUser.objects.get(pk=self.member.pk)
+        self.assertEqual(user.steam_account_id, 686868)
+        self.assertTrue(user.steam_account_verified)
+        self.assertEqual(user.steam_account_verified_by_id, staff.pk)
+
+    def test_staff_dota_profile_patch_untrusted_prechecked(self) -> None:
+        with patch(
+            "events.eligibility.steam.ensure_steam_account_exists", return_value=False
+        ) as ensure:
+            resp = self._staff_patch(self.owner, {"steam_account_id": "696969"})
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn(
+            "No Steam account has Friend ID 696969", resp.data["steam_account_id"]
+        )
+        self.assertEqual(ensure.call_args.kwargs["budget_user"], self.owner)
+        self.assertIsNone(CustomUser.objects.get(pk=self.member.pk).steam_account_id)
+
+        with patch(
+            "events.eligibility.steam.ensure_steam_account_exists", return_value=None
+        ):
+            resp = self._staff_patch(self.owner, {"steam_account_id": "696970"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        user = CustomUser.objects.get(pk=self.member.pk)
+        self.assertEqual(user.steam_account_id, 696970)
+        self.assertFalse(user.steam_account_verified)
+
+    def test_my_dota_profile_patch_unverified(self) -> None:
+        self.member.is_staff = True
+        self.member.save()
+        self.client.force_authenticate(self.member)
+        url = reverse("update-my-dota-profile", args=[self.org.pk])
+        with patch(
+            "events.eligibility.steam.ensure_steam_account_exists", return_value=True
+        ):
+            resp = self.client.patch(url, {"steam_account_id": "707070"}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        user = CustomUser.objects.get(pk=self.member.pk)
+        self.assertEqual(user.steam_account_id, 707070)
+        self.assertFalse(user.steam_account_verified)

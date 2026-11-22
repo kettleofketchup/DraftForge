@@ -17,8 +17,10 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, PositionsModel, ProfileClaimRequest, Team
+from app.steam_accounts import log_steam_verification_change
 from draft.models import DraftRound
 from draft.services.hero_chat import repoint_chat_attribution
+from events.eligibility import apply_admin_steam_account_id
 from events.models import Event
 from events.staff import dedupe_host_helpers
 from league.models import LeagueLog, LeagueUser
@@ -122,7 +124,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
             claim_request.save()
 
             # Perform the merge (this deletes target_user)
-            self._merge_profiles(claimer, target_user)
+            self._merge_profiles(claimer, target_user, approver=request.user)
 
             # Log the action
             OrgLog.objects.create(
@@ -186,7 +188,9 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
-    def _merge_profiles(self, claimer: CustomUser, target_user: CustomUser) -> None:
+    def _merge_profiles(
+        self, claimer: CustomUser, target_user: CustomUser, *, approver: CustomUser
+    ) -> None:
         """
         Merge target_user's profile into claimer.
 
@@ -195,8 +199,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         - All foreign key references
         - Then deletes target_user
         """
-        # Copy Friend ID from target to claimer
-        claimer.steam_account_id = target_user.steam_account_id
+        stub_steam_id = target_user.steam_account_id
 
         # Copy other fields from target if claimer doesn't have them
         if target_user.nickname and not claimer.nickname:
@@ -354,6 +357,14 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         target_user.steamid = None
         target_user.save(update_fields=["steam_account_id", "steamid"])
 
+        verify_grant = (
+            apply_admin_steam_account_id(claimer, stub_steam_id, actor=approver)
+            if stub_steam_id is not None
+            else None
+        )
+
         # Save claimer and delete target
         claimer.save()
+        if verify_grant is not None:
+            log_steam_verification_change(claimer, approver, verify_grant.org_id, True)
         target_user.delete()

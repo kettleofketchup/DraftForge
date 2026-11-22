@@ -14,7 +14,9 @@ from app.permissions_tournament import (
     request_user,
 )
 from app.services.team_references import team_references
+from app.steam_accounts import log_steam_verification_change
 from draft.models import Draft, DraftOptions, DraftRound
+from events.eligibility.steam import apply_admin_steam_account_id
 from events.overrides import (
     REASON_MAX_LENGTH,
     OverrideReasonRequired,
@@ -1548,6 +1550,10 @@ class UserSerializer(serializers.ModelSerializer):
             fields=dropped,
         )
 
+    def _actor(self) -> CustomUser | None:
+        actor = getattr(self.context.get("request"), "user", None)
+        return actor if isinstance(actor, CustomUser) else None
+
     def update(self, instance: CustomUser, validated_data: dict) -> CustomUser:
         self._strip_privilege_fields(validated_data, instance.pk)
         validated_data.pop("discordNickname", None)
@@ -1571,10 +1577,23 @@ class UserSerializer(serializers.ModelSerializer):
                     )
             except KeyError:
                 pass
+            has_steam_id = "steam_account_id" in validated_data
+            new_steam_id = validated_data.pop("steam_account_id", None)
             for key, value in validated_data.items():
                 setattr(instance, key, value)
+            grant = (
+                apply_admin_steam_account_id(
+                    instance, new_steam_id, actor=self._actor()
+                )
+                if has_steam_id
+                else None
+            )
 
             instance.save()
+            if grant is not None:
+                log_steam_verification_change(
+                    instance, self._actor(), grant.org_id, True
+                )
             log.debug(
                 "user_updated",
                 system="api",
@@ -1611,19 +1630,26 @@ class UserSerializer(serializers.ModelSerializer):
                 if key not in fields:
                     raise KeyError(f"Invalid field: {key}")
 
+            has_steam_id = "steam_account_id" in validated_data
+            new_steam_id = validated_data.pop("steam_account_id", None)
             if "positions" in validated_data:
                 positions_data = validated_data.pop("positions")
                 positions = PositionsModel.objects.create(**positions_data)
-                user = CustomUser.objects.create(positions=positions, **validated_data)
-
             else:
                 log.debug(
                     "user_create_no_positions", system="api", subsystem="serializer"
                 )
                 positions = PositionsModel.objects.create()
-                user = CustomUser(positions=positions, **validated_data)
+            user = CustomUser(positions=positions, **validated_data)
+            grant = (
+                apply_admin_steam_account_id(user, new_steam_id, actor=self._actor())
+                if has_steam_id
+                else None
+            )
 
             user.save()
+            if grant is not None:
+                log_steam_verification_change(user, self._actor(), grant.org_id, True)
             return user
 
 

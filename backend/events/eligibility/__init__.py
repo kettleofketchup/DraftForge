@@ -34,6 +34,8 @@ from events.eligibility.reasons import (
 from events.eligibility.steam import (
     FRIEND_ID_MAX_LENGTH,
     STEAM_ACCOUNT_ID_RANGE,
+    admin_precheck_steam_account_id,
+    apply_admin_steam_account_id,
     claim_friend_id,
     precheck_friend_id,
     validate_friend_id,
@@ -77,6 +79,8 @@ __all__ = [
     "Rule",
     "Severity",
     "Unmet",
+    "admin_precheck_steam_account_id",
+    "apply_admin_steam_account_id",
     "claim_friend_id",
     "clear_eligibility",
     "eligibility_values",
