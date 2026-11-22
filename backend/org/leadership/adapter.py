@@ -10,7 +10,7 @@ from app.models import CustomUser
 from events.models import Event
 from org.contributions.serializers import member_summary
 from org.feature_keys import FeatureKey
-from org.leadership import lifecycle, merge
+from org.leadership import lifecycle, maintenance
 from org.leadership.queries import CaptainRating, captain_ratings, points_by_member
 from org.leadership.settings import get_leadership_settings
 from org.leadership.summary import member_payload, round_score
@@ -104,19 +104,19 @@ class LeadershipTrack(TrackBase):
 
     @override
     def merge_members(self, drop: OrgUser, keep: OrgUser) -> TrackOutput:
-        merge.merge_members(drop, keep, now=timezone.now())
+        maintenance.reassign_member(drop, keep, now=timezone.now())
         return TrackOutput()
 
     @override
     def repoint_user(self, drop: CustomUser, keep: CustomUser) -> TrackOutput:
-        merge.repoint_user(drop, keep)
+        maintenance.repoint_attribution(drop, keep)
         return TrackOutput()
 
     @override
     def on_user_deleted(
         self, user: CustomUser, *, actor: CustomUser | None
     ) -> TrackOutput:
-        merge.delete_user(user, actor=actor, now=timezone.now())
+        maintenance.delete_user_rows(user, actor=actor, now=timezone.now())
         return TrackOutput()
 
     @override
