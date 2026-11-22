@@ -1,7 +1,7 @@
 from django.test import TestCase
 
-from app.models import CustomUser, League
-from league.models import LeagueUser
+from app.models import CustomUser
+from league.models import League, LeagueUser
 from org.models import Organization, OrgUser
 
 

@@ -6,8 +6,9 @@ from django.db.migrations.loader import MigrationLoader
 from django.test import TransactionTestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League
+from app.models import CustomUser
 from events.models import Event
+from league.models import League
 from org.models import Organization, OrgLog, OrgUser
 
 ORG_MODELS = ("organization", "orglog")

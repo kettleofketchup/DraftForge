@@ -15,7 +15,8 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, League
+from app.models import CustomUser
+from league.models import League
 from steam.functions.mmr_calculation import update_user_league_mmr
 from steam.functions.stats_update import update_all_league_stats_for_league
 from steam.models import LeagueSyncState, Match, PlayerMatchStats

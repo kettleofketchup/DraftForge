@@ -365,7 +365,7 @@ CACHEOPS_REDIS = {
 # what actually gates every Redis read/write and invalidation.
 CACHEOPS = {
     "org.organization": {"ops": "all", "timeout": 60 * 60},
-    "app.league": {"ops": "all", "timeout": 60 * 60},
+    "league.league": {"ops": "all", "timeout": 60 * 60},
     "app.tournament": {"ops": "all", "timeout": 60 * 60},
     "app.team": {"ops": "all", "timeout": 60 * 60},
     "app.customuser": {"ops": "all", "timeout": 60 * 60},

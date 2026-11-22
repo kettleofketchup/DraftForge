@@ -12,7 +12,8 @@ from steam.models import LeaguePlayerStats
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
-    from app.models import CustomUser, League
+    from app.models import CustomUser
+    from league.models import League
     from org.models import Organization
 
 logger = get_logger(__name__)

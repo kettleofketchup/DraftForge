@@ -4,8 +4,8 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, PositionsModel
-from league.models import LeagueUser
+from app.models import CustomUser, PositionsModel
+from league.models import League, LeagueUser
 from league.serializers import LeagueSerializer
 from org.models import Organization, OrgUser
 from tests.cache import flush_run_cache
