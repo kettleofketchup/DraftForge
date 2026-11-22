@@ -86,6 +86,8 @@ def update_user_league_mmr(
     """
     Set user's league_mmr to base mmr + best league adjustment.
 
+    Without a base MMR (no organization, or no org Dota MMR) nothing is written.
+
     Args:
         user: CustomUser instance
         organization: Optional Organization to get base MMR from OrgUser
