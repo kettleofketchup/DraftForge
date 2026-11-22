@@ -29,6 +29,7 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -71,7 +72,10 @@ import {
   useEventConduct,
   type ForecastMember,
 } from '~/features/conduct';
-import { useOrgFeatureAccess } from '~/features/org-features';
+import {
+  removeFeatureQueries,
+  useOrgFeatureAccess,
+} from '~/features/org-features';
 import {
   useEvent,
   useEventActionMutation,
@@ -79,6 +83,7 @@ import {
   useOptimisticEventSignups,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
+import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { cn } from '~/lib/utils';
 import { useGameTypeStore } from '~/store/gameTypeStore';
@@ -98,9 +103,17 @@ export default function RollCallPage() {
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
 
-  const { organization: eventOrg } = useOrganization(
+  const { organization: eventOrg, refetch: refetchEventOrg } = useOrganization(
     event?.organization ?? undefined,
   );
+  const queryClient = useQueryClient();
+  const eventOrgPk = event?.organization ?? null;
+  const onMemberViewerChange = useCallback(() => {
+    if (!eventOrgPk) return;
+    removeFeatureQueries(queryClient, eventOrgPk);
+    refetchEventOrg();
+  }, [eventOrgPk, queryClient, refetchEventOrg]);
+  useMemberAccess(eventOrg, onMemberViewerChange);
   const isAdmin = event?.user_can_manage ?? false;
   const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
   const { memberFor: conductMemberFor } = useEventConduct(
