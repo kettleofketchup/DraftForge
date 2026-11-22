@@ -310,7 +310,35 @@ LEAGUE = MovedSlice(
     cached_labels=frozenset({"league"}),
 )
 
-MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG, LEAGUE)
+_TOURNAMENT_PERMISSION_NAMES = (
+    "can_edit_tournament",
+    "can_create_team",
+    "_league_change_error",
+    "check_tournament_league_change",
+    "can_manage_game",
+    "CanEditTournament",
+    "CanEditTeam",
+    "CanManageGame",
+    "IsTournamentStaff",
+    "has_event_staff_access",
+    "check_lobby_steam_league_id",
+    "_lobby_league_error",
+)
+
+TOURNAMENT = MovedSlice(
+    name="tournament",
+    source_app="app",
+    new_app="tournament",
+    moved=frozenset(
+        ("app.permissions_tournament", name) for name in _TOURNAMENT_PERMISSION_NAMES
+    ),
+    retired_modules=frozenset({"app.permissions_tournament"}),
+    model_labels=frozenset(),
+    move_migration=("app", "0115_move_tournament_models_to_tournament"),
+    cached_labels=frozenset(),
+)
+
+MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG, LEAGUE, TOURNAMENT)
 
 # Slices cut before the rule that a retired module's defs go into `moved`;
 # their modules were renamed or split on the way out.
@@ -322,6 +350,7 @@ RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
 # under the new app; None means renamed within the source app.
 RETIRED_MODULE_HOMES: dict[str, str | None] = {
     "app.tests.test_league_rating": None,
+    "app.permissions_tournament": "tournament.permissions",
 }
 
 # target app -> production file (relative to backend/) -> what it may import from that app
@@ -373,10 +402,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         "app/consumers.py": BackEdge(
             frozenset({"recent_draft_events"}),
             "TournamentConsumer replays a tournament's recent team-draft events",
-        ),
-        "app/permissions_tournament.py": BackEdge(
-            frozenset({"HeroDraft"}),
-            "tournament staff check resolves a hero draft's tournament",
         ),
         "app/views/bracket.py": BackEdge(
             frozenset({"HeroDraft"}),
@@ -434,10 +459,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             ),
             "prod user sync clears org conduct, contribution and promo rows before "
             "reloading users, and keeps organization owners",
-        ),
-        "app/permissions_tournament.py": BackEdge(
-            frozenset({"has_org_staff_access"}),
-            "has_event_staff_access grants event staff via the event org's staff role",
         ),
         "app/serializers.py": BackEdge(
             frozenset(
@@ -536,16 +557,10 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"League"}),
             "tournament import attaches the tournament to a local League",
         ),
-        "app/permissions_tournament.py": BackEdge(
-            frozenset({"League", "has_league_admin_access", "has_league_staff_access"}),
-            "event, tournament and game permissions fall back to league staff; "
-            "tournament league changes and lobby Steam league IDs need league "
-            "admin, and the Steam league ID check looks up the owning League; "
-            "leaves with the tournament slice",
-        ),
         "app/serializers.py": BackEdge(
-            frozenset({"League", "LeagueUser"}),
-            "LeaguesSerializer and LeagueMinimalSerializer are embedded in "
+            frozenset({"League", "LeagueUser", "check_lobby_steam_league_id"}),
+            "TournamentSerializer checks lobby Steam league IDs against league "
+            "admin; LeaguesSerializer and LeagueMinimalSerializer are embedded in "
             "tournament serializers at class definition and TournamentSerializer "
             "validates league_id against League; tournament, team and draft user "
             "serializers prefetch the league membership behind league MMR; "
@@ -583,6 +598,32 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "tournament list caches on League (leaves with the tournament slice); "
             "home_stats caches on and counts League as a cross-domain home-page "
             "aggregate",
+        ),
+    },
+    "tournament": {
+        "app/functions/tournament.py": BackEdge(
+            frozenset({"can_edit_tournament"}),
+            "tournament draft actions check tournament edit rights; the module "
+            "moves to tournament later in 5a",
+        ),
+        "app/views/bracket.py": BackEdge(
+            frozenset({"IsTournamentStaff"}),
+            "bracket views require tournament staff; leaves with tournament 5b",
+        ),
+        "app/views_main.py": BackEdge(
+            frozenset(
+                {
+                    "CanEditTeam",
+                    "CanEditTournament",
+                    "CanManageGame",
+                    "can_create_team",
+                    "can_edit_tournament",
+                    "can_manage_game",
+                    "check_tournament_league_change",
+                }
+            ),
+            "tournament, team and game views check tournament permissions; "
+            "leaves with tournament 5b",
         ),
     },
 }
@@ -1314,6 +1355,7 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("league/permissions.py", rels)
         self.assertIn("league/models.py", rels)
         self.assertIn("league/models_rating.py", rels)
+        self.assertIn("tournament/permissions.py", rels)
         self.assertNotIn(GUARD_FILE, rels)
         self.assertFalse(any("/migrations/" in rel for rel in rels))
 

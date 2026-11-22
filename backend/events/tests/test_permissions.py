@@ -5,9 +5,9 @@ from django.test import TestCase
 from django.utils import timezone as tz
 
 from app.models import CustomUser, PositionsModel
-from app.permissions_tournament import has_event_staff_access
 from events.constants import EventState
 from events.models import Event
+from events.permissions import has_event_staff_access
 from league.models import League
 from org.models import Organization
 

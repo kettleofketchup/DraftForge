@@ -9,10 +9,7 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
-from app.permissions_tournament import (
-    check_lobby_steam_league_id,
-    request_user,
-)
+from app.permissions import request_user
 from app.services.team_references import team_references
 from draft.models import Draft, DraftOptions, DraftRound
 from events.overrides import (
@@ -21,6 +18,7 @@ from events.overrides import (
     OverrideRequestSerializer,
 )
 from league.models import League, LeagueUser
+from league.permissions import check_lobby_steam_league_id
 from org.mmr import LEAGUE_GAME, game_for_tournament, game_mmrs_prefetch, org_mmr_map
 from org.models import Organization, OrgUser
 from telemetry.logging import get_logger

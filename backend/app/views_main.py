@@ -87,6 +87,15 @@ from org.permissions import (
 from org.promotion.services import release_earning_sends
 from org.standing import api as standing
 from telemetry.logging import get_logger
+from tournament.permissions import (
+    CanEditTeam,
+    CanEditTournament,
+    CanManageGame,
+    can_create_team,
+    can_edit_tournament,
+    can_manage_game,
+    check_tournament_league_change,
+)
 
 # BaseUserProfile owns nickname/avatar; DotaUserProfile owns
 # positions/dota-mmr. Every @cached_as site below that ships
@@ -108,15 +117,6 @@ from .models import (
     Tournament,
 )
 from .permissions import IsStaff
-from .permissions_tournament import (
-    CanEditTeam,
-    CanEditTournament,
-    CanManageGame,
-    can_create_team,
-    can_edit_tournament,
-    can_manage_game,
-    check_tournament_league_change,
-)
 from .serializers import (
     TEAM_MMR_MAPS,
     GameSerializer,
