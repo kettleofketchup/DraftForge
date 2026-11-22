@@ -225,7 +225,7 @@ def _pick_under_lock(
 
     tie_data = None
     if draft.draft_style == "shuffle" and draft.users_remaining.exists():
-        tie_data = assign_next_shuffle_captain(draft)
+        tie_data = assign_next_shuffle_captain(draft, now=now)
 
     advance_after_pick(
         draft,

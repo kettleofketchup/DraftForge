@@ -72,6 +72,23 @@ class TieRollHoldAfterPickTests(NoTickThreadTestCase):
         self.assertEqual(started.payload["hold_ms"], TIE_ROLL_HOLD_MS)
         self.assertEqual(started.payload["started_at"], nxt.started_at.isoformat())
 
+    def test_tie_event_hold_until_is_when_the_next_clock_starts(self):
+        fx, nxt, _ = self._pick_first_round(TIED_AFTER_PICK)
+        tie = fx.events("tie_roll").filter(payload__pick_number=2).get()
+        self.assertEqual(tie.payload["hold_until"], nxt.started_at.isoformat())
+
+    def test_pick_response_tie_resolution_carries_hold_until(self):
+        fx = TimedDraftFixture(
+            style="shuffle", captain_mmrs=TIED_AFTER_PICK, prefix="until"
+        )
+        _started(fx)
+        with self.captureOnCommitCallbacks(execute=True):
+            response: Response = fx.pick(fx.round(1), fx.staff)
+        self.assertEqual(
+            response.data["tie_resolution"]["hold_until"],
+            fx.round(2).started_at.isoformat(),
+        )
+
     def test_pick_response_tie_resolution_carries_hold_ms(self):
         fx = TimedDraftFixture(
             style="shuffle", captain_mmrs=TIED_AFTER_PICK, prefix="resp"
@@ -123,6 +140,11 @@ class TieRollHoldAfterTimeoutTests(NoTickThreadTestCase):
         self.assertLess(nxt.started_at, before + HOLD + SLACK)
         tie = fx.events("tie_roll").filter(payload__pick_number=1).last()
         self.assertEqual(tie.payload["hold_ms"], TIE_ROLL_HOLD_MS)
+
+    def test_tie_after_timeout_skip_carries_hold_until(self):
+        fx, nxt, _ = self._skip_first_round(TIED_AFTER_SKIP)
+        tie = fx.events("tie_roll").filter(payload__pick_number=1).last()
+        self.assertEqual(tie.payload["hold_until"], nxt.started_at.isoformat())
 
     def test_no_tie_after_timeout_skip_starts_now(self):
         fx, nxt, before = self._skip_first_round(NO_TIES)
