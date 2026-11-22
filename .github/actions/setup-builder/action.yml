@@ -21,7 +21,9 @@ inputs:
     required: false
     default: ''
   bootstrap:
-    description: "'true' creates and bootstraps the remote `home` builder"
+    description: >
+      'true' creates and bootstraps the remote `home` builder now; `just
+      ci::prepare-images` does it itself, only when something needs building
     required: false
     default: 'true'
 
@@ -45,9 +47,4 @@ runs:
     - name: Create and bootstrap the home builder
       if: inputs.bootstrap == 'true'
       shell: bash
-      run: |
-        docker buildx create --name home --driver remote tcp://buildkit-0.buildkit.buildkit.svc.cluster.local:1234 --use || docker buildx use home
-        if ! timeout 20 docker buildx inspect --bootstrap home; then
-          echo "::error::home BuildKit unreachable; set the SELF_HOSTED_RUNNERS repo variable to false to stop prepare jobs"
-          exit 1
-        fi
+      run: just ci::home-builder

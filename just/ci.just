@@ -73,17 +73,36 @@ buildx-builder:
     docker buildx create --name df-ci --driver docker-container --use --bootstrap >/dev/null
     echo "buildx builder df-ci ready"
 
-# Build and push, under the content-hash tag only, every Playwright-stack image and the test DB the registry lacks (the Playwright `prepare` job); DF_PREPARE_READONLY=1 only reports. Failures warn and exit 0: test jobs rebuild what is still missing.
+# Build and push, under the content-hash tag only, every Playwright-stack image and the test DB the registry lacks (the Playwright `prepare` job); DF_PREPARE_READONLY=1 only reports. DF_PREPARE_PR=<n> (prepare on the home runner) builds through the home BuildKit and pushes only draftforge-ci/<img>:pr-<n>-<hash>, never a draftforge/ tag. --probe prints `missing=<names>` and builds nothing. Build and push failures warn and exit 0 (test jobs rebuild what is still missing); building on a self-hosted runner outside PR mode is an error.
 [group('ci')]
-prepare-images:
+[positional-arguments]
+prepare-images *flags:
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{quote(root)}}
     start=$SECONDS
+    probe=false
+    for flag in "$@"; do
+        case "$flag" in
+            --probe) probe=true ;;
+            *) echo "ci::prepare-images: unknown option $flag (use --probe)" >&2; exit 2 ;;
+        esac
+    done
     just={{quote(just_executable())}}
     justfile={{quote(root / "justfile")}}
     registry=ghcr.io/kettleofketchup/draftforge
+    ci_registry=ghcr.io/kettleofketchup/draftforge-ci
     db_registry="${DF_TEST_DB_REGISTRY:-$registry/test-db}"
+    pr="${DF_PREPARE_PR-}"
+    if [[ -n "$pr" && ! "$pr" =~ ^[0-9]+$ ]]; then
+        echo "::error::ci::prepare-images: DF_PREPARE_PR must be a PR number, got '$pr'" >&2
+        exit 2
+    fi
+    # The home runner builds PR code: it may push only draftforge-ci/ tags (PR mode).
+    if [[ -z "$pr" && "${RUNNER_ENVIRONMENT-}" == self-hosted ]]; then
+        echo "::error::ci::prepare-images: on a self-hosted runner only PR mode (DF_PREPARE_PR=<n>) may build; refusing to push draftforge/ tags" >&2
+        exit 1
+    fi
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
     # name, service hashed by hash-docker-image.sh, build recipe
@@ -93,7 +112,7 @@ prepare-images:
         "playwright-runner playwright docker::frontend::build-pw"
         "nginx nginx docker::nginx::build"
     )
-    declare -A ref recipe
+    declare -A ref ci_ref recipe
     names=()
     for entry in "${images[@]}"; do
         read -r name service build <<< "$entry"
@@ -103,34 +122,68 @@ prepare-images:
     done
     names+=(test-db)
     ref[test-db]="$db_registry:$(./scripts/hash-test-db-sources.sh)"
+    if [[ -n "$pr" ]]; then
+        for name in "${names[@]}"; do
+            ci_ref[$name]="$ci_registry/$name:pr-$pr-${ref[$name]##*:}"
+        done
+    fi
 
+    # In PR mode an item is present when main's hash tag or this PR's draftforge-ci tag exists.
     for name in "${names[@]}"; do
-        ( docker buildx imagetools inspect "${ref[$name]}" >/dev/null 2>&1 && touch "$dir/$name.present" ) &
+        (
+            if docker buildx imagetools inspect "${ref[$name]}" >/dev/null 2>&1 \
+                || { [[ -n "$pr" ]] && docker buildx imagetools inspect "${ci_ref[$name]}" >/dev/null 2>&1; }; then
+                touch "$dir/$name.present"
+            fi
+        ) &
     done
     wait
     missing=()
     for name in "${names[@]}"; do
         [[ -f "$dir/$name.present" ]] || missing+=("$name")
     done
+    if [[ "$probe" == true ]]; then
+        echo "missing=${missing[*]}"
+        exit 0
+    fi
 
     line() { local h="${ref[$1]##*:}"; printf '%-18s %s  %s\n' "$1" "${h:0:12}" "$2" | tee -a "$dir/summary"; }
     readonly_reason=""
     if [[ "${DF_PREPARE_READONLY-}" == 1 ]]; then
         readonly_reason="no registry write access"
     fi
+    if [[ -n "$pr" ]]; then
+        echo "PR mode: builds push only $ci_registry/<image>:pr-$pr-<hash>" | tee -a "$dir/summary"
+    fi
 
     if [[ ${#missing[@]} -gt 0 && -z "$readonly_reason" ]]; then
-        if [[ " ${missing[*]} " != " test-db " ]]; then
+        if [[ -n "$pr" ]]; then
+            # PR mode builds everything, the test DB included, on the remote home BuildKit.
+            "$just" --justfile "$justfile" ci::home-builder
+        elif [[ " ${missing[*]} " != " test-db " ]]; then
             "$just" --justfile "$justfile" ci::buildx-builder
         fi
         for name in "${missing[@]}"; do
             (
                 t=$SECONDS
-                if [[ "$name" == test-db ]]; then
+                if [[ "$name" == test-db && -n "$pr" ]]; then
+                    if python="${DF_JUST_PYTHON:-$("$just" --justfile "$justfile" ci::venv)}" \
+                        && DF_JUST_PYTHON="$python" "$just" --justfile "$justfile" docker::db::build --mode=pr --pr="$pr"; then
+                        s=ok
+                    else
+                        s=fail
+                    fi
+                elif [[ "$name" == test-db ]]; then
                     # Populate runs on the host: DF_JUST_PYTHON must have Django, else ci::venv makes one.
                     if python="${DF_JUST_PYTHON:-$("$just" --justfile "$justfile" ci::venv)}" \
                         && DF_JUST_PYTHON="$python" "$just" --justfile "$justfile" docker::db::build \
                         && "$just" --justfile "$justfile" docker::db::push --hash-only; then
+                        s=ok
+                    else
+                        s=fail
+                    fi
+                elif [[ -n "$pr" ]]; then
+                    if "$just" --justfile "$justfile" "${recipe[$name]}" --mode=pr --pr="$pr"; then
                         s=ok
                     else
                         s=fail
@@ -180,6 +233,19 @@ prepare-images:
     if [[ -n "${GITHUB_STEP_SUMMARY-}" ]]; then
         { echo '```'; cat "$dir/summary"; echo "done in $((SECONDS - start))s"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
     fi
+
+# Create or reuse the `home` remote buildx builder (the home cluster's BuildKit) and bootstrap it; the draftforge-home runner has no Docker daemon. Unreachable is an ::error:: and exit 1.
+[group('ci')]
+home-builder:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    addr="${DF_HOME_BUILDKIT:-tcp://buildkit-0.buildkit.buildkit.svc.cluster.local:1234}"
+    docker buildx create --name home --driver remote "$addr" --use >/dev/null 2>&1 || docker buildx use home
+    if ! timeout 20 docker buildx inspect --bootstrap home >/dev/null; then
+        echo "::error::home BuildKit unreachable; unset the SELF_HOSTED_RUNNERS repo variable so prepare runs on ubuntu-latest"
+        exit 1
+    fi
+    echo "buildx builder home ready"
 
 # Create .venv with Poetry for a job set up with python: 'false' that needs Django on the host (the test-DB populate fallback); prints its python
 [group('ci')]

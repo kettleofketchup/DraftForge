@@ -43,14 +43,34 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/kettleofketchup/draftforge
+  # 'true' when `prepare` runs on the home runner (the same guard as its runs-on, which
+  # cannot read `env`); test jobs then also look for this PR's draftforge-ci images.
+  # scripts/check-runs-on.sh keeps the two identical. HOME_RUNNER_AUTHORS unset means false.
+  HOME_PREPARE: >-
+    ${{ vars.SELF_HOSTED_RUNNERS == 'true'
+    && github.event_name == 'pull_request'
+    && github.event.pull_request.head.repo.full_name == github.repository
+    && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.event.pull_request.user.login))
+    && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.triggering_actor)) }}
+  PR_NUMBER: ${{ github.event.pull_request.number }}
 
 jobs:
   # Builds and pushes (content-hash tag only) any stack image or test DB the registry
-  # lacks, once, so the test jobs below only pull. vars.PREPARE_RUNNER takes a JSON
-  # runner label or label array, e.g. "self-hosted" or ["self-hosted","linux"].
+  # lacks, once, so the test jobs below only pull. Runs on ubuntu-latest, or on the home
+  # runner (draftforge-home) for an allowlisted same-repo PR when SELF_HOSTED_RUNNERS is
+  # 'true'. There it builds through the home BuildKit and pushes only
+  # draftforge-ci/<img>:pr-<n>-<hash> (PR mode), never a draftforge/ tag or :buildcache.
+  # The runs-on guard is convenience; the runner's job-started hook (home repo) is the
+  # boundary. scripts/check-runs-on.sh rejects any other runs-on that is not a hosted label.
   prepare:
     name: Prepare images and test DB
-    runs-on: ${{ fromJSON(vars.PREPARE_RUNNER || '"ubuntu-latest"') }}
+    runs-on: >-
+      ${{ (vars.SELF_HOSTED_RUNNERS == 'true'
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.event.pull_request.user.login))
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.triggering_actor)))
+      && 'draftforge-home' || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -68,9 +88,40 @@ jobs:
           buildx: 'false'
           python: 'false'
 
+      # Home runner only: Zot cache auth for the remote BuildKit; ci::prepare-images
+      # connects the builder itself, and only when something needs building.
+      - name: Set up registry auth for the home builder
+        if: runner.environment == 'self-hosted'
+        uses: ./.github/actions/setup-builder
+        with:
+          ghcr-user: ${{ github.actor }}
+          ghcr-token: ${{ secrets.GITHUB_TOKEN }}
+          zot-password: ${{ secrets.ZOT_CI_PASSWORD }}
+          bootstrap: 'false'
+
+      # Home runner only: the test DB populates on the host, and the runner image has no
+      # pipx for `just ci::venv`, so set up Python and Poetry only when it is missing.
+      - name: Check whether the test DB needs building
+        id: home-probe
+        if: runner.environment == 'self-hosted'
+        env:
+          DF_PREPARE_PR: ${{ github.event.pull_request.number }}
+        run: just ci::prepare-images --probe | tee -a "$GITHUB_OUTPUT"
+
+      - name: Set up Python for the test DB
+        if: runner.environment == 'self-hosted' && contains(steps.home-probe.outputs.missing, 'test-db')
+        uses: ./.github/actions/setup-toolchain
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          github-actor: ${{ github.actor }}
+          buildx: 'false'
+          python: 'true'
+
       - name: Build and push missing images and test DB
         env:
           DF_PREPARE_READONLY: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '1' || '' }}
+          # Set only on the home runner: PR mode, pushes draftforge-ci/ tags only.
+          DF_PREPARE_PR: ${{ runner.environment == 'self-hosted' && github.event.pull_request.number || '' }}
         run: just ci::prepare-images
 
       - name: Report elapsed time
