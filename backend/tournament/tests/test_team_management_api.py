@@ -34,7 +34,6 @@ from app.models import (
     Tournament,
 )
 from app.serializers import UserSerializer
-from app.views_main import TeamView
 from draft.models import DraftTeam, HeroDraft
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.team_state import build_draft_state
@@ -60,6 +59,7 @@ from tournament.services.team_audit import log_snapshot_fields
 from tournament.services.team_references import team_references, team_usage
 from tournament.services.team_signals import TeamRosterChange, team_roster_changed
 from tournament.tests.test_team_management import TeamManagementFixture
+from tournament.views.team import TeamView
 from user.tests.test_cacheops_integration import _redis_reachable
 
 

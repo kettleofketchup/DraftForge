@@ -6,20 +6,11 @@ from rest_framework import routers
 from app import views_main as app_views
 from app.functions.user import profile_update
 from app.views import (
-    GameCreateView,
-    GameView,
-    TeamCreateView,
-    TeamView,
-    TournamentCreateView,
-    TournamentListView,
-    TournamentsBasicView,
-    TournamentView,
     UserCreateView,
     UserView,
     current_user,
 )
 from app.views.admin_team import add_tournament_member, search_users
-from app.views.csv_import import import_csv_org, import_csv_tournament
 from app.views.internal import (
     auto_close_event,
     check_message_log_exists,
@@ -97,6 +88,15 @@ from steam.views_internal import (
 )
 from telemetry.logging import get_logger
 from tournament.functions import create_team_from_captain
+from tournament.views.csv_import import import_csv_org, import_csv_tournament
+from tournament.views.game import GameCreateView, GameView
+from tournament.views.team import TeamCreateView, TeamView
+from tournament.views.tournament import (
+    TournamentCreateView,
+    TournamentListView,
+    TournamentsBasicView,
+    TournamentView,
+)
 from user.internal.avatar import (
     bulk_update_user_avatars,
     list_discord_guild_ids,

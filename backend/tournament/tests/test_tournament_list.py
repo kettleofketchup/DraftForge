@@ -238,7 +238,8 @@ class TournamentListBucketTests(_BucketFixtureMixin):
 
     def test_cutoff_computed_once(self) -> None:
         with mock.patch(
-            "app.views_main.tournament_bucket_cutoff", wraps=tournament_bucket_cutoff
+            "tournament.views.tournament.tournament_bucket_cutoff",
+            wraps=tournament_bucket_cutoff,
         ) as spy:
             for qs in ("", "?bucket=upcoming", "?bucket=archived&page=1"):
                 with self.subTest(qs=qs):

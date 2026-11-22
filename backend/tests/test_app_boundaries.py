@@ -599,7 +599,143 @@ _TOURNAMENT_RETIRED_DEFS = {
         "TeamLegacyPatchTests",
         "_discord_ids",
     ),
+    "app.views.bracket": (
+        "get_bracket",
+        "generate_bracket",
+        "save_bracket",
+        "calculate_placement",
+        "_unset_winner",
+        "advance_winner",
+        "set_team_placement",
+    ),
+    "app.views.csv_import": (
+        "_parse_int",
+        "_parse_positions",
+        "_update_positions_if_empty",
+        "_resolve_user_for_csv_row",
+        "import_csv_org",
+        "_parse_mmr_cell",
+        "_flush_org_mmrs",
+        "_update_mmr_for_target",
+        "_resync_league_snapshots",
+        "import_csv_tournament",
+        "bulk_set_org_mmrs",
+    ),
+    "app.tests.test_bracket": (
+        "SaveBracketTest",
+        "CalculatePlacementTest",
+        "AdvanceWinnerPlacementTest",
+        "ManualPlacementOverrideTest",
+        "UnsetWinnerTest",
+        "AdvanceWinnerPersistenceTest",
+    ),
+    "app.tests.test_bracket_queries": (
+        "_user_ids",
+        "BracketFixture",
+        "build_bracket",
+        "per_team_serialization",
+        "BracketQueryTests",
+    ),
+    "app.tests.test_csv_import": (
+        "OrgCSVImportTest",
+        "OrgCSVImportDotaRowTest",
+        "OrgCSVImportGameTypeFixtures",
+        "OrgCSVImportGameTypeTest",
+        "OrgCSVImportCacheTest",
+    ),
+    "app.tests.test_csv_import_tournament": (
+        "TournamentCSVImportTest",
+        "TournamentCSVImportDotaRowTest",
+        "TournamentCSVImportGameTest",
+    ),
+    "app.tests.test_tournament_edit_config": (
+        "TournamentEditConfigBase",
+        "TournamentEditConfigTests",
+        "TournamentLobbySteamLeagueIdTests",
+        "TournamentDiscordLogsAccessTests",
+    ),
+    "app.tests.test_tournament_detail_cache": ("TournamentDetailStaleWriteTests",),
+    "app.tests.test_tournament_league_move": ("TournamentLeagueMoveTests",),
+    "app.tests.test_game_org_mmr_drafts": (
+        "_make_user",
+        "CaptainSuccessionRegressionTests",
+        "GameOrgMmrFixtures",
+        "GameOrgMmrDraftTests",
+        "GameOrgMmrSuccessionTests",
+        "GameOrgMmrEdgeTests",
+        "DraftStyleMmrsCacheTests",
+    ),
+    "app.tests.test_game_org_mmr_league": (
+        "_discord_seq",
+        "_make_user",
+        "_rating_selects",
+        "_capture",
+        "LeagueFixtures",
+        "LeagueSnapshotTests",
+        "MatchFinalizationGameMmrTests",
+        "UpdateUserLeagueMmrTests",
+        "OrgUserCreationSitesTests",
+    ),
+    "app.tests.test_game_org_mmr_payloads": (
+        "_discord_ids",
+        "_make_user",
+        "NumericDiscordFixtures",
+        "_map_queries",
+        "_count",
+        "OrgUsersEndpointTests",
+        "OrgUserSerializerContextTests",
+        "PublicPayloadGameTests",
+        "TeamTotalsQueryTests",
+        "UserSerializerTeamsTests",
+        "ClaimRequestPayloadTests",
+        "OrgUserPatchResponseTests",
+        "DeadlockFreshReadTests",
+    ),
+    "app.tests.test_team_management_api": (
+        "TeamActionRequestSerializerTests",
+        "_dumps",
+        "_count_queries",
+        "ResponseSerializerTests",
+        "TournamentLeadershipQueryTests",
+        "ExceptionHandlerTests",
+        "action_url",
+        "ActionCase",
+        "prepare_restore",
+        "prepare_standins_remove",
+        "prepare_sub_in",
+        "TeamApiFixture",
+        "TeamActionPermissionTests",
+        "LeadershipActionTests",
+        "RosterActionTests",
+        "CachedPermissionTests",
+        "CanManageTeamTests",
+        "CanManageTeamCacheTests",
+        "TeamHistoryTests",
+        "LegacyDeleteTests",
+        "TeamUsageTests",
+    ),
+    "app.tests.test_team_create_permissions": ("TeamCreatePermissionTests",),
+    "app.tests.test_tournament_viewer": ("TournamentViewerTests",),
+    "app.tests.test_team_name_from_captain": ("TeamNameFromCaptainTest",),
 }
+
+_TOURNAMENT_VIEW_NAMES = (
+    "TournamentView",
+    "TournamentsBasicView",
+    "TournamentListView",
+    "TournamentCreateView",
+    "TEAM_MANAGE_ACTIONS",
+    "TeamServiceCall",
+    "TeamLogPagination",
+    "_can_read_scope",
+    "_scope_q",
+    "_team_in_use_detail",
+    "TeamView",
+    "_check_can_create_team",
+    "TeamCreateView",
+    "GameCreateView",
+    "GameView",
+)
 
 TOURNAMENT = MovedSlice(
     name="tournament",
@@ -619,6 +755,17 @@ TOURNAMENT = MovedSlice(
             *(("app.internal_client", name) for name in _TOURNAMENT_CLIENT_NAMES),
             *(("app.schemas", name) for name in _TOURNAMENT_SCHEMA_NAMES),
             *(("app.serializers", name) for name in _TOURNAMENT_SERIALIZER_NAMES),
+            *(("app.views_main", name) for name in _TOURNAMENT_VIEW_NAMES),
+            # patched on views_main before the views moved
+            ("app.views_main", "build_users_dict"),
+            ("app.views_main", "tournament_bucket_cutoff"),
+            *(
+                ("app.views", name)
+                for name in (
+                    *_TOURNAMENT_VIEW_NAMES,
+                    *_TOURNAMENT_RETIRED_DEFS["app.views.bracket"],
+                )
+            ),
         }
     ),
     retired_modules=frozenset(
@@ -662,17 +809,13 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             type_only=frozenset({"DraftOptions"}),
         ),
         "app/views_main.py": BackEdge(
-            frozenset({"Draft", "DraftRound", "DraftTeam", "apply_draft_options"}),
-            "tournament/team @cached_as deps; current_user lists active hero drafts "
-            "the user captains; tournament create/update applies draft options",
+            frozenset({"DraftRound", "DraftTeam"}),
+            "current_user lists the user's pending team-draft pick and the active "
+            "hero drafts the user captains",
         ),
         "app/consumers.py": BackEdge(
             frozenset({"recent_draft_events"}),
             "TournamentConsumer replays a tournament's recent team-draft events",
-        ),
-        "app/views/bracket.py": BackEdge(
-            frozenset({"HeroDraft"}),
-            "bracket view prefetches each game's hero draft",
         ),
     },
     "org": {
@@ -726,24 +869,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "membership; tournament member adds resolve the user against the "
             "league org's guild members; leaves with the tournament slice",
         ),
-        "app/views/csv_import.py": BackEdge(
-            frozenset(
-                {
-                    "LEAGUE_GAME",
-                    "OrgLog",
-                    "OrgMmrError",
-                    "OrgUser",
-                    "Organization",
-                    "bulk_set_org_mmrs",
-                    "game_for_tournament",
-                    "has_org_staff_access",
-                    "validate_org_mmr",
-                }
-            ),
-            "shared CSV import pipeline, including the org door, resolves the "
-            "Organization, writes OrgUser MMR and OrgLog rows; moves whole with "
-            "the tournament slice",
-        ),
         "app/views/internal.py": BackEdge(
             frozenset({"OrgUser"}),
             "repeater subscriber endpoint reports each subscriber's org membership",
@@ -752,20 +877,15 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset(
                 {
                     "OrgUser",
-                    "OrgUserGameMmr",
                     "Organization",
                     "api",
                     "has_org_staff_access",
                     "member_organization_ids",
-                    "not_permitted",
                     "release_earning_sends",
-                    "viewer_member_organization_ids",
                 }
             ),
             "UserView org-staff checks, profile claims and deletion standing; "
-            "TeamView feature errors and team log scope; current_user and "
-            "tournament list membership ids; tournament list, home stats and "
-            "scope checks read Organization",
+            "current_user membership ids; home stats counts Organization",
         ),
     },
     "league": {
@@ -775,18 +895,8 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "membership; tournament member adds check league staff; leaves with "
             "the tournament slice",
         ),
-        "app/views/csv_import.py": BackEdge(
-            frozenset({"League", "LeagueUser", "has_league_staff_access"}),
-            "shared CSV import pipeline checks league staff on the tournament "
-            "door and writes LeagueUser MMR; League annotates the MMR target "
-            "helper; moves whole with the tournament slice",
-            type_only=frozenset({"League"}),
-        ),
         "app/views_main.py": BackEdge(
-            frozenset({"League", "has_league_staff_access"}),
-            "GameCreateView and GameView.perform_create resolve league_id to a "
-            "League and check league staff (leave with the game slice); the "
-            "tournament list caches on League (leaves with the tournament slice); "
+            frozenset({"League"}),
             "home_stats caches on and counts League as a cross-domain home-page "
             "aggregate",
         ),
@@ -801,97 +911,11 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "tournament member add returns the serialized tournament; leaves "
             "with tournament 5b",
         ),
-        "app/views/bracket.py": BackEdge(
-            frozenset(
-                {
-                    "IsTournamentStaff",
-                    "BracketGameSerializer",
-                    "BracketGenerateSerializer",
-                    "BracketSaveSerializer",
-                    "TEAM_USER_INDEX",
-                    "build_team_user_index",
-                }
-            ),
-            "bracket views require tournament staff and serialize games with "
-            "the bulk team user index; leaves with tournament 5b",
-        ),
-        "app/views_main.py": BackEdge(
-            frozenset(
-                {
-                    "CanEditTeam",
-                    "CanEditTournament",
-                    "CanManageGame",
-                    "can_create_team",
-                    "can_edit_tournament",
-                    "can_manage_game",
-                    "check_tournament_league_change",
-                    "TeamChange",
-                    "TeamUsage",
-                    "add_standin",
-                    "change_from_log",
-                    "follow_captain",
-                    "log_snapshot_fields",
-                    "mark_dropout",
-                    "other_team_user_ids",
-                    "owning_team_audit",
-                    "remove_standin",
-                    "rename",
-                    "restore_member",
-                    "roster_snapshot",
-                    "send_roster_changed_on_commit",
-                    "set_captain",
-                    "set_deputy",
-                    "sub_in",
-                    "team_references",
-                    "team_usage",
-                    "write_team_log",
-                    "ArchiveCursor",
-                    "TournamentListPagination",
-                    "TournamentListParams",
-                    "archive_after_q",
-                    "buckets",
-                    "build_cursor_envelope",
-                    "build_page_envelope",
-                    "parse_tournament_list_params",
-                    "resolve_organizations",
-                    "tournament_bucket_cutoff",
-                    "tournaments_list_cache_key",
-                    "upcoming_q",
-                    "upcoming_rank",
-                    "utc_day_start",
-                    "GameSerializer",
-                    "ManagedTeamSerializer",
-                    "TEAM_MMR_MAPS",
-                    "TeamActionRequestSerializer",
-                    "TeamDeputyRequestSerializer",
-                    "TeamLogSerializer",
-                    "TeamRenameRequestSerializer",
-                    "TeamSerializer",
-                    "TeamSubInRequestSerializer",
-                    "TeamUserActionRequestSerializer",
-                    "TournamentListSerializer",
-                    "TournamentSerializer",
-                    "TournamentsSerializer",
-                    "build_team_mmr_maps",
-                    "build_users_dict",
-                    "tournament_organization",
-                }
-            ),
-            "tournament, team and game views check tournament permissions, "
-            "drive the team roster, audit and reference services and serialize "
-            "through tournament.serializers; the tournament list parses its "
-            "params, buckets and pages through tournament.listing and "
-            "tournament.buckets; leaves with tournament 5b",
-        ),
     },
 }
 
 # (file relative to backend/, name) -> why a source-app module may define a moved name
 ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {
-    ("app/tests/test_team_management_api.py", "TeamUsageTests"): (
-        "twin moves to tournament in 5b"
-    ),
-    ("app/views/csv_import.py", "_parse_int"): "twin moves to tournament in 5b",
     ("app/views/internal.py", "get_tournament_for_task"): (
         "twin moves to tournament in 5b"
     ),
@@ -1623,6 +1647,7 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("league/models.py", rels)
         self.assertIn("league/models_rating.py", rels)
         self.assertIn("tournament/permissions.py", rels)
+        self.assertIn("tournament/views/team.py", rels)
         self.assertNotIn(GUARD_FILE, rels)
         self.assertFalse(any("/migrations/" in rel for rel in rels))
 
