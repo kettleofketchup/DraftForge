@@ -5,7 +5,7 @@
  * Ported from Cypress: frontend/tests/cypress/e2e/03-tournaments/02-form.cy.ts
  */
 
-import { test, expect, visitAndWaitForHydration } from '../../fixtures';
+import { expect, test, visitAndWaitForHydration } from '../../fixtures';
 import { findTournamentCard } from '../../helpers/tournament';
 
 // Generate dynamic test data similar to Cypress constants
@@ -42,7 +42,9 @@ test.describe('Tournaments - create (e2e)', () => {
     page,
   }) => {
     // Wait for page data to load before interacting with create button
-    const createButton = page.getByRole('button', { name: /create tournament/i });
+    const createButton = page.getByRole('button', {
+      name: /create tournament/i,
+    });
     await createButton.waitFor({ state: 'visible', timeout: 30000 });
     await createButton.click();
 
@@ -73,7 +75,9 @@ test.describe('Tournaments - create (e2e)', () => {
 
     // Select day 20 (avoids collision with today if today is the 15th —
     // clicking an already-selected day deselects and skips popover close)
-    const dayButton = calendar.locator('[data-testid="calendar-day-20"]').first();
+    const dayButton = calendar
+      .locator('[data-testid="calendar-day-20"]')
+      .first();
     await dayButton.click();
 
     // Wait for popover to close
@@ -82,7 +86,9 @@ test.describe('Tournaments - create (e2e)', () => {
     // Submit the form
     await page.locator('[data-testid="tournament-submit-button"]').click();
 
-    await expect(page.locator('[data-testid="tournament-name-input"]')).toBeHidden({ timeout: 15000 });
+    await expect(
+      page.locator('[data-testid="tournament-name-input"]'),
+    ).toBeHidden({ timeout: 15000 });
 
     // Day 20 of this month can land on either tab; the helper searches both.
     const createdCard = await findTournamentCard(page, thisName);
@@ -97,7 +103,9 @@ test.describe('Tournaments - create (e2e)', () => {
     // .evaluate(btn => btn.click()), which bypasses visible/enabled/stable
     // checks and races the framer-motion card mount animation — caused a
     // first-attempt flake on PR #203's full-suite run).
-    const editButton = tournamentCard.locator('[data-testid="tournament-edit-button"]');
+    const editButton = tournamentCard.locator(
+      '[data-testid="tournament-edit-button"]',
+    );
     await editButton.click();
 
     // Wait for modal and name input
@@ -113,30 +121,46 @@ test.describe('Tournaments - create (e2e)', () => {
     await nameInput.fill(editedNameWithSuffix);
 
     // Save — auto-waiting click for the same reason as above.
-    const saveButton = page.getByRole('button', { name: /save changes/i }).first();
+    const saveButton = page
+      .getByRole('button', { name: /save changes/i })
+      .first();
     await saveButton.click();
 
     // Wait for success message
-    await expect(page.getByText(/successfully/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/successfully/i)).toBeVisible({
+      timeout: 10000,
+    });
 
     // Revert the change to keep test data clean
     const editedCard = await findTournamentCard(page, editedNameWithSuffix);
-    const revertEditButton = editedCard.locator('[data-testid="tournament-edit-button"]');
-    await revertEditButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+    const revertEditButton = editedCard.locator(
+      '[data-testid="tournament-edit-button"]',
+    );
+    await revertEditButton.evaluate((btn) =>
+      (btn as HTMLButtonElement).click(),
+    );
 
-    const revertNameInput = page.locator('[data-testid="tournament-name-input"]');
+    const revertNameInput = page.locator(
+      '[data-testid="tournament-name-input"]',
+    );
     await revertNameInput.waitFor({ state: 'visible', timeout: 10000 });
     await revertNameInput.clear();
     await revertNameInput.fill(originalName);
 
-    const revertSaveButton = page.getByRole('button', { name: /save changes/i }).first();
-    await revertSaveButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+    const revertSaveButton = page
+      .getByRole('button', { name: /save changes/i })
+      .first();
+    await revertSaveButton.evaluate((btn) =>
+      (btn as HTMLButtonElement).click(),
+    );
     await page.waitForLoadState('networkidle');
   });
 
   test('Can delete a tournament', async ({ page }) => {
     // First create a tournament to delete (so we don't destroy test data)
-    const createButton = page.getByRole('button', { name: /create tournament/i });
+    const createButton = page.getByRole('button', {
+      name: /create tournament/i,
+    });
     await createButton.waitFor({ state: 'visible', timeout: 30000 });
     await createButton.click();
 
@@ -157,13 +181,17 @@ test.describe('Tournaments - create (e2e)', () => {
     await datePicker.click();
     const calendar = page.locator('[data-slot="calendar"]');
     await calendar.waitFor({ state: 'visible', timeout: 5000 });
-    const dayButton = calendar.locator('[data-testid="calendar-day-20"]').first();
+    const dayButton = calendar
+      .locator('[data-testid="calendar-day-20"]')
+      .first();
     await dayButton.click();
     await calendar.waitFor({ state: 'hidden', timeout: 5000 });
 
     // Submit to create
     await page.locator('[data-testid="tournament-submit-button"]').click();
-    await expect(page.locator('[data-testid="tournament-name-input"]')).toBeHidden({ timeout: 15000 });
+    await expect(
+      page.locator('[data-testid="tournament-name-input"]'),
+    ).toBeHidden({ timeout: 15000 });
 
     const tournamentCard = await findTournamentCard(page, deletableName);
     await tournamentCard.scrollIntoViewIfNeeded();

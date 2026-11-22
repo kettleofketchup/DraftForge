@@ -1,11 +1,11 @@
-import { LeaderboardPage } from "~/features/leaderboard";
-import { generateMeta } from "~/lib/seo";
+import { LeaderboardPage } from '~/features/leaderboard';
+import { generateMeta } from '~/lib/seo';
 
 export function meta() {
   return generateMeta({
-    title: "Leaderboard",
-    description: "Player rankings and league standings",
-    url: "/leaderboard",
+    title: 'Leaderboard',
+    description: 'Player rankings and league standings',
+    url: '/leaderboard',
   });
 }
 

@@ -89,29 +89,57 @@ changelog-check:
     fi
     exit "$fail"
 
-# Test labels for one `Backend tests` CI group: `app`, or `rest` (every other top-level
-# package under backend/). Together they cover what an unlabelled `manage.py test` discovers.
+# Test labels for one `Backend tests` CI group: `app`; `migrations` (every
+# `test*migration*.py` module outside app); or `rest` (every other module in the other
+# top-level packages). Together they cover what an unlabelled `manage.py test` discovers.
 [group('ci')]
 backend-test-labels group:
     #!/usr/bin/env bash
     set -euo pipefail
     group={{quote(group)}}
     cd {{quote(root)}}/backend
-    shopt -s nullglob
+    shopt -s nullglob globstar
     stray=(test*.py)
     if [ "${#stray[@]}" -gt 0 ]; then
         echo "::error::backend/${stray[0]} is outside a package; no backend-test-labels group runs it." >&2
         exit 1
     fi
+    # Modules discovery would import: test*.py whose every parent directory is a package.
+    modules() {
+        local f dir ok
+        for f in "$1"/**/test*.py; do
+            dir="${f%/*}"; ok=1
+            while [ "$dir" != . ] && [ -n "$dir" ]; do
+                [ -f "$dir/__init__.py" ] || { ok=0; break; }
+                [ "${dir%/*}" = "$dir" ] && break
+                dir="${dir%/*}"
+            done
+            [ "$ok" = 1 ] || continue
+            f="${f%.py}"; echo "${f//\//.}"
+        done
+    }
+    is_migration() { [[ "${1##*.}" == test*migration* ]]; }
     case "$group" in
         app) echo app ;;
-        rest)
+        migrations|rest)
             labels=()
             for init in */__init__.py; do
                 pkg="${init%/__init__.py}"
-                [ "$pkg" = app ] || labels+=("$pkg")
+                [ "$pkg" = app ] && continue
+                mods=($(modules "$pkg"))
+                mig=() other=()
+                for m in "${mods[@]}"; do
+                    if is_migration "$m"; then mig+=("$m"); else other+=("$m"); fi
+                done
+                if [ "$group" = migrations ]; then
+                    labels+=("${mig[@]}")
+                elif [ "${#mig[@]}" -eq 0 ]; then
+                    labels+=("$pkg")
+                else
+                    labels+=("${other[@]}")
+                fi
             done
             echo "${labels[*]}"
             ;;
-        *) echo "unknown group: $group (app or rest)" >&2; exit 2 ;;
+        *) echo "unknown group: $group (app, migrations or rest)" >&2; exit 2 ;;
     esac

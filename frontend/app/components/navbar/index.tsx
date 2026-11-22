@@ -1,4 +1,4 @@
-import { ResponsiveAppBar } from './navbar';
 import { LoginButton, LoginWithDiscordButton } from './login';
+import { ResponsiveAppBar } from './navbar';
 
-export { ResponsiveAppBar, LoginButton, LoginWithDiscordButton };
+export { LoginButton, LoginWithDiscordButton, ResponsiveAppBar };

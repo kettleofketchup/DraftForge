@@ -33,7 +33,7 @@ export const IGNORED_CONSOLE_PATTERNS: readonly string[] = [
 export function shouldIgnoreConsoleMessage(message: string): boolean {
   const lowerMessage = message.toLowerCase();
   return IGNORED_CONSOLE_PATTERNS.some((pattern) =>
-    lowerMessage.includes(pattern.toLowerCase())
+    lowerMessage.includes(pattern.toLowerCase()),
   );
 }
 
@@ -46,7 +46,7 @@ export function shouldIgnoreConsoleMessage(message: string): boolean {
  */
 export async function visitAndWaitForHydration(
   page: Page,
-  url: string
+  url: string,
 ): Promise<void> {
   await page.goto(url);
 
@@ -74,7 +74,7 @@ export async function visitAndWaitForHydration(
  */
 export async function waitForLoadingToComplete(
   page: Page,
-  timeout = 10000
+  timeout = 10000,
 ): Promise<void> {
   const loadingSelector =
     '[data-testid="loading"], [data-slot="spinner"], .spinner, [aria-busy="true"]';
@@ -99,7 +99,10 @@ export async function waitForLoadingToComplete(
  * @param page - Playwright Page instance
  * @param route - The route/path to navigate to (e.g., '/about')
  */
-export async function navigateToRoute(page: Page, route: string): Promise<void> {
+export async function navigateToRoute(
+  page: Page,
+  route: string,
+): Promise<void> {
   // Try to find visible navigation links first
   const visibleLinkSelectors = [
     `nav a[href="${route}"]`,
@@ -180,7 +183,7 @@ export async function checkBasicAccessibility(page: Page): Promise<void> {
     await expect(mainLandmark.first()).toBeVisible();
   } else {
     console.log(
-      'No main landmark found - this could be improved for accessibility'
+      'No main landmark found - this could be improved for accessibility',
     );
   }
 
@@ -219,8 +222,7 @@ export async function checkBasicAccessibility(page: Page): Promise<void> {
       const text = await link.textContent();
       const ariaLabel = await link.getAttribute('aria-label');
 
-      const hasAccessibleName =
-        (text && text.trim().length > 0) || ariaLabel;
+      const hasAccessibleName = (text && text.trim().length > 0) || ariaLabel;
 
       if (!hasAccessibleName) {
         const outerHTML = await link.evaluate((el) => el.outerHTML);

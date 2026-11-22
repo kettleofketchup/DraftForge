@@ -56,7 +56,9 @@ export function DeleteDialog({
 
   const nameMatches = value === entityName;
 
-  const handleInputKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleInputKeyDown = async (
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     if (!nameMatches || isLoading) return;

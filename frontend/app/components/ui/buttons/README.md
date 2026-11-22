@@ -29,12 +29,12 @@ buttons/
 
 ## When to add a new file vs. a new folder
 
-| Situation | Where it goes |
-|---|---|
-| Generic action button used across many domains (e.g. `<EditButton>`, `<NavButton>`) | Root of `buttons/` |
-| Icon-only variant of a generic button | `buttons/icons/` |
-| Button tied to a specific external platform / domain (Dotabuff, Steam, Discord) | `buttons/<domain>/` (e.g. `buttons/user/`) |
-| Page-specific button only used in one feature | Co-locate in the feature folder, **not** in `buttons/` |
+| Situation                                                                           | Where it goes                                          |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Generic action button used across many domains (e.g. `<EditButton>`, `<NavButton>`) | Root of `buttons/`                                     |
+| Icon-only variant of a generic button                                               | `buttons/icons/`                                       |
+| Button tied to a specific external platform / domain (Dotabuff, Steam, Discord)     | `buttons/<domain>/` (e.g. `buttons/user/`)             |
+| Page-specific button only used in one feature                                       | Co-locate in the feature folder, **not** in `buttons/` |
 
 ## Existing groups
 

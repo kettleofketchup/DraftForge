@@ -372,4 +372,16 @@ describe('eventSignupSchema line fields', () => {
   it('exposes the Commitment values', () => {
     expect(Commitment).toEqual({ MAIN: 'main', MAYBE: 'maybe' });
   });
+
+  it('parses a signup with no MMR suggestion', () => {
+    const parsed = eventSignupSchema.parse({
+      ...oldPayload,
+      suggested_mmr: null,
+      suggested_mmr_range: null,
+      suggested_mmr_range_source: 'none',
+    });
+    expect(parsed.suggested_mmr).toBeNull();
+    expect(parsed.suggested_mmr_range).toBeNull();
+    expect(parsed.suggested_mmr_range_source).toBe('none');
+  });
 });

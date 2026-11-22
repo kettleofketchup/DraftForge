@@ -9,7 +9,7 @@ from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from app.functions.tournament import _serialize_tournament
+from app.functions.tournament import serialize_tournament
 from app.models import (
     CustomUser,
     League,
@@ -383,7 +383,7 @@ class DeadlockFreshReadTests(TransactionTestCase):
 
         def serialize_all() -> None:
             states.append(build_draft_state(fx.draft.pk, fresh=True))
-            _serialize_tournament(fx.tournament)
+            serialize_tournament(fx.tournament)
 
         self.assertEqual(self.cached_reads(serialize_all), [])
         entry = states[0]["_users"][str(captain.pk)]

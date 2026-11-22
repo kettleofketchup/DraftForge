@@ -1,9 +1,9 @@
 import React, { useCallback, useRef } from 'react';
-import type { UserType } from '~/components/user/types';
 import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
+import type { UserType } from '~/components/user/types';
+import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
-import { cn } from '~/lib/utils';
 
 interface PlayerPopoverTriggerProps {
   player: UserType;
@@ -21,7 +21,12 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   label,
   className,
 }) => {
-  const { showPlayerPopover, hidePopover, scheduleHidePopover, openPlayerModal } = useSharedPopoverActions();
+  const {
+    showPlayerPopover,
+    hidePopover,
+    scheduleHidePopover,
+    openPlayerModal,
+  } = useSharedPopoverActions();
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
   const triggerRef = useRef<HTMLSpanElement>(null);
@@ -37,28 +42,41 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
     scheduleHidePopover();
   }, [scheduleHidePopover]);
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openPlayerModal(player, {
-      organizationId: currentOrg?.pk,
-      leagueId: currentLeague?.pk,
-      statsLeagueId,
-    });
-  }, [player, openPlayerModal, currentOrg?.pk, currentLeague?.pk, statsLeagueId]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
       e.preventDefault();
+      e.stopPropagation();
       openPlayerModal(player, {
         organizationId: currentOrg?.pk,
         leagueId: currentLeague?.pk,
         statsLeagueId,
       });
-    } else if (e.key === 'Escape') {
-      hidePopover();
-    }
-  }, [player, openPlayerModal, hidePopover, currentOrg?.pk, currentLeague?.pk, statsLeagueId]);
+    },
+    [player, openPlayerModal, currentOrg?.pk, currentLeague?.pk, statsLeagueId],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openPlayerModal(player, {
+          organizationId: currentOrg?.pk,
+          leagueId: currentLeague?.pk,
+          statsLeagueId,
+        });
+      } else if (e.key === 'Escape') {
+        hidePopover();
+      }
+    },
+    [
+      player,
+      openPlayerModal,
+      hidePopover,
+      currentOrg?.pk,
+      currentLeague?.pk,
+      statsLeagueId,
+    ],
+  );
 
   return (
     <span

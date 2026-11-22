@@ -28,11 +28,12 @@ export const BracketBadge = memo(function BracketBadge({
   // Position classes based on where badge should appear
   const positionClasses = cn(
     'absolute flex items-center',
-    position === 'right' && 'right-0 translate-x-full top-1/2 -translate-y-1/2 pl-1',
+    position === 'right' &&
+      'right-0 translate-x-full top-1/2 -translate-y-1/2 pl-1',
     position === 'left' && 'left-0 -translate-x-full pr-1',
     position === 'left' && slot === 'top' && 'top-[25%]',
     position === 'left' && slot === 'bottom' && 'top-[75%]',
-    position === 'left' && !slot && 'top-1/2 -translate-y-1/2'
+    position === 'left' && !slot && 'top-1/2 -translate-y-1/2',
   );
 
   return (
@@ -44,7 +45,7 @@ export const BracketBadge = memo(function BracketBadge({
       <div
         className={cn(
           'h-px w-3',
-          position === 'right' ? 'order-first' : 'order-last'
+          position === 'right' ? 'order-first' : 'order-last',
         )}
         style={{ backgroundColor: color }}
       />

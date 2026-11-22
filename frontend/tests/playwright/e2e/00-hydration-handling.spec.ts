@@ -1,8 +1,9 @@
-import { test, expect } from '../fixtures';
 import {
-  visitAndWaitForHydration,
+  expect,
   navigateToRoute,
   shouldIgnoreConsoleMessage,
+  test,
+  visitAndWaitForHydration,
 } from '../fixtures';
 
 /**

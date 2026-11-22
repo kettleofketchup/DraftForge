@@ -42,6 +42,13 @@ export const UserSchema = z.object({
   nickname: z.string().min(2).max(100).nullable().optional(),
   mmr: z.number().min(0).nullable().optional(),
   league_mmr: z.number().min(0).nullable().optional(), // MMR snapshot from LeagueUser
+  // Org MMR for every game, keyed by GameType id; gated org payloads only.
+  game_mmrs: z
+    .record(z.string(), z.number().int().min(0))
+    .nullable()
+    .optional(),
+  // The game `mmr` was resolved for.
+  mmr_game_type: z.number().nullable().optional(),
   steam_account_id: z.number().min(0).nullable().optional(), // 32-bit Friend ID (Dotabuff)
   avatar: z.string().url().nullable().optional(),
   orgUserPk: z.number().min(0).optional(), // OrgUser pk (for org-scoped PATCH)
@@ -64,13 +71,15 @@ export const UserSchema = z.object({
 
 /**
  * Core user fields for the entity cache.
- * Omits context-scoped fields (orgUserPk, mmr=org MMR, league_mmr,
+ * Omits context-scoped fields (orgUserPk, mmr/game_mmrs/mmr_game_type=org MMR, league_mmr,
  * guildNickname) which go into orgData/leagueData/orgNicknames on UserEntry.
  * pk is overridden from optional to required.
  */
 export const CoreUserSchema = UserSchema.omit({
   orgUserPk: true,
   mmr: true,
+  game_mmrs: true,
+  mmr_game_type: true,
   league_mmr: true,
   guildNickname: true,
 }).extend({ pk: z.number() });

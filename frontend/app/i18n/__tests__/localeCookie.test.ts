@@ -2,7 +2,11 @@ import { createCookie } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { localeCookie, resolveRequestLocale } from '../i18n.server';
-import { decodeLocaleCookieValue, readLocaleCookie, serializeLocaleCookie } from '../localeCookie';
+import {
+  decodeLocaleCookieValue,
+  readLocaleCookie,
+  serializeLocaleCookie,
+} from '../localeCookie';
 
 async function legacyHeader(locale: string): Promise<string> {
   const setCookie = await createCookie('df-locale').serialize(locale);
@@ -32,18 +36,30 @@ describe('decodeLocaleCookieValue', () => {
 
 describe('readLocaleCookie', () => {
   it('does not ask to rewrite a plain cookie', () => {
-    expect(readLocaleCookie('a=1; df-locale=es')).toEqual({ locale: 'es', needsRewrite: false });
+    expect(readLocaleCookie('a=1; df-locale=es')).toEqual({
+      locale: 'es',
+      needsRewrite: false,
+    });
   });
 
   it('decodes a cookie written by React Router createCookie and asks to rewrite it', async () => {
     const header = await legacyHeader('es');
     expect(header).toBe('df-locale=ImVzIg%3D%3D');
-    expect(readLocaleCookie(header)).toEqual({ locale: 'es', needsRewrite: true });
+    expect(readLocaleCookie(header)).toEqual({
+      locale: 'es',
+      needsRewrite: true,
+    });
   });
 
   it('reports nothing for a missing or unusable cookie', () => {
-    expect(readLocaleCookie(null)).toEqual({ locale: undefined, needsRewrite: false });
-    expect(readLocaleCookie('df-locale=fr')).toEqual({ locale: undefined, needsRewrite: false });
+    expect(readLocaleCookie(null)).toEqual({
+      locale: undefined,
+      needsRewrite: false,
+    });
+    expect(readLocaleCookie('df-locale=fr')).toEqual({
+      locale: undefined,
+      needsRewrite: false,
+    });
   });
 });
 
@@ -75,21 +91,30 @@ describe('resolveRequestLocale', () => {
   function request(cookie: string | null, search = ''): Request {
     const headers = new Headers({ 'Accept-Language': 'en-US' });
     if (cookie) headers.set('Cookie', cookie);
-    return new Request(`https://example.test/tournaments${search}`, { headers });
+    return new Request(`https://example.test/tournaments${search}`, {
+      headers,
+    });
   }
 
   it('honours a plain cookie without rewriting it', async () => {
-    expect(await resolveRequestLocale(request('df-locale=es'))).toEqual({ locale: 'es', setCookie: null });
+    expect(await resolveRequestLocale(request('df-locale=es'))).toEqual({
+      locale: 'es',
+      setCookie: null,
+    });
   });
 
   it('honours a legacy cookie and rewrites it as plain', async () => {
-    const { locale, setCookie } = await resolveRequestLocale(request(await legacyHeader('es')));
+    const { locale, setCookie } = await resolveRequestLocale(
+      request(await legacyHeader('es')),
+    );
     expect(locale).toBe('es');
     expect(setCookie).toMatch(/^df-locale=es;/);
   });
 
   it('writes ?lang= as a plain cookie over an existing one', async () => {
-    const { locale, setCookie } = await resolveRequestLocale(request('df-locale=es', '?lang=en'));
+    const { locale, setCookie } = await resolveRequestLocale(
+      request('df-locale=es', '?lang=en'),
+    );
     expect(locale).toBe('en');
     expect(setCookie).toMatch(/^df-locale=en;/);
   });

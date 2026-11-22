@@ -2,6 +2,7 @@ import { Trophy } from 'lucide-react';
 import { useState } from 'react';
 
 import { TournamentCard } from '~/components/tournament/card/TournamentCard';
+import type { TournamentType } from '~/components/tournament/types';
 import {
   Select,
   SelectContent,
@@ -10,7 +11,6 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import type { LeagueType } from '../schemas';
-import type { TournamentType } from '~/components/tournament/types';
 
 interface Props {
   league: LeagueType;

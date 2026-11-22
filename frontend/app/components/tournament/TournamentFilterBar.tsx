@@ -13,7 +13,10 @@ import {
   orgScopeValue,
   parseOrgScope,
 } from '~/components/tournament/orgScope';
-import { filtersActive, parseFilterId } from '~/components/tournament/tournamentBuckets';
+import {
+  filtersActive,
+  parseFilterId,
+} from '~/components/tournament/tournamentBuckets';
 import {
   BrandSelect,
   BrandSelectContent,
@@ -40,7 +43,11 @@ export function nextFilterParams(
 ): URLSearchParams {
   const next = new URLSearchParams(params);
   const param =
-    key === 'organization' ? orgScopeParam(value, isLoggedIn) : value === ALL ? null : value;
+    key === 'organization'
+      ? orgScopeParam(value, isLoggedIn)
+      : value === ALL
+        ? null
+        : value;
   if (param === null) {
     next.delete(key);
   } else {
@@ -90,12 +97,14 @@ export function TournamentFilterBar({
 
   const rawOrganization = searchParams.get('organization');
   const scope = parseOrgScope(rawOrganization, isLoggedIn);
-  const scopePending = membershipPending && !isExplicitOrgScope(rawOrganization);
+  const scopePending =
+    membershipPending && !isExplicitOrgScope(rawOrganization);
   const organization = scope.kind === 'org' ? scope.id : undefined;
   const league = parseFilterId(searchParams.get('league'));
 
   const { organizations, isLoading: orgsLoading } = useOrganizations();
-  const { leagues: loadedLeagues, isLoading: leaguesLoading } = useLeagues(organization);
+  const { leagues: loadedLeagues, isLoading: leaguesLoading } =
+    useLeagues(organization);
   // Under My organizations a non-member league would match only its open-signup cups.
   const leagues =
     scope.kind === 'mine'
@@ -115,7 +124,9 @@ export function TournamentFilterBar({
     searchInput,
   });
   const orgValue =
-    scope.kind === 'org' ? selectValue(scope.id, organizations) : orgScopeValue(scope);
+    scope.kind === 'org'
+      ? selectValue(scope.id, organizations)
+      : orgScopeValue(scope);
 
   const setFilter = (key: FilterKey, value: string) => {
     setSearchParams(nextFilterParams(searchParams, key, value, isLoggedIn));
@@ -187,18 +198,28 @@ export function TournamentFilterBar({
             >
               <SelectValue
                 id={orgValueId}
-                placeholder={orgsLoading ? 'Loading organizations…' : 'Unknown organization'}
+                placeholder={
+                  orgsLoading
+                    ? 'Loading organizations…'
+                    : 'Unknown organization'
+                }
               />
             </BrandSelectTrigger>
             <BrandSelectContent>
               {isLoggedIn && (
-                <BrandSelectItem value={ORG_SCOPE_MINE}>My organizations</BrandSelectItem>
+                <BrandSelectItem value={ORG_SCOPE_MINE}>
+                  My organizations
+                </BrandSelectItem>
               )}
-              <BrandSelectItem value={ORG_SCOPE_ALL}>All organizations</BrandSelectItem>
+              <BrandSelectItem value={ORG_SCOPE_ALL}>
+                All organizations
+              </BrandSelectItem>
               {isLoggedIn && yours.length > 0 ? (
                 <>
                   <SelectGroup>
-                    <SelectLabel className={GROUP_LABEL}>Your organizations</SelectLabel>
+                    <SelectLabel className={GROUP_LABEL}>
+                      Your organizations
+                    </SelectLabel>
                     {yours.map((org) => (
                       <BrandSelectItem key={org.pk} value={String(org.pk)}>
                         {org.name}
@@ -207,7 +228,9 @@ export function TournamentFilterBar({
                   </SelectGroup>
                   {others.length > 0 && (
                     <SelectGroup>
-                      <SelectLabel className={GROUP_LABEL}>Other organizations</SelectLabel>
+                      <SelectLabel className={GROUP_LABEL}>
+                        Other organizations
+                      </SelectLabel>
                       {others.map((org) => (
                         <BrandSelectItem key={org.pk} value={String(org.pk)}>
                           {org.name}
@@ -242,7 +265,9 @@ export function TournamentFilterBar({
           >
             <SelectValue
               id={leagueValueId}
-              placeholder={leaguesLoading ? 'Loading leagues…' : 'Unknown league'}
+              placeholder={
+                leaguesLoading ? 'Loading leagues…' : 'Unknown league'
+              }
             />
           </BrandSelectTrigger>
           <BrandSelectContent>
@@ -258,7 +283,10 @@ export function TournamentFilterBar({
         </BrandSelect>
       </div>
       {active && (
-        <SecondaryButton data-testid="tournaments-filter-clear" onClick={clearFilters}>
+        <SecondaryButton
+          data-testid="tournaments-filter-clear"
+          onClick={clearFilters}
+        >
           <X className="size-4" aria-hidden />
           Clear filters
         </SecondaryButton>

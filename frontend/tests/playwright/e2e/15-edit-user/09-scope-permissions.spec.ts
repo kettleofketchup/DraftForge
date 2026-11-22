@@ -7,13 +7,13 @@
  * (global scope = superuser-only).
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
   loginAdmin as loginAdminContext,
+  test,
   visitAndWaitForHydration,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 const USER_EDIT_ORG_NAME = 'User Edit Org';
 // Pin to a specific dedicated user so the test is deterministic instead of
@@ -29,15 +29,27 @@ test.describe('Scope permissions (@cicd)', () => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     // The org member list is restricted to members and org staff.
     await loginAdminContext(context);
-    const orgs = await (await context.request.get(`${API_URL}/organizations/`)).json();
-    const orgList = Array.isArray(orgs) ? orgs : orgs.results ?? [];
-    const editOrg = orgList.find((o: { name: string }) => o.name === USER_EDIT_ORG_NAME);
-    if (!editOrg) throw new Error(`Org "${USER_EDIT_ORG_NAME}" not found. Run just db::populate::all`);
+    const orgs = await (
+      await context.request.get(`${API_URL}/organizations/`)
+    ).json();
+    const orgList = Array.isArray(orgs) ? orgs : (orgs.results ?? []);
+    const editOrg = orgList.find(
+      (o: { name: string }) => o.name === USER_EDIT_ORG_NAME,
+    );
+    if (!editOrg)
+      throw new Error(
+        `Org "${USER_EDIT_ORG_NAME}" not found. Run just db::populate::all`,
+      );
     orgPk = editOrg.pk;
-    const usersResp = await context.request.get(`${API_URL}/organizations/${orgPk}/users/`);
+    const usersResp = await context.request.get(
+      `${API_URL}/organizations/${orgPk}/users/`,
+    );
     const users = await usersResp.json();
-    const target = users.find((u: { username?: string }) => u.username === TARGET_USERNAME);
-    if (!target) throw new Error(`Target user "${TARGET_USERNAME}" not in User Edit Org`);
+    const target = users.find(
+      (u: { username?: string }) => u.username === TARGET_USERNAME,
+    );
+    if (!target)
+      throw new Error(`Target user "${TARGET_USERNAME}" not in User Edit Org`);
     targetUserPk = target.pk;
     await context.close();
   });
@@ -60,7 +72,9 @@ test.describe('Scope permissions (@cicd)', () => {
   }) => {
     await loginOrgAdmin();
     await visitAndWaitForHydration(page, `/user/${targetUserPk}`);
-    await expect(page.locator('h1, [data-testid="user-profile-heading"]').first()).toBeVisible({
+    await expect(
+      page.locator('h1, [data-testid="user-profile-heading"]').first(),
+    ).toBeVisible({
       timeout: 10000,
     });
     await expect(page.locator('[data-testid="edit-user-btn"]')).toHaveCount(0);
@@ -75,7 +89,9 @@ test.describe('Scope permissions (@cicd)', () => {
     const editBtn = page.locator('[data-testid="edit-user-btn"]');
     await expect(editBtn).toBeVisible({ timeout: 10000 });
     await editBtn.click();
-    await expect(page.locator('[data-testid="edit-user-nickname"]')).toBeVisible();
+    await expect(
+      page.locator('[data-testid="edit-user-nickname"]'),
+    ).toBeVisible();
     await expect(page.locator('[data-testid="edit-user-mmr"]')).toHaveCount(0);
   });
 });

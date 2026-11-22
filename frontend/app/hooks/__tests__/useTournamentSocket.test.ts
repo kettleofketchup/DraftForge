@@ -25,14 +25,24 @@ describe('handleTournamentMessage', () => {
   });
 
   it('refetches the game lobby and the bracket when the lobby state changed', () => {
-    expect(keys({ type: 'lobby_event', game_id: 42, state: 'ready' }, bracket('waiting'))).toEqual([
+    expect(
+      keys(
+        { type: 'lobby_event', game_id: 42, state: 'ready' },
+        bracket('waiting'),
+      ),
+    ).toEqual([
       ['gameLobby', 42],
       ['bracket', 7],
     ]);
   });
 
   it('refetches the bracket for a game that had no lobby yet', () => {
-    expect(keys({ type: 'lobby_event', game_id: 42, state: 'requested' }, bracket(null))).toEqual([
+    expect(
+      keys(
+        { type: 'lobby_event', game_id: 42, state: 'requested' },
+        bracket(null),
+      ),
+    ).toEqual([
       ['gameLobby', 42],
       ['bracket', 7],
     ]);
@@ -41,16 +51,24 @@ describe('handleTournamentMessage', () => {
   it('refetches only the game lobby when the lobby state did not change', () => {
     // player_invited, player_joined, ... keep the state: no bracket or
     // tournament refetch for every spectator.
-    expect(keys({ type: 'lobby_event', game_id: 42, state: 'waiting' }, bracket('waiting'))).toEqual([
-      ['gameLobby', 42],
-    ]);
+    expect(
+      keys(
+        { type: 'lobby_event', game_id: 42, state: 'waiting' },
+        bracket('waiting'),
+      ),
+    ).toEqual([['gameLobby', 42]]);
   });
 
   it('does not refetch an uncached bracket on lobby_event', () => {
-    expect(keys({ type: 'lobby_event', game_id: 42, state: 'ready' })).toEqual([['gameLobby', 42]]);
-    expect(keys({ type: 'lobby_event', game_id: 99, state: 'ready' }, bracket('waiting'))).toEqual([
-      ['gameLobby', 99],
+    expect(keys({ type: 'lobby_event', game_id: 42, state: 'ready' })).toEqual([
+      ['gameLobby', 42],
     ]);
+    expect(
+      keys(
+        { type: 'lobby_event', game_id: 99, state: 'ready' },
+        bracket('waiting'),
+      ),
+    ).toEqual([['gameLobby', 99]]);
   });
 
   it('refetches the bracket on bracket_update', () => {

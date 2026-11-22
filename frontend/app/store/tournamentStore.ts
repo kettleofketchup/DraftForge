@@ -47,7 +47,9 @@ export const useTournamentStore = create<TournamentState>((set, get) => ({
     set({ draftPredictedMMRs: data }),
   // Deep-linking support
   pendingDraftId: null,
-  setPendingDraftId: (draftId: number | null) => set({ pendingDraftId: draftId }),
+  setPendingDraftId: (draftId: number | null) =>
+    set({ pendingDraftId: draftId }),
   pendingMatchId: null,
-  setPendingMatchId: (matchId: string | null) => set({ pendingMatchId: matchId }),
+  setPendingMatchId: (matchId: string | null) =>
+    set({ pendingMatchId: matchId }),
 }));

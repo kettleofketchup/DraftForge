@@ -1,5 +1,6 @@
 import { Repeat, Users } from 'lucide-react';
 import { Link } from 'react-router';
+import { GAME_TYPE } from '~/components/game/constants';
 import { Button } from '~/components/ui/button';
 import { EditIconButton } from '~/components/ui/buttons';
 import {
@@ -10,7 +11,6 @@ import {
 import { cn } from '~/lib/utils';
 import { EventStateBadge } from './EventStateBadge';
 import { type EventType } from './schemas';
-import { GAME_TYPE } from '~/components/game/constants';
 
 const GAME_LABELS: Record<number, string> = {
   [GAME_TYPE.DOTA2]: 'Dota 2',
@@ -24,7 +24,12 @@ interface EventStripProps {
   className?: string;
 }
 
-export function EventStrip({ event, onEdit, onEditSeries, className }: EventStripProps) {
+export function EventStrip({
+  event,
+  onEdit,
+  onEditSeries,
+  className,
+}: EventStripProps) {
   return (
     <Link
       to={`/events/${event.id}`}
@@ -37,7 +42,9 @@ export function EventStrip({ event, onEdit, onEditSeries, className }: EventStri
       {/* Date block */}
       <div className="shrink-0 text-center w-12">
         <p className="text-xs font-medium text-muted-foreground uppercase">
-          {new Date(event.scheduled_at).toLocaleDateString(undefined, { month: 'short' })}
+          {new Date(event.scheduled_at).toLocaleDateString(undefined, {
+            month: 'short',
+          })}
         </p>
         <p className="text-lg font-bold leading-tight">
           {new Date(event.scheduled_at).getDate()}
@@ -71,7 +78,11 @@ export function EventStrip({ event, onEdit, onEditSeries, className }: EventStri
           {onEdit && (
             <EditIconButton
               tooltip="Edit this event"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(event); }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onEdit(event);
+              }}
               data-testid={`event-edit-${event.id}`}
             />
           )}
@@ -82,7 +93,11 @@ export function EventStrip({ event, onEdit, onEditSeries, className }: EventStri
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEditSeries(event.event_repeater!); }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onEditSeries(event.event_repeater!);
+                  }}
                   data-testid={`event-edit-series-${event.id}`}
                 >
                   <Repeat className="h-3.5 w-3.5" />

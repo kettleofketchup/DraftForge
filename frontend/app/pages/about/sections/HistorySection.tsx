@@ -32,8 +32,9 @@ export function HistorySection() {
                 <h3 className="font-semibold text-lg mb-1">Born from DTX</h3>
                 <p className="text-base-content/80">
                   DraftForge started as an internal tool for DTX, a competitive
-                  Dota 2 guild ranked #1 on US East. Built to coordinate rosters, manage
-                  scrims, track stats, and keep the community aligned through Discord integration.
+                  Dota 2 guild ranked #1 on US East. Built to coordinate
+                  rosters, manage scrims, track stats, and keep the community
+                  aligned through Discord integration.
                 </p>
               </div>
             </div>
@@ -46,11 +47,14 @@ export function HistorySection() {
                 </div>
               </div>
               <div>
-                <h3 className="font-semibold text-lg mb-1">Open Sourced for Everyone</h3>
+                <h3 className="font-semibold text-lg mb-1">
+                  Open Sourced for Everyone
+                </h3>
                 <p className="text-base-content/80">
-                  We realized other Dota 2 communities could benefit from the same tools,
-                  so we open sourced the project. Now any guild, team, or tournament organizer
-                  can use DraftForge to manage their community.
+                  We realized other Dota 2 communities could benefit from the
+                  same tools, so we open sourced the project. Now any guild,
+                  team, or tournament organizer can use DraftForge to manage
+                  their community.
                 </p>
               </div>
             </div>
@@ -59,8 +63,9 @@ export function HistorySection() {
           {/* Thank you note */}
           <div className="mt-6 p-4 bg-base-content/5 rounded-lg border border-base-content/10">
             <p className="text-sm text-base-content/70 italic">
-              Special thanks to DTX and its members for supporting the development of this
-              platform from the beginning. Your feedback and enthusiasm made this possible.
+              Special thanks to DTX and its members for supporting the
+              development of this platform from the beginning. Your feedback and
+              enthusiasm made this possible.
             </p>
           </div>
         </div>

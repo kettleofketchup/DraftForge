@@ -1,9 +1,12 @@
-import { useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { KeyRound } from 'lucide-react';
+import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
-import { eventLobbyPasswordKey, useEventLobbyPassword } from '~/hooks/useLobbyPassword';
+import {
+  eventLobbyPasswordKey,
+  useEventLobbyPassword,
+} from '~/hooks/useLobbyPassword';
 import { CopyPasswordButton } from './CopyPasswordButton';
 
 interface EventLobbyPasswordProps {
@@ -18,14 +21,19 @@ interface EventLobbyPasswordProps {
  * The event's lobby password, ahead of time, for its staff and registered
  * players. The endpoint answers 404 to everyone else, so nothing shows.
  */
-export function EventLobbyPassword({ eventId, lobbiesEnabled, signedIn }: EventLobbyPasswordProps) {
+export function EventLobbyPassword({
+  eventId,
+  lobbiesEnabled,
+  signedIn,
+}: EventLobbyPasswordProps) {
   const { t } = useTranslation('lobby');
   const queryClient = useQueryClient();
   const { data } = useEventLobbyPassword(eventId, lobbiesEnabled && signedIn);
   // A disabled query still returns its cached data: drop it on logout so the
   // next person at the screen (or the next account) never sees it.
   useEffect(() => {
-    if (!signedIn) queryClient.removeQueries({ queryKey: eventLobbyPasswordKey(eventId) });
+    if (!signedIn)
+      queryClient.removeQueries({ queryKey: eventLobbyPasswordKey(eventId) });
   }, [signedIn, eventId, queryClient]);
   if (!lobbiesEnabled || !signedIn || !data?.password) return null;
 
@@ -45,9 +53,14 @@ export function EventLobbyPassword({ eventId, lobbiesEnabled, signedIn }: EventL
           >
             {data.password}
           </code>
-          <CopyPasswordButton password={data.password} data-testid="event-lobby-password-copy" />
+          <CopyPasswordButton
+            password={data.password}
+            data-testid="event-lobby-password-copy"
+          />
         </div>
-        <p className="text-xs text-muted-foreground">{t('password.event.description')}</p>
+        <p className="text-xs text-muted-foreground">
+          {t('password.event.description')}
+        </p>
       </CardContent>
     </Card>
   );

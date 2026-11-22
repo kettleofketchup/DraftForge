@@ -1,8 +1,16 @@
 import type { Cookie } from 'react-router';
 import { RemixI18Next } from 'remix-i18next/server';
 
-import { FALLBACK_LOCALE, SUPPORTED_LOCALES, type SupportedLocale } from './config';
-import { LOCALE_COOKIE_NAME, readLocaleCookie, serializeLocaleCookie } from './localeCookie';
+import {
+  FALLBACK_LOCALE,
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+} from './config';
+import {
+  LOCALE_COOKIE_NAME,
+  readLocaleCookie,
+  serializeLocaleCookie,
+} from './localeCookie';
 
 // Not createCookie: it base64-encodes JSON, which the client and nginx would have to decode.
 export const localeCookie: Cookie = {
@@ -32,6 +40,7 @@ export async function resolveRequestLocale(
 ): Promise<{ locale: SupportedLocale; setCookie: string | null }> {
   const locale = (await i18nServer.getLocale(request)) as SupportedLocale;
   const existing = readLocaleCookie(request.headers.get('Cookie'));
-  if (existing.locale === locale && !existing.needsRewrite) return { locale, setCookie: null };
+  if (existing.locale === locale && !existing.needsRewrite)
+    return { locale, setCookie: null };
   return { locale, setCookie: await localeCookie.serialize(locale) };
 }

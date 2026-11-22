@@ -1,5 +1,5 @@
+import { memo, useCallback, useState } from 'react';
 import { cn } from '~/lib/utils';
-import { memo, useState, useCallback } from 'react';
 
 interface SimpleAvatarProps {
   src?: string;
@@ -39,7 +39,7 @@ export const SimpleAvatar = memo(function SimpleAvatar({
     <div
       className={cn(
         'relative flex shrink-0 overflow-hidden rounded-full bg-muted',
-        className
+        className,
       )}
     >
       {/* Image - browser handles loading natively */}
@@ -59,7 +59,7 @@ export const SimpleAvatar = memo(function SimpleAvatar({
         className={cn(
           'absolute inset-0 flex items-center justify-center rounded-full bg-muted',
           showImage ? 'opacity-0' : 'opacity-100',
-          fallbackClassName
+          fallbackClassName,
         )}
         aria-hidden={showImage}
       >

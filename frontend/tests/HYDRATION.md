@@ -9,6 +9,7 @@ Error: Hydration failed because the server rendered HTML didn't match the client
 ```
 
 This commonly happens due to:
+
 - Dynamic content that differs between server and client (like dates, random numbers)
 - Font loading that affects text rendering
 - Theme/styling differences between server and client
@@ -40,7 +41,7 @@ Use the utility functions in `support/utils.ts`:
 import {
   visitAndWaitForHydration,
   suppressHydrationErrors,
-  navigateToRoute
+  navigateToRoute,
 } from '../support/utils';
 
 // In your test
@@ -78,12 +79,15 @@ describe('Hydration Error Handling', () => {
 ## Common Issues and Solutions
 
 ### Dropdown Navigation
+
 If navigation links are hidden in dropdown menus, the standard Cypress click will fail:
+
 ```
 CypressError: element is not visible because its parent has CSS property: display: none
 ```
 
 **Solution**: Use `navigateToRoute()` which automatically handles dropdown menus:
+
 ```typescript
 import { navigateToRoute } from '../support/utils';
 
@@ -97,7 +101,7 @@ navigateToRoute('/tournaments');
 import {
   visitAndWaitForHydration,
   suppressHydrationErrors,
-  navigateToRoute
+  navigateToRoute,
 } from '../support/utils';
 
 describe('My Feature Tests', () => {

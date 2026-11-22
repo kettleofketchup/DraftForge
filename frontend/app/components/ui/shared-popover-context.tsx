@@ -53,26 +53,34 @@ interface SharedPopoverActionsValue {
 /** Mutable state. The value changes whenever the popover/modal opens or closes. */
 interface SharedPopoverStateValue {
   state: SharedPopoverState;
-  playerModalState: { player: UserType | null; open: boolean; context?: PlayerModalContext };
+  playerModalState: {
+    player: UserType | null;
+    open: boolean;
+    context?: PlayerModalContext;
+  };
   teamModalState: { team: TeamType | null; open: boolean };
 }
 
 interface SharedPopoverContextValue
-  extends SharedPopoverActionsValue,
-    SharedPopoverStateValue {}
+  extends SharedPopoverActionsValue, SharedPopoverStateValue {}
 
-const SharedPopoverContext = createContext<SharedPopoverContextValue | null>(null);
+const SharedPopoverContext = createContext<SharedPopoverContextValue | null>(
+  null,
+);
 // Split context: action consumers (UserCard, PopoverTriggers) subscribe to a
 // value that is constructed once and never changes, so popover/modal state
 // transitions don't cascade re-renders down to every grid card on screen.
 // State consumers (PlayerModal, popover renderer) keep using the legacy
 // combined hook.
-const SharedPopoverActionsContext = createContext<SharedPopoverActionsValue | null>(null);
+const SharedPopoverActionsContext =
+  createContext<SharedPopoverActionsValue | null>(null);
 
 export const useSharedPopover = () => {
   const context = useContext(SharedPopoverContext);
   if (!context) {
-    throw new Error('useSharedPopover must be used within SharedPopoverProvider');
+    throw new Error(
+      'useSharedPopover must be used within SharedPopoverProvider',
+    );
   }
   return context;
 };
@@ -134,7 +142,11 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
   const isHoveringRef = useRef(false);
 
   const showPlayerPopover = useCallback(
-    (player: UserType, anchorEl: HTMLElement, context?: PlayerPopoverContext) => {
+    (
+      player: UserType,
+      anchorEl: HTMLElement,
+      context?: PlayerPopoverContext,
+    ) => {
       cancelHidePopover();
       isHoveringRef.current = true;
       if (hoverIntentRef.current) {
@@ -156,24 +168,27 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
     [cancelHidePopover],
   );
 
-  const showTeamPopover = useCallback((team: TeamType, anchorEl: HTMLElement) => {
-    cancelHidePopover();
-    isHoveringRef.current = true;
-    if (hoverIntentRef.current) {
-      clearTimeout(hoverIntentRef.current);
-    }
-    hoverIntentRef.current = setTimeout(() => {
-      if (isHoveringRef.current) {
-        setState({
-          type: 'team',
-          player: null,
-          team,
-          anchorEl,
-          isOpen: true,
-        });
+  const showTeamPopover = useCallback(
+    (team: TeamType, anchorEl: HTMLElement) => {
+      cancelHidePopover();
+      isHoveringRef.current = true;
+      if (hoverIntentRef.current) {
+        clearTimeout(hoverIntentRef.current);
       }
-    }, 50);
-  }, [cancelHidePopover]);
+      hoverIntentRef.current = setTimeout(() => {
+        if (isHoveringRef.current) {
+          setState({
+            type: 'team',
+            player: null,
+            team,
+            anchorEl,
+            isOpen: true,
+          });
+        }
+      }, 50);
+    },
+    [cancelHidePopover],
+  );
 
   const hidePopover = useCallback(() => {
     cancelHidePopover();
@@ -193,15 +208,21 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
     hideTimerRef.current = setTimeout(hidePopover, HIDE_DELAY_MS);
   }, [cancelHidePopover, hidePopover]);
 
-  const openPlayerModal = useCallback((player: UserType, context?: PlayerModalContext) => {
-    hidePopover();
-    setPlayerModalState({ player, open: true, context });
-  }, [hidePopover]);
+  const openPlayerModal = useCallback(
+    (player: UserType, context?: PlayerModalContext) => {
+      hidePopover();
+      setPlayerModalState({ player, open: true, context });
+    },
+    [hidePopover],
+  );
 
-  const openTeamModal = useCallback((team: TeamType) => {
-    hidePopover();
-    setTeamModalState({ team, open: true });
-  }, [hidePopover]);
+  const openTeamModal = useCallback(
+    (team: TeamType) => {
+      hidePopover();
+      setTeamModalState({ team, open: true });
+    },
+    [hidePopover],
+  );
 
   const setPlayerModalOpen = useCallback((open: boolean) => {
     setPlayerModalState((prev) => ({ ...prev, open }));

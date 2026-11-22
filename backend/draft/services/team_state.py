@@ -5,9 +5,10 @@ serialization costs a fixed number of queries regardless of rounds, teams or
 users. ``fresh=True`` makes no cacheops read anywhere in the payload: the
 prefetches, draft options, league/organization (and the source event's
 organization), the OrgUser/LeagueUser MMR overlay and the ``_users`` cores all
-come from the database (pinned by DraftStateFreshReadTests). Use it for
-anything built right after a write (broadcasts, endpoint responses) so the
-payload never depends on the ordering of post-commit invalidations.
+come from the database (pinned by DraftStateFreshReadTests in
+draft/tests/test_team_state_queries.py). Use it for anything built right after
+a write (broadcasts, endpoint responses) so the payload never depends on the
+ordering of post-commit invalidations.
 """
 
 from django.db import connection, transaction
@@ -35,7 +36,7 @@ def build_draft_state(draft_id: int, *, fresh: bool) -> dict | None:
     snapshot. Under the configured ``BEGIN IMMEDIATE`` that holds the write
     lock for the build: other writers wait (busy timeout) rather than commit
     mid-build. DEFERRED is not used: the OrgUser auto-create write in
-    _collect_context_mmr would then fail with SQLITE_BUSY_SNAPSHOT whenever
+    collect_org_mmr would then fail with SQLITE_BUSY_SNAPSHOT whenever
     another connection committed after the build's first read. Cached builds
     (every websocket connect) promise no freshness and stay plain autocommit
     reads, so spectators never queue on the write lock.

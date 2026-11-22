@@ -38,7 +38,9 @@ describe('TournamentRemoveButton', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete tournament' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm Delete' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Confirm Delete' }),
+    );
 
     await waitFor(() =>
       expect(spy).toHaveBeenCalledWith({ queryKey: ['tournaments'] }),
@@ -74,7 +76,12 @@ describe('refreshAfterSave', () => {
 
   it('invalidates the single tournament when a pk is given', () => {
     const { queryClient, invalidate, getTournaments } = setup();
-    refreshAfterSave({ pathname: '/leagues/3', getTournaments, queryClient, pk: 9 });
+    refreshAfterSave({
+      pathname: '/leagues/3',
+      getTournaments,
+      queryClient,
+      pk: 9,
+    });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tournament', 9] });
   });
 

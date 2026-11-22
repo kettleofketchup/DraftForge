@@ -59,11 +59,18 @@ async function serveDiscoveryRows(page: Page): Promise<void> {
       await route.continue();
       return;
     }
-    const response = await route.fetch({ url: `${url.origin}/api/tournaments-list/` });
+    const response = await route.fetch({
+      url: `${url.origin}/api/tournaments-list/`,
+    });
     const tournaments = (await response.json()) as Tournament[];
-    const source = tournaments.find((t) => t.league && typeof t.league === 'object');
+    const source = tournaments.find(
+      (t) => t.league && typeof t.league === 'object',
+    );
     const baseLeague: Tournament = {
-      ...((source?.league as Tournament | undefined) ?? { pk: 1, name: 'Card Layout League' }),
+      ...((source?.league as Tournament | undefined) ?? {
+        pk: 1,
+        name: 'Card Layout League',
+      }),
       organization_id: 1,
       organization_name: 'Card Layout Org',
       organization_logo: null,
@@ -154,7 +161,9 @@ test.describe('Tournaments - card layout', () => {
     await expectRowAligned(cards);
 
     // A LIVE header must not push the inner rows down.
-    await expect(cards.nth(0).getByTestId('tournament-live-badge')).toBeVisible();
+    await expect(
+      cards.nth(0).getByTestId('tournament-live-badge'),
+    ).toBeVisible();
     await expect(page.getByTestId('tournament-live-badge')).toHaveCount(1);
     await expectSameY(cards.getByTestId('tournament-card-date'));
 

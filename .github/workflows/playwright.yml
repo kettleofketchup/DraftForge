@@ -313,7 +313,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [app, rest]
+        group: [app, migrations, rest]
     steps:
       - uses: actions/checkout@v4
 

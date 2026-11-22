@@ -1,5 +1,5 @@
-import type { BracketMatch, BracketSectionType } from '../types';
 import type { TeamType } from '~/components/tournament/types';
+import type { BracketMatch, BracketSectionType } from '../types';
 
 /**
  * Double elimination bracket generator.
@@ -27,13 +27,21 @@ export function generateDoubleElimination(teams: TeamType[]): BracketMatch[] {
   let matchId = 1;
 
   // Generate Winners Bracket
-  const winnersMatches = generateWinnersBracket(bracketSize, winnersRounds, matchId);
+  const winnersMatches = generateWinnersBracket(
+    bracketSize,
+    winnersRounds,
+    matchId,
+  );
   matchId += winnersMatches.length;
   matches.push(...winnersMatches);
 
   // Generate Losers Bracket
   const losersRounds = 2 * (winnersRounds - 1);
-  const losersMatches = generateLosersBracket(bracketSize, losersRounds, matchId);
+  const losersMatches = generateLosersBracket(
+    bracketSize,
+    losersRounds,
+    matchId,
+  );
   matchId += losersMatches.length;
   matches.push(...losersMatches);
 
@@ -41,19 +49,27 @@ export function generateDoubleElimination(teams: TeamType[]): BracketMatch[] {
   wireLoserPaths(winnersMatches, losersMatches);
 
   // Generate Grand Finals
-  const { grandFinals, connections } = generateGrandFinals(matchId, winnersMatches, losersMatches);
+  const { grandFinals, connections } = generateGrandFinals(
+    matchId,
+    winnersMatches,
+    losersMatches,
+  );
   matches.push(...grandFinals);
 
   // Apply connections from finalists to grand finals
   if (connections.winnersFinalistId) {
-    const winnersFinalist = matches.find((m) => m.id === connections.winnersFinalistId);
+    const winnersFinalist = matches.find(
+      (m) => m.id === connections.winnersFinalistId,
+    );
     if (winnersFinalist) {
       winnersFinalist.nextMatchId = connections.grandFinalsId;
       winnersFinalist.nextMatchSlot = 'radiant';
     }
   }
   if (connections.losersFinalistId) {
-    const losersFinalist = matches.find((m) => m.id === connections.losersFinalistId);
+    const losersFinalist = matches.find(
+      (m) => m.id === connections.losersFinalistId,
+    );
     if (losersFinalist) {
       losersFinalist.nextMatchId = connections.grandFinalsId;
       losersFinalist.nextMatchSlot = 'dire';
@@ -66,7 +82,7 @@ export function generateDoubleElimination(teams: TeamType[]): BracketMatch[] {
 function generateWinnersBracket(
   bracketSize: number,
   rounds: number,
-  startId: number
+  startId: number,
 ): BracketMatch[] {
   const matches: BracketMatch[] = [];
   let matchId = startId;
@@ -103,7 +119,7 @@ function generateWinnersBracket(
 function generateLosersBracket(
   bracketSize: number,
   rounds: number,
-  startId: number
+  startId: number,
 ): BracketMatch[] {
   const matches: BracketMatch[] = [];
   let matchId = startId;
@@ -134,9 +150,10 @@ function generateLosersBracket(
       };
 
       if (round < rounds) {
-        const nextPosition = matchesInNextRound === matchesInRound
-          ? position
-          : Math.floor(position / 2);
+        const nextPosition =
+          matchesInNextRound === matchesInRound
+            ? position
+            : Math.floor(position / 2);
         // Offset from current match to (start of next round) + nextPosition.
         const offsetToNextRoundStart = matchesInRound - position;
         const nextMatchId = matchId + offsetToNextRoundStart + nextPosition;
@@ -166,7 +183,7 @@ function generateLosersBracket(
  */
 function wireLoserPaths(
   winnersMatches: BracketMatch[],
-  losersMatches: BracketMatch[]
+  losersMatches: BracketMatch[],
 ): void {
   const winnersRounds = Math.max(...winnersMatches.map((m) => m.round));
 
@@ -185,11 +202,14 @@ function wireLoserPaths(
       const lbMatch = lbMatchesInRound.find((m) => m.position === lbPosition);
       if (lbMatch) {
         wMatch.loserNextMatchId = lbMatch.id;
-        wMatch.loserNextMatchSlot = wMatch.position % 2 === 0 ? 'radiant' : 'dire';
+        wMatch.loserNextMatchSlot =
+          wMatch.position % 2 === 0 ? 'radiant' : 'dire';
       }
     } else if (wMatch.round < winnersRounds) {
       // Minor rounds (LB R2, R4, etc.): 1:1 mapping, dire slot
-      const lbMatch = lbMatchesInRound.find((m) => m.position === wMatch.position);
+      const lbMatch = lbMatchesInRound.find(
+        (m) => m.position === wMatch.position,
+      );
       if (lbMatch) {
         wMatch.loserNextMatchId = lbMatch.id;
         wMatch.loserNextMatchSlot = 'dire';
@@ -198,7 +218,7 @@ function wireLoserPaths(
       // Winners Finals → Losers Finals (last LB round)
       const losersFinalsRound = Math.max(...losersMatches.map((m) => m.round));
       const losersFinals = losersMatches.find(
-        (m) => m.round === losersFinalsRound && m.position === 0
+        (m) => m.round === losersFinalsRound && m.position === 0,
       );
       if (losersFinals) {
         wMatch.loserNextMatchId = losersFinals.id;
@@ -220,7 +240,7 @@ interface GrandFinalsResult {
 function generateGrandFinals(
   startId: number,
   winnersMatches: BracketMatch[],
-  losersMatches: BracketMatch[]
+  losersMatches: BracketMatch[],
 ): GrandFinalsResult {
   const winnersFinalist = winnersMatches[winnersMatches.length - 1];
   const losersFinalist = losersMatches[losersMatches.length - 1];
@@ -247,7 +267,11 @@ function generateGrandFinals(
 /**
  * Get round label for display
  */
-export function getRoundLabel(bracketType: BracketSectionType, round: number, totalRounds?: number): string {
+export function getRoundLabel(
+  bracketType: BracketSectionType,
+  round: number,
+  totalRounds?: number,
+): string {
   switch (bracketType) {
     case 'winners':
       if (totalRounds && round === totalRounds) return 'Winners Finals';

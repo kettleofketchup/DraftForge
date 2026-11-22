@@ -7,15 +7,14 @@
  * Ported from Cypress: frontend/tests/cypress/e2e/05-match-stats/01-modal.cy.ts
  */
 
+import { expect, test, visitAndWaitForHydration } from '../../fixtures';
 import { API_URL } from '../../fixtures/base-url';
-import { test, expect, visitAndWaitForHydration } from '../../fixtures';
 import { findTournamentCard } from '../../helpers/tournament';
-
 
 test.describe('Match Stats Modal - Direct API Tests', () => {
   test('should create test match via API endpoint', async ({ context }) => {
     const response = await context.request.post(
-      `${API_URL}/tests/create-match/`
+      `${API_URL}/tests/create-match/`,
     );
 
     expect(response.ok()).toBeTruthy();
@@ -30,7 +29,7 @@ test.describe('Match Stats Modal - Direct API Tests', () => {
   test('should return match data from API endpoint', async ({ context }) => {
     // First create a test match
     const createResponse = await context.request.post(
-      `${API_URL}/tests/create-match/`
+      `${API_URL}/tests/create-match/`,
     );
     expect(createResponse.ok()).toBeTruthy();
     const createData = await createResponse.json();
@@ -38,7 +37,7 @@ test.describe('Match Stats Modal - Direct API Tests', () => {
 
     // Then fetch the match data
     const response = await context.request.get(
-      `${API_URL}/steam/matches/${matchId}/`
+      `${API_URL}/steam/matches/${matchId}/`,
     );
 
     expect(response.ok()).toBeTruthy();
@@ -68,7 +67,7 @@ test.describe('Match Stats Modal - Direct API Tests', () => {
   test('should return 404 for non-existent match', async ({ context }) => {
     const response = await context.request.get(
       `${API_URL}/steam/matches/9999999999/`,
-      { failOnStatusCode: false }
+      { failOnStatusCode: false },
     );
 
     expect(response.status()).toBe(404);
@@ -79,7 +78,7 @@ test.describe('Match Stats Modal - Direct API Tests', () => {
   }) => {
     // First create a test match
     const createResponse = await context.request.post(
-      `${API_URL}/tests/create-match/`
+      `${API_URL}/tests/create-match/`,
     );
     expect(createResponse.ok()).toBeTruthy();
     const createData = await createResponse.json();
@@ -87,7 +86,7 @@ test.describe('Match Stats Modal - Direct API Tests', () => {
 
     // Then fetch the match data
     const response = await context.request.get(
-      `${API_URL}/steam/matches/${matchId}/`
+      `${API_URL}/steam/matches/${matchId}/`,
     );
     expect(response.ok()).toBeTruthy();
     const data = await response.json();
@@ -95,11 +94,11 @@ test.describe('Match Stats Modal - Direct API Tests', () => {
 
     // Radiant players have player_slot < 128
     const radiantPlayers = players.filter(
-      (p: { player_slot: number }) => p.player_slot < 128
+      (p: { player_slot: number }) => p.player_slot < 128,
     );
     // Dire players have player_slot >= 128
     const direPlayers = players.filter(
-      (p: { player_slot: number }) => p.player_slot >= 128
+      (p: { player_slot: number }) => p.player_slot >= 128,
     );
 
     expect(radiantPlayers).toHaveLength(5);
@@ -124,7 +123,9 @@ test.describe('Match Stats Modal - UI Integration', () => {
 
     await expect(page.locator('body')).toBeVisible();
     // The tournament detail page should load — use .first() since name may appear in multiple places
-    await expect(page.getByText('Completed Bracket Test').first()).toBeVisible();
+    await expect(
+      page.getByText('Completed Bracket Test').first(),
+    ).toBeVisible();
   });
 
   test('should display Bracket tab in tournament detail', async ({ page }) => {

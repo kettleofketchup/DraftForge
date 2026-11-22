@@ -19,17 +19,14 @@ export function LeaguePopover({ league, children }: LeaguePopoverProps) {
 
   const handleMouseEnter = useCallback(() => setOpen(true), []);
   const handleMouseLeave = useCallback(() => setOpen(false), []);
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        setOpen((prev) => !prev);
-      } else if (e.key === 'Escape') {
-        setOpen(false);
-      }
-    },
-    [],
-  );
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setOpen((prev) => !prev);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  }, []);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

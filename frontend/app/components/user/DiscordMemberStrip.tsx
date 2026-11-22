@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
-import { ConfirmButton } from '~/components/ui/buttons';
 import type { DiscordSearchResult } from '~/components/api/api';
+import { ConfirmButton } from '~/components/ui/buttons';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
 import { cn } from '~/lib/utils';
@@ -26,9 +26,7 @@ export const DiscordMemberStrip = React.memo(function DiscordMemberStrip({
     username: member.user.global_name || member.user.username,
   });
   const subtitle =
-    member.nick || member.user.global_name
-      ? member.user.username
-      : undefined;
+    member.nick || member.user.global_name ? member.user.username : undefined;
 
   const handleClick = useCallback(() => onAdd(member), [onAdd, member]);
 
@@ -67,9 +65,7 @@ export const DiscordMemberStrip = React.memo(function DiscordMemberStrip({
 
       {/* Site account badge */}
       {member.has_site_account && (
-        <span className="shrink-0 text-xs text-muted-foreground">
-          Linked
-        </span>
+        <span className="shrink-0 text-xs text-muted-foreground">Linked</span>
       )}
 
       {/* Spacer */}
