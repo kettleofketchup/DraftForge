@@ -142,7 +142,6 @@ class LeagueView(viewsets.ModelViewSet):
     def matches(self, request: Request, pk: str | None = None) -> Response:
         """Get all matches for this league (direct or via tournaments)."""
         league = self.get_object()
-        # Games directly belonging to league OR games in tournaments belonging to league
         games = (
             Game.objects.filter(Q(league=league) | Q(tournament__league=league))
             .select_related(

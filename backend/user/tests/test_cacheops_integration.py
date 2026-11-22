@@ -54,8 +54,7 @@ class CacheopsInvalidationOnBaseProfilePatchTests(TransactionTestCase):
     eviction is scheduled via `transaction.on_commit`. Plain TestCase wraps
     each test in a transaction that's rolled back at teardown — on_commit
     hooks would never fire mid-test, and the cache would never be evicted
-    between the warm and the re-fetch. This class needs real commits in the
-    middle of the test, which TransactionTestCase provides. Pattern mirrors
+    between the warm and the re-fetch. Pattern mirrors
     LeaguePatchSteamLeagueIdCacheTest in
     backend/league/tests/test_league_serializer.py.
     """

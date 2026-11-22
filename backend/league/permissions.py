@@ -18,7 +18,7 @@ from org.permissions import (
 
 
 def has_league_admin_access(user: CustomUser | AnonymousUser, league: League) -> bool:
-    """Check if user is league admin, admin of any linked org, or site admin."""
+    """Check if user is league admin, admin of the league's org, or site admin."""
     if not user.is_authenticated:
         return False
 
