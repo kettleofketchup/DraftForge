@@ -57,7 +57,10 @@ import {
 } from '~/components/events/signupOptimistic';
 import type { GameTypeValue } from '~/components/game/constants';
 import type { UserType } from '~/components/user/types';
-import { invalidateOrgContributionQueries } from '~/features/org-features/queryKeys';
+import {
+  invalidateConductQueries,
+  invalidateOrgContributionQueries,
+} from '~/features/org-features/queryKeys';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
@@ -115,6 +118,10 @@ export function useSignupMutation(eventId: number) {
         });
       }
       useOrgStore.getState().clearOrgUsers();
+      void invalidateConductQueries(
+        queryClient,
+        queryClient.getQueryData<EventType>(['event', eventId])?.organization,
+      );
     },
   });
 }
@@ -128,7 +135,10 @@ export function useEventActionMutation(eventId: number) {
     }),
     startRollCall: useMutation({
       mutationFn: () => startRollCallAPI(eventId),
-      onSuccess: (data) => queryClient.setQueryData(['event', eventId], data),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['event', eventId], data);
+        void invalidateConductQueries(queryClient, data.organization);
+      },
     }),
     reopenSignups: useMutation({
       // Corrective transition; no optimistic update intentionally.
@@ -138,17 +148,22 @@ export function useEventActionMutation(eventId: number) {
         // The events list filters by state — a regression from roll_call → signups_open
         // changes which lists this event appears in.
         queryClient.invalidateQueries({ queryKey: ['events'] });
+        void invalidateConductQueries(queryClient, data.organization);
       },
     }),
     startTournament: useMutation({
       mutationFn: () => startTournamentAPI(eventId),
-      onSuccess: (data) => queryClient.setQueryData(['event', eventId], data),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['event', eventId], data);
+        void invalidateConductQueries(queryClient, data.organization);
+      },
     }),
     cancelEvent: useMutation({
       mutationFn: () => cancelEventAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
+        void invalidateConductQueries(queryClient, data.organization);
       },
     }),
     deleteEvent: useMutation({
@@ -156,6 +171,7 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['events'] });
         queryClient.removeQueries({ queryKey: ['event', eventId] });
+        void invalidateConductQueries(queryClient);
       },
     }),
     restartTournament: useMutation({
@@ -163,6 +179,7 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
+        void invalidateConductQueries(queryClient, data.organization);
       },
     }),
     completeEvent: useMutation({
@@ -171,6 +188,7 @@ export function useEventActionMutation(eventId: number) {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
         void invalidateOrgContributionQueries(queryClient, data.organization);
+        void invalidateConductQueries(queryClient, data.organization);
       },
     }),
     setEventStaff: useMutation({
@@ -263,6 +281,7 @@ export function useUpdateEventMutation(eventId: number) {
       queryClient.invalidateQueries({
         queryKey: ['event-lobby-password', eventId],
       });
+      void invalidateConductQueries(queryClient, data.organization);
     },
   });
 }
@@ -303,6 +322,10 @@ export function useSignupActionMutations(eventId: number) {
       queryClient.invalidateQueries({
         queryKey: ['event-lobby-password', eventId],
       });
+      void invalidateConductQueries(
+        queryClient,
+        queryClient.getQueryData<EventType>(['event', eventId])?.organization,
+      );
     },
   });
 

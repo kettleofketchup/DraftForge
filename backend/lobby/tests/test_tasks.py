@@ -605,7 +605,7 @@ class LobbyInfoTests(TaskTestBase):
             external_ref=self.ref, state="waiting", password="pw-from-lobby"
         )
 
-    @mock.patch("discordbot.utils.sync_send_dm", return_value={"id": "1"})
+    @mock.patch("lobby.tasks.sync_send_dm", return_value={"id": "1"})
     def test_sends_dm_with_password_and_logs_without_it(self, send_dm):
         result = self.run_task(tasks.send_lobby_info, self.row.pk)
         self.assertEqual(send_dm.call_count, 10)
@@ -621,7 +621,7 @@ class LobbyInfoTests(TaskTestBase):
         self.assertNotIn("pw-from-lobby", log.message)
         self.assertFalse(DiscordMessageLog.objects.exists())
 
-    @mock.patch("discordbot.utils.sync_send_dm")
+    @mock.patch("lobby.tasks.sync_send_dm")
     def test_disabled_by_tournament(self, send_dm):
         tournament = self.game.tournament
         tournament.discord_send_lobby_info = False
