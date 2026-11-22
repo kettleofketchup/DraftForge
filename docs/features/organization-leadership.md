@@ -10,10 +10,24 @@ A site admin unlocks Leadership per organization, the same way as the other
 a [standing track](../development/org-standing.md), so its leaderboards are served by
 the generic [standing endpoints](../api/endpoints.md#organization-standing).
 
-!!! note "Screens ship separately"
-    This release adds the backend: the data, the review window, the scoring and the
-    API. The rating dialog, the captain's card and the moderation table arrive in a
-    later release.
+## Screens
+
+- **Leadership tab** (organization page): boards for points, overall rating and each
+  trait, chosen with the metric switcher. Opening a member shows their points history
+  and, once released, their per-trait rating; until then it reads "not yet released",
+  and a captain with too few reviews is shown as new. Captains see their own
+  aggregates only, never who rated them.
+- **Rate your captain** (event page and the Leadership tab's pending list): a dialog
+  with a 1 to 5 score for each active trait. Teammates can submit, edit or withdraw
+  while the review window is open; a countdown shows the time left. Refusals such as
+  a closed window or a moderated review are shown as plain messages.
+- **Review moderation** (event page, staff): a table of the event's reviews with the
+  rater, where staff void a review with a reason or restore it. Reviews of the viewing
+  staff member's own team are not shown for moderation.
+- **Settings → Leadership** (admins): review window, minimum reviewers, reviews to be
+  ranked, rating max points, the rating prior and decay, public ranking, captain point
+  overrides per kind, and the trait list (add, rename, reorder, activate or deactivate;
+  a trait with scores can only be deactivated).
 
 ## What is tracked
 
