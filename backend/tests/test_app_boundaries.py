@@ -414,10 +414,26 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"guild_nicknames", "org_nicknames_public"}),
             "tournament player payloads show the league org's guild nicknames",
         ),
+        "app/management/commands/import_prod_tournament.py": BackEdge(
+            frozenset(
+                {
+                    "OrgMmrError",
+                    "OrgUser",
+                    "Organization",
+                    "bulk_set_org_mmrs",
+                    "resolve_game_type",
+                    "validate_org_mmr",
+                }
+            ),
+            "tournament import writes imported users' MMR as org MMR for the "
+            "target organization",
+        ),
         "app/management/commands/sync_prod_users.py": BackEdge(
-            frozenset({"AttendanceOutcome", "ContributionEntry", "PromoSend"}),
+            frozenset(
+                {"AttendanceOutcome", "ContributionEntry", "Organization", "PromoSend"}
+            ),
             "prod user sync clears org conduct, contribution and promo rows before "
-            "reloading users",
+            "reloading users, and keeps organization owners",
         ),
         "app/permissions_tournament.py": BackEdge(
             frozenset({"has_org_staff_access"}),
@@ -516,6 +532,10 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         ),
     },
     "league": {
+        "app/management/commands/import_prod_tournament.py": BackEdge(
+            frozenset({"League"}),
+            "tournament import attaches the tournament to a local League",
+        ),
         "app/permissions_tournament.py": BackEdge(
             frozenset({"League", "has_league_admin_access", "has_league_staff_access"}),
             "event, tournament and game permissions fall back to league staff; "
