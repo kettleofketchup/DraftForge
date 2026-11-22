@@ -195,9 +195,8 @@ export default function EventPage() {
   // Mutations
   const queryClient = useQueryClient();
 
-  // Populate the org users cache so signup rows can read per-org MMR via the
-  // user entity adapter (selectOrgMmr). Viewers without member
-  // access fall back to signup.org_user_mmr.
+  // Populate the org users cache so signup rows read per-org MMR via
+  // selectOrgMmr; viewers without member access fall back to signup.org_user_mmr.
   const eventOrgPk = event?.organization ?? null;
   const onMemberViewerChange = useCallback(() => {
     if (!eventOrgPk) return;

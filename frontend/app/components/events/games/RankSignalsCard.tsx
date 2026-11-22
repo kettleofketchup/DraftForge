@@ -10,10 +10,7 @@ interface RankSignalsCardProps {
   signup: EventSignupType;
 }
 
-/**
- * Game-aware dispatcher: a game-specific card when the page's game has one,
- * otherwise the universal `BaseRankSignalsCard`.
- */
+/** The page's game-specific card, else the universal `BaseRankSignalsCard`. */
 export function RankSignalsCard({ signup }: RankSignalsCardProps) {
   const gameType = useContextGameType();
   if (gameType === GAME_TYPE.DOTA2) {
