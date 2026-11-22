@@ -11,6 +11,7 @@ SCRIPT = ROOT / "scripts" / "hash-docker-image.sh"
 
 INPUTS = {
     "frontend": ("frontend/Dockerfile", "frontend/package-lock.json"),
+    "playwright": ("frontend/Dockerfile.playwright", "frontend/package-lock.json"),
     "backend": ("backend/Dockerfile", "poetry.lock"),
     "nginx": (
         "nginx/Dockerfile",
