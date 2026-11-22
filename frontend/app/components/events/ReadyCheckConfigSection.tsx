@@ -126,12 +126,8 @@ export function ReadyCheckConfigSection<
   const control = parentControl as unknown as Control<ReadyCheckFields>;
   const setValue =
     parentSetValue as unknown as UseFormSetValue<ReadyCheckFields>;
-  const {
-    getValues,
-    resetField,
-    formState: { defaultValues },
-  } = useFormContext<ReadyCheckFields>();
-  const { errors } = useFormState({ control });
+  const { getValues, resetField } = useFormContext<ReadyCheckFields>();
+  const { errors, defaultValues } = useFormState({ control });
   const hasError = (names: (keyof ReadyCheckFields)[]) =>
     names.some((name) => errors[name]);
   const settingsError = hasError(SETTINGS_FIELDS);

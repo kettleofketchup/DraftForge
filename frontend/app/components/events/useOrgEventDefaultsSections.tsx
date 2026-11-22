@@ -7,7 +7,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { useForm, type FieldErrors } from 'react-hook-form';
+import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { getOrgEventDefaults } from '~/components/api/api';
@@ -264,6 +264,45 @@ export function useOrgEventDefaultsSections(
     discard: () => form.reset(defaults ? valuesFrom(defaults) : FORM_DEFAULTS),
   };
 
+  // Memoized: dirty and error changes re-render the dialog, not these fields.
+  const ready = !!defaults && hydrated;
+  const content = useMemo(
+    () => defaultsContent({ form, organizationId, ready, isError, error }),
+    [form, organizationId, ready, isError, error],
+  );
+
+  const errorKeys = Object.keys(form.formState.errors).filter(
+    (k) => k !== 'root',
+  );
+  const sections: SettingsSection[] = TABS.map((tab) => {
+    const value = `defaults-${tab}`;
+    return {
+      value,
+      ...EVENT_TAB_META[tab],
+      group: GROUP,
+      lazy: tab === 'discord',
+      fields: EVENT_SECTION_FIELDS[tab],
+      content: content[tab],
+      invalid: errorKeys.some((k) => sectionFor(k) === value),
+    };
+  });
+
+  return { sections, unit };
+}
+
+function defaultsContent({
+  form,
+  organizationId,
+  ready,
+  isError,
+  error,
+}: {
+  form: UseFormReturn<OrgDefaultsFormInput, unknown, OrgDefaultsInput>;
+  organizationId: number;
+  ready: boolean;
+  isError: boolean;
+  error: unknown;
+}): Record<DefaultsTab, ReactNode> {
   const wrap = (children: ReactNode) => {
     if (isError) {
       return (
@@ -275,7 +314,7 @@ export function useOrgEventDefaultsSections(
         </p>
       );
     }
-    return defaults && hydrated ? (
+    return ready ? (
       <Form {...form}>
         <div className="flex flex-col gap-4">{children}</div>
       </Form>
@@ -284,7 +323,7 @@ export function useOrgEventDefaultsSections(
     );
   };
 
-  const content: Record<DefaultsTab, ReactNode> = {
+  return {
     event: wrap(
       <>
         <TimezoneField
@@ -403,22 +442,4 @@ export function useOrgEventDefaultsSections(
       />,
     ),
   };
-
-  const errorKeys = Object.keys(form.formState.errors).filter(
-    (k) => k !== 'root',
-  );
-  const sections: SettingsSection[] = TABS.map((tab) => {
-    const value = `defaults-${tab}`;
-    return {
-      value,
-      ...EVENT_TAB_META[tab],
-      group: GROUP,
-      lazy: tab === 'discord',
-      fields: EVENT_SECTION_FIELDS[tab],
-      content: content[tab],
-      invalid: errorKeys.some((k) => sectionFor(k) === value),
-    };
-  });
-
-  return { sections, unit };
 }

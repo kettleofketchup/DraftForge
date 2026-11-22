@@ -3,7 +3,13 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { CalendarIcon, Settings2, Trophy } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { useForm, type FieldErrors } from 'react-hook-form';
+import {
+  useForm,
+  useFormState,
+  type Control,
+  type FieldErrors,
+  type UseFormSetValue,
+} from 'react-hook-form';
 import { useLocation } from 'react-router';
 import { toast } from 'sonner';
 
@@ -17,6 +23,7 @@ import type { LeagueType } from '~/components/league/schemas';
 import {
   SettingsDialog,
   type SettingsDialogHandle,
+  type SettingsDialogProps,
   type SettingsSection,
 } from '~/components/patterns/SettingsDialog';
 import { DraftSettingsSection } from '~/components/teamdraft/DraftSettingsSection';
@@ -172,7 +179,6 @@ export const TournamentEditForm: React.FC<Props> = ({
   const leaguesOrgId = useUserStore((state) => state.leaguesOrgId);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const sections = useRef<SettingsDialogHandle<string>>(null);
 
   const isEditing = !!tourn?.pk;
@@ -181,8 +187,6 @@ export const TournamentEditForm: React.FC<Props> = ({
     : null;
 
   const initialDateTime = extractDateAndTime(tourn?.date_played);
-  const [selectedDate, setSelectedDate] = useState(initialDateTime.date);
-  const [selectedTime, setSelectedTime] = useState(initialDateTime.time);
 
   useEffect(() => {
     if (leaguesOrgId !== 'all') getLeagues();
@@ -232,27 +236,11 @@ export const TournamentEditForm: React.FC<Props> = ({
 
   // The dialog stays mounted between openings; start each one from the
   // tournament's current values, as the old remounting dialog did.
-  const [wasOpen, setWasOpen] = useState(open);
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    if (open) {
-      const fresh = extractDateAndTime(tourn?.date_played);
-      setSelectedDate(fresh.date);
-      setSelectedTime(fresh.time);
-    }
-  }
   useEffect(() => {
     if (open) form.reset(defaultValues());
     // Reset only on opening; defaultValues reads the latest tourn.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  useEffect(() => {
-    form.setValue(
-      'date_played',
-      combineDateAndTime(selectedDate, selectedTime),
-    );
-  }, [selectedDate, selectedTime, form]);
 
   const currentLeague: LeagueOption | null =
     typeof tourn?.league === 'object' && tourn.league !== null
@@ -274,9 +262,6 @@ export const TournamentEditForm: React.FC<Props> = ({
   // Where the field renders, else its default tab, else General.
   const tabFor = (field: string): string =>
     sections.current?.sectionOfField(field) ?? tabForField(field);
-  const errorKeys = Object.keys(form.formState.errors).filter(
-    (k) => k !== 'root',
-  );
 
   async function onSubmit(data: CreateTournamentInput) {
     if (isSubmitting) return;
@@ -397,68 +382,11 @@ export const TournamentEditForm: React.FC<Props> = ({
           order={['single_elimination', 'double_elimination', 'swiss']}
         />
 
-        {/* Date & Time Picker */}
-        <FormField
+        <TournamentDateTimeField
           control={form.control}
-          name="date_played"
-          render={({ field }) => (
-            <FormItem className="flex flex-col">
-              <FormLabel>Tournament Date & Time</FormLabel>
-              <div className="flex flex-wrap gap-2">
-                {/* Date Picker */}
-                <Popover
-                  open={calendarOpen}
-                  onOpenChange={setCalendarOpen}
-                  modal={true}
-                >
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          'pl-3 text-left font-normal',
-                          !selectedDate && 'text-muted-foreground',
-                        )}
-                        data-testid="tournament-date-picker"
-                      >
-                        {selectedDate ? (
-                          format(localDate(selectedDate), 'PPP')
-                        ) : (
-                          <span>Pick a date</span>
-                        )}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={
-                        selectedDate ? localDate(selectedDate) : undefined
-                      }
-                      onSelect={(date) => {
-                        if (date) {
-                          setSelectedDate(format(date, 'yyyy-MM-dd'));
-                        }
-                        setCalendarOpen(false);
-                      }}
-                      data-testid="tournament-calendar"
-                    />
-                  </PopoverContent>
-                </Popover>
-
-                {/* Time Picker */}
-                <Input
-                  type="time"
-                  value={selectedTime}
-                  onChange={(e) => setSelectedTime(e.target.value)}
-                  className="w-fit"
-                  data-testid="tournament-time-picker"
-                />
-              </div>
-              <FormMessage />
-            </FormItem>
-          )}
+          setValue={form.setValue}
+          open={open}
+          datePlayed={tourn?.date_played}
         />
 
         <TimezoneField
@@ -562,7 +490,6 @@ export const TournamentEditForm: React.FC<Props> = ({
     ? FORM_SECTIONS.map((section) => ({
         ...section,
         content: content[section.value],
-        invalid: errorKeys.some((k) => tabFor(k) === section.value),
       }))
     : [
         {
@@ -579,7 +506,9 @@ export const TournamentEditForm: React.FC<Props> = ({
 
   return (
     <Form {...form}>
-      <SettingsDialog
+      <TournamentSettingsDialog
+        control={form.control}
+        tabFor={tabFor}
         open={open}
         onOpenChange={onOpenChange}
         title={title}
@@ -609,3 +538,124 @@ export const TournamentEditForm: React.FC<Props> = ({
     </Form>
   );
 };
+
+const FORM_SECTION_VALUES = new Set<string>(FORM_SECTIONS.map((s) => s.value));
+
+/** Marks invalid tabs; reads errors here so they don't re-render the tab contents. */
+function TournamentSettingsDialog({
+  control,
+  tabFor,
+  sections,
+  ...props
+}: SettingsDialogProps<string> & {
+  control: Control<CreateTournamentInput>;
+  tabFor: (field: string) => string;
+}) {
+  const { errors } = useFormState({ control });
+  const errorKeys = Object.keys(errors).filter((k) => k !== 'root');
+  return (
+    <SettingsDialog
+      {...props}
+      sections={sections.map((section) =>
+        FORM_SECTION_VALUES.has(section.value)
+          ? {
+              ...section,
+              invalid: errorKeys.some((k) => tabFor(k) === section.value),
+            }
+          : section,
+      )}
+    />
+  );
+}
+
+/** Date and time pickers; their state lives here so picking re-renders only this field. */
+function TournamentDateTimeField({
+  control,
+  setValue,
+  open,
+  datePlayed,
+}: {
+  control: Control<CreateTournamentInput>;
+  setValue: UseFormSetValue<CreateTournamentInput>;
+  open: boolean;
+  datePlayed: string | null | undefined;
+}) {
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const initial = extractDateAndTime(datePlayed);
+  const [selectedDate, setSelectedDate] = useState(initial.date);
+  const [selectedTime, setSelectedTime] = useState(initial.time);
+
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setSelectedDate(initial.date);
+      setSelectedTime(initial.time);
+    }
+  }
+
+  useEffect(() => {
+    setValue('date_played', combineDateAndTime(selectedDate, selectedTime));
+  }, [selectedDate, selectedTime, setValue]);
+
+  return (
+    <FormField
+      control={control}
+      name="date_played"
+      render={() => (
+        <FormItem className="flex flex-col">
+          <FormLabel>Tournament Date & Time</FormLabel>
+          <div className="flex flex-wrap gap-2">
+            <Popover
+              open={calendarOpen}
+              onOpenChange={setCalendarOpen}
+              modal={true}
+            >
+              <PopoverTrigger asChild>
+                <FormControl>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'pl-3 text-left font-normal',
+                      !selectedDate && 'text-muted-foreground',
+                    )}
+                    data-testid="tournament-date-picker"
+                  >
+                    {selectedDate ? (
+                      format(localDate(selectedDate), 'PPP')
+                    ) : (
+                      <span>Pick a date</span>
+                    )}
+                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                  </Button>
+                </FormControl>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate ? localDate(selectedDate) : undefined}
+                  onSelect={(date) => {
+                    if (date) {
+                      setSelectedDate(format(date, 'yyyy-MM-dd'));
+                    }
+                    setCalendarOpen(false);
+                  }}
+                  data-testid="tournament-calendar"
+                />
+              </PopoverContent>
+            </Popover>
+
+            <Input
+              type="time"
+              value={selectedTime}
+              onChange={(e) => setSelectedTime(e.target.value)}
+              className="w-fit"
+              data-testid="tournament-time-picker"
+            />
+          </div>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
