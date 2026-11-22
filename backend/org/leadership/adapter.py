@@ -11,9 +11,10 @@ from events.models import Event
 from org.contributions.serializers import member_summary
 from org.feature_keys import FeatureKey
 from org.leadership import lifecycle, maintenance
-from org.leadership.queries import CaptainRating, captain_ratings, points_by_member
+from org.leadership.queries import CaptainRating, points_board, rating_board
+from org.leadership.rating import display
 from org.leadership.settings import get_leadership_settings
-from org.leadership.summary import member_payload, round_score
+from org.leadership.summary import member_payload
 from org.leadership.traits import effective_traits
 from org.models import Organization, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain
@@ -239,8 +240,7 @@ class LeadershipTrack(TrackBase):
         *,
         now: datetime,
     ) -> tuple[list[LeaderboardRow], LeaderboardRow | None]:
-        settings = get_leadership_settings(org)
-        sums = list(points_by_member(org.pk, settings, period, now=now))
+        sums = list(points_board(org.pk, period, now=now))
         members = self._members(org, [s["org_user"] for s in sums])
         rows = [
             LeaderboardRow(
@@ -268,7 +268,7 @@ class LeadershipTrack(TrackBase):
     ) -> tuple[list[LeaderboardRow], LeaderboardRow | None]:
         settings = get_leadership_settings(org)
         traits = effective_traits(org)
-        ratings = captain_ratings(org.pk, settings, traits, now=now)
+        ratings = rating_board(org.pk, now=now, settings=settings, traits=traits)
         trait_pk = None
         if metric.key.startswith(TRAIT_METRIC_PREFIX):
             wanted = metric.key.removeprefix(TRAIT_METRIC_PREFIX)
@@ -276,7 +276,7 @@ class LeadershipTrack(TrackBase):
 
         def value(rating: CaptainRating) -> float | None:
             raw = rating.overall if trait_pk is None else rating.traits.get(trait_pk)
-            return round_score(raw)
+            return display(raw)
 
         members = self._members(org, list(ratings))
         scored = [
