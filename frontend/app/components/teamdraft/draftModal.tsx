@@ -46,6 +46,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
+import { serverNow } from '~/lib/draftClock/clock';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import {
@@ -355,6 +356,10 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     setTieResolution(pendingTieResolution);
   }, [pendingTieResolution]);
   const dismissTie = useCallback(() => setTieResolution(null), []);
+  const tieServerNow = useCallback(
+    () => serverNow(useDraftWebSocketStore.getState().serverClockOffsetMs),
+    [],
+  );
 
   // Auto-advance to latest round when latest_round changes and autoAdvance is enabled
   // Uses primitive value (draft?.latest_round) to avoid infinite loops from object reference changes
@@ -882,6 +887,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
               captain: t.captain ?? null,
             }))}
             clockHeld={timer.clockBarProps.timerEnabled}
+            serverNow={tieServerNow}
             onDone={dismissTie}
           />
         )}

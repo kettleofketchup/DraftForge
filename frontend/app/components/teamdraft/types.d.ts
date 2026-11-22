@@ -29,6 +29,8 @@ export interface TieResolution {
   pick_number?: number;
   /** How long the server holds the next clock for the roll; absent on older payloads. */
   hold_ms?: number;
+  /** Server time (ISO) when the hold ends and the next clock starts; absent on older payloads. */
+  hold_until?: string;
 }
 
 export interface PickResponse {

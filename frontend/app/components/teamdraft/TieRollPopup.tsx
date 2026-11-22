@@ -16,6 +16,8 @@ import { cn } from '~/lib/utils';
 import type { TieResolution } from './types';
 
 export const DEFAULT_TIE_HOLD_MS = 5000;
+/** A viewer who learns of the tie as the hold ends still gets this long to read the result. */
+export const TIE_ROLL_MIN_VISIBLE_MS = 3000;
 const WINNER_LINGER_MS = 1500;
 const MIN_ROUND_MS = 500;
 const MAX_ROUND_MS = 1200;
@@ -78,9 +80,20 @@ interface TieRollPopupProps {
   clockHeld: boolean;
   /** Injected for tests; defaults to performance.now. */
   now?: () => number;
+  /** Server-clock epoch ms, used to read `hold_until`; defaults to this browser's clock. */
+  serverNow?: () => number;
 }
 
 const perfNow = () => performance.now();
+const localNow = () => Date.now();
+
+/** Hold left at mount: until `hold_until` on the server clock (never more than the full hold), else `hold_ms`. */
+export function tieHoldLeftMs(tie: TieResolution, serverNowMs: number): number {
+  const fullMs = tie.hold_ms ?? DEFAULT_TIE_HOLD_MS;
+  const until = tie.hold_until ? Date.parse(tie.hold_until) : Number.NaN;
+  if (Number.isNaN(until)) return fullMs;
+  return Math.min(fullMs, Math.max(0, until - serverNowMs));
+}
 
 export function TieRollPopup({
   tie,
@@ -88,9 +101,14 @@ export function TieRollPopup({
   onDone,
   clockHeld,
   now = perfNow,
+  serverNow = localNow,
 }: TieRollPopupProps) {
   const rounds = tie.roll_rounds.length;
-  const timeline = tieRollTimeline(rounds, tie.hold_ms ?? DEFAULT_TIE_HOLD_MS);
+  const [holdLeftMs] = useState(() => tieHoldLeftMs(tie, serverNow()));
+  const timeline = tieRollTimeline(
+    rounds,
+    Math.max(holdLeftMs, TIE_ROLL_MIN_VISIBLE_MS),
+  );
   const nowRef = useRef(now);
   const [startedAt] = useState(now);
   const [elapsed, setElapsed] = useState(0);
@@ -118,10 +136,7 @@ export function TieRollPopup({
       : (tie.tied_teams.find((t) => t.id === teamId)?.name ?? 'Team');
   };
   const winnerLabel = labelOf(tie.winner_id);
-  const secondsLeft = Math.max(
-    0,
-    Math.ceil((timeline.totalMs - elapsed) / 1000),
-  );
+  const secondsLeft = Math.max(0, Math.ceil((holdLeftMs - elapsed) / 1000));
   const remainingPct = Math.max(0, 100 - (100 * elapsed) / timeline.totalMs);
 
   return (
@@ -237,7 +252,7 @@ export function TieRollPopup({
         >
           {frame.winnerShown ? `${winnerLabel} picks next` : 'Rolling…'}
         </span>
-        {clockHeld && (
+        {clockHeld && secondsLeft > 0 && (
           <span
             data-testid="tie-roll-countdown"
             className="text-xs tabular-nums text-muted-foreground"

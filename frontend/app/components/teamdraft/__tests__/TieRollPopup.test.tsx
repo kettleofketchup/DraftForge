@@ -3,7 +3,9 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DisplayName } from '~/index';
 import {
+  TIE_ROLL_MIN_VISIBLE_MS,
   TieRollPopup,
+  tieHoldLeftMs,
   tieRollFrame,
   tieRollKey,
   tieRollTimeline,
@@ -72,6 +74,13 @@ describe('tieRollTimeline / tieRollFrame', () => {
       tumbling: false,
       winnerShown: true,
     });
+  });
+  it('reads the hold left from hold_until, bounded by the full hold', () => {
+    const at = (ms: number) => new Date(ms).toISOString();
+    expect(tieHoldLeftMs({ ...tie, hold_until: at(3000) }, 1000)).toBe(2000);
+    expect(tieHoldLeftMs({ ...tie, hold_until: at(3000) }, 9000)).toBe(0);
+    expect(tieHoldLeftMs({ ...tie, hold_until: at(60_000) }, 0)).toBe(5000);
+    expect(tieHoldLeftMs({ ...tie, hold_until: undefined }, 0)).toBe(5000);
   });
   it('keys the same roll identically and different picks differently', () => {
     expect(tieRollKey(tie)).toBe(tieRollKey({ ...tie }));
@@ -220,5 +229,92 @@ describe('TieRollPopup', () => {
     );
     advance(5100);
     expect(onDone).toHaveBeenCalled();
+  });
+
+  describe('anchored to the server hold end', () => {
+    // Server clock runs 10 s ahead of this browser's performance clock.
+    const SERVER_AHEAD = 10_000;
+    const serverNow = () => clock + SERVER_AHEAD;
+    const heldUntil = (msFromMount: number) =>
+      new Date(SERVER_AHEAD + msFromMount).toISOString();
+
+    it('counts down to hold_until, not a fresh hold from mount', () => {
+      render(
+        <TieRollPopup
+          tie={{ ...tie, hold_until: heldUntil(4000) }}
+          teams={teams}
+          clockHeld
+          onDone={vi.fn()}
+          now={now}
+          serverNow={serverNow}
+        />,
+      );
+      expect(screen.getByTestId('tie-roll-countdown')).toHaveTextContent(
+        'Clock starts in 4s',
+      );
+      advance(2100);
+      expect(screen.getByTestId('tie-roll-countdown')).toHaveTextContent(
+        'Clock starts in 2s',
+      );
+    });
+
+    it('closes when the server hold ends', () => {
+      const onDone = vi.fn();
+      render(
+        <TieRollPopup
+          tie={{ ...tie, hold_until: heldUntil(4000) }}
+          teams={teams}
+          clockHeld
+          onDone={onDone}
+          now={now}
+          serverNow={serverNow}
+        />,
+      );
+      advance(3900);
+      expect(onDone).not.toHaveBeenCalled();
+      advance(200);
+      expect(onDone).toHaveBeenCalled();
+    });
+
+    it('stays up for the minimum readable time when the hold has nearly run out', () => {
+      const onDone = vi.fn();
+      render(
+        <TieRollPopup
+          tie={{ ...tie, hold_until: heldUntil(500) }}
+          teams={teams}
+          clockHeld
+          onDone={onDone}
+          now={now}
+          serverNow={serverNow}
+        />,
+      );
+      advance(600);
+      expect(screen.queryByTestId('tie-roll-countdown')).toBeNull();
+      advance(TIE_ROLL_MIN_VISIBLE_MS - 700);
+      expect(onDone).not.toHaveBeenCalled();
+      advance(200);
+      expect(onDone).toHaveBeenCalled();
+      expect(screen.getByTestId('tie-roll-result')).toHaveTextContent(
+        'picks next',
+      );
+    });
+
+    it('falls back to hold_ms from mount when hold_until is unreadable', () => {
+      const onDone = vi.fn();
+      render(
+        <TieRollPopup
+          tie={{ ...tie, hold_until: 'not a time' }}
+          teams={teams}
+          clockHeld
+          onDone={onDone}
+          now={now}
+          serverNow={serverNow}
+        />,
+      );
+      advance(4900);
+      expect(onDone).not.toHaveBeenCalled();
+      advance(200);
+      expect(onDone).toHaveBeenCalled();
+    });
   });
 });
