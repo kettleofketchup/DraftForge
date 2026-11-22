@@ -9,6 +9,7 @@ import {
   traitFormValues,
   traitPutItems,
 } from '../settingsForm';
+import { leadershipSettings } from './fixtures';
 
 const VALUES = {
   review_window_hours: 48,
@@ -83,6 +84,42 @@ describe('leadership settings form', () => {
       ['review_window_hours', 'Too big.'],
       ['points.captain', 'Too many.'],
     ]);
+  });
+});
+
+describe('leadership settings form against the backend payload', () => {
+  const saved = leadershipSettings({
+    points: leadershipSettings().points.map((k) =>
+      k.kind === 'captained' ? { ...k, points: 8, overridden: true } : k,
+    ),
+  });
+
+  it('sends null for an override set back to its default', () => {
+    const form = pickLeadershipFormValues(saved);
+    expect(
+      leadershipSettingsPatch(
+        { ...form, points: { ...form.points, captained: 5 } },
+        saved,
+      ),
+    ).toEqual({ points: { captained: null } });
+  });
+
+  it('sends a changed override as its value', () => {
+    const form = pickLeadershipFormValues(saved);
+    expect(
+      leadershipSettingsPatch(
+        { ...form, points: { ...form.points, placement_1: 12 } },
+        saved,
+      ),
+    ).toEqual({ points: { placement_1: 12 } });
+  });
+
+  it('maps the max age detail onto max_age_days', () => {
+    expect(
+      leadershipSettingsFieldErrors(
+        httpError({ detail: 'Max age must be at least the half-life.' }),
+      ),
+    ).toEqual([['max_age_days', 'Max age must be at least the half-life.']]);
   });
 });
 

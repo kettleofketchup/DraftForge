@@ -12,20 +12,19 @@ import { toast } from 'sonner';
 
 import { useOrganization } from '~/components/organization/hooks/useOrganization';
 import {
-  SettingNumberInput,
+  NumberSetting,
   SettingsGroup,
+  ToggleSetting,
 } from '~/components/organization/tabs/orgSettings/settingFields';
 import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
 import {
   submitForm,
   type SettingsFormUnit,
 } from '~/components/patterns/settingsSaveBar';
-import { Badge } from '~/components/ui/badge';
 import { SecondaryButton } from '~/components/ui/buttons';
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -241,12 +240,14 @@ export function useLeadershipSection(
   return { content, unit };
 }
 
-const NUMBER_FIELDS: {
+interface NumberFieldSpec {
   name: NumberField;
   label: string;
   help: string;
   step: number;
-}[] = [
+}
+
+const REVIEW_FIELDS: NumberFieldSpec[] = [
   {
     name: 'review_window_hours',
     label: 'Review window (hours)',
@@ -260,17 +261,14 @@ const NUMBER_FIELDS: {
     step: 1,
   },
   {
-    name: 'rating_max_points',
-    label: 'Rating max points',
-    help: 'Extra points a top-rated captain earns per event (0 to 100).',
-    step: 1,
-  },
-  {
     name: 'ranked_min_reviews',
     label: 'Reviews to be ranked',
     help: 'Captains with fewer reviews are listed as new (1 to 50).',
     step: 1,
   },
+];
+
+const RATING_FIELDS: NumberFieldSpec[] = [
   {
     name: 'prior_rating',
     label: 'Prior rating',
@@ -297,6 +295,8 @@ const NUMBER_FIELDS: {
   },
 ];
 
+const TEST_ID_PREFIX = 'leadership-setting';
+
 function LeadershipSettingsFields({
   form,
   settings,
@@ -304,123 +304,59 @@ function LeadershipSettingsFields({
   form: UseFormReturn<LeadershipSettingsForm>;
   settings: LeadershipSettings;
 }) {
+  const shared = {
+    control: form.control,
+    setValue: form.setValue,
+    testIdPrefix: TEST_ID_PREFIX,
+  };
+  const numberSettings = (fields: NumberFieldSpec[]) =>
+    fields.map((spec) => (
+      <NumberSetting
+        key={spec.name}
+        {...shared}
+        {...spec}
+        defaultValue={settings.defaults[spec.name]}
+      />
+    ));
   return (
     <Form {...form}>
-      <SettingsGroup title="Reviews and rating">
-        {NUMBER_FIELDS.map(({ name, label, help, step }) => (
-          <FormField
-            key={name}
-            control={form.control}
-            name={name}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{label}</FormLabel>
-                <FormControl>
-                  <SettingNumberInput
-                    step={step}
-                    data-testid={`leadership-setting-${name}`}
-                    name={field.name}
-                    ref={field.ref}
-                    onBlur={field.onBlur}
-                    value={field.value}
-                    onChange={field.onChange}
-                  />
-                </FormControl>
-                <FormDescription>{help}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
+      <SettingsGroup title="Reviews">
+        {numberSettings(REVIEW_FIELDS)}
+      </SettingsGroup>
+      <SettingsGroup title="Points">
+        <NumberSetting
+          {...shared}
+          name="rating_max_points"
+          label="Rating max points"
+          help="Extra points a top-rated captain earns per event (0 to 100)."
+          step={1}
+          defaultValue={settings.defaults.rating_max_points}
+        />
+        {settings.points.map((kind) => (
+          <NumberSetting
+            key={kind.kind}
+            {...shared}
+            name={`points.${kind.kind}`}
+            label={kind.label}
+            help={`Points per event. Default ${kind.default}.`}
+            step={1}
+            defaultValue={kind.default}
           />
         ))}
-        <FormField
-          control={form.control}
+      </SettingsGroup>
+      <SettingsGroup title="Rating">
+        {numberSettings(RATING_FIELDS)}
+      </SettingsGroup>
+      <SettingsGroup title="Visibility">
+        <ToggleSetting
+          {...shared}
           name="leaderboard_public"
-          render={({ field }) => (
-            <FormItem>
-              <div className="flex items-center gap-3">
-                <FormControl>
-                  <Switch
-                    data-testid="leadership-setting-leaderboard_public"
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                    onBlur={field.onBlur}
-                    ref={field.ref}
-                  />
-                </FormControl>
-                <FormLabel>Public ranking</FormLabel>
-              </div>
-              <FormDescription>
-                Members see the leadership ranking. When off, only staff see it;
-                captains still see their own aggregates.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
+          label="Public ranking"
+          help="Members see the leadership ranking. When off, only staff see it; captains still see their own aggregates."
+          defaultValue={settings.defaults.leaderboard_public}
         />
       </SettingsGroup>
-      <SettingsGroup title="Captain points">
-        {settings.points.map((kind) => (
-          <FormField
-            key={kind.kind}
-            control={form.control}
-            name={`points.${kind.kind}`}
-            render={({ field }) => (
-              <FormItem>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <FormLabel className="break-words">{kind.label}</FormLabel>
-                  <PointsDefault
-                    form={form}
-                    kind={kind.kind}
-                    def={kind.default}
-                  />
-                </div>
-                <FormControl>
-                  <SettingNumberInput
-                    step={1}
-                    data-testid={`leadership-points-${kind.kind}`}
-                    name={field.name}
-                    ref={field.ref}
-                    onBlur={field.onBlur}
-                    value={field.value}
-                    onChange={field.onChange}
-                  />
-                </FormControl>
-                <FormDescription>Default {kind.default}.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        ))}
-      </SettingsGroup>
     </Form>
-  );
-}
-
-function PointsDefault({
-  form,
-  kind,
-  def,
-}: {
-  form: UseFormReturn<LeadershipSettingsForm>;
-  kind: string;
-  def: number;
-}) {
-  const value = useWatch({ control: form.control, name: `points.${kind}` });
-  if (value === def) return <Badge variant="outline">Default</Badge>;
-  return (
-    <SecondaryButton
-      type="button"
-      size="sm"
-      data-testid={`leadership-points-${kind}-reset`}
-      onClick={() =>
-        form.setValue(`points.${kind}`, def, {
-          shouldDirty: true,
-          shouldValidate: true,
-        })
-      }
-    >
-      Reset
-    </SecondaryButton>
   );
 }
 

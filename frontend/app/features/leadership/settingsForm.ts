@@ -59,7 +59,7 @@ function firstMessage(value: unknown): string | null {
   return typeof message === 'string' ? message : null;
 }
 
-/** DRF errors mapped onto form paths: `field` or `points.<kind>`. */
+/** DRF errors mapped onto form paths: `field`, `points.<kind>`, or the max-age `detail`. */
 export function leadershipSettingsFieldErrors(
   err: unknown,
 ): [`points.${string}` | LeadershipSettingsField, string][] {
@@ -77,6 +77,12 @@ export function leadershipSettingsFieldErrors(
             return message ? [[`points.${kind}`, message]] : [];
           },
         );
+      }
+      if (key === 'detail') {
+        const message = firstMessage(value);
+        return message?.startsWith('Max age')
+          ? [['max_age_days', message]]
+          : [];
       }
       if (!isLeadershipSettingsField(key)) return [];
       const message = firstMessage(value);
