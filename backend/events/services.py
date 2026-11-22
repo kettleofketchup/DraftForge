@@ -25,6 +25,7 @@ from events.constants import (
     Commitment,
     EventState,
     RepeatFrequency,
+    SignupAction,
     SignupMeans,
     SignupOpenMode,
     SignupStatus,
@@ -46,7 +47,7 @@ from events.eligibility import (
     stamp_eligibility,
     validate_friend_id,
 )
-from events.ledger import SignupActor
+from events.ledger import SignupActor, record_signup_change, snapshot
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -61,6 +62,10 @@ from events.models import (
 from events.ready_check_constants import (
     DROPPED_SIGNUP_MESSAGE,
     REMOVED_SIGNUP_STATUSES,
+)
+from events.ready_check_core import (
+    enrol_signup_if_live,
+    ready_check_promotion_status,
 )
 from events.reopen import ReopenNotPermitted, reopen_event
 from events.roster import (
@@ -690,21 +695,49 @@ def _staff_or_system_actor(user: CustomUser | None) -> SignupActor:
 
 
 def _promote_one(
-    locked: Event, signup: EventSignup, *, cache: StandingCache, actor: SignupActor
+    locked: Event,
+    signup: EventSignup,
+    *,
+    cache: StandingCache,
+    actor: SignupActor,
+    correlation_id: str = "",
 ) -> EventSignup:
+    before = snapshot(signup)
+    signup.event = locked
     signup.waitlist_position = None
     result = evaluate_signup(
         locked, signup.user, for_staff_placement=True, standing_cache=cache
     )
     stamped = stamp_eligibility(signup, result)
-    signup.status = _decide_signup_status(locked, result)
+    in_roll_call = locked.state == EventState.ROLL_CALL
+    decided = _decide_signup_status(locked, result)
+    signup.status = (
+        ready_check_promotion_status(locked, decided, signup)
+        if in_roll_call
+        else decided
+    )
     _roster_add_if_joins(signup)
     signup.save(update_fields=["status", "waitlist_position", *stamped, "updated_at"])
     invalidate_after_commit(signup)
+    record_signup_change(
+        event=locked,
+        subject=signup.user,
+        actor=actor,
+        action=SignupAction.PROMOTED,
+        signup=signup,
+        before=before,
+        after=snapshot(signup),
+        reason="waitlist_promotion",
+        correlation_id=correlation_id,
+    )
+    if in_roll_call:
+        enrol_signup_if_live(signup, actor=actor)
     return signup
 
 
-def _promote_from_waitlist(event: Event, *, actor: SignupActor) -> list[EventSignup]:
+def _promote_from_waitlist(
+    event: Event, *, actor: SignupActor, correlation_id: str = ""
+) -> list[EventSignup]:
     """Promote waitlisted signups into every free seat, in waitlist order as
     reordered by the org's standing tracks."""
     locked = lock_event(event)
@@ -720,7 +753,15 @@ def _promote_from_waitlist(event: Event, *, actor: SignupActor) -> list[EventSig
         for candidate in standing.promotion_order(locked, candidates, cache=cache):
             if not has_free_seat(locked):
                 break
-            promoted.append(_promote_one(locked, candidate, cache=cache, actor=actor))
+            promoted.append(
+                _promote_one(
+                    locked,
+                    candidate,
+                    cache=cache,
+                    actor=actor,
+                    correlation_id=correlation_id,
+                )
+            )
     if promoted:
         invalidate_after_commit(locked)
     return promoted
