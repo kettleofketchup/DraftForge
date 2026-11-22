@@ -23,7 +23,6 @@ from events.discord._shared import (
     _log_signup,
     _steam_friend_id_prefill,
 )
-from events.eligibility import validate_friend_id
 from events.models import Event
 from events.schemas import (
     DotaModalConfig,
@@ -92,7 +91,7 @@ class DotaHandler:
         return _check_dota_profile_complete(org_user, event=event)
 
     def prefill(self, org_user: OrgUser) -> dict:
-        return {"unverified_friend_id": _steam_friend_id_prefill(org_user)}
+        return {"friend_id": _steam_friend_id_prefill(org_user)}
 
     def modal_config(self, event: Event) -> DotaModalConfig:
         return DotaModalConfig.from_event(event)
@@ -102,19 +101,6 @@ class DotaHandler:
     ) -> dict:
         from events.services import apply_signup_input
 
-        try:
-            friend_id = validate_friend_id(
-                values.get("unverified_friend_id", ""), org_user
-            )
-        except DjangoValidationError as exc:
-            log.info(
-                "signup_input_rejected",
-                system="discord",
-                subsystem="interaction",
-                reason=exc.code,
-            )
-            return {"action": "error", "message": exc.messages[0]}
-
         # NOTE: positions are collected in the follow-up PositionConfirmButton
         # flow, not in this modal.
         rank_status = values.get("rank_status") or None
@@ -122,9 +108,10 @@ class DotaHandler:
         if rank_status and rank_status not in ("active", "previous", "never"):
             rank_status = "never"
 
-        patch_kwargs = {}
+        patch_kwargs: dict[str, str] = {}
+        friend_id = (values.get("friend_id") or "").strip()
         if friend_id:
-            patch_kwargs["unverified_friend_id"] = friend_id
+            patch_kwargs["steam_account_id"] = friend_id
         if rank_status:
             patch_kwargs["rank_status"] = rank_status
 
@@ -135,8 +122,13 @@ class DotaHandler:
                 patch=SignupInputPatch(**patch_kwargs),
             )
         except DjangoValidationError as exc:
-            msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-            return {"action": "error", "message": msg}
+            log.info(
+                "signup_input_rejected",
+                system="discord",
+                subsystem="interaction",
+                reason=exc.code,
+            )
+            return {"action": "error", "message": exc.messages[0]}
 
         if rank_status:
             return {

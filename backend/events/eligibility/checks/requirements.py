@@ -147,7 +147,7 @@ def check_event_requirements(ctx: EvalContext) -> list[Reason]:
     event, user, org_user = ctx.event, ctx.user, ctx.org_user
     game = REQUIREMENT_CHECKS[GameType(event.game_type)]
     steam_ok = (
-        has_registered_steam_id(user, org_user)
+        has_registered_steam_id(user)
         if event.require_steam_id or event.require_profile_complete
         else True
     )

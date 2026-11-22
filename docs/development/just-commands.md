@@ -56,7 +56,8 @@ Builds use `docker buildx` with a registry cache. Every image is tagged `:latest
 just docker::all-build [--push]   # backend, frontend and nginx in parallel
 just docker::backend::build       # backend and backend-dev
 just docker::frontend::build      # frontend and frontend-dev
-just docker::frontend::build-dev  # frontend-dev only (Playwright image)
+just docker::frontend::build-dev  # frontend-dev only (dev/test stack image)
+just docker::frontend::build-pw   # playwright-runner (CI Playwright tests; pushed by all-push)
 just docker::nginx::build
 just docker::release::build       # version-tagged release images
 ```
@@ -70,7 +71,7 @@ just docker::release::push
 
 ### Pull
 ```bash
-just docker::all-pull         # By content hash, else :latest; fails if any image is missing
+just docker::all-pull         # By content hash, else :latest; fails if any image is missing (DF_PW_CONTAINER=1 adds playwright-runner)
 just docker::release::pull    # Production images only; a missing image only warns
 ```
 

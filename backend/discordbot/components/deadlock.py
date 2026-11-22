@@ -99,7 +99,7 @@ class DeadlockSignupModal(ui.Modal):
         ) as ctx:
             values = {}
             if self.friend_id_input:
-                values["unverified_friend_id"] = self.friend_id_input.value
+                values["friend_id"] = self.friend_id_input.value
             values["deadlock_rank"] = self.rank_input.value
             values["deadlock_date"] = self.rank_date_input.value
 

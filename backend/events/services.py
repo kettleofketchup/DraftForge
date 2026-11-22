@@ -37,12 +37,12 @@ from events.discord import (
 )
 from events.eligibility import (
     EligibilityResult,
+    claim_friend_id,
     clear_eligibility,
     eligibility_values,
     evaluate_signup,
     refresh_unmet_requirements,
     stamp_eligibility,
-    sync_steam_account_from_profiles,
     validate_friend_id,
 )
 from events.ledger import SignupActor
@@ -259,7 +259,6 @@ def _create_signup(
             raise ValueError("User has already signed up for this event.")
 
     signup_type = SignupType.TEAM if event_team else SignupType.USER
-    _sync_signup_steam_account(event, user)
     result = evaluate_signup(event, user, for_staff_placement=for_staff_placement)
     eligibility = eligibility_values(result)
 
@@ -421,8 +420,9 @@ def apply_signup_input(
 
     Used by both the web `/signup/` endpoint and the Discord adapters so the
     write path is identical. Per-field branches:
-      - unverified_friend_id: validate_friend_id (digits, site-wide
-        uniqueness), then write.
+      - steam_account_id: validate_friend_id (digits, range, site-wide
+        uniqueness, never replaces a set ID), then fills an empty
+        CustomUser.steam_account_id.
       - positions: priorities dict or list[int] of roles; writes pos_1..pos_5
         booleans and CustomUser.positions priorities.
       - rank_status: validated against event.allow_* flags on Dota events.
@@ -443,14 +443,10 @@ def apply_signup_input(
     if not set_fields:
         return None
 
-    friend_id: str | None = None
-    if "unverified_friend_id" in set_fields:
-        friend_id = validate_friend_id(
-            set_fields["unverified_friend_id"] or "", org_user
-        )
+    user = org_user.user
+    if "steam_account_id" in set_fields:
+        validate_friend_id(set_fields["steam_account_id"], user)
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    if friend_id is not None:
-        profile.unverified_friend_id = friend_id
     if "positions" in set_fields:
         # Two accepted input shapes (normalized to per-role priorities here):
         #   - dict {carry, mid, offlane, soft_support, hard_support} each 0..5
@@ -505,7 +501,6 @@ def apply_signup_input(
         # Write priorities to the user's main PositionsModel so the
         # edit-profile page reflects them. Auto-create the row if missing
         # (matches CustomUser.save() default).
-        user = org_user.user
         user_positions = user.positions
         if user_positions is None:
             user_positions = PositionsModel.objects.create()
@@ -551,6 +546,8 @@ def apply_signup_input(
         _validate_screenshot_url(set_fields["battlecup_screenshot"])
         profile.battlecup_screenshot = set_fields["battlecup_screenshot"] or ""
 
+    if "steam_account_id" in set_fields:
+        claim_friend_id(user, set_fields["steam_account_id"], event=event)
     profile.save()
     invalidate_after_commit(profile, org_user, event)
     refresh_unmet_requirements(org_user)
@@ -675,16 +672,6 @@ def cancel_signup(
     return signup
 
 
-def _sync_signup_steam_account(event: Event, user: CustomUser) -> None:
-    """Mirror the profile friend ID onto ``User.steam_account_id`` once per
-    signup decision, before requirements are checked."""
-    wrote = sync_steam_account_from_profiles(
-        user, event.organization, event_id=event.pk
-    )
-    if wrote and event.tournament_id is not None:
-        invalidate_after_commit(event.tournament)
-
-
 def _by_member(actor: SignupActor | None) -> bool:
     return actor is not None and actor.role == ActorRole.MEMBER
 
@@ -693,7 +680,6 @@ def _promote_one(
     locked: Event, signup: EventSignup, *, cache: StandingCache
 ) -> EventSignup:
     signup.waitlist_position = None
-    _sync_signup_steam_account(locked, signup.user)
     result = evaluate_signup(
         locked, signup.user, for_staff_placement=True, standing_cache=cache
     )
@@ -801,7 +787,6 @@ def reinstate_signup(
     if event.state != "signups_open":
         raise ValueError(NOT_ACCEPTING_MESSAGE)
     locked = lock_event(event)
-    _sync_signup_steam_account(locked, signup.user)
     result = evaluate_signup(
         locked, signup.user, for_staff_placement=for_staff_placement
     )
