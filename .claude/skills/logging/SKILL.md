@@ -56,7 +56,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `auth` | `internal` | — | `app/auth.py` | Internal-service auth (X-Internal-Token): IP-allowlist rejects, invalid-token failures |
 | `auth` | `social` | — | `app/pipelines.py` | Discord OAuth social-auth pipeline: account reclaim/merge, username matching |
 | `auth` | `merge` | — | `app/discord_accounts.py` | Discord account de-dup / merge |
-| `tournament` | `draft`, `registration`, `user` | — | `app/models.py`, `app/functions/tournament.py`, `draft/models/team.py`, `draft/views/team_setup.py`, `draft/views/team_picks.py` | Draft build/pick/rebuild, captain/team registration, per-user avatar refresh |
+| `tournament` | `draft`, `registration`, `user` | — | `app/models.py`, `tournament/functions.py`, `draft/models/team.py`, `draft/views/team_setup.py`, `draft/views/team_picks.py` | Draft build/pick/rebuild, captain/team registration, per-user avatar refresh |
 | `api` | `serializer`, `routing`, `main`, `csv_import`, `joke` | — | `app/serializers.py`, `app/views*.py`, `app/views/csv_import.py`, `backend/urls.py` | DRF serializer mutations, view cache-miss, CSV import, env/routing |
 | `user` | `functions` | — | `app/functions/user.py` | Profile-update request/validate/apply |
 | `app` | `signals` | — | `tournament/signals.py`, `draft/signals.py` | Model signal handlers (org/league user create, herodraft cleanup) |

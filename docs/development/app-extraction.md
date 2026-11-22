@@ -12,11 +12,13 @@ Planned slices, in order:
 | Team draft (done: `Draft`, `DraftRound`, `DraftEvent`, `DraftOptions`, teamdraft/shuffle/draft_picks, `draft_tick`, `teamdraft_tick`) | `app` | `draft` |
 | Organization (done: `Organization`, `OrgLog`, org permissions) | `app` | `org` |
 | League (done: `League`, `LeagueRating`, `LeagueMatch`, `LeagueMatchParticipant`, `LeagueLog`, league permissions, rating and match services) | `app` | `league` |
-| Bracket and tournament (next) | `bracket` | `tournament` |
+| Tournament (in progress, three PRs: domain layer, HTTP/WebSocket surface, then `Tournament`, `Team`, `Game`, `TeamLog`) | `app` | `tournament` |
+| Bracket models (later: `TournamentBracket`, `BracketSlot`; bracket views and URL wiring already live in `tournament`) | `bracket` | `tournament` |
+| Users, profile claims, jokes (later) | `app` | to be decided |
 
 `CustomUser` stays in `app` (it is `AUTH_USER_MODEL`).
 
-After the league slice, `app/models.py` points at `league` through three lazy strings, all of which leave with the bracket and tournament slice: `"league.League"` in `Tournament.league` and `Game.league`, and `"league.LeagueUser"` in `Team.league_users` (plus its method-body use through `self.league_users.model`). Two lazy `"org.Organization"` strings remain, on `CustomUser.default_organization` and `ProfileClaimRequest.organization`; `League.organization` left with the model. Lazy strings are not import edges, so they are not in `ALLOWED_BACK_EDGES`.
+After the league slice, `app/models.py` points at `league` through three lazy strings, all of which leave with the tournament slice: `"league.League"` in `Tournament.league` and `Game.league`, and `"league.LeagueUser"` in `Team.league_users` (plus its method-body use through `self.league_users.model`). Two lazy `"org.Organization"` strings remain, on `CustomUser.default_organization` and `ProfileClaimRequest.organization`; `League.organization` left with the model. Lazy strings are not import edges, so they are not in `ALLOWED_BACK_EDGES`.
 
 ## Rules for every slice
 
@@ -96,8 +98,7 @@ For a new app:
 
 Not every source app is `app`:
 
-- `bracket` is its own app (label `bracket`, `bracket.apps.BracketConfig`, tables `bracket_*`). The bracket/tournament slice uses `source_app="bracket"`, and its tables keep the `bracket_` prefix.
-- `backend/tournament/` holds only a stray 0-byte `models.py` and no `__init__.py`. The tournament slice must create the app properly or delete that file first.
+- `bracket` is its own app (label `bracket`, `bracket.apps.BracketConfig`, tables `bracket_*`). The later bracket-models slice moves `TournamentBracket` and `BracketSlot` into `tournament` with `source_app="bracket"`, state-only, and keeps the `bracket_*` tables.
 
 To extend an existing app (as the organization slice did with `org`):
 
@@ -154,6 +155,10 @@ Every commit must pass `manage.py check`, the tests that touch the slice and bot
 
 **Slice size.** Split a slice into stacked PRs when it has a separable shared-infrastructure move (prep and infra in one PR, domain code and models in the next), or when the diff passes roughly 60 non-test files. The team draft slice is the worked example: the prep commits plus the `draft_tick` and `consumers_base` moves form a self-contained prefix that touches no models or migrations.
 
+When the code surface alone passes the threshold, use three stacked PRs cut from one branch, as the tournament slice did: (a) prep fixes, the empty app and the domain layer (permissions, services, signals, state and listing helpers, internal client, schemas, management commands); (b) the HTTP and WebSocket surface (serializers, views, URL wiring, consumers, SSR, internal endpoints, admin); (c) the model move. The models stay in the source app through (a) and (b), so every PR leaves the tree importable and adds no migrations until (c).
+
+A split creates interim same-name twins: a name that moves in (a) can still be defined in the source app by a module that only moves in (b), for example the worker HTTP client `get_tournament_for_task` and the internal view of the same name. Record each twin in `ALLOWED_NAME_COLLISIONS` with the PR that removes it; `test_name_collisions_not_stale` forces the removal.
+
 After each commit, run the touched-name sweep (every test module that mentions the slice):
 
 ```bash
@@ -189,14 +194,18 @@ Commit an `<new_app>/tests/test_<new_app>_routes.py` that resolves every moved p
 Add a `MovedSlice` to `backend/tests/test_app_boundaries.py` and append it to `MOVED_SLICES`:
 
 - `moved`: fully qualified `(old_module, name)` pairs. Include names the old modules only imported, if tests used to patch them there (for example `("app.consumers", "broadcast_herodraft_state")`).
-- `retired_modules`: module paths that no longer exist. Every top-level class and function a retired module defined also goes into `moved`, under the old module path. The anywhere-redefinition check reads only `moved`, so an unlisted name could be redefined in the source app unnoticed. `test_retired_module_defs_listed_in_moved` enforces this: it reads each retired module's new home (the same path under the new app, or its entry in `RETIRED_MODULE_HOMES`, where `None` marks a module renamed within the source app) and fails on any top-level class or function missing from `moved`.
+- `retired_modules`: module paths that no longer exist. Every top-level class and function a retired module defined also goes into `moved`, under the old module path. When a module is split (some names stay in the source app under another module, some leave), names that stay in the source app are never listed in `moved`, because their definition there would trip the redefinition check; names that leave for any other app are listed. `app/permissions_tournament.py` is the example: `request_user` went to `app.permissions` and is not listed, while `has_event_staff_access` went to `events.permissions` and is. The anywhere-redefinition check reads only `moved`, so an unlisted name could be redefined in the source app unnoticed. `test_retired_module_defs_listed_in_moved` enforces this: it reads each retired module's new home (the same path under the new app, or its entry in `RETIRED_MODULE_HOMES`, where `None` marks a module renamed within the source app) and fails on any top-level class or function missing from `moved`.
 - `model_labels`: lower-case model names. The guard checks `app_label` and `db_table` for each.
 - `move_migration`: `(source_app, name)` of the source app's move migration. The guard scans every other app's migrations for references to the moved models under the source label and requires each one to be an ancestor of this migration.
 - `cached_labels`: the moved models that have a `CACHEOPS` profile. The guard checks that `"<new_app>.<label>"` is present.
 
 Do not touch `GuardSelfTests` to add a slice. They run against a synthetic fixture slice and back-edge map, not the live ones.
 
-The guard also flags `get_model("<source_app>", "<Moved>")` outside migrations and migration tests, and any top-level class or function in the source app named after a moved name. A name that genuinely collides goes in `ALLOWED_NAME_COLLISIONS` with a reason (for example the worker HTTP helper `create_herodraft_for_game` in `app/internal_client`).
+The guard also flags `get_model("<source_app>", "<Moved>")` outside migrations and migration tests, and any top-level class or function in the source app named after a moved name. Management-command `Command` classes in `*.management.commands.*` modules are exempt from that redefinition check, since every command module defines one.
+
+Lazy references are matched by label prefix, case-insensitively: `"<source_app>.<Model>"` itself, M2M through-model sender strings such as `"app.Team_members"`, and dotted field keys such as `"app.TeamLog.team"` all count as references to the moved model and must be retargeted with it. Prefer deriving such keys from `_meta.label` over writing literals.
+
+Committed tests never name a retired module path as a string, not even to assert its absence: the string back-door check walks test modules too. Assert the new home instead (`obj.__module__ == "<new_app>.<module>"`) and rely on `test_retired_modules_are_gone` for the absence. A name that genuinely collides goes in `ALLOWED_NAME_COLLISIONS` with a reason (for example the worker HTTP helper `create_herodraft_for_game` in `app/internal_client`).
 
 Update `ALLOWED_BACK_EDGES[<new_app>]` with each production file in the source app that still imports from the new app. Each entry is a `BackEdge(names, reason, type_only)`. Test modules are exempt. The rules:
 
@@ -205,7 +214,7 @@ Update `ALLOWED_BACK_EDGES[<new_app>]` with each production file in the source a
 - The list may grow, but only for class-definition-time uses, code owned by a later slice (tournament, Team) or cross-domain aggregate endpoints (`home_stats` in `app/views_main.py` counts leagues next to tournaments, games and organizations). An unlisted edge the guard reports is a design question, not something to add without thought.
 - Names imported only under `if TYPE_CHECKING:` go in `type_only`. A runtime import of a `type_only` name is a violation.
 
-Each listed name also becomes an attribute of that source-app module, so the guard blocks importing it from there (for example `from app.tournament_state import HeroDraft`) in every other file.
+Each listed name also becomes an attribute of that source-app module, so the guard blocks importing it from there (for example `from app.views_main import DraftRound`) in every other file.
 
 Derive the entries from the guard's own output rather than writing them by hand. Between commits, an edge that exists only until a later commit can be listed with a reason starting `TEMP`; none may be left by the guard commit.
 
@@ -250,9 +259,9 @@ Run the full verification before opening the PR:
 
 Add one fragment under `changelog.d/changed/` (see the [changelog workflow](changelog.md)). Mention every visible string that changed: `_meta.label`-derived payload keys, logger names, OpenTelemetry instrumentation scopes and admin URLs.
 
-### 12. Rebase and renumber before merge
+### 12. Merge `main` and renumber before merge
 
-Other branches often add the next migration number to the source app. Right before merge, rebase on `main`. If the source app's leaf moved, renumber the move migration to follow the new leaf and update its dependency. Do not add a merge migration. Then re-run `sqlmigrate` and `makemigrations --check`. CI on the PR cannot catch this, and two leaves on `main` break the release-time `makemigrations` and `migrate`.
+Other branches often add the next migration number to the source app. Right before merge, merge `origin/main` into the branch (do not rebase a stacked or shared branch). If the source app's leaf moved, renumber the move migration to follow the new leaf and update its dependency. Do not add a merge migration. Then re-run `sqlmigrate` and `makemigrations --check`. CI on the PR cannot catch this, and two leaves on `main` break the release-time `makemigrations` and `migrate`.
 
 ### 13. Deploy and rollback
 
