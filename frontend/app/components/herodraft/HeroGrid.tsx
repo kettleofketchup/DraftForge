@@ -1,4 +1,3 @@
-// frontend/app/components/herodraft/HeroGrid.tsx
 import { heroes } from 'dotaconstants';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { brandBg } from '~/components/ui/buttons/styles';
@@ -19,14 +18,12 @@ import {
 import { isOverlaidByOtherLayer } from './keyboardLayers';
 import { SuggesterStack } from './SuggesterStack';
 
-// Memoized hero button to prevent re-renders
-// IMPORTANT: Don't pass searchQuery directly - pass pre-computed booleans instead
-// to avoid all 508 buttons re-rendering on every keystroke
+// Takes precomputed booleans, not searchQuery, so a keystroke doesn't re-render every button.
 interface HeroButtonProps {
   hero: { id: number; name: string; icon: string };
   available: boolean;
-  isHighlighted: boolean; // matches && hasSearchQuery && available
-  isDimmed: boolean; // !available || (!matches && hasSearchQuery)
+  isHighlighted: boolean;
+  isDimmed: boolean;
   isSelected: boolean;
   disabled: boolean;
   onClick: (heroId: number) => void;
@@ -117,7 +114,6 @@ interface HeroGridProps {
   onHeroClick: (heroId: number) => void;
   disabled: boolean;
   showActionButton: boolean;
-  /** Current action type (ban or pick) for visual feedback */
   currentAction?: 'ban' | 'pick';
   isMyTurn?: boolean;
   canSuggest?: boolean;
@@ -153,14 +149,12 @@ export function HeroGrid({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
-  // Use selectors to prevent re-renders when unrelated state changes
   const searchQuery = useHeroDraftStore((state) => state.searchQuery);
   const setSearchQuery = useHeroDraftStore((state) => state.setSearchQuery);
   const selectedHeroId = useHeroDraftStore((state) => state.selectedHeroId);
   const setSelectedHeroId = useHeroDraftStore(
     (state) => state.setSelectedHeroId,
   );
-  // Select draft rounds directly for memoization
   const draftRounds = useHeroDraftStore((state) => state.draft?.rounds);
   const suggestHero = useHeroDraftStore((state) => state.suggestHero);
   const unsuggestHero = useHeroDraftStore((state) => state.unsuggestHero);
@@ -183,7 +177,7 @@ export function HeroGrid({
   );
   const chatInset = useHeroDraftStore((state) => state.chatPanelInset);
 
-  // Auto-focus search when typing anywhere (unless in a dialog/input)
+  // Typing anywhere outside an input or menu focuses the search box.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -201,10 +195,9 @@ export function HeroGrid({
         return;
       }
 
-      // Only handle printable characters (single character, no ctrl/alt/meta)
       if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         searchInputRef.current?.focus();
-        // Don't prevent default - let the key go through to the now-focused input
+        // No preventDefault: the key lands in the now-focused input.
       }
 
       if (e.key === 'Escape') {
@@ -236,7 +229,7 @@ export function HeroGrid({
   }, []);
 
   const filteredHeroes = useMemo(() => {
-    // Use heroMatchesSearch to match against all aliases (short names, nicknames, DotA 1 names)
+    // Also matches aliases: short names, nicknames, DotA 1 names.
     return heroList.filter((hero) => heroMatchesSearch(hero.id, searchQuery));
   }, [heroList, searchQuery]);
 
@@ -261,8 +254,8 @@ export function HeroGrid({
   const actionOverlay =
     isMyTurn && currentAction
       ? currentAction === 'ban'
-        ? 'bg-ban-surface/80' // Dark red tint for bans
-        : 'bg-pick-surface/80' // Dark green tint for picks
+        ? 'bg-ban-surface/80'
+        : 'bg-pick-surface/80'
       : '';
 
   const heroListEl = (
