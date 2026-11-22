@@ -4,9 +4,10 @@ import type {
   WebSocket as PWWebSocket,
   WebSocketRoute,
 } from '@playwright/test';
-import { chromium, expect, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { loginUser, waitForHydration } from '../../fixtures/auth';
 import { API_URL, BASE_URL } from '../../fixtures/base-url';
+import { launchChromium } from '../../fixtures/browser';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
 /**
@@ -27,7 +28,7 @@ test.describe('@cicd HeroDraft Stale Connection Detection', () => {
   test.setTimeout(60000);
 
   async function createContext(
-    browser: Awaited<ReturnType<typeof chromium.launch>>,
+    browser: Awaited<ReturnType<typeof launchChromium>>,
   ): Promise<BrowserContext> {
     return browser.newContext({ ignoreHTTPSErrors: true });
   }
@@ -74,7 +75,7 @@ test.describe('@cicd HeroDraft Stale Connection Detection', () => {
   }
 
   test('server sends ping messages during PAUSED state', async () => {
-    const browser = await chromium.launch({
+    const browser = await launchChromium({
       headless: true,
       args: [
         '--disable-web-security',
@@ -127,7 +128,7 @@ test.describe('@cicd HeroDraft Stale Connection Detection', () => {
   });
 
   test('connection stays alive during extended PAUSED period', async () => {
-    const browser = await chromium.launch({
+    const browser = await launchChromium({
       headless: true,
       args: [
         '--disable-web-security',
@@ -175,7 +176,7 @@ test.describe('@cicd HeroDraft Stale Connection Detection', () => {
   });
 
   test('client reconnects after WebSocket is force-closed', async () => {
-    const browser = await chromium.launch({
+    const browser = await launchChromium({
       headless: true,
       args: [
         '--disable-web-security',

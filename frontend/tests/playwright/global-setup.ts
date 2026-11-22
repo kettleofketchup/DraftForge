@@ -1,11 +1,12 @@
 import type { FullConfig } from '@playwright/test';
-import { chromium } from '@playwright/test';
+import {} from '@playwright/test';
 import { API_URL, BASE_URL } from './fixtures/base-url';
+import { launchChromium } from './fixtures/browser';
 
 async function globalSetup(config: FullConfig) {
   console.log('Global setup: Pre-fetching test data...');
 
-  const browser = await chromium.launch();
+  const browser = await launchChromium();
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
 
   try {
