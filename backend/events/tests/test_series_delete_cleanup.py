@@ -128,12 +128,12 @@ class AdminDeleteCleanupTest(SeriesDeleteCleanupTest):
             DiscordMessageLog.objects.filter(pk=self.message_log.pk).exists()
         )
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     def test_admin_event_delete_tears_down(self, mock_delete_task: MagicMock) -> None:
         EventAdmin(Event, admin_site).delete_model(self._request(), self.future_event)
         self._assert_torn_down(mock_delete_task)
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     def test_admin_event_bulk_delete_tears_down(
         self, mock_delete_task: MagicMock
     ) -> None:
@@ -142,7 +142,7 @@ class AdminDeleteCleanupTest(SeriesDeleteCleanupTest):
         )
         self._assert_torn_down(mock_delete_task)
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     def test_admin_series_delete_tears_down(self, mock_delete_task: MagicMock) -> None:
         EventRepeaterAdmin(EventRepeater, admin_site).delete_model(
             self._request(), self.repeater
@@ -151,7 +151,7 @@ class AdminDeleteCleanupTest(SeriesDeleteCleanupTest):
         self.past_event.refresh_from_db()
         self.assertIsNone(self.past_event.event_repeater_id)
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     def test_admin_series_bulk_delete_tears_down(
         self, mock_delete_task: MagicMock
     ) -> None:
