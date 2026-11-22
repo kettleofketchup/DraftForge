@@ -1,10 +1,13 @@
+from unittest import mock
+
 from django.test import TestCase
 from django.utils import timezone
 
 from app.discord_accounts import merge_discord_accounts
 from app.models import CustomUser
 from league.models import League, LeagueUser
-from org.models import MmrChangeRequest, Organization, OrgUser
+from org.mmr import LEAGUE_GAME
+from org.models import MmrChangeRequest, Organization, OrgUser, OrgUserGameMmr
 from org.tests.mmr_request_mixin import MmrRequestTestMixin
 
 
@@ -119,3 +122,44 @@ class MmrRequestDiscordMergeTests(MmrRequestTestMixin, TestCase):
 
         self.assertEqual(MmrChangeRequest.objects.count(), 3)
         self.assertEqual(self.media_files(), files_before)
+
+    def test_verifier_repointed_when_drop_verified(self) -> None:
+        member = CustomUser.objects.create(username="dm_member")
+        member_ou = OrgUser.objects.create(user=member, organization=self.org)
+        game_mmr = OrgUserGameMmr.objects.create(
+            org_user=member_ou,
+            game_type=LEAGUE_GAME,
+            mmr=4200,
+            verified_at=timezone.now(),
+            verified_by=self.drop,
+        )
+        member_lu = LeagueUser.objects.create(
+            user=member,
+            org_user=member_ou,
+            league=self.league,
+            mmr=4300,
+            mmr_verified_at=timezone.now(),
+            mmr_verified_by=self.drop,
+        )
+
+        with (
+            mock.patch(
+                "org.mmr_requests.services.invalidate_after_commit"
+            ) as invalidate,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            merge_discord_accounts(keep=self.keep, drop=self.drop)
+
+        self.assertFalse(CustomUser.objects.filter(pk=self.drop.pk).exists())
+        game_mmr = OrgUserGameMmr.objects.nocache().get(pk=game_mmr.pk)
+        self.assertEqual(game_mmr.verified_by_id, self.keep.pk)
+        self.assertIsNotNone(game_mmr.verified_at)
+        member_lu = LeagueUser.objects.nocache().get(pk=member_lu.pk)
+        self.assertEqual(member_lu.mmr_verified_by_id, self.keep.pk)
+        invalidated = {
+            (type(obj), obj.pk)
+            for call in invalidate.call_args_list
+            for obj in call.args
+        }
+        self.assertIn((OrgUserGameMmr, game_mmr.pk), invalidated)
+        self.assertIn((LeagueUser, member_lu.pk), invalidated)

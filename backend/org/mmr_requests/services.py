@@ -8,6 +8,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 
+from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
 from league.mmr import set_league_mmr
 from league.models import LeagueUser
@@ -496,6 +497,7 @@ def repoint_mmr_requests(
         MmrChangeRequest.objects.filter(**{field: target_user}).update(
             **{field: claimer}
         )
+    verifier_rows = _repoint_mmr_verifiers(claimer, target_user)
 
     log.info(
         "mmr_requests_repointed",
@@ -506,4 +508,27 @@ def repoint_mmr_requests(
         org_user_pairs=[(a.pk, b.pk) for a, b in org_user_pairs],
         league_user_pairs=[(a.pk, b.pk) for a, b in league_user_pairs],
         superseded_ids=superseded,
+        repointed_verifier_rows=verifier_rows,
     )
+
+
+def _repoint_mmr_verifiers(claimer: CustomUser, target_user: CustomUser) -> int:
+    game_mmrs = list(OrgUserGameMmr.objects.nocache().filter(verified_by=target_user))
+    league_users = list(
+        LeagueUser.objects.nocache().filter(mmr_verified_by=target_user)
+    )
+    if game_mmrs:
+        OrgUserGameMmr.objects.filter(pk__in=[r.pk for r in game_mmrs]).update(
+            verified_by=claimer
+        )
+        for row in game_mmrs:
+            row.verified_by_id = claimer.pk
+    if league_users:
+        LeagueUser.objects.filter(pk__in=[r.pk for r in league_users]).update(
+            mmr_verified_by=claimer
+        )
+        for lu in league_users:
+            lu.mmr_verified_by_id = claimer.pk
+    if game_mmrs or league_users:
+        invalidate_after_commit(*game_mmrs, *league_users)
+    return len(game_mmrs) + len(league_users)

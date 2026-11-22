@@ -4,7 +4,8 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser, PositionsModel, ProfileClaimRequest
 from league.models import League, LeagueUser
-from org.models import MmrChangeRequest, Organization, OrgUser
+from org.mmr import LEAGUE_GAME
+from org.models import MmrChangeRequest, Organization, OrgUser, OrgUserGameMmr
 from org.tests.mmr_request_mixin import MmrRequestTestMixin
 
 
@@ -199,3 +200,30 @@ class MmrRequestClaimMergeTests(MmrRequestTestMixin, TestCase):
             ).exists()
         )
         self.assertEqual(self.media_files(), files_before)
+
+    def test_verifier_repointed_when_target_verified(self) -> None:
+        member = _user("mcm_member")
+        member_ou = OrgUser.objects.create(user=member, organization=self.org)
+        game_mmr = OrgUserGameMmr.objects.create(
+            org_user=member_ou,
+            game_type=LEAGUE_GAME,
+            mmr=4200,
+            verified_at=timezone.now(),
+            verified_by=self.target,
+        )
+        member_lu = LeagueUser.objects.create(
+            user=member,
+            org_user=member_ou,
+            league=self.league,
+            mmr=4300,
+            mmr_verified_at=timezone.now(),
+            mmr_verified_by=self.target,
+        )
+
+        self.approve()
+
+        game_mmr = OrgUserGameMmr.objects.nocache().get(pk=game_mmr.pk)
+        self.assertEqual(game_mmr.verified_by_id, self.claimer.pk)
+        self.assertIsNotNone(game_mmr.verified_at)
+        member_lu = LeagueUser.objects.nocache().get(pk=member_lu.pk)
+        self.assertEqual(member_lu.mmr_verified_by_id, self.claimer.pk)
