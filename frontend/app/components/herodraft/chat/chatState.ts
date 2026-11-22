@@ -4,6 +4,7 @@ import type {
   ChatViewer,
   PendingChat,
 } from '../types';
+import { isWithdrawal } from './suggestions';
 
 export const CHAT_MESSAGE_CAP = 200;
 
@@ -55,8 +56,8 @@ function withoutPending(
   return rest;
 }
 
-const fromOther = (m: ChatMessage, selfId?: number): boolean =>
-  selfId === undefined || m.sender.pk !== selfId;
+const countsAsUnread = (m: ChatMessage, selfId?: number): boolean =>
+  (selfId === undefined || m.sender.pk !== selfId) && !isWithdrawal(m.kind);
 
 export function applyChatHistory(
   s: ChatState,
@@ -72,7 +73,7 @@ export function applyChatHistory(
       ? 0
       : sorted.filter(
           (m) =>
-            fromOther(m, selfId) &&
+            countsAsUnread(m, selfId) &&
             (mark.after === null || compareMessages(m, mark.after) > 0),
         ).length;
   return {
@@ -104,7 +105,7 @@ export function applyChatMessage(
     ...s,
     messages: capped,
     live: { message: m },
-    unread: s.panelOpen || !fromOther(m, selfId) ? s.unread : s.unread + 1,
+    unread: s.panelOpen || !countsAsUnread(m, selfId) ? s.unread : s.unread + 1,
   };
 }
 

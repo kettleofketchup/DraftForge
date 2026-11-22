@@ -121,6 +121,20 @@ describe('HeroDraftModal chat suggestion click', () => {
     );
   });
 
+  it('shows the hero being banned on a red dialog', () => {
+    renderAs(1);
+    click(74);
+    expect(screen.getByTestId('herodraft-confirm-hero')).toHaveTextContent(
+      'Invoker',
+    );
+    expect(
+      screen.getByTestId('herodraft-confirm-description'),
+    ).toHaveTextContent('Are you sure you want to ban Invoker?');
+    expect(screen.getByTestId('herodraft-confirm-dialog')).toHaveClass(
+      'border-destructive/50',
+    );
+  });
+
   it.each([
     ['the other captain', 2],
     ['a team member', 10],

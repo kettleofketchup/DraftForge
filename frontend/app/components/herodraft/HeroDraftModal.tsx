@@ -610,6 +610,8 @@ export function HeroDraftModal({
   const rollWinnerTeam = draft?.roll_winner ?? null;
 
   const currentAction = currentRoundData?.action_type;
+  const confirmHeroName =
+    confirmHeroId !== null ? getHeroNameFromLib(confirmHeroId) : 'this hero';
 
   const handleChatSuggestionClick = (heroId: number) => {
     if (draft?.state !== 'drafting' || !isMyCaptainTurn) return;
@@ -1233,9 +1235,29 @@ export function HeroDraftModal({
           }
         }}
         title={`${currentAction === 'ban' ? 'Ban' : 'Pick'} this hero?`}
-        description={`Are you sure you want to ${currentAction} this hero?`}
+        description={`Are you sure you want to ${currentAction} ${confirmHeroName}?`}
+        bodyContent={
+          confirmHeroId !== null && (
+            <div
+              className="flex items-center gap-3"
+              data-testid="herodraft-confirm-hero"
+            >
+              <img
+                src={getHeroIcon(confirmHeroId)}
+                alt=""
+                className={cn(
+                  'size-14 rounded-full border-2 object-cover shadow-lg shadow-black/50',
+                  currentAction === 'ban'
+                    ? 'border-destructive'
+                    : 'border-success',
+                )}
+              />
+              <span className="text-lg font-semibold">{confirmHeroName}</span>
+            </div>
+          )
+        }
         confirmLabel={`Confirm ${currentAction === 'ban' ? 'Ban' : 'Pick'}`}
-        variant="default"
+        variant={currentAction === 'ban' ? 'destructive' : 'default'}
         isLoading={isSubmitting}
         onConfirm={handleConfirmPick}
         contentTestId="herodraft-confirm-dialog"
