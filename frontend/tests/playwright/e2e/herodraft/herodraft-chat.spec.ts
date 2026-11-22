@@ -8,6 +8,7 @@ import {
 } from '@playwright/test';
 import { loginAsUser, loginUser } from '../../fixtures/auth';
 import { API_URL, BASE_URL } from '../../fixtures/base-url';
+import { postWithCsrf } from '../../fixtures/events';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
 /**
@@ -168,6 +169,47 @@ async function rightClickHero(page: Page, heroId: number): Promise<void> {
 
 function sentinelFor(label: string): string {
   return `chat-${label}-${test.info().testId}-${Date.now()}`;
+}
+
+async function suggestHero(
+  actor: Actor,
+  heroId: number,
+  action: 'pick' | 'ban',
+): Promise<void> {
+  await rightClickHero(actor.page, heroId);
+  const menu = actor.page.getByTestId('herodraft-hero-suggest-menu');
+  await expect(menu).toBeVisible();
+  await actor.page.getByTestId(`herodraft-hero-suggest-${action}`).click();
+  await expect(menu).toBeHidden();
+}
+
+function suggestionChip(
+  page: Page,
+  heroId: number,
+  action: 'pick' | 'ban',
+): Locator {
+  return page.locator(
+    `[data-testid^="herodraft-chat-message-"][data-kind="suggest_${action}"][data-hero-id="${heroId}"] [data-testid^="herodraft-chat-suggestion-"]`,
+  );
+}
+
+const TINT_CLASS = /(^|\s)bg-(ban|pick)-surface\/80(\s|$)/;
+
+function tintClass(action: 'pick' | 'ban'): RegExp {
+  return new RegExp(`(^|\\s)bg-${action}-surface/80(\\s|$)`);
+}
+
+async function submitPickViaApi(
+  captain: Actor,
+  draftPk: number,
+  heroId: number,
+): Promise<void> {
+  const res = await postWithCsrf(
+    captain.context,
+    `${API_URL}/herodraft/${draftPk}/submit-pick/`,
+    { hero_id: heroId },
+  );
+  expect(res.ok(), `submit-pick ${heroId}: ${await res.text()}`).toBe(true);
 }
 
 test.describe('@cicd HeroDraft chat', () => {
@@ -721,5 +763,159 @@ test.describe('@cicd HeroDraft chat', () => {
     await openChatPanel(memberA.page);
     await expect(chatRow(memberA.page, before)).toHaveCount(0);
     await expect(chatRow(memberA.page, after)).toHaveCount(0);
+  });
+
+  interface TurnRoles {
+    firstCaptain: Actor;
+    firstMember: Actor;
+    secondCaptain: Actor;
+    secondMember: Actor;
+  }
+
+  /** Splits the actors by pick order; rounds 1-2 belong to the first team. */
+  async function turnRoles(browser: Browser): Promise<TurnRoles> {
+    const teamAUsers = new Set([teamA.captain.pk, ...teamA.member_pks]);
+    const memberBPk = teamB.member_pks.find(
+      (pk) => pk !== teamB.captain.pk && !teamAUsers.has(pk),
+    );
+    if (memberBPk === undefined) {
+      throw new Error(`${teamB.team_name} has no non-captain member`);
+    }
+    const memberB = await newActor(browser, (c) => loginAsUser(c, memberBPk));
+    extraContexts.push(memberB.context);
+    await openDraft(memberB, draft.pk);
+    expect(lastViewerRole(memberB)).toBe('member');
+
+    return teamA.is_first_pick
+      ? {
+          firstCaptain: captainA,
+          firstMember: memberA,
+          secondCaptain: captainB,
+          secondMember: memberB,
+        }
+      : {
+          firstCaptain: captainB,
+          firstMember: memberB,
+          secondCaptain: captainA,
+          secondMember: memberA,
+        };
+  }
+
+  test('captain on turn confirms a chat suggestion', async ({ browser }) => {
+    test.setTimeout(120000);
+    await setUp(browser);
+    const { firstCaptain, firstMember } = await turnRoles(browser);
+    const OTHER_HERO = 3;
+    const page = firstCaptain.page;
+    const dialog = page.getByTestId('herodraft-confirm-dialog');
+
+    await suggestHero(firstMember, AVAILABLE_HERO, 'ban');
+    await suggestHero(firstMember, OTHER_HERO, 'ban');
+    await openChatPanel(page);
+
+    await suggestionChip(page, AVAILABLE_HERO, 'ban').click();
+    await expect(dialog).toBeVisible();
+    await expect(page.getByTestId('herodraft-confirm-title')).toHaveText(
+      'Ban this hero?',
+    );
+    await firstCaptain.draftPage.confirmHeroSelection();
+    await expect(dialog).toBeHidden();
+    await firstCaptain.draftPage.assertRoundCompleted(1);
+    await firstCaptain.draftPage.assertHeroUnavailable(AVAILABLE_HERO);
+    await firstCaptain.draftPage.assertRoundActive(2);
+
+    // Round 2 is still this captain's ban, so only the drafted hero is refused.
+    await openChatPanel(page);
+    await suggestionChip(page, AVAILABLE_HERO, 'ban').click();
+    await firstCaptain.draftPage.assertHeroSelected(AVAILABLE_HERO);
+    await expect(dialog).toHaveCount(0);
+
+    await suggestionChip(page, OTHER_HERO, 'ban').click();
+    await expect(dialog).toBeVisible();
+    await firstCaptain.draftPage.cancelHeroSelection();
+    await expect(dialog).toBeHidden();
+    await firstCaptain.draftPage.assertRoundActive(2);
+    await firstCaptain.draftPage.assertHeroAvailable(OTHER_HERO);
+  });
+
+  test('chat suggestion only selects the hero for viewers not on turn', async ({
+    browser,
+  }) => {
+    test.setTimeout(120000);
+    await setUp(browser);
+    const { firstCaptain, firstMember, secondCaptain, secondMember } =
+      await turnRoles(browser);
+    const SECOND_HERO = 3;
+
+    await suggestHero(firstMember, AVAILABLE_HERO, 'ban');
+    await suggestHero(secondMember, SECOND_HERO, 'ban');
+
+    await openChatPanel(firstMember.page);
+    await suggestionChip(firstMember.page, AVAILABLE_HERO, 'ban').click();
+    await firstMember.draftPage.assertHeroSelected(AVAILABLE_HERO);
+    await expect(
+      firstMember.page.getByTestId('herodraft-confirm-dialog'),
+    ).toHaveCount(0);
+
+    await openChatPanel(secondCaptain.page);
+    await suggestionChip(secondCaptain.page, SECOND_HERO, 'ban').click();
+    await secondCaptain.draftPage.assertHeroSelected(SECOND_HERO);
+    await expect(
+      secondCaptain.page.getByTestId('herodraft-confirm-dialog'),
+    ).toHaveCount(0);
+
+    await firstCaptain.page.getByTestId('herodraft-pause-btn').click();
+    await firstCaptain.draftPage.assertPaused();
+    await openChatPanel(firstCaptain.page);
+    await suggestionChip(firstCaptain.page, AVAILABLE_HERO, 'ban').click();
+    await firstCaptain.draftPage.assertHeroSelected(AVAILABLE_HERO);
+    await expect(
+      firstCaptain.page.getByTestId('herodraft-confirm-dialog'),
+    ).toHaveCount(0);
+    await firstCaptain.draftPage.assertHeroAvailable(AVAILABLE_HERO);
+  });
+
+  test('hero grid tint follows the team on turn', async ({ browser }) => {
+    test.setTimeout(150000);
+    await setUp(browser);
+    const roles = await turnRoles(browser);
+    const firstTeam = [roles.firstCaptain, roles.firstMember];
+    const secondTeam = [roles.secondCaptain, roles.secondMember];
+    const everyone = [...firstTeam, ...secondTeam, spectator];
+    const grid = (a: Actor) => a.page.getByTestId('herodraft-hero-grid');
+
+    async function expectTint(
+      round: number,
+      onTurn: Actor[],
+      action: 'pick' | 'ban',
+    ): Promise<void> {
+      for (const actor of everyone) {
+        await actor.draftPage.assertRoundActive(round);
+        if (onTurn.includes(actor)) {
+          await expect(grid(actor)).toHaveClass(tintClass(action));
+        } else {
+          await expect(grid(actor)).not.toHaveClass(TINT_CLASS);
+        }
+      }
+    }
+
+    await expectTint(1, firstTeam, 'ban');
+
+    // Captains mode: F F S S F S S bans, then F picks at round 8.
+    const banners = [
+      roles.firstCaptain,
+      roles.firstCaptain,
+      roles.secondCaptain,
+      roles.secondCaptain,
+      roles.firstCaptain,
+      roles.secondCaptain,
+      roles.secondCaptain,
+    ];
+    for (const [i, captain] of banners.entries()) {
+      await submitPickViaApi(captain, draft.pk, i + 1);
+      if (i === 1) await expectTint(3, secondTeam, 'ban');
+    }
+
+    await expectTint(8, firstTeam, 'pick');
   });
 });
