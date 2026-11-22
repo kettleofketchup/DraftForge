@@ -123,7 +123,7 @@ Both signup paths funnel through `apply_signup_input` and write the same per-org
 
 | Field | Web (`/signup/`) | Discord modal | Storage |
 |---|---|---|---|
-| `steam_account_id` (Friend ID) | ✓ when `require_steam_id` | ✓ modal text input, hidden once the player has one | `CustomUser.steam_account_id`, filled only when empty (Dota and Deadlock). The web endpoint still accepts the deprecated `unverified_friend_id` key. |
+| `steam_account_id` (Friend ID) | ✓ when `require_steam_id` | ✓ modal text input, hidden once the player has one | `CustomUser.steam_account_id`, filled only when empty (Dota and Deadlock). The web form shows a stored ID read-only. |
 | `positions` (Dota) | ✓ priority dict 0–5 per role (PositionForm) | ✓ slot-ordered list (1st / 2nd / 3rd choice selects) | `PlayerDotaProfile.pos_1..5` booleans (derived) **and** `CustomUser.positions` PositionsModel (priorities 1–5). Web sends a literal dict; Discord's `list[int]` is mapped to priorities by slot index (1st pick → priority 1, 2nd → 2, capped at 5; earliest slot wins on duplicate role). |
 | `rank_status` (Dota) | ✓ RankStatusRadioGroup | ✓ rank select | `PlayerDotaProfile.rank_status` |
 | `rank_medal` (Dota) | ✓ medal+star → joined ("Legend 4") | ✓ MedalSelect + StarSelect follow-up | `PlayerDotaProfile.rank_medal` |

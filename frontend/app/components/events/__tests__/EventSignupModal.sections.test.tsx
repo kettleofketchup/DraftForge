@@ -14,13 +14,16 @@ vi.mock('~/hooks/useEvent', () => ({
   }),
 }));
 
-function renderModal(overrides: Partial<EventType>) {
+function renderModal(
+  overrides: Partial<EventType>,
+  steamAccountId: number | null = null,
+) {
   render(
     <EventSignupModal
       event={{ ...event, ...overrides }}
       intent="rsvp"
       profile={null}
-      steamAccountId={null}
+      steamAccountId={steamAccountId}
       open
       onOpenChange={() => {}}
     />,
@@ -59,6 +62,18 @@ describe('EventSignupModal sections follow the event configuration', () => {
 
     const input = screen.getByLabelText('Dota 2 Friend ID');
     expect(input.getAttribute('placeholder')).toMatch(/dotabuff/i);
+  });
+
+  it('shows a stored friend ID read-only instead of an input', () => {
+    renderModal(
+      { game_type: GAME_TYPE.DEADLOCK, require_steam_id: true },
+      4294967295,
+    );
+
+    expect(screen.queryByTestId('signup-friend-id')).toBeNull();
+    const stored = screen.getByTestId('signup-prefilled-summary-friend-id');
+    expect(stored).toHaveTextContent('4294967295');
+    expect(stored).toHaveTextContent('Contact an admin to change it');
   });
 
   it('hides the friend ID entry when the event does not require it', () => {
