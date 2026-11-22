@@ -24,6 +24,7 @@ from app.models import CustomUser, PositionsModel
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import reinstate_signup
+from events.tests.actors import SYSTEM
 from org.models import Organization
 
 
@@ -63,7 +64,7 @@ class ReinstateSignupTest(TestCase):
         event = self._make_event(state=EventState.ROLL_CALL)
         signup = self._make_signup(event, status=SignupStatus.REJECTED)
 
-        result = reinstate_signup(signup)
+        result = reinstate_signup(signup, actor=SYSTEM)
 
         self.assertEqual(result.status, SignupStatus.APPROVED)
         self.assertIsNone(result.waitlist_position)
@@ -74,7 +75,7 @@ class ReinstateSignupTest(TestCase):
         event = self._make_event(state=EventState.ROLL_CALL)
         signup = self._make_signup(event, status=SignupStatus.CANCELLED)
 
-        result = reinstate_signup(signup)
+        result = reinstate_signup(signup, actor=SYSTEM)
 
         self.assertEqual(result.status, SignupStatus.APPROVED)
         self.assertIsNone(result.waitlist_position)
@@ -93,7 +94,7 @@ class ReinstateSignupTest(TestCase):
         with self.assertRaisesRegex(
             ValueError, "Only removed or rejected signups can be reinstated"
         ):
-            reinstate_signup(signup)
+            reinstate_signup(signup, actor=SYSTEM)
 
     # ---- signups_open branch (existing behavior preserved) ----------------
 
@@ -103,7 +104,7 @@ class ReinstateSignupTest(TestCase):
         event = self._make_event(state=EventState.SIGNUPS_OPEN, max_players=10)
         signup = self._make_signup(event, status=SignupStatus.CANCELLED)
 
-        result = reinstate_signup(signup)
+        result = reinstate_signup(signup, actor=SYSTEM)
 
         self.assertEqual(result.status, SignupStatus.RSVP)
         self.assertIsNone(result.waitlist_position)
@@ -123,7 +124,7 @@ class ReinstateSignupTest(TestCase):
         self._make_signup(event, status=SignupStatus.RSVP, user=u2)
         signup = self._make_signup(event, status=SignupStatus.CANCELLED)
 
-        result = reinstate_signup(signup)
+        result = reinstate_signup(signup, actor=SYSTEM)
 
         self.assertEqual(result.status, SignupStatus.WAITLISTED)
         # First slot in the waitlist (no one ahead).
@@ -138,7 +139,7 @@ class ReinstateSignupTest(TestCase):
         with self.assertRaisesRegex(
             ValueError, "Only cancelled signups can be reinstated"
         ):
-            reinstate_signup(signup)
+            reinstate_signup(signup, actor=SYSTEM)
 
     # ---- other states all reject -----------------------------------------
 
@@ -148,7 +149,7 @@ class ReinstateSignupTest(TestCase):
         signup = self._make_signup(event, status=SignupStatus.CANCELLED)
 
         with self.assertRaisesRegex(ValueError, "not accepting signups"):
-            reinstate_signup(signup)
+            reinstate_signup(signup, actor=SYSTEM)
 
     @patch("events.services.notify_signup_changed")
     def test_in_progress_state_raises(self, _notify):
@@ -156,7 +157,7 @@ class ReinstateSignupTest(TestCase):
         signup = self._make_signup(event, status=SignupStatus.CANCELLED)
 
         with self.assertRaisesRegex(ValueError, "not accepting signups"):
-            reinstate_signup(signup)
+            reinstate_signup(signup, actor=SYSTEM)
 
     @patch("events.services.notify_signup_changed")
     def test_completed_state_raises(self, _notify):
@@ -164,4 +165,4 @@ class ReinstateSignupTest(TestCase):
         signup = self._make_signup(event, status=SignupStatus.CANCELLED)
 
         with self.assertRaisesRegex(ValueError, "not accepting signups"):
-            reinstate_signup(signup)
+            reinstate_signup(signup, actor=SYSTEM)

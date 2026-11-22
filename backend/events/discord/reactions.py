@@ -67,7 +67,11 @@ def handle_reaction_signup(
 
     # 3. Process the RSVP
     try:
-        signup = process_rsvp(event, user)
+        signup = process_rsvp(
+            event,
+            user,
+            actor=SignupActor.discord(user, means=SignupMeans.DISCORD_REACTION),
+        )
         logger.info(
             "reaction_signup_created",
             system="events",

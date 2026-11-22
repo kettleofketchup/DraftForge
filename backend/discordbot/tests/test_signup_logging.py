@@ -30,6 +30,7 @@ from events.constants import EventState, SignupStatus
 from events.discord.handlers import handle_signup_button
 from events.models import Event, EventSignup
 from events.services import resolve_or_create_org_user
+from events.tests.actors import SYSTEM
 from org.models import Organization
 from org.models_profiles import PlayerDotaProfile
 
@@ -461,7 +462,7 @@ class RollbackPathTests(TransactionTestCase):
         ):
             try:
                 with transaction.atomic():
-                    process_rsvp(self.event, self.user)
+                    process_rsvp(self.event, self.user, actor=SYSTEM)
                     raise RuntimeError("force rollback after process_rsvp")
             except RuntimeError:
                 pass

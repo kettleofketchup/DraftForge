@@ -24,6 +24,7 @@ from events.services import (
     decline_signup,
     teardown_event,
 )
+from events.tests.actors import SYSTEM
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.models import Organization, OrgLog, OrgUser
@@ -393,7 +394,7 @@ class StandingCallSiteTest(TestCase):
         signup = EventSignup.objects.create(
             event=self.event, user=member, status=SignupStatus.APPROVED
         )
-        cancel_signup(signup)
+        cancel_signup(signup, actor=SYSTEM)
         self.assertEqual(self.fake.hooks, ["on_signup_withdrawn"])
         self.assertFalse(self.fake.calls[0].kwargs["by_member"])
 

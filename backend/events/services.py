@@ -55,6 +55,7 @@ from events.models import (
     EventRepeater,
     EventSignup,
     EventTeam,
+    SignupLedgerEntry,
     TournamentTemplateMixin,
 )
 from events.ready_check_constants import (
@@ -212,6 +213,7 @@ def _create_signup(
     user: CustomUser,
     event_team: EventTeam | None = None,
     *,
+    actor: SignupActor,
     for_staff_placement: bool = False,
 ) -> EventSignup:
     """Internal: create a signup with no state check.
@@ -316,7 +318,11 @@ def _create_signup(
 
 
 def process_rsvp(
-    event: Event, user: CustomUser, event_team: EventTeam | None = None
+    event: Event,
+    user: CustomUser,
+    event_team: EventTeam | None = None,
+    *,
+    actor: SignupActor,
 ) -> EventSignup:
     """Public-path signup. Self-serve admission applies (events.admission)."""
     log.info(
@@ -327,7 +333,7 @@ def process_rsvp(
         user_id=user.pk,
     )
     ensure_self_serve(event, user, intent=Commitment.MAIN)
-    signup = _create_signup(event, user, event_team=event_team)
+    signup = _create_signup(event, user, event_team=event_team, actor=actor)
     # Defer signup_created log until the outermost atomic commits — otherwise
     # rollback paths produce a log claiming a signup that doesn't persist.
     transaction.on_commit(
@@ -346,7 +352,7 @@ def process_rsvp(
 
 @transaction.atomic
 def create_tentative_signup(
-    event: Event, user: CustomUser, *, actor: SignupActor | None = None
+    event: Event, user: CustomUser, *, actor: SignupActor
 ) -> EventSignup:
     """Create a TENTATIVE EventSignup, upgrading any active signup to tentative.
 
@@ -391,7 +397,7 @@ def create_tentative_signup(
 
 @transaction.atomic
 def decline_signup(
-    event: Event, user: CustomUser, *, actor: SignupActor | None = None
+    event: Event, user: CustomUser, *, actor: SignupActor
 ) -> EventSignup:
     """Record that a user declined an event.
 
@@ -563,7 +569,11 @@ def apply_signup_input(
 
 
 def staff_add_signup(
-    event: Event, user: CustomUser, event_team: EventTeam | None = None
+    event: Event,
+    user: CustomUser,
+    event_team: EventTeam | None = None,
+    *,
+    actor: SignupActor,
 ) -> EventSignup:
     """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
     if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
@@ -572,7 +582,9 @@ def staff_add_signup(
     # has somewhere to live before they're approved.
     if event.organization_id:
         resolve_or_create_org_user(user, event.organization)
-    return _create_signup(event, user, event_team=event_team, for_staff_placement=True)
+    return _create_signup(
+        event, user, event_team=event_team, actor=actor, for_staff_placement=True
+    )
 
 
 APPROVABLE_STATUSES = [
@@ -583,7 +595,9 @@ APPROVABLE_STATUSES = [
 
 
 @transaction.atomic
-def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> EventSignup:
+def approve_signup(
+    signup: EventSignup, mmr_override: int | None = None, *, actor: SignupActor
+) -> EventSignup:
     """Approve a signup, optionally setting the user's MMR."""
     if signup.status not in APPROVABLE_STATUSES:
         raise ValueError(f"Cannot approve signup in '{signup.status}' status.")
@@ -609,7 +623,7 @@ def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> Even
 
 
 @transaction.atomic
-def reject_signup(signup: EventSignup) -> EventSignup:
+def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Reject a signup."""
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
@@ -618,14 +632,14 @@ def reject_signup(signup: EventSignup) -> EventSignup:
     signup.save(update_fields=["status", "updated_at"])
     _roster_remove_if_left(signup)
     if prior_status in seat_holding_statuses(signup.event):
-        _promote_from_waitlist(signup.event)
+        _promote_from_waitlist(signup.event, cause=None)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
 @transaction.atomic
-def confirm_signup(signup: EventSignup) -> EventSignup:
+def confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Confirm a signup (e.g., during roll call)."""
     if signup.status != SignupStatus.APPROVED:
         raise ValueError("Only approved signups can be confirmed.")
@@ -638,9 +652,7 @@ def confirm_signup(signup: EventSignup) -> EventSignup:
 
 
 @transaction.atomic
-def cancel_signup(
-    signup: EventSignup, *, actor: SignupActor | None = None
-) -> EventSignup:
+def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Cancel a signup."""
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
@@ -652,7 +664,7 @@ def cancel_signup(
     )
     _roster_remove_if_left(signup)
     if prior_status in seat_holding_statuses(signup.event):
-        _promote_from_waitlist(signup.event)
+        _promote_from_waitlist(signup.event, cause=None)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     # Log on commit, not on entry — same reason as signup_created in process_rsvp:
@@ -672,8 +684,8 @@ def cancel_signup(
     return signup
 
 
-def _by_member(actor: SignupActor | None) -> bool:
-    return actor is not None and actor.role == ActorRole.MEMBER
+def _by_member(actor: SignupActor) -> bool:
+    return actor.role == ActorRole.MEMBER
 
 
 def _promote_one(
@@ -691,7 +703,9 @@ def _promote_one(
     return signup
 
 
-def _promote_from_waitlist(event: Event) -> list[EventSignup]:
+def _promote_from_waitlist(
+    event: Event, *, cause: SignupLedgerEntry | None
+) -> list[EventSignup]:
     """Promote waitlisted signups into every free seat, in waitlist order as
     reordered by the org's standing tracks."""
     locked = lock_event(event)
@@ -714,7 +728,7 @@ def _promote_from_waitlist(event: Event) -> list[EventSignup]:
 
 
 @transaction.atomic
-def unconfirm_signup(signup: EventSignup) -> EventSignup:
+def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Revert a confirmed signup back to approved (e.g., during roll call adjustments)."""
     if signup.status != SignupStatus.CONFIRMED:
         raise ValueError("Only confirmed signups can be unconfirmed.")
@@ -727,7 +741,7 @@ def unconfirm_signup(signup: EventSignup) -> EventSignup:
 
 
 @transaction.atomic
-def demote_to_waitlist(signup: EventSignup) -> EventSignup:
+def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Move an active signup to the end of the waitlist."""
     if signup.status in (*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED):
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
@@ -748,7 +762,7 @@ def demote_to_waitlist(signup: EventSignup) -> EventSignup:
 
 @transaction.atomic
 def reinstate_signup(
-    signup: EventSignup, *, for_staff_placement: bool = True
+    signup: EventSignup, *, actor: SignupActor, for_staff_placement: bool = True
 ) -> EventSignup:
     """Bring a removed signup back into the active list.
 
