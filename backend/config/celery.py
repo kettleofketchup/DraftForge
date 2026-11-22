@@ -1,8 +1,11 @@
 import os
 
-from celery import Celery
+from celery import Celery, Task
 from celery.schedules import crontab
 from celery.signals import worker_process_init
+
+import telemetry.tracing
+from telemetry.config import init_telemetry
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
@@ -13,7 +16,7 @@ app.autodiscover_tasks(["events"], related_name="tournament_tasks")
 
 
 @worker_process_init.connect
-def init_worker_telemetry(**kwargs):
+def init_worker_telemetry(**kwargs: object) -> None:
     """Re-initialize telemetry in each forked celery worker process.
 
     The main celery process loads Django settings (which calls init_telemetry),
@@ -22,9 +25,6 @@ def init_worker_telemetry(**kwargs):
     """
     # Reset guards so init_tracing and init_log_export run again in this process.
     # Both providers from the parent are stale after fork.
-    import telemetry.tracing
-    from telemetry.config import init_telemetry
-
     telemetry.tracing._tracing_initialized = False
     telemetry.tracing._log_export_initialized = False
 
@@ -113,5 +113,5 @@ app.conf.beat_schedule = _beat_schedule
 
 
 @app.task(bind=True, ignore_result=True)
-def debug_task(self):
+def debug_task(self: Task) -> None:
     print(f"Request: {self.request!r}")

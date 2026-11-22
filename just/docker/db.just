@@ -85,12 +85,20 @@ pull:
     echo "✗ No test-db image available in registry"
     exit 1
 
-# Push test-db image to GHCR (both hash and latest tags)
+# Push test-db image to GHCR (both hash and latest tags); --hash-only pushes only the hash tag (PR pushes)
 [group('docker::db')]
-push:
+[positional-arguments]
+push *flags:
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{root}}
+    hash_only=false
+    for flag in "$@"; do
+        case "$flag" in
+            --hash-only) hash_only=true ;;
+            *) echo "docker::db::push: unknown option $flag (use --hash-only)" >&2; exit 2 ;;
+        esac
+    done
 
     HASH=$(./scripts/hash-test-db-sources.sh)
     if ! docker image inspect "{{image}}:$HASH" >/dev/null 2>&1; then
@@ -101,10 +109,11 @@ push:
 
     docker tag "{{image}}:$HASH" "{{registry}}:$HASH"
     docker push "{{registry}}:$HASH"
+    echo "Pushed {{registry}}:$HASH"
+    if [[ "$hash_only" == true ]]; then
+        exit 0
+    fi
 
     docker tag "{{image}}:$HASH" "{{registry}}:latest"
     docker push "{{registry}}:latest"
-
-    echo "Pushed:"
-    echo "  - {{registry}}:$HASH"
-    echo "  - {{registry}}:latest"
+    echo "Pushed {{registry}}:latest"

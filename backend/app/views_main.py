@@ -55,6 +55,7 @@ from app.services.team_signals import (
     owning_team_audit,
     send_roster_changed_on_commit,
 )
+from app.tasks.avatar_refresh import refresh_avatars_batched
 from app.tournament_buckets import (
     tournament_bucket_cutoff,
     upcoming_q,
@@ -72,6 +73,7 @@ from app.tournament_list import (
     resolve_organizations,
     tournaments_list_cache_key,
 )
+from discordbot.models import DiscordTournamentLog
 from draft.models import Draft, DraftRound, DraftTeam
 from draft.services.team import apply_draft_options
 from events.models import Event
@@ -112,6 +114,7 @@ from .permissions_tournament import (
     CanEditTeam,
     CanEditTournament,
     CanManageGame,
+    can_create_team,
     can_edit_tournament,
     can_manage_game,
     check_tournament_league_change,
@@ -312,15 +315,6 @@ class UserView(viewsets.ModelViewSet):
             standing.on_user_deleted(instance, actor=self.request.user)
             instance.delete()
 
-    @permission_classes((IsAdminUser,))
-    def delete(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        try:
-            user = self.get_object()
-            user.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except CustomUser.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-
     @action(detail=True, methods=["post"])
     def claim(self, request: Request, pk: str | None = None) -> Response:
         """
@@ -517,6 +511,16 @@ class TournamentView(viewsets.ModelViewSet):
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
 
+    @action(detail=True, methods=["get"])
+    def viewer(self, request: Request, pk: str | None = None) -> Response:
+        """Per-viewer and uncached: the detail payload above is shared by everyone."""
+        tournament = get_object_or_404(
+            Tournament.objects.nocache().select_related("league"), pk=pk
+        )
+        return Response(
+            {"can_edit_tournament": can_edit_tournament(request.user, tournament)}
+        )
+
     def perform_update(self, serializer: TournamentSerializer) -> None:
         check_tournament_league_change(
             self.request.user,
@@ -549,8 +553,6 @@ class TournamentView(viewsets.ModelViewSet):
         permission_classes=[CanEditTournament],
     )
     def discord_logs(self, request: Request, pk: str | None = None) -> Response:
-        from discordbot.models import DiscordTournamentLog
-
         tournament = self.get_object()
         logs = DiscordTournamentLog.objects.filter(tournament=tournament)
         data = [
@@ -769,6 +771,10 @@ class TeamView(viewsets.ModelViewSet):
         else:
             self.permission_classes = [IsAuthenticated]
         return super(TeamView, self).get_permissions()
+
+    def perform_create(self, serializer: BaseSerializer) -> None:
+        _check_can_create_team(self.request.user, serializer)
+        serializer.save()
 
     def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == "history":
@@ -1517,12 +1523,18 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
         )
 
 
+def _check_can_create_team(user: CustomUser, serializer: BaseSerializer) -> None:
+    if not can_create_team(user, serializer.validated_data.get("tournament")):
+        raise PermissionDenied("You do not have permission to create teams here.")
+
+
 class TeamCreateView(generics.CreateAPIView):
     serializer_class = TeamSerializer
-    permission_classes = [IsStaff]
+    permission_classes = [IsAuthenticated]
 
     @transaction.atomic
     def perform_create(self, serializer: TeamSerializer) -> None:
+        _check_can_create_team(self.request.user, serializer)
         serializer.save()
 
 
@@ -1680,8 +1692,6 @@ def refresh_all_avatars(request: Request) -> Response:
             {"message": "Avatar refresh can only be run once per hour."},
             status=status.HTTP_200_OK,
         )
-
-    from app.tasks.avatar_refresh import refresh_avatars_batched
 
     refresh_avatars_batched.delay()
 

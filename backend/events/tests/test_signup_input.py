@@ -388,14 +388,12 @@ class FriendIdInputTests(EventTestCase):
 
 
 class SignupViewFriendIdTests(EventTestCase):
-    def _post(
-        self, user: CustomUser, event: Event, fid: str, key: str = "steam_account_id"
-    ) -> object:
+    def _post(self, user: CustomUser, event: Event, fid: str) -> object:
         client = APIClient()
         client.force_authenticate(user)
         return client.post(
             f"/api/events/{event.pk}/signup/",
-            {"intent": "rsvp", "profile": {key: fid}},
+            {"intent": "rsvp", "profile": {"steam_account_id": fid}},
             format="json",
         )
 
@@ -407,10 +405,10 @@ class SignupViewFriendIdTests(EventTestCase):
         u.refresh_from_db()
         self.assertEqual(u.steam_account_id, 777123)
 
-    def test_deprecated_key_fills_the_user(self) -> None:
+    def test_id_above_signed_32_bit_fills_the_user(self) -> None:
         ev = self.make_event(require_steam_id=True)
         u = self.make_user()
-        resp = self._post(u, ev, "3000000000", key="unverified_friend_id")
+        resp = self._post(u, ev, "3000000000")
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertEqual(resp.data["status"], "approved")
         u.refresh_from_db()

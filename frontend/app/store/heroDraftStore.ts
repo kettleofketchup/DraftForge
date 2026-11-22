@@ -1,10 +1,3 @@
-/**
- * HeroDraft Store
- *
- * Zustand store for hero draft state with WebSocket integration.
- * Manages draft state, UI state, and real-time updates via WebSocket.
- */
-
 import { create } from 'zustand';
 import {
   addPending,
@@ -54,7 +47,6 @@ function ingestDraftUsers(draft: HeroDraft): void {
     .upsert(users as UserType[], orgId ? { orgId } : undefined);
 }
 
-// Debug logging
 const DEBUG = false;
 const debugLog = (...args: unknown[]) => {
   if (DEBUG) {
@@ -63,18 +55,14 @@ const debugLog = (...args: unknown[]) => {
 };
 
 interface HeroDraftState {
-  // Connection state (synced from manager)
   status: ConnectionStatus;
   error: string | null;
   reconnectAttempts: number;
   wasKicked: boolean;
 
-  // Domain state
   draft: HeroDraft | null;
   tick: HeroDraftTick | null;
-  // Computed from `tick.server_time - Date.now()` at receive — lets
-  // outbound calls (e.g. submitPick) send timestamps in server-clock
-  // reference. Defaults to 0 until the first tick arrives.
+  // Server minus local clock; 0 until the first tick. Used for outbound timestamps.
   serverClockOffsetMs: number;
   selectedHeroId: number | null;
   searchQuery: string;
@@ -83,21 +71,16 @@ interface HeroDraftState {
   /** Pixels of the hero grid's bottom covered by the open desktop chat panel. */
   chatPanelInset: number;
 
-  // Internal tracking
   _connectionId: string | null;
   _unsubscribe: Unsubscribe | null;
   _currentDraftId: number | null;
   // Survives disconnect so a same-draft reconnect keeps its chat.
   _chatDraftId: number | null;
   _stopHeartbeat: (() => void) | null;
-  // Receive-side tick gap detection. Server logs `tick_loop_stalled`
-  // when the broadcaster itself stalls; this catches the COMPLEMENTARY
-  // case where the broadcast happened but didn't reach this client
-  // (WS hiccup, browser tab throttled, channel-layer queue saturated).
+  // Client-side tick gap detection; complements the server's `tick_loop_stalled`.
   _lastTickReceivedAtMs: number | null;
   _offsetSamples: number[];
 
-  // Actions
   connect: (draftId: number) => void;
   disconnect: () => void;
   reconnect: () => void;
@@ -107,12 +90,12 @@ interface HeroDraftState {
   setSearchQuery: (query: string) => void;
   sendChat: (raw: string) => string | null;
   suggestHero: (kind: HeroSuggestionKind, heroId: number) => string | null;
+  unsuggestHero: (kind: HeroSuggestionKind, heroId: number) => string | null;
   setChatPanelOpen: (open: boolean) => void;
   setChatPanelInset: (px: number) => void;
   clearChatError: () => void;
   reset: () => void;
 
-  // Computed helpers
   getCurrentTeam: () => DraftTeam | null;
   getOtherTeam: () => DraftTeam | null;
   isMyTurn: (userId: number) => boolean;
@@ -147,7 +130,6 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
   connect: (draftId: number) => {
     const current = get();
 
-    // Already connected to same draft
     if (
       current._currentDraftId === draftId &&
       current.status !== 'disconnected'
@@ -156,7 +138,6 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       return;
     }
 
-    // Different draft - disconnect first
     if (
       current._currentDraftId !== null &&
       current._currentDraftId !== draftId
@@ -167,7 +148,6 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       get().disconnect();
     }
 
-    // Clean up any existing subscription
     if (current._unsubscribe) {
       current._unsubscribe();
     }
@@ -219,7 +199,6 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
     });
 
     const unsubscribe = manager.subscribe(connectionId, (rawMessage) => {
-      // Validate message with Zod schema
       const parseResult = HeroDraftWebSocketMessageSchema.safeParse(rawMessage);
       if (!parseResult.success) {
         log.warn('Invalid WebSocket message format:', parseResult.error.issues);
@@ -273,12 +252,8 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             set({ draft: message.draft_state });
           }
 
-          // On hero_selected, patch the tick with the NEW round's anchors
-          // immediately. The next 1Hz server tick would otherwise arrive up
-          // to a second later, so without this patch the grace timer keeps
-          // running against the previous round's `round_started_at` until
-          // the new tick lands — the user sees the timer linger on the
-          // previous team.
+          // Patch the tick with the new round now; the next tick is up to 1s away
+          // and the timer would linger on the previous team until then.
           if (message.event_type === 'hero_selected') {
             const prevTick = get().tick;
             const newDraft = message.draft_state;
@@ -344,10 +319,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             tickReceivedAtMs,
           );
 
-          // Gap detection — expected cadence is 1Hz. If we go >2s without
-          // a tick, log it. This catches client-side delivery problems
-          // the server can't see (WS hiccup, throttled tab, queue
-          // saturation) and complements server's `tick_loop_stalled`.
+          // Ticks are 1Hz; a >2s gap is a delivery problem the server can't see.
           const lastTickAt = get()._lastTickReceivedAtMs;
           if (lastTickAt !== null) {
             const gapMs = tickReceivedAtMs - lastTickAt;
@@ -387,17 +359,14 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
         case 'herodraft_kicked': {
           log.warn('Kicked from draft:', message.reason);
           get().stopHeartbeat();
-          // Disconnect to prevent auto-reconnect loop
-          // (server will close connection after sending kicked message)
+          // Disconnect ourselves so the manager doesn't auto-reconnect.
           const kickedConnId = get()._connectionId;
           const kickedUnsub = get()._unsubscribe;
           if (kickedUnsub) kickedUnsub();
           if (kickedConnId) {
             manager.disconnect(kickedConnId, 'Kicked by server');
           }
-          // Clear connection state but preserve wasKicked flag.
-          // `isConnected` is a derived selector (heroDraftSelectors), not state — the
-          // canonical disconnected signal is `status: 'disconnected'`.
+          // Keep wasKicked; `status` is the disconnected signal (isConnected is derived).
           set({
             _connectionId: null,
             _unsubscribe: null,
@@ -449,8 +418,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       }
     });
 
-    // Set status to 'connecting' immediately so the guard at the top of
-    // connect() works during the WebSocketManager's 50ms StrictMode debounce.
+    // 'connecting' now, so connect()'s guard holds during the manager's 50ms debounce.
     set({
       _connectionId: connectionId,
       _unsubscribe: unsubscribe,
@@ -465,7 +433,6 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
   disconnect: () => {
     const { _connectionId, _unsubscribe, _chatDraftId, chat } = get();
 
-    // Stop heartbeat first
     get().stopHeartbeat();
 
     if (_unsubscribe) {
@@ -486,14 +453,13 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
 
   reconnect: () => {
     const { _currentDraftId, wasKicked } = get();
-    // Don't reconnect if we were kicked - prevents infinite loop with multiple tabs
+    // A kicked tab reconnecting would kick the other tab, forever.
     if (wasKicked) {
       log.warn('Reconnect blocked: was kicked from this draft');
       return;
     }
     if (_currentDraftId) {
       get().disconnect();
-      // Small delay before reconnecting
       setTimeout(() => {
         get().connect(_currentDraftId);
       }, 100);
@@ -536,6 +502,9 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
   suggestHero: (kind, heroId) =>
     sendChatFrame('', { type: 'chat_suggest', kind, hero_id: heroId }),
 
+  unsuggestHero: (kind, heroId) =>
+    sendChatFrame('', { type: 'chat_unsuggest', kind, hero_id: heroId }),
+
   setChatPanelOpen: (open) => {
     const { chat } = get();
     set({
@@ -554,7 +523,6 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
     set({ chat: initialChatState, chatPanelInset: 0, _chatDraftId: null });
   },
 
-  // Computed helpers
   getCurrentTeam: () => {
     const { draft, tick } = get();
     if (!draft || !tick) return null;
@@ -589,7 +557,11 @@ function sendChatFrame(
   raw: string,
   frame:
     | { type: 'chat_send'; body: string }
-    | { type: 'chat_suggest'; kind: HeroSuggestionKind; hero_id: number },
+    | {
+        type: 'chat_suggest' | 'chat_unsuggest';
+        kind: HeroSuggestionKind;
+        hero_id: number;
+      },
 ): string | null {
   const { _connectionId, _currentDraftId, status, chat } =
     useHeroDraftStore.getState();
@@ -615,40 +587,28 @@ function sendChatFrame(
   return clientMsgId;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Selectors
-// ─────────────────────────────────────────────────────────────────
-
 export const heroDraftSelectors = {
-  /** True when connecting or reconnecting */
   isLoading: (s: HeroDraftState) =>
     s.status === 'connecting' || s.status === 'reconnecting',
 
-  /** True when WebSocket is connected */
   isConnected: (s: HeroDraftState) => s.status === 'connected',
 
-  /** True when draft is in an active state */
   isActive: (s: HeroDraftState) =>
     s.draft?.state === 'drafting' || s.draft?.state === 'choosing',
 
-  /** True when draft is completed */
   isCompleted: (s: HeroDraftState) => s.draft?.state === 'completed',
 
-  /** True when waiting for captains */
   isWaiting: (s: HeroDraftState) => s.draft?.state === 'waiting_for_captains',
 
-  /** True when draft is paused */
   isPaused: (s: HeroDraftState) => s.draft?.state === 'paused',
 
-  /** True when draft is in resuming countdown (3-2-1 before resume) */
+  /** The 3-2-1 countdown before a resume. */
   isResuming: (s: HeroDraftState) => s.draft?.state === 'resuming',
 
-  /** True when it's the current user's turn to pick/ban */
   isMyTurn: (s: HeroDraftState, currentUserId: number | undefined) => {
     if (!currentUserId) return false;
     if (s.draft?.state !== 'drafting') return false;
 
-    // Get active team ID from tick first, then fall back to current round
     const activeTeamId =
       s.tick?.active_team_id ??
       (s.draft.current_round !== null
@@ -657,7 +617,6 @@ export const heroDraftSelectors = {
 
     if (!activeTeamId) return false;
 
-    // Find user's team (as captain or member)
     const myTeam = s.draft.draft_teams.find(
       (t) =>
         t.captain?.pk === currentUserId ||
@@ -667,21 +626,13 @@ export const heroDraftSelectors = {
     return myTeam?.id === activeTeamId;
   },
 
-  /** Get the current action type (pick or ban) */
   currentAction: (s: HeroDraftState) => {
     if (!s.draft || s.draft.current_round === null) return null;
     return s.draft.rounds[s.draft.current_round]?.action_type ?? null;
   },
 };
 
-/**
- * Returns the current server time as an ISO string, derived from the
- * latest tick's server_time plus elapsed local time. Use this instead of
- * `new Date().toISOString()` for any timestamp the server will compare
- * against its own clock (e.g. `client_picked_at` on pick submission).
- * Falls back to local clock when no tick has arrived yet — the server's
- * 2s sanity window then degrades cleanly to receive-time.
- */
+/** Server-clock now, for timestamps the server compares to its own clock (e.g. `client_picked_at`). Local clock before the first tick. */
 export function getServerNowISO(): string {
   return serverNowISO(useHeroDraftStore.getState().serverClockOffsetMs);
 }

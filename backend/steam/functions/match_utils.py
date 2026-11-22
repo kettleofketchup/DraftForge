@@ -1,10 +1,19 @@
+from collections.abc import Iterable
+from typing import Any
+
+from django.db.models import QuerySet
+
+from app.models import Team
 from steam.models import Match
+from steam.utils.steam_api_caller import SteamAPI
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
 
-def find_matches_by_players(steam_ids, require_all=True, league_id=None):
+def find_matches_by_players(
+    steam_ids: Iterable[int], require_all: bool = True, league_id: int | None = None
+) -> QuerySet[Match]:
     """
     Find historical matches where given players participated.
 
@@ -36,15 +45,13 @@ def find_matches_by_players(steam_ids, require_all=True, league_id=None):
     return queryset.prefetch_related("players")
 
 
-def find_matches_by_team(team_id):
+def find_matches_by_team(team_id: int) -> QuerySet[Match]:
     """
     Find all matches where members of a Team played together.
     Looks up team members' steamids and calls find_matches_by_players.
 
     Returns: QuerySet of Match objects
     """
-    from app.models import Team
-
     try:
         team = Team.objects.get(id=team_id)
     except Team.DoesNotExist:
@@ -63,15 +70,15 @@ def find_matches_by_team(team_id):
     return find_matches_by_players(steam_ids, require_all=False)
 
 
-def find_live_game_by_players(steam_ids, league_id=None):
+def find_live_game_by_players(
+    steam_ids: Iterable[int | str], league_id: int | None = None
+) -> dict[str, Any] | None:
     """
     Check if any of the given players are in a live game.
     Calls Steam API GetLiveLeagueGames and filters by player list.
 
     Returns: Live game data dict or None
     """
-    from steam.utils.steam_api_caller import SteamAPI
-
     if not steam_ids:
         return None
 

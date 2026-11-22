@@ -268,6 +268,7 @@ export function ReadyCheckConfigSection<
     values: readonly V[],
     labels: Record<V, string>,
     testId: string,
+    description?: string,
   ) => (
     <FormField
       control={control}
@@ -289,6 +290,7 @@ export function ReadyCheckConfigSection<
               ))}
             </SelectContent>
           </Select>
+          {description && <FormDescription>{description}</FormDescription>}
           <FormMessage />
         </FormItem>
       )}
@@ -365,6 +367,14 @@ export function ReadyCheckConfigSection<
         SETTINGS_FIELDS,
         'Ready check settings',
         <>
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid={IDS.settingsNotActive}
+          >
+            Not active yet: these settings are saved, but no Ready DM, nudge,
+            ops notice or automatic drop goes out until the automatic ready
+            check ships.
+          </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {select(
               'roll_call_mode',
@@ -383,13 +393,13 @@ export function ReadyCheckConfigSection<
             {numberInput(
               'ready_check_open_minutes',
               'Opens (minutes)',
-              'Minutes before start',
+              'Minutes before start. Each asked member gets a Ready button by DM.',
               IDS.open,
             )}
             {numberInput(
               'ready_check_escalation_minutes',
-              'Escalation nudge (minutes)',
-              'Minutes before start (0 = off)',
+              'Nudge unconfirmed members by DM (minutes)',
+              'Minutes before start (0 = off). Staff also get the unconfirmed count as an ops notice.',
               IDS.escalation,
             )}
             {numberInput(
@@ -401,8 +411,8 @@ export function ReadyCheckConfigSection<
             <div className="flex flex-col gap-2">
               {numberInput(
                 'ready_check_chase_minutes',
-                'Ops chase (minutes)',
-                'Minutes before close',
+                'Ops notice per unconfirmed member (minutes)',
+                'Minutes before close. Shown to org and league staff, the event host and helpers on the event page, and sent wherever the org routes ops notices.',
                 IDS.chase,
                 chase === null,
               )}
@@ -421,7 +431,7 @@ export function ReadyCheckConfigSection<
                   }
                 />
                 <Label htmlFor={IDS.chaseOff} className="text-sm font-normal">
-                  No ops chase
+                  No per-member ops notices
                 </Label>
               </div>
             </div>
@@ -442,17 +452,20 @@ export function ReadyCheckConfigSection<
               LOW_COMPLETION_ACTIONS,
               LOW_COMPLETION_ACTION_LABELS,
               IDS.lowCompletionAction,
+              'Non-binding and held checks raise an urgent ops notice for staff.',
             )}
           </div>
           {switchField(
             'ready_check_notify_on_signup',
             IDS.notifyOnSignup,
-            'Tell members when they sign up that confirmation is mandatory',
+            'DM members on their first sign-up that confirmation is mandatory',
+            'If their DMs are closed they get a reply only they can see, and staff get an ops notice.',
           )}
           {switchField(
             'ready_check_drop_notice',
             IDS.dropNotice,
-            'Tell dropped members they were dropped',
+            'DM members who are dropped',
+            'Members can turn this off under roster changes in their notification settings.',
           )}
         </>,
         !rollCallOn && !settingsError,
@@ -468,6 +481,13 @@ export function ReadyCheckConfigSection<
         VOICE_FIELDS,
         'Start cull and voice',
         <>
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid={IDS.voiceNotActive}
+          >
+            Not active yet: voice presence and the start cull are saved but do
+            not run until a later release.
+          </p>
           <FormField
             control={control}
             name="event_voice_channel_id"
@@ -512,7 +532,7 @@ export function ReadyCheckConfigSection<
             'start_cull_enabled',
             IDS.cullEnabled,
             'Remove members absent from the voice channel after start',
-            undefined,
+            'Removed members get the drop notice DM. If the bot cannot see the voice channel, nobody is removed and staff get an ops notice.',
             {
               onChange: (on) => {
                 setDirty('start_cull_enabled', on);
@@ -534,6 +554,7 @@ export function ReadyCheckConfigSection<
               POST_CULL_FILL_MODES,
               POST_CULL_FILL_MODE_LABELS,
               IDS.fillMode,
+              'Members moved into a seat get a promotion DM.',
             )}
           </div>
         </>,

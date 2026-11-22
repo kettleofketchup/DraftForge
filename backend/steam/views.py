@@ -80,9 +80,9 @@ class LeaderboardView(generics.ListAPIView):
 
     def get_queryset(self) -> QuerySet[LeaguePlayerStats]:
         # LeaguePlayerStatsSerializer ships user.avatar via source="user.avatar",
-        # which goes through CustomUser.avatar @property → base_profile.avatar
-        # (T1 epic). Paginated up to 100; without user__base_profile, the
-        # leaderboard is N+1 cold-cache.
+        # which goes through CustomUser.avatar @property → base_profile.avatar.
+        # Paginated up to 100; without user__base_profile, the leaderboard is
+        # N+1 cold-cache.
         queryset = with_user_profiles(
             LeaguePlayerStats.objects.filter(
                 league_id=LEAGUE_ID,

@@ -1,4 +1,3 @@
-import logging
 from argparse import ArgumentParser
 from typing import Any
 
@@ -6,15 +5,22 @@ import requests
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from app.management.prod_payload import (
+    create_positions,
+    position_values,
+    steam_account_id,
+)
 from app.models import CustomUser, PositionsModel
 from org.models import (
     AttendanceOutcome,
     ContributionEntry,
     EventCaptain,
+    Organization,
     PromoSend,
 )
+from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 PROD_API_URL = "https://dota.kettle.sh/api/users/"
 
@@ -60,30 +66,50 @@ class Command(BaseCommand):
                 elif user.get("is_staff"):
                     admin_status = " [staff]"
                 self.stdout.write(
-                    f"  Would sync: {user.get('username')} (steamid: {user.get('steamid')}){admin_status}"
+                    f"  Would sync: {user.get('username')} (steam_account_id: {user.get('steam_account_id')}){admin_status}"
                 )
             return
 
         with transaction.atomic():
-            # Delete all existing users and positions
+            # Organization.owner is PROTECT: owners stay and are updated in place.
+            owner_ids = set(
+                Organization.objects.filter(owner__isnull=False).values_list(
+                    "owner_id", flat=True
+                )
+            )
+            kept = list(CustomUser.objects.filter(pk__in=owner_ids))
             existing_count = CustomUser.objects.count()
-            self.stdout.write(f"Deleting {existing_count} existing users...")
+            self.stdout.write(
+                f"Deleting {existing_count - len(kept)} existing users "
+                f"(keeping {len(kept)} organization owners)..."
+            )
             AttendanceOutcome.objects.nocache().all().delete()
             EventCaptain.objects.nocache().all().delete()
             ContributionEntry.objects.nocache().all().delete()
             PromoSend.objects.all().delete()
-            CustomUser.objects.all().delete()
-            PositionsModel.objects.all().delete()
+            CustomUser.objects.exclude(pk__in=owner_ids).delete()
+            PositionsModel.objects.filter(dotauserprofile__isnull=True).delete()
 
-            # Create users from production data
-            created_count = 0
+            by_discord = {u.discordId: u for u in kept if u.discordId}
+            by_username = {u.username: u for u in kept if u.username}
+
+            synced_count = 0
             for user_data in prod_users:
+                existing = self._match_kept(user_data, by_discord, by_username)
                 try:
-                    self._create_user(user_data)
-                    created_count += 1
+                    with transaction.atomic():
+                        if existing is None:
+                            self._create_user(user_data)
+                        else:
+                            self._update_user(existing, user_data)
+                    synced_count += 1
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to create user {user_data.get('username')}: {e}"
+                    log.warning(
+                        "prod_user_sync_skipped",
+                        system="app",
+                        subsystem="prod_import",
+                        username=user_data.get("username"),
+                        error=str(e),
                     )
                     self.stdout.write(
                         self.style.WARNING(
@@ -93,35 +119,48 @@ class Command(BaseCommand):
 
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"Successfully synced {created_count} users from production!"
+                    f"Successfully synced {synced_count} users from production!"
                 )
             )
 
-    def _create_user(self, user_data: dict) -> CustomUser:
-        """Create a user from production API data."""
-        # Create positions if provided
-        positions_data = user_data.get("positions")
-        if positions_data:
-            positions = PositionsModel.objects.create(
-                carry=positions_data.get("carry", 0),
-                mid=positions_data.get("mid", 0),
-                offlane=positions_data.get("offlane", 0),
-                soft_support=positions_data.get("soft_support", 0),
-                hard_support=positions_data.get("hard_support", 0),
-            )
-        else:
-            positions = PositionsModel.objects.create()
+    @staticmethod
+    def _match_kept(
+        user_data: dict[str, Any],
+        by_discord: dict[str, CustomUser],
+        by_username: dict[str, CustomUser],
+    ) -> CustomUser | None:
+        discord_id = user_data.get("discordId")
+        if discord_id:
+            return by_discord.get(discord_id)
+        return by_username.get(user_data.get("username"))
 
-        user = CustomUser.objects.create(
+    def _create_user(self, user_data: dict[str, Any]) -> CustomUser:
+        """Create a user from production API data."""
+        return CustomUser.objects.create(
             username=user_data.get("username", f"user_{user_data.get('pk')}"),
             nickname=user_data.get("nickname"),
-            steamid=user_data.get("steamid"),
+            steam_account_id=steam_account_id(user_data),
             discordId=user_data.get("discordId"),
             avatar=user_data.get("avatar"),
-            mmr=user_data.get("mmr"),
-            positions=positions,
+            positions=create_positions(user_data),
             is_staff=user_data.get("is_staff", False),
             is_superuser=user_data.get("is_superuser", False),
         )
 
-        return user
+    def _update_user(self, user: CustomUser, user_data: dict[str, Any]) -> None:
+        user.username = user_data.get("username", user.username)
+        user.steamid = None
+        user.steam_account_id = steam_account_id(user_data)
+        user.discordId = user_data.get("discordId", user.discordId)
+        user.is_staff = user_data.get("is_staff", False)
+        user.is_superuser = user_data.get("is_superuser", False)
+        user.save()
+        user.nickname = user_data.get("nickname")
+        user.avatar = user_data.get("avatar")
+        positions = user.positions
+        if positions is None:
+            user.positions = create_positions(user_data)
+        else:
+            for field, value in position_values(user_data).items():
+                setattr(positions, field, value)
+            positions.save()

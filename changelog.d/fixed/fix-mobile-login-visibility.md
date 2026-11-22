@@ -1,1 +1,0 @@
-- On phones, the navbar login button now shows a "Log in" label under the Discord icon, and the menu drawer opens with a login row when you're logged out (or your name and profile link when you're logged in), so it's clear whether you're signed in.

@@ -256,7 +256,7 @@ Other branches often add the next migration number to the source app. Right befo
 
 ### 13. Deploy and rollback
 
-**Deploy.** `just dev::release` runs `db::migrate-env release` on the host. That runs `makemigrations <apps>` and then `migrate` from the git checkout, before the new images start. With the migrations committed and `--check` clean, `makemigrations` is a no-op, and `migrate` writes only `django_migrations` rows and the ContentType relabel. The old containers keep working during the window because the tables are unchanged. One brief gap: once the relabel commits, the old containers check permissions under the old app label, so non-superuser staff lose admin access to the moved models until the new images start.
+**Deploy.** `just dev::release` pulls the release images, stops the release stack, then runs `db::migrate-env release` on the host before it starts the new images. `db::migrate-env` runs `makemigrations <apps>` and then `migrate` from the git checkout. With the migrations committed and `--check` clean, `makemigrations` is a no-op, and `migrate` writes only `django_migrations` rows and the ContentType relabel. No old container runs while the relabel commits, so there is no window where staff permissions are checked under the old app label.
 
 !!! warning "Release-time makemigrations"
     `db::migrate-env` runs `makemigrations` on the prod host before `migrate`. If the host checkout or venv disagrees with the committed state, it can generate a real schema migration on prod. Make sure the checkout is at the release tag and `makemigrations --check` is clean there before you deploy.

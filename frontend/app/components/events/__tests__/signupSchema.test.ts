@@ -39,7 +39,7 @@ describe('buildSignupPatchSchema', () => {
   it('accepts a complete payload (positions as priority dict)', () => {
     const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile);
     const ok = schema.safeParse({
-      unverified_friend_id: '12345',
+      steam_account_id: '12345',
       rank_status: 'active',
       positions: {
         carry: 1,
@@ -57,7 +57,7 @@ describe('buildSignupPatchSchema', () => {
   it('rejects positions with all zeros when positions are required', () => {
     const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile);
     const result = schema.safeParse({
-      unverified_friend_id: '12345',
+      steam_account_id: '12345',
       rank_status: 'active',
       positions: emptyPositions,
       rank_medal_medal: 'Immortal',
@@ -68,7 +68,7 @@ describe('buildSignupPatchSchema', () => {
   it('accepts Immortal without star', () => {
     const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile);
     const ok = schema.safeParse({
-      unverified_friend_id: '12345',
+      steam_account_id: '12345',
       rank_status: 'active',
       positions: completePositions,
       rank_medal_medal: 'Immortal',
@@ -79,7 +79,7 @@ describe('buildSignupPatchSchema', () => {
   it('rejects medal without star for non-Immortal', () => {
     const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile);
     const result = schema.safeParse({
-      unverified_friend_id: '12345',
+      steam_account_id: '12345',
       rank_status: 'active',
       positions: completePositions,
       rank_medal_medal: 'Legend',
@@ -92,7 +92,7 @@ describe('buildSignupPatchSchema', () => {
     const event = { ...baseEvent, discord_require_rank_screenshot: true };
     const schema = buildSignupPatchSchema(event as never, emptyProfile);
     const result = schema.safeParse({
-      unverified_friend_id: '12345',
+      steam_account_id: '12345',
       rank_status: 'active',
       positions: completePositions,
       rank_medal_medal: 'Legend',
@@ -104,7 +104,7 @@ describe('buildSignupPatchSchema', () => {
 
   it('still requires rank_status when profile has default never with no battle_cup_tier', () => {
     const profile = {
-      unverified_friend_id: '12345',
+      steam_account_id: '12345',
       positions: {
         pos_1: true,
         pos_2: false,
@@ -121,7 +121,7 @@ describe('buildSignupPatchSchema', () => {
     };
     const schema = buildSignupPatchSchema(baseEvent as never, profile as never);
     const result = schema.safeParse({
-      unverified_friend_id: '12345',
+      steam_account_id: '12345',
       positions: completePositions,
     });
     expect(result.success).toBe(false);
@@ -129,7 +129,7 @@ describe('buildSignupPatchSchema', () => {
 
   it('treats rank_status as optional when profile has never WITH battle_cup_tier', () => {
     const profile = {
-      unverified_friend_id: '12345',
+      steam_account_id: '12345',
       positions: {
         pos_1: true,
         pos_2: false,
@@ -146,7 +146,7 @@ describe('buildSignupPatchSchema', () => {
     };
     const schema = buildSignupPatchSchema(baseEvent as never, profile as never);
     const result = schema.safeParse({
-      unverified_friend_id: '12345',
+      steam_account_id: '12345',
       positions: completePositions,
     });
     expect(result.success).toBe(true);
@@ -166,7 +166,7 @@ describe('buildSignupPatchSchema', () => {
       userPositions,
     });
     const result = schema.safeParse({
-      unverified_friend_id: '12345',
+      steam_account_id: '12345',
       rank_status: 'active',
       rank_medal_medal: 'Immortal',
     });
@@ -181,19 +181,19 @@ describe('buildSignupPatchSchema', () => {
     };
     const padded = schema.safeParse({
       ...base,
-      unverified_friend_id: ' 12345 ',
+      steam_account_id: ' 12345 ',
     });
     expect(padded.success).toBe(true);
     if (padded.success) {
-      expect(
-        (padded.data as Record<string, unknown>).unverified_friend_id,
-      ).toBe('12345');
+      expect((padded.data as Record<string, unknown>).steam_account_id).toBe(
+        '12345',
+      );
     }
-    const bad = schema.safeParse({ ...base, unverified_friend_id: '12a' });
+    const bad = schema.safeParse({ ...base, steam_account_id: '12a' });
     expect(bad.success).toBe(false);
     if (!bad.success) {
       expect(bad.error.issues.map((i) => i.path.join('.'))).toContain(
-        'unverified_friend_id',
+        'steam_account_id',
       );
     }
   });
@@ -203,7 +203,7 @@ describe('buildSignupPatchSchema', () => {
     const result = schema.safeParse({
       rank_status: 'never',
       positions: completePositions,
-      unverified_friend_id: '   ',
+      steam_account_id: '   ',
     });
     expect(result.success).toBe(false);
   });
@@ -216,6 +216,34 @@ describe('buildSignupPatchSchema', () => {
     const paths = parsed.success
       ? []
       : parsed.error.issues.map((i) => i.path.join('.'));
-    expect(paths).not.toContain('unverified_friend_id');
+    expect(paths).not.toContain('steam_account_id');
+  });
+
+  it('drops a submitted friend id when the user already has one', () => {
+    const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile, {
+      steamAccountId: 12345,
+    });
+    const parsed = schema.safeParse({
+      rank_status: 'never',
+      positions: completePositions,
+      steam_account_id: '99999',
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data).not.toHaveProperty('steam_account_id');
+    }
+  });
+
+  it('accepts friend ids up to 2^32-1 and rejects 0 and larger ids', () => {
+    const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile);
+    const base = { rank_status: 'never', positions: completePositions };
+    expect(
+      schema.safeParse({ ...base, steam_account_id: '4294967295' }).success,
+    ).toBe(true);
+    for (const fid of ['0', '4294967296']) {
+      expect(schema.safeParse({ ...base, steam_account_id: fid }).success).toBe(
+        false,
+      );
+    }
   });
 });

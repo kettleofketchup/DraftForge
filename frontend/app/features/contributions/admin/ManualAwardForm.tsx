@@ -43,7 +43,7 @@ import {
   type AdminEntry,
   type ManualAwardInput,
 } from '../schemas';
-import { dateInZone, todayInZone } from '../timezone';
+import { dateInZone, formatOrgDate, todayInZone } from '../timezone';
 
 const log = getLogger('ManualAwardForm');
 
@@ -52,6 +52,7 @@ const NO_EVENT = 'none';
 export interface AwardEvent {
   id: number;
   name: string;
+  scheduled_at?: string;
 }
 
 export interface ManualAwardFormProps {
@@ -62,6 +63,12 @@ export interface ManualAwardFormProps {
   /** Edit this manual entry instead of creating a new award. */
   entry?: AdminEntry;
   onDone?: () => void;
+}
+
+function eventLabel(event: AwardEvent, timeZone: string | undefined): string {
+  return event.scheduled_at
+    ? `${event.name} · ${formatOrgDate(event.scheduled_at, timeZone)}`
+    : event.name;
 }
 
 function numberOrNaN(value: string): number {
@@ -324,7 +331,7 @@ export function ManualAwardForm({
                       value={String(e.id)}
                       data-testid={`${prefix}-event-${e.id}`}
                     >
-                      {e.name}
+                      {eventLabel(e, timeZone)}
                     </BrandSelectItem>
                   ))}
                 </BrandSelectContent>

@@ -18,6 +18,7 @@ import { initialChatState } from '~/components/herodraft/chat/chatState';
 import type { HeroDraft } from '~/components/herodraft/types';
 import { getHeroName } from '~/lib/dota/heroes';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
+import { useUserStore } from '~/store/userStore';
 
 const PICKED_HERO = 1;
 const FREE_HERO = 2;
@@ -26,6 +27,7 @@ const suggestHero = vi.fn(
   (_kind: string, _heroId: number): string | null => 'c1',
 );
 const original = useHeroDraftStore.getState();
+const originalUser = useUserStore.getState();
 
 beforeEach(() => {
   suggestHero.mockClear();
@@ -221,5 +223,153 @@ describe('HeroGrid suggestion context menu', () => {
     expect(
       fireEvent.contextMenu(screen.getByTestId('herodraft-attr-grid-str')),
     ).toBe(true);
+  });
+});
+
+describe('HeroGrid action tint', () => {
+  it.each([
+    ['ban', 'bg-ban-surface/80'],
+    ['pick', 'bg-pick-surface/80'],
+  ] as const)('tints the grid for the team on a %s turn', (action, tint) => {
+    render(
+      <HeroGrid
+        onHeroClick={() => {}}
+        disabled
+        showActionButton={false}
+        currentAction={action}
+        isMyTurn
+      />,
+    );
+    expect(screen.getByTestId('herodraft-hero-grid')).toHaveClass(tint);
+  });
+
+  it('has no tint when it is not your team’s turn', () => {
+    render(
+      <HeroGrid
+        onHeroClick={() => {}}
+        disabled
+        showActionButton={false}
+        currentAction="ban"
+        isMyTurn={false}
+      />,
+    );
+    expect(screen.getByTestId('herodraft-hero-grid')).not.toHaveClass(
+      'bg-ban-surface/80',
+    );
+  });
+});
+
+describe('HeroGrid suggestion badges', () => {
+  const sender = (pk: number) => ({
+    pk,
+    username: `u${pk}`,
+    nickname: null,
+    avatarUrl: null,
+    discordId: null,
+  });
+  let n = 0;
+  const suggestion = (
+    kind: 'suggest_pick' | 'suggest_ban' | 'unsuggest_pick' | 'unsuggest_ban',
+    heroId: number,
+    pk: number,
+  ) => ({
+    id: `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`,
+    channel: 'team' as const,
+    team_id: 12,
+    kind,
+    hero_id: heroId,
+    body: '',
+    created_at: '2026-11-22T00:00:00.000000Z',
+    sender: sender(pk),
+  });
+
+  function seedSuggestions(messages: ReturnType<typeof suggestion>[]) {
+    useHeroDraftStore.setState({ chat: { ...initialChatState, messages } });
+  }
+
+  function renderAt(action: 'pick' | 'ban' | undefined, isMyTurn: boolean) {
+    render(
+      <HeroGrid
+        onHeroClick={() => {}}
+        disabled={!isMyTurn}
+        showActionButton={false}
+        currentAction={action}
+        isMyTurn={isMyTurn}
+        canSuggest
+      />,
+    );
+  }
+
+  const stack = (heroId: number, kind: 'pick' | 'ban') =>
+    screen.queryByTestId(`herodraft-hero-${heroId}-${kind}-suggesters`);
+
+  it('shows pick suggesters always and ban suggesters only on a ban stage', () => {
+    seedSuggestions([
+      suggestion('suggest_pick', FREE_HERO, 1),
+      suggestion('suggest_ban', FREE_HERO, 2),
+    ]);
+    renderAt('pick', false);
+    expect(stack(FREE_HERO, 'pick')).toHaveAttribute('data-count', '1');
+    expect(stack(FREE_HERO, 'ban')).toBeNull();
+  });
+
+  it('shows ban suggesters on a ban stage', () => {
+    seedSuggestions([suggestion('suggest_ban', FREE_HERO, 2)]);
+    renderAt('ban', false);
+    expect(stack(FREE_HERO, 'ban')).toHaveAttribute('data-count', '1');
+  });
+
+  it('caps the avatars and shows the overflow count', () => {
+    seedSuggestions(
+      [1, 2, 3, 4, 5].map((pk) => suggestion('suggest_pick', FREE_HERO, pk)),
+    );
+    renderAt('pick', false);
+    expect(
+      screen.getByTestId(`herodraft-hero-${FREE_HERO}-pick-suggesters-more`),
+    ).toHaveTextContent('+2');
+  });
+
+  it('hides suggestions on a drafted hero and withdrawn ones', () => {
+    seedSuggestions([
+      suggestion('suggest_pick', PICKED_HERO, 1),
+      suggestion('suggest_pick', FREE_HERO, 1),
+      suggestion('unsuggest_pick', FREE_HERO, 1),
+    ]);
+    renderAt('pick', false);
+    expect(stack(PICKED_HERO, 'pick')).toBeNull();
+    expect(stack(FREE_HERO, 'pick')).toBeNull();
+  });
+
+  it('emphasizes suggested picks on your pick turn, not ban-only heroes', () => {
+    seedSuggestions([
+      suggestion('suggest_pick', FREE_HERO, 1),
+      suggestion('suggest_ban', 3, 1),
+    ]);
+    renderAt('pick', true);
+    expect(hero(FREE_HERO)).toHaveAttribute('data-hero-emphasis', 'pick');
+    expect(hero(3)).not.toHaveAttribute('data-hero-emphasis');
+  });
+
+  it('does not emphasize when it is not your turn', () => {
+    seedSuggestions([suggestion('suggest_pick', FREE_HERO, 1)]);
+    renderAt('pick', false);
+    expect(hero(FREE_HERO)).not.toHaveAttribute('data-hero-emphasis');
+  });
+
+  it('offers removal of your own suggestion on right-click', () => {
+    const unsuggestHero = vi.fn((): string | null => 'c2');
+    useUserStore.setState({ currentUser: { pk: 1 } as never });
+    useHeroDraftStore.setState({ unsuggestHero });
+    seedSuggestions([
+      suggestion('suggest_pick', FREE_HERO, 1),
+      suggestion('suggest_ban', FREE_HERO, 2),
+    ]);
+    renderAt('ban', false);
+    fireEvent.contextMenu(hero(FREE_HERO));
+    expect(screen.queryByTestId('herodraft-hero-suggest-pick')).toBeNull();
+    expect(screen.getByTestId('herodraft-hero-suggest-ban')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('herodraft-hero-unsuggest-pick'));
+    expect(unsuggestHero).toHaveBeenCalledWith('suggest_pick', FREE_HERO);
+    useUserStore.setState(originalUser, true);
   });
 });

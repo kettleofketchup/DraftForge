@@ -1,11 +1,11 @@
 /**
- * Dota tab — position persist + reflect (T2 GameUserProfile epic #224).
+ * Dota tab — position persist + reflect (#224).
  *
  * Covers the NEW layered EditProfileModal Dota tab, which edits the
  * logged-in user's OWN DotaUserProfile.positions via
  * PATCH /api/users/me/profile/game/dota/. This is distinct from
  * 08-position-persistence.spec.ts, which guards the legacy userCard
- * `/users/<id>/` shim path (Task 9 regression) — do NOT merge the two.
+ * `/users/<id>/` shim path — do NOT merge the two.
  *
  * Login: the per-user fixture loginAsUser(pk) as edit_user_positions
  * (PK 2057, backend/tests/data/users.py). loginAdmin is wrong here —

@@ -20,25 +20,18 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { RolePositions } from '~/components/user/positions';
+import {
+  DotaProfileApiSchema,
+  type DotaProfileApi,
+} from '~/hooks/useUserProfile';
 import { extractApiError } from '~/lib/apiError';
 
-interface DotaProfile {
-  id: number;
-  org_user_id: number;
-  rank_status: string;
-  rank_medal: string;
-  rank_date: string | null;
-  battle_cup_tier: number | null;
-  mmr: number | null;
-  rank_screenshot: string | null;
-  battlecup_screenshot: string | null;
-  unverified_friend_id: string;
-  pos_1: boolean;
-  pos_2: boolean;
-  pos_3: boolean;
-  pos_4: boolean;
-  pos_5: boolean;
-}
+type DotaProfile = DotaProfileApi;
+
+/** Fields the PATCH accepts; the Friend ID only fills an empty one. */
+type DotaProfilePatch = Partial<Omit<DotaProfile, 'steam_account_id'>> & {
+  steam_account_id?: string;
+};
 
 const MEDALS = [
   'Herald',
@@ -102,11 +95,12 @@ export function DotaProfileCard({
 
   const { data: profile, isLoading } = useQuery<DotaProfile>({
     queryKey,
-    queryFn: () => api.get(endpoint).then((r) => r.data),
+    queryFn: () =>
+      api.get(endpoint).then((r) => DotaProfileApiSchema.parse(r.data)),
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: Partial<DotaProfile>) => api.patch(updateEndpoint, data),
+    mutationFn: (data: DotaProfilePatch) => api.patch(updateEndpoint, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       setEditing(false);
@@ -234,11 +228,11 @@ export function DotaProfileCard({
         </div>
 
         {/* Friend ID */}
-        {profile.unverified_friend_id && (
+        {profile.steam_account_id != null && (
           <div className="text-xs text-muted-foreground">
             Friend ID:{' '}
             <code className="bg-base-400 px-1 rounded">
-              {profile.unverified_friend_id}
+              {profile.steam_account_id}
             </code>
           </div>
         )}
@@ -300,7 +294,7 @@ function DotaProfileEditForm({
   saving,
 }: {
   profile: DotaProfile;
-  onSave: (data: Partial<DotaProfile>) => void;
+  onSave: (data: DotaProfilePatch) => void;
   onCancel: () => void;
   saving: boolean;
 }) {
@@ -312,7 +306,7 @@ function DotaProfileEditForm({
   const [battleCupTier, setBattleCupTier] = useState(
     profile.battle_cup_tier?.toString() || '',
   );
-  const [friendId, setFriendId] = useState(profile.unverified_friend_id || '');
+  const [friendId, setFriendId] = useState('');
   const [pos1, setPos1] = useState(profile.pos_1);
   const [pos2, setPos2] = useState(profile.pos_2);
   const [pos3, setPos3] = useState(profile.pos_3);
@@ -330,7 +324,7 @@ function DotaProfileEditForm({
       rank_medal: rankMedal,
       mmr: mmr ? parseInt(mmr) : null,
       battle_cup_tier: battleCupTier ? parseInt(battleCupTier) : null,
-      unverified_friend_id: friendId,
+      ...(friendId.trim() ? { steam_account_id: friendId.trim() } : {}),
       pos_1: pos1,
       pos_2: pos2,
       pos_3: pos3,
@@ -452,11 +446,23 @@ function DotaProfileEditForm({
           <label className="text-xs text-muted-foreground mb-1 block">
             Dota 2 Friend ID
           </label>
-          <Input
-            placeholder="e.g. 123456789"
-            value={friendId}
-            onChange={(e) => setFriendId(e.target.value)}
-          />
+          {profile.steam_account_id != null ? (
+            <p className="text-sm">
+              <code className="bg-base-400 px-1 rounded">
+                {profile.steam_account_id}
+              </code>{' '}
+              <span className="text-xs text-muted-foreground">
+                Contact an admin to change it
+              </span>
+            </p>
+          ) : (
+            <Input
+              inputMode="numeric"
+              placeholder="e.g. 123456789"
+              value={friendId}
+              onChange={(e) => setFriendId(e.target.value)}
+            />
+          )}
         </div>
 
         {/* Positions */}

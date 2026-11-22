@@ -65,12 +65,9 @@ export function isRankSectionComplete(
 
 export type SteamGateOptions = { steamAccountId?: number | null };
 
-/** A profile friend ID or a linked Steam account satisfies "Require Friend ID". */
-export function hasFriendId(
-  profile: DotaProfileData | null | undefined,
-  opts: SteamGateOptions = {},
-): boolean {
-  return !!(profile?.unverified_friend_id?.trim() || opts.steamAccountId);
+/** The user's stored Friend ID (`steam_account_id`) satisfies "Require Friend ID". */
+export function hasFriendId(opts: SteamGateOptions = {}): boolean {
+  return opts.steamAccountId != null;
 }
 
 /**
@@ -88,8 +85,7 @@ export function evaluateSignupGap(
 ): 'complete' | string[] {
   const missing: string[] = [];
 
-  if (event.require_steam_id && !hasFriendId(profile, opts))
-    missing.push('friend_id');
+  if (event.require_steam_id && !hasFriendId(opts)) missing.push('friend_id');
 
   if (event.game_type === GAME_TYPE.DOTA2) {
     if (!isRankSectionComplete(event, profile)) missing.push('rank_status');
