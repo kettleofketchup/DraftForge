@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from django.test import TestCase
+from django.db import transaction
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
@@ -11,10 +11,12 @@ from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
+from org.leadership.lifecycle import SnapshotResult, snapshot_event
 from org.leadership.reviews import submit_review
 from org.leadership.traits import materialize_traits
 from org.models import ContributionEntry, Organization, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain
+from org.tests.conduct_base import ConductTestCase
 
 ALL_FIVES = {"communication": 5, "drafting": 5, "composure": 5, "sportsmanship": 5}
 
@@ -23,12 +25,12 @@ def scores(value: int) -> dict[str, int]:
     return {key: value for key in ALL_FIVES}
 
 
-class LeadershipTestCase(TestCase):
+class LeadershipTestCase(ConductTestCase):
     def setUp(self) -> None:
         self.admin = self.make_user("ld_admin")
         self.org = Organization.objects.create(name="Leadership Org", owner=self.admin)
         self.org.admins.add(self.admin)
-        set_org_feature(self.org, FeatureKey.LEADERSHIP, enabled=True, actor=None)
+        self.unlock_leadership()
         self.event, self.tournament = self.make_event("Cup")
         self.cap_a = self.make_user("ld_cap_a")
         self.cap_b = self.make_user("ld_cap_b")
@@ -38,6 +40,9 @@ class LeadershipTestCase(TestCase):
         self.team_b = self.make_team("Bravo", self.cap_b, self.mates_b, placement=2)
         for user in [self.cap_a, self.cap_b, *self.mates_a, *self.mates_b]:
             self.admit(user)
+
+    def unlock_leadership(self) -> None:
+        set_org_feature(self.org, FeatureKey.LEADERSHIP, enabled=True, actor=None)
 
     def make_user(self, name: str) -> CustomUser:
         return CustomUser.objects.create_user(username=name, password="x")
@@ -98,6 +103,15 @@ class LeadershipTestCase(TestCase):
             source="admin",
             actor=self.admin,
         )
+
+    def run_snapshot(
+        self, event: Event | None = None, *, now: datetime | None = None
+    ) -> SnapshotResult:
+        event = event or self.event
+        Event.objects.filter(pk=event.pk).update(state=EventState.COMPLETED)
+        event.refresh_from_db()
+        with transaction.atomic():
+            return snapshot_event(event, now=now or tz.now())
 
     def snapshot(self, captain: CustomUser, event: Event | None = None) -> EventCaptain:
         return EventCaptain.objects.nocache().get(

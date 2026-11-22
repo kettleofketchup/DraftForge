@@ -99,7 +99,7 @@ class LeadershipTrack(TrackBase):
     def on_event_deleted(
         self, event: Event, *, actor: CustomUser | None, now: datetime
     ) -> TrackOutput:
-        lifecycle.delete_event(event)
+        lifecycle.delete_event_rows(event)
         return TrackOutput()
 
     @override

@@ -3,22 +3,18 @@ from datetime import datetime, timedelta
 
 from django.db.models import Prefetch
 
-from app.models import CustomUser, Team, Tournament
-from draft.models.team import TeamDraftState
+from app.models import CustomUser, Team
+from draft.models.team import Draft, TeamDraftState
+from events.capacity import lock_event
 from events.constants import REGISTERED_SIGNUP_STATUSES
 from events.models import Event, EventSignup
 from org.conduct.constants import Outcome
 from org.feature_keys import FeatureKey
 from org.features import org_has_feature
 from org.leadership.constants import VoidKind
-from org.leadership.kinds import (
-    DEFAULT_POINTS,
-    PLACEMENT_KINDS,
-    RATED_KINDS,
-    LeadershipKind,
-)
+from org.leadership.kinds import PLACEMENT_KINDS, RATED_KINDS, LeadershipKind
 from org.leadership.settings import get_leadership_settings
-from org.models import ContributionEntry, ContributionPointValue, OrgUser
+from org.models import OrgUser
 from org.models_conduct import AttendanceOutcome
 from org.models_leadership import CaptainReview, EventCaptain
 from org.standing import ledger
@@ -26,8 +22,6 @@ from org.standing.kinds import kinds_for
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
-
-RATED_KIND_VALUES: frozenset[str] = frozenset(k.value for k in RATED_KINDS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +56,7 @@ def _attended_user_ids(event: Event) -> set[int] | None:
         return None
     return set(
         AttendanceOutcome.objects.nocache()
-        .filter(event_id=event.pk, outcome=Outcome.ATTENDED)
+        .filter(event_id=event.pk, outcome=Outcome.ATTENDED, voided_at__isnull=True)
         .values_list("org_user__user_id", flat=True)
     )
 
@@ -84,7 +78,18 @@ def _plan(event: Event, teams: list[Team]) -> list[_Planned]:
     seen: set[int] = set()
     for team in teams:
         captain = members.get(team.captain_id) if team.captain_id in admitted else None
-        if captain is None or captain.pk in seen:
+        if captain is None:
+            continue
+        if captain.pk in seen:
+            log.warning(
+                "leadership_duplicate_captain",
+                system="org",
+                subsystem="leadership",
+                org_id=event.organization_id,
+                event_id=event.pk,
+                team_id=team.pk,
+                org_user_id=captain.pk,
+            )
             continue
         seen.add(captain.pk)
         teammates = sorted(
@@ -96,23 +101,10 @@ def _plan(event: Event, teams: list[Team]) -> list[_Planned]:
     return planned
 
 
-def _kind_points(org_id: int) -> dict[str, int]:
-    overrides = dict(
-        ContributionPointValue.objects.nocache()
-        .filter(organization_id=org_id, kind__in=RATED_KIND_VALUES)
-        .values_list("kind", "points")
-    )
-    return {
-        kind: overrides.get(kind, points) for kind, points in DEFAULT_POINTS.items()
-    }
-
-
-def _award_rows(
-    event: Event, planned: list[_Planned], *, draft_done: bool
-) -> list[ContributionEntry]:
-    points = _kind_points(event.organization_id)
-    occurred_at = event.ends_at or event.scheduled_at
-    rows: list[ContributionEntry] = []
+def _wanted_awards(
+    planned: list[_Planned], points: dict[str, int], *, draft_done: bool
+) -> dict[tuple[int, str], int]:
+    wanted: dict[tuple[int, str], int] = {}
     for plan in planned:
         kinds = [LeadershipKind.CAPTAINED]
         placement_kind = PLACEMENT_KINDS.get(plan.team.placement or 0)
@@ -120,46 +112,14 @@ def _award_rows(
             kinds.append(placement_kind)
         if draft_done:
             kinds.append(LeadershipKind.DRAFT_COMPLETED)
-        rows.extend(
-            ContributionEntry(
-                org_user_id=plan.captain.pk,
-                organization_id=event.organization_id,
-                track="leadership",
-                kind=kind.value,
-                points=points[kind.value],
-                event=event,
-                event_name=event.name,
-                occurred_at=occurred_at,
-            )
-            for kind in kinds
-            if points[kind.value] > 0
-        )
-    return rows
+        for kind in kinds:
+            wanted[(plan.captain.pk, kind.value)] = points[kind.value]
+    return wanted
 
 
-def snapshot_event(event: Event, *, now: datetime) -> SnapshotResult:
-    if event.tournament_id is None or event.organization_id is None:
-        return SnapshotResult(captains=0, awarded=0)
-    if not org_has_feature(event.organization_id, FeatureKey.LEADERSHIP):
-        return SnapshotResult(captains=0, awarded=0)
-    teams = list(
-        Team.objects.nocache()
-        .filter(tournament_id=event.tournament_id, captain__isnull=False)
-        .prefetch_related(
-            Prefetch("members", queryset=CustomUser.objects.nocache().only("pk"))
-        )
-        .order_by("pk")
-    )
-    planned = _plan(event, teams)
-    draft_state = (
-        Tournament.objects.nocache()
-        .filter(pk=event.tournament_id)
-        .values_list("draft__state", flat=True)
-        .first()
-    )
-    settings = get_leadership_settings(event.organization_id)
-    closes = now + timedelta(hours=settings.review_window_hours)
-
+def _write_snapshots(
+    event: Event, planned: list[_Planned], *, closes: datetime
+) -> None:
     existing = {
         s.captain_id: s for s in EventCaptain.objects.nocache().filter(event=event)
     }
@@ -189,60 +149,110 @@ def snapshot_event(event: Event, *, now: datetime) -> SnapshotResult:
     if create:
         EventCaptain.objects.bulk_create(create)
     snaps = {s.captain_id: s for s in [*update, *create]}
+    if not snaps:
+        return
     through = EventCaptain.teammates.through
-    if snaps:
-        through.objects.filter(
-            eventcaptain_id__in=[s.pk for s in snaps.values()]
-        ).delete()
-        through.objects.bulk_create(
-            through(eventcaptain_id=snaps[plan.captain.pk].pk, orguser_id=mate)
-            for plan in planned
-            for mate in plan.teammates
-        )
-
-    ledger.track_rows("leadership").filter(
-        event_id=event.pk, kind__in=RATED_KIND_VALUES
-    ).delete()
-    rows = _award_rows(
-        event, planned, draft_done=draft_state == TeamDraftState.COMPLETED
+    through.objects.filter(eventcaptain_id__in=[s.pk for s in snaps.values()]).delete()
+    through.objects.bulk_create(
+        through(eventcaptain_id=snaps[plan.captain.pk].pk, orguser_id=mate)
+        for plan in planned
+        for mate in plan.teammates
     )
-    ContributionEntry.objects.bulk_create(rows)
+
+
+def snapshot_event(event: Event, *, now: datetime) -> SnapshotResult:
+    if (
+        event.tournament_id is None
+        or event.organization_id is None
+        or not org_has_feature(event.organization_id, FeatureKey.LEADERSHIP)
+    ):
+        return SnapshotResult(captains=0, awarded=0)
+    locked = lock_event(event)
+    if locked.tournament_id is None:
+        return SnapshotResult(captains=0, awarded=0)
+    teams = list(
+        Team.objects.nocache()
+        .filter(tournament_id=locked.tournament_id, captain__isnull=False)
+        .prefetch_related(
+            Prefetch("members", queryset=CustomUser.objects.nocache().only("pk"))
+        )
+        .order_by("pk")
+    )
+    planned = _plan(locked, teams)
+    draft_state = (
+        Draft.objects.nocache()
+        .filter(tournament_id=locked.tournament_id)
+        .values_list("state", flat=True)
+        .first()
+    )
+    settings = get_leadership_settings(locked.organization_id)
+    _write_snapshots(
+        locked, planned, closes=now + timedelta(hours=settings.review_window_hours)
+    )
+    points = ledger.points_table(locked.organization, RATED_KINDS)
+    counts = ledger.sync_event_kinds(
+        locked,
+        kinds=RATED_KINDS,
+        wanted=_wanted_awards(
+            planned, points, draft_done=draft_state == TeamDraftState.COMPLETED
+        ),
+    )
+    awarded = counts.created + counts.updated
     log.info(
         "leadership_event_snapshotted",
         system="org",
         subsystem="leadership",
-        org_id=event.organization_id,
-        event_id=event.pk,
+        org_id=locked.organization_id,
+        event_id=locked.pk,
         captains=len(planned),
-        awarded=len(rows),
+        awarded=awarded,
     )
-    return SnapshotResult(captains=len(planned), awarded=len(rows))
+    return SnapshotResult(captains=len(planned), awarded=awarded)
+
+
+def _snapshot_ids(event: Event) -> list[int]:
+    return list(
+        EventCaptain.objects.nocache()
+        .filter(event_id=event.pk)
+        .values_list("pk", flat=True)
+    )
 
 
 def void_event(event: Event, *, now: datetime) -> VoidResult:
-    if not EventCaptain.objects.nocache().filter(event=event).exists():
+    ids = _snapshot_ids(event)
+    if not ids:
         return VoidResult(reviews_voided=0, revoked=0)
-    EventCaptain.objects.nocache().filter(event=event, voided_at__isnull=True).update(
+    EventCaptain.objects.nocache().filter(pk__in=ids, voided_at__isnull=True).update(
         voided_at=now, updated_at=now
     )
     voided = (
         CaptainReview.objects.nocache()
-        .filter(event_captain__event=event, voided_at__isnull=True)
+        .filter(event_captain_id__in=ids, voided_at__isnull=True)
         .update(voided_at=now, void_kind=VoidKind.LIFECYCLE, updated_at=now)
     )
     revoked = ledger.revoke_event_kinds(event, kinds=kinds_for("leadership"))
-    if voided or revoked:
-        log.info(
-            "leadership_event_voided",
-            system="org",
-            subsystem="leadership",
-            org_id=event.organization_id,
-            event_id=event.pk,
-            reviews_voided=voided,
-            revoked=revoked,
-        )
+    log.info(
+        "leadership_event_voided",
+        system="org",
+        subsystem="leadership",
+        org_id=event.organization_id,
+        event_id=event.pk,
+        reviews_voided=voided,
+        revoked=revoked,
+    )
     return VoidResult(reviews_voided=voided, revoked=revoked)
 
 
-def delete_event(event: Event) -> int:
-    return ledger.revoke_event_kinds(event, kinds=kinds_for("leadership"))
+def delete_event_rows(event: Event) -> int:
+    if not _snapshot_ids(event):
+        return 0
+    revoked = ledger.revoke_event_kinds(event, kinds=kinds_for("leadership"))
+    log.info(
+        "leadership_event_rows_deleted",
+        system="org",
+        subsystem="leadership",
+        org_id=event.organization_id,
+        event_id=event.pk,
+        revoked=revoked,
+    )
+    return revoked
