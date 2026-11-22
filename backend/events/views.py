@@ -154,7 +154,7 @@ def with_event_staff(qs: QuerySet[Event]) -> QuerySet[Event]:
 def _attach_user_can_manage(
     payload: dict[str, Any] | list[dict[str, Any]], user: CustomUser | AnonymousUser
 ) -> dict[str, Any] | list[dict[str, Any]]:
-    """Mutate a serialized Event payload (or list of them) to set user_can_manage per-request.
+    """Mutate a serialized Event payload (or list of them) to set per-request user flags.
 
     Called AFTER cached_as serves a payload, so the cache itself stays user-agnostic.
     The Event instances are looked up by id from the payload; one batched query
@@ -171,11 +171,21 @@ def _attach_user_can_manage(
             "organization", "tournament_league"
         )
     }
+    helper_event_ids = set(
+        Event.helpers.through.objects.filter(
+            event_id__in=list(events_by_pk), customuser_id=user.pk
+        ).values_list("event_id", flat=True)
+    )
     admin_by_org: dict[int, bool] = {}
     for p in items:
         ev = events_by_pk.get(p["id"])
         if ev is not None:
             p["user_can_manage"] = has_event_staff_access(user, ev)
+            p["user_is_event_operator"] = (
+                p["user_can_manage"]
+                or ev.host_id == user.pk
+                or ev.pk in helper_event_ids
+            )
             if ev.organization_id not in admin_by_org:
                 admin_by_org[ev.organization_id] = has_org_admin_access(
                     user, ev.organization

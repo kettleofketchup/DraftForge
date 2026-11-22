@@ -423,6 +423,7 @@ class EventSerializer(
     user_can_manage_event_staff = serializers.BooleanField(
         read_only=True, default=False
     )
+    user_is_event_operator = serializers.BooleanField(read_only=True, default=False)
     host = EventStaffUserSerializer(read_only=True)
     helpers = EventStaffUserSerializer(many=True, read_only=True)
 
@@ -553,6 +554,7 @@ class EventSerializer(
             "dota_lobby_password",
             "user_can_manage",
             "user_can_manage_event_staff",
+            "user_is_event_operator",
             "is_off_schedule",
         ]
         read_only_fields = [

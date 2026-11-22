@@ -385,3 +385,56 @@ describe('eventSignupSchema line fields', () => {
     expect(parsed.suggested_mmr_range_source).toBe('none');
   });
 });
+
+describe('eventSchema user_is_event_operator', () => {
+  const payload = {
+    ...baseDiscordConfig,
+    id: 1,
+    organization: 1,
+    organization_name: 'Org',
+    event_repeater: null,
+    event_repeater_name: null,
+    name: 'Event',
+    description: '',
+    scheduled_at: '2026-12-01T20:00:00Z',
+    signups_open_at: null,
+    state: 'upcoming',
+    tournament: null,
+    created_by: 1,
+    created_at: '2026-11-01T00:00:00Z',
+    updated_at: '2026-11-01T00:00:00Z',
+    signup_count: 0,
+    confirmed_count: 0,
+    tournament_name: '',
+    tournament_league: null,
+    tournament_type: 'single_elimination',
+    game_type: 1,
+    draft_type: 'snake',
+    game_mode: 'normal',
+    custom_game_name: '',
+    captains_draft_time: 60,
+    lobby_steam_league_id: null,
+    people_per_team: 5,
+    number_of_teams: null,
+    tournament_date: null,
+    timezone: 'UTC',
+    min_players: null,
+    max_players: null,
+    signup_deadline_hours: null,
+    allow_team_signups: false,
+    auto_approve: false,
+    auto_confirm: false,
+    roll_call_mode: 'manual',
+  };
+
+  it('defaults to false when the key is missing', () => {
+    expect(eventSchema.parse(payload).user_is_event_operator).toBe(false);
+  });
+
+  it('parses true', () => {
+    expect(
+      eventSchema.parse({ ...payload, user_is_event_operator: true })
+        .user_is_event_operator,
+    ).toBe(true);
+  });
+});
