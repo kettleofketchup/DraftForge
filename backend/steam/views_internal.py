@@ -4,12 +4,13 @@ All endpoints require InternalServiceAuth (X-Internal-Token header).
 """
 
 from django.utils import timezone
+from rest_framework import status
 from rest_framework.decorators import (
     api_view,
     authentication_classes,
     permission_classes,
 )
-from rest_framework import status
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
@@ -27,19 +28,23 @@ SYNC_STATE_ALLOWED_FIELDS = {"is_syncing", "last_match_id", "failed_match_ids"}
 @api_view(["GET", "PATCH"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def steam_sync_state(request, league_id):
+def steam_sync_state(request: Request, league_id: int) -> Response:
     """GET: return (or create) sync state for a league. PATCH: update allowed fields."""
     from steam.models import LeagueSyncState
 
     if request.method == "GET":
         state, _created = LeagueSyncState.objects.get_or_create(league_id=league_id)
-        return Response({
-            "league_id": state.league_id,
-            "is_syncing": state.is_syncing,
-            "last_match_id": state.last_match_id,
-            "last_sync_at": state.last_sync_at.isoformat() if state.last_sync_at else None,
-            "failed_match_ids": state.failed_match_ids,
-        })
+        return Response(
+            {
+                "league_id": state.league_id,
+                "is_syncing": state.is_syncing,
+                "last_match_id": state.last_match_id,
+                "last_sync_at": state.last_sync_at.isoformat()
+                if state.last_sync_at
+                else None,
+                "failed_match_ids": state.failed_match_ids,
+            }
+        )
 
     # PATCH
     state = LeagueSyncState.objects.get(league_id=league_id)
@@ -49,13 +54,17 @@ def steam_sync_state(request, league_id):
     state.last_sync_at = timezone.now()
     state.save()
     invalidate_after_commit(state)
-    return Response({
-        "league_id": state.league_id,
-        "is_syncing": state.is_syncing,
-        "last_match_id": state.last_match_id,
-        "last_sync_at": state.last_sync_at.isoformat() if state.last_sync_at else None,
-        "failed_match_ids": state.failed_match_ids,
-    })
+    return Response(
+        {
+            "league_id": state.league_id,
+            "is_syncing": state.is_syncing,
+            "last_match_id": state.last_match_id,
+            "last_sync_at": state.last_sync_at.isoformat()
+            if state.last_sync_at
+            else None,
+            "failed_match_ids": state.failed_match_ids,
+        }
+    )
 
 
 STEAM_ID_64_BASE = 76561197960265728
@@ -64,7 +73,7 @@ STEAM_ID_64_BASE = 76561197960265728
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def store_match(request):
+def store_match(request: Request) -> Response:
     """Store a match and its player stats from raw Steam API data."""
     from app.models import CustomUser
     from steam.models import Match, PlayerMatchStats
@@ -200,14 +209,14 @@ def store_match(request):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def tracked_leagues(request):
+def tracked_leagues(request: Request) -> Response:
     """Return League.steam_league_id values currently set on any League row.
 
     The periodic sync coordinator calls this to discover which leagues
     to poll — replaces the hardcoded LEAGUE_ID constant that previously
     pinned sync to a single league.
     """
-    from app.models import League
+    from league.models import League
 
     ids = list(
         League.objects.filter(steam_league_id__isnull=False)
@@ -220,7 +229,7 @@ def tracked_leagues(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def update_league_stats(request, league_id):
+def update_league_stats(request: Request, league_id: int) -> Response:
     """Recalculate LeaguePlayerStats for all users in a league."""
     from steam.functions.stats_update import update_all_league_stats_for_league
 
@@ -231,7 +240,7 @@ def update_league_stats(request, league_id):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def recalculate_mmr(request, user_id):
+def recalculate_mmr(request: Request, user_id: int) -> Response:
     """Recalculate a single user's league MMR."""
     from app.models import CustomUser
     from steam.functions.mmr_calculation import update_user_league_mmr

@@ -1,6 +1,7 @@
 from django.test import SimpleTestCase
 
-from app.models import League, LeagueRating
+from league.models import League
+from league.models_rating import LeagueRating
 from league.services.rating import (
     EloRatingSystem,
     FixedDeltaRatingSystem,

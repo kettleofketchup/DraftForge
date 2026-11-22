@@ -24,7 +24,7 @@ Runs last in ``populate_all`` so the auto-incremented org pk lands on 8.
 
 from cacheops import invalidate_obj
 
-from app.models import League
+from league.models import League
 from org.models import Organization
 from tests.data.leagues import AUTH_MATRIX_LEAGUE
 from tests.data.organizations import AUTH_MATRIX_ORG

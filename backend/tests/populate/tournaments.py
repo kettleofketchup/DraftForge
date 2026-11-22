@@ -29,7 +29,8 @@ def create_dynamic_tournament(config: DynamicTournamentConfig, force: bool = Fal
     Returns:
         Tournament: The created or existing Tournament instance
     """
-    from app.models import League, Tournament
+    from app.models import Tournament
+    from league.models import League
 
     # Check if tournament already exists
     existing = Tournament.objects.filter(name=config.name).first()
@@ -183,7 +184,8 @@ def populate_tournaments(force=False):
     Args:
         force (bool): If True, create tournaments even if some already exist.
     """
-    from app.models import League, Tournament
+    from app.models import Tournament
+    from league.models import League
 
     # Check if tournaments already exist
     existing_tournaments = Tournament.objects.count()
@@ -246,7 +248,8 @@ def populate_real_tournament_38(force=False):
 
     from django.utils import timezone
 
-    from app.models import League, Tournament
+    from app.models import Tournament
+    from league.models import League
     from tests.data.teams import REAL_TOURNAMENT_38_TEAMS
     from tests.data.tournaments import REAL_TOURNAMENT_38
 

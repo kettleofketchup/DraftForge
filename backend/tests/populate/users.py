@@ -98,7 +98,7 @@ def populate_test_auth_users(force=False):
     """
     from social_django.models import UserSocialAuth
 
-    from app.models import League
+    from league.models import League
     from tests.data.users import (
         ADMIN_USER,
         AUTH_MATRIX_LEAGUE_ADMIN_USER,

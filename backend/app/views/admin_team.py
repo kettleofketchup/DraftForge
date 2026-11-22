@@ -10,9 +10,9 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.tournament import serialize_tournament
-from app.models import CustomUser, League, Tournament
+from app.models import CustomUser, Tournament
 from app.serializers import TournamentUserSerializer
-from league.models import LeagueUser
+from league.models import League, LeagueUser
 from league.permissions import has_league_staff_access
 from org.member_resolution import resolve_member_user
 from org.models import Organization, OrgUser

@@ -653,7 +653,7 @@ def login_league_admin(request):
     user, created = createLeagueAdminTestUser()
 
     # Make this user an admin of league 1 if not already
-    from app.models import League
+    from league.models import League
 
     league = League.objects.filter(pk=1).first()
     if league and user not in league.admins.all():
@@ -676,7 +676,7 @@ def login_league_staff(request):
     user, created = createLeagueStaffTestUser()
 
     # Make this user staff of league 1 if not already
-    from app.models import League
+    from league.models import League
 
     league = League.objects.filter(pk=1).first()
     if league and user not in league.staff.all():
@@ -797,7 +797,7 @@ def login_auth_matrix_league_admin(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixLeagueAdminTestUser()
-    from app.models import League
+    from league.models import League
 
     league = League.objects.filter(pk=AUTH_MATRIX_LEAGUE_ADMIN_USER.league_id).first()
     if league and user not in league.admins.all():
@@ -816,7 +816,7 @@ def login_auth_matrix_league_staff(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixLeagueStaffTestUser()
-    from app.models import League
+    from league.models import League
 
     league = League.objects.filter(pk=AUTH_MATRIX_LEAGUE_STAFF_USER.league_id).first()
     if league and user not in league.staff.all():

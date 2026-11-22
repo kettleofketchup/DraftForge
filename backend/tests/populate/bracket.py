@@ -11,7 +11,8 @@ from datetime import date, datetime
 from datetime import time as dt_time
 from datetime import timezone as dt_tz
 
-from app.models import CustomUser, Game, League, PositionsModel, Team, Tournament
+from app.models import CustomUser, Game, PositionsModel, Team, Tournament
+from league.models import League
 from steam.models import Match, PlayerMatchStats
 
 from .constants import BRACKET_STEAM_ID_BASE, BRACKET_USER_COUNT, DTX_STEAM_LEAGUE_ID
@@ -45,7 +46,7 @@ def populate_bracket_linking_scenario(force: bool = False) -> Tournament | None:
     # Get the DTX league (should be created by populate_organizations_and_leagues)
     dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
     if not dtx_league:
-        print(f"DTX League not found. Run populate_organizations_and_leagues first.")
+        print("DTX League not found. Run populate_organizations_and_leagues first.")
         return None
 
     # Check if tournament already exists (check both old and new names)
@@ -367,7 +368,8 @@ def populate_bracket_unset_winner_tournament(force=False):
     Args:
         force: If True, recreate the tournament even if it exists
     """
-    from app.models import Game, League, Team, Tournament
+    from app.models import Game, Team, Tournament
+    from league.models import League
     from tests.data.teams import BRACKET_UNSET_WINNER_TEAMS
     from tests.data.tournaments import BRACKET_UNSET_WINNER_TOURNAMENT
 

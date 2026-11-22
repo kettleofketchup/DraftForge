@@ -5,12 +5,9 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import (
-    CustomUser,
-    League,
-    LeagueMatch,
-    LeagueRating,
-)
+from app.models import CustomUser
+from league.models import League
+from league.models_rating import LeagueMatch, LeagueRating
 from league.services.match_finalization import LeagueMatchService
 from org.models import Organization
 from tests.populate.utils import ensure_org_user

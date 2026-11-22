@@ -5,7 +5,8 @@ from django.test import TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, ProfileClaimRequest
+from app.models import CustomUser, ProfileClaimRequest
+from league.models import League
 from org.contributions.kinds import ContributionKind
 from org.models import ContributionEntry, Organization, OrgUser
 from org.views import ClaimRequestViewSet

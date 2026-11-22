@@ -76,6 +76,7 @@ from draft.models import Draft, DraftRound, DraftTeam
 from draft.services.team import apply_draft_options
 from events.models import Event
 from events.signup_window import user_signups_open_tournament_ids
+from league.models import League
 from league.permissions import has_league_staff_access
 from org.feature_errors import not_permitted
 from org.membership import member_organization_ids, viewer_member_organization_ids
@@ -99,7 +100,6 @@ from .decorators import render_to
 from .models import (
     CustomUser,
     Game,
-    League,
     ProfileClaimRequest,
     Team,
     TeamLog,
