@@ -6,21 +6,20 @@ from django.conf import settings
 from django.db.models import Avg, Max
 
 from common.game import GameType
+from league.models import LeagueUser
 from org.mmr import org_mmr_for
+from steam.models import LeaguePlayerStats
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
     from app.models import CustomUser, League
     from org.models import Organization
-    from steam.models import LeaguePlayerStats
 
 logger = get_logger(__name__)
 
 
 def get_league_avg_kda(league_id: int) -> float:
     """Get the average KDA for all players in a league."""
-    from steam.models import LeaguePlayerStats
-
     stats = LeaguePlayerStats.objects.filter(
         league_id=league_id,
         games_played__gte=settings.LEAGUE_MMR_MIN_GAMES,
@@ -39,8 +38,6 @@ def get_league_avg_kda(league_id: int) -> float:
 
 def get_league_avg_gpm(league_id: int) -> float:
     """Get the average GPM for all players in a league."""
-    from steam.models import LeaguePlayerStats
-
     result = LeaguePlayerStats.objects.filter(
         league_id=league_id,
         games_played__gte=settings.LEAGUE_MMR_MIN_GAMES,
@@ -100,8 +97,6 @@ def update_user_league_mmr(
     if not base_mmr:
         # No base MMR - update LeagueUser if we have league context
         if league:
-            from league.models import LeagueUser
-
             try:
                 league_user = LeagueUser.objects.get(user=user, league=league)
                 league_user.mmr = 0
@@ -124,8 +119,6 @@ def update_user_league_mmr(
 
     # Update LeagueUser if league context provided
     if league:
-        from league.models import LeagueUser
-
         try:
             league_user = LeagueUser.objects.get(user=user, league=league)
             league_user.mmr = calculated_league_mmr
