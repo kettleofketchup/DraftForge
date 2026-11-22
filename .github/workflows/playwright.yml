@@ -79,7 +79,10 @@ jobs:
       - name: Record start time
         run: echo "PREPARE_START=$(date +%s)" >> "$GITHUB_ENV"
 
-      - uses: actions/checkout@v4
+      # Pinned by SHA and no persisted token: this job may run on the home runner.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-toolchain
         with:
