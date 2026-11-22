@@ -363,3 +363,12 @@ backend-test-labels group:
 [positional-arguments]
 timing *args:
     cd {{quote(root)}} && python3 -I scripts/ci_timing.py "$@"
+
+# Check which jobs may use the draftforge-home runner, plus the checker's tests (the `runs-on-guard` CI job); needs mikefarah yq
+[group('ci')]
+check-runs-on:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{quote(root)}}
+    python3 -I scripts/test_check_runs_on.py
+    bash scripts/check-runs-on.sh

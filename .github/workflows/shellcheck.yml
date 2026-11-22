@@ -1,19 +1,26 @@
 name: Shellcheck
 
-# `just ci::shellcheck` lints only the justfile, its modules under just/ and its own
-# checker scripts, so a run without one of those changed has nothing new to check.
+# Runs only when something its two jobs read changes: `just ci::shellcheck` lints the
+# justfile, its modules under just/ and its own checker scripts; the runs-on guard reads
+# every workflow plus its own scripts.
 on:
   push:
     branches: [main]
-    paths: &recipes
+    paths: &checked
       - 'justfile'
       - 'just/**'
       - 'scripts/shellcheck_just.py'
       - 'scripts/test_shellcheck_just.py'
-      - '.github/workflows/shellcheck.yml'
+      # The runs-on guard below must see every workflow change, or a self-hosted
+      # runs-on could land without it running.
+      - '.github/workflows/**'
+      - '.github/actionlint.yaml'
+      - 'scripts/check-runs-on.sh'
+      - 'scripts/test_check_runs_on.py'
+  # fix/** matches playwright.yml, so the runs-on guard sees every PR that can run prepare.
   pull_request:
-    branches: [main]
-    paths: *recipes
+    branches: [main, 'fix/**']
+    paths: *checked
 
 permissions:
   contents: read
@@ -55,3 +62,19 @@ jobs:
 
       - name: Shellcheck just recipes
         run: just ci::shellcheck
+
+  # Only playwright.yml `prepare` may use the draftforge-home runner (scripts/check-runs-on.sh).
+  runs-on-guard:
+    name: runs-on guard (home runner label)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Test the guard
+        run: python3 -I scripts/test_check_runs_on.py
+
+      - name: Check which jobs use the home runner label
+        run: bash scripts/check-runs-on.sh
