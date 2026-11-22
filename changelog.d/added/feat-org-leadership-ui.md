@@ -1,1 +1,4 @@
-- Organization Leadership screens: a Leadership tab on the organization page with points and per-trait rating boards and a member panel (points history, ratings once released), a "Rate your captain" dialog on the event page with a 1 to 5 score per trait that teammates can edit or withdraw while the review window is open, a review moderation table for staff (void with a reason, restore), and a Leadership section in organization settings for the review window, rating thresholds, captain point overrides and the trait list.
+- Leadership screens: the Leadership tab with rating, points and per-trait boards and a
+  captain panel, "Rate your captain" for teammates on the event page and the tab, review
+  moderation for org admins on the event page, and Leadership settings with a trait
+  editor.

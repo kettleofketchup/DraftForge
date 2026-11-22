@@ -10,25 +10,6 @@ A site admin unlocks Leadership per organization, the same way as the other
 a [standing track](../development/org-standing.md), so its leaderboards are served by
 the generic [standing endpoints](../api/endpoints.md#organization-standing).
 
-## Screens
-
-- **Leadership tab** (organization page): boards for points, overall rating and each
-  trait, chosen with the metric switcher. Opening a member shows their points history
-  and, once released, their per-trait rating; until then it reads "not yet released",
-  and a captain with too few reviews is shown as new. Captains see their own
-  aggregates only, never who rated them.
-- **Rate your captain** (event page and the Leadership tab's pending list): a dialog
-  with a 1 to 5 score for each active trait. Teammates can submit, edit or withdraw
-  while the review window is open; a countdown shows the time left. Refusals such as
-  a closed window or a moderated review are shown as plain messages.
-- **Review moderation** (event page, staff): a table of the event's reviews with the
-  rater, where staff void a review with a reason or restore it. Reviews of the viewing
-  staff member's own team are not shown for moderation.
-- **Settings → Leadership** (admins): review window, minimum reviewers, reviews to be
-  ranked, rating max points, the rating prior and decay, public ranking, captain point
-  overrides per kind, and the trait list (add, rename, reorder, activate or deactivate;
-  a trait with scores can only be deactivated).
-
 ## What is tracked
 
 When an event that has a tournament is completed, every team's captain at that moment
@@ -156,6 +137,88 @@ written to the organization log with the points before and after.
 
 The max age must stay at least the half-life. The minimum reviews for points can never
 go below 2.
+
+## Using Leadership
+
+### The Leadership tab
+
+The organization page gets a **Leadership** tab once the feature is unlocked. The
+metric picker chooses the board: **Rating** (overall), **Points** (with a period
+picker) and one board per active trait. Adding or renaming a trait in the settings
+updates the picker without a reload.
+
+Selecting a row opens that member's panel:
+
+- the overall rating, with a **New** badge while the captain has fewer released
+  reviews than the org's "Reviews to be ranked";
+- "No released ratings yet" until a review window closes with enough reviews;
+- **Points all time** and **Points this month**;
+- **Rated events**: each event the captain was rated for, with the team, its
+  placement and the captain rating points. An event still inside its window, or
+  without the minimum number of reviews, is marked **Not released**. A released event
+  with fewer than 3 reviews shows the review count but no per-trait averages.
+
+The rated events list does not add up to the points totals: the totals also count
+captaining, placement and draft points from events that are still in their review
+window or did not get enough reviews, and those events are not listed. The panel says
+so under the totals.
+
+Who can open which panel:
+
+- every member can open their own;
+- org admins can open anyone's;
+- other members can open other captains only when the leaderboard is public. Org
+  staff who are not admins cannot open other captains from the tab.
+
+A captain's own panel shows aggregates only: their rating, per-trait averages for
+released events with at least 3 reviews, and their points. It never shows who rated
+them or any single review.
+
+### Rate your captain
+
+A teammate who can still rate a captain sees a **Rate your captain** banner on the
+event page and a card at the top of the Leadership tab, one entry per captain. The
+dialog has a 1 to 5 score for each active trait, as a radio group that works with the
+keyboard (arrow keys move between scores). Every trait must be scored.
+
+While the window is open, a countdown shows the time left and the rater can submit,
+edit (**Update**) or **Withdraw** the review. When the countdown reaches zero the
+dialog shows "The review window has closed." and its buttons are disabled. A review
+an organizer voided is read-only: the dialog says so and offers no buttons. Other
+refusals, such as a captain the rater can no longer rate, are shown as plain messages
+inside the dialog.
+
+**Your reviews**, a collapsed list on the same card, shows the rater's own past
+reviews with their scores, and marks a review that was withdrawn, no longer counted
+after a reopen, or removed by an organizer. It never shows anyone else's review.
+
+### Moderation on the event page
+
+Org admins see a **Captain reviews** section on the event page's Details tab for
+events that are in progress, completed or cancelled. For each captain it shows whether the rating is
+released and a table of the reviews with the rater, the scores and the status.
+**Void** asks for a reason (1 to 500 characters) and marks the review "Voided by
+staff" with the reason under the rater; **Restore** puts it back. On teams the admin
+captained, the section shows only the released aggregate and the note "Another admin
+has to moderate its reviews", with no reviews and no actions.
+
+### Settings
+
+Org admins edit Leadership under **Settings → Leadership**:
+
+- the review window, minimum reviewers, reviews to be ranked, the baseline rating and
+  strength, half-life, max age and whether the leaderboard is public;
+- the captain rating maximum and the points per kind (captained, placements, draft
+  completed). Each field shows a **Default** badge and a reset button that restores
+  the default;
+- the trait list: add a trait, rename it, move it up or down, and switch it active or
+  inactive. At least one trait stays active, and at most 8 can be. **Delete** is
+  offered only for saved traits and asks for confirmation; a trait that already has
+  scores is refused ("This trait has scores. Deactivate it instead.") and switched to
+  inactive for the next save.
+
+The settings and the trait list are saved together with the section's save button.
+Server-side validation errors are shown under the field they belong to.
 
 ## API
 
