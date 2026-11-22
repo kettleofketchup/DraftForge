@@ -114,6 +114,7 @@ def test_podman_build_skips_registry_cache(
     assert argv[:2] == ["buildx", "build"]
     assert "--cache-from" not in argv
     assert "--cache-to" not in argv
+    assert "--provenance=false" not in argv
     assert argv[-1] == "nginx"
 
 
@@ -185,6 +186,14 @@ def test_pr_number_must_be_numeric(tmp_path: Path) -> None:
 
 def test_unknown_mode_exits_2(tmp_path: Path) -> None:
     assert_rejected(tmp_path, "--mode=nightly")
+
+
+def test_pr_mode_rejects_no_cache(tmp_path: Path) -> None:
+    assert_rejected(tmp_path, "--mode=pr", "--pr=1", "--no-cache")
+
+
+def test_pr_number_needs_pr_mode(tmp_path: Path) -> None:
+    assert_rejected(tmp_path, "--pr=5")
 
 
 TEST_DB_DOCKER_STUB = """#!/usr/bin/env bash

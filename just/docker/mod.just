@@ -106,11 +106,14 @@ buildx service image target dockerfile context *flags:
         *) echo "docker: unknown mode $mode ($usage)" >&2; exit 2 ;;
     esac
     hash=$(./scripts/hash-docker-image.sh "$service")
-    args=(--file "$dockerfile" --target "$target" --platform linux/amd64 --provenance=false)
-    # podman's buildx shim rejects BuildKit's type=registry cache syntax.
+    args=(--file "$dockerfile" --target "$target" --platform linux/amd64)
+    # podman's buildx shim rejects BuildKit's type=registry cache syntax and --provenance.
     registry_cache=true
     if docker --version 2>/dev/null | grep -qi podman; then
         registry_cache=false
+    fi
+    if [[ "$mode" == pr || "$registry_cache" == true ]]; then
+        args+=(--provenance=false)
     fi
     if [[ "$mode" == pr ]]; then
         # Never a draftforge/ tag, never :latest, never a GHCR cache-to: a PR build
