@@ -3,23 +3,29 @@
 
 from datetime import datetime, timedelta
 
+import requests
 from celery import shared_task
 
+from app.internal_client import (
+    get_due_scheduled_events,
+    sweep_discord_leases,
+    update_scheduled_event,
+)
+from discordbot.activity_launch_gateway import prepare_launch_payload
+from discordbot.utils import sync_add_reactions, sync_send_embed
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
 
 @shared_task
-def check_scheduled_events():
+def check_scheduled_events() -> str:
     """
     Check for and post scheduled events that are due.
     Runs every 60 seconds via Celery beat.
 
     All reads via internal HTTP API. Embeds built from template data.
     """
-    from app.internal_client import get_due_scheduled_events, update_scheduled_event
-    from discordbot.utils import sync_add_reactions, sync_send_embed
 
     due_events = get_due_scheduled_events()
     processed = 0
@@ -98,7 +104,7 @@ def check_scheduled_events():
 
 
 @shared_task
-def sweep_stale_discord_leases():
+def sweep_stale_discord_leases() -> int:
     """Reap stuck DiscordMessageLog rows so the partial unique constraint
     doesn't permanently brick reminders.
 
@@ -116,7 +122,6 @@ def sweep_stale_discord_leases():
     Both deletes happen server-side via the internal endpoint — the
     worker stays ORM-free.
     """
-    from app.internal_client import sweep_discord_leases
 
     result = sweep_discord_leases(pending_threshold_minutes=5, failed_threshold_hours=1)
     pending_swept = result.get("pending_swept", 0)
@@ -143,9 +148,6 @@ def complete_activity_launch(
     draft_id: int,
 ) -> None:
     """Finish an authenticated Discord interaction without touching the ORM."""
-    import requests
-
-    from discordbot.activity_launch_gateway import prepare_launch_payload
 
     # Only signed HTTP interactions enqueue this task. Values are still
     # constrained before using them in a URL; tokens must never enter logs.

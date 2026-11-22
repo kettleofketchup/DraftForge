@@ -27,6 +27,9 @@ from typing import Any
 from celery import Task, shared_task
 from django.conf import settings
 
+from app.internal_client import create_tournament_log, update_tournament_log
+from discordbot.utils import sync_send_dm
+from events.discord.tournament_embeds import build_lobby_info_embed
 from lobby import internal_api
 from lobby.client import DotaLobbyClient, DotaLobbyError
 from lobby.schemas import LobbyView
@@ -504,9 +507,6 @@ def send_lobby_info(game_lobby_id: int) -> str:
     The password is read from dota_lobby, so it is the one players need. It
     goes out in the DM only: no per-message log row stores the embed.
     """
-    from app.internal_client import create_tournament_log, update_tournament_log
-    from discordbot.utils import sync_send_dm
-    from events.discord.tournament_embeds import build_lobby_info_embed
 
     if not _enabled():
         return "disabled"

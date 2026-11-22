@@ -26,6 +26,7 @@ from app.models import Game
 from draft.models import HeroDraft
 from lobby import broadcast, services
 from lobby.models import GameLobby
+from lobby.tasks import close_dota_lobby, create_dota_lobby, flip_lobby_sides
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -101,8 +102,6 @@ def lobby_on_game_saved(
         if not services.lobby_eligibility(game).ok:
             return
 
-    from lobby.tasks import create_dota_lobby
-
     game_pk = game.pk
     log.info("lobby_auto_create_queued", game_id=game_pk, **_LOG)
     transaction.on_commit(lambda: create_dota_lobby.delay(game_pk, trigger="auto"))
@@ -122,8 +121,6 @@ def lobby_on_herodraft_saved(
     if game_lobby is None or not services.wants_flip(game_lobby):
         return
 
-    from lobby.tasks import flip_lobby_sides
-
     pk, lobby_id = game_lobby.pk, game_lobby.lobby_id
     radiant_ref = services.team_ref(game_lobby.dire_team_id)
     log.info("lobby_flip_queued", game_id=instance.game_id, game_lobby_id=pk, **_LOG)
@@ -135,7 +132,6 @@ def lobby_on_game_deleted(sender: type, instance: Game, **kwargs: object) -> Non
     """Close the deleted game's lobby, which would otherwise hold a bot."""
     if not services.is_enabled():
         return
-    from lobby.tasks import close_dota_lobby
 
     for row in GameLobby.objects.filter(
         game_id=instance.pk,

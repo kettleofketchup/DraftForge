@@ -1,19 +1,16 @@
 """DraftOptions model, lazy creation, Draft state/clock_armed, migration state rule."""
 
-import importlib
 from datetime import date, timedelta
 from unittest.mock import PropertyMock, patch
 
-from django.apps.registry import Apps
 from django.contrib.auth import get_user_model
-from django.db import connection, transaction
-from django.db.migrations.loader import MigrationLoader
+from django.db import transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.management.commands import import_prod_tournament, sync_prod_tournaments
-from app.models import League, Team, Tournament
+from app.models import Team, Tournament
 from app.serializers import DraftSerializerSlim, TournamentSerializer
 from draft.models import (
     Draft,
@@ -25,6 +22,7 @@ from draft.models import (
 )
 from draft.services.team_timeout import skip_turn
 from draft.tests.team_fixtures import TimedDraftFixture
+from league.models import League
 from org.models import Organization
 from tests.data.users import REGULAR_USER
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, TestTournamentConfig
@@ -170,52 +168,6 @@ class DraftStateTests(TestCase):
         ):
             with transaction.atomic():
                 self.assertEqual(draft.lock_active_round().pick_number, 1)
-
-
-PRE_TEAM_MOVE = ("app", "0108_move_hero_draft_models_to_draft")
-
-
-def _pre_team_move_apps() -> Apps:
-    return MigrationLoader(connection).project_state(PRE_TEAM_MOVE).apps
-
-
-class MigrationStateRuleTests(TestCase):
-    def test_set_initial_draft_states(self):
-        mod = importlib.import_module("app.migrations.0097_teamdraft_timer")
-        t_empty = make_tournament(1, "m0")
-        empty = Draft.objects.create(tournament=t_empty, draft_style="snake")
-        t_half = make_tournament(2, "m1")
-        half = Draft.objects.create(tournament=t_half, draft_style="snake")
-        half.build_rounds()
-        t_done = make_tournament(2, "m2")
-        done = Draft.objects.create(tournament=t_done, draft_style="snake")
-        done.build_rounds()
-        DraftRound.objects.filter(draft=done).update(choice=t_done.users.first())
-        Draft.objects.update(state="paused")
-
-        mod.set_initial_draft_states(_pre_team_move_apps(), None)
-
-        self.assertEqual(Draft.objects.get(pk=empty.pk).state, "pending")
-        self.assertEqual(Draft.objects.get(pk=half.pk).state, "drafting")
-        self.assertEqual(Draft.objects.get(pk=done.pk).state, "completed")
-
-    def test_backfill_turns_the_timer_off_for_existing_tournaments(self):
-        mod = importlib.import_module(
-            "app.migrations.0099_backfill_draftoptions_timer_off"
-        )
-        bare = make_tournament(1, "bf0")
-        opted_in = make_tournament(1, "bf1")
-        DraftOptions.objects.create(
-            tournament=opted_in, timer_enabled=True, grace_time_ms=5000
-        )
-
-        mod.backfill_timer_off(_pre_team_move_apps(), None)
-
-        self.assertFalse(DraftOptions.objects.get(tournament=bare).timer_enabled)
-        kept = DraftOptions.objects.get(tournament=opted_in)
-        self.assertEqual((kept.timer_enabled, kept.grace_time_ms), (True, 5000))
-        fresh = make_tournament(1, "bf2")
-        self.assertTrue(fresh.get_draft_options().timer_enabled)
 
 
 class LegacyStateDerivationTests(TestCase):

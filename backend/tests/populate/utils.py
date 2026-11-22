@@ -15,7 +15,9 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 
-from app.models import CustomUser, GameType, League, PositionsModel
+from app.models import CustomUser, GameType, PositionsModel
+from discordbot.services.users import get_discord_members_data
+from league.models import League, LeagueUser
 from org.mmr import LEAGUE_GAME, org_mmr_for, validate_org_mmr
 from org.models import Organization, OrgUser, OrgUserGameMmr, PromoSend
 from org.standing import api as standing
@@ -163,25 +165,18 @@ def ensure_org_user(
         wanted[GameType.DOTA2] = mmr
     for game_type, value in wanted.items():
         validate_org_mmr(game_type, value)
-    dota = wanted.get(GameType.DOTA2)
     org_user, created = OrgUser.objects.get_or_create(
         user=user,
         organization=organization,
-        defaults={
-            "mmr": dota if dota is not None else 0,
-            "guild_nickname": guild_nickname,
-        },
+        defaults={"guild_nickname": guild_nickname},
     )
-    if not created:
-        update_fields: list[str] = []
-        if dota is not None and org_user.mmr != dota:
-            org_user.mmr = dota
-            update_fields.append("mmr")
-        if guild_nickname is not None and org_user.guild_nickname != guild_nickname:
-            org_user.guild_nickname = guild_nickname
-            update_fields.append("guild_nickname")
-        if update_fields:
-            org_user.save(update_fields=update_fields)
+    if (
+        not created
+        and guild_nickname is not None
+        and org_user.guild_nickname != guild_nickname
+    ):
+        org_user.guild_nickname = guild_nickname
+        org_user.save(update_fields=["guild_nickname"])
     for game_type, value in wanted.items():
         if value:
             OrgUserGameMmr.objects.update_or_create(
@@ -212,7 +207,6 @@ def ensure_league_user(
     user: CustomUser, org_user: OrgUser, league: League
 ) -> "LeagueUser":
     """Ensure LeagueUser exists for user in league."""
-    from league.models import LeagueUser
 
     league_user, created = LeagueUser.objects.get_or_create(
         user=user,
@@ -367,8 +361,6 @@ def _get_discord_avatar_cache() -> dict[str, str]:
         return _discord_avatar_cache
 
     try:
-        from discordbot.services.users import get_discord_members_data
-
         members = get_discord_members_data()
         _discord_avatar_cache = {}
         for member in members:

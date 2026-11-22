@@ -6,7 +6,8 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League
+from app.models import CustomUser
+from league.models import League
 from org.membership import member_organization_ids, viewer_member_organization_ids
 from org.models import Organization, OrgUser
 

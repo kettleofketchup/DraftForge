@@ -7,6 +7,23 @@ All DB writes via internal API POST/PATCH endpoints.
 from celery import shared_task
 from django.conf import settings
 
+from app.internal_client import (
+    create_activity_notification_invite,
+    create_herodraft_for_game,
+    create_tournament_log,
+    get_auto_herodraft_games,
+    get_match_participants,
+    get_tournament_for_task,
+    get_tournament_participants,
+    update_tournament_log,
+)
+from discordbot.utils import sync_send_dm
+from events.discord.tournament_embeds import (
+    build_draft_link_components,
+    build_draft_link_embed,
+    build_herodraft_link_components,
+    build_herodraft_link_embed,
+)
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -15,17 +32,6 @@ logger = get_logger(__name__)
 @shared_task
 def send_tournament_draft_links(tournament_id: int, draft_id: int | None) -> str:
     """DM draft link to all tournament participants."""
-    from app.internal_client import (
-        create_activity_notification_invite,
-        create_tournament_log,
-        get_tournament_for_task,
-        get_tournament_participants,
-    )
-    from discordbot.utils import sync_send_dm
-    from events.discord.tournament_embeds import (
-        build_draft_link_components,
-        build_draft_link_embed,
-    )
 
     tournament = get_tournament_for_task(tournament_id)
     if not tournament:
@@ -85,8 +91,6 @@ def send_tournament_draft_links(tournament_id: int, draft_id: int | None) -> str
 
     # Flip the in-flight row to its terminal state with the actual count.
     if tournament_log_id:
-        from app.internal_client import update_tournament_log
-
         update_tournament_log(
             tournament_log_id,
             recipient_count=sent,
@@ -114,17 +118,6 @@ def send_tournament_herodraft_links(
     dire_name: str = "",
 ) -> str:
     """DM hero draft link to match players."""
-    from app.internal_client import (
-        create_activity_notification_invite,
-        create_tournament_log,
-        get_match_participants,
-        get_tournament_for_task,
-    )
-    from discordbot.utils import sync_send_dm
-    from events.discord.tournament_embeds import (
-        build_herodraft_link_components,
-        build_herodraft_link_embed,
-    )
 
     tournament = get_tournament_for_task(tournament_id)
     if not tournament:
@@ -181,8 +174,6 @@ def send_tournament_herodraft_links(
         message += f". Failed: {', '.join(failed_users[:10])}"
 
     if tournament_log_id:
-        from app.internal_client import update_tournament_log
-
         update_tournament_log(
             tournament_log_id,
             recipient_count=sent,
@@ -205,10 +196,6 @@ def send_tournament_herodraft_links(
 def sweep_auto_herodrafts() -> str:
     """Create hero drafts for every game that is ready, in every tournament
     with auto_create_hero_drafts on. Runs on the beat schedule."""
-    from app.internal_client import (
-        create_herodraft_for_game,
-        get_auto_herodraft_games,
-    )
 
     created_count = 0
     for game in get_auto_herodraft_games():

@@ -7,11 +7,12 @@ from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, PositionsModel
+from app.models import CustomUser, PositionsModel
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import create_tournament_for_event
 from events.tests.base import EventTestCase
+from league.models import League
 from org.models import Organization
 from tests.cache import flush_run_cache
 

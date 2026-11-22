@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('app', '0106_draftoptions_hero_grace_time_ms_and_more'),
+        ("app", "0096_squashed_0106"),
         ('org', '0010_orguser_guild_nickname'),
     ]
 

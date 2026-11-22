@@ -19,7 +19,7 @@ DEADLOCK = 2
 
 class ForwardBackfillTest(MigratorTestCase):
     migrate_from = ("org", "0014_move_organization_models_from_app")
-    migrate_to = ("org", "0016_backfill_org_user_game_mmr")
+    migrate_to = ("org", "0018_remove_orguser_mmr")
 
     def prepare(self) -> None:
         apps = self.old_state.apps
@@ -112,14 +112,65 @@ class BackfillReverseTest(MigratorTestCase):
         self.assertEqual(OrgUser.objects.get(pk=self.deadlock_only_pk).mmr, 0)
 
 
+class ReverseRestoreTest(MigratorTestCase):
+    migrate_from = ("org", "0018_remove_orguser_mmr")
+    migrate_to = ("org", "0017_retarget_default_league_to_league")
+
+    def prepare(self) -> None:
+        apps = self.old_state.apps
+        CustomUser = apps.get_model("app", "CustomUser")
+        Organization = apps.get_model("org", "Organization")
+        OrgUser = apps.get_model("org", "OrgUser")
+        Row = apps.get_model("org", "OrgUserGameMmr")
+        org = Organization.objects.create(name="Restore Org")
+        both = OrgUser.objects.create(
+            user=CustomUser.objects.create(username="restore_both"),
+            organization=org,
+        )
+        Row.objects.create(org_user=both, game_type=DOTA2, mmr=4200)
+        Row.objects.create(org_user=both, game_type=DEADLOCK, mmr=2600)
+        deadlock_only = OrgUser.objects.create(
+            user=CustomUser.objects.create(username="restore_deadlock"),
+            organization=org,
+        )
+        Row.objects.create(org_user=deadlock_only, game_type=DEADLOCK, mmr=1900)
+        none = OrgUser.objects.create(
+            user=CustomUser.objects.create(username="restore_none"),
+            organization=org,
+        )
+        self.pks = {"both": both.pk, "deadlock": deadlock_only.pk, "none": none.pk}
+
+    def test_orguser_mmr_restored_from_dota_rows(self) -> None:
+        OrgUser = self.new_state.apps.get_model("org", "OrgUser")
+        restored = dict(
+            OrgUser.objects.filter(pk__in=self.pks.values()).values_list("pk", "mmr")
+        )
+        self.assertEqual(
+            restored,
+            {self.pks["both"]: 4200, self.pks["deadlock"]: 0, self.pks["none"]: 0},
+        )
+
+    def test_game_rows_kept(self) -> None:
+        Row = self.new_state.apps.get_model("org", "OrgUserGameMmr")
+        self.assertEqual(Row.objects.filter(game_type=DEADLOCK).count(), 2)
+
+
 class OrgMmrMigrationShapeTest(SimpleTestCase):
-    def test_model_and_backfill_are_not_destructive(self) -> None:
+    def test_only_0018_is_destructive(self) -> None:
         graph = MigrationLoader(None, ignore_no_migrations=True).graph
         destructive: list[tuple[str, str, str]] = []
-        for name in ("0015_orgusergamemmr", "0016_backfill_org_user_game_mmr"):
+        for name in (
+            "0015_orgusergamemmr",
+            "0016_backfill_org_user_game_mmr",
+            "0018_remove_orguser_mmr",
+        ):
             for op in graph.nodes[("org", name)].operations:
                 if isinstance(op, RemoveField):
                     destructive.append((name, op.model_name, op.name))
                 elif isinstance(op, DeleteModel):
                     destructive.append((name, op.name, ""))
-        self.assertEqual(destructive, [])
+        self.assertEqual(destructive, [("0018_remove_orguser_mmr", "orguser", "mmr")])
+        self.assertIn(
+            ("org", "0017_retarget_default_league_to_league"),
+            graph.nodes[("org", "0018_remove_orguser_mmr")].dependencies,
+        )

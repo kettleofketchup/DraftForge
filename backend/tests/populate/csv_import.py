@@ -20,7 +20,8 @@ import os
 
 from django.utils import timezone
 
-from app.models import CustomUser, League, PositionsModel, Tournament
+from app.models import CustomUser, PositionsModel, Tournament
+from league.models import League
 from org.models import Organization
 from tests.data.leagues import CSV_LEAGUE
 from tests.data.organizations import CSV_ORG

@@ -39,12 +39,14 @@ vi.mock('~/components/api/eventsAPI', () => ({
   getEvents: vi.fn(async () => []),
 }));
 
-vi.mock('~/hooks/useOrgUsers', () => ({
-  useOrgUsers: () => [],
+vi.mock('~/components/user/AddUserModal', () => ({
+  AddUserModal: () => null,
+  findSearchedUser: () => null,
 }));
 
 vi.mock('~/store/orgStore', () => ({
-  useOrgStore: { getState: () => ({ getOrgUsers: vi.fn() }) },
+  useOrgStore: (select: (s: { currentOrg: null }) => unknown) =>
+    select({ currentOrg: null }),
 }));
 
 beforeAll(() => {

@@ -5,6 +5,12 @@ from typing import TYPE_CHECKING, Any
 import requests
 
 from app.internal_client import transport
+from events.schemas import (
+    EventSignupSchema,
+    EventTaskSchema,
+    RepeaterSubscriberSchema,
+    ScheduledEventDueSchema,
+)
 
 if TYPE_CHECKING:
     from events.schemas import (
@@ -44,7 +50,6 @@ def get_event_signups(event_id: int) -> list["EventSignupSchema"]:
     Raises InternalAPIUnavailable on a network or HTTP error, so a failed
     read is never mistaken for an event with no signups.
     """
-    from events.schemas import EventSignupSchema
 
     resp = transport.api_get("/events/signups/", params={"event": event_id})
     if resp is None or not resp.ok:
@@ -78,7 +83,6 @@ def get_event_for_task(pk: int) -> "EventTaskSchema | None":
     Returns EventTaskData (Pydantic) with typed attribute access,
     or None if event not found / API error.
     """
-    from events.schemas import EventTaskSchema
 
     resp = transport.get(f"/events/{pk}/full/")
     if resp and resp.ok:
@@ -107,7 +111,6 @@ def generate_repeater_events(repeater_pk: int) -> int:
 
 def get_repeater_subscribers(repeater_id: int) -> list["RepeaterSubscriberSchema"]:
     """Get subscribers for a repeater. Returns list of RepeaterSubscriber."""
-    from events.schemas import RepeaterSubscriberSchema
 
     resp = transport.get(f"/repeaters/{repeater_id}/subscribers/")
     if resp and resp.ok:
@@ -117,7 +120,6 @@ def get_repeater_subscribers(repeater_id: int) -> list["RepeaterSubscriberSchema
 
 def get_due_scheduled_events() -> list["ScheduledEventDueSchema"]:
     """Get ScheduledEvents due for posting. Returns list of ScheduledEventDue."""
-    from events.schemas import ScheduledEventDueSchema
 
     resp = transport.get("/scheduled-events/due/")
     if resp and resp.ok:
