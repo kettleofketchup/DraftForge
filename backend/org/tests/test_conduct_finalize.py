@@ -18,7 +18,7 @@ from events.ready_check_constants import (
     ReadyCheckPhase,
 )
 from events.reopen import reopen_event
-from events.services import cancel_event
+from events.services import approve_signup, cancel_event, unconfirm_signup
 from org.conduct.adapter import CONDUCT
 from org.conduct.attendance import event_attendance
 from org.conduct.constants import Outcome, OutcomeSource
@@ -550,6 +550,37 @@ class ReadyCheckConductTest(ConductTestCase):
         }
         self.assertEqual(flags[unconfirmed.user_id], "roll_call_unconfirmed")
         self.assertIsNone(flags[confirmed.user_id])
+
+    def test_staff_verified_close_keeps_late_and_unconfirmed_members_pending(
+        self,
+    ) -> None:
+        event = self._event(roll_call_enabled=True)
+        confirmed, unconfirm_later = self._members(event, 2)
+        check = self._run_check(event, [confirmed, unconfirm_later])
+        self.assertEqual(check.outcome, ReadyCheckOutcome.STAFF_VERIFIED)
+        late = self.signup(event, self.make_user(), SignupStatus.PENDING_APPROVAL)
+        approve_signup(late, actor=self._actor())
+        unconfirm_later.refresh_from_db()
+        unconfirm_signup(unconfirm_later, actor=self._actor())
+        late.refresh_from_db()
+        self.assertEqual(late.status, SignupStatus.APPROVED)
+        event = self._complete(event)
+
+        rows = self._rows(event)
+        self.assertEqual(
+            (rows[confirmed.user_id].outcome, rows[confirmed.user_id].source),
+            (Outcome.ATTENDED, OutcomeSource.READY_CHECK),
+        )
+        flags = {
+            row["member"]["user_pk"]: row["flag"]
+            for row in event_attendance(event, now=tz.now())["rows"]
+        }
+        for signup in (late, unconfirm_later):
+            row = rows[signup.user_id]
+            self.assertEqual(
+                (row.outcome, row.source), (Outcome.PENDING, OutcomeSource.DEFAULT)
+            )
+            self.assertEqual(flags[signup.user_id], "roll_call_unconfirmed")
 
     def test_roll_call_off_check_does_not_change_sources(self) -> None:
         event = self._event(roll_call_enabled=False)

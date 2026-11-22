@@ -50,6 +50,7 @@ from events.services import (
     cancel_signup,
     create_tournament_for_event,
     demote_to_waitlist,
+    ensure_tournament_with_signups,
 )
 from events.tests.base import EventTestCase
 
@@ -418,9 +419,19 @@ class ConfirmTests(ReadyCheckServiceTestCase):
     def test_pending_on_closed_check_is_closed(self) -> None:
         check = self._open().check
         ReadyCheck.objects.filter(pk=check.pk).update(phase=ReadyCheckPhase.CLOSED)
+        self.assertEqual(self._confirm(), ConfirmResult.CLOSED)
+
+    def test_staff_confirm_on_closed_check_overrides(self) -> None:
+        check = self._open().check
+        ReadyCheck.objects.filter(pk=check.pk).update(phase=ReadyCheckPhase.CLOSED)
         self.assertEqual(
             self._confirm(via=ReadyCheckConfirmVia.STAFF, actor=self.staff_actor),
-            ConfirmResult.CLOSED,
+            ConfirmResult.CONFIRMED,
+        )
+        self.signup.refresh_from_db()
+        self.assertEqual(self.signup.status, SignupStatus.CONFIRMED)
+        self.assertEqual(
+            self._entry(check, self.signup).state, ReadyCheckEntryState.PENDING
         )
 
     def test_repairs_confirmed_entry_with_approved_signup(self) -> None:
@@ -541,6 +552,11 @@ class LifecycleTestCase(ReadyCheckServiceTestCase):
     def _chase(self, event: Event) -> list[ReadyCheckEntry]:
         with self.captureOnCommitCallbacks(execute=True):
             return chase_unconfirmed(event, actor=self.staff_actor)
+
+    def _start_roster(self, event: Event) -> set[int]:
+        event.refresh_from_db()
+        tournament = ensure_tournament_with_signups(event)
+        return set(tournament.users.values_list("pk", flat=True))
 
     def _dropped(self, event: Event) -> list[EventSignup]:
         return list(
@@ -772,6 +788,28 @@ class CloseTests(LifecycleTestCase):
         self.assertTrue(all(r.reason == "non_binding" for r in kept))
         sig.assert_called_once()
         self.assertEqual(len(sig.call_args.kwargs["change"].user_ids), 4)
+
+    def test_non_binding_close_seats_unconfirmed_members_at_start(self) -> None:
+        event, signups = self._setup(AUTO, 6, 10, NON_BINDING)
+        result = self._close(event)
+        assert result.check is not None
+        self.assertEqual(result.check.outcome, ReadyCheckOutcome.NON_BINDING)
+        for signup in signups:
+            signup.refresh_from_db()
+            self.assertEqual(signup.status, SignupStatus.CONFIRMED)
+        kept = self._rows(SignupAction.READY_CHECK_KEPT, event)
+        self.assertTrue(all(r.before["status"] == SignupStatus.APPROVED for r in kept))
+        self.assertTrue(all(r.after["status"] == SignupStatus.CONFIRMED for r in kept))
+        self.assertEqual(
+            self._start_roster(event), {signup.user_id for signup in signups}
+        )
+
+    def test_staff_verified_close_leaves_unconfirmed_off_start_roster(self) -> None:
+        event, signups = self._setup(MANUAL, 6, 10)
+        self._close(event)
+        self.assertEqual(
+            self._start_roster(event), {signup.user_id for signup in signups[:6]}
+        )
 
     def test_automatic_below_min_hold_for_staff_holds(self) -> None:
         event, _ = self._setup(AUTO, 6, 10, HOLD)
@@ -1005,6 +1043,44 @@ class PromotionTests(LifecycleTestCase):
         self.assertEqual(asked[0].actor_role, ActorRole.STAFF)
         self.assertEqual(asked[0].correlation_id, f"rc{check.pk}:enrol")
 
+    def test_operator_seats_member_promoted_at_close(self) -> None:
+        event = self.make_event(
+            roll_call_enabled=True, roll_call_mode=AUTO, max_players=10
+        )
+        event.helpers.add(self.helper)
+        main = [self._signup(SignupStatus.APPROVED, event=event) for _ in range(10)]
+        self._open(event)
+        for signup in main[:7]:
+            self._confirm_member(signup)
+        late = EventSignup.objects.create(
+            event=event,
+            user=self.make_user(),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
+        result = self._close(event)
+        assert result.check is not None
+        self.assertIn(late.pk, result.promoted_signup_ids)
+        self.assertEqual(self._confirm_member(late), ConfirmResult.CLOSED)
+
+        host = self.make_user()
+        event.host = host
+        event.save(update_fields=["host"])
+        operator = SignupActor(user=host, role=ActorRole.STAFF, means=SignupMeans.WEB)
+        self.assertEqual(
+            self._confirm_member(late, actor=operator), ConfirmResult.CONFIRMED
+        )
+        late.refresh_from_db()
+        self.assertEqual(late.status, SignupStatus.CONFIRMED)
+        self.assertIn(late.user_id, self._start_roster(event))
+        row = [
+            r
+            for r in self._rows(SignupAction.CONFIRMED, event)
+            if r.signup_id == late.pk
+        ][-1]
+        self.assertEqual(row.rules_overridden, ["ready_check_closed"])
+        self.assertEqual(row.actor_user, host)
+
     def test_unconfirmed_fill_member_present_at_open_is_dropped(self) -> None:
         event = self.make_event(
             roll_call_enabled=True,
@@ -1237,7 +1313,8 @@ class ResolveTests(LifecycleTestCase):
         self.assertIsNotNone(check.closed_at)
         self.assertEqual(self._entry(check, kept).state, ReadyCheckEntryState.EXCUSED)
         kept.refresh_from_db()
-        self.assertEqual(kept.status, SignupStatus.APPROVED)
+        self.assertEqual(kept.status, SignupStatus.CONFIRMED)
+        self.assertIn(kept.user_id, self._start_roster(event))
         others = signups[7:]
         self.assertEqual(
             set(result.dropped_user_ids), {signup.user_id for signup in others}
@@ -1301,6 +1378,9 @@ class ResolveTests(LifecycleTestCase):
         kept_rows = self._rows(SignupAction.READY_CHECK_KEPT, event)
         self.assertEqual(
             {r.signup_id for r in kept_rows}, {signup.pk for signup in signups[6:]}
+        )
+        self.assertEqual(
+            self._start_roster(event), {signup.user_id for signup in signups}
         )
         self.assertTrue(all(r.reason == self.REASON for r in kept_rows))
 

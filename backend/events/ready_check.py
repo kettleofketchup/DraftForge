@@ -380,6 +380,13 @@ def confirm_ready(
         staff_on_held = (
             via == ReadyCheckConfirmVia.STAFF and check.phase == ReadyCheckPhase.HELD
         )
+        if (
+            via == ReadyCheckConfirmVia.STAFF
+            and check.phase == ReadyCheckPhase.CLOSED
+            and signup.status == SignupStatus.APPROVED
+        ):
+            _confirm_after_close(locked, check, signup, actor=actor)
+            return ConfirmResult.CONFIRMED
         if check.phase not in ACCEPTING_PHASES and not staff_on_held:
             return _log_refused(locked, check, user, ConfirmResult.CLOSED)
         entry_changed = _confirm_entry(entry, via)
@@ -496,18 +503,26 @@ def _record_member_rows(
     action: SignupAction,
     reason: str,
     correlation_id: str,
-) -> None:
+    seat: bool = False,
+) -> list[EventSignup]:
+    seated: list[EventSignup] = []
     for entry in entries:
+        signup = entry.signup
+        before = snapshot(signup) if seat and signup is not None else None
+        if seat and signup is not None and _sync_signup_confirmed(locked, signup):
+            seated.append(signup)
         record_signup_change(
             event=locked,
             subject=entry.user,
             actor=actor,
             action=action,
-            signup=entry.signup,
-            after=snapshot(entry.signup) if entry.signup is not None else None,
+            signup=signup,
+            before=before,
+            after=snapshot(signup) if signup is not None else None,
             reason=reason,
             correlation_id=correlation_id,
         )
+    return seated
 
 
 def _log_on_commit(event_name: str, fields: dict[str, Any]) -> None:
@@ -717,16 +732,16 @@ def close_ready_check(event: Event, *, actor: SignupActor) -> CloseResult:
         phase, outcome = ReadyCheckPhase.CLOSED, ReadyCheckOutcome.NON_BINDING
         member_rows = (SignupAction.READY_CHECK_KEPT, "non_binding", pending)
 
-    if member_rows is not None:
-        action, reason, entries = member_rows
-        _record_member_rows(
-            locked,
-            entries,
-            actor=actor,
-            action=action,
-            reason=reason,
-            correlation_id=f"rc{check.pk}:{step}",
-        )
+    action, reason, entries = member_rows
+    seated = _record_member_rows(
+        locked,
+        entries,
+        actor=actor,
+        action=action,
+        reason=reason,
+        correlation_id=f"rc{check.pk}:{step}",
+        seat=outcome == ReadyCheckOutcome.NON_BINDING,
+    )
 
     now = tz.now()
     update_fields: dict[str, Any] = {
@@ -749,12 +764,13 @@ def close_ready_check(event: Event, *, actor: SignupActor) -> CloseResult:
         "pending": len(pending),
         "dropped": len(dropped_user_ids),
         "promoted": len(promoted_signup_ids),
+        "seated": len(seated),
     }
     record_ready_check_transition(
         event=locked, actor=actor, check=check, step=step, extra=counts
     )
-    if dropped_user_ids or promoted_signup_ids:
-        invalidate_after_commit(locked)
+    if dropped_user_ids or promoted_signup_ids or seated:
+        invalidate_after_commit(locked, *seated)
         locked.refresh_signup_post_on_commit()
 
     if phase == ReadyCheckPhase.HELD:
@@ -849,13 +865,14 @@ def resolve_held_ready_check(
         excused = pending
         _excuse(excused)
         kept = pending
-    _record_member_rows(
+    seated = _record_member_rows(
         locked,
         kept,
         actor=actor,
         action=SignupAction.READY_CHECK_KEPT,
         reason=reason,
         correlation_id=correlation_id,
+        seat=True,
     )
 
     confirmed = sum(
@@ -884,12 +901,13 @@ def resolve_held_ready_check(
         "excused": len(excused),
         "dropped": len(dropped_user_ids),
         "promoted": len(promoted_signup_ids),
+        "seated": len(seated),
     }
     record_ready_check_transition(
         event=locked, actor=actor, check=check, step=step, reason=reason, extra=counts
     )
-    if dropped_user_ids or promoted_signup_ids:
-        invalidate_after_commit(locked)
+    if dropped_user_ids or promoted_signup_ids or seated:
+        invalidate_after_commit(locked, *seated)
         locked.refresh_signup_post_on_commit()
 
     send_on_commit(
@@ -960,7 +978,9 @@ def staff_confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSig
                 .get(pk=signup.pk)
             )
 
-    closed = check is not None and check.phase == ReadyCheckPhase.CLOSED
+    if check is not None and check.phase == ReadyCheckPhase.CLOSED:
+        _confirm_after_close(locked, check, signup, actor=actor)
+        return signup
     before = snapshot(signup)
     confirm_signup(signup)
     record_signup_change(
@@ -972,23 +992,39 @@ def staff_confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSig
         before=before,
         after=snapshot(signup),
         reason="staff_confirmed",
-        rules_overridden=["ready_check_closed"] if closed else [],
         correlation_id=f"rc{check.pk}:confirm" if check is not None else "",
     )
-    if closed:
-        assert check is not None
-        _log_on_commit(
-            "ready_check_staff_confirm_after_close",
-            {
-                "event_id": locked.pk,
-                "ready_check_id": check.pk,
-                "phase": check.phase,
-                "outcome": check.outcome,
-                "signup_id": signup.pk,
-                "actor_user_id": _actor_user_id(actor),
-            },
-        )
     return signup
+
+
+def _confirm_after_close(
+    locked: Event, check: ReadyCheck, signup: EventSignup, *, actor: SignupActor
+) -> None:
+    before = snapshot(signup)
+    confirm_signup(signup)
+    record_signup_change(
+        event=locked,
+        subject=signup.user,
+        actor=actor,
+        action=SignupAction.CONFIRMED,
+        signup=signup,
+        before=before,
+        after=snapshot(signup),
+        reason="staff_confirmed",
+        rules_overridden=["ready_check_closed"],
+        correlation_id=f"rc{check.pk}:confirm",
+    )
+    _log_on_commit(
+        "ready_check_staff_confirm_after_close",
+        {
+            "event_id": locked.pk,
+            "ready_check_id": check.pk,
+            "phase": check.phase,
+            "outcome": check.outcome,
+            "signup_id": signup.pk,
+            "actor_user_id": _actor_user_id(actor),
+        },
+    )
 
 
 @transaction.atomic

@@ -181,15 +181,14 @@ class UnconfirmTests(LifecycleTestCase):
         self._assert_reset(check, signup)
         self.assertEqual(len(self._rows(SignupAction.UNCONFIRMED)), 1)
 
-    def test_closed_check_keeps_entry(self) -> None:
+    def test_closed_check_resets_entry(self) -> None:
         check, signup = self._confirmed_in_check()
         self._set_phase(check, ReadyCheckPhase.CLOSED, ReadyCheckOutcome.STAFF_VERIFIED)
         unconfirm_signup(signup, actor=self.admin_actor)
         signup.refresh_from_db()
         self.assertEqual(signup.status, SignupStatus.APPROVED)
-        self.assertEqual(
-            check.entries.get(signup=signup).state, ReadyCheckEntryState.CONFIRMED
-        )
+        self._assert_reset(check, signup)
+        self.assertEqual(len(self._rows(SignupAction.UNCONFIRMED)), 1)
         self.assertEqual(len(self._rows(SignupAction.UNCONFIRMED)), 1)
 
     def test_helper_actor_attributes_row(self) -> None:

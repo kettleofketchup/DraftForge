@@ -199,7 +199,7 @@ If fewer than `ready_check_min_completion_pct` percent of members have confirmed
 
 | Value | Label | Effect |
 |-------|-------|--------|
-| `non_binding` | Make the check non-binding (drop nobody) | Nobody is dropped |
+| `non_binding` | Make the check non-binding (drop nobody) | Nobody is dropped; unconfirmed members are confirmed so they stay on the roster |
 | `hold_for_staff` | Hold drops for staff, the host or helpers to decide | Org or league staff, the event host or helpers decide who is dropped |
 | `drop_anyway` | Drop unconfirmed anyway | Unconfirmed members are dropped regardless |
 
@@ -219,7 +219,7 @@ The check moves through these phases:
 
 Starting the tournament closes an open check first. A staff-verified check closes without dropping anyone, exactly as roll call did before. If the close holds the check, the tournament does not start and the roll call page shows "The ready check is held for staff; resolve it before starting."
 
-A member who tries to confirm after the check has closed is told to contact the host by name (or the event staff when the event has no host). Confirming members, holds, drops and resolutions are all written to the signup ledger.
+A member who tries to confirm after the check has closed is told to contact the host by name (or the event staff when the event has no host). The host, helpers and staff can still confirm that member, for example someone promoted from the waitlist into a seat freed by the close: the ledger row records that the closed check was overridden. Members kept by a non-binding close or excused by a staff resolve are confirmed, so they stay on the roster when the tournament starts. Confirming members, holds, drops and resolutions are all written to the signup ledger.
 
 #### Who can run the ready check
 
@@ -245,7 +245,7 @@ Promoters can run it only if they also hold one of those roles. The same people 
 
 #### Conduct
 
-When a check closes, [Conduct](../organization-conduct.md) records members who confirmed as attended through the ready check. With a staff-verified check, members who never confirmed stay pending for staff to decide. Once automatic mode is live, a member dropped by a binding close (whether the host, a helper or staff closed it) is recorded as a no-show; staff can still override any outcome from the Attendance panel.
+When a check closes, [Conduct](../organization-conduct.md) records members who confirmed as attended through the ready check. With a staff-verified check, members who are not confirmed when the event ends stay pending for staff to decide, including members approved after the check closed and members staff unconfirmed after it closed. Once automatic mode is live, a member dropped by a binding close (whether the host, a helper or staff closed it) is recorded as a no-show; staff can still override any outcome from the Attendance panel.
 
 #### Known gaps until line placement ships
 

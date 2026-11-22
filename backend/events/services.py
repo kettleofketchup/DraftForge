@@ -64,10 +64,8 @@ from events.ready_check_constants import (
     DROPPED_SIGNUP_MESSAGE,
     REMOVED_SIGNUP_STATUSES,
     ReadyCheckEntryState,
-    ReadyCheckPhase,
 )
 from events.ready_check_core import (
-    ACCEPTING_PHASES,
     cancel_ready_check,
     enrol_signup_if_live,
     live_ready_check,
@@ -795,7 +793,7 @@ def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     signup.status = SignupStatus.APPROVED
     signup.save(update_fields=["status", "updated_at"])
     _roster_remove_if_left(signup)
-    if check is not None and check.phase in (*ACCEPTING_PHASES, ReadyCheckPhase.HELD):
+    if check is not None:
         check.entries.filter(
             signup_id=signup.pk, state=ReadyCheckEntryState.CONFIRMED
         ).update(
