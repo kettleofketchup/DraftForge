@@ -604,7 +604,7 @@ def test_setup_allocates_before_any_compose_call() -> None:
     assert "compose --ansi always up -d" in text
 
 
-def test_release_migrates_and_pulls_before_recreating() -> None:
+def test_release_pulls_then_stops_migrates_and_starts() -> None:
     assert JUST is not None
     text = subprocess.run(
         [JUST, "--justfile", str(ROOT / "justfile"), "--dry-run", "dev::release"],
@@ -614,12 +614,13 @@ def test_release_migrates_and_pulls_before_recreating() -> None:
         check=True,
     ).stderr
     order = [
-        text.index("db::migrate-env release"),
-        text.index("docker::release::pull"),
+        text.index("compose --stack release pull"),
         text.index("compose --stack release down"),
+        text.index("db::migrate-env release"),
         text.index("compose --stack release up -d"),
     ]
     assert order == sorted(order)
+    assert "docker::release::pull" not in text
     assert "in-env.sh' release" in text or "in-env.sh release" in text
 
 

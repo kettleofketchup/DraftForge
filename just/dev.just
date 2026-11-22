@@ -163,7 +163,7 @@ local-prod:
     {{just}} db::migrate::prod
     {{in_env}} prod . {{slots}} compose --stack prod up
 
-# Deploy: migrate, pull the release images, then recreate the release stack
+# Deploy: pull the release images, then stop the release stack, migrate and start it
 [group('dev')]
 release:
     #!/usr/bin/env bash
@@ -175,11 +175,15 @@ release:
         key=$(python3 -c 'import secrets; print(secrets.token_urlsafe(50))')
         printf '\nDJANGO_SECRET_KEY=%s\n' "$key" >> "$env_file"
     fi
-    {{just}} db::migrate-env release
-    {{just}} docker::release::pull
     version=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' {{quote(root / "docker/.env.release")}} | head -n 1)
-    echo "launching release version ${version:-<unset>}"
+    echo "pulling release version ${version:-<unset>}"
+    {{in_env}} release . {{slots}} compose --stack release pull
     {{in_env}} release . {{slots}} compose --stack release down
+    if ! {{just}} db::migrate-env release; then
+        echo "ERROR: migration failed; the release stack is down. Fix it, then rerun just dev::release." >&2
+        exit 1
+    fi
+    echo "launching release version ${version:-<unset>}"
     {{in_env}} release . {{slots}} compose --stack release up -d
 
 # Launch Chrome with remote debugging for Chrome DevTools MCP
