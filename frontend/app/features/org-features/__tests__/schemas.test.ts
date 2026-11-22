@@ -10,15 +10,17 @@ const row = (feature: string) => ({
 });
 
 describe('OrgFeatureRowsSchema', () => {
-  it('accepts every feature row the backend returns, conduct included', () => {
+  it('accepts every feature row the backend returns, leadership included', () => {
     const parsed = OrgFeatureRowsSchema.parse([
       row('conduct'),
       row('contributions'),
+      row('leadership'),
       row('promotion'),
     ]);
     expect(parsed.map((r) => r.feature)).toEqual([
       'conduct',
       'contributions',
+      'leadership',
       'promotion',
     ]);
   });

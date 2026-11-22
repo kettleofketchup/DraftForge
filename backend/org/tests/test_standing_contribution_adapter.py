@@ -78,15 +78,27 @@ class ContributionAdapterTest(TestCase):
 
     def test_registry_holds_contribution(self) -> None:
         self.assertEqual(
-            [t.key for t in registry.tracks()], ["contribution", "conduct"]
+            [t.key for t in registry.tracks()],
+            ["contribution", "conduct", "leadership"],
         )
 
     def test_close_completed_awards_and_stamps(self) -> None:
         self._add_helpers(2)
         now = timezone.now()
         result = self._close(cancelled=False, source="admin", now=now)
-        self.assertEqual(result.orglog_details(), {"awarded": 3})
-        self.assertEqual(result.log_fields(), {"awarded": True, "created": 3})
+        self.assertEqual(
+            result.orglog_details(),
+            {"awarded": 3, "captains_snapshotted": 0, "leadership_awarded": 0},
+        )
+        self.assertEqual(
+            result.log_fields(),
+            {
+                "awarded": True,
+                "created": 3,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
+            },
+        )
         self.assertEqual(self._entries(), 3)
         self.assertEqual(self.event.contributions_awarded_at, now)
         self.assertEqual(
@@ -95,8 +107,19 @@ class ContributionAdapterTest(TestCase):
 
     def test_close_admin_cancel_no_award(self) -> None:
         result = self._close(cancelled=True, source="admin")
-        self.assertEqual(result.orglog_details(), {"awarded": 0})
-        self.assertEqual(result.log_fields(), {"awarded": False, "created": 0})
+        self.assertEqual(
+            result.orglog_details(),
+            {"awarded": 0, "captains_snapshotted": 0, "leadership_awarded": 0},
+        )
+        self.assertEqual(
+            result.log_fields(),
+            {
+                "awarded": False,
+                "created": 0,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
+            },
+        )
         self.assertEqual(self._entries(), 0)
 
     def test_close_auto_cancel_with_host_awards(self) -> None:
@@ -109,14 +132,30 @@ class ContributionAdapterTest(TestCase):
         self.event.save(update_fields=["host"])
         self._add_helpers(1)
         result = self._close(cancelled=True, source="auto")
-        self.assertEqual(result.log_fields(), {"awarded": True, "created": 1})
+        self.assertEqual(
+            result.log_fields(),
+            {
+                "awarded": True,
+                "created": 1,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
+            },
+        )
         self.assertEqual(self._entries(), 1)
 
     def test_close_auto_cancel_without_staff_no_award(self) -> None:
         self.event.host = None
         self.event.save(update_fields=["host"])
         result = self._close(cancelled=True, source="auto")
-        self.assertEqual(result.log_fields(), {"awarded": False, "created": 0})
+        self.assertEqual(
+            result.log_fields(),
+            {
+                "awarded": False,
+                "created": 0,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
+            },
+        )
         self.assertIsNone(self.event.contributions_awarded_at)
 
     def test_close_awards_while_feature_locked(self) -> None:
@@ -141,7 +180,13 @@ class ContributionAdapterTest(TestCase):
         with transaction.atomic():
             result = standing.on_event_reopened(self.event, actor=None)
         self.assertEqual(
-            result.orglog_details(), {"revoked": staff, "attendance_reopened": 0}
+            result.orglog_details(),
+            {
+                "revoked": staff,
+                "attendance_reopened": 0,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
+            },
         )
         self.assertEqual(result.log_fields(), {"revoked": staff})
         self.assertEqual(self._entries(), 1)
@@ -169,7 +214,7 @@ class ContributionAdapterTest(TestCase):
     def test_deletion_blockers_lazy(self) -> None:
         with self.assertNumQueries(0):
             blockers = standing.deletion_blockers([self.host.pk])
-        self.assertEqual(len(blockers), 1)
+        self.assertEqual(len(blockers), 2)
 
     def test_user_deleted_logs_per_org(self) -> None:
         self._close(cancelled=False, source="admin")

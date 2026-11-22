@@ -208,7 +208,9 @@ def _org_event(org: Organization, event_id: int | None) -> Event | None:
 
 def _admin_entry(entry_pk: int) -> ContributionEntry:
     return with_user_profiles(
-        ContributionEntry.objects.nocache().select_related("event", "awarded_by"),
+        ContributionEntry.objects.nocache()
+        .filter(track="contribution")
+        .select_related("event", "awarded_by"),
         "org_user__user",
     ).get(pk=entry_pk)
 
@@ -218,7 +220,9 @@ def _list_entries(request: Request, org: Organization) -> Response:
     query.is_valid(raise_exception=True)
     params = query.validated_data
     period = _parse_period(org, params.get("period"))
-    qs = ContributionEntry.objects.nocache().filter(organization=org)
+    qs = ContributionEntry.objects.nocache().filter(
+        organization=org, track="contribution"
+    )
     if period.start is not None:
         qs = qs.filter(occurred_at__gte=period.start)
     if period.end is not None:
@@ -287,6 +291,7 @@ def contributions_entry(request: Request, org_id: int, entry_pk: int) -> Respons
         ),
         pk=entry_pk,
         organization=org,
+        track="contribution",
     )
     if entry.kind != ContributionKind.MANUAL:
         raise ValidationError({"detail": "only manual awards can be edited or deleted"})

@@ -33,25 +33,26 @@ from org.models import (
 )
 from org.promotion.services import record_promo_send, undo_promo_send
 
-# Close, reopen, merge and delete counts include the registered conduct track.
+# Close, reopen, merge and delete counts include the registered conduct and
+# leadership tracks.
 CLOSE_ADMIN_COMPLETE_QUERIES = 46
-CLOSE_AUTO_CANCEL_QUERIES = 41
-CLOSE_ADMIN_CANCEL_QUERIES = 11
-CLOSE_AUTO_CANCEL_NO_STAFF_QUERIES = 11
-REOPEN_QUERIES = 11
+CLOSE_AUTO_CANCEL_QUERIES = 42
+CLOSE_ADMIN_CANCEL_QUERIES = 12
+CLOSE_AUTO_CANCEL_NO_STAFF_QUERIES = 12
+REOPEN_QUERIES = 12
 PATCH_NAME_QUERIES = 21
 PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 39
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 176
-MERGE_CLAIM_QUERIES = 160
-DELETE_API_QUERIES = 97
-DELETE_ADMIN_QUERIES = 143
-DELETE_ADMIN_CONFIRM_QUERIES = 48
+MERGE_DISCORD_QUERIES = 186
+MERGE_CLAIM_QUERIES = 170
+DELETE_API_QUERIES = 103
+DELETE_ADMIN_QUERIES = 152
+DELETE_ADMIN_CONFIRM_QUERIES = 51
 PROMO_SEND_QUERIES = 23
 PROMO_UNDO_QUERIES = 8
-PROMO_RELEASE_QUERIES = 111
+PROMO_RELEASE_QUERIES = 117
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8
@@ -190,6 +191,8 @@ class CloseParityTest(_ParityBase):
                 "from": EventState.IN_PROGRESS.value,
                 "to": EventState.COMPLETED.value,
                 "awarded": 3,
+                "captains_snapshotted": 0,
+                "leadership_awarded": 0,
             },
         )
         closed = one_log(logs, "event_closed")
@@ -301,6 +304,8 @@ class ReopenParityTest(_ParityBase):
                 "to": EventState.SIGNUPS_OPEN.value,
                 "revoked": 3,
                 "attendance_reopened": 0,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
             },
         )
         self.assertEqual(one_log(logs, "event_reopened")["revoked"], 3)

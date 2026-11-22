@@ -2,17 +2,18 @@
 
 `org/standing/` is the one interface between the rest of the backend and the
 per-member organization tracks. A track scores members of an organization on one
-axis. Three tracks are planned:
+axis. There are three tracks:
 
 | Track | Status | Measures |
 |---|---|---|
 | `contribution` | Live | Points for hosting, helping, promotion and manual awards (the ledger) |
 | `conduct` | Live (backend) | Attendance outcomes and each member's show rate |
-| `leadership` | Planned | Captain and team-leadership history |
+| `leadership` | Live (backend) | Captain points and teammate trait ratings ([guide](../features/organization-leadership.md)) |
 
-Each track's code stays in its own package (`org/contributions/`, `org/conduct/`), and
-the package's `adapter.py` plugs it into the registry. Conduct is registered after
-contribution.
+Each track's code stays in its own package (`org/contributions/`, `org/conduct/`,
+`org/leadership/`), and the package's `adapter.py` plugs it into the registry. The
+registry runs them in the order contribution, conduct, leadership, so leadership's
+close hook sees conduct's finalized attendance in the same transaction.
 
 ## Public interface
 
@@ -49,7 +50,7 @@ them.
 | `on_feature_toggled(org_id, feature, *, enabled)` | Feature switch API (`org/views_features.py`), `OrgFeatureAdmin.save_model`, both inside `transaction.atomic()` | Nothing | Re-stamps the org's stored eligibility reasons on commit |
 | `merge_users(drop, keep, *, member_pairs)` | Profile claim merge (`org/views.py`), Discord account merge (`app/discord_accounts.py`); both also move the merged account's event signups through `events.merge.merge_user_signups`, which records them in the signup ledger | Moves ledger rows to the kept member, repoints `awarded_by`/`updated_by` | Moves outcomes (a staff edit wins a same-event clash), repoints `set_by`/`updated_by` |
 | `on_user_deleted(user, *, actor)` | User delete (admin and API) | Deletes the user's rows, one `delete_user_contributions` OrgLog per org | Nothing (outcomes cascade with the `OrgUser`) |
-| `deletion_blockers(user_pks)` | `CustomUserAdmin.get_deleted_objects` | The user's ledger rows (`RESTRICT`) | Nothing |
+| `deletion_blockers(user_pks)` | `CustomUserAdmin.get_deleted_objects` | The user's ledger rows of this track (`RESTRICT`, `ledger.user_rows(track, user_pks)`) | Nothing |
 | `promotion_order(event, candidates, *, cache)` | `events.services` waitlist promotion | No reordering | With back of the line on, moves deferred members after everyone else, keeping their order |
 | `leaderboard(org, track, metric, period, *, viewer, now=None)` | `/contributions/leaderboard/`, `/standing/<track>/leaderboard/` (`/conduct/leaderboard/` reads `org/conduct/board.py` directly) | Points (or `entries`) per member for the period | Show rate per member, ranked then new; `total` is `null` |
 
@@ -76,8 +77,14 @@ roles it needs, so contribution's leaderboard costs the same single member-list 
 it always has. Contribution's `member_standing` returns `totals` and `monthly` for the
 member themselves or a viewer who can see the member list, in two queries.
 
-!!! info "Interface status"
-    `ledger.upsert_event_entry` arrives with the leadership track.
+The leadership track's hooks are listed under [Leadership track](#leadership-track).
+
+Two more reads exist for tracks that need them:
+
+| Call | Returns |
+|---|---|
+| `TrackBase.metrics_for(org_id)` | The org's metrics; defaults to the static `metrics`. Leadership adds one `rating.<trait_key>` metric per active trait. `api.leaderboard`, `api.track_metrics` and `track_info` use it; registry validation still checks the static `metrics` |
+| `api.event_viewer_flags(event_id, org_id, viewer)` | Per-viewer fields merged into event detail after the cache. A track overriding `TrackBase.event_viewer_flags(event_id, now=)` returns expressions over the viewer's `OrgUser` row (`OuterRef("pk")`); `api` annotates them, plus an `Exists` per hooked track's feature, on one `OrgUser` query, locked or unlocked, and nothing for anonymous viewers. Only unlocked tracks' fields are returned (leadership: `can_review_captains`, `pending_captain_reviews`) |
 
 ## Invariants
 
@@ -141,6 +148,11 @@ output namespace.
 `build_kinds` rejects duplicates across tracks. `kinds_for(track)` and
 `ONCE_PER_EVENT_KINDS` derive from it.
 
+`ContributionEntry` is shared by every track that awards points. Its `track` column
+(`contribution` or `leadership`, written from the kind's owning track) scopes every
+read: contribution leaderboards, totals, rescoring, merges and user cleanup filter
+`track="contribution"`, and leadership filters `track="leadership"`.
+
 `org/standing/ledger.py` reads and writes `ContributionEntry` (always `.nocache()`):
 
 | Helper | Does |
@@ -148,6 +160,11 @@ output namespace.
 | `award(*, org, user, kind, occurred_at, points=None, ...)` | Creates one entry; resolves the `OrgUser` and default points |
 | `revoke_event_kinds(event, *, kinds)` | Deletes the event's entries of those kinds; returns the count |
 | `sum_by_member(org_id, *, track, period)` | Per-member totals for a track, non-zero only, ranked |
+| `track_entries(org_id, *, track)`, `track_rows(track)` | The org's (or every org's) rows of one track |
+| `user_rows(user_pks)` | Every track's rows for those users; the single deletion blocker, returned by the contribution adapter only |
+| `upsert_event_entry(*, event, org_user, kind, points)` | One once-per-event row: creates, updates, or deletes it when `points` is falsy; survives a concurrent insert |
+| `sync_event_kinds(event, *, kinds, wanted)` | Reconciles an event's rows of those kinds to `{(org_user_id, kind): points}` |
+| `points_table(org, kinds)` | `points_for` for several kinds in one query |
 | `total(org_id, *, track, period)` | The org's total for a track |
 | `in_period(qs, period)` | Filters by `occurred_at` |
 | `points_for(org, kind)` | The org's override from `ContributionPointValue`, else the kind's default |
@@ -212,6 +229,29 @@ roll back the caller. `events/completion.py` and `events/reopen.py` import
 reopen has the slot registered (`org.tests.test_standing_import_order` checks each
 entry point in a fresh interpreter).
 
+## Leadership track
+
+`org/leadership/adapter.py` (`LEADERSHIP`) is registered third. Behaviour is in the
+[guide](../features/organization-leadership.md); the interface parts:
+
+| Hook | Does | Output |
+|---|---|---|
+| `on_event_closed` | Completed: snapshots each team captain, the rater pool and placement, awards `captained`, `placement_N`, `draft_completed`, opens the review window. Cancelled: voids like a reopen. Nothing new while Leadership is locked | OrgLog `captains_snapshotted`, `leadership_awarded`; log `captain_reviews_voided`, `leadership_revoked` (always all four) |
+| `on_event_reopened` | Voids the event's snapshots and reviews (`void_kind="lifecycle"`) and revokes its leadership rows | OrgLog `captain_reviews_voided`, `leadership_revoked` |
+| `on_event_deleted` | Deletes the event's snapshots, reviews and leadership rows | Nothing |
+| `merge_members`, `repoint_user` | Moves snapshots, rater pools, reviews and leadership ledger rows to the kept member; same-event snapshots and reviews fold into one, and a review the merge would turn into a self-review is dropped. When one person ends up with two reviews of a captain, a `moderated` one wins, otherwise the newer; the loser is deleted, or loses its rater (`rater=NULL`) when it is live and the window has closed. Repoints `voided_by`, settings `updated_by`, `awarded_by` and leadership point-value editors | Nothing |
+| `on_user_deleted` | Deletes the user's snapshots and reviews, except live reviews in closed windows, which lose their rater so released aggregates do not move; recomputes open captain ratings they fed, deletes their leadership ledger rows with one `delete_user_leadership` OrgLog per org | Nothing |
+
+`captain_rating` is upserted through `ledger.upsert_event_entry` on every review submit,
+edit, withdrawal and staff void or restore. Reopen, cancel and delete cost one extra
+query (an `EventCaptain` id read) when the event has no snapshots.
+
+With Leadership unlocked, its `track_info` in org detail and `standing/tracks/` costs
+three reads: the cached settings row, the viewer's membership and the trait list behind
+the `rating.<trait>` metrics (`test_org_detail_flags` pins it). The leaderboard view
+passes the metrics it resolved to `api.leaderboard`, so a request reads the traits once
+for metric lookup and once more for the rating board.
+
 ## Generic endpoints
 
 - `GET /api/organizations/<org_id>/standing/tracks/`: the viewer's tracks for the org
@@ -224,8 +264,9 @@ entry point in a fresh interpreter).
 makes `api.leaderboard` raise `AccessDenied` (the view returns `401` to anonymous
 viewers and `not_permitted` otherwise); conduct sets it when the ranking is private
 and the viewer is neither staff nor a member. `board_open` is whether the board itself
-is open to the viewer (conduct: `leaderboard_public` or org staff; contribution:
-always), and backs org detail's `can_view_conduct`.
+is open to the viewer (conduct and leadership: `leaderboard_public` or org staff;
+contribution: always), and backs org detail's `can_view_conduct`. Leadership allows any
+org member (own row) and, with a private board, refuses everyone else.
 
 ## Departures from the design
 
@@ -234,7 +275,7 @@ always), and backs org detail's `can_view_conduct`.
 | `track_info`, `member_standing`, `api.tracks_for`, `api.member_standing` | Closed by the conduct track |
 | Contribution `entries` metric | Closed by the conduct track |
 | `tests/populate/*` rewired onto standing | Closed by the conduct track |
-| `ledger.upsert_event_entry` | Open, arrives with the leadership track |
+| `ledger.upsert_event_entry` | Closed by the leadership track |
 | Promotion wrapper named `has_promo_entry` | Stays |
 | `dedupe_host_helpers` calls `on_event_changed` itself; Event PATCH passes every changed field | Stays |
 | The internal transition endpoint and `cleanup_stale_repeater_events` change event state without the hooks | Open |
@@ -282,4 +323,5 @@ point first in a fresh interpreter to catch import cycles.
 
 Shared helpers log with `system="org", subsystem="standing"`
 (`org_timezone_invalid` from `periods.py`). Contribution ledger writes keep
-`system="org", subsystem="contributions"`.
+`system="org", subsystem="contributions"`; leadership logs with
+`system="org", subsystem="leadership"`.
