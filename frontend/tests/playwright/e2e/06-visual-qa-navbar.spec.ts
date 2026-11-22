@@ -16,7 +16,9 @@ const EXPECTED_LOGIN = (locale: 'en' | 'es') =>
   locale === 'es' ? 'Iniciar sesión con Discord' : 'Login with Discord';
 
 async function settleNavbar(page: Page, locale: 'en' | 'es') {
-  await expect(page.locator(LOGIN_BUTTON)).toHaveText(EXPECTED_LOGIN(locale));
+  await expect(page.locator(LOGIN_BUTTON)).toHaveAccessibleName(
+    EXPECTED_LOGIN(locale),
+  );
   await page.evaluate(() => document.fonts.ready);
 }
 
