@@ -93,7 +93,6 @@ def get_lowest_mmr_team(teams: list) -> tuple:
             ],
             "roll_rounds": roll_rounds,
             "winner_id": winner.id,
-            "hold_ms": TIE_ROLL_HOLD_MS,
         }
         return winner, tie_data
 
@@ -150,7 +149,8 @@ def reassign_round_captain(
 ) -> dict | None:
     """Assign the lowest-MMR eligible team's captain to `round`; None if no team is eligible.
 
-    A tie carries ``hold_until``: ``now`` plus the hold, which is when the next clock starts.
+    Only these ties hold the next clock, so only they carry ``hold_ms`` and ``hold_until``
+    (``now`` plus the hold, when the clock starts). A tie at draft start holds nothing.
     """
     eligible_teams = [
         t
@@ -166,7 +166,8 @@ def reassign_round_captain(
     round.captain = next_team.captain
     if tie_data:
         tie_data["pick_number"] = round.pick_number
-        hold = timedelta(milliseconds=tie_data["hold_ms"])
+        tie_data["hold_ms"] = TIE_ROLL_HOLD_MS
+        hold = timedelta(milliseconds=TIE_ROLL_HOLD_MS)
         tie_data["hold_until"] = ((now or timezone.now()) + hold).isoformat()
         round.was_tie = True
         round.tie_roll_data = tie_data

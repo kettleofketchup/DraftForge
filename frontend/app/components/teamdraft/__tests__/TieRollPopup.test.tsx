@@ -321,6 +321,23 @@ describe('TieRollPopup', () => {
     });
   });
 
+  it('shows no clock countdown for a tie the server did not hold the clock for', () => {
+    const onDone = vi.fn();
+    render(
+      <TieRollPopup
+        tie={{ ...tie, hold_until: undefined }}
+        teams={teams}
+        clockHeld
+        onDone={onDone}
+        now={now}
+        serverNow={now}
+      />,
+    );
+    expect(screen.queryByTestId('tie-roll-countdown')).toBeNull();
+    advance(5100);
+    expect(onDone).toHaveBeenCalled();
+  });
+
   describe('following the live hold end', () => {
     const at = (ms: number) => new Date(ms).toISOString();
     const heldTie = { ...tie, hold_until: at(4000) };

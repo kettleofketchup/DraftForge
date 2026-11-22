@@ -117,6 +117,30 @@ class TieRollHoldAfterPickTests(NoTickThreadTestCase):
         self.assertEqual(team.draft_reserve_ms, fx.options.reserve_time_ms)
 
 
+class TieAtDraftStartTests(NoTickThreadTestCase):
+    """A tie for pick 1 is rolled when the rounds are built; nothing holds the clock for it."""
+
+    def test_first_clock_starts_at_once_with_no_tie_roll_event(self):
+        fx = TimedDraftFixture(
+            style="shuffle", captain_mmrs=[1000, 1000, 3000, 4000], prefix="first"
+        )
+        first = fx.round(1)
+        self.assertTrue(first.was_tie)
+        now = timezone.now()
+        with self.captureOnCommitCallbacks(execute=True):
+            fx.start(now=now)
+        self.assertEqual(fx.round(1).started_at, now)
+        self.assertFalse(fx.events("tie_roll").exists())
+
+    def test_stored_tie_data_claims_no_hold(self):
+        fx = TimedDraftFixture(
+            style="shuffle", captain_mmrs=[1000, 1000, 3000, 4000], prefix="first2"
+        )
+        data = fx.round(1).tie_roll_data
+        self.assertNotIn("hold_ms", data)
+        self.assertNotIn("hold_until", data)
+
+
 class TieRollHoldAfterTimeoutTests(NoTickThreadTestCase):
     def _skip_first_round(
         self, mmrs: list[int]

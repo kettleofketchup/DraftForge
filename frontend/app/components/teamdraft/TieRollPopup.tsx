@@ -76,7 +76,7 @@ interface TieRollPopupProps {
   tie: TieResolution;
   teams: TieRollTeam[];
   onDone: () => void;
-  /** The server holds the next pick clock while the dice roll. */
+  /** The draft clock is on; the countdown also needs the server's `hold_until`, sent only when it holds the clock. */
   clockHeld: boolean;
   /** Injected for tests; defaults to performance.now. */
   now?: () => number;
@@ -188,6 +188,8 @@ export function TieRollPopup({
   };
   const winnerLabel = labelOf(tie.winner_id);
   const secondsLeft = Math.ceil(holdLeftMs / 1000);
+  const serverHeld =
+    tie.hold_until != null && !Number.isNaN(Date.parse(tie.hold_until));
   const remainingMs = paused
     ? timeline.totalMs
     : Math.max(timeline.totalMs - elapsed, holdLeftMs);
@@ -306,7 +308,7 @@ export function TieRollPopup({
         >
           {frame.winnerShown ? `${winnerLabel} picks next` : 'Rolling…'}
         </span>
-        {clockHeld && (paused || secondsLeft > 0) && (
+        {clockHeld && serverHeld && (paused || secondsLeft > 0) && (
           <span
             data-testid="tie-roll-countdown"
             className="text-xs tabular-nums text-muted-foreground"
