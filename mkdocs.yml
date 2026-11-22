@@ -98,6 +98,7 @@ nav:
           - Signup Ledger: features/events/signup-ledger.md
       - Organization Locked Features: features/organization-locked-features.md
       - Organization Conduct: features/organization-conduct.md
+      - Organization Leadership: features/organization-leadership.md
       - Organization Settings: features/organization-settings.md
       - Org MMR per Game: features/org-mmr.md
       - Steam Friend ID Verification: features/steam-friend-id.md

@@ -5,7 +5,7 @@ BaseUserProfile migration: legacy serializers that exposed
 emitting the same JSON shape now that those fields live on
 `BaseUserProfile`.
 
-Covers the two serializers identified in T1.6:
+Covers the two serializers that ship nickname/avatar:
 - UserSerializer (primary identity payload — /api/users/, /api/users/me/, etc.)
 - TournamentUserSerializer (used in tournament/team/league/match payloads)
 

@@ -1,7 +1,7 @@
 from django.core.validators import MaxLengthValidator
 from django.db import models
 
-from org.contributions.kinds import EVENT_STAFF_KINDS, RATED_KINDS, ContributionKind
+from org.standing.kinds import ONCE_PER_EVENT_KINDS
 
 
 class ContributionPointValue(models.Model):
@@ -12,9 +12,7 @@ class ContributionPointValue(models.Model):
         on_delete=models.CASCADE,
         related_name="point_values",
     )
-    kind = models.CharField(
-        max_length=32, choices=[(k.value, k.label) for k in RATED_KINDS]
-    )
+    kind = models.CharField(max_length=32)
     points = models.PositiveIntegerField()
     updated_by = models.ForeignKey(
         "app.CustomUser",
@@ -49,7 +47,8 @@ class ContributionEntry(models.Model):
         on_delete=models.CASCADE,
         related_name="contribution_entries",
     )
-    kind = models.CharField(max_length=32, choices=ContributionKind.choices)
+    track = models.CharField(max_length=32, default="contribution")
+    kind = models.CharField(max_length=32)
     points = models.IntegerField()
     event = models.ForeignKey(
         "events.Event",
@@ -84,9 +83,9 @@ class ContributionEntry(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["event", "org_user", "kind"],
-                condition=models.Q(kind__in=EVENT_STAFF_KINDS)
+                condition=models.Q(kind__in=sorted(ONCE_PER_EVENT_KINDS))
                 & models.Q(event__isnull=False),
-                name="uniq_event_staff_entry",
+                name="uniq_event_once_entry",
             ),
             models.UniqueConstraint(
                 fields=["promo_send"],
@@ -95,8 +94,14 @@ class ContributionEntry(models.Model):
             ),
         ]
         indexes = [
-            models.Index(fields=["organization", "occurred_at"]),
-            models.Index(fields=["org_user", "occurred_at"]),
+            models.Index(
+                fields=["organization", "track", "occurred_at"],
+                name="ledger_org_track_at_idx",
+            ),
+            models.Index(
+                fields=["org_user", "track", "occurred_at"],
+                name="ledger_mbr_track_at_idx",
+            ),
         ]
 
     def __str__(self) -> str:

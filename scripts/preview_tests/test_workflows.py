@@ -5,6 +5,7 @@ carries real logic (tag, exists check, comments) the script is executed with
 shimmed `docker`/`gh` binaries, so the test exercises behaviour and not only
 its spelling.
 """
+
 import json
 import os
 import re
@@ -35,8 +36,9 @@ def load(name: str) -> dict:
     path = WORKFLOW_DIR / name
     if not path.is_file():
         raise AssertionError(f"workflow {path} does not exist")
-    out = subprocess.run(["yq", "-o=json", ".", str(path)], capture_output=True,
-                         text=True, check=True).stdout
+    out = subprocess.run(
+        ["yq", "-o=json", ".", str(path)], capture_output=True, text=True, check=True
+    ).stdout
     return json.loads(out)
 
 
@@ -128,7 +130,11 @@ def run_step(step: dict, env: dict, cwd=None):
         full_env.update(env)
         proc = subprocess.run(
             ["bash", "--noprofile", "--norc", "-eo", "pipefail", str(script)],
-            env=full_env, cwd=cwd or tmp, capture_output=True, text=True)
+            env=full_env,
+            cwd=cwd or tmp,
+            capture_output=True,
+            text=True,
+        )
         calls = [json.loads(line) for line in gh_log.read_text().splitlines()]
         return proc, out_file.read_text(), calls
 
@@ -146,25 +152,49 @@ class PreviewImagesStructureTest(unittest.TestCase):
         cond = self.build["if"]
         self.assertIn(
             "contains(format(',{0},', vars.PREVIEW_AUTHORS || 'kettleofketchup'), "
-            "format(',{0},', github.event.pull_request.user.login))", cond)
+            "format(',{0},', github.event.pull_request.user.login))",
+            cond,
+        )
         self.assertIn(
-            "github.event.pull_request.head.repo.full_name == github.repository", cond)
+            "github.event.pull_request.head.repo.full_name == github.repository", cond
+        )
 
     def test_images_concurrency_per_leg(self):
+        # Per PR and leg, not per SHA: a push cancels the build for the head it
+        # replaced, whose images the queue never deploys (tag_for(pr, head_sha)).
         conc = self.build["concurrency"]
-        self.assertIn("matrix.name", conc["group"])
-        self.assertIn("github.event.pull_request.number", conc["group"])
-        self.assertIn("github.event.pull_request.head.sha", conc["group"])
-        self.assertIs(conc["cancel-in-progress"], False)
+        self.assertEqual(
+            conc["group"],
+            "preview-images-${{ github.event.pull_request.number }}-${{ matrix.name }}",
+        )
+        self.assertIs(conc["cancel-in-progress"], True)
+
+    def test_images_skip_no_preview_prs(self):
+        # The queue never grants a no-preview PR a slot, so its images would go unused.
+        self.assertIn(
+            "!contains(github.event.pull_request.labels.*.name, 'no-preview')",
+            self.build["if"],
+        )
 
     def test_images_matrix_legs(self):
         legs = {leg["name"]: leg for leg in self.build["strategy"]["matrix"]["include"]}
         self.assertEqual(set(legs), {"backend", "frontend"})
-        self.assertEqual((legs["backend"]["context"], legs["backend"]["file"],
-                          legs["backend"]["target"]), (".", "backend/Dockerfile", "runtime"))
-        self.assertEqual((legs["frontend"]["context"], legs["frontend"]["file"],
-                          legs["frontend"]["target"]),
-                         ("frontend", "frontend/Dockerfile", "runtime"))
+        self.assertEqual(
+            (
+                legs["backend"]["context"],
+                legs["backend"]["file"],
+                legs["backend"]["target"],
+            ),
+            (".", "backend/Dockerfile", "runtime"),
+        )
+        self.assertEqual(
+            (
+                legs["frontend"]["context"],
+                legs["frontend"]["file"],
+                legs["frontend"]["target"],
+            ),
+            ("frontend", "frontend/Dockerfile", "runtime"),
+        )
         self.assertEqual(
             legs["frontend"]["args"].split(),
             ["VITE_PREVIEW_TEST_FEATURES=true", "VITE_SENTRY_ENABLED=false"],
@@ -191,14 +221,18 @@ class PreviewImagesStructureTest(unittest.TestCase):
         self.assertEqual(
             self.build_push["with"]["tags"],
             "ghcr.io/kettleofketchup/draftforge-preview/${{ matrix.name }}:"
-            "${{ steps.tag.outputs.tag }}")
+            "${{ steps.tag.outputs.tag }}",
+        )
 
     def test_build_labels(self):
         labels = self.build_push["with"]["labels"].splitlines()
-        self.assertEqual(labels, [
-            "org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}",
-            "org.opencontainers.image.source=https://github.com/kettleofketchup/DraftForge",
-        ])
+        self.assertEqual(
+            labels,
+            [
+                "org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}",
+                "org.opencontainers.image.source=https://github.com/kettleofketchup/DraftForge",
+            ],
+        )
 
     def test_floor_and_exists_steps(self):
         floor_i = step_index(self.steps, lambda s: s.get("id") == "floor")
@@ -219,7 +253,9 @@ class PreviewImagesStructureTest(unittest.TestCase):
 
     def test_floor_sets_output_and_fails(self):
         floor = step_by_id(self.steps, "floor")
-        self.assertEqual(self.build["outputs"]["floor_ok"], "${{ steps.floor.outputs.floor_ok }}")
+        self.assertEqual(
+            self.build["outputs"]["floor_ok"], "${{ steps.floor.outputs.floor_ok }}"
+        )
         with tempfile.TemporaryDirectory() as tmp:
             proc, out, _ = run_step(floor, {}, cwd=tmp)
             self.assertNotEqual(proc.returncode, 0)
@@ -228,14 +264,17 @@ class PreviewImagesStructureTest(unittest.TestCase):
             (Path(tmp) / "backend" / "backend" / "env_utils.py").touch()
             (Path(tmp) / "frontend").mkdir()
             (Path(tmp) / "frontend" / "Dockerfile").write_text(
-                "FROM x\nARG VITE_PREVIEW_TEST_FEATURES=false\n")
+                "FROM x\nARG VITE_PREVIEW_TEST_FEATURES=false\n"
+            )
             proc, out, _ = run_step(floor, {}, cwd=tmp)
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertIn("floor_ok=true", out.split())
 
     def test_report_states(self):
         self.assertEqual(self.report["needs"], "build")
-        self.assertEqual(self.report["if"], "always() && needs.build.result != 'skipped'")
+        self.assertEqual(
+            self.report["if"], "always() && needs.build.result != 'skipped'"
+        )
         steps = self.report["steps"]
         comments = [s for s in steps if "issues/$PR/comments" in s.get("run", "")]
         self.assertEqual(len(comments), 2)
@@ -250,7 +289,8 @@ class PreviewImagesStructureTest(unittest.TestCase):
         status = step_by_id(steps, "status")
         self.assertEqual(
             status["if"],
-            "needs.build.result == 'success' || needs.build.result == 'failure'")
+            "needs.build.result == 'success' || needs.build.result == 'failure'",
+        )
         self.assertEqual(status["env"]["STATE"], "${{ needs.build.result }}")
 
     def test_tag_is_sha7(self):
@@ -268,30 +308,60 @@ class PreviewImagesStructureTest(unittest.TestCase):
         self.assertIn("context=preview-images", status["run"])
         self.assertIn('description="$TAG"', status["run"])
         self.assertEqual(status["env"]["TAG"], "${{ needs.build.outputs.tag }}")
-        proc, _, calls = run_step(status, {
-            "GH_REPO": "kettleofketchup/DraftForge", "HEAD_SHA": HEAD_SHA,
-            "TAG": "pr-12-0123456", "STATE": "failure", "RUN_URL": RUN_URL})
+        proc, _, calls = run_step(
+            status,
+            {
+                "GH_REPO": "kettleofketchup/DraftForge",
+                "HEAD_SHA": HEAD_SHA,
+                "TAG": "pr-12-0123456",
+                "STATE": "failure",
+                "RUN_URL": RUN_URL,
+            },
+        )
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(calls, [[
-            "api", "-X", "POST", f"repos/kettleofketchup/DraftForge/statuses/{HEAD_SHA}",
-            "-f", "context=preview-images", "-f", "state=failure",
-            "-f", "description=pr-12-0123456", "-f", f"target_url={RUN_URL}"]])
+        self.assertEqual(
+            calls,
+            [
+                [
+                    "api",
+                    "-X",
+                    "POST",
+                    f"repos/kettleofketchup/DraftForge/statuses/{HEAD_SHA}",
+                    "-f",
+                    "context=preview-images",
+                    "-f",
+                    "state=failure",
+                    "-f",
+                    "description=pr-12-0123456",
+                    "-f",
+                    f"target_url={RUN_URL}",
+                ]
+            ],
+        )
 
     def test_checkout_uses_head_sha(self):
         checkout = step_using(self.steps, "actions/checkout")
-        self.assertEqual(checkout["with"]["ref"], "${{ github.event.pull_request.head.sha }}")
+        self.assertEqual(
+            checkout["with"]["ref"], "${{ github.event.pull_request.head.sha }}"
+        )
 
     def test_build_timeout(self):
         self.assertEqual(self.build["timeout-minutes"], 45)
 
     def test_images_permissions(self):
         self.assertEqual(self.wf["permissions"], {"contents": "read"})
-        self.assertEqual(self.build["permissions"], {"contents": "read", "packages": "write"})
-        self.assertEqual(self.report["permissions"], {"statuses": "write", "issues": "write"})
+        self.assertEqual(
+            self.build["permissions"], {"contents": "read", "packages": "write"}
+        )
+        self.assertEqual(
+            self.report["permissions"], {"statuses": "write", "issues": "write"}
+        )
 
     def test_triggers(self):
-        self.assertEqual(self.wf["on"],
-                         {"pull_request": {"types": ["opened", "synchronize", "reopened"]}})
+        self.assertEqual(
+            self.wf["on"],
+            {"pull_request": {"types": ["opened", "synchronize", "reopened"]}},
+        )
 
 
 class ExistsCheckTest(unittest.TestCase):
@@ -302,21 +372,29 @@ class ExistsCheckTest(unittest.TestCase):
         cls.step = step_by_id(load(IMAGES)["jobs"]["build"]["steps"], "exists")
 
     def run_exists(self, rc: int, err: str):
-        return run_step(self.step, {
-            "REF": PREVIEW_REPO + "backend:pr-12-0123456",
-            "DOCKER_FAKE_RC": str(rc), "DOCKER_FAKE_ERR": err})
+        return run_step(
+            self.step,
+            {
+                "REF": PREVIEW_REPO + "backend:pr-12-0123456",
+                "DOCKER_FAKE_RC": str(rc),
+                "DOCKER_FAKE_ERR": err,
+            },
+        )
 
     def test_exists_distinguishes_not_found(self):
         run = self.step["run"]
         self.assertNotIn("|| echo found=false", run)
-        self.assertNotIn("|| echo \"found=false\"", run)
+        self.assertNotIn('|| echo "found=false"', run)
         lines = [line.strip() for line in run.splitlines() if line.strip()]
-        guard = [i for i, line in enumerate(lines)
-                 if "grep -qiE 'not found|MANIFEST_UNKNOWN|NAME_UNKNOWN'" in line]
+        guard = [
+            i
+            for i, line in enumerate(lines)
+            if "grep -qiE 'not found|MANIFEST_UNKNOWN|NAME_UNKNOWN'" in line
+        ]
         self.assertEqual(len(guard), 1)
         false_lines = [i for i, line in enumerate(lines) if "found=false" in line]
         self.assertEqual(false_lines, [guard[0] + 1])
-        self.assertIn("exit 1", lines[guard[0] + 2:])
+        self.assertIn("exit 1", lines[guard[0] + 2 :])
 
     def test_exists_found(self):
         proc, out, _ = self.run_exists(0, "")
@@ -324,18 +402,22 @@ class ExistsCheckTest(unittest.TestCase):
         self.assertEqual(out.split(), ["found=true"])
 
     def test_exists_not_found_variants(self):
-        for err in ("ERROR: ghcr.io/x:pr-12-0123456: not found",
-                    "MANIFEST_UNKNOWN: manifest unknown",
-                    "error: NAME_UNKNOWN: repository name not known to registry"):
+        for err in (
+            "ERROR: ghcr.io/x:pr-12-0123456: not found",
+            "MANIFEST_UNKNOWN: manifest unknown",
+            "error: NAME_UNKNOWN: repository name not known to registry",
+        ):
             with self.subTest(err=err):
                 proc, out, _ = self.run_exists(1, err)
                 self.assertEqual(proc.returncode, 0, proc.stderr)
                 self.assertEqual(out.split(), ["found=false"])
 
     def test_exists_other_errors_fail(self):
-        for err in ("unexpected status: 500 Internal Server Error",
-                    "toomanyrequests: rate limit exceeded",
-                    "unexpected status: 401 Unauthorized"):
+        for err in (
+            "unexpected status: 500 Internal Server Error",
+            "toomanyrequests: rate limit exceeded",
+            "unexpected status: 401 Unauthorized",
+        ):
             with self.subTest(err=err):
                 proc, out, _ = self.run_exists(1, err)
                 self.assertNotEqual(proc.returncode, 0)
@@ -346,8 +428,12 @@ class ExistsCheckTest(unittest.TestCase):
 class ReportCommentTest(unittest.TestCase):
     """Run the report's comment steps against a fake `gh`."""
 
-    ENV = {"GH_REPO": "kettleofketchup/DraftForge", "PR": "12",
-           "HEAD_SHA": HEAD_SHA, "RUN_URL": RUN_URL}
+    ENV = {
+        "GH_REPO": "kettleofketchup/DraftForge",
+        "PR": "12",
+        "HEAD_SHA": HEAD_SHA,
+        "RUN_URL": RUN_URL,
+    }
 
     @classmethod
     def setUpClass(cls):
@@ -362,26 +448,44 @@ class ReportCommentTest(unittest.TestCase):
         for argv in calls:
             if "-X" in argv:
                 body = [a for a in argv if a.startswith("body=")]
-                bodies.append(body[0][len("body="):])
+                bodies.append(body[0][len("body=") :])
         return bodies
 
     def test_build_failure_comment_verbatim(self):
         proc, _, calls = run_step(self.failed, self.ENV)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0][:4],
-                         ["api", "-X", "POST", "repos/kettleofketchup/DraftForge/issues/12/comments"])
-        self.assertEqual(self.posted_bodies(calls), [
-            "Preview image build failed for commit `0123456`. The preview (if any) keeps "
-            "serving the previous commit's backend and frontend; the celery worker may be "
-            f"down until the next good commit. See {RUN_URL}."])
+        self.assertEqual(
+            calls[0][:4],
+            [
+                "api",
+                "-X",
+                "POST",
+                "repos/kettleofketchup/DraftForge/issues/12/comments",
+            ],
+        )
+        self.assertEqual(
+            self.posted_bodies(calls),
+            [
+                "Preview image build failed for commit `0123456`. The preview (if any) keeps "
+                "serving the previous commit's backend and frontend; the celery worker may be "
+                f"down until the next good commit. See {RUN_URL}."
+            ],
+        )
 
     def test_floor_comment_verbatim(self):
-        proc, _, calls = run_step(self.floor, dict(self.ENV, GH_FAKE_OUT="hello\nother\n"))
+        proc, _, calls = run_step(
+            self.floor, dict(self.ENV, GH_FAKE_OUT="hello\nother\n")
+        )
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(self.posted_bodies(calls), [
-            FLOOR_MARKER + "\nPreview images were not built for commit `0123456`: this "
-            "branch predates preview support. Rebase on main to get a preview."])
+        self.assertEqual(
+            self.posted_bodies(calls),
+            [
+                FLOOR_MARKER
+                + "\nPreview images were not built for commit `0123456`: this "
+                "branch predates preview support. Rebase on main to get a preview."
+            ],
+        )
 
     def test_floor_comment_deduplicated(self):
         run = self.floor["run"]
@@ -390,8 +494,13 @@ class ReportCommentTest(unittest.TestCase):
         self.assertIn("--jq", run)
         self.assertIn(FLOOR_MARKER, run)
         self.assertLess(list_at, run.index("-X POST"))
-        proc, _, calls = run_step(self.floor, dict(
-            self.ENV, GH_FAKE_OUT=f"first\n{FLOOR_MARKER}\nPreview images were not built\n"))
+        proc, _, calls = run_step(
+            self.floor,
+            dict(
+                self.ENV,
+                GH_FAKE_OUT=f"first\n{FLOOR_MARKER}\nPreview images were not built\n",
+            ),
+        )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(len(calls), 1)
         self.assertNotIn("-X", calls[0])
@@ -414,90 +523,198 @@ class PreviewQueueStructureTest(unittest.TestCase):
         cls.text = (WORKFLOW_DIR / QUEUE).read_text()
         cls.release = cls.wf["jobs"]["release-closed"]
         cls.reconcile = cls.wf["jobs"]["reconcile"]
+        cls.kick = cls.wf["jobs"]["kick"]
 
     def test_queue_never_checks_out_pr_code(self):
         self.assertNotIn("head.sha", self.text)
         self.assertNotIn("head.ref", self.text)
         self.assertNotIn("github.head_ref", self.text)
-        # release-closed only calls the API; it checks nothing out.
+        # release-closed and kick only call the API; they check nothing out.
         self.assertEqual([s for s in self.release["steps"] if "uses" in s], [])
+        self.assertEqual([s for s in self.kick["steps"] if "uses" in s], [])
 
     def test_queue_checkout_ref(self):
         checkout = step_using(self.reconcile["steps"], "actions/checkout")
-        self.assertEqual(checkout["with"]["ref"],
-                         "${{ github.event.repository.default_branch || 'main' }}")
+        self.assertEqual(
+            checkout["with"]["ref"],
+            "${{ github.event.repository.default_branch || 'main' }}",
+        )
         self.assertIs(checkout["with"]["persist-credentials"], False)
         run = [s for s in self.reconcile["steps"] if "run" in s]
-        self.assertEqual([s["run"].strip() for s in run], ["python3 -I scripts/preview_queue.py"])
+        self.assertEqual(
+            [s["run"].strip() for s in run], ["python3 -I scripts/preview_queue.py"]
+        )
 
     def test_release_closed_tolerates_404(self):
         (step,) = [s for s in self.release["steps"] if "run" in s]
         self.assertIn("HTTP 404", step["run"])
         self.assertIn(
             'out=$(gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/preview-env" 2>&1) || '
-            "{ grep -q 'HTTP 404' <<<\"$out\" || { echo \"$out\"; exit 1; }; }", step["run"])
-        cases = [(0, "", True), (1, "gh: Not Found (HTTP 404)", True),
-                 (1, "gh: Server Error (HTTP 500)", False),
-                 (1, "gh: Forbidden (HTTP 403)", False)]
+            '{ grep -q \'HTTP 404\' <<<"$out" || { echo "$out"; exit 1; }; }',
+            step["run"],
+        )
+        cases = [
+            (0, "", True),
+            (1, "gh: Not Found (HTTP 404)", True),
+            (1, "gh: Server Error (HTTP 500)", False),
+            (1, "gh: Forbidden (HTTP 403)", False),
+        ]
         with tempfile.TemporaryDirectory() as tmp:
             bindir = Path(tmp)
             make_shim(bindir, "gh", GH_EXIT_SHIM)
             for rc, err, ok in cases:
                 with self.subTest(rc=rc, err=err):
-                    proc, _, calls = run_step(step, {
-                        "PATH": f"{bindir}:{os.environ['PATH']}",
-                        "GH_REPO": "kettleofketchup/DraftForge", "PR": "12",
-                        "GH_FAKE_RC": str(rc), "GH_FAKE_ERR": err})
-                    self.assertEqual(proc.returncode == 0, ok, proc.stdout + proc.stderr)
+                    proc, _, calls = run_step(
+                        step,
+                        {
+                            "PATH": f"{bindir}:{os.environ['PATH']}",
+                            "GH_REPO": "kettleofketchup/DraftForge",
+                            "PR": "12",
+                            "GH_FAKE_RC": str(rc),
+                            "GH_FAKE_ERR": err,
+                        },
+                    )
+                    self.assertEqual(
+                        proc.returncode == 0, ok, proc.stdout + proc.stderr
+                    )
                     if not ok:
                         self.assertIn(err, proc.stdout)
-                    self.assertEqual(calls, [[
-                        "api", "-X", "DELETE",
-                        "repos/kettleofketchup/DraftForge/issues/12/labels/preview-env"]])
+                    self.assertEqual(
+                        calls,
+                        [
+                            [
+                                "api",
+                                "-X",
+                                "DELETE",
+                                "repos/kettleofketchup/DraftForge/issues/12/labels/preview-env",
+                            ]
+                        ],
+                    )
 
     def test_queue_triggers(self):
         on = self.wf["on"]
-        self.assertEqual(set(on), {"workflow_run", "pull_request_target", "schedule",
-                                   "workflow_dispatch"})
-        self.assertEqual(on["workflow_run"],
-                         {"workflows": ["preview-images"], "types": ["completed"]})
-        self.assertEqual(on["pull_request_target"],
-                         {"types": ["closed", "reopened", "labeled", "unlabeled"]})
+        self.assertEqual(
+            set(on),
+            {"workflow_run", "pull_request_target", "schedule", "workflow_dispatch"},
+        )
+        self.assertEqual(
+            on["workflow_run"],
+            {"workflows": ["preview-images"], "types": ["completed"]},
+        )
+        self.assertEqual(
+            on["pull_request_target"],
+            {"types": ["closed", "reopened", "labeled", "unlabeled"]},
+        )
         self.assertNotIn("branches", on["pull_request_target"])
         self.assertEqual(on["schedule"], [{"cron": "*/10 * * * *"}])
-        self.assertIn(on["workflow_dispatch"], ({}, None))
+        self.assertEqual(
+            on["workflow_dispatch"],
+            {
+                "inputs": {
+                    "closed_pr": {
+                        "description": "Number of a PR that was just closed (empty otherwise)",
+                        "required": False,
+                        "default": "",
+                    }
+                }
+            },
+        )
         self.assertEqual(self.wf["permissions"], {})
 
     def test_reconcile_wiring(self):
         self.assertEqual(self.reconcile["needs"], "release-closed")
-        self.assertEqual(self.reconcile["if"], "always()")
-        self.assertEqual(self.reconcile["concurrency"],
-                         {"group": "preview-queue", "cancel-in-progress": False})
-        self.assertEqual(self.reconcile["permissions"], {
-            "contents": "read", "issues": "write", "pull-requests": "write",
-            "statuses": "write"})
+        # PR events only kick; a reconcile there could be cancelled while
+        # pending and show on the PR as a failing check.
+        self.assertEqual(
+            self.reconcile["if"],
+            "always() && github.event_name != 'pull_request_target'",
+        )
+        self.assertEqual(
+            self.reconcile["concurrency"],
+            {"group": "preview-queue", "cancel-in-progress": False},
+        )
+        self.assertEqual(
+            self.reconcile["permissions"],
+            {
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+                "statuses": "write",
+            },
+        )
         self.assertNotIn("concurrency", self.release)
         self.assertEqual(self.release["permissions"], {"pull-requests": "write"})
         self.assertEqual(
             self.release["if"],
-            "github.event_name == 'pull_request_target' && github.event.action == 'closed'")
+            "github.event_name == 'pull_request_target' && github.event.action == 'closed'",
+        )
 
     def test_queue_env(self):
-        self.assertEqual(self.release["env"], {
-            "GH_TOKEN": "${{ github.token }}",
-            "GH_REPO": "${{ github.repository }}",
-            "PR": "${{ github.event.pull_request.number }}",
-        })
-        self.assertEqual(self.reconcile["env"], {
-            "GH_TOKEN": "${{ github.token }}",
-            "GH_REPO": "${{ github.repository }}",
-            "CAP": "${{ vars.PREVIEW_CAP || '0' }}",
-            "PREVIEW_AUTHORS": "${{ vars.PREVIEW_AUTHORS || 'kettleofketchup' }}",
-            "PREVIEW_IDLE_DAYS": "${{ vars.PREVIEW_IDLE_DAYS || '7' }}",
-            "PREVIEW_REQUIRE_VERIFIED": "${{ vars.PREVIEW_REQUIRE_VERIFIED || 'false' }}",
-            "CLOSED_PR": "${{ github.event.action == 'closed' && "
-                         "github.event.pull_request.number || '' }}",
-        })
+        self.assertEqual(
+            self.release["env"],
+            {
+                "GH_TOKEN": "${{ github.token }}",
+                "GH_REPO": "${{ github.repository }}",
+                "PR": "${{ github.event.pull_request.number }}",
+            },
+        )
+        self.assertEqual(
+            self.reconcile["env"],
+            {
+                "GH_TOKEN": "${{ github.token }}",
+                "GH_REPO": "${{ github.repository }}",
+                "CAP": "${{ vars.PREVIEW_CAP || '0' }}",
+                "PREVIEW_AUTHORS": "${{ vars.PREVIEW_AUTHORS || 'kettleofketchup' }}",
+                "PREVIEW_IDLE_DAYS": "${{ vars.PREVIEW_IDLE_DAYS || '7' }}",
+                "PREVIEW_REQUIRE_VERIFIED": "${{ vars.PREVIEW_REQUIRE_VERIFIED || 'false' }}",
+                "CLOSED_PR": "${{ inputs.closed_pr || '' }}",
+            },
+        )
+        self.assertEqual(
+            self.kick["env"],
+            {
+                "GH_TOKEN": "${{ github.token }}",
+                "GH_REPO": "${{ github.repository }}",
+                "DEFAULT_BRANCH": "${{ github.event.repository.default_branch }}",
+                "CLOSED_PR": "${{ github.event.action == 'closed' && "
+                "github.event.pull_request.number || '' }}",
+            },
+        )
+
+    def test_kick_dispatches_reconcile(self):
+        self.assertEqual(self.kick["if"], "github.event_name == 'pull_request_target'")
+        self.assertEqual(self.kick["permissions"], {"actions": "write"})
+        self.assertNotIn("concurrency", self.kick)
+        (step,) = [s for s in self.kick["steps"] if "run" in s]
+        with tempfile.TemporaryDirectory() as tmp:
+            bindir = Path(tmp)
+            make_shim(bindir, "gh", GH_EXIT_SHIM)
+            for closed in ("", "12"):
+                with self.subTest(closed_pr=closed):
+                    proc, _, calls = run_step(
+                        step,
+                        {
+                            "PATH": f"{bindir}:{os.environ['PATH']}",
+                            "GH_REPO": "kettleofketchup/DraftForge",
+                            "DEFAULT_BRANCH": "main",
+                            "CLOSED_PR": closed,
+                        },
+                    )
+                    self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                    self.assertEqual(
+                        calls,
+                        [
+                            [
+                                "workflow",
+                                "run",
+                                "preview-queue.yml",
+                                "--ref",
+                                "main",
+                                "-f",
+                                f"closed_pr={closed}",
+                            ]
+                        ],
+                    )
 
 
 class HelmChartWorkflowTest(unittest.TestCase):
@@ -521,10 +738,15 @@ class WorkflowHygieneTest(unittest.TestCase):
 
     def test_checkout_hygiene(self):
         for wf in self.each():
-            checkouts = [s for s in all_steps(wf)
-                         if s.get("uses", "").startswith("actions/checkout@")]
+            checkouts = [
+                s
+                for s in all_steps(wf)
+                if s.get("uses", "").startswith("actions/checkout@")
+            ]
             for step in checkouts:
-                self.assertIs(step.get("with", {}).get("persist-credentials"), False, step)
+                self.assertIs(
+                    step.get("with", {}).get("persist-credentials"), False, step
+                )
 
     def test_no_inline_event_data(self):
         for wf in self.each():

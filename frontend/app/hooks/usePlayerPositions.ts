@@ -11,7 +11,7 @@ import type { PositionsType } from '~/store/userCacheTypes';
  * Cannot be called inside `.map()` row callbacks (Rules of Hooks) — for per-row
  * reads in a list, call `selectPositions(useUserCacheStore.getState(), pk, gt)`
  * ONCE at the component top with a single store subscription, or subscribe the
- * whole row list. orgUserId is T3.
+ * whole row list.
  */
 export function usePlayerPositions(userPk: number): PositionsType | undefined {
   const gameType = useGameType();

@@ -204,12 +204,11 @@ class LegacyStateDerivationTests(TestCase):
             draft = cmd._create_draft(
                 t,
                 {"draft_style": "snake", "draft_rounds": self._sync_rounds(t, picked)},
-                {},
             )
             self.assertEqual(Draft.objects.get(pk=draft.pk).state, expected, prefix)
         t = make_tournament(1, "se")
         cmd = sync_prod_tournaments.Command()
-        draft = cmd._create_draft(t, {"draft_style": "snake", "draft_rounds": []}, {})
+        draft = cmd._create_draft(t, {"draft_style": "snake", "draft_rounds": []})
         self.assertEqual(Draft.objects.get(pk=draft.pk).state, "pending")
 
     def test_sync_prod_tournament_is_untimed(self):

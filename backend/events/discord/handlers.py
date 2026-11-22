@@ -21,6 +21,8 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from structlog.contextvars import bind_contextvars
 
+from app.cache_utils import invalidate_obj
+from app.models import CustomUser
 from events.constants import SignupStatus
 from events.discord._shared import (
     _direct_signup,
@@ -35,6 +37,7 @@ from events.discord.providers.dota import DotaHandler
 from events.discord.providers.registry import SIGNUP_HANDLERS, get_signup_handler
 from events.eligibility import precheck_friend_id
 from events.ledger import SignupActor
+from events.models import RepeaterSubscription
 from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE
 from events.schemas import STALE_MODAL_MESSAGE
 from telemetry.logging import get_logger
@@ -330,9 +333,6 @@ def handle_notify_button(event_id: int, discord_user_id: str) -> dict[str, Any]:
         subsystem="interaction",
         handler="notify_button",
     )
-    from app.cache_utils import invalidate_obj
-    from app.models import CustomUser
-    from events.models import RepeaterSubscription
 
     event = _load_event(event_id, select_related=("event_repeater",))
     if event is None:
@@ -369,6 +369,7 @@ def handle_decline_button(
         subsystem="interaction",
         handler="decline_button",
     )
+    # local: cycle: events.services -> events.discord -> handlers
     from events.services import decline_signup
 
     event = _load_event(event_id)
@@ -429,6 +430,7 @@ def handle_tentative_button(
     if not user:
         return {"action": "error", "message": "Could not create your account."}
 
+    # local: cycle: events.services -> events.discord -> handlers
     from events.services import create_tentative_signup
 
     try:

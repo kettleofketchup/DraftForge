@@ -8,7 +8,7 @@ from user.models import BaseUserProfile
 class BaseUserProfileModelTests(TestCase):
     def test_create_profile_with_user(self):
         user = CustomUser.objects.create(username="alice")
-        # Auto-create from Task 3 makes the initial profile; replace it so we
+        # Creating the user auto-creates a profile; replace it so we
         # can assert on the nickname/avatar we set explicitly here.
         BaseUserProfile.objects.filter(user=user).delete()
         profile = BaseUserProfile.objects.create(
@@ -21,7 +21,7 @@ class BaseUserProfileModelTests(TestCase):
         assert profile.avatar == "https://example.com/alice.png"
 
     def test_one_to_one_constraint(self):
-        # Auto-create from Task 3 makes the first BaseUserProfile; the second
+        # Creating the user auto-creates the first BaseUserProfile; the second
         # explicit create must violate uniqueness.
         user = CustomUser.objects.create(username="bob")
         BaseUserProfile.objects.filter(user=user).delete()  # clear if auto-created
@@ -32,7 +32,7 @@ class BaseUserProfileModelTests(TestCase):
     def test_str_includes_username(self):
         user = CustomUser.objects.create(username="carol")
         profile = BaseUserProfile.objects.filter(user=user).first()
-        # Tolerant of auto-create from Task 3
+        # Tolerant of the profile auto-created with the user
         if profile is None:
             profile = BaseUserProfile.objects.create(user=user, nickname="Carol")
         assert "carol" in str(profile)

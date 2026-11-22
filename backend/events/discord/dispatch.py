@@ -62,6 +62,7 @@ def notify_event_announced(event: "Event") -> None:
     if not event.discord_announcement_channel_id:
         _log_skipped(event, "no_channel_id", "send_event_announcement")
         return
+    # local: cycle: events.tasks -> events.discord -> dispatch
     from events.tasks import send_event_announcement
 
     interaction_id = _current_interaction_id()
@@ -81,6 +82,7 @@ def notify_signup_changed(event: "Event") -> None:
     if not mark_pending(event.pk):
         _log_skipped(event, "update_already_pending", "send_signup_update")
         return
+    # local: cycle: events.tasks -> events.discord -> dispatch
     from events.tasks import send_signup_update
 
     send_signup_update.apply_async(
@@ -101,6 +103,7 @@ def notify_new_event(event: "Event") -> None:
     if not event.discord_announcement_channel_id:
         _log_skipped(event, "no_channel_id", "send_new_event_notification")
         return
+    # local: cycle: events.tasks -> events.discord -> dispatch
     from events.tasks import send_new_event_notification
 
     interaction_id = _current_interaction_id()
@@ -115,6 +118,7 @@ def notify_create_discord_event(event: "Event") -> None:
             event, "discord_create_event_disabled", "create_discord_scheduled_event"
         )
         return
+    # local: cycle: events.tasks -> events.discord -> dispatch
     from events.tasks import create_discord_scheduled_event
 
     interaction_id = _current_interaction_id()
@@ -129,6 +133,7 @@ def notify_sync_signups(event: "Event") -> None:
             event, "discord_sync_signups_disabled", "sync_discord_event_signups"
         )
         return
+    # local: cycle: events.tasks -> events.discord -> dispatch
     from events.tasks import sync_discord_event_signups
 
     interaction_id = _current_interaction_id()
@@ -143,6 +148,7 @@ def notify_mark_interested(event: "Event", user_id: int) -> None:
             event, "discord_mark_interested_disabled", "mark_interested_discord_event"
         )
         return
+    # local: cycle: events.tasks -> events.discord -> dispatch
     from events.tasks import mark_interested_discord_event
 
     interaction_id = _current_interaction_id()

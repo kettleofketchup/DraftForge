@@ -229,7 +229,7 @@ class SignupButton(ui.Button):
                     content=f"✅ {signed_up_text(result['status'], result.get('unmet_labels'))}",
                 )
             elif result["action"] == "needs_modal":
-                # Local: registry imports this module.
+                # local: cycle: registry -> base
                 from discordbot.components.registry import get_component_provider
 
                 provider = get_component_provider(result["game_type"])

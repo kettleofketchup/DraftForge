@@ -34,6 +34,7 @@ from draft.services.hero_chat import (
     resolve_chat_viewer,
     team_group_name,
     visible_messages,
+    withdraw_suggestion,
 )
 from draft.services.hero_state import herodraft_state_queryset
 from draft.tasks.draft_tick import TickDriver
@@ -46,7 +47,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 _CLIENT_MSG_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
-_CHAT_MESSAGE_TYPES = frozenset({"chat_send", "chat_suggest"})
+_CHAT_MESSAGE_TYPES = frozenset({"chat_send", "chat_suggest", "chat_unsuggest"})
 
 
 def _session_alive(scope: dict[str, Any], user: Any) -> bool:
@@ -165,6 +166,14 @@ class HeroDraftConsumer(BaseDraftConsumer):
         try:
             if msg_type == "chat_send":
                 result = post_text(self.draft_id, self.user, data.get("body"), viewer)
+            elif msg_type == "chat_unsuggest":
+                result = withdraw_suggestion(
+                    self.draft_id,
+                    self.user,
+                    data.get("kind"),
+                    data.get("hero_id"),
+                    viewer,
+                )
             else:
                 result = post_suggestion(
                     self.draft_id,

@@ -161,12 +161,12 @@ class EventConfigMixin(models.Model):
     ready_check_open_minutes = models.PositiveIntegerField(
         default=120,
         validators=_range_validators("ready_check_open_minutes"),
-        help_text="Minutes before start that the ready check opens",
+        help_text="Minutes before start that the ready check opens and DMs each asked member a Ready button",
     )
     ready_check_escalation_minutes = models.PositiveIntegerField(
         default=30,
         validators=_range_validators("ready_check_escalation_minutes"),
-        help_text="Minutes before start to nudge unconfirmed members (0 = off)",
+        help_text="Minutes before start to DM unconfirmed members a nudge (0 = off)",
     )
     ready_check_close_minutes = models.PositiveIntegerField(
         default=10,
@@ -178,7 +178,7 @@ class EventConfigMixin(models.Model):
         blank=True,
         default=30,
         validators=_range_validators("ready_check_chase_minutes"),
-        help_text="Minutes before close to alert staff about each unconfirmed member (blank = off)",
+        help_text="Minutes before close to raise an ops notice for each unconfirmed member (blank = off)",
     )
     ready_check_min_completion_pct = models.PositiveSmallIntegerField(
         default=70,
@@ -193,11 +193,11 @@ class EventConfigMixin(models.Model):
     )
     ready_check_notify_on_signup = models.BooleanField(
         default=True,
-        help_text="Tell members at signup that a ready check will run",
+        help_text="DM members on their first signup that confirmation is mandatory",
     )
     ready_check_drop_notice = models.BooleanField(
         default=True,
-        help_text="Notify members who are dropped by the ready check",
+        help_text="DM members who are dropped by the ready check",
     )
     start_cull_enabled = models.BooleanField(
         default=False,
@@ -279,11 +279,14 @@ class DiscordEventConfigMixin(models.Model):
     )
     discord_confirm_attendance = models.BooleanField(
         default=False,
-        help_text="Require attendance confirmation via Discord message reply on event day",
+        help_text=(
+            "Post an attendance reminder in the announcement channel before the event. "
+            "Replies are not tracked; use the ready check to require confirmation."
+        ),
     )
     discord_confirm_attendance_hours = models.IntegerField(
         default=2,
-        help_text="Hours before event to send attendance confirmation request",
+        help_text="Hours before event to post the attendance reminder",
     )
     discord_profile_reminder = models.BooleanField(
         default=False,

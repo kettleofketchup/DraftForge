@@ -4,6 +4,8 @@ import logging
 import os
 from urllib.parse import unquote
 
+from telemetry.logging import configure_logging
+
 # Use stdlib logging until structlog is configured
 _bootstrap_log = logging.getLogger("telemetry.config")
 
@@ -48,9 +50,11 @@ def init_telemetry() -> None:
     Call once at Django startup (in settings.py or wsgi/asgi.py).
     Safe to call multiple times - subsequent calls are no-ops.
     """
-    # Import here to avoid circular imports
-    from telemetry.logging import configure_logging
-    from telemetry.tracing import init_log_export, init_tracing
+    # local: cycle: telemetry.tracing -> telemetry.config
+    from telemetry.tracing import (
+        init_log_export,
+        init_tracing,
+    )
 
     # Check master switch
     if not env_bool("TELEMETRY_ENABLED", True):

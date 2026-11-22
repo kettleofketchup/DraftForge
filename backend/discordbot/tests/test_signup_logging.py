@@ -280,7 +280,7 @@ class CeleryHopTests(TransactionTestCase):
         self.assertEqual(started[0]["task"], "send_signup_update")
         self.assertEqual(started[0]["event_id"], self.event.pk)
 
-        # After I2 fix, celery_task_finished now fires on early-return paths too
+        # celery_task_finished fires on early-return paths too
         finished = [log for log in logs if log["event"] == "celery_task_finished"]
         self.assertEqual(len(finished), 1)
         self.assertEqual(finished[0]["interaction_id"], "abc123")

@@ -38,9 +38,8 @@ export function EditProfileModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* ScrollArea contract for dialog body — DialogContent needs
           overflow-hidden (NOT overflow-y-auto) so Radix Viewport can
-          drive its themed scrollbar inside <ScrollArea>. T1 body is
-          short today (one nickname field) but the contract is in place
-          now so T2/T3's Dota/Org tabs don't break it later. Ref:
+          drive its themed scrollbar inside <ScrollArea>, however many
+          tabs and fields the body grows. Ref:
           docs/theming-guide/ai/references/scrollbars-dialogs.md */}
       <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
         <DialogHeader>

@@ -167,8 +167,52 @@ async function rightClickHero(page: Page, heroId: number): Promise<void> {
   });
 }
 
+/**
+ * Waits for the server to process the captains' disconnects; a late one
+ * landing after the next test's reset would pause the fresh draft.
+ */
+async function waitForCaptainsDisconnected(
+  browser: Browser,
+  draftPk: number,
+): Promise<void> {
+  const probe = await browser.newContext({ ignoreHTTPSErrors: true });
+  try {
+    await expect
+      .poll(
+        async () => {
+          const res = await probe.request.get(
+            `${API_URL}/herodraft/${draftPk}/`,
+          );
+          const body: { draft_teams: Array<{ is_connected: boolean }> } =
+            await res.json();
+          return body.draft_teams.some((t) => t.is_connected);
+        },
+        { timeout: 15000 },
+      )
+      .toBe(false);
+  } finally {
+    await probe.close();
+  }
+}
+
 function sentinelFor(label: string): string {
   return `chat-${label}-${test.info().testId}-${Date.now()}`;
+}
+
+/** Sends an all-chat line and waits until every listed actor has it. */
+async function allChatBarrier(
+  sender: Actor,
+  receivers: Actor[],
+): Promise<void> {
+  const barrier = sentinelFor('barrier');
+  await sendChat(sender.page, `/all ${barrier}`);
+  for (const r of receivers) {
+    await expect
+      .poll(() => r.frames.some((f) => f.includes(barrier)), {
+        timeout: 15000,
+      })
+      .toBe(true);
+  }
 }
 
 async function suggestHero(
@@ -272,44 +316,8 @@ test.describe('@cicd HeroDraft chat', () => {
     for (const context of extraContexts.splice(0)) {
       await context.close().catch(() => {});
     }
-    if (!draft) return;
-    // Wait for the server to process the captains' disconnects; a late one
-    // landing after the next test's reset would pause the fresh draft.
-    const probe = await browser.newContext({ ignoreHTTPSErrors: true });
-    try {
-      await expect
-        .poll(
-          async () => {
-            const res = await probe.request.get(
-              `${API_URL}/herodraft/${draft.pk}/`,
-            );
-            const body: { draft_teams: Array<{ is_connected: boolean }> } =
-              await res.json();
-            return body.draft_teams.some((t) => t.is_connected);
-          },
-          { timeout: 15000 },
-        )
-        .toBe(false);
-    } finally {
-      await probe.close();
-    }
+    if (draft) await waitForCaptainsDisconnected(browser, draft.pk);
   });
-
-  /** Sends an all-chat line and waits until every listed actor has it. */
-  async function allChatBarrier(
-    sender: Actor,
-    receivers: Actor[],
-  ): Promise<void> {
-    const barrier = sentinelFor('barrier');
-    await sendChat(sender.page, `/all ${barrier}`);
-    for (const r of receivers) {
-      await expect
-        .poll(() => r.frames.some((f) => f.includes(barrier)), {
-          timeout: 15000,
-        })
-        .toBe(true);
-    }
-  }
 
   test('team message reaches only the sender team', async ({ browser }) => {
     test.setTimeout(120000);
@@ -920,5 +928,390 @@ test.describe('@cicd HeroDraft chat', () => {
     }
 
     await expectTint(8, firstTeam, 'pick');
+  });
+});
+
+type SuggestKind = 'pick' | 'ban';
+
+function suggesters(page: Page, heroId: number, kind: SuggestKind): Locator {
+  return page.getByTestId(`herodraft-hero-${heroId}-${kind}-suggesters`);
+}
+
+function anySuggesters(page: Page): Locator {
+  return page.locator(
+    '[data-testid$="-pick-suggesters"], [data-testid$="-ban-suggesters"]',
+  );
+}
+
+async function suggest(
+  actor: Actor,
+  heroId: number,
+  kind: SuggestKind,
+): Promise<void> {
+  await rightClickHero(actor.page, heroId);
+  const menu = actor.page.getByTestId('herodraft-hero-suggest-menu');
+  await expect(menu).toBeVisible();
+  await actor.page.getByTestId(`herodraft-hero-suggest-${kind}`).click();
+  await expect(menu).toBeHidden();
+}
+
+test.describe('@cicd HeroDraft suggestion badges', () => {
+  let draft: DraftInfo;
+  let first: DraftTeamInfo;
+  let second: DraftTeamInfo;
+  let captainF: Actor;
+  let membersF: Actor[];
+  let captainS: Actor;
+  let spectator: Actor;
+
+  /** First-pick team (bans round 1) gets its captain and three members. */
+  async function setUp(browser: Browser): Promise<void> {
+    const setupContext = await browser.newContext({ ignoreHTTPSErrors: true });
+    try {
+      draft = await fetchDraft(setupContext);
+    } finally {
+      await setupContext.close();
+    }
+    first =
+      draft.draft_teams.find((t) => t.is_first_pick) ?? draft.draft_teams[0];
+    second = draft.draft_teams.find((t) => t !== first)!;
+    const secondUsers = new Set([second.captain.pk, ...second.member_pks]);
+    const memberPks = first.member_pks
+      .filter((pk) => pk !== first.captain.pk && !secondUsers.has(pk))
+      .slice(0, 3);
+    if (memberPks.length < 3) {
+      throw new Error(
+        `${first.team_name} has fewer than 3 non-captain members`,
+      );
+    }
+
+    captainF = await newActor(browser, (c) => loginAsUser(c, first.captain.pk));
+    captainS = await newActor(browser, (c) =>
+      loginAsUser(c, second.captain.pk),
+    );
+    membersF = [];
+    for (const pk of memberPks) {
+      membersF.push(await newActor(browser, (c) => loginAsUser(c, pk)));
+    }
+    spectator = await newActor(browser, loginUser);
+
+    // Captains first, as in the chat suite.
+    await openDraft(captainF, draft.pk);
+    await openDraft(captainS, draft.pk);
+    for (const m of membersF) await openDraft(m, draft.pk);
+    await openDraft(spectator, draft.pk);
+    for (const a of [captainF, ...membersF]) {
+      expect(lastViewerRole(a)).toBe('member');
+    }
+    await captainF.draftPage.assertRoundActive(1);
+    expect(await captainF.draftPage.getCurrentAction()).toBe('ban');
+  }
+
+  test.afterEach(async ({ browser }) => {
+    for (const actor of [captainF, captainS, spectator, ...(membersF ?? [])]) {
+      await actor?.context.close().catch(() => {});
+    }
+    if (draft) await waitForCaptainsDisconnected(browser, draft.pk);
+  });
+
+  /** Submits the active captain's ban/pick and waits for the next round. */
+  async function submit(
+    captain: Actor,
+    heroId: number,
+    round: number,
+  ): Promise<void> {
+    await captain.draftPage.assertRoundActive(round);
+    await expect(
+      captain.page.getByTestId(`herodraft-hero-${heroId}`),
+    ).toHaveAttribute('data-hero-disabled', 'false');
+    await captain.draftPage.clickHero(heroId);
+    await captain.draftPage.confirmHeroSelection();
+    await captain.draftPage.assertRoundHeroId(round, heroId);
+  }
+
+  test('suggester stacks reach only the suggesting team', async ({
+    browser,
+  }) => {
+    test.setTimeout(150000);
+    await setUp(browser);
+    const [m1, m2, m3] = membersF;
+    const BAN_TARGET = 5;
+    const PICK_TARGET = 6;
+    const OTHER_TEAM_TARGET = 7;
+
+    const banners = [m1, m2, m3, captainF];
+    for (const [n, actor] of banners.entries()) {
+      await suggest(actor, BAN_TARGET, 'ban');
+      await expect(suggesters(m1.page, BAN_TARGET, 'ban')).toHaveAttribute(
+        'data-count',
+        String(n + 1),
+      );
+    }
+    await suggest(m1, PICK_TARGET, 'pick');
+    await suggest(captainS, OTHER_TEAM_TARGET, 'ban');
+
+    for (const viewer of [captainF, m2]) {
+      const ban = suggesters(viewer.page, BAN_TARGET, 'ban');
+      await expect(ban).toHaveAttribute('data-count', '4');
+      await expect(ban.locator(':scope > *')).toHaveCount(4);
+      await expect(
+        viewer.page.getByTestId(
+          `herodraft-hero-${BAN_TARGET}-ban-suggesters-more`,
+        ),
+      ).toHaveText('+1');
+      await expect(suggesters(viewer.page, BAN_TARGET, 'pick')).toHaveCount(0);
+      await expect(
+        suggesters(viewer.page, PICK_TARGET, 'pick'),
+      ).toHaveAttribute('data-count', '1');
+      await expect(
+        viewer.page.getByTestId(
+          `herodraft-hero-${PICK_TARGET}-pick-suggesters-more`,
+        ),
+      ).toHaveCount(0);
+
+      // First-pick team's ban turn: only ban suggestions are emphasized.
+      await expect(
+        viewer.page.getByTestId(`herodraft-hero-${BAN_TARGET}`),
+      ).toHaveAttribute('data-hero-emphasis', 'ban');
+      await expect(
+        viewer.page.getByTestId(`herodraft-hero-${PICK_TARGET}`),
+      ).not.toHaveAttribute('data-hero-emphasis', /.*/);
+    }
+
+    // Pick badges sit top-left, ban badges bottom-right.
+    const heroBox = (await captainF.page
+      .getByTestId(`herodraft-hero-${PICK_TARGET}`)
+      .boundingBox())!;
+    const pickBox = (await suggesters(
+      captainF.page,
+      PICK_TARGET,
+      'pick',
+    ).boundingBox())!;
+    expect(pickBox.x + pickBox.width / 2).toBeLessThan(
+      heroBox.x + heroBox.width / 2,
+    );
+    expect(pickBox.y + pickBox.height / 2).toBeLessThan(
+      heroBox.y + heroBox.height / 2,
+    );
+    const banHeroBox = (await captainF.page
+      .getByTestId(`herodraft-hero-${BAN_TARGET}`)
+      .boundingBox())!;
+    const banBox = (await suggesters(
+      captainF.page,
+      BAN_TARGET,
+      'ban',
+    ).boundingBox())!;
+    expect(banBox.x + banBox.width / 2).toBeGreaterThan(
+      banHeroBox.x + banHeroBox.width / 2,
+    );
+    expect(banBox.y + banBox.height / 2).toBeGreaterThan(
+      banHeroBox.y + banHeroBox.height / 2,
+    );
+
+    // The second-pick team sees its own badge but no emphasis off-turn.
+    await expect(
+      suggesters(captainS.page, OTHER_TEAM_TARGET, 'ban'),
+    ).toHaveAttribute('data-count', '1');
+    await expect(
+      captainS.page.getByTestId(`herodraft-hero-${OTHER_TEAM_TARGET}`),
+    ).not.toHaveAttribute('data-hero-emphasis', /.*/);
+
+    await allChatBarrier(m1, [captainS, spectator]);
+    await allChatBarrier(captainS, [captainF, m1]);
+    await expect(anySuggesters(spectator.page)).toHaveCount(0);
+    await expect(anySuggesters(captainS.page)).toHaveCount(1);
+    for (const viewer of [captainF, m1]) {
+      await expect(
+        suggesters(viewer.page, OTHER_TEAM_TARGET, 'ban'),
+      ).toHaveCount(0);
+    }
+
+    await submit(captainF, BAN_TARGET, 1);
+    for (const viewer of [captainF, m1, m2, m3]) {
+      await viewer.draftPage.assertHeroUnavailable(BAN_TARGET);
+      await expect(suggesters(viewer.page, BAN_TARGET, 'ban')).toHaveCount(0);
+      await expect(
+        viewer.page.getByTestId(`herodraft-hero-${BAN_TARGET}`),
+      ).not.toHaveAttribute('data-hero-emphasis', /.*/);
+      await expect(
+        suggesters(viewer.page, PICK_TARGET, 'pick'),
+      ).toHaveAttribute('data-count', '1');
+    }
+  });
+
+  test('pick round hides ban stacks and emphasizes pick suggestions', async ({
+    browser,
+  }) => {
+    test.setTimeout(180000);
+    await setUp(browser);
+    const [m1, m2] = membersF;
+    const BOTH = 10;
+    const BAN_ONLY = 11;
+
+    await suggest(m1, BOTH, 'pick');
+    await suggest(m1, BOTH, 'ban');
+    await suggest(m2, BAN_ONLY, 'ban');
+    for (const [heroId, kind] of [
+      [BOTH, 'pick'],
+      [BOTH, 'ban'],
+      [BAN_ONLY, 'ban'],
+    ] as const) {
+      await expect(suggesters(captainF.page, heroId, kind)).toHaveAttribute(
+        'data-count',
+        '1',
+      );
+    }
+    for (const heroId of [BOTH, BAN_ONLY]) {
+      await expect(
+        captainF.page.getByTestId(`herodraft-hero-${heroId}`),
+      ).toHaveAttribute('data-hero-emphasis', 'ban');
+    }
+
+    // Captains mode: F F S S F S S bans, then F picks in round 8.
+    const bans: Array<[Actor, number]> = [
+      [captainF, 12],
+      [captainF, 13],
+      [captainS, 14],
+      [captainS, 15],
+      [captainF, 16],
+      [captainS, 17],
+      [captainS, 18],
+    ];
+    for (const [n, [captain, heroId]] of bans.entries()) {
+      await submit(captain, heroId, n + 1);
+    }
+    await m1.draftPage.assertRoundActive(8);
+    expect(await m1.draftPage.getCurrentAction()).toBe('pick');
+
+    for (const viewer of [captainF, m1, m2]) {
+      await expect(suggesters(viewer.page, BOTH, 'pick')).toHaveAttribute(
+        'data-count',
+        '1',
+      );
+      await expect(suggesters(viewer.page, BOTH, 'ban')).toHaveCount(0);
+      await expect(suggesters(viewer.page, BAN_ONLY, 'ban')).toHaveCount(0);
+      await expect(
+        viewer.page.getByTestId(`herodraft-hero-${BOTH}`),
+      ).toHaveAttribute('data-hero-emphasis', 'pick');
+      await expect(
+        viewer.page.getByTestId(`herodraft-hero-${BAN_ONLY}`),
+      ).not.toHaveAttribute('data-hero-emphasis', /.*/);
+    }
+  });
+
+  test('withdrawing a suggestion removes only your own badge', async ({
+    browser,
+  }) => {
+    test.setTimeout(150000);
+    await setUp(browser);
+    const [m1, m2] = membersF;
+    const SHARED = 20;
+    const THEIRS = 21;
+    const BAN_TARGET = 22;
+
+    await suggest(m1, SHARED, 'pick');
+    await expect(suggesters(m2.page, SHARED, 'pick')).toHaveAttribute(
+      'data-count',
+      '1',
+    );
+    await suggest(m2, SHARED, 'pick');
+    await suggest(m2, THEIRS, 'pick');
+    await suggest(m1, BAN_TARGET, 'ban');
+    for (const viewer of [captainF, m1]) {
+      await expect(suggesters(viewer.page, SHARED, 'pick')).toHaveAttribute(
+        'data-count',
+        '2',
+      );
+      await expect(suggesters(viewer.page, THEIRS, 'pick')).toHaveAttribute(
+        'data-count',
+        '1',
+      );
+      await expect(suggesters(viewer.page, BAN_TARGET, 'ban')).toHaveAttribute(
+        'data-count',
+        '1',
+      );
+    }
+
+    const menu = m1.page.getByTestId('herodraft-hero-suggest-menu');
+
+    // Someone else's suggestion offers no remove item.
+    await rightClickHero(m1.page, THEIRS);
+    await expect(menu).toBeVisible();
+    await expect(
+      m1.page.getByTestId('herodraft-hero-suggest-pick'),
+    ).toBeVisible();
+    await expect(
+      m1.page.getByTestId('herodraft-hero-unsuggest-pick'),
+    ).toHaveCount(0);
+    await expect(
+      m1.page.getByTestId('herodraft-hero-unsuggest-ban'),
+    ).toHaveCount(0);
+    await m1.page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+
+    await rightClickHero(m1.page, SHARED);
+    await expect(menu).toBeVisible();
+    await expect(
+      m1.page.getByTestId('herodraft-hero-suggest-pick'),
+    ).toHaveCount(0);
+    await expect(
+      m1.page.getByTestId('herodraft-hero-suggest-ban'),
+    ).toBeVisible();
+    await m1.page.getByTestId('herodraft-hero-unsuggest-pick').click();
+    await expect(menu).toBeHidden();
+
+    for (const viewer of [captainF, m1, m2]) {
+      await expect(suggesters(viewer.page, SHARED, 'pick')).toHaveAttribute(
+        'data-count',
+        '1',
+      );
+    }
+    await expect(suggesters(m2.page, THEIRS, 'pick')).toHaveAttribute(
+      'data-count',
+      '1',
+    );
+
+    await rightClickHero(m1.page, BAN_TARGET);
+    await expect(menu).toBeVisible();
+    await expect(m1.page.getByTestId('herodraft-hero-suggest-ban')).toHaveCount(
+      0,
+    );
+    await m1.page.getByTestId('herodraft-hero-unsuggest-ban').click();
+    await expect(menu).toBeHidden();
+    for (const viewer of [captainF, m1, m2]) {
+      await expect(suggesters(viewer.page, BAN_TARGET, 'ban')).toHaveCount(0);
+    }
+
+    await openChatPanel(captainF.page);
+    const withdrawals = captainF.page.locator(
+      '[data-testid^="herodraft-chat-withdrawal-"]',
+    );
+    await expect(withdrawals).toHaveCount(2);
+    for (const [heroId, kind, label] of [
+      [SHARED, 'unsuggest_pick', 'PICK'],
+      [BAN_TARGET, 'unsuggest_ban', 'BAN'],
+    ] as const) {
+      const row = captainF.page.locator(
+        `[data-testid^="herodraft-chat-message-"][data-kind="${kind}"][data-hero-id="${heroId}"]`,
+      );
+      await expect(row).toHaveCount(1);
+      const body = row.locator('[data-testid^="herodraft-chat-withdrawal-"]');
+      await expect(body).toContainText('removed');
+      await expect(body).toContainText(label);
+    }
+
+    // Withdrawn suggestions can be made again.
+    await rightClickHero(m1.page, SHARED);
+    await expect(
+      m1.page.getByTestId('herodraft-hero-suggest-pick'),
+    ).toBeVisible();
+    await m1.page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+
+    await allChatBarrier(m1, [captainS, spectator]);
+    for (const outsider of [captainS, spectator]) {
+      expectNoFrameContains(outsider, 'unsuggest_');
+      await expect(anySuggesters(outsider.page)).toHaveCount(0);
+    }
   });
 });

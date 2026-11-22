@@ -112,7 +112,14 @@ class StandingCallSiteTest(TestCase):
         self.assertEqual(self.fake.hooks, ["on_event_reopened"])
         self.assertEqual(self.fake.calls[0].kwargs["state"], EventState.SIGNUPS_OPEN)
         self.assertEqual(
-            result.details, {"revoked": 0, "attendance_reopened": 0, "fake_count": 1}
+            result.details,
+            {
+                "revoked": 0,
+                "attendance_reopened": 0,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
+                "fake_count": 1,
+            },
         )
         details = OrgLog.objects.get(action="reopen_event").details
         self.assertEqual(details["fake_count"], 1)
@@ -316,20 +323,20 @@ class StandingCallSiteTest(TestCase):
             scheduled_at=timezone.now(),
             created_by=self.admin,
         )
+        pks = [self.event.pk, other.pk]
         baseline = atomic_baseline()
         EventAdmin(Event, admin_site).delete_queryset(
-            self._admin_request(),
-            Event.objects.filter(pk__in=[self.event.pk, other.pk]),
+            self._admin_request(), Event.objects.filter(pk__in=pks)
         )
         self._assert_nested(baseline)
         self.assertEqual(self.fake.hooks, ["on_event_deleted", "on_event_deleted"])
         self.assertEqual(len({c.atomic_depth for c in self.fake.calls}), 1)
         self.assertCountEqual(
-            [c.kwargs["event"].pk for c in self.fake.calls], [self.event.pk, other.pk]
+            [c.kwargs["event"].name for c in self.fake.calls],
+            [self.event.name, other.name],
         )
-        self.assertFalse(
-            Event.objects.filter(pk__in=[self.event.pk, other.pk]).exists()
-        )
+        self.assertTrue(all(c.kwargs["exists"] for c in self.fake.calls))
+        self.assertFalse(Event.objects.filter(pk__in=pks).exists())
 
     def test_admin_event_delete_rolls_back_when_track_raises(self) -> None:
         self.fake.raise_on = {"on_event_deleted"}

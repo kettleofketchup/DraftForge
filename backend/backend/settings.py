@@ -15,6 +15,7 @@ import importlib.util
 import os
 import secrets
 import sys
+import tomllib
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -396,6 +397,7 @@ CACHEOPS = {
     "org.playerdeadlockprofile": {"ops": "all", "timeout": 60 * 60},
     "org.orgsettings": {"ops": "all", "timeout": 60 * 60},
     "org.orgconductsettings": {"ops": "all", "timeout": 60 * 60},
+    "org.orgleadershipsettings": {"ops": "all", "timeout": 60 * 60},
     "league.leagueuser": {"ops": "all", "timeout": 60 * 60},
     # Steam match data - cached with shorter timeout for freshness
     "steam.match": {"ops": "all", "timeout": 30 * 60},
@@ -440,8 +442,6 @@ def _deploy_version() -> str:
     if env:
         return env
     try:
-        import tomllib
-
         pyproject = Path(__file__).resolve().parent.parent.parent / "pyproject.toml"
         with open(pyproject, "rb") as f:
             return tomllib.load(f).get("project", {}).get("version", "0")

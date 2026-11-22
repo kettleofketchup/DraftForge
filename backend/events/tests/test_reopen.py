@@ -78,7 +78,12 @@ class ReopenEventServiceTest(ReopenTestBase):
             ReopenResult(
                 reopened=True,
                 state=EventState.SIGNUPS_OPEN,
-                details={"revoked": 3, "attendance_reopened": 0},
+                details={
+                    "revoked": 3,
+                    "attendance_reopened": 0,
+                    "captain_reviews_voided": 0,
+                    "leadership_revoked": 0,
+                },
             ),
         )
         self.ev.refresh_from_db()
@@ -135,6 +140,8 @@ class ReopenEventServiceTest(ReopenTestBase):
                 "to": EventState.SIGNUPS_OPEN,
                 "revoked": 3,
                 "attendance_reopened": 0,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
             },
         )
 
@@ -193,7 +200,12 @@ class ReopenEventServiceTest(ReopenTestBase):
             ReopenResult(
                 reopened=True,
                 state=EventState.SIGNUPS_OPEN,
-                details={"revoked": 3, "attendance_reopened": 0},
+                details={
+                    "revoked": 3,
+                    "attendance_reopened": 0,
+                    "captain_reviews_voided": 0,
+                    "leadership_revoked": 0,
+                },
             ),
         )
         self.assertFalse(outer.reopened)
@@ -226,7 +238,12 @@ class ReopenEventServiceTest(ReopenTestBase):
             ReopenResult(
                 reopened=True,
                 state=EventState.SIGNUPS_OPEN,
-                details={"revoked": 3, "attendance_reopened": 0},
+                details={
+                    "revoked": 3,
+                    "attendance_reopened": 0,
+                    "captain_reviews_voided": 0,
+                    "leadership_revoked": 0,
+                },
             ),
         )
         self.ev.refresh_from_db()

@@ -14,6 +14,7 @@ from django.utils import timezone
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from common.game import GameType  # noqa: F401
 from discordbot.services.member_names import normalise_name
+from lobby.passwords import generate_password
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -51,12 +52,10 @@ class PositionsModel(models.Model):
 
     def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
-        from app.cache_utils import invalidate_after_commit
-
-        # T2: positions live on user.DotaUserProfile (default reverse accessor
+        # Positions live on user.DotaUserProfile (default reverse accessor
         # dotauserprofile_set). Walk it + bubbled parents. Org positions are
         # pos_1..5 booleans on org.PlayerDotaProfile (no PositionsModel FK) —
-        # cacheops auto-invalidates that model; not this loop. Org branch is T3.
+        # cacheops auto-invalidates that model; not this loop.
         # .nocache(): invalidation must walk the live rows — a cached join
         # (invalidated only on DotaUserProfile) could miss a freshly linked
         # profile and skip its parents.
@@ -330,9 +329,6 @@ class CustomUser(AbstractUser):
         behave as if the field were still on CustomUser. Invalidates the
         base_profile cacheops row on commit.
         """
-        # Use a local import to avoid the circular at module load.
-        from app.cache_utils import invalidate_after_commit
-
         bp = getattr(self, "base_profile", None)
         if bp is None:
             # User hasn't been saved yet (no pk) — buffer the value and apply
@@ -352,8 +348,6 @@ class CustomUser(AbstractUser):
 
     @avatar.setter
     def avatar(self, value: str | None) -> None:
-        from app.cache_utils import invalidate_after_commit
-
         bp = getattr(self, "base_profile", None)
         if bp is None:
             self._pending_avatar = value
@@ -382,8 +376,6 @@ class CustomUser(AbstractUser):
 
     @positions.setter
     def positions(self, value: PositionsModel | None) -> None:
-        from app.cache_utils import invalidate_after_commit
-
         bp = getattr(self, "base_profile", None)
         dp = getattr(bp, "dota_user_profile", None) if bp else None
         if dp is None:
@@ -407,8 +399,6 @@ class CustomUser(AbstractUser):
 
     @has_active_dota_mmr.setter
     def has_active_dota_mmr(self, value: bool) -> None:
-        from app.cache_utils import invalidate_after_commit
-
         bp = getattr(self, "base_profile", None)
         dp = getattr(bp, "dota_user_profile", None) if bp else None
         if dp is None:
@@ -426,8 +416,6 @@ class CustomUser(AbstractUser):
 
     @dota_mmr_last_verified.setter
     def dota_mmr_last_verified(self, value: datetime | None) -> None:
-        from app.cache_utils import invalidate_after_commit
-
         bp = getattr(self, "base_profile", None)
         dp = getattr(bp, "dota_user_profile", None) if bp else None
         if dp is None:
@@ -592,7 +580,7 @@ class CustomUser(AbstractUser):
         # (model is registered with ops="all"). No explicit call needed.
 
         # 2. BaseUserProfile auto-create. Idempotent via get_or_create.
-        # Local import avoids the circular: user.models -> app.CustomUser.
+        # local: user app is not in celery MODEL_APPS
         from user.models import BaseUserProfile
 
         bp, _ = BaseUserProfile.objects.get_or_create(user=self)
@@ -611,8 +599,6 @@ class CustomUser(AbstractUser):
             bp.avatar = pending_avatar
             fields_to_update.append("avatar")
         if fields_to_update:
-            from app.cache_utils import invalidate_after_commit
-
             bp.save(update_fields=fields_to_update)
             invalidate_after_commit(bp)
             if pending_nickname is not None:
@@ -633,8 +619,6 @@ class CustomUser(AbstractUser):
             dp.dota_mmr_last_verified = self._pending_dota_mmr_last_verified
             dota_fields.append("dota_mmr_last_verified")
         if dota_fields:
-            from app.cache_utils import invalidate_after_commit
-
             dp.save(update_fields=dota_fields)
             invalidate_after_commit(dp)
             for attr in (
@@ -786,8 +770,6 @@ class Tournament(models.Model):
 
     def save(self, *args: object, **kwargs: object) -> None:
         if self.dota_lobby_mode != DotaLobbyMode.OFF and not self.dota_lobby_password:
-            from lobby.passwords import generate_password
-
             self.dota_lobby_password = generate_password()
             update_fields = kwargs.get("update_fields")
             if update_fields is not None:

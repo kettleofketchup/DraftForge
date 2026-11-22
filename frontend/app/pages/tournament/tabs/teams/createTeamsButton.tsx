@@ -13,6 +13,7 @@ import type { TeamType, TournamentType } from '~/components/tournament/types';
 import { SubmitButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import type { UserType } from '~/components/user/types';
+import { useCanEditTournamentFromServer } from '~/features/tournament-viewer/queries';
 import { deleteTeamsInOrder, deleteTeamsMessage } from '~/lib/deleteTeams';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
@@ -34,7 +35,7 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
   setDialogOpen,
 }) => {
   const setTournament = useUserStore((state) => state.setTournament);
-  const isStaff = useUserStore((state) => state.isStaff);
+  const canEdit = useCanEditTournamentFromServer(tournament.pk);
   const [showConfirm, setShowConfirm] = useState(false);
 
   const refreshTournament = async () => {
@@ -99,7 +100,7 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
     setDialogOpen(false);
   };
 
-  if (!isStaff()) return <AdminOnlyButton />;
+  if (!canEdit) return <AdminOnlyButton />;
 
   return (
     <>

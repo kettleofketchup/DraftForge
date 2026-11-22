@@ -136,6 +136,7 @@ export const ChatErrorCodeSchema = z.enum([
   'draft_closed',
   'draft_inactive',
   'hero_unavailable',
+  'not_suggested',
   'bad_request',
   'unavailable',
 ]);
@@ -144,7 +145,13 @@ export const ChatMessageSchema = z.object({
   id: z.uuid(),
   channel: z.enum(['team', 'all']),
   team_id: z.number().nullable(),
-  kind: z.enum(['text', 'suggest_pick', 'suggest_ban']),
+  kind: z.enum([
+    'text',
+    'suggest_pick',
+    'suggest_ban',
+    'unsuggest_pick',
+    'unsuggest_ban',
+  ]),
   hero_id: z.number().nullable(),
   body: z.string(),
   created_at: z.string(),

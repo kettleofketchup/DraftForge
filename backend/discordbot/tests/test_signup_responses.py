@@ -1,8 +1,8 @@
 """Tests for backend.discordbot.signup_responses (#191, #192)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
-import discord
 
+import discord
 from django.test import SimpleTestCase
 
 from discordbot.signup_responses import (
@@ -34,7 +34,9 @@ def _make_forbidden(code):
 
 
 class RespondToSignupUserDMSuccessTest(SimpleTestCase):
-    async def test_dm_path_defers_with_thinking_then_sends_then_deletes_placeholder(self):
+    async def test_dm_path_defers_with_thinking_then_sends_then_deletes_placeholder(
+        self,
+    ):
         """Regression guard for the signup-post-deletion bug.
 
         For component (button) interactions, `defer(ephemeral=True)` WITHOUT
@@ -115,7 +117,7 @@ class RespondToSignupUserDMDisabledTest(SimpleTestCase):
 
 class RespondToSignupUserNoViewFallbackTest(SimpleTestCase):
     async def test_forbidden_fallback_with_no_view_does_not_raise_typeerror(self):
-        """#268 bug 1: DM-disabled + no view/embed must fall back cleanly.
+        """DM-disabled + no view/embed must fall back cleanly (#268).
 
         discord.py's Webhook.send (the followup.send path) rejects a literal
         None view (None is not MISSING and lacks __discord_ui_view__). The
@@ -137,9 +139,12 @@ class RespondToSignupUserNoViewFallbackTest(SimpleTestCase):
                 raise TypeError(
                     "expected embed parameter to be of type Embed not NoneType"
                 )
+
         interaction.followup.send = AsyncMock(side_effect=_send)
 
-        channel = await respond_to_signup_user(interaction, content="✅ You're signed up!")
+        channel = await respond_to_signup_user(
+            interaction, content="✅ You're signed up!"
+        )
 
         self.assertEqual(channel, ResponseChannel.EPHEMERAL)
         interaction.followup.send.assert_awaited_once()
@@ -176,7 +181,8 @@ class RespondToSignupUserLoggingTest(SimpleTestCase):
         self.assertIn("signup_response_sent", events)
 
         sent_call = next(
-            c for c in mock_log.info.call_args_list
+            c
+            for c in mock_log.info.call_args_list
             if c.args[0] == "signup_response_sent"
         )
         kwargs = sent_call.kwargs

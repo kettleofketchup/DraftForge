@@ -1,7 +1,7 @@
 /**
  * Edit Profile — Base tab of the new layered EditProfileModal.
  *
- * Covers T1 (BaseUserProfile epic):
+ * Covers the BaseUserProfile base tab:
  *   - Nickname edit dual-writes to userCacheStore + userStore.currentUser
  *     so the navbar / profile header / user lists update without a reload.
  *   - The navbar UserAvatar's `alt` text comes from getDisplayName(currentUser),
@@ -12,8 +12,8 @@
  *
  * Avatar is NOT user-editable in this modal — it's synced from Discord
  * server-side (BaseUserProfile.avatar stores the Discord avatar hash,
- * not a URL). T2/T3 don't change that. If a future ticket adds
- * user-uploaded avatars, add a separate spec for it.
+ * not a URL). If user-uploaded avatars are ever added, add a separate spec
+ * for them.
  *
  * Logs in as the admin user (PK 1001, kettleofketchup) and only edits that
  * user's OWN profile via /profile → EditProfileModal. Original values are

@@ -65,8 +65,8 @@ class SearchUsersTest(TestCase):
         # User with steam ID. CustomUser.save() syncs steamid <-> steam_account_id
         # via STEAM_ID_64_BASE (76561197960265728), so we set steam_account_id and
         # let save() derive the canonical 64-bit value. Setting both to inconsistent
-        # values previously slipped past a dead save() override; T1.5 resurrected
-        # the sync, so the derived steamid is now authoritative.
+        # values used to slip past a dead save() override; the sync now runs, so
+        # the derived steamid is authoritative.
         self.steam_user = CustomUser.objects.create_user(
             username="steamjohn",
             password="test",

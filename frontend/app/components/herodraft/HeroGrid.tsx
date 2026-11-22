@@ -1,27 +1,44 @@
-// frontend/app/components/herodraft/HeroGrid.tsx
 import { heroes } from 'dotaconstants';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { brandBg } from '~/components/ui/buttons/styles';
 import { Input } from '~/components/ui/input';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { FastTooltip } from '~/components/ui/tooltip';
+import { DisplayName } from '~/components/user/avatar';
 import { heroMatchesSearch } from '~/lib/dota/heroes';
 import { cn } from '~/lib/utils';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
+import { useUserStore } from '~/store/userStore';
 import { HeroSuggestMenu } from './chat/HeroSuggestMenu';
+import {
+  activeSuggestions,
+  type HeroSuggestions,
+  NO_SUGGESTIONS,
+} from './chat/suggestions';
 import { isOverlaidByOtherLayer } from './keyboardLayers';
+import { SuggesterStack } from './SuggesterStack';
 
-// Memoized hero button to prevent re-renders
-// IMPORTANT: Don't pass searchQuery directly - pass pre-computed booleans instead
-// to avoid all 508 buttons re-rendering on every keystroke
+// Takes precomputed booleans, not searchQuery, so a keystroke doesn't re-render every button.
 interface HeroButtonProps {
   hero: { id: number; name: string; icon: string };
   available: boolean;
-  isHighlighted: boolean; // matches && hasSearchQuery && available
-  isDimmed: boolean; // !available || (!matches && hasSearchQuery)
+  isHighlighted: boolean;
+  isDimmed: boolean;
   isSelected: boolean;
   disabled: boolean;
   onClick: (heroId: number) => void;
+  suggestions: HeroSuggestions;
+  showBanSuggestions: boolean;
+  emphasis: 'pick' | 'ban' | null;
+}
+
+function suggestionLabel(name: string, s: HeroSuggestions, bans: boolean) {
+  const parts = [name];
+  const names = (users: HeroSuggestions['pick']) =>
+    users.map((u) => DisplayName(u)).join(', ');
+  if (s.pick.length) parts.push(`Pick: ${names(s.pick)}`);
+  if (bans && s.ban.length) parts.push(`Ban: ${names(s.ban)}`);
+  return parts.join(' · ');
 }
 
 const HeroButton = memo(function HeroButton({
@@ -32,9 +49,18 @@ const HeroButton = memo(function HeroButton({
   isSelected,
   disabled,
   onClick,
+  suggestions,
+  showBanSuggestions,
+  emphasis,
 }: HeroButtonProps) {
+  const pick = available ? suggestions.pick : NO_SUGGESTIONS.pick;
+  const ban =
+    available && showBanSuggestions ? suggestions.ban : NO_SUGGESTIONS.ban;
   return (
-    <FastTooltip content={hero.name} className="text-xs">
+    <FastTooltip
+      content={suggestionLabel(hero.name, { pick, ban }, showBanSuggestions)}
+      className="text-xs"
+    >
       <button
         type="button"
         style={{ padding: 0, margin: 0, lineHeight: 0 }}
@@ -45,13 +71,19 @@ const HeroButton = memo(function HeroButton({
         }}
         // Don't use HTML disabled - it prevents hover states for spectators
         className={cn(
-          'size-[24px] sm:size-[28px] md:size-[32px] lg:size-[40px] xl:size-[48px] 2xl:size-[56px] shrink-0 p-0.5',
+          'relative size-[24px] sm:size-[28px] md:size-[32px] lg:size-[40px] xl:size-[48px] 2xl:size-[56px] shrink-0 p-0.5',
           'rounded-full bg-gradient-to-b from-base-100 to-base-400',
           'border border-border shadow-md shadow-black/50',
           'hover:from-base-50 hover:to-base-200 hover:scale-110 hover:z-10 hover:shadow-lg hover:shadow-black/60',
           'transition-all duration-150',
           isSelected &&
             'ring-2 ring-turn scale-110 z-10 from-turn/40 to-base-400',
+          available &&
+            emphasis === 'pick' &&
+            'z-10 scale-105 ring-2 ring-pick brightness-125 shadow-lg shadow-pick/60 from-pick/50 to-base-400',
+          available &&
+            emphasis === 'ban' &&
+            'z-10 scale-105 ring-2 ring-ban brightness-125 shadow-lg shadow-ban/60 from-ban/50 to-base-400',
           isHighlighted &&
             'ring-2 ring-search-match from-search-match/30 to-base-400',
           isDimmed && 'opacity-30 grayscale',
@@ -63,7 +95,10 @@ const HeroButton = memo(function HeroButton({
         data-hero-available={available}
         data-hero-selected={isSelected}
         data-hero-disabled={disabled}
+        data-hero-emphasis={available && emphasis ? emphasis : undefined}
       >
+        <SuggesterStack users={pick} kind="pick" heroId={hero.id} />
+        <SuggesterStack users={ban} kind="ban" heroId={hero.id} />
         <img
           src={hero.icon}
           alt={hero.name}
@@ -79,7 +114,6 @@ interface HeroGridProps {
   onHeroClick: (heroId: number) => void;
   disabled: boolean;
   showActionButton: boolean;
-  /** Current action type (ban or pick) for visual feedback */
   currentAction?: 'ban' | 'pick';
   isMyTurn?: boolean;
   canSuggest?: boolean;
@@ -115,19 +149,35 @@ export function HeroGrid({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
-  // Use selectors to prevent re-renders when unrelated state changes
   const searchQuery = useHeroDraftStore((state) => state.searchQuery);
   const setSearchQuery = useHeroDraftStore((state) => state.setSearchQuery);
   const selectedHeroId = useHeroDraftStore((state) => state.selectedHeroId);
   const setSelectedHeroId = useHeroDraftStore(
     (state) => state.setSelectedHeroId,
   );
-  // Select draft rounds directly for memoization
   const draftRounds = useHeroDraftStore((state) => state.draft?.rounds);
   const suggestHero = useHeroDraftStore((state) => state.suggestHero);
+  const unsuggestHero = useHeroDraftStore((state) => state.unsuggestHero);
+  const chatMessages = useHeroDraftStore((state) => state.chat.messages);
+  const selfId = useUserStore((state) => state.currentUser?.pk);
+  const suggestions = useMemo(
+    () => activeSuggestions(chatMessages),
+    [chatMessages],
+  );
+  const showBanSuggestions = currentAction === 'ban';
+  const ownSuggestions = useCallback(
+    (heroId: number) => {
+      const s = suggestions.get(heroId) ?? NO_SUGGESTIONS;
+      return {
+        pick: s.pick.some((u) => u.pk === selfId),
+        ban: s.ban.some((u) => u.pk === selfId),
+      };
+    },
+    [suggestions, selfId],
+  );
   const chatInset = useHeroDraftStore((state) => state.chatPanelInset);
 
-  // Auto-focus search when typing anywhere (unless in a dialog/input)
+  // Typing anywhere outside an input or menu focuses the search box.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -145,10 +195,9 @@ export function HeroGrid({
         return;
       }
 
-      // Only handle printable characters (single character, no ctrl/alt/meta)
       if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         searchInputRef.current?.focus();
-        // Don't prevent default - let the key go through to the now-focused input
+        // No preventDefault: the key lands in the now-focused input.
       }
 
       if (e.key === 'Escape') {
@@ -180,7 +229,7 @@ export function HeroGrid({
   }, []);
 
   const filteredHeroes = useMemo(() => {
-    // Use heroMatchesSearch to match against all aliases (short names, nicknames, DotA 1 names)
+    // Also matches aliases: short names, nicknames, DotA 1 names.
     return heroList.filter((hero) => heroMatchesSearch(hero.id, searchQuery));
   }, [heroList, searchQuery]);
 
@@ -205,8 +254,8 @@ export function HeroGrid({
   const actionOverlay =
     isMyTurn && currentAction
       ? currentAction === 'ban'
-        ? 'bg-ban-surface/80' // Dark red tint for bans
-        : 'bg-pick-surface/80' // Dark green tint for picks
+        ? 'bg-ban-surface/80'
+        : 'bg-pick-surface/80'
       : '';
 
   const heroListEl = (
@@ -242,13 +291,22 @@ export function HeroGrid({
               {ATTRIBUTE_LABELS[attr]}
             </h3>
             <div
-              className="flex flex-wrap content-start gap-2"
+              // p-2 fits a full suggester stack overhanging an edge hero at every breakpoint.
+              className="flex flex-wrap content-start gap-2 p-2"
               data-testid={`herodraft-attr-grid-${attr}`}
             >
               {heroesForAttr.map((hero) => {
                 const available = isHeroAvailable(hero.id);
                 const matches = matchesSearch(hero.id);
                 const hasSearchQuery = !!searchQuery;
+                const heroSuggestions =
+                  suggestions.get(hero.id) ?? NO_SUGGESTIONS;
+                const emphasis =
+                  isMyTurn && currentAction
+                    ? heroSuggestions[currentAction].length > 0
+                      ? currentAction
+                      : null
+                    : null;
                 return (
                   <HeroButton
                     key={hero.id}
@@ -259,6 +317,9 @@ export function HeroGrid({
                     isSelected={selectedHeroId === hero.id}
                     disabled={disabled}
                     onClick={handleHeroClick}
+                    suggestions={heroSuggestions}
+                    showBanSuggestions={showBanSuggestions}
+                    emphasis={emphasis}
                   />
                 );
               })}
@@ -291,7 +352,12 @@ export function HeroGrid({
         />
       </div>
 
-      <HeroSuggestMenu enabled={canSuggest} onSuggest={suggestHero}>
+      <HeroSuggestMenu
+        enabled={canSuggest}
+        onSuggest={suggestHero}
+        onUnsuggest={unsuggestHero}
+        ownSuggestions={ownSuggestions}
+      >
         {heroListEl}
       </HeroSuggestMenu>
     </div>

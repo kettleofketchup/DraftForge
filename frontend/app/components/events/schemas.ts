@@ -60,7 +60,7 @@ export type LowCompletionAction = (typeof LOW_COMPLETION_ACTIONS)[number];
 export const LOW_COMPLETION_ACTION_LABELS: Record<LowCompletionAction, string> =
   {
     non_binding: 'Make the check non-binding (drop nobody)',
-    hold_for_staff: 'Hold drops for staff',
+    hold_for_staff: 'Hold drops for staff, the host or helpers to decide',
     drop_anyway: 'Drop unconfirmed anyway',
   };
 
@@ -242,7 +242,7 @@ export const eventSchema = z
   .superRefine((val, ctx) => {
     // Single events have no subscriber list — discord_signup_reminder DMs
     // subscribed users, which is a series-level concept on EventRepeater.
-    // Mirrors the backend EventSerializer.validate rejection (Task 2.2).
+    // Mirrors the backend EventSerializer.validate rejection.
     if (val.event_repeater === null && val.discord_signup_reminder === true) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

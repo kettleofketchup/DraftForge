@@ -37,7 +37,11 @@ class CustomUserAdmin(admin.ModelAdmin):
             entries = list(blockers)
             if entries:
                 to_delete = [*to_delete, *(f"{prefix}{entry}" for entry in entries)]
-                model_count = {**model_count, opts.verbose_name_plural: len(entries)}
+                name = str(opts.verbose_name_plural)
+                model_count = {
+                    **model_count,
+                    name: model_count.get(name, 0) + len(entries),
+                }
                 if not request.user.has_perm(
                     f"{opts.app_label}.delete_{opts.model_name}"
                 ):
