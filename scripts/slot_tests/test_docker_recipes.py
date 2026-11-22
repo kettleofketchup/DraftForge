@@ -24,15 +24,18 @@ printf '%s\\0' "$@" > {log}
 """
 
 
-def build(tmp_path: Path, version: str, *flags: str) -> list[str]:
+def run_build(
+    tmp_path: Path, version: str, *flags: str
+) -> tuple[subprocess.CompletedProcess[str], Path]:
     assert JUST is not None
     log = tmp_path / "argv"
     bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
+    bin_dir.mkdir(exist_ok=True)
     stub = bin_dir / "docker"
     stub.write_text(DOCKER_STUB.format(version=version, log=log))
     stub.chmod(0o755)
     env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    env.pop("DF_ZOT_REGISTRY", None)
     result = subprocess.run(
         [JUST, "--justfile", str(ROOT / "justfile"), "docker::nginx::build", *flags],
         cwd=ROOT,
@@ -40,8 +43,27 @@ def build(tmp_path: Path, version: str, *flags: str) -> list[str]:
         capture_output=True,
         text=True,
     )
+    return result, log
+
+
+def build(tmp_path: Path, version: str, *flags: str) -> list[str]:
+    result, log = run_build(tmp_path, version, *flags)
     assert result.returncode == 0, result.stderr
     return log.read_bytes().decode().split("\0")[:-1]
+
+
+def nginx_hash() -> str:
+    return subprocess.run(
+        [str(ROOT / "scripts/hash-docker-image.sh"), "nginx"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def values(argv: list[str], flag: str) -> list[str]:
+    return [argv[i + 1] for i, a in enumerate(argv[:-1]) if a == flag]
 
 
 def test_docker_build_uses_registry_cache(tmp_path: Path) -> None:
@@ -93,6 +115,76 @@ def test_podman_build_skips_registry_cache(
     assert "--cache-from" not in argv
     assert "--cache-to" not in argv
     assert argv[-1] == "nginx"
+
+
+CI_IMAGE = "ghcr.io/kettleofketchup/draftforge-ci/nginx"
+ZOT_CACHE = "zot.zot.svc.cluster.local:5000/buildcache/pr/draftforge/nginx"
+
+
+def test_trusted_mode_is_todays_build_plus_platform(tmp_path: Path) -> None:
+    h = nginx_hash()
+    argv = build(tmp_path, DOCKER)
+    assert values(argv, "--platform") == ["linux/amd64"]
+    assert "--provenance=false" in argv
+    assert values(argv, "--tag") == [f"{IMAGE}:latest", f"{IMAGE}:{h}"]
+    assert values(argv, "--cache-from") == [f"type=registry,ref={IMAGE}:buildcache"]
+    assert "--load" in argv
+    assert "--push" not in argv
+    pushed = build(tmp_path, DOCKER, "--mode=trusted", "--push")
+    assert values(pushed, "--cache-to") == [
+        f"type=registry,ref={IMAGE}:buildcache,mode=max"
+    ]
+    assert "--push" in pushed
+    assert "--load" not in pushed
+
+
+def test_pr_mode_tags_only_the_ci_image(tmp_path: Path) -> None:
+    h = nginx_hash()
+    argv = build(tmp_path, DOCKER, "--mode=pr", "--pr=42")
+    tags = values(argv, "--tag")
+    assert tags == [f"{CI_IMAGE}:pr-42-{h}"]
+    assert not any("/draftforge/nginx:latest" in a for a in argv)
+    assert not any(t.startswith("ghcr.io/kettleofketchup/draftforge/") for t in tags)
+    assert values(argv, "--platform") == ["linux/amd64"]
+    assert "--provenance=false" in argv
+    assert "--push" in argv
+    assert "--load" not in argv
+
+
+def test_pr_mode_cache_refs(tmp_path: Path) -> None:
+    argv = build(tmp_path, DOCKER, "--mode=pr", "--pr=42")
+    assert values(argv, "--cache-from") == [
+        f"type=registry,ref={ZOT_CACHE}:pr-42",
+        f"type=registry,ref={IMAGE}:buildcache",
+    ]
+    cache_to = values(argv, "--cache-to")
+    assert cache_to == [
+        f"type=registry,ref={ZOT_CACHE}:pr-42,mode=max,image-manifest=true,"
+        "oci-mediatypes=true,ignore-error=true"
+    ]
+    assert not any("ghcr.io" in c for c in cache_to)
+
+
+def assert_rejected(tmp_path: Path, *flags: str) -> None:
+    result, log = run_build(tmp_path, DOCKER, *flags)
+    assert result.returncode == 2, result.stderr
+    assert not log.exists()
+
+
+def test_pr_mode_requires_a_pr_number(tmp_path: Path) -> None:
+    assert_rejected(tmp_path, "--mode=pr")
+
+
+def test_pr_mode_rejects_release(tmp_path: Path) -> None:
+    assert_rejected(tmp_path, "--mode=pr", "--pr=1", "--release")
+
+
+def test_pr_number_must_be_numeric(tmp_path: Path) -> None:
+    assert_rejected(tmp_path, "--mode=pr", "--pr=abc")
+
+
+def test_unknown_mode_exits_2(tmp_path: Path) -> None:
+    assert_rejected(tmp_path, "--mode=nightly")
 
 
 TEST_DB_DOCKER_STUB = """#!/usr/bin/env bash
