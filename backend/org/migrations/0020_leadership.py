@@ -7,12 +7,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("app", "0111_move_organization_models_to_org"),
-        ("events", "0035_retarget_organization_to_org"),
-        ("org", "0018_remove_orguser_mmr"),
-        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-    ]
+    dependencies = [('app', '0111_move_organization_models_to_org'), ('events', '0035_retarget_organization_to_org'), ('org', '0019_remove_unverified_friend_id'), migrations.swappable_dependency(settings.AUTH_USER_MODEL)]
 
     operations = [
         migrations.AddField(

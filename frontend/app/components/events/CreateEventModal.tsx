@@ -379,7 +379,6 @@ export function CreateEventModal({
           content: (
             <EventLobbyFields
               control={form.control}
-              watch={form.watch}
               scope={isRecurring ? 'series' : 'event'}
             />
           ),
@@ -388,10 +387,7 @@ export function CreateEventModal({
           value: 'approval',
           content: (
             <div className="space-y-6">
-              <ApprovalConfigSection
-                control={form.control}
-                watch={form.watch}
-              />
+              <ApprovalConfigSection control={form.control} />
               <SignupRulesSection control={form.control} />
             </div>
           ),
@@ -402,7 +398,6 @@ export function CreateEventModal({
           content: (
             <DiscordConfigSection
               control={form.control}
-              watch={form.watch}
               isRepeater={isRecurring}
               organizationId={organizationId}
             />

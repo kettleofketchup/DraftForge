@@ -69,13 +69,11 @@ import { TournamentConfigSection } from './TournamentConfigSection';
 
 const log = getLogger('TournamentEditForm');
 
-// Helper to format timezone for display
 function formatTimezoneLabel(tz: string): string {
   const parts = tz.split('/');
   return parts.length > 1 ? parts[1].replace(/_/g, ' ') : tz;
 }
 
-// Helper to extract date and time from ISO string
 function extractDateAndTime(isoString: string | null | undefined): {
   date: string;
   time: string;
@@ -84,7 +82,7 @@ function extractDateAndTime(isoString: string | null | undefined): {
     const now = new Date();
     return {
       date: format(now, 'yyyy-MM-dd'),
-      time: '19:00', // Default to 7 PM
+      time: '19:00',
     };
   }
   try {
@@ -101,7 +99,6 @@ function extractDateAndTime(isoString: string | null | undefined): {
   }
 }
 
-// Helper to combine date and time into ISO string
 function combineDateAndTime(dateStr: string, timeStr: string): string {
   return `${dateStr}T${timeStr}:00`;
 }
@@ -183,7 +180,6 @@ export const TournamentEditForm: React.FC<Props> = ({
     ? { id: tourn.source_event.id, name: tourn.source_event.name }
     : null;
 
-  // Extract initial date and time from existing tournament
   const initialDateTime = extractDateAndTime(tourn?.date_played);
   const [selectedDate, setSelectedDate] = useState(initialDateTime.date);
   const [selectedTime, setSelectedTime] = useState(initialDateTime.time);
@@ -227,7 +223,7 @@ export const TournamentEditForm: React.FC<Props> = ({
     // Cast: zodResolver's TFieldValues generic resolves to `unknown` when
     // the schema uses z.coerce, so RHF's inferred Resolver doesn't unify
     // with our explicit CreateTournamentInput. Same workaround as in
-    // editUser/editModal.tsx — the runtime resolver is correct.
+    // user/userCard/editModal.tsx — the runtime resolver is correct.
     resolver: zodResolver(
       CreateTournamentSchema,
     ) as unknown as import('react-hook-form').Resolver<CreateTournamentInput>,
@@ -251,7 +247,6 @@ export const TournamentEditForm: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Update date_played when date or time changes
   useEffect(() => {
     form.setValue(
       'date_played',
@@ -543,7 +538,7 @@ export const TournamentEditForm: React.FC<Props> = ({
     ),
     config: (
       <>
-        <LobbyConfigSection control={form.control} watch={form.watch} />
+        <LobbyConfigSection control={form.control} />
         <TournamentConfigSection control={form.control} />
         <DraftSettingsSection
           control={form.control}

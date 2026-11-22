@@ -14,8 +14,8 @@ AT = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
 
 
 class LeadershipLedgerMigrationTest(MigratorTestCase):
-    migrate_from = ("org", "0018_remove_orguser_mmr")
-    migrate_to = ("org", "0019_leadership")
+    migrate_from = ("org", "0019_remove_unverified_friend_id")
+    migrate_to = ("org", "0020_leadership")
 
     def prepare(self) -> None:
         apps = self.old_state.apps

@@ -1,4 +1,4 @@
-import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
+import { useWatch, type Control, type FieldValues } from 'react-hook-form';
 import type { z } from 'zod';
 import {
   FormControl,
@@ -155,7 +155,6 @@ function HoursSelect({
 
 interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
   control: Control<T>;
-  watch: UseFormWatch<T>;
   isRepeater: boolean;
   organizationId: number;
   /** Gates the repeater-only "Message interested users" block. Defaults to
@@ -166,7 +165,6 @@ interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
 
 export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
   control: parentControl,
-  watch: parentWatch,
   isRepeater,
   organizationId,
   showNotifyNewEvents = isRepeater,
@@ -174,7 +172,6 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
   // T extends DiscordFields by the generic constraint, so narrowing to
   // Control<DiscordFields> is sound: we touch only the discord-config slice.
   const control = parentControl as unknown as Control<DiscordFields>;
-  const watch = parentWatch as unknown as UseFormWatch<DiscordFields>;
 
   const [
     createEvent,
@@ -184,15 +181,18 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
     postSignups,
     announcement,
     startMention,
-  ] = watch([
-    'discord_create_event',
-    'discord_signup_reminder',
-    'discord_profile_reminder',
-    'discord_confirm_attendance',
-    'discord_post_signups',
-    'discord_announcement',
-    'discord_start_mention',
-  ]);
+  ] = useWatch({
+    control,
+    name: [
+      'discord_create_event',
+      'discord_signup_reminder',
+      'discord_profile_reminder',
+      'discord_confirm_attendance',
+      'discord_post_signups',
+      'discord_announcement',
+      'discord_start_mention',
+    ],
+  });
 
   return (
     <div className="space-y-3">

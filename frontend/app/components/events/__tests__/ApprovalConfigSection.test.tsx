@@ -26,7 +26,7 @@ function Harness() {
   });
   return (
     <Form {...form}>
-      <ApprovalConfigSection control={form.control} watch={form.watch} />
+      <ApprovalConfigSection control={form.control} />
     </Form>
   );
 }

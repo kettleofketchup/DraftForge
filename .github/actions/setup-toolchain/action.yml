@@ -1,7 +1,7 @@
 name: Setup Toolchain
 description: >
-  GHCR login + Just + Python 3.12 + Poetry 2.2 (with .venv cache) + Docker
-  Buildx. Shared base layer for every workflow that builds/pushes images or
+  GHCR login + Just + Python 3.12 + Poetry 2.2 (with .venv cache, unless
+  python is 'false') + Docker Buildx. Shared base layer for every workflow that builds/pushes images or
   drives docker compose. Composed by setup-playwright-stack/action.yml on top
   of this for E2E jobs.
 
@@ -24,6 +24,12 @@ inputs:
       (`just ci::prefetch-start`) before Python and Poetry are set up
     required: false
     default: 'false'
+  python:
+    description: >
+      'false' skips Python, Poetry and the .venv, for jobs whose host-side helpers
+      are stdlib-only (run them with DF_JUST_PYTHON=python3)
+    required: false
+    default: 'true'
 
 runs:
   using: composite
@@ -44,11 +50,13 @@ runs:
       run: just ci::prefetch-start
 
     - name: Set up Python
+      if: inputs.python == 'true'
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
 
     - name: Install Poetry
+      if: inputs.python == 'true'
       uses: snok/install-poetry@v1
       with:
         version: '2.2.0'
@@ -56,12 +64,14 @@ runs:
         virtualenvs-in-project: true
 
     - name: Cache Poetry dependencies
+      if: inputs.python == 'true'
       uses: actions/cache@v4
       with:
         path: .venv
         key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
 
     - name: Install Python dependencies
+      if: inputs.python == 'true'
       shell: bash
       run: poetry install --no-interaction --no-ansi
 

@@ -1,7 +1,8 @@
 import type { BrowserContext, Page } from '@playwright/test';
-import { chromium, expect, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
 import { API_URL, BASE_URL } from '../../fixtures/base-url';
+import { launchChromium } from '../../fixtures/browser';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
 /**
@@ -50,7 +51,7 @@ test.describe('@cicd HeroDraft WebSocket Reconnection Fuzzing', () => {
   }
 
   test('should maintain state through multiple connection drops during waiting phase', async () => {
-    const browser = await chromium.launch({
+    const browser = await launchChromium({
       headless: true,
       args: [
         '--disable-web-security',
@@ -165,7 +166,7 @@ test.describe('@cicd HeroDraft WebSocket Reconnection Fuzzing', () => {
   });
 
   test('should recover draft state after reconnection during drafting phase', async () => {
-    const browser = await chromium.launch({
+    const browser = await launchChromium({
       headless: true,
       args: [
         '--disable-web-security',
@@ -321,7 +322,7 @@ test.describe('@cicd HeroDraft WebSocket Reconnection Fuzzing', () => {
   });
 
   test('should handle rapid connection drops and reconnects', async () => {
-    const browser = await chromium.launch({
+    const browser = await launchChromium({
       headless: true,
       args: [
         '--disable-web-security',
@@ -407,7 +408,7 @@ test.describe('@cicd HeroDraft WebSocket Reconnection Fuzzing', () => {
   // Server doesn't pause/resume timers on disconnect - would require tracking
   // connection state per-user and coordinating timer state across reconnects.
   test.skip('should pause timer when disconnected and resume on reconnect', async () => {
-    const browser = await chromium.launch({
+    const browser = await launchChromium({
       headless: true,
       args: [
         '--disable-web-security',
@@ -594,7 +595,7 @@ test.describe('@cicd HeroDraft WebSocket Reconnection Fuzzing', () => {
   // Random 33% drop chance creates unpredictable test behavior.
   // Core reconnection scenarios are covered by other tests in this file.
   test.skip('should complete full draft with intermittent connection drops', async () => {
-    const browser = await chromium.launch({
+    const browser = await launchChromium({
       headless: true,
       args: [
         '--disable-web-security',

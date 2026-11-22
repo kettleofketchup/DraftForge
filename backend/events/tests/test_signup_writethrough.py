@@ -1,42 +1,25 @@
-"""Test signup-side writethrough to User-level fields (#196a).
+"""The Friend ID lives on User.steam_account_id: filled once, never replaced
+by a signup (#717). Positions and MMR are not touched by the signup itself."""
 
-Signup writes PlayerDotaProfile.pos_1..5 and an unverified_friend_id (32-bit Steam
-account ID). We mirror those to User.positions (last-write-wins) and
-User.steam_account_id (first-write-wins).
-
-NOTE: PlayerDotaProfile does NOT have a steam_account_id field directly — it has
-unverified_friend_id (a CharField on PlayerProfileMixin). The writethrough therefore
-reads profile.unverified_friend_id (a non-empty string of digits) and writes it as
-an integer to User.steam_account_id (IntegerField, first-write-wins).
-
-MMR is NOT touched on signup save — it continues through MmrApprovalModal /
-approve_signup(mmr_override=...).
-"""
-
-from collections.abc import Callable
 from unittest.mock import patch
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone as tz
-from structlog.testing import capture_logs
 
 from app.models import CustomUser, PositionsModel
 from common.game import GameType
 from events.constants import SignupStatus
-from events.eligibility import EligibilityResult, sync_steam_account_from_profiles
+from events.eligibility import claim_friend_id
 from events.models import Event, EventSignup
 from events.schemas import SignupInputPatch
-from events.services import (
-    _create_signup,
-    apply_signup_input,
-    cancel_signup,
-    process_rsvp,
-)
+from events.services import _create_signup, apply_signup_input, process_rsvp
 from events.tests.base import EventTestCase
+from org.membership import resolve_or_create_org_user
 from org.mmr import org_mmr_for, set_org_mmr
 from org.models import Organization, OrgUser
-from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
+from org.models_profiles import PlayerDotaProfile
 
 
 class SignupWritethroughTest(TestCase):
@@ -65,21 +48,14 @@ class SignupWritethroughTest(TestCase):
         pos_3=False,
         pos_4=False,
         pos_5=False,
-        unverified_friend_id=None,
     ):
-        """Helper: populate the user's dota profile, then sign up via _create_signup.
-
-        Uses unverified_friend_id (the actual PlayerDotaProfile/PlayerProfileMixin
-        field) instead of steam_account_id which does not exist on that model.
-        """
+        """Helper: populate the user's dota profile, then sign up via _create_signup."""
         profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=self.org_user)
         profile.pos_1 = pos_1
         profile.pos_2 = pos_2
         profile.pos_3 = pos_3
         profile.pos_4 = pos_4
         profile.pos_5 = pos_5
-        if unverified_friend_id is not None:
-            profile.unverified_friend_id = str(unverified_friend_id)
         profile.save()
         signup = _create_signup(self.event, self.user)
         signup.refresh_from_db()
@@ -126,27 +102,6 @@ class SignupWritethroughTest(TestCase):
         self.assertEqual(self.user.positions.hard_support, 0)
 
 
-class SignupSteamIdWritethroughTest(SignupWritethroughTest):
-    """First-write-wins on User.steam_account_id (identity-bearing, unique=True).
-
-    Source: profile.unverified_friend_id (CharField of digits on PlayerProfileMixin).
-    Target: User.steam_account_id (IntegerField, unique=True, first-write-wins).
-    """
-
-    def test_steam_id_set_when_user_has_none(self):
-        self.assertIsNone(self.user.steam_account_id)
-        self._signup_with_positions(unverified_friend_id=12345)
-        self.assertEqual(self.user.steam_account_id, 12345)
-
-    def test_steam_id_preserved_when_user_already_has_one(self):
-        self.user.steam_account_id = 99999
-        self.user.save(update_fields=["steam_account_id"])
-        self._signup_with_positions(unverified_friend_id=12345)
-        self.user.refresh_from_db()
-        # First-write-wins: existing 99999 preserved, signup 12345 ignored.
-        self.assertEqual(self.user.steam_account_id, 99999)
-
-
 class SignupWritethroughInvariantsTest(SignupWritethroughTest):
     """MMR isolation + transaction atomicity (#196a)."""
 
@@ -162,18 +117,19 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
         # Org MMR untouched — only approve_signup(mmr_override=...) writes it.
         self.assertEqual(org_mmr_for(self.org.pk, self.user.pk, GameType.DOTA2), 4500)
 
-    def test_signup_rolls_back_when_a_later_step_fails(self):
-        """The Steam sync and the signup row share _create_signup's atomic
-        block: a failure after the sync rolls both back."""
-        PlayerDotaProfile.objects.update_or_create(
-            org_user=self.org_user, defaults={"unverified_friend_id": "56565"}
-        )
+    def test_signup_input_rolls_back_with_the_signup(self):
         with patch(
             "events.services.invalidate_after_commit",
             side_effect=RuntimeError("boom"),
         ):
             with self.assertRaises(RuntimeError):
-                _create_signup(self.event, self.user)
+                with transaction.atomic():
+                    apply_signup_input(
+                        org_user=self.org_user,
+                        event=self.event,
+                        patch=SignupInputPatch(steam_account_id="56565"),
+                    )
+                    _create_signup(self.event, self.user)
 
         self.assertFalse(
             EventSignup.objects.filter(event=self.event, user=self.user).exists()
@@ -182,177 +138,115 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
         self.assertIsNone(self.user.steam_account_id)
 
 
-class SyncSteamAccountFromProfilesTest(EventTestCase):
-    def _user_with_friend_id(self, fid: str) -> CustomUser:
+class ClaimFriendIdTest(EventTestCase):
+    def _assert_refused(self, user: CustomUser, fid: str, code: str) -> None:
+        with self.assertRaises(ValidationError) as ctx:
+            claim_friend_id(user, fid)
+        self.assertEqual(ctx.exception.code, code)
+
+    def test_fills_an_empty_id(self) -> None:
         user = self.make_user()
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        PlayerDotaProfile.objects.update_or_create(
-            org_user=org_user, defaults={"unverified_friend_id": fid}
-        )
-        return CustomUser.objects.get(pk=user.pk)
-
-    def _skips(self, logs: list[dict[str, object]]) -> list[dict[str, object]]:
-        return [e for e in logs if e["event"] == "signup_steam_writethrough_skipped"]
-
-    def test_writes_friend_id_and_reports_it(self) -> None:
-        user = self._user_with_friend_id("424242")
-        self.assertTrue(sync_steam_account_from_profiles(user, self.org))
+        self.assertEqual(claim_friend_id(user, " 0424242 "), 424242)
         user.refresh_from_db()
         self.assertEqual(user.steam_account_id, 424242)
+        self.assertEqual(user.steamid, 424242 + CustomUser.STEAM_ID_64_BASE)
 
-    def test_reads_deadlock_profile_when_dota_has_none(self) -> None:
+    def test_accepts_ids_above_signed_32_bit(self) -> None:
         user = self.make_user()
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        PlayerDeadlockProfile.objects.update_or_create(
-            org_user=org_user, defaults={"unverified_friend_id": "434343"}
-        )
-        user = CustomUser.objects.get(pk=user.pk)
-        self.assertTrue(sync_steam_account_from_profiles(user, self.org))
+        self.assertEqual(claim_friend_id(user, str(2**32 - 1)), 2**32 - 1)
         user.refresh_from_db()
-        self.assertEqual(user.steam_account_id, 434343)
+        self.assertEqual(user.steam_account_id, 2**32 - 1)
 
-    def test_race_conflict_logs_and_leaves_user_unchanged(self) -> None:
-        user = self._user_with_friend_id("111111")
-        other = self.make_user()
-        other.steam_account_id = 111111
-        other.save()
-        with transaction.atomic():
-            with capture_logs() as logs:
-                wrote = sync_steam_account_from_profiles(user, self.org, event_id=77)
-            self.assertEqual(EventSignup.objects.filter(user=user).count(), 0)
-        self.assertFalse(wrote)
-        skips = self._skips(logs)
-        self.assertEqual(len(skips), 1)
-        self.assertEqual(skips[0]["reason"], "conflict")
-        self.assertEqual(skips[0]["conflicting_user_id"], other.pk)
-        self.assertEqual(skips[0]["user_id"], user.pk)
-        self.assertEqual(skips[0]["event_id"], 77)
-        self.assertEqual(skips[0]["log_level"], "warning")
-        self.assertIsNone(user.steam_account_id)
-        self.assertIsNone(user.steamid)
-        user.refresh_from_db()
-        self.assertIsNone(user.steam_account_id)
-
-    def test_out_of_range_friend_id_skips(self) -> None:
-        user = self._user_with_friend_id("9" * 20)
-        with capture_logs() as logs:
-            self.assertFalse(sync_steam_account_from_profiles(user, self.org))
-        self.assertEqual(self._skips(logs)[0]["reason"], "out_of_range")
-        user.refresh_from_db()
-        self.assertIsNone(user.steam_account_id)
-
-    def test_non_numeric_friend_id_skips(self) -> None:
-        user = self._user_with_friend_id("abc")
-        with capture_logs() as logs:
-            self.assertFalse(sync_steam_account_from_profiles(user, self.org))
-        self.assertEqual(self._skips(logs)[0]["reason"], "non_numeric")
-
-    def test_existing_account_id_is_kept(self) -> None:
-        user = self._user_with_friend_id("454545")
+    def test_same_id_is_a_no_op(self) -> None:
+        user = self.make_user()
         user.steam_account_id = 99999
         user.save()
-        self.assertFalse(sync_steam_account_from_profiles(user, self.org))
+        with self.assertNumQueries(0):
+            self.assertIsNone(claim_friend_id(user, "099999"))
+
+    def test_blank_is_a_no_op(self) -> None:
+        user = self.make_user()
+        user.steam_account_id = 99999
+        user.save()
+        self.assertIsNone(claim_friend_id(user, "  "))
         user.refresh_from_db()
         self.assertEqual(user.steam_account_id, 99999)
 
-    def test_event_without_org_skips(self) -> None:
-        user = self._user_with_friend_id("464646")
-        with self.assertNumQueries(0):
-            self.assertFalse(sync_steam_account_from_profiles(user, None))
+    def test_different_id_is_refused(self) -> None:
+        user = self.make_user()
+        user.steam_account_id = 99999
+        user.save()
+        self._assert_refused(user, "12345", "friend_id_already_set")
+        user.refresh_from_db()
+        self.assertEqual(user.steam_account_id, 99999)
+
+    def test_id_held_by_another_user_is_refused(self) -> None:
+        other = self.make_user()
+        other.steam_account_id = 3000000000
+        other.save()
+        user = self.make_user()
+        self._assert_refused(user, "3000000000", "duplicate_friend_id")
         user.refresh_from_db()
         self.assertIsNone(user.steam_account_id)
 
-
-class SignupSteamSyncOrderingTest(EventTestCase):
-    """The Steam account is written once per signup, before the status is decided."""
-
-    def _user_with_friend_id(self, fid: str) -> CustomUser:
+    def test_malformed_or_out_of_range_ids_are_refused(self) -> None:
         user = self.make_user()
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        PlayerDotaProfile.objects.update_or_create(
-            org_user=org_user, defaults={"unverified_friend_id": fid}
-        )
-        return CustomUser.objects.get(pk=user.pk)
+        for fid in ("abc", "12a", "0", "000", str(2**32), "9" * 21, "\u0661\u0662"):
+            with self.subTest(fid=fid):
+                self._assert_refused(user, fid, "invalid_friend_id")
+        user.refresh_from_db()
+        self.assertIsNone(user.steam_account_id)
 
-    def _skips(self, logs: list[dict[str, object]]) -> list[dict[str, object]]:
-        return [e for e in logs if e["event"] == "signup_steam_writethrough_skipped"]
-
-    def _recording_check(
-        self, seen: list[int | None]
-    ) -> Callable[..., EligibilityResult]:
-        def record(
-            event: Event, user: CustomUser, **_kwargs: object
-        ) -> EligibilityResult:
-            seen.append(user.steam_account_id)
-            return EligibilityResult()
-
-        return record
-
-    def test_conflicting_friend_id_logs_once_and_waits_for_approval(self) -> None:
-        ev = self.make_event(require_steam_id=True)
-        user = self._user_with_friend_id("515151")
-        other = self.make_user()
-        other.steam_account_id = 515151
-        other.save()
-        with capture_logs() as logs:
-            signup = process_rsvp(ev, user)
-        skips = self._skips(logs)
-        self.assertEqual(len(skips), 1, skips)
-        self.assertEqual(skips[0]["reason"], "conflict")
-        self.assertEqual(signup.status, SignupStatus.PENDING_APPROVAL)
-
-    def test_process_rsvp_writes_steam_account_before_requirements(self) -> None:
-        ev = self.make_event(require_steam_id=True)
-        user = self._user_with_friend_id("525252")
-        seen: list[int | None] = []
-        with patch(
-            "events.services.evaluate_signup",
-            side_effect=self._recording_check(seen),
-        ):
-            process_rsvp(ev, user)
-        self.assertEqual(seen, [525252])
-
-    def test_promotion_writes_steam_account_before_requirements(self) -> None:
-        ev = self.make_event(require_steam_id=True, max_players=1)
-        holder = process_rsvp(ev, self.make_user(steamid=76561198000005353))
-        waiting_user = self.make_user()
-        waiting = process_rsvp(ev, waiting_user)
-        self.assertEqual(waiting.status, SignupStatus.WAITLISTED)
-        PlayerDotaProfile.objects.update_or_create(
-            org_user=OrgUser.objects.get(user=waiting_user, organization=self.org),
-            defaults={"unverified_friend_id": "535353"},
-        )
-        seen: list[int | None] = []
-        with patch(
-            "events.services.evaluate_signup",
-            side_effect=self._recording_check(seen),
-        ):
-            cancel_signup(holder)
-        self.assertEqual(seen, [535353])
-        waiting.refresh_from_db()
-        self.assertEqual(waiting.status, SignupStatus.APPROVED)
-
-    def test_conflict_after_validation_keeps_outer_transaction_usable(self) -> None:
-        ev = self.make_event(require_steam_id=True)
-        user = self.make_user()
-        org_user = OrgUser.objects.get(user=user, organization=self.org)
-        apply_signup_input(
-            org_user=org_user,
-            event=ev,
-            patch=SignupInputPatch(unverified_friend_id="111111"),
-        )
+    def test_race_on_the_unique_column_is_refused_and_keeps_the_transaction(
+        self,
+    ) -> None:
         other = self.make_user()
         other.steam_account_id = 111111
         other.save()
+        user = self.make_user()
         with transaction.atomic():
-            with capture_logs() as logs:
-                signup = process_rsvp(ev, user)
-            self.assertTrue(EventSignup.objects.filter(pk=signup.pk).exists())
-        skips = self._skips(logs)
-        self.assertEqual(len(skips), 1, skips)
-        self.assertEqual(skips[0]["reason"], "conflict")
-        self.assertEqual(skips[0]["conflicting_user_id"], other.pk)
-        self.assertIsNone(user.steam_account_id)
+            with patch(
+                "events.eligibility.steam.steam_account_id_holder", return_value=None
+            ):
+                self._assert_refused(user, "111111", "duplicate_friend_id")
+            self.assertIsNone(user.steam_account_id)
+            self.assertTrue(CustomUser.objects.filter(pk=user.pk).exists())
         user.refresh_from_db()
         self.assertIsNone(user.steam_account_id)
-        self.assertEqual(signup.status, SignupStatus.PENDING_APPROVAL)
+
+
+class SignupInputFriendIdTest(EventTestCase):
+    def _apply(self, user: CustomUser, fid: str) -> None:
+        apply_signup_input(
+            org_user=resolve_or_create_org_user(user, self.org),
+            event=self.make_event(),
+            patch=SignupInputPatch(steam_account_id=fid),
+        )
+
+    def test_fills_the_user_not_the_profile(self) -> None:
+        user = self.make_user()
+        self._apply(user, "525252")
+        user.refresh_from_db()
+        self.assertEqual(user.steam_account_id, 525252)
+
+    def test_refused_change_writes_nothing(self) -> None:
+        user = self.make_user()
+        user.steam_account_id = 99999
+        user.save()
+        org_user = OrgUser.objects.get(user=user, organization=self.org)
+        with self.assertRaises(ValidationError):
+            self._apply(user, "12345")
+        self.assertFalse(PlayerDotaProfile.objects.filter(org_user=org_user).exists())
+        user.refresh_from_db()
+        self.assertEqual(user.steam_account_id, 99999)
+
+    def test_rsvp_after_input_sees_the_new_id(self) -> None:
+        ev = self.make_event(require_steam_id=True)
+        user = self.make_user()
+        apply_signup_input(
+            org_user=resolve_or_create_org_user(user, self.org),
+            event=ev,
+            patch=SignupInputPatch(steam_account_id="535353"),
+        )
+        signup = process_rsvp(ev, user)
+        self.assertEqual(signup.status, SignupStatus.APPROVED)

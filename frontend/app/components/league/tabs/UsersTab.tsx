@@ -86,6 +86,8 @@ export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
         showSearch={leagueUsers.length > 5}
         searchPlaceholder="Search members..."
         emptyMessage="No members in this league"
+        organizationId={displayOrgId ?? undefined}
+        leagueId={leaguePk}
       />
 
       {canEdit && (
