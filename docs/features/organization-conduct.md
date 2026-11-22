@@ -13,10 +13,6 @@ Conduct is a [standing track](../development/org-standing.md#conduct-track), so 
 ranking is also served by the generic
 [standing endpoints](../api/endpoints.md#organization-standing).
 
-!!! note "Event screens ship separately"
-    The Conduct tab and the Conduct settings section are live. The Attendance panel and
-    the turnout forecast card on the event page arrive in a later release.
-
 ## On the organization page
 
 The organization page shows one tab per enabled standing track, so an org with
@@ -52,6 +48,40 @@ Values are checked in the browser against the same ranges as the server (at most
 decimal places, and the maximum age can't be shorter than the half-life). An error
 the server returns for a field is shown under that field and opens its group, even a
 collapsed Enforcement group; an error that belongs to no field is shown as a toast.
+
+## On the event page
+
+Event staff (org staff, or staff of the event's league) see the Conduct tools on an
+event of an organization with Conduct unlocked. Nobody else sees them.
+
+- **Turnout forecast.** On an event that is upcoming, has sign-ups open or is in roll
+  call, a card reads like "30 signed up · expect ~24 (21–27)", with the number of
+  signups awaiting approval and, when the event has a capacity, the expected open
+  seats. See [Turnout forecast](#turnout-forecast) for how it is worked out.
+- **Show-rate badge.** On the signup tabs and the roll-call page, each member's row
+  shows their show rate (for example "Show 87%"), or "Show New" for members without
+  enough history. A **Needs approval** badge marks members whose signup enforcement
+  would hold for review, and a **Blocked** badge marks members it would block.
+- **Attendance.** From roll call onwards, a table lists every expected member with
+  their outcome, its source, any flag and their show rate. Tick the checkbox on
+  several rows and use **Mark attended**, **Mark no-show**, **Mark late cancel** or
+  **Excuse**, or set one row's outcome directly. A member nobody has recorded yet shows
+  **Attended (default)**; members flagged **Did not confirm at roll call** or
+  **Dropped, needs review** show as pending until staff resolve them (see
+  [The roll-call rule](#the-roll-call-rule)). **Save** opens the reason dialog
+  ([every edit needs a reason](#finalize-and-staff-edits)).
+- **Add walk-in.** Searches the org's members only and adds someone who played without
+  signing up as attended. Only org staff see the button: league-only event staff can
+  edit outcomes but cannot add walk-ins.
+- **Read-only cases.** A cancelled event shows "Voided, event cancelled", and an event
+  whose attendance was never tracked says so; neither can be edited.
+
+On phones the attendance table keeps the member and outcome columns and stacks the
+source, flag and show rate under the member's name.
+
+Signups, cancels, roll call, completing or reopening the event, event edits and
+attendance saves all refresh the forecast, the attendance table and the Conduct
+ranking.
 
 ---
 
@@ -192,8 +222,8 @@ staff say otherwise, so staff only need to flip the no-shows.
 
 Event staff record attendance in the **Attendance** panel on the event page, from roll
 call onwards. Before the event completes, members without an outcome show as "Attended
-(default)". Staff can select several members and **Mark no-show**, **Mark attended** or
-**Excuse**, or set one outcome at a time.
+(default)". Staff can select several members and **Mark attended**, **Mark no-show**, **Mark late
+cancel** or **Excuse**, or set one outcome at a time.
 
 !!! warning "Every edit needs a reason"
     Saving asks "Why are you changing attendance?" and needs at least 3 characters. One

@@ -35,7 +35,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("org", "0001_initial"),
-        ("app", "0077_add_discord_server_id_to_organization"),
+        ("app", "0070_squashed_0077"),
     ]
 
     operations = [

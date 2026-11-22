@@ -11,7 +11,6 @@ import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 import { useDisplayOrgId } from '~/lib/displayOrg';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
-import { useUserCacheStore } from '~/store/userCacheStore';
 
 interface Props {
   leaguePk: number;
@@ -45,12 +44,7 @@ export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
     async (payload: AddMemberPayload) => {
       if (!leaguePk) throw new Error('No league');
       const user = await addLeagueMember(leaguePk, payload);
-      // Optimistic update: upsert into cache + append pk
-      useUserCacheStore.getState().upsert(user, { leagueId: leaguePk });
-      const { leagueUserPks } = useLeagueStore.getState();
-      if (user.pk != null) {
-        useLeagueStore.setState({ leagueUserPks: [...leagueUserPks, user.pk] });
-      }
+      useLeagueStore.getState().addLeagueUser(leaguePk, user);
       return user;
     },
     [leaguePk],
