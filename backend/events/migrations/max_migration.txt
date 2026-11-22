@@ -1,1 +1,1 @@
-0036_retarget_tournament_league_to_league
+0037_attendance_reminder_help_text
