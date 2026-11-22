@@ -148,6 +148,8 @@ def run(tmp_path: Path) -> Runner:
         "DISABLE_CACHE",
         "DF_BASE_URL",
         "DOTA_LOBBY_SIMULATOR_REQUIRED",
+        "DF_PW_CONTAINER",
+        "DF_PW_IMAGE",
     ):
         env.pop(key, None)
     return Runner(log, env)
@@ -434,6 +436,72 @@ def test_playwright_runs_in_frontend_with_the_slot_url(run: Runner) -> None:
         "--no-deps",
         "--shard=1/4",
     ]
+
+
+PW_IMAGE = "ghcr.io/kettleofketchup/draftforge/frontend-dev:latest"
+
+
+def _docker_stub(tmp_path: Path) -> None:
+    stub = tmp_path / "bin" / "docker"
+    stub.write_text(RECORDER.format(log=str(tmp_path / "calls")))
+    stub.chmod(0o755)
+
+
+def test_playwright_runs_in_the_frontend_dev_image(run: Runner, tmp_path: Path) -> None:
+    _docker_stub(tmp_path)
+    result = run("test::pw::cicd-chromium", "--shard=1/4", DF_PW_CONTAINER="1")
+    assert result.returncode == 0, result.stderr
+    env_call, flush_call, docker = run.calls()
+    assert env_call.argv == ["-m", "scripts.compose", "env"]
+    assert flush_call.argv == ["-m", "scripts.compose", "flush-redis"]
+    frontend = str(ROOT / "frontend")
+    assert docker.tool == "docker" and docker.cwd == ROOT / "frontend"
+    assert docker.base_url == "https://localhost:13443"
+    argv = docker.argv
+    assert argv[:7] == [
+        "run",
+        "--rm",
+        "--network",
+        "host",
+        "--ipc",
+        "host",
+        "--entrypoint",
+    ]
+    assert argv[argv.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
+    passed = {argv[i + 1] for i, a in enumerate(argv) if a == "-e"}
+    assert {
+        "HOME=/tmp",
+        "DF_BASE_URL",
+        "DF_BASE_URL_SOURCE",
+        "CI",
+        "PLAYWRIGHT_WORKERS",
+        "DOTA_LOBBY_SIMULATOR_REQUIRED",
+    } <= passed
+    assert argv[argv.index("-v") + 1] == f"{frontend}:{frontend}"
+    assert argv[argv.index("-w") + 1] == frontend
+    tail = argv[argv.index(PW_IMAGE) + 1 :]
+    assert tail == [
+        "node_modules/.bin/playwright",
+        "test",
+        "--grep",
+        "@cicd",
+        "--project=chromium",
+        "--no-deps",
+        "--shard=1/4",
+    ]
+
+
+def test_container_playwright_requires_a_running_simulator(
+    run: Runner, tmp_path: Path
+) -> None:
+    _docker_stub(tmp_path)
+    result = run(
+        "test::pw::cicd-dota-lobby", DF_PW_CONTAINER="1", DF_FAKE_SIM_RUNNING="1"
+    )
+    assert result.returncode == 0, result.stderr
+    docker = run.calls()[-1]
+    assert docker.tool == "docker" and docker.sim_required == "1"
+    assert "DOTA_LOBBY_SIMULATOR_REQUIRED" in docker.argv
 
 
 def test_org_features_cicd_runs_only_its_project(run: Runner) -> None:

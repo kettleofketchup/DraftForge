@@ -306,7 +306,8 @@ just docker::release::push
 Two workflows use hash tagging:
 
 - **`build-docker-images.yml`** — Triggers on push to `main` when Dockerfiles or lock files change. Builds and pushes hash-tagged images.
-- **`playwright.yml`** — Pulls images by hash before running tests. Falls back to building if no image matches. Test jobs start the image and test-DB pulls (`just ci::prefetch-start`) right after the registry login, while Python, Node and Playwright install, and join them with `just ci::prefetch-wait images|db`. They skip the buildx builder; a fallback rebuild boots one with `just ci::buildx-builder`.
+- **`playwright.yml`** — Pulls images by hash before running tests. Falls back to building if no image matches. Test jobs start the image and test-DB pulls (`just ci::prefetch-start`) right after the registry login and join them with `just ci::prefetch-wait images|db`. They skip the buildx builder; a fallback rebuild boots one with `just ci::buildx-builder`.
+- Playwright and backend test jobs set up no Python, Poetry, Node or browsers on the runner. The host helpers (`scripts/slots.py`, `scripts/compose.py`) are stdlib-only and run on the runner's `python3` (`DF_JUST_PYTHON=python3`). With `DF_PW_CONTAINER=1`, `just test::pw::run` runs Playwright inside the `frontend-dev` image (`docker run --network host`, the checkout's `frontend/` mounted at the same path, `frontend/node_modules` linked to the image's `/app/node_modules`), so tests use the image's Alpine system Chromium. Local runs are unchanged. If the cached test DB is missing, `just ci::venv` installs Poetry and the venv for the host-side `db::populate::fresh`.
 
 ### Build Timing
 

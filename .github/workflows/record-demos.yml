@@ -34,6 +34,24 @@ jobs:
       with:
         registry-token: ${{ secrets.GITHUB_TOKEN }}
         github-actor: ${{ github.actor }}
+        playwright: 'false'
+
+    # scripts/demo.py needs the project venv and Playwright on the runner.
+    - name: Set up the project venv
+      run: echo "DF_JUST_PYTHON=$(just ci::venv)" >> "$GITHUB_ENV"
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies and Chromium
+      working-directory: frontend
+      run: |
+        npm ci
+        npx playwright install --with-deps chromium
 
     # demo::gifs needs ffmpeg on PATH; the runner image has none.
     - name: Install ffmpeg

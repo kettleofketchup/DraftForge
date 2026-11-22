@@ -1,0 +1,1 @@
+- CI Playwright jobs run the tests inside the `frontend-dev` image with its system Chromium, and Playwright and backend test jobs no longer install Python, Poetry, Node or Playwright browsers on the runner, saving about 45s of setup per job.

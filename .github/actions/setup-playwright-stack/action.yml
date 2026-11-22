@@ -20,8 +20,9 @@ inputs:
     default: ghcr.io/kettleofketchup/draftforge
   playwright:
     description: >
-      'false' skips Node, npm ci and the Playwright browser setup, for jobs that
-      only exec into the stack (backend tests)
+      'true' runs `just test::pw::*` inside the frontend-dev image
+      (DF_PW_CONTAINER=1), so the runner needs no Node or browsers; 'false' for
+      jobs that only exec into the stack (backend tests)
     required: false
     default: 'true'
 
@@ -34,48 +35,18 @@ runs:
         github-actor: ${{ inputs.github-actor }}
         buildx: 'false'
         prefetch: 'true'
+        python: 'false'
 
-    - name: Set up Node.js
-      if: inputs.playwright == 'true'
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
-
-    - name: Install frontend dependencies
-      if: inputs.playwright == 'true'
+    - name: Run host helpers on the runner's python3, Playwright in frontend-dev
       shell: bash
-      working-directory: frontend
-      run: npm ci
-
-    - name: Detect OS release
-      if: inputs.playwright == 'true'
-      id: os-release
-      shell: bash
+      env:
+        PLAYWRIGHT: ${{ inputs.playwright }}
       run: |
-        . /etc/os-release
-        echo "id=${ID}${VERSION_ID}" >> "$GITHUB_OUTPUT"
-
-    - name: Cache Playwright browsers
-      if: inputs.playwright == 'true'
-      uses: actions/cache@v4
-      id: playwright-cache
-      with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ steps.os-release.outputs.id }}-${{ hashFiles('frontend/package-lock.json') }}
-
-    - name: Install Playwright browsers
-      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
-      shell: bash
-      working-directory: frontend
-      run: npx playwright install --with-deps chromium
-
-    - name: Install Playwright system deps (if cached)
-      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
-      shell: bash
-      working-directory: frontend
-      run: npx playwright install-deps chromium
+        echo "DF_JUST_PYTHON=python3" >> "$GITHUB_ENV"
+        if [[ "$PLAYWRIGHT" == true ]]; then
+          echo "DF_PW_CONTAINER=1" >> "$GITHUB_ENV"
+          ln -sfn /app/node_modules frontend/node_modules
+        fi
 
     - name: Pull or Build Docker images
       shell: bash
@@ -132,7 +103,7 @@ runs:
           echo "Hash mismatch (expected ${HASH:0:12}, got ${EXISTING:0:12}); falling back to populate"
         fi
         echo "Populating test database from scratch..."
-        just db::populate::fresh
+        DF_JUST_PYTHON="$(just ci::venv)" just db::populate::fresh
 
     - name: Fix database permissions
       shell: bash

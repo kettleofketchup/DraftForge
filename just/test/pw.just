@@ -8,8 +8,9 @@ python := env("DF_JUST_PYTHON", root / ".venv/bin/python")
 just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
 pw := just + " test::pw::run"
 cicd := pw + " --grep @cicd"
+pw_image := env("DF_PW_IMAGE", "ghcr.io/kettleofketchup/draftforge/frontend-dev:latest")
 
-# npx playwright test <args> with DF_BASE_URL set for this slot, after flushing the test Redis
+# npx playwright test <args> with DF_BASE_URL set for this slot, after flushing the test Redis (DF_PW_CONTAINER=1: inside the frontend-dev image, as CI does)
 [group('test::pw')]
 run *args:
     #!/usr/bin/env bash
@@ -19,7 +20,22 @@ run *args:
     eval "$pw_env"
     {{quote(python)}} -m scripts.compose flush-redis
     cd frontend
-    exec npx playwright test "$@"
+    if [[ "${DF_PW_CONTAINER-}" != 1 ]]; then
+        exec npx playwright test "$@"
+    fi
+    # Mounted at the same path so report and annotation paths match the checkout;
+    # frontend/node_modules must resolve inside the image (CI links it to /app/node_modules).
+    pass=(DF_BASE_URL DF_BASE_URL_SOURCE CI GITHUB_ACTIONS GITHUB_WORKSPACE
+        PLAYWRIGHT_WORKERS PLAYWRIGHT_HEALTH_URL PLAYWRIGHT_CACHED_LEAGUES
+        NAVBAR_SHOT_DIR DOTA_LOBBY_SIMULATOR_REQUIRED)
+    env_args=()
+    for name in "${pass[@]}"; do
+        env_args+=(-e "$name")
+    done
+    exec docker run --rm --network host --ipc host --entrypoint "" \
+        --user "$(id -u):$(id -g)" -e HOME=/tmp "${env_args[@]}" \
+        -v "$PWD:$PWD" -w "$PWD" {{quote(pw_image)}} \
+        node_modules/.bin/playwright test "$@"
 
 # All suites except demos (chromium, herodraft, events-sequential, dota-lobby-sequential, org-features-sequential)
 [group('test::pw')]
