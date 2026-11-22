@@ -82,6 +82,48 @@ interface TieRollPopupProps {
   now?: () => number;
   /** Server-clock epoch ms, used to read `hold_until`; defaults to this browser's clock. */
   serverNow?: () => number;
+  /** The tied round's live clock start and pause state; a pause or resume moves it. */
+  liveHold?: LiveTieHold | null;
+}
+
+export interface LiveTieHold {
+  until: string | null;
+  paused: boolean;
+}
+
+interface LiveHoldDraft {
+  state?: string | null;
+  latest_round?: number | null;
+  draft_rounds?: ReadonlyArray<{
+    pk: number;
+    pick_number?: number | null;
+    started_at?: string | null;
+  }> | null;
+}
+
+interface LiveHoldTick {
+  active_round_pk: number | null;
+  round_started_at: string | null;
+}
+
+/** The tied pick's clock start from the live draft state (a newer tick wins); null once another pick is active. */
+export function liveTieHold(
+  tick: LiveHoldTick | null,
+  draft: LiveHoldDraft | null,
+  tickIsNewer: boolean,
+  pickNumber: number | undefined,
+): LiveTieHold | null {
+  if (!draft || pickNumber == null) return null;
+  const round = draft.draft_rounds?.find((r) => r.pk === draft.latest_round);
+  if (!round || round.pick_number !== pickNumber) return null;
+  const fromTick =
+    tick && tickIsNewer && tick.active_round_pk === round.pk
+      ? tick.round_started_at
+      : null;
+  return {
+    until: fromTick ?? round.started_at ?? null,
+    paused: draft.state === 'paused',
+  };
 }
 
 const perfNow = () => performance.now();
@@ -102,12 +144,13 @@ export function TieRollPopup({
   clockHeld,
   now = perfNow,
   serverNow = localNow,
+  liveHold = null,
 }: TieRollPopupProps) {
   const rounds = tie.roll_rounds.length;
-  const [holdLeftMs] = useState(() => tieHoldLeftMs(tie, serverNow()));
+  const [mountHoldLeftMs] = useState(() => tieHoldLeftMs(tie, serverNow()));
   const timeline = tieRollTimeline(
     rounds,
-    Math.max(holdLeftMs, TIE_ROLL_MIN_VISIBLE_MS),
+    Math.max(mountHoldLeftMs, TIE_ROLL_MIN_VISIBLE_MS),
   );
   const nowRef = useRef(now);
   const [startedAt] = useState(now);
@@ -121,9 +164,17 @@ export function TieRollPopup({
     return () => clearInterval(id);
   }, [startedAt]);
 
+  const paused = liveHold?.paused ?? false;
+  const movedUntil = movedHoldEnd(tie, liveHold);
+  const holdLeftMs =
+    movedUntil == null
+      ? Math.max(0, mountHoldLeftMs - elapsed)
+      : Math.max(0, movedUntil - serverNow());
+  const done = !paused && elapsed >= timeline.totalMs && holdLeftMs <= 0;
+
   useEffect(() => {
-    if (elapsed >= timeline.totalMs) onDone();
-  }, [elapsed, timeline.totalMs, onDone]);
+    if (done) onDone();
+  }, [done, onDone]);
 
   const frame = tieRollFrame(elapsed, rounds, timeline);
   const step = Math.floor(elapsed / FRAME_MS);
@@ -136,8 +187,11 @@ export function TieRollPopup({
       : (tie.tied_teams.find((t) => t.id === teamId)?.name ?? 'Team');
   };
   const winnerLabel = labelOf(tie.winner_id);
-  const secondsLeft = Math.max(0, Math.ceil((holdLeftMs - elapsed) / 1000));
-  const remainingPct = Math.max(0, 100 - (100 * elapsed) / timeline.totalMs);
+  const secondsLeft = Math.ceil(holdLeftMs / 1000);
+  const remainingMs = paused
+    ? timeline.totalMs
+    : Math.max(timeline.totalMs - elapsed, holdLeftMs);
+  const remainingPct = Math.min(100, (100 * remainingMs) / timeline.totalMs);
 
   return (
     <div
@@ -252,12 +306,12 @@ export function TieRollPopup({
         >
           {frame.winnerShown ? `${winnerLabel} picks next` : 'Rolling…'}
         </span>
-        {clockHeld && secondsLeft > 0 && (
+        {clockHeld && (paused || secondsLeft > 0) && (
           <span
             data-testid="tie-roll-countdown"
             className="text-xs tabular-nums text-muted-foreground"
           >
-            Clock starts in {secondsLeft}s
+            {paused ? 'Clock paused' : `Clock starts in ${secondsLeft}s`}
           </span>
         )}
       </div>
@@ -269,6 +323,18 @@ export function TieRollPopup({
       </div>
     </div>
   );
+}
+
+/** The live hold end in server epoch ms when a pause or resume has moved it off `hold_until`. */
+function movedHoldEnd(
+  tie: TieResolution,
+  liveHold: LiveTieHold | null,
+): number | null {
+  if (!liveHold?.until) return null;
+  const live = Date.parse(liveHold.until);
+  if (Number.isNaN(live)) return null;
+  const sent = tie.hold_until ? Date.parse(tie.hold_until) : Number.NaN;
+  return live === sent ? null : live;
 }
 
 export function tieRollKey(tie: TieResolution): string {

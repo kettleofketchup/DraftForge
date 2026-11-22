@@ -46,7 +46,6 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
-import { serverNow } from '~/lib/draftClock/clock';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import {
@@ -77,8 +76,9 @@ import { useConfirmForceReset } from './hooks/useConfirmForceReset';
 import { useDraftLive } from './hooks/useDraftLive';
 import { useDraftResetSummary } from './hooks/useDraftResetSummary';
 import { isCaptainOf } from './isCaptainOf';
+import { LiveTieRollPopup } from './LiveTieRollPopup';
 import { DraftRoundIndicator, LiveAutoButtons } from './liveView';
-import { TieRollPopup, tieRollKey } from './TieRollPopup';
+import { tieRollKey } from './TieRollPopup';
 import { LiveDraftClockBar } from './timer/DraftClockBar';
 import { LiveDraftPauseOverlay } from './timer/DraftPauseOverlay';
 import { useTeamDraftTimerProps } from './timer/useTeamDraftTimerProps';
@@ -356,10 +356,6 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     setTieResolution(pendingTieResolution);
   }, [pendingTieResolution]);
   const dismissTie = useCallback(() => setTieResolution(null), []);
-  const tieServerNow = useCallback(
-    () => serverNow(useDraftWebSocketStore.getState().serverClockOffsetMs),
-    [],
-  );
 
   // Auto-advance to latest round when latest_round changes and autoAdvance is enabled
   // Uses primitive value (draft?.latest_round) to avoid infinite loops from object reference changes
@@ -879,7 +875,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
         </div>
 
         {tieResolution && (
-          <TieRollPopup
+          <LiveTieRollPopup
             key={tieRollKey(tieResolution)}
             tie={tieResolution}
             teams={(tournament?.teams ?? []).map((t) => ({
@@ -887,7 +883,6 @@ export const DraftModal: React.FC<DraftModalParams> = ({
               captain: t.captain ?? null,
             }))}
             clockHeld={timer.clockBarProps.timerEnabled}
-            serverNow={tieServerNow}
             onDone={dismissTie}
           />
         )}

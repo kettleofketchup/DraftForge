@@ -5,6 +5,7 @@ import { DisplayName } from '~/index';
 import {
   TIE_ROLL_MIN_VISIBLE_MS,
   TieRollPopup,
+  liveTieHold,
   tieHoldLeftMs,
   tieRollFrame,
   tieRollKey,
@@ -192,13 +193,15 @@ describe('TieRollPopup', () => {
   });
 
   it('shows the clock countdown only when the clock is held', () => {
+    const heldTie = { ...tie, hold_until: new Date(5000).toISOString() };
     const { rerender } = render(
       <TieRollPopup
-        tie={tie}
+        tie={heldTie}
         teams={teams}
         clockHeld
         onDone={vi.fn()}
         now={now}
+        serverNow={now}
       />,
     );
     expect(screen.getByTestId('tie-roll-countdown')).toHaveTextContent(
@@ -206,7 +209,7 @@ describe('TieRollPopup', () => {
     );
     rerender(
       <TieRollPopup
-        tie={tie}
+        tie={heldTie}
         teams={teams}
         clockHeld={false}
         onDone={vi.fn()}
@@ -316,5 +319,118 @@ describe('TieRollPopup', () => {
       advance(200);
       expect(onDone).toHaveBeenCalled();
     });
+  });
+
+  describe('following the live hold end', () => {
+    const at = (ms: number) => new Date(ms).toISOString();
+    const heldTie = { ...tie, hold_until: at(4000) };
+    const renderHeld = (onDone: () => void) =>
+      render(
+        <TieRollPopup
+          tie={heldTie}
+          teams={teams}
+          clockHeld
+          onDone={onDone}
+          now={now}
+          serverNow={now}
+          liveHold={{ until: at(4000), paused: false }}
+        />,
+      );
+    const rerenderWith = (
+      rerender: (ui: React.ReactElement) => void,
+      onDone: () => void,
+      liveHold: { until: string | null; paused: boolean },
+    ) =>
+      rerender(
+        <TieRollPopup
+          tie={heldTie}
+          teams={teams}
+          clockHeld
+          onDone={onDone}
+          now={now}
+          serverNow={now}
+          liveHold={liveHold}
+        />,
+      );
+
+    it('shows a paused clock and stays open while the draft is paused', () => {
+      const onDone = vi.fn();
+      const { rerender } = renderHeld(onDone);
+      advance(1000);
+      rerenderWith(rerender, onDone, { until: at(4000), paused: true });
+      expect(screen.getByTestId('tie-roll-countdown')).toHaveTextContent(
+        'Clock paused',
+      );
+      advance(20_000);
+      expect(onDone).not.toHaveBeenCalled();
+      expect(screen.getByTestId('tie-roll-countdown')).toHaveTextContent(
+        'Clock paused',
+      );
+    });
+
+    it('counts down to the moved hold end after a resume and closes then', () => {
+      const onDone = vi.fn();
+      const { rerender } = renderHeld(onDone);
+      advance(1000);
+      rerenderWith(rerender, onDone, { until: at(4000), paused: true });
+      advance(20_000);
+      // Resume at 21 s: the server moved the start by the pause plus its countdown.
+      rerenderWith(rerender, onDone, { until: at(27_000), paused: false });
+      advance(100);
+      expect(screen.getByTestId('tie-roll-countdown')).toHaveTextContent(
+        'Clock starts in 6s',
+      );
+      advance(5700);
+      expect(onDone).not.toHaveBeenCalled();
+      advance(300);
+      expect(onDone).toHaveBeenCalled();
+    });
+  });
+});
+
+describe('liveTieHold', () => {
+  const round = (pk: number, pick_number: number, started_at: string) => ({
+    pk,
+    pick_number,
+    started_at,
+  });
+  const draft = {
+    state: 'drafting' as const,
+    paused_at: null,
+    latest_round: 12,
+    draft_rounds: [
+      round(11, 1, '2026-01-01T00:00:00Z'),
+      round(12, 2, '2026-01-01T00:00:09Z'),
+    ],
+  };
+  const tick = {
+    active_round_pk: 12,
+    active_pick_number: 2,
+    round_started_at: '2026-01-01T00:00:30Z',
+  };
+
+  it('reads the active round start for the tied pick from the draft state', () => {
+    expect(liveTieHold(null, draft, true, 2)).toEqual({
+      until: '2026-01-01T00:00:09Z',
+      paused: false,
+    });
+  });
+  it('reports a paused draft', () => {
+    expect(liveTieHold(null, { ...draft, state: 'paused' }, true, 2)).toEqual({
+      until: '2026-01-01T00:00:09Z',
+      paused: true,
+    });
+  });
+  it('prefers a newer tick for the same round', () => {
+    expect(liveTieHold(tick, draft, true, 2)?.until).toBe(
+      '2026-01-01T00:00:30Z',
+    );
+    expect(liveTieHold(tick, draft, false, 2)?.until).toBe(
+      '2026-01-01T00:00:09Z',
+    );
+  });
+  it('has nothing to say once the active round is another pick', () => {
+    expect(liveTieHold(null, draft, true, 3)).toBeNull();
+    expect(liveTieHold(null, null, true, 2)).toBeNull();
   });
 });
