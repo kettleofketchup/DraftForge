@@ -16,11 +16,14 @@ from org.models_leadership import OrgLeadershipSettings
 POINT_VALUE_MAX = 1000
 
 
-def settings_data(row: OrgLeadershipSettings) -> dict[str, Any]:
+def settings_data(
+    row: OrgLeadershipSettings, points: list[dict[str, Any]]
+) -> dict[str, Any]:
     return {
         **{field: getattr(row, field) for field in SETTINGS_DEFAULTS},
         "defaults": dict(SETTINGS_DEFAULTS),
         "ranges": {k: list(v) for k, v in SETTINGS_RANGES.items()},
+        "points": points,
     }
 
 
@@ -44,7 +47,7 @@ class SettingsUpdateSerializer(serializers.Serializer):
     half_life_days = _int_field("half_life_days")
     max_age_days = _int_field("max_age_days")
     leaderboard_public = serializers.BooleanField(required=False)
-    kind_points = serializers.DictField(
+    points = serializers.DictField(
         child=serializers.IntegerField(
             min_value=0, max_value=POINT_VALUE_MAX, allow_null=True
         ),
@@ -60,9 +63,7 @@ class SettingsUpdateSerializer(serializers.Serializer):
                 )
         return super().to_internal_value(data)
 
-    def validate_kind_points(
-        self, value: dict[str, int | None]
-    ) -> dict[str, int | None]:
+    def validate_points(self, value: dict[str, int | None]) -> dict[str, int | None]:
         allowed = {k.value for k in RATED_KINDS}
         bad = sorted(set(value) - allowed)
         if bad:

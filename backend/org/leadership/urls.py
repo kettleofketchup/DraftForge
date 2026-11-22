@@ -3,6 +3,7 @@ from django.urls import path
 from org.leadership.views import (
     leadership_event_reviews,
     leadership_member,
+    leadership_mine,
     leadership_pending,
     leadership_review,
     leadership_review_unvoid,
@@ -17,6 +18,7 @@ urlpatterns = [
     path("traits/", leadership_traits, name="org-leadership-traits"),
     path("traits/<slug:key>/", leadership_trait, name="org-leadership-trait"),
     path("reviews/pending/", leadership_pending, name="org-leadership-pending"),
+    path("reviews/mine/", leadership_mine, name="org-leadership-mine"),
     path(
         "reviews/<int:review_pk>/void/",
         leadership_review_void,

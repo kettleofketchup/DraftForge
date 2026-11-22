@@ -42,7 +42,12 @@ def rating_data(
 
 
 def member_payload(
-    org_user: OrgUser, *, now: datetime, detail: bool, staff: bool
+    org_user: OrgUser,
+    *,
+    now: datetime,
+    detail: bool,
+    staff: bool,
+    period_points: bool = False,
 ) -> dict[str, Any]:
     org_id = org_user.organization_id
     settings = get_leadership_settings(org_id)
@@ -50,15 +55,14 @@ def member_payload(
     rating = rating_board(
         org_id, now=now, settings=settings, traits=traits, captain_ids=[org_user.pk]
     ).get(org_user.pk)
+    points = member_points(org_user, now=now, include_unreleased=False)
     payload: dict[str, Any] = {
         "member": member_summary(org_user),
         **rating_data(rating, traits),
-        "points": member_points(org_user, now=now, include_unreleased=False)[
-            "all_time"
-        ],
+        "points": points if period_points else points["all_time"],
     }
     if detail:
-        payload["history"] = captain_events(
+        payload["events"] = captain_events(
             org_user, now=now, settings=settings, traits=traits, staff=staff
         )
     return payload
