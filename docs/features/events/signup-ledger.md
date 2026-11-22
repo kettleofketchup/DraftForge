@@ -36,7 +36,7 @@ A member who declines without having signed up has a declined signup with these 
 
 ## Signup record
 
-The signup ledger (`SignupLedgerEntry`) is an append-only record meant for signup changes. Each entry stores:
+The signup ledger (`SignupLedgerEntry`) is an append-only record of signup changes. Each entry stores:
 
 - **Who:** the member the change is about and the person who made it (a member, a staff member or the system), plus whether it was done on someone else's behalf.
 - **How:** the means, such as the website, a Discord button or the system.
@@ -53,7 +53,7 @@ Each signup that existed when the ledger was added got a `backfilled` entry, mar
 
 ## What gets recorded
 
-Each signup change writes exactly one entry, in the same database transaction as the change. If the change fails or is rolled back, no entry is kept, and if the entry cannot be written, the change fails too.
+Each signup change writes one entry (moving a signup to another event writes one on each event, see [Moved signups](#moved-signups)), in the same database transaction as the change. If the change fails or is rolled back, no entry is kept, and if the entry cannot be written, the change fails too.
 
 | Action | Written when |
 |---|---|
@@ -80,7 +80,7 @@ The role and means show who acted and how:
 | A staff member on someone else's signup, on the website | `staff` | `web` |
 | A member using a Discord button (sign up, decline, tentative) | `member` | `discord_button` |
 | A member adding or removing a Discord reaction | `member` | `discord_reaction` |
-| The system (waitlist promotion, account merge, cleanup script, test setup) | `system` | `system` |
+| The system (waitlist promotion, Discord account merge, cleanup script, test setup) | `system` | `system` |
 
 A staff member acting on their own signup is recorded as `member`. When they used a staff-only action to do it (approve, reject, confirm, unconfirm, demote, a staff add, or a reinstate that bypasses the member rules), the after snapshot carries `extra.staff_power: true`. Approving a profile claim is recorded as the approving staff member, with means `web`.
 
@@ -107,7 +107,7 @@ When staff approve a signup and set an MMR, the `approved` entry's after snapsho
 
 ### Account merges
 
-Both account merges, a Discord account merge and an approved profile claim, move the merged account's signups to the kept account and write an `account_merged` entry for each one, with `extra.from_user_id` set to the merged account. When both accounts had signed up for the same event, the merged account's signup is deleted as before, and the entry is written against the kept account's signup with `extra.discarded_duplicate: true` and `extra.discarded_signup_id` in its before snapshot. The merged account's earlier entries move to the kept account.
+Both account merges, a Discord account merge and an approved profile claim, move the merged account's signups to the kept account and write an `account_merged` entry for each one, with `extra.from_user_id` set to the merged account in the before snapshot (and in the after snapshot when the row moved). When both accounts had signed up for the same event, the merged account's signup is deleted, and the entry is written against the kept account's signup with `extra.discarded_duplicate: true` and `extra.discarded_signup_id` in its before snapshot. Earlier entries about the merged account, and entries it made as the actor, move to the kept account.
 
 Approving a profile claim used to delete the claimed profile's signups; it now moves them to the claimer.
 
