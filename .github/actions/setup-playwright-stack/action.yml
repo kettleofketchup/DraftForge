@@ -18,6 +18,12 @@ inputs:
     description: GHCR image prefix
     required: false
     default: ghcr.io/kettleofketchup/draftforge
+  playwright:
+    description: >
+      'false' skips Node, npm ci and the Playwright browser setup, for jobs that
+      only exec into the stack (backend tests)
+    required: false
+    default: 'true'
 
 runs:
   using: composite
@@ -28,6 +34,7 @@ runs:
         github-actor: ${{ inputs.github-actor }}
 
     - name: Set up Node.js
+      if: inputs.playwright == 'true'
       uses: actions/setup-node@v4
       with:
         node-version: '22'
@@ -35,11 +42,13 @@ runs:
         cache-dependency-path: frontend/package-lock.json
 
     - name: Install frontend dependencies
+      if: inputs.playwright == 'true'
       shell: bash
       working-directory: frontend
       run: npm ci
 
     - name: Detect OS release
+      if: inputs.playwright == 'true'
       id: os-release
       shell: bash
       run: |
@@ -47,6 +56,7 @@ runs:
         echo "id=${ID}${VERSION_ID}" >> "$GITHUB_OUTPUT"
 
     - name: Cache Playwright browsers
+      if: inputs.playwright == 'true'
       uses: actions/cache@v4
       id: playwright-cache
       with:
@@ -54,13 +64,13 @@ runs:
         key: playwright-${{ steps.os-release.outputs.id }}-${{ hashFiles('frontend/package-lock.json') }}
 
     - name: Install Playwright browsers
-      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: frontend
       run: npx playwright install --with-deps chromium
 
     - name: Install Playwright system deps (if cached)
-      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
       shell: bash
       working-directory: frontend
       run: npx playwright install-deps chromium

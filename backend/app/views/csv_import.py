@@ -13,9 +13,9 @@ from rest_framework.response import Response
 from app.cache_utils import invalidate_obj
 from app.display_names import user_display_name
 from app.models import CustomUser, GameType, League, PositionsModel, Team, Tournament
-from app.permissions_tournament import has_league_staff_access
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
+from league.permissions import has_league_staff_access
 from org.mmr import (
     LEAGUE_GAME,
     OrgMmrError,

@@ -201,6 +201,20 @@ export async function loginEventPlayerNoProfile(context: BrowserContext) {
   return resp.json();
 }
 
+/** Whether the backend has a Discord bot token; without one nothing posts. */
+export async function discordBotConfigured(
+  context: BrowserContext,
+): Promise<boolean> {
+  const resp = await context.request.get(`${API_URL}/tests/discord/status/`);
+  if (!resp.ok()) {
+    throw new Error(
+      `Discord status check failed: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+  const data = await resp.json();
+  return data.bot_token_configured === true;
+}
+
 /** Trigger sync_discord_events synchronously. */
 export async function syncDiscordEvents(
   context: BrowserContext,

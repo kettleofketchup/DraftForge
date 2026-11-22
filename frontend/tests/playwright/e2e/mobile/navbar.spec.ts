@@ -38,4 +38,18 @@ test.describe('Mobile navbar', () => {
       drawer.getByRole('link', { name: /tournaments/i }),
     ).toBeVisible();
   });
+
+  test('logged-out visitors see a labelled login button and drawer row', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const login = page.locator('[data-testid="navbarLoginButton"]');
+    await expect(login).toBeVisible();
+    await expect(login.getByText('Log in', { exact: true })).toBeVisible();
+
+    await page.locator(MOBILE_TOGGLE).click();
+    const row = page.getByTestId('mobile-nav-login');
+    await expect(row).toBeVisible();
+    await expect(row).toContainText("You're not logged in");
+  });
 });
