@@ -174,7 +174,7 @@ class EventSignupModalTest(TestCase):
 
     def test_steam_input_omitted_when_friend_id_prefilled(self):
         async def _test():
-            modal = _dota_modal(event_id=42, prefill={"unverified_friend_id": "12345"})
+            modal = _dota_modal(event_id=42, prefill={"friend_id": "12345"})
             self.assertEqual(_friend_id_inputs(modal), [])
 
         run_async(_test())

@@ -20,72 +20,41 @@ inputs:
     default: ghcr.io/kettleofketchup/draftforge
   playwright:
     description: >
-      'false' skips Node, npm ci and the Playwright browser setup, for jobs that
-      only exec into the stack (backend tests)
+      'true' runs `just test::pw::*` inside the playwright-runner image
+      (DF_PW_CONTAINER=1), so the runner needs no Node or browsers; 'false' for
+      jobs that only exec into the stack (backend tests)
     required: false
     default: 'true'
 
 runs:
   using: composite
   steps:
+    - name: Run host helpers on the runner's python3, Playwright in playwright-runner
+      shell: bash
+      env:
+        PLAYWRIGHT: ${{ inputs.playwright }}
+      run: |
+        echo "DF_JUST_PYTHON=python3" >> "$GITHUB_ENV"
+        if [[ "$PLAYWRIGHT" == true ]]; then
+          echo "DF_PW_CONTAINER=1" >> "$GITHUB_ENV"
+          ln -sfn /app/node_modules frontend/node_modules
+        fi
+
     - uses: ./.github/actions/setup-toolchain
       with:
         registry-token: ${{ inputs.registry-token }}
         github-actor: ${{ inputs.github-actor }}
         buildx: 'false'
         prefetch: 'true'
+        python: 'false'
 
-    - name: Set up Node.js
-      if: inputs.playwright == 'true'
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
-
-    - name: Install frontend dependencies
-      if: inputs.playwright == 'true'
-      shell: bash
-      working-directory: frontend
-      run: npm ci
-
-    - name: Detect OS release
-      if: inputs.playwright == 'true'
-      id: os-release
-      shell: bash
-      run: |
-        . /etc/os-release
-        echo "id=${ID}${VERSION_ID}" >> "$GITHUB_OUTPUT"
-
-    - name: Cache Playwright browsers
-      if: inputs.playwright == 'true'
-      uses: actions/cache@v4
-      id: playwright-cache
-      with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ steps.os-release.outputs.id }}-${{ hashFiles('frontend/package-lock.json') }}
-
-    - name: Install Playwright browsers
-      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
-      shell: bash
-      working-directory: frontend
-      run: npx playwright install --with-deps chromium
-
-    - name: Install Playwright system deps (if cached)
-      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
-      shell: bash
-      working-directory: frontend
-      run: npx playwright install-deps chromium
-
-    - name: Pull or Build Docker images
+    - name: Pull Docker images
       shell: bash
       run: |
         if just ci::prefetch-wait images; then
           echo "Images pulled successfully"
         else
-          echo "Pull failed, building with buildx + registry cache..."
-          just ci::buildx-builder
-          just docker::frontend::build-dev
+          echo "Pull incomplete; the steps below rebuild missing or stale images"
         fi
 
     - name: Rebuild frontend-dev image if pulled :latest is stale
@@ -101,6 +70,22 @@ runs:
           echo "frontend-dev image lacks current package-lock hash; rebuilding"
           just ci::buildx-builder
           just docker::frontend::build-dev
+        fi
+
+    - name: Rebuild playwright-runner image if pulled :latest is stale
+      if: inputs.playwright == 'true'
+      shell: bash
+      env:
+        IMAGE_PREFIX: ${{ inputs.image-prefix }}
+      run: |
+        PW_HASH=$(just docker::hash playwright)
+        PW_IMAGE="${IMAGE_PREFIX}/playwright-runner:${PW_HASH}"
+        if docker image inspect "$PW_IMAGE" >/dev/null 2>&1; then
+          echo "playwright-runner:${PW_HASH:0:12} present (deps in sync)"
+        else
+          echo "playwright-runner image lacks current hash; rebuilding"
+          just ci::buildx-builder
+          just docker::frontend::build-pw
         fi
 
     - name: Rebuild backend-dev image if pulled :latest is stale
@@ -132,7 +117,7 @@ runs:
           echo "Hash mismatch (expected ${HASH:0:12}, got ${EXISTING:0:12}); falling back to populate"
         fi
         echo "Populating test database from scratch..."
-        just db::populate::fresh
+        DF_JUST_PYTHON="$(just ci::venv)" just db::populate::fresh
 
     - name: Fix database permissions
       shell: bash

@@ -18,15 +18,21 @@ mod db 'db.just'
 all-build *flags:
     {{just}} docker::parallel "$@" -- docker::backend::build docker::frontend::build docker::nginx::build
 
-# Build and push all images
+# Build and push all images, plus the CI Playwright runner
 [group('docker')]
 all-push:
-    {{just}} docker::all-build --push
+    {{just}} docker::parallel --push -- docker::backend::build docker::frontend::build docker::nginx::build docker::frontend::build-pw
 
-# Pull all images (prod and -dev) by content hash, falling back to :latest
+# Pull all images (prod and -dev) by content hash, falling back to :latest; with DF_PW_CONTAINER=1 also the Playwright runner
 [group('docker')]
 all-pull:
-    {{just}} docker::parallel -- docker::backend::pull docker::frontend::pull docker::nginx::pull
+    #!/usr/bin/env bash
+    set -euo pipefail
+    recipes=(docker::backend::pull docker::frontend::pull docker::nginx::pull)
+    if [[ "${DF_PW_CONTAINER-}" == 1 ]]; then
+        recipes+=(docker::frontend::pull-pw)
+    fi
+    {{just}} docker::parallel -- "${recipes[@]}"
 
 # Output content hashes for Docker images
 [group('docker')]
@@ -36,6 +42,7 @@ hash service="all":
     cd {{quote(root)}}
     if [[ "$1" == "all" ]]; then
         echo "frontend: $(./scripts/hash-docker-image.sh frontend | cut -c1-12)..."
+        echo "playwright: $(./scripts/hash-docker-image.sh playwright | cut -c1-12)..."
         echo "backend:  $(./scripts/hash-docker-image.sh backend | cut -c1-12)..."
         echo "nginx:    $(./scripts/hash-docker-image.sh nginx | cut -c1-12)..."
     else

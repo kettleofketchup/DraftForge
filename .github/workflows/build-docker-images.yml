@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'frontend/Dockerfile'
+      - 'frontend/Dockerfile.playwright'
       - 'frontend/package-lock.json'
       - 'backend/Dockerfile'
       - 'poetry.lock'

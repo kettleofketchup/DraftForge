@@ -34,9 +34,7 @@ from events.eligibility.reasons import (
 from events.eligibility.steam import (
     FRIEND_ID_MAX_LENGTH,
     STEAM_ACCOUNT_ID_RANGE,
-    STORED_STEAM_ACCOUNT_ID_MAX,
-    steam_friend_id_from_profiles,
-    sync_steam_account_from_profiles,
+    claim_friend_id,
     validate_friend_id,
 )
 from events.eligibility.store import (
@@ -64,7 +62,6 @@ __all__ = [
     "FRIEND_ID_MAX_LENGTH",
     "REQUIREMENT_CHECKS",
     "STEAM_ACCOUNT_ID_RANGE",
-    "STORED_STEAM_ACCOUNT_ID_MAX",
     "UNMET_LABELS",
     "DeadlockRequirements",
     "DotaRequirements",
@@ -79,6 +76,7 @@ __all__ = [
     "Rule",
     "Severity",
     "Unmet",
+    "claim_friend_id",
     "clear_eligibility",
     "eligibility_values",
     "evaluate_signup",
@@ -91,8 +89,6 @@ __all__ = [
     "refresh_org_eligibility",
     "refresh_unmet_requirements",
     "stamp_eligibility",
-    "steam_friend_id_from_profiles",
-    "sync_steam_account_from_profiles",
     "unmet_codes",
     "unmet_labels",
     "unmet_requirements",

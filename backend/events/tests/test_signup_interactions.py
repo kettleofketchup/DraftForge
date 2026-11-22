@@ -107,6 +107,8 @@ class HandleSignupModalSubmitTest(EventTestCase):
         self.event.auto_approve = True
         self.event.save()
         self.user.discordId = "100000000000000001"
+        self.user.steamid = None
+        self.user.steam_account_id = None
         self.user.save()
         self.org_user = OrgUser.objects.create(
             user=self.user,
@@ -130,7 +132,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
             discord_user_id="100000000000000001",
             game_type=GameType.DOTA2,
             values={
-                "unverified_friend_id": "12345",
+                "friend_id": "12345",
                 "rank_status": "active",
             },
         )
@@ -141,15 +143,8 @@ class HandleSignupModalSubmitTest(EventTestCase):
 
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.rank_status, "active")
-        self.assertEqual(profile.unverified_friend_id, "12345")
-
-        # Verify CustomUser.steam_account_id was NOT modified by the modal.
-        # The setUp sets steamid, and CustomUser.save() syncs steam_account_id
-        # from steamid (32-bit vs 64-bit are the same identity). So the
-        # baseline is the derived value, not None. Confirm the modal handler didn't *change* it.
-        baseline_steam_account_id = self.user.steam_account_id
         self.user.refresh_from_db()
-        self.assertEqual(self.user.steam_account_id, baseline_steam_account_id)
+        self.assertEqual(self.user.steam_account_id, 12345)
 
     def test_modal_submit_calls_apply_signup_input_for_dota(self):
         """Dota 2 branch routes profile writes through apply_signup_input."""
@@ -164,7 +159,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
                 discord_user_id="100000000000000001",
                 game_type=GameType.DOTA2,
                 values={
-                    "unverified_friend_id": "12345",
+                    "friend_id": "12345",
                     "rank_status": "active",
                     "positions": [],
                 },
@@ -172,7 +167,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
         spy.assert_called_once()
         patch_arg = spy.call_args.kwargs["patch"]
         self.assertIsInstance(patch_arg, SignupInputPatch)
-        self.assertEqual(patch_arg.unverified_friend_id, "12345")
+        self.assertEqual(patch_arg.steam_account_id, "12345")
         self.assertEqual(patch_arg.rank_status, "active")
 
     def test_deadlock_modal_signs_up_directly(self):
@@ -186,7 +181,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
             discord_user_id="100000000000000001",
             game_type=GameType.DEADLOCK,
             values={
-                "unverified_friend_id": "12345",
+                "friend_id": "12345",
                 "deadlock_rank": "Phantom IV",
                 "deadlock_date": "last week",
             },
@@ -197,7 +192,8 @@ class HandleSignupModalSubmitTest(EventTestCase):
 
         profile = PlayerDeadlockProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.rank, "Phantom IV")
-        self.assertEqual(profile.unverified_friend_id, "12345")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.steam_account_id, 12345)
 
     def test_modal_submit_returns_vocabulary_message_on_disallowed_rank_status(self):
         """Discord adapter surfaces the EXACT vocabulary-table message when
@@ -258,15 +254,11 @@ class HandleSignupModalSubmitTest(EventTestCase):
             result = handle_signup_modal_submit(
                 event_id=self.event.pk,
                 discord_user_id="100000000000000001",
-                values={"unverified_friend_id": "12345"},
+                values={"friend_id": "12345"},
             )
         self.assertEqual(result, {"action": "error", "message": STALE_MODAL_MESSAGE})
         spy.assert_not_called()
-        self.assertFalse(
-            PlayerDotaProfile.objects.filter(
-                org_user=self.org_user, unverified_friend_id="12345"
-            ).exists()
-        )
+        self.assertFalse(CustomUser.objects.filter(steam_account_id=12345).exists())
 
     def test_fallback_modal_dispatches_for_unregistered_game(self):
         """game_type=None passes the check while the event still resolves to
@@ -279,7 +271,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
         result = handle_signup_modal_submit(
             event_id=self.event.pk,
             discord_user_id="100000000000000001",
-            values={"unverified_friend_id": "12345"},
+            values={"friend_id": "12345"},
         )
         self.assertEqual(result, {"action": "error", "message": "Unknown game type."})
 
@@ -294,7 +286,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
             event_id=self.event.pk,
             discord_user_id="100000000000000001",
             game_type=GameType.DOTA2,
-            values={"unverified_friend_id": "12345", "rank_status": "active"},
+            values={"friend_id": "12345", "rank_status": "active"},
         )
         self.assertEqual(result, {"action": "error", "message": STALE_MODAL_MESSAGE})
 
@@ -624,6 +616,8 @@ class SignupModalSubmitEndpointTest(EventTestCase):
         self.event.auto_approve = True
         self.event.save()
         self.user.discordId = "100000000000000001"
+        self.user.steamid = None
+        self.user.steam_account_id = None
         self.user.save()
         self.org_user = OrgUser.objects.create(
             user=self.user, organization=self.event.organization
@@ -639,7 +633,7 @@ class SignupModalSubmitEndpointTest(EventTestCase):
         body = {
             "event_id": self.event.pk,
             "discord_user_id": "100000000000000001",
-            "values": {"unverified_friend_id": "12345", "rank_status": "active"},
+            "values": {"friend_id": "12345", "rank_status": "active"},
             **extra,
         }
         return self.client.post(self.URL, data=body, format="json")
@@ -652,11 +646,7 @@ class SignupModalSubmitEndpointTest(EventTestCase):
             resp.json(), {"action": "error", "message": STALE_MODAL_MESSAGE}
         )
         self.assertFalse(EventSignup.objects.filter(event=self.event).exists())
-        self.assertFalse(
-            PlayerDotaProfile.objects.filter(
-                org_user=self.org_user, unverified_friend_id="12345"
-            ).exists()
-        )
+        self.assertFalse(CustomUser.objects.filter(steam_account_id=12345).exists())
 
     def test_null_game_type_on_registered_game_is_stale(self):
         self._assert_stale_and_no_writes(self._post(game_type=None))
@@ -671,3 +661,5 @@ class SignupModalSubmitEndpointTest(EventTestCase):
         resp = self._post(game_type=GameType.DOTA2)
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual(resp.json()["action"], "needs_rank_details")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.steam_account_id, 12345)
