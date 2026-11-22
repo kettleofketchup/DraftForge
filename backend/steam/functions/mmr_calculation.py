@@ -107,7 +107,6 @@ def update_user_league_mmr(
 
     calculated_league_mmr = base_mmr + best_adjustment
 
-    # Update LeagueUser if league context provided
     if league:
         try:
             league_user = LeagueUser.objects.get(user=user, league=league)

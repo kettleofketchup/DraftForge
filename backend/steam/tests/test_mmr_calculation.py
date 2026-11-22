@@ -19,7 +19,6 @@ class TestMMRCalculation(TestCase):
             password="testpass",
             positions=self.positions,
         )
-        # Create org/league structure for MMR
         self.org = Organization.objects.create(name="Test Org", owner=self.user)
         self.league = League.objects.create(
             name="Test League",
