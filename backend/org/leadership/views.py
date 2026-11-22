@@ -42,19 +42,18 @@ from org.leadership.serializers import (
     TraitsPutSerializer,
     settings_data,
 )
-from org.leadership.services import (
-    TraitInUse,
-    delete_trait,
-    kind_points,
-    update_settings,
-    upsert_traits,
-)
-from org.leadership.store import (
-    active_traits,
-    effective_traits,
+from org.leadership.settings import (
     get_leadership_settings,
+    kind_points,
+    update_leadership_settings,
 )
 from org.leadership.summary import member_payload, trait_data
+from org.leadership.traits import (
+    TraitInUse,
+    delete_trait,
+    effective_traits,
+    upsert_traits,
+)
 from org.models import Organization, OrgUser
 from org.models_leadership import CaptainReview, CaptainTrait, EventCaptain
 from org.permissions import can_view_org_members, has_org_admin_access
@@ -105,7 +104,7 @@ def leadership_settings(request: Request, org_id: int) -> Response:
         changes = dict(body.validated_data)
         points = changes.pop("kind_points", None)
         try:
-            row = update_settings(
+            row = update_leadership_settings(
                 org, actor=request.user, changes=changes, points=points
             )
         except ValueError as exc:
@@ -192,7 +191,7 @@ def leadership_pending(request: Request, org_id: int) -> Response:
         .filter(event_captain__in=[s.pk for s in snapshots], rater=member)
         .prefetch_related(Prefetch("scores__trait"))
     }
-    traits = active_traits(effective_traits(org))
+    traits = effective_traits(org, active_only=True)
     items = []
     for snap in snapshots:
         review = own.get(snap.pk)

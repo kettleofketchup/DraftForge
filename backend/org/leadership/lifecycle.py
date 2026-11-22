@@ -17,7 +17,7 @@ from org.leadership.kinds import (
     RATED_KINDS,
     LeadershipKind,
 )
-from org.leadership.store import get_leadership_settings
+from org.leadership.settings import get_leadership_settings
 from org.models import ContributionEntry, ContributionPointValue, OrgUser
 from org.models_conduct import AttendanceOutcome
 from org.models_leadership import CaptainReview, EventCaptain

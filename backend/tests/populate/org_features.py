@@ -29,7 +29,7 @@ from org.contributions.services import award_entry, sync_event_staff_entries
 from org.features import FeatureKey, set_org_feature
 from org.leadership.lifecycle import snapshot_event
 from org.leadership.reviews import submit_review
-from org.leadership.store import effective_traits, ensure_traits
+from org.leadership.traits import effective_traits, materialize_traits
 from org.models import (
     ContributionEntry,
     ContributionPointValue,
@@ -391,7 +391,7 @@ def _seed_leadership(
     )
     Event.objects.nocache().filter(pk=event.pk).update(conduct_finalized_at=now)
     snapshot_event(event, now=now)
-    ensure_traits(org)
+    materialize_traits(org)
     keys = [t.key for t in effective_traits(org) if t.active]
     for rater, captain, score in ORG_FEATURES_LEADERSHIP_REVIEWS:
         submit_review(

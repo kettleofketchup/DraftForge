@@ -12,7 +12,8 @@ from org.leadership.queries import (
     event_trait_averages,
     member_points,
 )
-from org.leadership.store import effective_traits, get_leadership_settings
+from org.leadership.settings import get_leadership_settings
+from org.leadership.traits import effective_traits
 from org.models import OrgUser
 from org.models_leadership import CaptainTrait, EventCaptain
 from org.standing import ledger

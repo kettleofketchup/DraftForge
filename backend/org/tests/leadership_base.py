@@ -12,7 +12,7 @@ from events.models import Event, EventSignup
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.leadership.reviews import submit_review
-from org.leadership.store import ensure_traits
+from org.leadership.traits import materialize_traits
 from org.models import ContributionEntry, Organization, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain
 
@@ -113,7 +113,7 @@ class LeadershipTestCase(TestCase):
         now: datetime | None = None,
         event: Event | None = None,
     ) -> CaptainReview:
-        ensure_traits(self.org)
+        materialize_traits(self.org)
         return submit_review(
             org_id=self.org.pk,
             event_id=(event or self.event).pk,

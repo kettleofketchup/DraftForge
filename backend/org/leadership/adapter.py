@@ -12,8 +12,9 @@ from org.contributions.serializers import member_summary
 from org.feature_keys import FeatureKey
 from org.leadership import lifecycle, merge
 from org.leadership.queries import CaptainRating, captain_ratings, points_by_member
-from org.leadership.store import effective_traits, get_leadership_settings
+from org.leadership.settings import get_leadership_settings
 from org.leadership.summary import member_payload, round_score
+from org.leadership.traits import effective_traits
 from org.models import Organization, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain
 from org.standing.base import TrackBase

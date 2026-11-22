@@ -14,7 +14,7 @@ from org.leadership.constants import (
     VoidKind,
 )
 from org.leadership.rating import RatingUpsert, upsert_captain_rating
-from org.leadership.store import active_traits, ensure_traits
+from org.leadership.traits import materialize_traits
 from org.models import OrgLog, OrgUser
 from org.models_leadership import CaptainReview, CaptainTraitScore, EventCaptain
 from telemetry.logging import get_logger
@@ -73,7 +73,7 @@ def _existing(snapshot: EventCaptain, rater: OrgUser) -> CaptainReview | None:
 
 
 def _validated_scores(org_id: int, scores: Mapping[str, int]) -> dict[int, int]:
-    traits = active_traits(ensure_traits(org_id))
+    traits = [t for t in materialize_traits(org_id) if t.active]
     by_key = {t.key: t for t in traits}
     missing = sorted(set(by_key) - set(scores))
     extra = sorted(set(scores) - set(by_key))

@@ -20,7 +20,7 @@ def _range(field: str) -> list[MinValueValidator | MaxValueValidator]:
 
 
 class OrgLeadershipSettings(models.Model):
-    """Per-organization leadership settings. Read via org.leadership.store."""
+    """Per-organization leadership settings. Read via org.leadership.settings."""
 
     organization = models.OneToOneField(
         "org.Organization",

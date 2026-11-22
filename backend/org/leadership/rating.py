@@ -7,7 +7,7 @@ from fractions import Fraction
 from events.models import Event
 from org.leadership.constants import SCORE_MAX, SCORE_MIN
 from org.leadership.kinds import LeadershipKind
-from org.leadership.store import get_leadership_settings
+from org.leadership.settings import get_leadership_settings
 from org.models import ContributionEntry
 from org.models_leadership import CaptainTraitScore, EventCaptain
 from org.standing import ledger
