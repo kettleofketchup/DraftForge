@@ -3,6 +3,7 @@ from django.db import models
 from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
+from common.game import GameType
 from org.models_conduct import (
     AttendanceOutcome,  # noqa: F401
     OrgConductSettings,  # noqa: F401
@@ -206,3 +207,29 @@ class OrgLog(models.Model):
     def __str__(self) -> str:
         actor_name = self.actor.username if self.actor else "System"
         return f"{actor_name} {self.action} on {self.organization.name}"
+
+
+class OrgUserGameMmr(models.Model):
+    """Org-assigned MMR for one game; a missing row means 0."""
+
+    org_user = models.ForeignKey(
+        OrgUser, on_delete=models.CASCADE, related_name="game_mmrs"
+    )
+    game_type = models.PositiveSmallIntegerField()
+    mmr = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["org_user", "game_type"], name="org_user_game_mmr_unique"
+            )
+        ]
+
+    def __str__(self) -> str:
+        game = (
+            GameType(self.game_type).label
+            if self.game_type in GameType.values
+            else str(self.game_type)
+        )
+        return f"{self.org_user_id} {game}: {self.mmr}"

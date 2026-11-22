@@ -303,11 +303,12 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "OrgUser",
                     "api",
                     "demote_colliding_earning_sends",
+                    "merge_org_mmrs",
                     "repoint_org_attribution",
                 }
             ),
-            "user account merge pairs org memberships, merges standing and "
-            "repoints org contribution and promo attribution",
+            "user account merge pairs org memberships, merges per-game org MMR "
+            "and standing, and repoints org contribution and promo attribution",
         ),
         "app/functions/tournament.py": BackEdge(
             frozenset({"guild_nicknames", "org_nicknames_public"}),
@@ -331,27 +332,40 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "org's roles; leaves with the league slice",
         ),
         "app/serializers.py": BackEdge(
-            frozenset({"Organization", "OrgUser", "OrgUserSerializer"}),
+            frozenset(
+                {
+                    "LEAGUE_GAME",
+                    "Organization",
+                    "OrgUser",
+                    "OrgUserSerializer",
+                    "game_for_tournament",
+                    "game_mmrs_prefetch",
+                    "org_mmr_map",
+                }
+            ),
             "tournament and league user serializers auto-create OrgUser rows and "
-            "embed org MMR via OrgUserSerializer; OrganizationsSerializer, "
+            "embed the context game's org MMR via org.mmr and OrgUserSerializer; "
+            "OrganizationsSerializer, "
             "LeagueSerializer.organization_id and UserSerializer."
             "default_organization read Organization at class definition",
         ),
         "app/services/match_finalization.py": BackEdge(
-            frozenset({"OrgUser"}),
-            "league rating creation seeds base MMR from the league org's OrgUser",
+            frozenset({"LEAGUE_GAME", "org_mmr_map"}),
+            "league rating creation seeds base MMR from the league org's Dota 2 org MMR",
         ),
         "app/services/team_leadership.py": BackEdge(
-            frozenset({"OrgUser"}),
-            "captain succession falls back to the highest-MMR OrgUser of the league org",
+            frozenset({"OrgUser", "OrgUserGameMmr", "game_for_tournament"}),
+            "captain succession falls back to the highest org MMR (tournament game) "
+            "in the league org",
         ),
         "app/services/team_management.py": BackEdge(
             frozenset({"OrgSettings", "OrgUser", "get_org_settings"}),
             "roster rules read the league org's settings; member adds report OrgUser creation",
         ),
         "app/signals.py": BackEdge(
-            frozenset({"OrgUser"}),
-            "tournament user auto-add creates the league org's OrgUser",
+            frozenset({"LEAGUE_GAME", "OrgUser", "org_mmr_map"}),
+            "tournament user auto-add creates the league org's OrgUser and seeds "
+            "league MMR from its Dota 2 org MMR",
         ),
         "app/tournament_state.py": BackEdge(
             frozenset({"Organization"}),
@@ -361,10 +375,12 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset(
                 {
                     "OrgUser",
+                    "LEAGUE_GAME",
                     "Organization",
                     "has_org_admin_access",
                     "has_org_staff_access",
                     "member_nick",
+                    "org_mmr_for",
                     "resolve_member_user",
                     "user_name_q",
                 }
@@ -374,7 +390,19 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "with the league and tournament slices",
         ),
         "app/views/csv_import.py": BackEdge(
-            frozenset({"OrgLog", "OrgUser", "Organization", "has_org_staff_access"}),
+            frozenset(
+                {
+                    "LEAGUE_GAME",
+                    "OrgLog",
+                    "OrgMmrError",
+                    "OrgUser",
+                    "Organization",
+                    "bulk_set_org_mmrs",
+                    "game_for_tournament",
+                    "has_org_staff_access",
+                    "validate_org_mmr",
+                }
+            ),
             "shared CSV import pipeline, including the org door, resolves the "
             "Organization, writes OrgUser MMR and OrgLog rows; moves whole with "
             "the tournament slice",
@@ -387,6 +415,7 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset(
                 {
                     "OrgUser",
+                    "OrgUserGameMmr",
                     "Organization",
                     "api",
                     "has_org_staff_access",

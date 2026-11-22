@@ -84,7 +84,7 @@ from org.membership import (
     member_organization_ids,
     viewer_member_organization_ids,
 )
-from org.models import Organization, OrgUser
+from org.models import Organization, OrgUser, OrgUserGameMmr
 from org.permissions import (
     has_org_staff_access,
 )
@@ -126,6 +126,7 @@ from .permissions_tournament import (
     has_league_staff_access,
 )
 from .serializers import (
+    TEAM_MMR_MAPS,
     GameSerializer,
     LeagueMatchSerializer,
     LeagueSerializer,
@@ -142,8 +143,9 @@ from .serializers import (
     TournamentSerializer,
     TournamentsSerializer,
     UserSerializer,
-    _build_users_dict,
-    _tournament_organization,
+    build_team_mmr_maps,
+    build_users_dict,
+    tournament_organization,
 )
 from .steam_accounts import steam_account_id_holder, steam_account_id_identity
 from .user_cache import serialize_user_core
@@ -498,6 +500,7 @@ class TournamentView(viewsets.ModelViewSet):
             Game,
             Draft,
             DraftRound,
+            OrgUserGameMmr,
             extra=cache_key,
             timeout=60 * 10,
             # Every draft event refetches this; a read that straddles a commit
@@ -516,7 +519,7 @@ class TournamentView(viewsets.ModelViewSet):
             data = serializer.data
 
             # Deduplicated user dict for frontend entity cache
-            data["_users"] = _build_users_dict(instance)
+            data["_users"] = build_users_dict(instance)
 
             return data
 
@@ -691,13 +694,22 @@ class TeamView(viewsets.ModelViewSet):
             Game,
             Draft,
             DraftRound,
+            OrgUserGameMmr,
             extra=cache_key,
             timeout=60 * 60,
         )
         def get_data() -> Any:
             log.debug("team_list_cache_miss", system="api", subsystem="main")
-            queryset = self.filter_queryset(self.get_queryset())
-            serializer = self.get_serializer(queryset, many=True)
+            teams = list(
+                self.filter_queryset(self.get_queryset())
+                .select_related("tournament__league")
+                .prefetch_related("members")
+            )
+            context = {
+                **self.get_serializer_context(),
+                TEAM_MMR_MAPS: build_team_mmr_maps(teams),
+            }
+            serializer = self.get_serializer(teams, many=True, context=context)
             return serializer.data
 
         data = get_data()
@@ -716,6 +728,7 @@ class TeamView(viewsets.ModelViewSet):
             Game,
             Draft,
             DraftRound,
+            OrgUserGameMmr,
             # No keep_fresh: team detail ships member nickname/avatar/positions;
             # keep_fresh would serve stale members after a profile edit, same as
             # the user list/detail blocks above.
@@ -748,7 +761,7 @@ class TeamView(viewsets.ModelViewSet):
         return self._manager_fields(team)
 
     def _manager_fields(self, team: Team) -> dict[str, Any]:
-        org = _tournament_organization(team.tournament, fresh=True)
+        org = tournament_organization(team.tournament, fresh=True)
         return {
             "can_manage_team": True,
             "organization_pk": org.pk if org else None,

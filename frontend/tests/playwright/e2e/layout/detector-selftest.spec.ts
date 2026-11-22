@@ -1,6 +1,12 @@
 import type { Page } from '@playwright/test';
 
 import {
+  expect,
+  loginAdmin,
+  test,
+  visitAndWaitForHydration,
+} from '../../fixtures';
+import {
   clipEscapes,
   collisions,
   formatReports,
@@ -11,7 +17,6 @@ import {
   sweepLayoutOnce,
   type KnownFinding,
 } from '../../fixtures/layout';
-import { test, expect, loginAdmin, visitAndWaitForHydration } from '../../fixtures';
 
 /**
  * The layout detector's own regression tests. A detector that always returns [] looks exactly
@@ -39,7 +44,9 @@ async function injectBelowNavbar(
   spec: { id: string; offset: number; css: string; html: string },
 ): Promise<void> {
   await page.evaluate((s) => {
-    const navBottom = document.querySelector('[data-testid=nav-root]')?.getBoundingClientRect().bottom ?? 0;
+    const navBottom =
+      document.querySelector('[data-testid=nav-root]')?.getBoundingClientRect()
+        .bottom ?? 0;
     const host = document.createElement('div');
     host.id = s.id;
     host.setAttribute('data-testid', s.id);
@@ -59,53 +66,75 @@ test.describe('layout detector self-test (@cicd)', () => {
     await prepareLayoutProbe(page);
   });
 
-  test('pairwise collision detector fires above the fold and below it', async ({ page }) => {
-    const injected = await page.evaluate((html) => {
-      const mk = (id: string, markup: string) => {
-        const host = document.createElement('div');
-        host.id = id;
-        host.innerHTML = markup;
-        return host;
-      };
-      const nav = document.querySelector('[data-testid=nav-root]');
-      const anchor = nav?.parentElement ?? document.body;
-      anchor.insertBefore(mk('selftest-above', html.above), nav?.nextElementSibling ?? null);
+  test('pairwise collision detector fires above the fold and below it', async ({
+    page,
+  }) => {
+    const injected = await page.evaluate(
+      (html) => {
+        const mk = (id: string, markup: string) => {
+          const host = document.createElement('div');
+          host.id = id;
+          host.innerHTML = markup;
+          return host;
+        };
+        const nav = document.querySelector('[data-testid=nav-root]');
+        const anchor = nav?.parentElement ?? document.body;
+        anchor.insertBefore(
+          mk('selftest-above', html.above),
+          nav?.nextElementSibling ?? null,
+        );
 
-      // ~2000px down in a fixed-height overflow:visible holder that the pair overflows. Catches a
-      // clip rect that picked up a viewport term or stopped at a padding box.
-      const holder = document.createElement('div');
-      holder.id = 'selftest-below-holder';
-      holder.style.cssText = 'height:20px;overflow:visible;position:relative;margin-top:2000px';
-      holder.appendChild(mk('selftest-below', html.below));
-      document.body.appendChild(holder);
+        // ~2000px down in a fixed-height overflow:visible holder that the pair overflows. Catches a
+        // clip rect that picked up a viewport term or stopped at a padding box.
+        const holder = document.createElement('div');
+        holder.id = 'selftest-below-holder';
+        holder.style.cssText =
+          'height:20px;overflow:visible;position:relative;margin-top:2000px';
+        holder.appendChild(mk('selftest-below', html.below));
+        document.body.appendChild(holder);
 
-      const rectsOf = (id: string) =>
-        [...document.querySelectorAll(`#${id} p`)]
-          .map((p) => p.getBoundingClientRect())
-          .map((r) => ({ top: r.top, bottom: r.bottom }));
-      const holderRect = holder.getBoundingClientRect();
-      const lowerRect = document.querySelector('[data-testid=selftest-below-lower]')!.getBoundingClientRect();
-      return {
-        above: rectsOf('selftest-above'),
-        below: rectsOf('selftest-below'),
-        belowOverflowsHolder: lowerRect.bottom > holderRect.bottom,
-        belowTop: lowerRect.top,
-        viewportH: window.innerHeight,
-      };
-    }, { above: pair('selftest-above'), below: pair('selftest-below') });
+        const rectsOf = (id: string) =>
+          [...document.querySelectorAll(`#${id} p`)]
+            .map((p) => p.getBoundingClientRect())
+            .map((r) => ({ top: r.top, bottom: r.bottom }));
+        const holderRect = holder.getBoundingClientRect();
+        const lowerRect = document
+          .querySelector('[data-testid=selftest-below-lower]')!
+          .getBoundingClientRect();
+        return {
+          above: rectsOf('selftest-above'),
+          below: rectsOf('selftest-below'),
+          belowOverflowsHolder: lowerRect.bottom > holderRect.bottom,
+          belowTop: lowerRect.top,
+          viewportH: window.innerHeight,
+        };
+      },
+      { above: pair('selftest-above'), below: pair('selftest-below') },
+    );
 
     for (const name of ['above', 'below'] as const) {
       const p = injected[name];
       expect(p.length, `${name}: both paragraphs must render`).toBe(2);
-      expect(p[1].top, `${name}: the second paragraph must be pulled over the first`).toBeLessThan(p[0].bottom);
+      expect(
+        p[1].top,
+        `${name}: the second paragraph must be pulled over the first`,
+      ).toBeLessThan(p[0].bottom);
     }
-    expect(injected.belowTop, 'the below-fold fixture must be off-screen').toBeGreaterThan(injected.viewportH);
-    expect(injected.belowOverflowsHolder, 'the below-fold fixture must overflow its holder').toBe(true);
+    expect(
+      injected.belowTop,
+      'the below-fold fixture must be off-screen',
+    ).toBeGreaterThan(injected.viewportH);
+    expect(
+      injected.belowOverflowsHolder,
+      'the below-fold fixture must overflow its holder',
+    ).toBe(true);
 
     const pop = await sweepLayoutOnce(page, { debugKeys: true });
     for (const id of ['selftest-above', 'selftest-below']) {
       expect(
-        pop.debugKeys!.candidates.some((k) => k.startsWith(keyPrefix('p', `${id}-upper`))),
+        pop.debugKeys!.candidates.some((k) =>
+          k.startsWith(keyPrefix('p', `${id}-upper`)),
+        ),
         `${id} must be in the measured candidate population`,
       ).toBe(true);
     }
@@ -113,17 +142,27 @@ test.describe('layout detector self-test (@cicd)', () => {
     const hits = await collisions(page);
     const above = hits.filter((h) => /selftest-above/.test(`${h.a}${h.b}`));
     const below = hits.filter((h) => /selftest-below/.test(`${h.a}${h.b}`));
-    expect(above.length, 'an overlapping pair above the fold must be reported').toBeGreaterThan(0);
+    expect(
+      above.length,
+      'an overlapping pair above the fold must be reported',
+    ).toBeGreaterThan(0);
     expect(
       below.length,
       'an overlapping pair ~2000px below the fold must be reported; empty means the clip rect ' +
         'has picked up a viewport term',
     ).toBeGreaterThan(0);
-    expect(above[0].keyA, 'Collision keys must be text-free').not.toMatch(/upper line/);
-    expect(above[0].keyA, 'the key must not collapse to a bare tag name').not.toBe('p');
+    expect(above[0].keyA, 'Collision keys must be text-free').not.toMatch(
+      /upper line/,
+    );
+    expect(
+      above[0].keyA,
+      'the key must not collapse to a bare tag name',
+    ).not.toBe('p');
   });
 
-  test('a wrapped inline row is not reported as overlapping', async ({ page }) => {
+  test('a wrapped inline row is not reported as overlapping', async ({
+    page,
+  }) => {
     // getBoundingClientRect() on a wrapped inline is the union of its line boxes and swallows its
     // neighbours; the detector must use getClientRects().
     await page.evaluate(() => {
@@ -143,30 +182,51 @@ test.describe('layout detector self-test (@cicd)', () => {
       const spans = [...document.querySelectorAll('#overlap-selftest span')];
       return Math.max(...spans.map((s) => s.getClientRects().length));
     });
-    expect(lineCount, 'a span must break across lines for this to be a real test').toBeGreaterThan(1);
+    expect(
+      lineCount,
+      'a span must break across lines for this to be a real test',
+    ).toBeGreaterThan(1);
 
     const pop = await sweepLayoutOnce(page, { debugKeys: true });
-    const spanKeys = pop.debugKeys!.candidates.filter((k) => k.startsWith('span|wrap-selftest-'));
-    expect(spanKeys.length, 'the injected spans must be pairwise candidates').toBeGreaterThan(1);
+    const spanKeys = pop.debugKeys!.candidates.filter((k) =>
+      k.startsWith('span|wrap-selftest-'),
+    );
+    expect(
+      spanKeys.length,
+      'the injected spans must be pairwise candidates',
+    ).toBeGreaterThan(1);
 
     const hits = await collisions(page);
     const injected = hits.filter((h) => /wrap-selftest-/.test(`${h.a}${h.b}`));
-    expect(injected, `wrapped inline text reported as overlapping:\n${JSON.stringify(injected, null, 2)}`).toEqual([]);
+    expect(
+      injected,
+      `wrapped inline text reported as overlapping:\n${JSON.stringify(injected, null, 2)}`,
+    ).toEqual([]);
   });
 
-  test('the stability window drops a finding that does not survive re-measure', async ({ page }) => {
+  test('the stability window drops a finding that does not survive re-measure', async ({
+    page,
+  }) => {
     // The pair separates on the rAF after the detector's first read, i.e. before the re-measure.
     await page.evaluate((html) => {
       const host = document.createElement('div');
       host.id = 'flicker-selftest';
       host.innerHTML = html;
-      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(host);
-      const lower = document.querySelector('[data-testid=flicker-selftest-lower]') as HTMLElement;
+      (
+        document.querySelector('[data-testid=nav-root]')?.parentElement ??
+        document.body
+      ).appendChild(host);
+      const lower = document.querySelector(
+        '[data-testid=flicker-selftest-lower]',
+      ) as HTMLElement;
       const original = lower.getClientRects.bind(lower);
       let reads = 0;
       lower.getClientRects = function patched() {
         const rects = original();
-        if (++reads === 1) requestAnimationFrame(() => { lower.style.marginTop = '0px'; });
+        if (++reads === 1)
+          requestAnimationFrame(() => {
+            lower.style.marginTop = '0px';
+          });
         return rects;
       };
     }, pair('flicker-selftest'));
@@ -174,7 +234,9 @@ test.describe('layout detector self-test (@cicd)', () => {
     const report = await sweepLayoutOnce(page, { debugKeys: true });
     const base = report.findings.find((f) => f.state === 'base');
     expect(
-      (base?.collisions ?? []).filter((c) => /flicker-selftest/.test(`${c.a}${c.b}`)),
+      (base?.collisions ?? []).filter((c) =>
+        /flicker-selftest/.test(`${c.a}${c.b}`),
+      ),
       'a pair that separates before the re-measure must not survive the stability window',
     ).toEqual([]);
     expect(
@@ -183,7 +245,9 @@ test.describe('layout detector self-test (@cicd)', () => {
     ).toBe(true);
   });
 
-  test('clip-escape detector fires on an injected clip host', async ({ page }) => {
+  test('clip-escape detector fires on an injected clip host', async ({
+    page,
+  }) => {
     // E overflows an 80px overflow:hidden host (a correctly clipped negative on its own). F, a
     // position:fixed descendant laid over the escaped strip, really paints there.
     await injectBelowNavbar(page, {
@@ -197,10 +261,19 @@ test.describe('layout detector self-test (@cicd)', () => {
     });
 
     const shape = await page.evaluate(() => {
-      const navBottom = document.querySelector('[data-testid=nav-root]')?.getBoundingClientRect().bottom ?? 0;
-      const hostRect = document.querySelector('[data-testid=escape-host]')!.getBoundingClientRect();
-      const elRect = document.querySelector('[data-testid=escape-selftest]')!.getBoundingClientRect();
-      const paint = document.querySelector('[data-testid=escape-selftest-paint]') as HTMLElement;
+      const navBottom =
+        document
+          .querySelector('[data-testid=nav-root]')
+          ?.getBoundingClientRect().bottom ?? 0;
+      const hostRect = document
+        .querySelector('[data-testid=escape-host]')!
+        .getBoundingClientRect();
+      const elRect = document
+        .querySelector('[data-testid=escape-selftest]')!
+        .getBoundingClientRect();
+      const paint = document.querySelector(
+        '[data-testid=escape-selftest-paint]',
+      ) as HTMLElement;
       paint.style.left = `${Math.round(hostRect.left)}px`;
       paint.style.top = `${Math.round(hostRect.bottom)}px`;
       paint.style.width = `${Math.round(hostRect.width)}px`;
@@ -211,35 +284,58 @@ test.describe('layout detector self-test (@cicd)', () => {
       const hit = document.elementFromPoint(cx, cy) as HTMLElement | null;
       return {
         escapedBy: Math.round(elRect.bottom - hostRect.bottom),
-        clips: getComputedStyle(document.querySelector('[data-testid=escape-host]')!).overflowY,
-        centroidInViewport: cx > 0 && cx < window.innerWidth && cy > 0 && cy < window.innerHeight,
+        clips: getComputedStyle(
+          document.querySelector('[data-testid=escape-host]')!,
+        ).overflowY,
+        centroidInViewport:
+          cx > 0 && cx < window.innerWidth && cy > 0 && cy < window.innerHeight,
         centroidBelowNavbar: cy > navBottom,
         hitTestid: hit?.getAttribute('data-testid') ?? null,
       };
     });
 
     expect(shape.clips, 'the host must actually clip').toBe('hidden');
-    expect(shape.escapedBy, 'E must overflow the host by more than the escape floor').toBeGreaterThan(200);
-    expect(shape.centroidInViewport, 'the probe point must be inside the viewport').toBe(true);
-    expect(shape.centroidBelowNavbar, 'the probe point must be below the navbar band').toBe(true);
-    expect(shape.hitTestid, 'the fixture must genuinely paint in the escaped strip').toBe('escape-selftest-paint');
+    expect(
+      shape.escapedBy,
+      'E must overflow the host by more than the escape floor',
+    ).toBeGreaterThan(200);
+    expect(
+      shape.centroidInViewport,
+      'the probe point must be inside the viewport',
+    ).toBe(true);
+    expect(
+      shape.centroidBelowNavbar,
+      'the probe point must be below the navbar band',
+    ).toBe(true);
+    expect(
+      shape.hitTestid,
+      'the fixture must genuinely paint in the escaped strip',
+    ).toBe('escape-selftest-paint');
 
     const pop = await sweepLayoutOnce(page, { debugKeys: true });
     expect(
-      pop.debugKeys!.geometricEscapes.some((k) => k.startsWith(keyPrefix('div', 'escape-selftest'))),
+      pop.debugKeys!.geometricEscapes.some((k) =>
+        k.startsWith(keyPrefix('div', 'escape-selftest')),
+      ),
       'the fixture must be in the measured geometric-escape population',
     ).toBe(true);
 
     const escapes = await clipEscapes(page);
-    const mine = escapes.filter((e) => e.elKey.startsWith(keyPrefix('div', 'escape-selftest')));
+    const mine = escapes.filter((e) =>
+      e.elKey.startsWith(keyPrefix('div', 'escape-selftest')),
+    );
     expect(
       mine.length,
       `content painted outside its clip host must be reported:\n${JSON.stringify(escapes, null, 2)}`,
     ).toBeGreaterThan(0);
-    expect(['self', 'descendant'], `unexpected via: ${mine[0].via}`).toContain(mine[0].via);
+    expect(['self', 'descendant'], `unexpected via: ${mine[0].via}`).toContain(
+      mine[0].via,
+    );
   });
 
-  test('clip-escape reports through a pointer-events:none ancestor', async ({ page }) => {
+  test('clip-escape reports through a pointer-events:none ancestor', async ({
+    page,
+  }) => {
     // shadcn primitives put pointer-events:none on their svgs, so the hit resolves to the
     // painting ancestor rather than the escaping icon itself.
     await injectBelowNavbar(page, {
@@ -253,36 +349,65 @@ test.describe('layout detector self-test (@cicd)', () => {
     });
 
     const shape = await page.evaluate(() => {
-      const navBottom = document.querySelector('[data-testid=nav-root]')?.getBoundingClientRect().bottom ?? 0;
-      const clip = document.querySelector('[data-testid=pe-clip]')!.getBoundingClientRect();
-      const svg = document.querySelector('[data-testid=pe-escape]')!.getBoundingClientRect();
+      const navBottom =
+        document
+          .querySelector('[data-testid=nav-root]')
+          ?.getBoundingClientRect().bottom ?? 0;
+      const clip = document
+        .querySelector('[data-testid=pe-clip]')!
+        .getBoundingClientRect();
+      const svg = document
+        .querySelector('[data-testid=pe-escape]')!
+        .getBoundingClientRect();
       const px = clip.right + (svg.right - clip.right) / 2;
       const py = clip.top + clip.height / 2;
       const hit = document.elementFromPoint(px, py) as HTMLElement | null;
       return {
         escapedWidth: Math.round(svg.right - clip.right),
-        probeInViewport: px > 0 && px < window.innerWidth && py > navBottom && py < window.innerHeight,
+        probeInViewport:
+          px > 0 &&
+          px < window.innerWidth &&
+          py > navBottom &&
+          py < window.innerHeight,
         hitTestid: hit?.getAttribute('data-testid') ?? null,
       };
     });
 
-    expect(shape.escapedWidth, 'the svg must overflow its clip box').toBeGreaterThan(120);
-    expect(shape.probeInViewport, 'the probe point must be inside the viewport, below the navbar').toBe(true);
-    expect(shape.hitTestid, 'elementFromPoint must resolve to the pointer-events:auto ancestor').toBe('pe-host');
+    expect(
+      shape.escapedWidth,
+      'the svg must overflow its clip box',
+    ).toBeGreaterThan(120);
+    expect(
+      shape.probeInViewport,
+      'the probe point must be inside the viewport, below the navbar',
+    ).toBe(true);
+    expect(
+      shape.hitTestid,
+      'elementFromPoint must resolve to the pointer-events:auto ancestor',
+    ).toBe('pe-host');
 
     const pop = await sweepLayoutOnce(page, { debugKeys: true });
     expect(
-      pop.debugKeys!.geometricEscapes.some((k) => k.startsWith(keyPrefix('svg', 'pe-escape'))),
+      pop.debugKeys!.geometricEscapes.some((k) =>
+        k.startsWith(keyPrefix('svg', 'pe-escape')),
+      ),
       'the svg must be in the measured geometric-escape population',
     ).toBe(true);
 
     const escapes = await clipEscapes(page);
-    const mine = escapes.filter((e) => e.elKey.startsWith(keyPrefix('svg', 'pe-escape')));
-    expect(mine.length, 'an escaping icon under a pointer-events:none chain must be reported').toBeGreaterThan(0);
+    const mine = escapes.filter((e) =>
+      e.elKey.startsWith(keyPrefix('svg', 'pe-escape')),
+    );
+    expect(
+      mine.length,
+      'an escaping icon under a pointer-events:none chain must be reported',
+    ).toBeGreaterThan(0);
     expect(mine[0].via).toBe('pointer-events-none-ancestor');
   });
 
-  test('clip-escape stays quiet on four correctly-clipped shapes', async ({ page }) => {
+  test('clip-escape stays quiet on four correctly-clipped shapes', async ({
+    page,
+  }) => {
     // A: in-flow, clipped horizontally.
     await injectBelowNavbar(page, {
       id: 'negative-a-host',
@@ -327,38 +452,64 @@ test.describe('layout detector self-test (@cicd)', () => {
     });
 
     const shape = await page.evaluate(() => {
-      const rect = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
-      const b = document.querySelector('[data-testid=negative-b-host]') as HTMLElement;
+      const rect = (sel: string) =>
+        document.querySelector(sel)!.getBoundingClientRect();
+      const b = document.querySelector(
+        '[data-testid=negative-b-host]',
+      ) as HTMLElement;
       b.scrollTop = 180;
       const dHost = rect('[data-testid=negative-d-host]');
       const d = rect('[data-testid=negative-d]');
       const bChild = rect('[data-testid=negative-b]');
       return {
-        aOverflows: rect('[data-testid=negative-a]').right > rect('[data-testid=negative-a-host]').right,
+        aOverflows:
+          rect('[data-testid=negative-a]').right >
+          rect('[data-testid=negative-a-host]').right,
         bScrolledOut: bChild.bottom < rect('[data-testid=negative-b-host]').top,
-        cIsFixed: getComputedStyle(document.querySelector('[data-testid=negative-c-fixed]')!).position,
+        cIsFixed: getComputedStyle(
+          document.querySelector('[data-testid=negative-c-fixed]')!,
+        ).position,
         dOverflows: d.right > dHost.right,
       };
     });
 
-    expect(shape.aOverflows, 'A must overflow its clip host horizontally').toBe(true);
-    expect(shape.bScrolledOut, 'B must be scrolled entirely above its clip rect').toBe(true);
+    expect(shape.aOverflows, 'A must overflow its clip host horizontally').toBe(
+      true,
+    );
+    expect(
+      shape.bScrolledOut,
+      'B must be scrolled entirely above its clip rect',
+    ).toBe(true);
     expect(shape.cIsFixed, 'C must be position:fixed').toBe('fixed');
-    expect(shape.dOverflows, 'D must shrink-wrap wider than its clip host').toBe(true);
+    expect(
+      shape.dOverflows,
+      'D must shrink-wrap wider than its clip host',
+    ).toBe(true);
 
     const pop = await sweepLayoutOnce(page, { debugKeys: true });
     expect(
-      pop.debugKeys!.geometricEscapes.some((k) => k.startsWith(keyPrefix('div', 'negative-d'))),
+      pop.debugKeys!.geometricEscapes.some((k) =>
+        k.startsWith(keyPrefix('div', 'negative-d')),
+      ),
       'D must reach the escape pass, or its absence says nothing about the paintability check',
     ).toBe(true);
 
     const escapes = await clipEscapes(page);
     for (const [fixture, why] of [
       ['negative-a', 'an in-flow box clipped horizontally is not an escape'],
-      ['negative-b', 'a box scrolled out of view has escape geometry but no paint'],
+      [
+        'negative-b',
+        'a box scrolled out of view has escape geometry but no paint',
+      ],
       ['negative-c-fixed', 'a fixed host escaping a clip box is CSS-correct'],
-      ['negative-c-child', 'a static child of a fixed host is clipped by nothing above the host'],
-      ['negative-d', 'a wrapper with no background, border or text paints nothing'],
+      [
+        'negative-c-child',
+        'a static child of a fixed host is clipped by nothing above the host',
+      ],
+      [
+        'negative-d',
+        'a wrapper with no background, border or text paints nothing',
+      ],
     ] as const) {
       expect(
         escapes.filter((e) => e.elKey.includes(`|${fixture}|`)),
@@ -367,7 +518,9 @@ test.describe('layout detector self-test (@cicd)', () => {
     }
   });
 
-  test('a sub-2px sliver past a clip edge is not an escape', async ({ page }) => {
+  test('a sub-2px sliver past a clip edge is not an escape', async ({
+    page,
+  }) => {
     // 300x1 clears the area floor; only the thickness rule keeps it out.
     await injectBelowNavbar(page, {
       id: 'sliver-host',
@@ -377,21 +530,35 @@ test.describe('layout detector self-test (@cicd)', () => {
     });
 
     const escapedBy = await page.evaluate(() => {
-      const host = document.querySelector('[data-testid=sliver-host]')!.getBoundingClientRect();
-      const el = document.querySelector('[data-testid=sliver-negative]')!.getBoundingClientRect();
+      const host = document
+        .querySelector('[data-testid=sliver-host]')!
+        .getBoundingClientRect();
+      const el = document
+        .querySelector('[data-testid=sliver-negative]')!
+        .getBoundingClientRect();
       return { top: host.top - el.top, width: el.width };
     });
-    expect(escapedBy.top, 'the fixture must poke 1px above its clip host').toBeCloseTo(1, 1);
-    expect(escapedBy.width * escapedBy.top, 'the sliver must clear the area floor').toBeGreaterThanOrEqual(256);
+    expect(
+      escapedBy.top,
+      'the fixture must poke 1px above its clip host',
+    ).toBeCloseTo(1, 1);
+    expect(
+      escapedBy.width * escapedBy.top,
+      'the sliver must clear the area floor',
+    ).toBeGreaterThanOrEqual(256);
 
     const report = await sweepLayoutOnce(page, { debugKeys: true });
     expect(
-      report.debugKeys!.geometricEscapes.filter((k) => k.startsWith(keyPrefix('div', 'sliver-negative'))),
+      report.debugKeys!.geometricEscapes.filter((k) =>
+        k.startsWith(keyPrefix('div', 'sliver-negative')),
+      ),
       'a 1px sliver must not reach the escape pass',
     ).toEqual([]);
   });
 
-  test('unprobeable strips are counted, and the navbar band is resolved by layout', async ({ page }) => {
+  test('unprobeable strips are counted, and the navbar band is resolved by layout', async ({
+    page,
+  }) => {
     // An escaped strip entirely past the right viewport edge.
     await injectBelowNavbar(page, {
       id: 'offscreen-host',
@@ -413,41 +580,73 @@ test.describe('layout detector self-test (@cicd)', () => {
     });
 
     const shape = await page.evaluate(() => {
-      const navBottom = document.querySelector('[data-testid=nav-root]')?.getBoundingClientRect().bottom ?? 0;
-      const off = document.querySelector('[data-testid=offscreen-negative]')!.getBoundingClientRect();
-      const offHost = document.querySelector('[data-testid=offscreen-host]')!.getBoundingClientRect();
-      const nav = document.querySelector('[data-testid=navbar-negative]')!.getBoundingClientRect();
-      const navHost = document.querySelector('[data-testid=navbar-host]')!.getBoundingClientRect();
+      const navBottom =
+        document
+          .querySelector('[data-testid=nav-root]')
+          ?.getBoundingClientRect().bottom ?? 0;
+      const off = document
+        .querySelector('[data-testid=offscreen-negative]')!
+        .getBoundingClientRect();
+      const offHost = document
+        .querySelector('[data-testid=offscreen-host]')!
+        .getBoundingClientRect();
+      const nav = document
+        .querySelector('[data-testid=navbar-negative]')!
+        .getBoundingClientRect();
+      const navHost = document
+        .querySelector('[data-testid=navbar-host]')!
+        .getBoundingClientRect();
       return {
         navBottom,
-        offStripStartsOffscreen: offHost.right >= window.innerWidth - 1 && off.right > window.innerWidth,
-        navStripAboveBand: nav.bottom <= navHost.top && nav.bottom <= navBottom && nav.top > 0,
+        offStripStartsOffscreen:
+          offHost.right >= window.innerWidth - 1 &&
+          off.right > window.innerWidth,
+        navStripAboveBand:
+          nav.bottom <= navHost.top && nav.bottom <= navBottom && nav.top > 0,
       };
     });
 
-    expect(shape.offStripStartsOffscreen, 'the off-screen fixture must escape past the viewport edge').toBe(true);
-    expect(shape.navStripAboveBand, 'the navbar fixture must escape entirely into the navbar band').toBe(true);
+    expect(
+      shape.offStripStartsOffscreen,
+      'the off-screen fixture must escape past the viewport edge',
+    ).toBe(true);
+    expect(
+      shape.navStripAboveBand,
+      'the navbar fixture must escape entirely into the navbar band',
+    ).toBe(true);
 
     const report = await sweepLayoutOnce(page, { debugKeys: true });
     for (const fixture of ['offscreen-negative', 'navbar-negative']) {
       expect(
-        report.debugKeys!.geometricEscapes.some((k) => k.startsWith(keyPrefix('div', fixture))),
+        report.debugKeys!.geometricEscapes.some((k) =>
+          k.startsWith(keyPrefix('div', fixture)),
+        ),
         `${fixture} must be in the measured geometric-escape population`,
       ).toBe(true);
     }
-    expect(report.ledger.unprobeable, 'both fixtures must be counted unprobeable').toBeGreaterThanOrEqual(2);
     expect(
-      report.findings.flatMap((f) => f.escapes).filter((e) => /offscreen-negative|navbar-negative/.test(e.elKey)),
+      report.ledger.unprobeable,
+      'both fixtures must be counted unprobeable',
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      report.findings
+        .flatMap((f) => f.escapes)
+        .filter((e) => /offscreen-negative|navbar-negative/.test(e.elKey)),
       'an unprobeable strip must not be reported as a finding',
     ).toEqual([]);
     expect(
       report.ledger.navbarHeightPx,
       'navbarHeightPx must be the navbar bottom measured by layout',
     ).toBe(Math.round(shape.navBottom));
-    expect(report.ledger.navbarHeightPx, 'the navbar must have a real height').toBeGreaterThanOrEqual(48);
+    expect(
+      report.ledger.navbarHeightPx,
+      'the navbar must have a real height',
+    ).toBeGreaterThanOrEqual(48);
   });
 
-  test('the scroll walk re-measures, and the clip filter keeps it honest', async ({ page }) => {
+  test('the scroll walk re-measures, and the clip filter keeps it honest', async ({
+    page,
+  }) => {
     const shape = await page.evaluate((html) => {
       const container = document.createElement('div');
       container.id = 'scroll-selftest-host';
@@ -462,7 +661,10 @@ test.describe('layout detector self-test (@cicd)', () => {
       host.innerHTML = html;
       inner.appendChild(host);
       container.appendChild(inner);
-      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(container);
+      (
+        document.querySelector('[data-testid=nav-root]')?.parentElement ??
+        document.body
+      ).appendChild(container);
 
       const clip = container.getBoundingClientRect();
       const at0 = host.getBoundingClientRect();
@@ -476,9 +678,18 @@ test.describe('layout detector self-test (@cicd)', () => {
       };
     }, pair('scroll-selftest'));
 
-    expect(shape.scrollable, 'the injected container must actually scroll').toBe(true);
-    expect(shape.outsideAt0, 'at scrollTop=0 the pair must be outside the clip rect').toBe(true);
-    expect(shape.insideAtMax, 'at scrollTop=max the pair must be inside the clip rect').toBe(true);
+    expect(
+      shape.scrollable,
+      'the injected container must actually scroll',
+    ).toBe(true);
+    expect(
+      shape.outsideAt0,
+      'at scrollTop=0 the pair must be outside the clip rect',
+    ).toBe(true);
+    expect(
+      shape.insideAtMax,
+      'at scrollTop=max the pair must be inside the clip rect',
+    ).toBe(true);
 
     const [report] = await sweepLayout(page, {
       viewports: [V375],
@@ -493,17 +704,24 @@ test.describe('layout detector self-test (@cicd)', () => {
     ).toContain('scroll:scroll-selftest-host@1');
 
     const forState = (pred: (s: string) => boolean) =>
-      report.findings.filter((f) => pred(f.state)).flatMap((f) => f.collisions)
+      report.findings
+        .filter((f) => pred(f.state))
+        .flatMap((f) => f.collisions)
         .filter((c) => /scroll-selftest/.test(`${c.a}${c.b}`));
 
-    expect(forState((s) => s === 'base'), 'the clip filter must drop a pair outside its container').toEqual([]);
+    expect(
+      forState((s) => s === 'base'),
+      'the clip filter must drop a pair outside its container',
+    ).toEqual([]);
     expect(
       forState((s) => s === 'scroll:scroll-selftest-host@1').length,
       'the scroll walk must report the pair once it is inside the clip rect',
     ).toBeGreaterThan(0);
 
     const restored = await page.evaluate(
-      () => (document.getElementById('scroll-selftest-host') as HTMLElement).scrollTop === 0,
+      () =>
+        (document.getElementById('scroll-selftest-host') as HTMLElement)
+          .scrollTop === 0,
     );
     expect(restored, 'every scrolled container must be restored').toBe(true);
   });
@@ -514,14 +732,20 @@ test.describe('layout detector self-test (@cicd)', () => {
       const host = document.createElement('div');
       host.id = 'quarantine-selftest';
       host.innerHTML = html;
-      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(host);
+      (
+        document.querySelector('[data-testid=nav-root]')?.parentElement ??
+        document.body
+      ).appendChild(host);
     }, pair('quarantine-selftest'));
 
     const report = await sweepLayoutOnce(page);
-    const mine = (report.findings.find((f) => f.state === 'base')?.collisions ?? []).filter((c) =>
-      /quarantine-selftest/.test(`${c.a}${c.b}`),
-    );
-    expect(mine.length, 'the fixture must be reported before it can be quarantined').toBeGreaterThan(0);
+    const mine = (
+      report.findings.find((f) => f.state === 'base')?.collisions ?? []
+    ).filter((c) => /quarantine-selftest/.test(`${c.a}${c.b}`));
+    expect(
+      mine.length,
+      'the fixture must be reported before it can be quarantined',
+    ).toBeGreaterThan(0);
 
     const entry: KnownFinding = {
       route: '/',
@@ -537,19 +761,31 @@ test.describe('layout detector self-test (@cicd)', () => {
     return { report, entry };
   }
 
-  test('a quarantined finding does not gate, and is still reported', async ({ page }) => {
+  test('a quarantined finding does not gate, and is still reported', async ({
+    page,
+  }) => {
     const { report, entry } = await quarantineFixture(page);
 
     const { fresh, matched, stale } = partitionFindings([report], '/', [entry]);
-    expect(matched, 'the entry must match the finding it names').toEqual([entry]);
-    expect(fresh.filter((f) => f.findingKey === entry.findingKey), 'a quarantined finding must not gate').toEqual([]);
+    expect(matched, 'the entry must match the finding it names').toEqual([
+      entry,
+    ]);
+    expect(
+      fresh.filter((f) => f.findingKey === entry.findingKey),
+      'a quarantined finding must not gate',
+    ).toEqual([]);
     expect(stale, 'an entry that fired is not stale').toEqual([]);
 
     const rendered = formatReports([report], matched);
-    expect(rendered, 'the quarantined finding must still be named in the report').toContain('LAYOUT-SELFTEST');
+    expect(
+      rendered,
+      'the quarantined finding must still be named in the report',
+    ).toContain('LAYOUT-SELFTEST');
   });
 
-  test('a stale quarantine entry is reported, and intermittent exempts it', async ({ page }) => {
+  test('a stale quarantine entry is reported, and intermittent exempts it', async ({
+    page,
+  }) => {
     const { report } = await quarantineFixture(page);
 
     const bogus: KnownFinding = {
@@ -557,13 +793,17 @@ test.describe('layout detector self-test (@cicd)', () => {
       viewport: `${report.viewport.width}x${report.viewport.height}`,
       state: 'base',
       kind: 'collision',
-      findingKey: 'p|nothing-fires-here|| 9.9.9 p|nothing-fires-here-either|| 9.9.8',
+      findingKey:
+        'p|nothing-fires-here|| 9.9.9 p|nothing-fires-here-either|| 9.9.8',
       owner: 'layout-selftest',
       issue: 'LAYOUT-SELFTEST-STALE',
       note: 'injected by detector-selftest.spec.ts',
       added: '2026-11-12',
     };
-    expect(partitionFindings([report], '/', [bogus]).stale, 'a key that stopped firing is stale').toEqual([bogus]);
+    expect(
+      partitionFindings([report], '/', [bogus]).stale,
+      'a key that stopped firing is stale',
+    ).toEqual([bogus]);
 
     const intermittent: KnownFinding = { ...bogus, intermittent: true };
     expect(
@@ -572,7 +812,9 @@ test.describe('layout detector self-test (@cicd)', () => {
     ).toEqual([]);
   });
 
-  test('the quarantine matches exactly, and the checked-in file loads', async ({ page }) => {
+  test('the quarantine matches exactly, and the checked-in file loads', async ({
+    page,
+  }) => {
     const { report, entry } = await quarantineFixture(page);
 
     const mutations: Array<[string, KnownFinding]> = [
@@ -584,17 +826,25 @@ test.describe('layout detector self-test (@cicd)', () => {
     ];
     for (const [field, mutated] of mutations) {
       const { fresh, matched } = partitionFindings([report], '/', [mutated]);
-      expect(matched, `an entry differing in \`${field}\` must not quarantine anything`).toEqual([]);
+      expect(
+        matched,
+        `an entry differing in \`${field}\` must not quarantine anything`,
+      ).toEqual([]);
       expect(
         fresh.some((f) => f.findingKey === entry.findingKey),
         `an entry differing in \`${field}\` must leave the finding gating`,
       ).toBe(true);
     }
 
-    expect(() => loadKnownFindings(), 'the checked-in quarantine must parse and validate').not.toThrow();
+    expect(
+      () => loadKnownFindings(),
+      'the checked-in quarantine must parse and validate',
+    ).not.toThrow();
   });
 
-  test('only on-screen loading content makes a state unsettled', async ({ page }) => {
+  test('only on-screen loading content makes a state unsettled', async ({
+    page,
+  }) => {
     // An image whose request never completes, far below the fold, as a lazy avatar would be.
     await page.route('**/layout-selftest-never.png', () => {});
     await page.evaluate(() => {
@@ -608,14 +858,25 @@ test.describe('layout detector self-test (@cicd)', () => {
       document.body.appendChild(img);
     });
     const lazy = await page.evaluate(() => {
-      const img = document.querySelector('[data-testid=lazy-selftest]') as HTMLImageElement;
-      return { complete: img.complete, top: img.getBoundingClientRect().top, vh: window.innerHeight };
+      const img = document.querySelector(
+        '[data-testid=lazy-selftest]',
+      ) as HTMLImageElement;
+      return {
+        complete: img.complete,
+        top: img.getBoundingClientRect().top,
+        vh: window.innerHeight,
+      };
     });
     expect(lazy.complete, 'the image must still be loading').toBe(false);
-    expect(lazy.top, 'the image must be below the fold').toBeGreaterThan(lazy.vh);
+    expect(lazy.top, 'the image must be below the fold').toBeGreaterThan(
+      lazy.vh,
+    );
 
     const quiet = await sweepLayoutOnce(page);
-    expect(quiet.ledger.statesUnsettled, 'an off-screen loading image must not block measuring').toEqual([]);
+    expect(
+      quiet.ledger.statesUnsettled,
+      'an off-screen loading image must not block measuring',
+    ).toEqual([]);
 
     await injectBelowNavbar(page, {
       id: 'busy-selftest',
@@ -624,39 +885,64 @@ test.describe('layout detector self-test (@cicd)', () => {
       html: '<div aria-busy="true" style="width:100px;height:20px"></div>',
     });
     const busy = await sweepLayoutOnce(page, { settleCapMs: 200 });
-    expect(busy.ledger.statesUnsettled, 'on-screen aria-busy content must leave base unmeasured').toEqual(['base']);
+    expect(
+      busy.ledger.statesUnsettled,
+      'on-screen aria-busy content must leave base unmeasured',
+    ).toEqual(['base']);
     expect(busy.states.find((st) => st.state === 'base')?.settled).toBe('busy');
   });
 
-  test('a slow timer scheduled while measuring is deferred, not dropped', async ({ page }) => {
+  test('a slow timer scheduled while measuring is deferred, not dropped', async ({
+    page,
+  }) => {
     // Schedules a 300ms timer from inside the probe's first read, i.e. while the gate is
     // closed, and gives the probe a finding so it holds the gate through the stability window.
     await page.evaluate((html) => {
       const host = document.createElement('div');
       host.id = 'timer-selftest';
       host.innerHTML = html;
-      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(host);
+      (
+        document.querySelector('[data-testid=nav-root]')?.parentElement ??
+        document.body
+      ).appendChild(host);
       const w = window as unknown as { __timerFired?: boolean };
       w.__timerFired = false;
-      const lower = document.querySelector('[data-testid=timer-selftest-lower]') as HTMLElement;
+      const lower = document.querySelector(
+        '[data-testid=timer-selftest-lower]',
+      ) as HTMLElement;
       const original = lower.getClientRects.bind(lower);
       let reads = 0;
       lower.getClientRects = function patched() {
-        if (++reads === 1) window.setTimeout(() => { w.__timerFired = true; }, 300);
+        if (++reads === 1)
+          window.setTimeout(() => {
+            w.__timerFired = true;
+          }, 300);
         return original();
       };
     }, pair('timer-selftest'));
 
     const report = await sweepLayoutOnce(page);
-    expect(report.ledger.timersDeferred, 'the timer must have been held while measuring').toBeGreaterThanOrEqual(1);
+    expect(
+      report.ledger.timersDeferred,
+      'the timer must have been held while measuring',
+    ).toBeGreaterThanOrEqual(1);
     await expect
-      .poll(() => page.evaluate(() => (window as unknown as { __timerFired?: boolean }).__timerFired), {
-        timeout: 5_000,
-      })
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (window as unknown as { __timerFired?: boolean }).__timerFired,
+          ),
+        {
+          timeout: 5_000,
+        },
+      )
       .toBe(true);
   });
 
-  test('scroll containers get distinct, stable state names', async ({ page }) => {
+  test('scroll containers get distinct, stable state names', async ({
+    page,
+  }) => {
     await page.evaluate(() => {
       const anchor = document.createElement('div');
       anchor.setAttribute('data-testid', 'scroll-pair-anchor');
@@ -666,7 +952,10 @@ test.describe('layout detector self-test (@cicd)', () => {
         sc.innerHTML = `<div style="height:${h}px"></div>`;
         anchor.appendChild(sc);
       }
-      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(anchor);
+      (
+        document.querySelector('[data-testid=nav-root]')?.parentElement ??
+        document.body
+      ).appendChild(anchor);
     });
 
     const [report] = await sweepLayout(page, {
@@ -676,11 +965,16 @@ test.describe('layout detector self-test (@cicd)', () => {
       maxScrollContainers: 2,
     });
     expect(report.ledger.statesExercised).toEqual(
-      expect.arrayContaining(['scroll:scroll-pair-anchor>div@1', 'scroll:scroll-pair-anchor>div~2@1']),
+      expect.arrayContaining([
+        'scroll:scroll-pair-anchor>div@1',
+        'scroll:scroll-pair-anchor>div~2@1',
+      ]),
     );
   });
 
-  test('a wrapped inline overlapping a neighbour is reported once', async ({ page }) => {
+  test('a wrapped inline overlapping a neighbour is reported once', async ({
+    page,
+  }) => {
     await page.evaluate(() => {
       const host = document.createElement('div');
       host.id = 'dedupe-selftest';
@@ -688,55 +982,94 @@ test.describe('layout detector self-test (@cicd)', () => {
       host.innerHTML =
         '<div><span data-testid="dedupe-span">one two three four five six seven eight nine ten eleven</span></div>' +
         '<div data-testid="dedupe-block" style="margin-top:-54px;height:54px;font:14px sans-serif">covering block</div>';
-      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(host);
+      (
+        document.querySelector('[data-testid=nav-root]')?.parentElement ??
+        document.body
+      ).appendChild(host);
     });
     const covered = await page.evaluate(() => {
-      const block = document.querySelector('[data-testid=dedupe-block]')!.getBoundingClientRect();
-      const lines = [...document.querySelector('[data-testid=dedupe-span]')!.getClientRects()];
+      const block = document
+        .querySelector('[data-testid=dedupe-block]')!
+        .getBoundingClientRect();
+      const lines = [
+        ...document
+          .querySelector('[data-testid=dedupe-span]')!
+          .getClientRects(),
+      ];
       return lines.filter((r) => {
         const w = Math.min(r.right, block.right) - Math.max(r.left, block.left);
         const h = Math.min(r.bottom, block.bottom) - Math.max(r.top, block.top);
         return w > 0 && h > 0 && w * h >= 64;
       }).length;
     });
-    expect(covered, 'the block must overlap at least two of the span lines').toBeGreaterThanOrEqual(2);
+    expect(
+      covered,
+      'the block must overlap at least two of the span lines',
+    ).toBeGreaterThanOrEqual(2);
 
     const hits = (await collisions(page)).filter(
-      (c) => /dedupe-span/.test(`${c.a}${c.b}`) && /dedupe-block/.test(`${c.a}${c.b}`),
+      (c) =>
+        /dedupe-span/.test(`${c.a}${c.b}`) &&
+        /dedupe-block/.test(`${c.a}${c.b}`),
     );
-    expect(hits.length, `one finding per element pair:\n${JSON.stringify(hits, null, 2)}`).toBe(1);
+    expect(
+      hits.length,
+      `one finding per element pair:\n${JSON.stringify(hits, null, 2)}`,
+    ).toBe(1);
   });
 
-  test('a visible child of a visibility:hidden parent is still measured', async ({ page }) => {
+  test('a visible child of a visibility:hidden parent is still measured', async ({
+    page,
+  }) => {
     await page.evaluate((html) => {
       const host = document.createElement('div');
       host.style.visibility = 'hidden';
       host.innerHTML = `<div data-testid="visible-child" style="visibility:visible">${html}</div>`;
-      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(host);
+      (
+        document.querySelector('[data-testid=nav-root]')?.parentElement ??
+        document.body
+      ).appendChild(host);
     }, pair('hidden-parent-selftest'));
     const vis = await page.evaluate(
-      () => getComputedStyle(document.querySelector('[data-testid=hidden-parent-selftest-upper]')!).visibility,
+      () =>
+        getComputedStyle(
+          document.querySelector('[data-testid=hidden-parent-selftest-upper]')!,
+        ).visibility,
     );
     expect(vis, 'the pair must be visible').toBe('visible');
 
-    const hits = (await collisions(page)).filter((c) => /hidden-parent-selftest/.test(`${c.a}${c.b}`));
-    expect(hits.length, 'overlapping visible content under a hidden parent must be reported').toBeGreaterThan(0);
+    const hits = (await collisions(page)).filter((c) =>
+      /hidden-parent-selftest/.test(`${c.a}${c.b}`),
+    );
+    expect(
+      hits.length,
+      'overlapping visible content under a hidden parent must be reported',
+    ).toBeGreaterThan(0);
   });
 
-  test('keys survive content inserted before their named ancestor', async ({ page }) => {
+  test('keys survive content inserted before their named ancestor', async ({
+    page,
+  }) => {
     await page.evaluate((html) => {
       const anchor = document.createElement('div');
       anchor.setAttribute('data-testid', 'key-anchor');
       anchor.innerHTML = `<div>${html}</div>`;
-      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(anchor);
+      (
+        document.querySelector('[data-testid=nav-root]')?.parentElement ??
+        document.body
+      ).appendChild(anchor);
     }, pair('key-selftest'));
     const keyOf = async () => {
       const pop = await sweepLayoutOnce(page, { debugKeys: true });
-      return pop.debugKeys!.candidates.find((k) => k.startsWith(keyPrefix('p', 'key-selftest-upper')));
+      return pop.debugKeys!.candidates.find((k) =>
+        k.startsWith(keyPrefix('p', 'key-selftest-upper')),
+      );
     };
     const before = await keyOf();
     expect(before, 'the fixture must be measured').toBeDefined();
-    expect(before, 'the path must start at the named ancestor').toContain('|@key-anchor/');
+    expect(before, 'the path must start at the named ancestor').toContain(
+      '|@key-anchor/',
+    );
 
     await page.evaluate(() => {
       const banner = document.createElement('div');
@@ -744,6 +1077,9 @@ test.describe('layout detector self-test (@cicd)', () => {
       const anchor = document.querySelector('[data-testid=key-anchor]')!;
       anchor.parentElement!.insertBefore(banner, anchor);
     });
-    expect(await keyOf(), 'a sibling inserted before the anchor must not change the key').toBe(before);
+    expect(
+      await keyOf(),
+      'a sibling inserted before the anchor must not change the key',
+    ).toBe(before);
   });
 });

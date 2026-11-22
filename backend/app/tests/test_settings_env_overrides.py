@@ -193,5 +193,5 @@ class TestRunnerPasswordHasherTests(SimpleTestCase):
         with mock.patch.object(sys, "argv", ["daphne", "backend.asgi:application"]):
             with mock.patch.dict(sys.modules):
                 sys.modules.pop("pytest", None)
-                mod = _reload()
+                mod = _reload(remove=("DF_RUNNING_TESTS",))
         self.assertFalse(hasattr(mod, "PASSWORD_HASHERS"))

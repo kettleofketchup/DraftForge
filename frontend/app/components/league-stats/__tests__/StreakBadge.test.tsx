@@ -38,7 +38,9 @@ describe('StreakBadge', () => {
 
   it('has no aria-label on the generic span', () => {
     render(<StreakBadge streak={{ result: 'L', count: 3 }} />);
-    expect(screen.getByTestId('streak-badge').hasAttribute('aria-label')).toBe(false);
+    expect(screen.getByTestId('streak-badge').hasAttribute('aria-label')).toBe(
+      false,
+    );
   });
 
   it('renders W12 without growing the row', () => {
@@ -48,6 +50,7 @@ describe('StreakBadge', () => {
     expect(badge.className).toContain('leading-none');
     expect(badge.className).toContain('text-[10px]');
     const tokens = badge.className.split(/\s+/);
-    for (const t of ['text-xs', 'py-0.5', 'px-2']) expect(tokens).not.toContain(t);
+    for (const t of ['text-xs', 'py-0.5', 'px-2'])
+      expect(tokens).not.toContain(t);
   });
 });

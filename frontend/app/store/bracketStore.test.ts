@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useBracketStore } from './bracketStore';
 import type { BracketMatch } from '~/components/bracket/types';
 import type { TeamType } from '~/components/tournament/types';
+import { useBracketStore } from './bracketStore';
 
 const teamA = { pk: 1, name: 'Team A' } as unknown as TeamType;
 const teamB = { pk: 2, name: 'Team B' } as unknown as TeamType;
@@ -80,7 +80,9 @@ describe('useBracketStore.unsetMatchWinner', () => {
 
     useBracketStore.getState().unsetMatchWinner(stuck.id);
 
-    const updated = useBracketStore.getState().matches.find((m) => m.id === stuck.id)!;
+    const updated = useBracketStore
+      .getState()
+      .matches.find((m) => m.id === stuck.id)!;
     expect(updated.status).toBe('pending');
     expect(updated.winner).toBeUndefined();
     expect(useBracketStore.getState().isDirty).toBe(true);

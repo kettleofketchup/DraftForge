@@ -1,13 +1,4 @@
-import { generateMeta } from '~/lib/seo';
 import { Building2, Plus } from 'lucide-react';
-
-export function meta() {
-  return generateMeta({
-    title: 'Organizations',
-    description: 'Dota 2 tournament organizers',
-    url: '/organizations',
-  });
-}
 import { memo, useEffect, useState } from 'react';
 import {
   CreateOrganizationModal,
@@ -18,7 +9,16 @@ import type { OrganizationType } from '~/components/organization/schemas';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { useIsLoggedIn } from '~/hooks/usePermissions';
+import { generateMeta } from '~/lib/seo';
 import { useUserStore } from '~/store/userStore';
+
+export function meta() {
+  return generateMeta({
+    title: 'Organizations',
+    description: 'Dota 2 tournament organizers',
+    url: '/organizations',
+  });
+}
 
 /** Skeleton loader for organization cards */
 const OrganizationCardSkeleton = () => (
@@ -51,18 +51,18 @@ const EmptyOrganizations = () => (
   <div className="flex flex-col items-center justify-center py-16 text-base-content/60">
     <Building2 className="w-16 h-16 mb-4 opacity-50" />
     <h3 className="text-xl font-semibold mb-2">No Organizations Found</h3>
-    <p className="text-sm text-muted-foreground">Create a new organization to get started!</p>
+    <p className="text-sm text-muted-foreground">
+      Create a new organization to get started!
+    </p>
   </div>
 );
 
 /** Memoized wrapper for individual organization cards */
-const OrganizationCardWrapper = memo(({
-  organization,
-}: {
-  organization: OrganizationType;
-}) => {
-  return <OrganizationCard organization={organization} />;
-});
+const OrganizationCardWrapper = memo(
+  ({ organization }: { organization: OrganizationType }) => {
+    return <OrganizationCard organization={organization} />;
+  },
+);
 
 // Try to get cached organizations from sessionStorage (client-side only)
 const getCachedOrganizations = (): OrganizationType[] => {
@@ -86,7 +86,9 @@ export default function OrganizationsPage() {
 
   // Read cached organizations after mount to avoid hydration mismatch
   const [mounted, setMounted] = useState(false);
-  const [cachedOrganizations, setCachedOrganizations] = useState<OrganizationType[]>([]);
+  const [cachedOrganizations, setCachedOrganizations] = useState<
+    OrganizationType[]
+  >([]);
 
   useEffect(() => {
     setMounted(true);
@@ -96,7 +98,9 @@ export default function OrganizationsPage() {
   // Use cached organizations after mount, then switch to store after hydration
   const organizations = hasHydrated
     ? storeOrganizations
-    : (mounted && cachedOrganizations.length > 0 ? cachedOrganizations : storeOrganizations);
+    : mounted && cachedOrganizations.length > 0
+      ? cachedOrganizations
+      : storeOrganizations;
 
   // Render the organization grid content based on state
   const renderOrganizationGrid = () => {
@@ -122,29 +126,31 @@ export default function OrganizationsPage() {
 
   return (
     <div className="container mx-auto p-4 overflow-x-hidden">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
-          <div className="flex items-center gap-3 min-w-0">
-            <Building2 className="h-7 w-7 sm:h-8 sm:w-8 text-primary shrink-0" />
-            <h1 className="text-xl! sm:text-2xl! font-bold truncate">Organizations</h1>
-          </div>
-          {isLoggedIn && (
-            <PrimaryButton
-              onClick={() => setCreateModalOpen(true)}
-              className="w-full sm:w-auto"
-              data-testid="create-organization-button"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create Organization
-            </PrimaryButton>
-          )}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-3 min-w-0">
+          <Building2 className="h-7 w-7 sm:h-8 sm:w-8 text-primary shrink-0" />
+          <h1 className="text-xl! sm:text-2xl! font-bold truncate">
+            Organizations
+          </h1>
         </div>
+        {isLoggedIn && (
+          <PrimaryButton
+            onClick={() => setCreateModalOpen(true)}
+            className="w-full sm:w-auto"
+            data-testid="create-organization-button"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Create Organization
+          </PrimaryButton>
+        )}
+      </div>
 
-        {renderOrganizationGrid()}
+      {renderOrganizationGrid()}
 
-        <CreateOrganizationModal
-          open={createModalOpen}
-          onOpenChange={setCreateModalOpen}
-        />
+      <CreateOrganizationModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+      />
     </div>
   );
 }

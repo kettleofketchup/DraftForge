@@ -13,7 +13,15 @@ const frame = (reserve_ms: number | null) => ({
   round_started_at: '2026-11-08T11:59:30Z',
   round_timed_out_at: null,
   round_grace_time_ms: 30000,
-  teams: [{ team_id: 1, captain_id: 7, reserve_ms, is_connected: true, is_ready: true }],
+  teams: [
+    {
+      team_id: 1,
+      captain_id: 7,
+      reserve_ms,
+      is_connected: true,
+      is_ready: true,
+    },
+  ],
 });
 
 it('accepts a tick whose team reserve_ms is null (unseeded pool)', () => {

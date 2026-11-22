@@ -14,21 +14,39 @@ describe('selectPositions', () => {
     useUserCacheStore.getState().upsert({
       pk: 5,
       username: 'x',
-      positions: { carry: 5, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+      positions: {
+        carry: 5,
+        mid: 0,
+        offlane: 0,
+        soft_support: 0,
+        hard_support: 0,
+      },
     } as never);
-    const pos = selectPositions(useUserCacheStore.getState(), 5, GAME_TYPE.DOTA2);
+    const pos = selectPositions(
+      useUserCacheStore.getState(),
+      5,
+      GAME_TYPE.DOTA2,
+    );
     expect(pos?.carry).toBe(5);
   });
 
   it('returns undefined for null gameType', () => {
-    expect(selectPositions(useUserCacheStore.getState(), 5, null)).toBeUndefined();
+    expect(
+      selectPositions(useUserCacheStore.getState(), 5, null),
+    ).toBeUndefined();
   });
 
   it('returns undefined for non-dota gameType', () => {
     useUserCacheStore.getState().upsert({
       pk: 7,
       username: 'y',
-      positions: { carry: 3, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+      positions: {
+        carry: 3,
+        mid: 0,
+        offlane: 0,
+        soft_support: 0,
+        hard_support: 0,
+      },
     } as never);
     expect(
       selectPositions(useUserCacheStore.getState(), 7, GAME_TYPE.DEADLOCK),

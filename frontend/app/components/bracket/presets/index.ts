@@ -1,13 +1,16 @@
-export * from './types';
 export { FOUR_TEAM_DOUBLE_ELIM } from './fourTeamDoubleElim';
+export * from './types';
 
-import type { BracketPreset } from './types';
 import { FOUR_TEAM_DOUBLE_ELIM } from './fourTeamDoubleElim';
+import type { BracketPreset } from './types';
 
 /**
  * Get bracket preset by team count and format
  */
-export function getPreset(teamCount: number, format: 'double_elimination' | 'swiss'): BracketPreset | undefined {
+export function getPreset(
+  teamCount: number,
+  format: 'double_elimination' | 'swiss',
+): BracketPreset | undefined {
   if (format === 'double_elimination') {
     switch (teamCount) {
       case 4:
@@ -24,6 +27,4 @@ export function getPreset(teamCount: number, format: 'double_elimination' | 'swi
 /**
  * All available presets
  */
-export const ALL_PRESETS: BracketPreset[] = [
-  FOUR_TEAM_DOUBLE_ELIM,
-];
+export const ALL_PRESETS: BracketPreset[] = [FOUR_TEAM_DOUBLE_ELIM];

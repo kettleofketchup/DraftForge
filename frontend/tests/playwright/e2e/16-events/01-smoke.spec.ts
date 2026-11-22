@@ -15,19 +15,18 @@
  * - event_player_1-3 (pk=5001-5003) - regular players
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   getEventsTestData,
-  resetEventsData,
   loginEventAdmin,
   loginEventPlayer,
   postWithCsrf,
+  resetEventsData,
+  test,
+  visitAndWaitForHydration,
   type EventInfo,
 } from '../../fixtures';
-
+import { API_URL } from '../../fixtures/base-url';
 
 let eventInfo: EventInfo;
 
@@ -43,11 +42,15 @@ test.describe('Events - List Page (@cicd)', () => {
     await loginEventAdmin(context);
   });
 
-  test('shows events list page with header and org filter', async ({ page }) => {
+  test('shows events list page with header and org filter', async ({
+    page,
+  }) => {
     await visitAndWaitForHydration(page, '/events');
 
     // Header with icon and title
-    await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible({
+      timeout: 10000,
+    });
 
     // Org filter dropdown
     await expect(page.getByTestId('events-org-filter')).toBeVisible();
@@ -61,25 +64,37 @@ test.describe('Events - List Page (@cicd)', () => {
     await page.getByRole('button', { name: 'Events Test Org' }).click();
 
     // Should show the E2E Signup Event card
-    await expect(page.getByText('E2E Signup Event')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Signup Event')).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test('event card shows state badge', async ({ page }) => {
-    await visitAndWaitForHydration(page, `/events?organization=${eventInfo.orgPk}`);
+    await visitAndWaitForHydration(
+      page,
+      `/events?organization=${eventInfo.orgPk}`,
+    );
 
     // Event card should show a status badge — multiple events may show this state
-    await expect(page.getByText('Signups Open').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Signups Open').first()).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test('navigates to event detail from card', async ({ page }) => {
-    await visitAndWaitForHydration(page, `/events?organization=${eventInfo.orgPk}`);
+    await visitAndWaitForHydration(
+      page,
+      `/events?organization=${eventInfo.orgPk}`,
+    );
 
     // Click the event card
     await page.getByText('E2E Signup Event').click();
 
     // Should navigate to event detail
     await expect(page).toHaveURL(new RegExp(`/events/${eventInfo.pk}`));
-    await expect(page.getByRole('heading', { name: 'E2E Signup Event' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'E2E Signup Event' }),
+    ).toBeVisible();
   });
 });
 
@@ -99,7 +114,9 @@ test.describe('Events - Detail Page', () => {
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
 
     // Header — heading is unique, org/state badges may appear in multiple places
-    await expect(page.getByRole('heading', { name: 'E2E Signup Event' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'E2E Signup Event' }),
+    ).toBeVisible();
     await expect(page.getByText('Events Test Org').first()).toBeVisible();
     await expect(page.getByText('Signups Open').first()).toBeVisible();
 
@@ -108,12 +125,17 @@ test.describe('Events - Detail Page', () => {
     await expect(page.getByTestId('event-tab-signups')).toBeVisible();
   });
 
-  test('admin sees action buttons for signups_open state', async ({ context, page }) => {
+  test('admin sees action buttons for signups_open state', async ({
+    context,
+    page,
+  }) => {
     await loginEventAdmin(context);
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
 
     // Admin should see Start Roll Call and Cancel buttons
-    await expect(page.getByTestId('event-start-rollcall-btn')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('event-start-rollcall-btn')).toBeVisible({
+      timeout: 10000,
+    });
     await expect(page.getByTestId('event-cancel-btn')).toBeVisible();
 
     // Should NOT see Open Signups (already open)
@@ -125,7 +147,9 @@ test.describe('Events - Detail Page', () => {
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
 
     // Player should not see admin action buttons
-    await expect(page.getByTestId('event-start-rollcall-btn')).not.toBeVisible();
+    await expect(
+      page.getByTestId('event-start-rollcall-btn'),
+    ).not.toBeVisible();
     await expect(page.getByTestId('event-cancel-btn')).not.toBeVisible();
   });
 
@@ -191,14 +215,20 @@ test.describe('Events - Signup Flow', () => {
     await rsvpBtn.click();
 
     // No confirm dialog now — fast path fires immediately for users with complete profiles.
-    await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test('admin can approve signup', async ({ browser }) => {
     // Player RSVPs via API (separate context)
     const playerCtx = await browser.newContext({ ignoreHTTPSErrors: true });
     await loginEventPlayer(playerCtx);
-    const rsvpResp = await postWithCsrf(playerCtx, `${API_URL}/events/${eventInfo.pk}/signup/`, { intent: 'rsvp' });
+    const rsvpResp = await postWithCsrf(
+      playerCtx,
+      `${API_URL}/events/${eventInfo.pk}/signup/`,
+      { intent: 'rsvp' },
+    );
     expect(rsvpResp.ok()).toBeTruthy();
     await playerCtx.close();
 
@@ -206,10 +236,15 @@ test.describe('Events - Signup Flow', () => {
     const adminCtx = await browser.newContext({ ignoreHTTPSErrors: true });
     const adminPage = await adminCtx.newPage();
     await loginEventAdmin(adminCtx);
-    await visitAndWaitForHydration(adminPage, `/events/${eventInfo.pk}/signups`);
+    await visitAndWaitForHydration(
+      adminPage,
+      `/events/${eventInfo.pk}/signups`,
+    );
 
     // Should see the signup with approved status (auto_approve is enabled on test event)
-    await expect(adminPage.getByText('EventPlayer1').first()).toBeVisible({ timeout: 10000 });
+    await expect(adminPage.getByText('EventPlayer1').first()).toBeVisible({
+      timeout: 10000,
+    });
     await expect(adminPage.getByText('Approved').first()).toBeVisible();
 
     await adminCtx.close();

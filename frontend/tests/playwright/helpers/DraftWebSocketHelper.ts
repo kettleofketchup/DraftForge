@@ -1,4 +1,9 @@
-import { type Page, type WebSocket, type Locator, expect } from '@playwright/test';
+import {
+  type Locator,
+  type Page,
+  type WebSocket,
+  expect,
+} from '@playwright/test';
 
 /**
  * WebSocket monitoring helper for team draft E2E tests.
@@ -68,7 +73,9 @@ export class DraftWebSocketHelper {
   }
 
   /** Messages of a specific type. */
-  messagesOfType(type: string): Array<{ type: string; [key: string]: unknown }> {
+  messagesOfType(
+    type: string,
+  ): Array<{ type: string; [key: string]: unknown }> {
     return this._messages.filter((m) => m.type === type);
   }
 
@@ -91,7 +98,7 @@ export class DraftWebSocketHelper {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error(`No WS connection within ${timeout}ms`)),
-        timeout
+        timeout,
       );
 
       const handler = (ws: WebSocket) => {
@@ -129,14 +136,14 @@ export class DraftWebSocketHelper {
             }
             const timer = setTimeout(
               () => reject(new Error(`WS did not close within ${timeout}ms`)),
-              timeout
+              timeout,
             );
             ws.on('close', () => {
               clearTimeout(timer);
               resolve();
             });
-          })
-      )
+          }),
+      ),
     );
   }
 
@@ -152,15 +159,18 @@ export class DraftWebSocketHelper {
         () =>
           reject(
             new Error(
-              `No reconnection within ${timeout}ms (connections: ${this.connectionCount}, before: ${countBefore})`
-            )
+              `No reconnection within ${timeout}ms (connections: ${this.connectionCount}, before: ${countBefore})`,
+            ),
           ),
-        timeout
+        timeout,
       );
 
       const checkReconnect = () => {
         // New connection opened after the ones we had before
-        if (this.connectionCount > countBefore && this.activeConnectionCount > 0) {
+        if (
+          this.connectionCount > countBefore &&
+          this.activeConnectionCount > 0
+        ) {
           clearTimeout(timer);
           resolve();
         }
@@ -185,7 +195,7 @@ export class DraftWebSocketHelper {
    */
   async waitForMessage(
     type: string,
-    timeout = 10000
+    timeout = 10000,
   ): Promise<{ type: string; [key: string]: unknown }> {
     // Check if already received
     const existing = this._messages.find((m) => m.type === type);
@@ -193,8 +203,11 @@ export class DraftWebSocketHelper {
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
-        () => reject(new Error(`No WS message of type "${type}" within ${timeout}ms`)),
-        timeout
+        () =>
+          reject(
+            new Error(`No WS message of type "${type}" within ${timeout}ms`),
+          ),
+        timeout,
       );
 
       // Poll messages array (framereceived events are async)
@@ -217,7 +230,7 @@ export class DraftWebSocketHelper {
   assertSingleConnection(): void {
     expect(
       this.activeConnectionCount,
-      `Expected 1 active WS connection, got ${this.activeConnectionCount}`
+      `Expected 1 active WS connection, got ${this.activeConnectionCount}`,
     ).toBe(1);
   }
 
@@ -225,7 +238,7 @@ export class DraftWebSocketHelper {
   assertNoConnections(): void {
     expect(
       this.activeConnectionCount,
-      `Expected 0 active WS connections, got ${this.activeConnectionCount}`
+      `Expected 0 active WS connections, got ${this.activeConnectionCount}`,
     ).toBe(0);
   }
 

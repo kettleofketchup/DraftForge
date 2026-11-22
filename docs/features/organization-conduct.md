@@ -13,10 +13,45 @@ Conduct is a [standing track](../development/org-standing.md#conduct-track), so 
 ranking is also served by the generic
 [standing endpoints](../api/endpoints.md#organization-standing).
 
-!!! note "Screens ship separately"
-    The backend (recording, scoring, enforcement and the API) ships first. The Conduct
-    tab, the Conduct settings section, the Attendance panel and the turnout forecast
-    card described below arrive with the conduct frontend.
+!!! note "Event screens ship separately"
+    The Conduct tab and the Conduct settings section are live. The Attendance panel and
+    the turnout forecast card on the event page arrive in a later release.
+
+## On the organization page
+
+The organization page shows one tab per enabled standing track, so an org with
+Conduct unlocked has a **Conduct** tab next to **Contributions**. A track with more
+than one metric gets a metric switcher above its leaderboard. The tab is shown to
+anyone who can see the ranking or their own record; outsiders of an org with a
+private ranking get no tab, and a `?tab=conduct` link falls back to the default tab.
+
+- **Leaderboard.** Ranked members with rank, show rate and counted events. Members
+  with fewer than the minimum counted events show **New** instead of a rate and are
+  not numbered. Members with the same rate and event count share a rank.
+- **Private ranking.** With **Public ranking** off, members see the note "This
+  organization keeps its Conduct ranking private." and only their own row and history.
+- **Member history.** Your own history opens with the tab: each event with its
+  outcome, source and weight, plus totals per outcome. A new member's history says
+  why they show as New. Plain members open only their own history; org staff can open
+  any member's, and also see reasons and who made an edit.
+- **How the show rate works.** The info button next to the ranking explains how the
+  rate is built: what counts as a show or a miss, what is left out, how older events
+  weigh less, and why new members lean on the org's baseline. The formula below is the
+  reference.
+
+### Conduct settings
+
+Org admins open **Organization Settings > Conduct**; other roles do not see the
+section. It holds four groups: **Scoring**, **Late cancel** (window and weight),
+**Visibility** (**Public ranking**) and **Enforcement**. A field still at its default
+shows a **Default** badge; a changed one has a **Reset** button that puts the default
+back. The three enforcement toggles are off by default, and the group stays collapsed
+until one is on.
+
+Values are checked in the browser against the same ranges as the server (at most two
+decimal places, and the maximum age can't be shorter than the half-life). An error
+the server returns for a field is shown under that field and opens its group, even a
+collapsed Enforcement group; an error that belongs to no field is shown as a toast.
 
 ---
 

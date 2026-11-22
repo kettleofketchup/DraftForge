@@ -20,7 +20,7 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.serializers import _users_remaining_pks
+from app.serializers import users_remaining_pks
 from app.services import team_management
 from app.services.team_management import (
     DEFAULT_MAX_STANDINS,
@@ -63,6 +63,7 @@ from org.models import Organization, OrgSettings, OrgUser
 from org.models_profiles import PlayerDotaProfile
 from org.settings_constants import StaffOverridePolicy
 from org.settings_service import get_org_settings
+from tests.populate.utils import ensure_org_user
 from user.tests.test_cacheops_integration import _redis_reachable
 
 
@@ -114,7 +115,7 @@ class TeamManagementFixture:
 
     def make_user(self, username: str) -> CustomUser:
         user = CustomUser.objects.create_user(username=username, password="test")
-        OrgUser.objects.create(user=user, organization=self.org, mmr=3000)
+        ensure_org_user(user, self.org, mmr=3000)
         return user
 
     def gate_event(self) -> CustomUser:
@@ -861,7 +862,7 @@ class CaptainDraftFollowUpTests(TeamManagementFixture, TestCase):
         self.assertNotIn(self.c.pk, remaining)
         self.assertEqual(remaining, {self.p1.pk, self.p2.pk})
         state = tournament_state_queryset(fresh=True).get(pk=self.tournament.pk)
-        pool = _users_remaining_pks(state.draft)
+        pool = users_remaining_pks(state.draft)
         self.assertNotIn(self.c.pk, pool)
         self.assertEqual(set(pool), {self.p1.pk, self.p2.pk})
 
@@ -875,7 +876,7 @@ class CaptainDraftFollowUpTests(TeamManagementFixture, TestCase):
         remaining = set(fresh.users_remaining.values_list("pk", flat=True))
         self.assertEqual(remaining, {self.p2.pk})
         state = tournament_state_queryset(fresh=True).get(pk=self.tournament.pk)
-        self.assertEqual(set(_users_remaining_pks(state.draft)), {self.p2.pk})
+        self.assertEqual(set(users_remaining_pks(state.draft)), {self.p2.pk})
 
     def test_presence_reset_and_pending_emits(self) -> None:
         draft = self.make_draft(TeamDraftState.PENDING)
@@ -1094,9 +1095,9 @@ class DropoutTests(TeamManagementFixture, TestCase):
     def test_dropout_captain_mmr_successor_added_to_tournament(self) -> None:
         Team.objects.filter(pk=self.team.pk).update(deputy_captain=None)
         high = CustomUser.objects.create_user(username="roster_high", password="t")
-        OrgUser.objects.create(user=high, organization=self.org, mmr=9000)
+        ensure_org_user(high, self.org, mmr=9000)
         self.team.members.add(high)
-        OrgUser.objects.filter(user=self.c).update(mmr=12000)
+        ensure_org_user(self.c, self.org, mmr=12000)
         self.assertFalse(self.tournament.users.filter(pk=high.pk).exists())
 
         change = self.dropout(self.c)
@@ -1498,7 +1499,7 @@ class DraftBookkeepingTests(TeamManagementFixture, TestCase):
         fresh = Draft.objects.nocache().get(pk=self.draft.pk)
         remaining = set(fresh.users_remaining.values_list("pk", flat=True))
         state = tournament_state_queryset(fresh=True).get(pk=self.tournament.pk)
-        self.assertEqual(set(_users_remaining_pks(state.draft)), remaining)
+        self.assertEqual(set(users_remaining_pks(state.draft)), remaining)
         return remaining
 
     def test_dropout_not_in_pool(self) -> None:

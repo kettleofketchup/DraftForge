@@ -1,6 +1,15 @@
-import { Award, FileSpreadsheet, Gamepad2, GitBranch, Shield, Swords, Trophy, Users } from 'lucide-react';
-import { getLogger } from '~/lib/logger';
+import {
+  Award,
+  FileSpreadsheet,
+  Gamepad2,
+  GitBranch,
+  Shield,
+  Swords,
+  Trophy,
+  Users,
+} from 'lucide-react';
 import { FeatureCard } from '~/components/feature/FeatureCard';
+import { getLogger } from '~/lib/logger';
 
 const log = getLogger('FeaturesSection');
 

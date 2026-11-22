@@ -5,8 +5,8 @@ import type {
   TournamentType,
 } from './types';
 
-import type { UserType } from '../user/types.d';
 import type { TeamDraftType } from '../teamdraft/types.d';
+import type { UserType } from '../user/types.d';
 import type { StateValue, TournamentTypeValue } from './schemas';
 
 import {
@@ -55,7 +55,9 @@ export class Tournament implements TournamentClassType {
     }
     try {
       const rawData = await fetchTournament(this.pk);
-      const data = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> });
+      const data = hydrateTournament(
+        rawData as TournamentType & { _users?: Record<number, unknown> },
+      );
       Object.assign(this, data);
     } catch (error) {
       log.error('Error fetching user data:', error);

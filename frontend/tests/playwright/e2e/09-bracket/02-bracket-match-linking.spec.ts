@@ -14,11 +14,10 @@
 
 import type { Page } from '@playwright/test';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   getTournamentByKey,
-  TournamentPage,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
 
 // Tournament PK fetched in beforeAll
@@ -47,13 +46,17 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
    */
   async function openLinkModalForTeam(
     page: Page,
-    captainName: string
+    captainName: string,
   ): Promise<void> {
     await page.locator(`text=${captainName}`).click();
-    await expect(page.locator('[data-testid="match-details-header"]')).toBeVisible({ timeout: 5000 });
-    await page.locator('[data-testid="link-steam-match-btn"]').click({ force: true });
     await expect(
-      page.locator('[data-testid="link-steam-match-modal"]')
+      page.locator('[data-testid="match-details-header"]'),
+    ).toBeVisible({ timeout: 5000 });
+    await page
+      .locator('[data-testid="link-steam-match-btn"]')
+      .click({ force: true });
+    await expect(
+      page.locator('[data-testid="link-steam-match-modal"]'),
     ).toBeVisible({ timeout: 5000 });
   }
 
@@ -111,24 +114,34 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
 
     test.describe('Navigation to Link Modal', () => {
       test('should display bracket with pending games', async ({ page }) => {
-        await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
+        await visitAndWaitForHydration(
+          page,
+          `/tournament/${tournamentPk}/games`,
+        );
 
         // Wait for the games tab to load
         const bracketTab = page.locator('[data-testid="bracketTab"]');
         await expect(bracketTab).toBeVisible({ timeout: 10000 });
 
         // Bracket container is the only view now (List View was removed)
-        const bracketContainer = page.locator('[data-testid="bracketContainer"]');
+        const bracketContainer = page.locator(
+          '[data-testid="bracketContainer"]',
+        );
         await expect(bracketContainer).toBeVisible({ timeout: 15000 });
       });
 
       test('should open MatchStatsModal when clicking a bracket match node', async ({
         page,
       }) => {
-        await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
+        await visitAndWaitForHydration(
+          page,
+          `/tournament/${tournamentPk}/games`,
+        );
 
         // Wait for bracket to load
-        const bracketContainer = page.locator('[data-testid="bracketContainer"]');
+        const bracketContainer = page.locator(
+          '[data-testid="bracketContainer"]',
+        );
         await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
         // Click on a match node - look for team captain name from first match
@@ -136,22 +149,31 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
         await page.locator('text=link_test_player_0').click();
 
         // MatchStatsModal should open (wait for dialog content)
-        await expect(page.locator('[data-testid="match-details-header"]')).toBeVisible({ timeout: 5000 });
+        await expect(
+          page.locator('[data-testid="match-details-header"]'),
+        ).toBeVisible({ timeout: 5000 });
       });
 
       test('should show Link Steam Match button in MatchStatsModal for staff', async ({
         page,
       }) => {
-        await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
+        await visitAndWaitForHydration(
+          page,
+          `/tournament/${tournamentPk}/games`,
+        );
 
-        const bracketContainer = page.locator('[data-testid="bracketContainer"]');
+        const bracketContainer = page.locator(
+          '[data-testid="bracketContainer"]',
+        );
         await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
         // Click on a match node
         await page.locator('text=link_test_player_0').click();
 
         // Wait for modal to open
-        await expect(page.locator('[data-testid="match-details-header"]')).toBeVisible({ timeout: 5000 });
+        await expect(
+          page.locator('[data-testid="match-details-header"]'),
+        ).toBeVisible({ timeout: 5000 });
 
         // Staff should see the Link Steam Match button
         const linkButton = page.locator('[data-testid="link-steam-match-btn"]');
@@ -161,47 +183,71 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
       test('should open LinkSteamMatchModal when clicking link button', async ({
         page,
       }) => {
-        await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
+        await visitAndWaitForHydration(
+          page,
+          `/tournament/${tournamentPk}/games`,
+        );
 
-        const bracketContainer = page.locator('[data-testid="bracketContainer"]');
+        const bracketContainer = page.locator(
+          '[data-testid="bracketContainer"]',
+        );
         await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
         // Click on match node
         await page.locator('text=link_test_player_0').click();
 
         // Wait for MatchStatsModal
-        await expect(page.locator('[data-testid="match-details-header"]')).toBeVisible({ timeout: 5000 });
+        await expect(
+          page.locator('[data-testid="match-details-header"]'),
+        ).toBeVisible({ timeout: 5000 });
 
         // Click Link Steam Match button (use force to handle overlay)
-        await page.locator('[data-testid="link-steam-match-btn"]').click({ force: true });
+        await page
+          .locator('[data-testid="link-steam-match-btn"]')
+          .click({ force: true });
 
         // LinkSteamMatchModal should open
-        const linkModal = page.locator('[data-testid="link-steam-match-modal"]');
+        const linkModal = page.locator(
+          '[data-testid="link-steam-match-modal"]',
+        );
         await expect(linkModal).toBeVisible({ timeout: 5000 });
 
         // Modal should have title (scroll into view first to handle any overlay)
-        await linkModal.locator('text=Link Steam Match').scrollIntoViewIfNeeded();
+        await linkModal
+          .locator('text=Link Steam Match')
+          .scrollIntoViewIfNeeded();
         await expect(linkModal.locator('text=Link Steam Match')).toBeVisible();
       });
     });
 
     test.describe('Match Suggestions Display', () => {
       test.beforeEach(async ({ page }) => {
-        await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
+        await visitAndWaitForHydration(
+          page,
+          `/tournament/${tournamentPk}/games`,
+        );
 
-        const bracketContainer = page.locator('[data-testid="bracketContainer"]');
+        const bracketContainer = page.locator(
+          '[data-testid="bracketContainer"]',
+        );
         await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
         // Navigate to LinkSteamMatchModal - use second match to avoid conflicts
         await page.locator('text=link_test_player_10').click();
-        await expect(page.locator('[data-testid="match-details-header"]')).toBeVisible({ timeout: 5000 });
-        await page.locator('[data-testid="link-steam-match-btn"]').click({ force: true });
         await expect(
-          page.locator('[data-testid="link-steam-match-modal"]')
+          page.locator('[data-testid="match-details-header"]'),
+        ).toBeVisible({ timeout: 5000 });
+        await page
+          .locator('[data-testid="link-steam-match-btn"]')
+          .click({ force: true });
+        await expect(
+          page.locator('[data-testid="link-steam-match-modal"]'),
         ).toBeVisible({ timeout: 5000 });
       });
 
-      test('should display match suggestions grouped by tier', async ({ page }) => {
+      test('should display match suggestions grouped by tier', async ({
+        page,
+      }) => {
         // Should show tier sections (may have all_players, captains_plus, etc.)
         // At least one tier section should be visible
         const tierSections = page.locator('[data-testid^="tier-"]');
@@ -234,21 +280,32 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
 
     test.describe('Search Functionality', () => {
       test.beforeEach(async ({ page }) => {
-        await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
+        await visitAndWaitForHydration(
+          page,
+          `/tournament/${tournamentPk}/games`,
+        );
 
-        const bracketContainer = page.locator('[data-testid="bracketContainer"]');
+        const bracketContainer = page.locator(
+          '[data-testid="bracketContainer"]',
+        );
         await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
         // Navigate to LinkSteamMatchModal - use third match
         await page.locator('text=link_test_player_15').click();
-        await expect(page.locator('[data-testid="match-details-header"]')).toBeVisible({ timeout: 5000 });
-        await page.locator('[data-testid="link-steam-match-btn"]').click({ force: true });
         await expect(
-          page.locator('[data-testid="link-steam-match-modal"]')
+          page.locator('[data-testid="match-details-header"]'),
+        ).toBeVisible({ timeout: 5000 });
+        await page
+          .locator('[data-testid="link-steam-match-btn"]')
+          .click({ force: true });
+        await expect(
+          page.locator('[data-testid="link-steam-match-modal"]'),
         ).toBeVisible({ timeout: 5000 });
       });
 
-      test('should filter matches when searching by match ID', async ({ page }) => {
+      test('should filter matches when searching by match ID', async ({
+        page,
+      }) => {
         // Wait for suggestions to load
         const matchCards = page.locator('[data-testid="match-card"]');
         await expect(matchCards.first()).toBeAttached({ timeout: 10000 });
@@ -261,7 +318,9 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
           const matchId = matchIdMatch[1];
 
           // Search for this specific match
-          const searchInput = page.locator('[data-testid="match-search-input"]');
+          const searchInput = page.locator(
+            '[data-testid="match-search-input"]',
+          );
           await searchInput.fill(matchId);
 
           // Should show fewer or same number of results (expect waits for condition)
@@ -277,23 +336,36 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
         await searchInput.fill('9999999999999');
 
         // Should show "No matches found" message (expect waits for condition)
-        await expect(page.locator('text=No matches found')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('text=No matches found')).toBeVisible({
+          timeout: 5000,
+        });
       });
     });
 
     test.describe('Link and Unlink Flow', () => {
-      test('should link a match when clicking Link button', async ({ page }) => {
-        await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
+      test('should link a match when clicking Link button', async ({
+        page,
+      }) => {
+        await visitAndWaitForHydration(
+          page,
+          `/tournament/${tournamentPk}/games`,
+        );
 
-        const bracketContainer = page.locator('[data-testid="bracketContainer"]');
+        const bracketContainer = page.locator(
+          '[data-testid="bracketContainer"]',
+        );
         await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
         // Use first match for this test
         await page.locator('text=link_test_player_0').click();
-        await expect(page.locator('[data-testid="match-details-header"]')).toBeVisible({ timeout: 5000 });
-        await page.locator('[data-testid="link-steam-match-btn"]').click({ force: true });
         await expect(
-          page.locator('[data-testid="link-steam-match-modal"]')
+          page.locator('[data-testid="match-details-header"]'),
+        ).toBeVisible({ timeout: 5000 });
+        await page
+          .locator('[data-testid="link-steam-match-btn"]')
+          .click({ force: true });
+        await expect(
+          page.locator('[data-testid="link-steam-match-modal"]'),
         ).toBeVisible({ timeout: 5000 });
 
         // Wait for suggestions to load
@@ -315,21 +387,28 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
           const matchId = matchIdMatch[1];
 
           // Click link button on first match card (use force to handle any overlay)
-          await page.locator('[data-testid="link-btn"]').first().click({ force: true });
+          await page
+            .locator('[data-testid="link-btn"]')
+            .first()
+            .click({ force: true });
 
           // Modal should close after linking
           await expect(
-            page.locator('[data-testid="link-steam-match-modal"]')
+            page.locator('[data-testid="link-steam-match-modal"]'),
           ).not.toBeVisible();
 
           // Reopen the link modal
-          await page.locator('[data-testid="link-steam-match-btn"]').click({ force: true });
+          await page
+            .locator('[data-testid="link-steam-match-btn"]')
+            .click({ force: true });
           await expect(
-            page.locator('[data-testid="link-steam-match-modal"]')
+            page.locator('[data-testid="link-steam-match-modal"]'),
           ).toBeVisible({ timeout: 5000 });
 
           // Should show "Currently Linked" section
-          const currentlyLinked = page.locator('[data-testid="currently-linked"]');
+          const currentlyLinked = page.locator(
+            '[data-testid="currently-linked"]',
+          );
           await expect(currentlyLinked).toBeVisible({ timeout: 5000 });
 
           // Should show the linked match ID
@@ -340,17 +419,26 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
       test('should show Currently Linked section when match is linked', async ({
         page,
       }) => {
-        await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
+        await visitAndWaitForHydration(
+          page,
+          `/tournament/${tournamentPk}/games`,
+        );
 
-        const bracketContainer = page.locator('[data-testid="bracketContainer"]');
+        const bracketContainer = page.locator(
+          '[data-testid="bracketContainer"]',
+        );
         await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
         // Use second match for this test
         await page.locator('text=link_test_player_10').click();
-        await expect(page.locator('[data-testid="match-details-header"]')).toBeVisible({ timeout: 5000 });
-        await page.locator('[data-testid="link-steam-match-btn"]').click({ force: true });
         await expect(
-          page.locator('[data-testid="link-steam-match-modal"]')
+          page.locator('[data-testid="match-details-header"]'),
+        ).toBeVisible({ timeout: 5000 });
+        await page
+          .locator('[data-testid="link-steam-match-btn"]')
+          .click({ force: true });
+        await expect(
+          page.locator('[data-testid="link-steam-match-modal"]'),
         ).toBeVisible({ timeout: 5000 });
 
         // Wait for suggestions to load
@@ -365,26 +453,40 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
         }
 
         // Link a match
-        await page.locator('[data-testid="link-btn"]').first().click({ force: true });
+        await page
+          .locator('[data-testid="link-btn"]')
+          .first()
+          .click({ force: true });
 
         // Modal closes, reopen it
-        await page.locator('[data-testid="link-steam-match-btn"]').click({ force: true });
+        await page
+          .locator('[data-testid="link-steam-match-btn"]')
+          .click({ force: true });
         await expect(
-          page.locator('[data-testid="link-steam-match-modal"]')
+          page.locator('[data-testid="link-steam-match-modal"]'),
         ).toBeVisible({ timeout: 5000 });
 
         // Currently linked section should be visible
-        const currentlyLinked = page.locator('[data-testid="currently-linked"]');
+        const currentlyLinked = page.locator(
+          '[data-testid="currently-linked"]',
+        );
         await expect(currentlyLinked).toBeVisible({ timeout: 5000 });
 
         // Unlink button should be visible
         await expect(page.locator('[data-testid="unlink-btn"]')).toBeVisible();
       });
 
-      test('should unlink a match when clicking Unlink button', async ({ page }) => {
-        await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
+      test('should unlink a match when clicking Unlink button', async ({
+        page,
+      }) => {
+        await visitAndWaitForHydration(
+          page,
+          `/tournament/${tournamentPk}/games`,
+        );
 
-        const bracketContainer = page.locator('[data-testid="bracketContainer"]');
+        const bracketContainer = page.locator(
+          '[data-testid="bracketContainer"]',
+        );
         await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
         // Wait for bracket to load
@@ -404,7 +506,9 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
         await expect(dialog).toBeVisible({ timeout: 5000 });
 
         // Check if link steam match button is available
-        const linkSteamBtn = page.locator('[data-testid="link-steam-match-btn"]');
+        const linkSteamBtn = page.locator(
+          '[data-testid="link-steam-match-btn"]',
+        );
         const canLink = await linkSteamBtn.isVisible().catch(() => false);
 
         if (!canLink) {
@@ -415,12 +519,15 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
 
         await linkSteamBtn.click({ force: true });
         await expect(
-          page.locator('[data-testid="link-steam-match-modal"]')
+          page.locator('[data-testid="link-steam-match-modal"]'),
         ).toBeVisible({ timeout: 5000 });
 
         // Wait for suggestions to load
         const matchCards = page.locator('[data-testid="match-card"]');
-        const hasCards = await matchCards.count().then(c => c > 0).catch(() => false);
+        const hasCards = await matchCards
+          .count()
+          .then((c) => c > 0)
+          .catch(() => false);
 
         if (!hasCards) {
           console.log('No match cards found - skipping test');
@@ -444,7 +551,7 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
           // Reopen modal
           await linkSteamBtn.click({ force: true });
           await expect(
-            page.locator('[data-testid="link-steam-match-modal"]')
+            page.locator('[data-testid="link-steam-match-modal"]'),
           ).toBeVisible({ timeout: 5000 });
 
           // Click unlink button
@@ -453,7 +560,7 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
 
           // Currently linked section should disappear
           await expect(
-            page.locator('[data-testid="currently-linked"]')
+            page.locator('[data-testid="currently-linked"]'),
           ).not.toBeVisible();
         } else {
           console.log('Link button not available - skipping unlink test');
@@ -465,17 +572,26 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
     // E2E tests run in isolation - state doesn't persist between describe blocks.
     test.describe.skip('View Details Functionality', () => {
       test.beforeEach(async ({ page }) => {
-        await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
+        await visitAndWaitForHydration(
+          page,
+          `/tournament/${tournamentPk}/games`,
+        );
 
-        const bracketContainer = page.locator('[data-testid="bracketContainer"]');
+        const bracketContainer = page.locator(
+          '[data-testid="bracketContainer"]',
+        );
         await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
         // Navigate to LinkSteamMatchModal
         await page.locator('text=link_test_player_0').click();
-        await expect(page.locator('[data-testid="match-details-header"]')).toBeVisible({ timeout: 5000 });
-        await page.locator('[data-testid="link-steam-match-btn"]').click({ force: true });
         await expect(
-          page.locator('[data-testid="link-steam-match-modal"]')
+          page.locator('[data-testid="match-details-header"]'),
+        ).toBeVisible({ timeout: 5000 });
+        await page
+          .locator('[data-testid="link-steam-match-btn"]')
+          .click({ force: true });
+        await expect(
+          page.locator('[data-testid="link-steam-match-modal"]'),
         ).toBeVisible({ timeout: 5000 });
       });
 
@@ -496,7 +612,9 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
         // The DotaMatchStatsModal shows player stats in a dialog
         // Check for the modal content - note: text is in ALL CAPS
         const dialog = page.locator('[role="dialog"]').last();
-        await expect(dialog.locator('text=RADIANT')).toBeAttached({ timeout: 5000 });
+        await expect(dialog.locator('text=RADIANT')).toBeAttached({
+          timeout: 5000,
+        });
         await expect(dialog.locator('text=DIRE')).toBeAttached();
       });
     });
@@ -523,11 +641,13 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
       await page.locator('text=link_test_player_0').click();
 
       // Wait for modal to open
-      await expect(page.locator('[data-testid="match-details-header"]')).toBeVisible({ timeout: 5000 });
+      await expect(
+        page.locator('[data-testid="match-details-header"]'),
+      ).toBeVisible({ timeout: 5000 });
 
       // Link button should NOT be visible for non-staff
       await expect(
-        page.locator('[data-testid="link-steam-match-btn"]')
+        page.locator('[data-testid="link-steam-match-btn"]'),
       ).not.toBeVisible();
     });
   });

@@ -111,17 +111,17 @@ const HERO_ALIASES: Record<number, string[]> = {
   67: ['Spec', 'Spectre', 'Mercurial'],
   46: ['TA', 'Lanaya', 'Templar'],
   109: ['TB', 'Terror', 'Terrorblade'],
-  95: ['Troll', 'TW', 'Jah\'rakal'],
+  95: ['Troll', 'TW', "Jah'rakal"],
   70: ['Ursa', 'Fuzzy', 'Ulfsaar'],
   20: ['VS', 'Venge', 'Shendelzare'],
   47: ['Viper', 'Netherdrake'],
-  63: ['Weaver', 'Anub\'seran', 'Bug'],
+  63: ['Weaver', "Anub'seran", 'Bug'],
 
   // Intelligence
   68: ['AA', 'Apparition', 'Kaldr', 'Ancient'],
   66: ['Chen', 'Holy'],
   5: ['CM', 'Crystal', 'Rylai', 'Maiden'],
-  55: ['DS', 'Ish\'kafel', 'Dark Seer'],
+  55: ['DS', "Ish'kafel", 'Dark Seer'],
   119: ['Willow', 'DW', 'Mireska'],
   87: ['Disruptor', 'Thrall', 'Dis'],
   58: ['Ench', 'Aiushtha', 'Enchantress', 'Deer'],
@@ -130,11 +130,11 @@ const HERO_ALIASES: Record<number, string[]> = {
   64: ['Jak', 'Jakiro', 'THD', 'Twin'],
   90: ['KOTL', 'Ezalor', 'Keeper', 'Gandalf'],
   52: ['Lesh', 'Leshrac', 'Disco', 'Pony'],
-  31: ['Lich', 'Kel\'Thuzad'],
+  31: ['Lich', "Kel'Thuzad"],
   25: ['Lina', 'Slayer'],
   26: ['Lion', 'Demon'],
   138: ['Muerta'],
-  36: ['Necro', 'Rotund\'jere', 'Necrophos'],
+  36: ['Necro', "Rotund'jere", 'Necrophos'],
   111: ['Oracle', 'Nerif'],
   76: ['OD', 'Obsidian', 'Harbinger', 'Outworld'],
   13: ['Puck', 'Faerie'],
@@ -164,13 +164,13 @@ const HERO_ALIASES: Record<number, string[]> = {
   97: ['Mag', 'Magnus', 'Magnataur'],
   136: ['Marci'],
   53: ['NP', 'Furion', 'Prophet', 'Tequoia', 'Nature'],
-  88: ['Nyx', 'NA', 'Anub\'arak'],
+  88: ['Nyx', 'NA', "Anub'arak"],
   120: ['Pango', 'Pangolier', 'Donté'],
   16: ['SK', 'Sand', 'Crixalis', 'Sand King'],
   128: ['Snap', 'Snapfire', 'Beatrix', 'Grandma'],
   105: ['Techies', 'Squee', 'Spleen', 'Spoon'],
   40: ['Veno', 'Venomancer', 'Lesale'],
-  92: ['Visage', 'Necro\'lic'],
+  92: ['Visage', "Necro'lic"],
   126: ['Void', 'VS', 'Inai', 'Void Spirit'],
   21: ['WR', 'Windrunner', 'Lyralei', 'Windranger'],
 };
@@ -210,7 +210,7 @@ export function getHeroAliases(heroId: number): string[] {
     allAliases.push(internalName);
   }
 
-  return allAliases.map(a => a.toLowerCase());
+  return allAliases.map((a) => a.toLowerCase());
 }
 
 /**
@@ -223,5 +223,5 @@ export function heroMatchesSearch(heroId: number, query: string): boolean {
   const lowerQuery = query.toLowerCase();
   const aliases = getHeroAliases(heroId);
 
-  return aliases.some(alias => alias.includes(lowerQuery));
+  return aliases.some((alias) => alias.includes(lowerQuery));
 }

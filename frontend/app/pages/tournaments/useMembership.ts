@@ -10,10 +10,13 @@ export interface Membership {
 export function useMembership(): Membership {
   const status = useUserStore((s) => s.currentUserStatus);
   const pk = useUserStore((s) => s.currentUser?.pk);
-  const memberOrgIds = useUserStore((s) => s.currentUser?.member_organization_ids);
+  const memberOrgIds = useUserStore(
+    (s) => s.currentUser?.member_organization_ids,
+  );
   const getCurrentUser = useUserStore((s) => s.getCurrentUser);
   const refetchStarted = useRef(false);
-  const [membershipRefetchSettled, setMembershipRefetchSettled] = useState(false);
+  const [membershipRefetchSettled, setMembershipRefetchSettled] =
+    useState(false);
 
   useEffect(() => {
     if (useUserStore.getState().currentUserStatus === 'unknown') {

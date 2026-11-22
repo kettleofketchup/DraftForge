@@ -31,6 +31,7 @@ from events.models import Event
 from events.staff import dedupe_host_helpers
 from league.models import LeagueUser
 from org.accounts import repoint_org_attribution
+from org.mmr import merge_org_mmrs
 from org.models import OrgLog, OrgUser, PromoSend
 from org.permissions import IsOrgStaff
 from org.promotion.services import demote_colliding_earning_sends
@@ -232,10 +233,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 user=claimer, organization=org_user.organization
             ).first()
             if existing:
-                # Keep the one with higher MMR
-                if org_user.mmr > existing.mmr:
-                    existing.mmr = org_user.mmr
-                    existing.save()
+                merge_org_mmrs(org_user, existing)
                 pairs.append((org_user, existing))
             else:
                 org_user.user = claimer

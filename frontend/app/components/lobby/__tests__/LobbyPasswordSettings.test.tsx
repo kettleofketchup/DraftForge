@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { zodResolver } from '@hookform/resolvers/zod';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { useForm } from 'react-hook-form';
 import { I18nextProvider } from 'react-i18next';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Form } from '~/components/ui/form';
 import { createI18nInstance } from '~/i18n/config';
@@ -36,7 +42,10 @@ function Harness({
   onRegenerate?: () => void;
   onSubmit?: (v: Values) => void;
 }) {
-  const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: values });
+  const form = useForm<Values>({
+    resolver: zodResolver(schema),
+    defaultValues: values,
+  });
   return (
     <I18nextProvider i18n={createI18nInstance('en')}>
       <Form {...form}>
@@ -60,20 +69,32 @@ afterEach(cleanup);
 
 describe('LobbyPasswordSettings', () => {
   it('fixed mode: hidden input with a show/hide toggle', () => {
-    render(<Harness values={{ dota_lobby_password_mode: 'fixed', dota_lobby_password: 'pw' }} />);
+    render(
+      <Harness
+        values={{
+          dota_lobby_password_mode: 'fixed',
+          dota_lobby_password: 'pw',
+        }}
+      />,
+    );
     const input = screen.getByTestId('lobby-password-input');
     expect(input).toHaveAttribute('type', 'password');
     expect(input).toHaveAttribute('maxLength', '32');
     fireEvent.click(screen.getByTestId('lobby-password-toggle'));
     expect(input).toHaveAttribute('type', 'text');
-    expect(screen.queryByTestId('lobby-password-regenerate')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('lobby-password-regenerate'),
+    ).not.toBeInTheDocument();
   });
 
   it('shows a translated error for an invalid fixed password', async () => {
     const onSubmit = vi.fn();
     render(
       <Harness
-        values={{ dota_lobby_password_mode: 'fixed', dota_lobby_password: ' padded' }}
+        values={{
+          dota_lobby_password_mode: 'fixed',
+          dota_lobby_password: ' padded',
+        }}
         onSubmit={onSubmit}
       />,
     );
@@ -89,15 +110,26 @@ describe('LobbyPasswordSettings', () => {
     render(
       <Harness
         values={{ dota_lobby_password_mode: 'random', dota_lobby_password: '' }}
-        saved={{ mode: 'random', password: 'abcd2345wxyz', source: 'series', can_manage: true }}
+        saved={{
+          mode: 'random',
+          password: 'abcd2345wxyz',
+          source: 'series',
+          can_manage: true,
+        }}
         followsSeries
         onRegenerate={onRegenerate}
       />,
     );
-    expect(screen.getByTestId('lobby-password-leak-help')).toHaveTextContent(/regenerate it/);
-    expect(screen.getByTestId('lobby-password-current')).toHaveTextContent('abcd2345wxyz');
+    expect(screen.getByTestId('lobby-password-leak-help')).toHaveTextContent(
+      /regenerate it/,
+    );
+    expect(screen.getByTestId('lobby-password-current')).toHaveTextContent(
+      'abcd2345wxyz',
+    );
     expect(screen.getByTestId('lobby-password-copy')).toBeInTheDocument();
-    expect(screen.getByTestId('lobby-password-from-series')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('lobby-password-from-series'),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('lobby-password-regenerate'));
     await waitFor(() => expect(onRegenerate).toHaveBeenCalledOnce());
   });
@@ -105,8 +137,16 @@ describe('LobbyPasswordSettings', () => {
   it('warns an event that overrides its series that a series save replaces it', () => {
     render(
       <Harness
-        values={{ dota_lobby_password_mode: 'fixed', dota_lobby_password: 'night4' }}
-        saved={{ mode: 'fixed', password: 'night4', source: 'event', can_manage: true }}
+        values={{
+          dota_lobby_password_mode: 'fixed',
+          dota_lobby_password: 'night4',
+        }}
+        saved={{
+          mode: 'fixed',
+          password: 'night4',
+          source: 'event',
+          can_manage: true,
+        }}
         followsSeries
       />,
     );
@@ -119,22 +159,42 @@ describe('LobbyPasswordSettings', () => {
     render(
       <Harness
         values={{ dota_lobby_password_mode: 'random', dota_lobby_password: '' }}
-        saved={{ mode: 'random', password: 'abcd2345wxyz', source: 'event', can_manage: true }}
+        saved={{
+          mode: 'random',
+          password: 'abcd2345wxyz',
+          source: 'event',
+          can_manage: true,
+        }}
       />,
     );
-    expect(screen.queryByTestId('lobby-password-from-series')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('lobby-password-from-series'),
+    ).not.toBeInTheDocument();
   });
 
   it('fixed mode: leak help says to set a new one, not to regenerate', () => {
-    render(<Harness values={{ dota_lobby_password_mode: 'fixed', dota_lobby_password: 'pw' }} />);
+    render(
+      <Harness
+        values={{
+          dota_lobby_password_mode: 'fixed',
+          dota_lobby_password: 'pw',
+        }}
+      />,
+    );
     const help = screen.getByTestId('lobby-password-leak-help');
     expect(help).toHaveTextContent(/set a new one/);
     expect(help).toHaveTextContent(/recreate/);
   });
 
   it('new random event: no leak help without a regenerate button', () => {
-    render(<Harness values={{ dota_lobby_password_mode: 'random', dota_lobby_password: '' }} />);
-    expect(screen.queryByTestId('lobby-password-leak-help')).not.toBeInTheDocument();
+    render(
+      <Harness
+        values={{ dota_lobby_password_mode: 'random', dota_lobby_password: '' }}
+      />,
+    );
+    expect(
+      screen.queryByTestId('lobby-password-leak-help'),
+    ).not.toBeInTheDocument();
   });
 
   it('saved fixed password: an empty field keeps it', async () => {
@@ -159,12 +219,21 @@ describe('LobbyPasswordSettings', () => {
 
   it('random series: explains that each event gets its own', () => {
     render(
-      <Harness values={{ dota_lobby_password_mode: 'random', dota_lobby_password: '' }} scope="series" />,
+      <Harness
+        values={{ dota_lobby_password_mode: 'random', dota_lobby_password: '' }}
+        scope="series"
+      />,
     );
-    expect(screen.queryByTestId('lobby-password-input')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('lobby-password-regenerate')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('lobby-password-input'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('lobby-password-regenerate'),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(/its own generated password/)).toBeInTheDocument();
-    expect(screen.getByText(/anyone who has it can join any of them/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/anyone who has it can join any of them/),
+    ).toBeInTheDocument();
     expect(screen.getByTestId('lobby-password-leak-help')).toHaveTextContent(
       /in that event's settings/,
     );

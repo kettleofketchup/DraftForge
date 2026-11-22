@@ -11,7 +11,9 @@ interface ErrorBody {
   detail?: unknown;
 }
 
-const responseOf = (err: unknown): { status?: number; data?: unknown } | undefined =>
+const responseOf = (
+  err: unknown,
+): { status?: number; data?: unknown } | undefined =>
   (err as { response?: { status?: number; data?: unknown } } | null)?.response;
 
 const bodyOf = (err: unknown): ErrorBody => {
@@ -30,7 +32,10 @@ export function describePickError(err: unknown): PickErrorInfo {
           jumpToPickNumber: n,
         };
       }
-      return { message: 'That pick is no longer active', jumpToPickNumber: null };
+      return {
+        message: 'That pick is no longer active',
+        jumpToPickNumber: null,
+      };
     }
     case 'draft_not_accepting_picks':
       return {
@@ -38,7 +43,10 @@ export function describePickError(err: unknown): PickErrorInfo {
         jumpToPickNumber: null,
       };
     case 'paused_staff_only':
-      return { message: 'Draft is paused — only staff can pick', jumpToPickNumber: null };
+      return {
+        message: 'Draft is paused — only staff can pick',
+        jumpToPickNumber: null,
+      };
     case 'already_picked':
       return { message: 'That pick was already made', jumpToPickNumber: null };
   }
@@ -65,7 +73,10 @@ export function handlePickError(
   deps: { jumpToPickNumber: (n: number) => boolean; refresh: () => void },
 ): string {
   const info = describePickError(err);
-  if (info.jumpToPickNumber !== null && !deps.jumpToPickNumber(info.jumpToPickNumber)) {
+  if (
+    info.jumpToPickNumber !== null &&
+    !deps.jumpToPickNumber(info.jumpToPickNumber)
+  ) {
     deps.refresh();
   }
   return info.message;
@@ -78,7 +89,10 @@ const TIMER_ACTION_MESSAGES: Record<string, string> = {
   already_armed: 'The clock is already running',
 };
 
-export function describeTimerActionError(err: unknown, fallback: string): string {
+export function describeTimerActionError(
+  err: unknown,
+  fallback: string,
+): string {
   const code = bodyOf(err).code;
   return (code && TIMER_ACTION_MESSAGES[code]) || fallback;
 }

@@ -27,7 +27,10 @@ async function fetchTangoes(): Promise<number> {
   return parsed.tangoes_purchased;
 }
 
-async function buyTangoRequest(): Promise<{ tangoes: number; message: string }> {
+async function buyTangoRequest(): Promise<{
+  tangoes: number;
+  message: string;
+}> {
   const response = await api.post('/jokes/tangoes/buy/');
   const parsed = BuyTangoResponseSchema.parse(response.data);
   return { tangoes: parsed.tangoes_purchased, message: parsed.message };

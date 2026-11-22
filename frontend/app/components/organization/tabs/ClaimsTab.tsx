@@ -1,21 +1,21 @@
+import { AlertCircle, Check, Clock, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Clock, X, AlertCircle } from 'lucide-react';
 import {
-  getClaimRequests,
   approveClaimRequest,
+  getClaimRequests,
   rejectClaimRequest,
   type ProfileClaimRequest,
 } from '~/components/api/api';
+import { Alert, AlertDescription } from '~/components/ui/alert';
+import { Badge } from '~/components/ui/badge';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { Badge } from '~/components/ui/badge';
 import { MobileNavDropdown } from '~/components/ui/mobile-nav-dropdown';
+import { Spinner } from '~/components/ui/spinner';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { getLogger } from '~/lib/logger';
 import { ClaimCard } from './ClaimCard';
-import { Spinner } from '~/components/ui/spinner';
-import { Alert, AlertDescription } from '~/components/ui/alert';
 
 const log = getLogger('ClaimsTab');
 
@@ -32,12 +32,14 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
   const [statusFilter, setStatusFilter] = useState<ClaimStatus>('pending');
 
   // Rejection modal state
-  const [rejectingClaim, setRejectingClaim] = useState<ProfileClaimRequest | null>(null);
+  const [rejectingClaim, setRejectingClaim] =
+    useState<ProfileClaimRequest | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [isRejecting, setIsRejecting] = useState(false);
 
   // Approval confirmation state
-  const [approvingClaim, setApprovingClaim] = useState<ProfileClaimRequest | null>(null);
+  const [approvingClaim, setApprovingClaim] =
+    useState<ProfileClaimRequest | null>(null);
   const [isApproving, setIsApproving] = useState(false);
 
   const fetchClaims = useCallback(async () => {
@@ -96,11 +98,14 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
 
   const pendingCount = claims.filter((c) => c.status === 'pending').length;
 
-  const claimStatusOptions = useMemo(() => [
-    { value: 'pending', label: 'Pending' },
-    { value: 'approved', label: 'Approved' },
-    { value: 'rejected', label: 'Rejected' },
-  ], []);
+  const claimStatusOptions = useMemo(
+    () => [
+      { value: 'pending', label: 'Pending' },
+      { value: 'approved', label: 'Approved' },
+      { value: 'rejected', label: 'Rejected' },
+    ],
+    [],
+  );
 
   return (
     <div className="space-y-4">
@@ -109,7 +114,10 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
       </div>
 
       {/* Status filter tabs */}
-      <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as ClaimStatus)}>
+      <Tabs
+        value={statusFilter}
+        onValueChange={(v) => setStatusFilter(v as ClaimStatus)}
+      >
         {/* Mobile dropdown */}
         <MobileNavDropdown
           options={claimStatusOptions}
@@ -121,7 +129,11 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
 
         {/* Desktop tabs */}
         <TabsList className="hidden md:flex">
-          <TabsTrigger value="pending" className="gap-2" data-testid="claims-tab-pending">
+          <TabsTrigger
+            value="pending"
+            className="gap-2"
+            data-testid="claims-tab-pending"
+          >
             <Clock className="w-4 h-4" />
             Pending
             {statusFilter !== 'pending' && pendingCount > 0 && (
@@ -142,7 +154,10 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
 
         <TabsContent value={statusFilter} className="mt-4">
           {isLoading ? (
-            <div className="flex items-center justify-center py-8" data-testid="claims-loading">
+            <div
+              className="flex items-center justify-center py-8"
+              data-testid="claims-loading"
+            >
               <Spinner className="size-8" />
             </div>
           ) : error ? (
@@ -152,7 +167,9 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
             </Alert>
           ) : claims.length === 0 ? (
             <Alert data-testid="claims-empty">
-              <AlertDescription>No {statusFilter} claim requests</AlertDescription>
+              <AlertDescription>
+                No {statusFilter} claim requests
+              </AlertDescription>
             </Alert>
           ) : (
             <div className="space-y-3" data-testid="claims-list">

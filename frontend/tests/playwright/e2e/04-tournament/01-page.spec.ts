@@ -5,7 +5,7 @@
  * Ported from Cypress: frontend/tests/cypress/e2e/04-tournament/01-page.cy.ts
  */
 
-import { test, expect, visitAndWaitForHydration } from '../../fixtures';
+import { expect, test, visitAndWaitForHydration } from '../../fixtures';
 
 test.describe('API Integration Tests', () => {
   test.beforeEach(async () => {

@@ -14,26 +14,24 @@
  * Requires Discord bot tokens for announcement posting.
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   getEventsTestData,
-  resetEventsData,
   loginEventAdmin,
+  resetEventsData,
+  test,
   triggerEventGeneration,
+  visitAndWaitForHydration,
   type EventInfo,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 import {
   postWithCsrf,
-  patchWithCsrf,
-  syncDiscordEvents,
   simulateDiscordSignup,
+  syncDiscordEvents,
   verifyDiscordMessages,
 } from '../../fixtures/events';
-
 
 let eventInfo: EventInfo;
 
@@ -58,30 +56,34 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
     // =========================================================================
     // 1. Create EventRepeater via API
     // =========================================================================
-    const repeaterResp = await postWithCsrf(context, `${API_URL}/events/repeaters/`, {
-      organization: eventInfo.orgPk,
-      name: 'Lifecycle Test Inhouse',
-      description: 'Full lifecycle test repeater',
-      frequency: 'daily',
-      time_of_day: '20:00',
-      starts_at: new Date().toISOString().split('T')[0],
-      generate_days_ahead: 7,
-      is_active: true,
-      tournament_name: 'Lifecycle Tournament',
-      tournament_league: eventInfo.leaguePk,
-      tournament_type: 'single_elimination',
-      game_type: 1,
-      draft_type: 'shuffle',
-      people_per_team: 5,
-      number_of_teams: 2,
-      max_players: 10,
-      auto_approve: false,
-      timezone: 'America/New_York',
-      discord_announcement: true,
-      discord_announcement_channel_id: '1482767177063858216',
-      discord_post_signups: true,
-      discord_post_signups_channel_id: '1482767709279096893',
-    });
+    const repeaterResp = await postWithCsrf(
+      context,
+      `${API_URL}/events/repeaters/`,
+      {
+        organization: eventInfo.orgPk,
+        name: 'Lifecycle Test Inhouse',
+        description: 'Full lifecycle test repeater',
+        frequency: 'daily',
+        time_of_day: '20:00',
+        starts_at: new Date().toISOString().split('T')[0],
+        generate_days_ahead: 7,
+        is_active: true,
+        tournament_name: 'Lifecycle Tournament',
+        tournament_league: eventInfo.leaguePk,
+        tournament_type: 'single_elimination',
+        game_type: 1,
+        draft_type: 'shuffle',
+        people_per_team: 5,
+        number_of_teams: 2,
+        max_players: 10,
+        auto_approve: false,
+        timezone: 'America/New_York',
+        discord_announcement: true,
+        discord_announcement_channel_id: '1482767177063858216',
+        discord_post_signups: true,
+        discord_post_signups_channel_id: '1482767709279096893',
+      },
+    );
     expect(repeaterResp.ok()).toBeTruthy();
 
     // =========================================================================
@@ -136,7 +138,9 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
     if (!discordReady) {
       // Skip Discord-specific assertions if no announcement posted
       // (bot tokens may not be configured in CI)
-      console.warn('Discord announcement not posted — skipping Discord verification');
+      console.warn(
+        'Discord announcement not posted — skipping Discord verification',
+      );
     }
 
     // =========================================================================
@@ -176,7 +180,9 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
     // =========================================================================
     // 7. Bulk RSVP remaining 10 players
     // =========================================================================
-    const playerPks = [5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010];
+    const playerPks = [
+      5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010,
+    ];
     const bulkResp = await context.request.post(
       `${API_URL}/tests/events/${eventId}/bulk-rsvp/`,
       {
@@ -194,7 +200,8 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
     );
     const signups = await signupsResp.json();
     const active = signups.filter(
-      (s: { status: string }) => !['waitlisted', 'cancelled', 'rejected'].includes(s.status),
+      (s: { status: string }) =>
+        !['waitlisted', 'cancelled', 'rejected'].includes(s.status),
     );
     const waitlisted = signups.filter(
       (s: { status: string }) => s.status === 'waitlisted',
@@ -213,7 +220,9 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
       );
       if (!approveResp.ok()) {
         const body = await approveResp.text();
-        throw new Error(`Approve signup ${active[i].id} failed (${approveResp.status()}): ${body.slice(0, 500)}`);
+        throw new Error(
+          `Approve signup ${active[i].id} failed (${approveResp.status()}): ${body.slice(0, 500)}`,
+        );
       }
     }
 
@@ -247,7 +256,9 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
       );
       if (!confirmResp.ok()) {
         const body = await confirmResp.text();
-        throw new Error(`Confirm signup ${approved[i].id} (status=${approved[i].status}) failed (${confirmResp.status()}): ${body.slice(0, 500)}`);
+        throw new Error(
+          `Confirm signup ${approved[i].id} (status=${approved[i].status}) failed (${confirmResp.status()}): ${body.slice(0, 500)}`,
+        );
       }
     }
 
@@ -269,7 +280,9 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
     await visitAndWaitForHydration(page, `/events/${eventId}`);
 
     // Signups tab should show players
-    await expect(page.getByTestId('event-tab-signups')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('event-tab-signups')).toBeVisible({
+      timeout: 10000,
+    });
 
     // =========================================================================
     // 14. Verify Task Schedule on Discord tab
@@ -281,8 +294,12 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
     await expect(scheduleTab).toBeVisible({ timeout: 5000 });
 
     // Should show task schedule entries
-    await expect(page.getByTestId('task-schedule-section')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByTestId('task-schedule-entry-announcement')).toBeVisible();
+    await expect(page.getByTestId('task-schedule-section')).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(
+      page.getByTestId('task-schedule-entry-announcement'),
+    ).toBeVisible();
 
     // =========================================================================
     // 15. Verify Activity Log and log detail modal
@@ -290,11 +307,15 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
     await page.getByTestId('discord-subtab-activity').click();
 
     // Click first log entry to open detail modal (if any logs exist)
-    const firstLogEntry = page.locator('[data-testid^="discord-log-entry-"]').first();
+    const firstLogEntry = page
+      .locator('[data-testid^="discord-log-entry-"]')
+      .first();
     if (await firstLogEntry.isVisible({ timeout: 3000 }).catch(() => false)) {
       await firstLogEntry.click();
       // InfoDialog renders as role="dialog"
-      await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 3000 });
+      await expect(page.locator('[role="dialog"]')).toBeVisible({
+        timeout: 3000,
+      });
       await page.keyboard.press('Escape');
     }
   });

@@ -16,9 +16,13 @@ export const leaguePlayerSummariesKey = (leaguePk: number) =>
 async function fetchLeaguePlayerSummaries(
   leaguePk: number,
 ): Promise<LeaguePlayerSummaries> {
-  const response = await fetch(`/api/steam/leagues/${leaguePk}/player-summaries/`);
+  const response = await fetch(
+    `/api/steam/leagues/${leaguePk}/player-summaries/`,
+  );
   if (!response.ok) {
-    throw new Error(`Failed to fetch league player summaries: ${response.status}`);
+    throw new Error(
+      `Failed to fetch league player summaries: ${response.status}`,
+    );
   }
   const parsed = LeaguePlayerSummariesSchema.safeParse(await response.json());
   if (!parsed.success) {
@@ -81,7 +85,9 @@ export interface LeagueDistributionSlice {
   minGames: number;
 }
 
-function selectDistribution(data: LeaguePlayerSummaries): LeagueDistributionSlice {
+function selectDistribution(
+  data: LeaguePlayerSummaries,
+): LeagueDistributionSlice {
   return {
     distribution: data.distribution,
     population: data.population,

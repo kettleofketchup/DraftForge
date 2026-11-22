@@ -12,11 +12,10 @@
  */
 
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   getTournamentByKey,
-  TournamentPage,
+  test,
+  visitAndWaitForHydration,
   type TournamentData,
 } from '../../fixtures';
 
@@ -58,11 +57,17 @@ test.describe('Shuffle Draft - Full Flow', () => {
     // Click on Teams tab and wait for content
     const teamsTab = page.locator('[data-testid="teamsTab"]');
     await teamsTab.click();
-    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
+    await page
+      .locator('[data-testid="teamsTabContent"]')
+      .waitFor({ state: 'visible' });
 
     // Verify teams exist (check for team headers)
-    await expect(page.locator('[data-testid="team-card-name"]').first()).toBeVisible();
-    await expect(page.locator('[data-testid="team-avg-mmr-label"]').first()).toBeVisible();
+    await expect(
+      page.locator('[data-testid="team-card-name"]').first(),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-testid="team-avg-mmr-label"]').first(),
+    ).toBeVisible();
   });
 
   // SKIP REASON: Requires tournament in pre-draft state to configure draft style.
@@ -84,21 +89,31 @@ test.describe('Shuffle Draft - Full Flow', () => {
 
     // Click on Teams tab and wait for content
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
+    await page
+      .locator('[data-testid="teamsTabContent"]')
+      .waitFor({ state: 'visible' });
 
     // Click Start Draft button to open the draft modal
-    await page.locator('[data-testid="startTeamDraftButton"]').click({ force: true });
+    await page
+      .locator('[data-testid="startTeamDraftButton"]')
+      .click({ force: true });
 
     // The draft modal should open
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
 
     // Open Moderation dropdown and click "Change Draft Style"
-    await dialog.getByRole('button', { name: 'Moderation' }).click({ force: true });
-    await page.locator('[data-testid="change-draft-style-option"]').click({ force: true });
+    await dialog
+      .getByRole('button', { name: 'Moderation' })
+      .click({ force: true });
+    await page
+      .locator('[data-testid="change-draft-style-option"]')
+      .click({ force: true });
 
     // Wait for the draft style dialog to open
-    const styleDialog = page.locator('[role="dialog"]').filter({ hasText: 'Draft Style' });
+    const styleDialog = page
+      .locator('[role="dialog"]')
+      .filter({ hasText: 'Draft Style' });
     await expect(styleDialog).toBeVisible();
 
     // Click on the style selector and choose shuffle
@@ -106,19 +121,25 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await page.locator('[role="option"]:has-text("Shuffle")').click();
 
     // Apply the style
-    await page.locator('[data-testid="apply-shuffle-draft-button"]').click({ force: true });
+    await page
+      .locator('[data-testid="apply-shuffle-draft-button"]')
+      .click({ force: true });
 
     await page.waitForLoadState('networkidle');
 
     // Open Moderation dropdown and click Restart Draft
-    await dialog.getByRole('button', { name: 'Moderation' }).click({ force: true });
-    await page.locator('[data-testid="restart-draft-option"]').click({ force: true });
+    await dialog
+      .getByRole('button', { name: 'Moderation' })
+      .click({ force: true });
+    await page
+      .locator('[data-testid="restart-draft-option"]')
+      .click({ force: true });
 
     // Confirm if there's a confirmation dialog
     const alertDialog = page.locator('[role="alertdialog"]');
     if (await alertDialog.isVisible().catch(() => false)) {
       const confirmBtn = alertDialog.locator(
-        'button:has-text("Confirm"), button:has-text("Yes"), button:has-text("Continue"), button:has-text("Restart")'
+        'button:has-text("Confirm"), button:has-text("Yes"), button:has-text("Continue"), button:has-text("Restart")',
       );
       await confirmBtn.first().click({ force: true });
     }
@@ -148,20 +169,30 @@ test.describe('Shuffle Draft - Full Flow', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
+    await page
+      .locator('[data-testid="teamsTabContent"]')
+      .waitFor({ state: 'visible' });
 
     // Open draft modal
-    await page.locator('[data-testid="startTeamDraftButton"]').click({ force: true });
+    await page
+      .locator('[data-testid="startTeamDraftButton"]')
+      .click({ force: true });
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
 
     // Open Moderation dropdown and click "Change Draft Style"
-    await dialog.getByRole('button', { name: 'Moderation' }).click({ force: true });
-    await page.locator('[data-testid="change-draft-style-option"]').click({ force: true });
+    await dialog
+      .getByRole('button', { name: 'Moderation' })
+      .click({ force: true });
+    await page
+      .locator('[data-testid="change-draft-style-option"]')
+      .click({ force: true });
 
     // Wait for the draft style dialog to open
-    const styleDialog = page.locator('[role="dialog"]').filter({ hasText: 'Draft Style' });
+    const styleDialog = page
+      .locator('[role="dialog"]')
+      .filter({ hasText: 'Draft Style' });
     await expect(styleDialog).toBeVisible();
 
     // Click on the style selector and choose shuffle
@@ -169,19 +200,25 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await page.locator('[role="option"]:has-text("Shuffle")').click();
 
     // Apply the style
-    await page.locator('[data-testid="apply-shuffle-draft-button"]').click({ force: true });
+    await page
+      .locator('[data-testid="apply-shuffle-draft-button"]')
+      .click({ force: true });
 
     await page.waitForLoadState('networkidle');
 
     // Open Moderation dropdown and click Restart Draft
-    await dialog.getByRole('button', { name: 'Moderation' }).click({ force: true });
-    await page.locator('[data-testid="restart-draft-option"]').click({ force: true });
+    await dialog
+      .getByRole('button', { name: 'Moderation' })
+      .click({ force: true });
+    await page
+      .locator('[data-testid="restart-draft-option"]')
+      .click({ force: true });
 
     // Confirm restart dialog
     const alertDialog = page.locator('[role="alertdialog"]');
     if (await alertDialog.isVisible().catch(() => false)) {
       const confirmBtn = alertDialog.locator(
-        'button:has-text("Confirm"), button:has-text("Yes"), button:has-text("Continue"), button:has-text("Restart")'
+        'button:has-text("Confirm"), button:has-text("Yes"), button:has-text("Continue"), button:has-text("Restart")',
       );
       await confirmBtn.first().click({ force: true });
     }
@@ -204,7 +241,9 @@ test.describe('Shuffle Draft - Full Flow', () => {
         // Handle confirmation dialog if it appears
         const confirmDialog = page.locator('[role="alertdialog"]');
         if (await confirmDialog.isVisible().catch(() => false)) {
-          const pickConfirmBtn = confirmDialog.locator('[data-testid="confirmPickButton"]');
+          const pickConfirmBtn = confirmDialog.locator(
+            '[data-testid="confirmPickButton"]',
+          );
           if (await pickConfirmBtn.isVisible().catch(() => false)) {
             await pickConfirmBtn.first().click({ force: true });
           }
@@ -236,7 +275,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
     // Get the shuffle draft captain turn tournament
     const tournament = await getTournamentByKey(
       context,
-      'shuffle_draft_captain_turn'
+      'shuffle_draft_captain_turn',
     );
 
     if (!tournament) {
@@ -244,12 +283,8 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
     }
 
     tournamentData = tournament;
-    console.log(
-      `Tournament: ${tournamentData.name} (pk=${tournamentData.pk})`
-    );
-    console.log(
-      `Captains: ${tournamentData.captains.join(', ')}`
-    );
+    console.log(`Tournament: ${tournamentData.name} (pk=${tournamentData.pk})`);
+    console.log(`Captains: ${tournamentData.captains.join(', ')}`);
 
     await context.close();
   });
@@ -273,12 +308,16 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
+    await page
+      .locator('[data-testid="teamsTabContent"]')
+      .waitFor({ state: 'visible' });
 
     // Open draft modal - use data-testid for reliable selection
-    const draftButton = page.locator(
-      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
-    ).first();
+    const draftButton = page
+      .locator(
+        '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]',
+      )
+      .first();
     await draftButton.click({ force: true });
 
     const dialog = page.locator('[role="dialog"]');
@@ -304,7 +343,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
   }) => {
     // Get the second captain's pk
     const secondCaptain = tournamentData.teams.find(
-      (t) => t.draft_order === 2
+      (t) => t.draft_order === 2,
     )?.captain;
 
     if (!secondCaptain) {
@@ -315,7 +354,10 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Login as the second captain using loginAsUser
     // captain is now a PK (number) from the slim serializer
-    const captainPk: number = typeof secondCaptain === 'number' ? secondCaptain : (secondCaptain as { pk: number }).pk;
+    const captainPk: number =
+      typeof secondCaptain === 'number'
+        ? secondCaptain
+        : (secondCaptain as { pk: number }).pk;
     const response = await loginAsUser(captainPk);
     console.log(`Logged in as: ${response.user?.username}`);
 
@@ -329,12 +371,16 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
+    await page
+      .locator('[data-testid="teamsTabContent"]')
+      .waitFor({ state: 'visible' });
 
     // Open draft modal - use data-testid for reliable selection
-    const draftButton = page.locator(
-      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
-    ).first();
+    const draftButton = page
+      .locator(
+        '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]',
+      )
+      .first();
     await draftButton.click({ force: true });
 
     const dialog = page.locator('[role="dialog"]');
@@ -371,12 +417,16 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
+    await page
+      .locator('[data-testid="teamsTabContent"]')
+      .waitFor({ state: 'visible' });
 
     // Open draft modal - use data-testid for reliable selection
-    const draftButton = page.locator(
-      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
-    ).first();
+    const draftButton = page
+      .locator(
+        '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]',
+      )
+      .first();
     await draftButton.click({ force: true });
 
     const dialog = page.locator('[role="dialog"]');
@@ -395,7 +445,9 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
       // Handle confirmation dialog
       const alertDialog = page.locator('[role="alertdialog"]');
       if (await alertDialog.isVisible().catch(() => false)) {
-        const confirmBtn = alertDialog.locator('[data-testid="confirmPickButton"]');
+        const confirmBtn = alertDialog.locator(
+          '[data-testid="confirmPickButton"]',
+        );
         if (await confirmBtn.isVisible().catch(() => false)) {
           await confirmBtn.first().click({ force: true });
           await page.waitForLoadState('networkidle');
@@ -403,7 +455,9 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
         }
       }
     } else {
-      console.log('No pick buttons available - draft may not be at captain turn');
+      console.log(
+        'No pick buttons available - draft may not be at captain turn',
+      );
     }
   });
 
@@ -439,12 +493,16 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
+    await page
+      .locator('[data-testid="teamsTabContent"]')
+      .waitFor({ state: 'visible' });
 
     // Open draft modal - use data-testid for reliable selection
-    const draftButton = page.locator(
-      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
-    ).first();
+    const draftButton = page
+      .locator(
+        '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]',
+      )
+      .first();
     await draftButton.click({ force: true });
 
     const dialog = page.locator('[role="dialog"]');
@@ -464,7 +522,9 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
       // Confirm the pick
       const alertDialog = page.locator('[role="alertdialog"]');
       if (await alertDialog.isVisible().catch(() => false)) {
-        const confirmBtn = alertDialog.locator('[data-testid="confirmPickButton"]');
+        const confirmBtn = alertDialog.locator(
+          '[data-testid="confirmPickButton"]',
+        );
         if (await confirmBtn.isVisible().catch(() => false)) {
           await confirmBtn.first().click({ force: true });
         }

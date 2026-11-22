@@ -1,4 +1,7 @@
-export function captureClockOffset(serverTimeIso: string, receivedAtMs: number): number {
+export function captureClockOffset(
+  serverTimeIso: string,
+  receivedAtMs: number,
+): number {
   const serverMs = Date.parse(serverTimeIso);
   return Number.isNaN(serverMs) ? 0 : serverMs - receivedAtMs;
 }
@@ -26,7 +29,10 @@ export function addClockOffsetSample(
   serverTimeIso: string,
   receivedAtMs: number,
 ): ClockOffsetEstimate {
-  const next = [...samples, captureClockOffset(serverTimeIso, receivedAtMs)].slice(-CLOCK_OFFSET_SAMPLES);
+  const next = [
+    ...samples,
+    captureClockOffset(serverTimeIso, receivedAtMs),
+  ].slice(-CLOCK_OFFSET_SAMPLES);
   return { samples: next, offsetMs: bestClockOffset(next) };
 }
 
@@ -36,7 +42,8 @@ export function seedClockOffset(
   serverTimeIso: string | null | undefined,
   receivedAtMs: number,
 ): ClockOffsetEstimate {
-  if (!serverTimeIso) return { samples: [...samples], offsetMs: bestClockOffset(samples) };
+  if (!serverTimeIso)
+    return { samples: [...samples], offsetMs: bestClockOffset(samples) };
   return addClockOffsetSample([], serverTimeIso, receivedAtMs);
 }
 
@@ -48,7 +55,10 @@ export function serverNowISO(offsetMs: number): string {
   return new Date(serverNow(offsetMs)).toISOString();
 }
 
-export function elapsedSince(anchorIso: string | null | undefined, serverNowMs: number): number {
+export function elapsedSince(
+  anchorIso: string | null | undefined,
+  serverNowMs: number,
+): number {
   if (!anchorIso) return 0;
   const anchorMs = Date.parse(anchorIso);
   if (Number.isNaN(anchorMs)) return 0;

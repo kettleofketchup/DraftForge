@@ -22,9 +22,11 @@ function rangeSourceLabel(
 // (medal or battle-cup). Fallback ranges aren't trustworthy enough to flag.
 function computeRangeDiscrepancy(signup: EventSignupType) {
   const prior = signup.org_user_mmr;
-  const [low, high] = signup.suggested_mmr_range;
+  const range = signup.suggested_mmr_range;
   const sourceLabel = rangeSourceLabel(signup.suggested_mmr_range_source);
-  if (prior == null || prior <= 0 || sourceLabel == null) return null;
+  if (prior == null || prior <= 0 || sourceLabel == null || range == null)
+    return null;
+  const [low, high] = range;
   if (prior >= low && prior <= high) return null;
 
   const gap = prior < low ? low - prior : prior - high;
@@ -47,7 +49,7 @@ function computeRangeDiscrepancy(signup: EventSignupType) {
  */
 export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
   const profile = signup.dota_profile;
-  const [rangeLow, rangeHigh] = signup.suggested_mmr_range;
+  const range = signup.suggested_mmr_range;
 
   const positionsUser = profile?.positions
     ? ({
@@ -104,7 +106,11 @@ export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
               {profile.rank_medal}
             </Badge>
             <span className="text-xs text-muted-foreground font-mono ml-2">
-              {rangeLow.toLocaleString()}&ndash;{rangeHigh.toLocaleString()}
+              {range && (
+                <>
+                  {range[0].toLocaleString()}&ndash;{range[1].toLocaleString()}
+                </>
+              )}
               {isPrevious ? ' (previous)' : ''}
             </span>
           </span>

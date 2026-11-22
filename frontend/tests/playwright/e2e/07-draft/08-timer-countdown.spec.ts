@@ -8,23 +8,23 @@
  * clock running must end by picking or pausing.
  */
 
-import type { BrowserContext, Browser } from '@playwright/test';
+import type { Browser, BrowserContext } from '@playwright/test';
 import {
-  test,
-  expect,
-  loginAdmin,
-  loginAsUser,
-  resetTimerTournament,
-  fetchTimerTournament,
-  readyUp,
-  startDraftAsStaff,
-  expireDraftClock,
-  staffPick,
   activeRound,
   captainsOf,
+  draftStateOf,
+  expect,
+  expireDraftClock,
+  fetchTimerTournament,
+  loginAdmin,
+  loginAsUser,
   openCaptainPage,
   openDraftModal,
-  draftStateOf,
+  readyUp,
+  resetTimerTournament,
+  staffPick,
+  startDraftAsStaff,
+  test,
   type TimerTournament,
 } from '../../fixtures';
 
@@ -73,7 +73,9 @@ test.describe.serial('Team draft timer countdown', () => {
     await a?.context.close().catch(() => undefined);
   });
 
-  test('@cicd grace counts down and reserve stays full before grace ends', async ({ browser }) => {
+  test('@cicd grace counts down and reserve stays full before grace ends', async ({
+    browser,
+  }) => {
     a = await openCaptainPage(browser, captainsOf(t)[0], t.pk);
     const grace = a.page.getByTestId('draft-clock-grace');
     await expect(grace).toBeVisible();
@@ -85,14 +87,21 @@ test.describe.serial('Team draft timer countdown', () => {
       .toBeLessThan(first);
 
     const teamA = teamsInOrder(t)[0];
-    await expect(a.page.getByTestId(`draft-clock-reserve-${teamA.pk}`).first()).toHaveText('1:00');
+    await expect(
+      a.page.getByTestId(`draft-clock-reserve-${teamA.pk}`).first(),
+    ).toHaveText('1:00');
     // Grace is still running after the reserve check, so the reserve was full before grace ended.
     expect(parseClock(await grace.textContent())).toBeGreaterThan(0);
     await expect(a.page.getByTestId('draft-clock-your-turn')).toBeVisible();
-    await expect(a.page.getByTestId('turn-indicator')).toContainText('YOUR turn');
+    await expect(a.page.getByTestId('turn-indicator')).toContainText(
+      'YOUR turn',
+    );
   });
 
-  test('@cicd spectator sees the same clock', async ({ page, loginAdmin: login }) => {
+  test('@cicd spectator sees the same clock', async ({
+    page,
+    loginAdmin: login,
+  }) => {
     await login();
     await openDraftModal(page, t.pk);
 
@@ -115,7 +124,9 @@ test.describe.serial('Team draft timer countdown', () => {
     await a.page.getByTestId('confirmPickButton').click();
 
     await expect(active).not.toHaveText(before);
-    await expect(a.page.getByTestId('draft-clock-grace')).toHaveText(/^1:(2\d|30)$/);
+    await expect(a.page.getByTestId('draft-clock-grace')).toHaveText(
+      /^1:(2\d|30)$/,
+    );
     await a.context.close();
   });
 
@@ -130,13 +141,19 @@ test.describe.serial('Team draft timer countdown', () => {
 
     const [, teamB, teamC] = teamsInOrder(t);
     // Pick order lists upcoming picks only, so check a waiting team (C) rather than A, who has already picked.
-    const reserveC = page.getByTestId(`draft-clock-reserve-${teamC.pk}`).first();
+    const reserveC = page
+      .getByTestId(`draft-clock-reserve-${teamC.pk}`)
+      .first();
     await expect(reserveC).toHaveText(/^\d+:\d{2}$/);
     const reserveCBefore = (await reserveC.textContent()) ?? '';
     await expireDraftClock(context, t.draft.pk, 88_000);
 
-    await expect(page.getByTestId('draft-clock-grace')).toHaveText('0:00', { timeout: 6_000 });
-    await expect(page.getByTestId(`draft-clock-reserve-${teamB.pk}`).first()).not.toHaveText('1:00', {
+    await expect(page.getByTestId('draft-clock-grace')).toHaveText('0:00', {
+      timeout: 6_000,
+    });
+    await expect(
+      page.getByTestId(`draft-clock-reserve-${teamB.pk}`).first(),
+    ).not.toHaveText('1:00', {
       timeout: 6_000,
     });
     await expect(reserveC).toHaveText(reserveCBefore);
@@ -158,7 +175,11 @@ test.describe.serial('Team draft timer countdown', () => {
     for (let i = 0; i < 16; i++) {
       const cur = await fetchTimerTournament(context, KEY);
       expect(cur.draft.state).toBe('drafting');
-      await staffPick(context, activeRound(cur).pk, cur.draft.users_remaining[0]);
+      await staffPick(
+        context,
+        activeRound(cur).pk,
+        cur.draft.users_remaining[0],
+      );
     }
 
     await openDraftModal(page, t.pk);

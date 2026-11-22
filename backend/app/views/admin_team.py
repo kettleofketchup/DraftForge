@@ -10,7 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.functions.tournament import _serialize_tournament
+from app.functions.tournament import serialize_tournament
 from app.models import CustomUser, League, LeagueLog, Tournament
 from app.permissions_tournament import (
     has_league_admin_access,
@@ -19,6 +19,10 @@ from app.permissions_tournament import (
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
 from org.member_resolution import member_nick, resolve_member_user
+from org.mmr import (
+    LEAGUE_GAME,
+    org_mmr_for,
+)
 from org.models import Organization, OrgUser
 from org.permissions import (
     has_org_admin_access,
@@ -360,7 +364,12 @@ def add_league_member(request: Request, league_id: int) -> Response:
             if org_user.guild_nickname is None and nick is not None:
                 org_user.guild_nickname = nick
                 org_user.save(update_fields=["guild_nickname"])
-            LeagueUser.objects.create(user=user, org_user=org_user, league=league)
+            LeagueUser.objects.create(
+                user=user,
+                org_user=org_user,
+                league=league,
+                mmr=org_mmr_for(league.organization_id, user.pk, LEAGUE_GAME),
+            )
             invalidate_after_commit(user)
     except IntegrityError:
         return Response(
@@ -409,13 +418,8 @@ def add_tournament_member(request: Request, tournament_id: int) -> Response:
 
     tournament.users.add(user)
 
-    # Invalidate immediately so _serialize_tournament gets fresh data,
-    # AND after commit so subsequent GET requests see the new state.
     invalidate_obj(tournament)
     invalidate_after_commit(tournament)
 
-    # Refresh to include the newly added user in serialization
     tournament.refresh_from_db()
-    return Response(
-        {"status": "added", "tournament": _serialize_tournament(tournament)}
-    )
+    return Response({"status": "added", "tournament": serialize_tournament(tournament)})

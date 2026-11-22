@@ -1,6 +1,6 @@
 import { useGameType } from '~/hooks/useGameType';
-import { useUserCacheStore } from '~/store/userCacheStore';
 import { selectPositions } from '~/store/selectPositions';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import type { PositionsType } from '~/store/userCacheTypes';
 
 /**

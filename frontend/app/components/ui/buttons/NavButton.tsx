@@ -2,12 +2,19 @@ import { ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { brandGlowLift, brandGradient, buttonLift, buttonDisabled } from './styles';
+import {
+  brandGlowLift,
+  brandGradient,
+  buttonDisabled,
+  buttonLift,
+} from './styles';
 
 export type NavDirection = 'prev' | 'next' | 'latest';
 
-export interface NavButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
+export interface NavButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant'
+> {
   /** Navigation direction - determines icon and default text */
   direction?: NavDirection;
   /** Whether to apply the soft-shadow lift (default: true) */
@@ -16,7 +23,11 @@ export interface NavButtonProps
 
 const directionConfig: Record<
   NavDirection,
-  { icon: React.ComponentType<{ className?: string }>; label: string; iconPosition: 'left' | 'right' }
+  {
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    iconPosition: 'left' | 'right';
+  }
 > = {
   prev: { icon: ChevronLeft, label: 'Previous', iconPosition: 'left' },
   next: { icon: ChevronRight, label: 'Next', iconPosition: 'right' },
@@ -49,7 +60,7 @@ const NavButton = React.forwardRef<HTMLButtonElement, NavButtonProps>(
           brandGlowLift,
           '[text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]',
           '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
-          className
+          className,
         )}
         {...props}
       >
@@ -62,7 +73,7 @@ const NavButton = React.forwardRef<HTMLButtonElement, NavButtonProps>(
         )}
       </Button>
     );
-  }
+  },
 );
 
 NavButton.displayName = 'NavButton';

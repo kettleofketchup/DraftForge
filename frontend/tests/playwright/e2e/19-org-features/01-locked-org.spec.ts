@@ -30,6 +30,7 @@ test.describe('Org features: locked org @cicd', () => {
     await expect(page.getByTestId('org-tab-claims')).toBeVisible();
     await expect(page.getByTestId('org-tab-contributions')).toHaveCount(0);
     await expect(page.getByTestId('org-tab-promotion')).toHaveCount(0);
+    await expect(page.getByTestId('org-tab-conduct')).toHaveCount(0);
 
     await page.getByTestId('org-settings-button').click();
     await expect(page.getByTestId('org-settings-modal')).toBeVisible();
@@ -58,6 +59,26 @@ test.describe('Org features: locked org @cicd', () => {
       'active',
     );
     await expect(page.getByTestId('promotion-tab')).toHaveCount(0);
+    await expectNoSessionToast(page);
+  });
+
+  test('a conduct deep link bounces to leagues without a session toast @cicd', async ({
+    page,
+    context,
+  }) => {
+    await loginOrgFeatures(context, 'locked_admin');
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${data.orgs.locked.pk}?tab=conduct`,
+    );
+
+    await expect(page.getByTestId('org-tab-users')).toBeVisible();
+    await expect(page).not.toHaveURL(/tab=conduct/);
+    await expect(page.getByTestId('org-tab-leagues')).toHaveAttribute(
+      'data-state',
+      'active',
+    );
+    await expect(page.getByTestId('conduct-tab')).toHaveCount(0);
     await expectNoSessionToast(page);
   });
 

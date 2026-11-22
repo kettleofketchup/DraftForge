@@ -17,9 +17,9 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from app.models import CustomUser, League, Team, Tournament
 from app.serializers import (
-    _collect_context_mmr,
-    _collect_tournament_user_pks,
-    _tournament_organization,
+    collect_org_mmr,
+    collect_tournament_user_pks,
+    tournament_organization,
 )
 from app.user_cache import serialize_user_core
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound
@@ -27,7 +27,8 @@ from draft.services import team as teamdraft
 from draft.services.team_timeout import skip_turn
 from draft.views.team import teamdraft_pause
 from draft.views.team_picks import pick_player_for_round, undo_last_pick
-from org.models import Organization, OrgUser
+from org.models import Organization
+from tests.populate.utils import ensure_org_user
 
 User = get_user_model()
 
@@ -80,7 +81,7 @@ class TimedDraftFixture:
             self.tournament.league = league
             self.tournament.save()
             for captain, mmr in zip(self.captains, captain_mmrs):
-                OrgUser.objects.create(user=captain, organization=org, mmr=mmr)
+                ensure_org_user(captain, org, mmr=mmr)
 
         self.options: DraftOptions = DraftOptions.ensure_for(
             self.tournament,
@@ -178,10 +179,11 @@ def mid_draft_fixture(num_teams: int, prefix: str) -> TimedDraftFixture:
 
 
 def legacy_users_dict(tournament: Tournament) -> dict:
-    """Pre-optimisation _build_users_dict: per-user cached core + MMR overlay."""
-    seen_pks = _collect_tournament_user_pks(tournament)
-    mmr_map = _collect_context_mmr(tournament, seen_pks)
-    is_org = _tournament_organization(tournament) is not None
+    """Pre-optimisation build_users_dict: per-user cached core + MMR overlay."""
+    seen_pks = collect_tournament_user_pks(tournament)
+    org = tournament_organization(tournament)
+    mmr_map = collect_org_mmr(tournament, org, seen_pks, fresh=False)
+    is_org = org is not None
     result: dict = {}
     for pk in seen_pks:
         core = serialize_user_core(pk)

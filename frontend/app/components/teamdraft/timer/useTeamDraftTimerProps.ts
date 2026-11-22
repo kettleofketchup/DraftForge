@@ -1,7 +1,14 @@
 import { useMemo } from 'react';
-import { pauseTeamDraft, resumeTeamDraft, startTeamDraft } from '~/components/api/draftAPI';
+import {
+  pauseTeamDraft,
+  resumeTeamDraft,
+  startTeamDraft,
+} from '~/components/api/draftAPI';
 import type { UserType } from '~/index';
-import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
+import {
+  draftWsSelectors,
+  useDraftWebSocketStore,
+} from '~/store/draftWebSocketStore';
 import { useUserStore } from '~/store/userStore';
 import { isCaptainOf } from '../isCaptainOf';
 import type { ClockTeam, LiveDraftClockBarProps } from './DraftClockBar';
@@ -21,14 +28,19 @@ interface StateTeam {
   captain?: UserType | null;
 }
 
-export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaff: boolean): TeamDraftTimerProps {
+export function useTeamDraftTimerProps(
+  currentUserPk: number | undefined,
+  isStaff: boolean,
+): TeamDraftTimerProps {
   const draftState = useDraftWebSocketStore((s) => s.draftState);
   const captainFresh = useDraftWebSocketStore((s) => s.captainFresh);
   const draftStatus = useDraftWebSocketStore(draftWsSelectors.draftStatus);
   const timerEnabled = useDraftWebSocketStore(draftWsSelectors.timerEnabled);
   const clockArmed = useDraftWebSocketStore(draftWsSelectors.clockArmed);
   const activeRoundPk = useDraftWebSocketStore(draftWsSelectors.activeRoundPk);
-  const isActiveCaptainDisconnected = useDraftWebSocketStore(draftWsSelectors.isActiveCaptainDisconnected);
+  const isActiveCaptainDisconnected = useDraftWebSocketStore(
+    draftWsSelectors.isActiveCaptainDisconnected,
+  );
   const userStoreDraftState = useUserStore((s) => s.tournament?.draft?.state);
 
   return useMemo(() => {
@@ -37,10 +49,12 @@ export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaf
     const activeRound = ds?.draft_rounds?.find((r) => r.pk === activeRoundPk);
     const activeCaptain = (activeRound?.captain ?? null) as UserType | null;
     const dsTeams = (ds?.tournament?.teams ?? []) as StateTeam[];
-    const activeTeamPk = dsTeams.find((t) => t.captain?.pk === activeCaptain?.pk)?.pk ?? null;
+    const activeTeamPk =
+      dsTeams.find((t) => t.captain?.pk === activeCaptain?.pk)?.pk ?? null;
     const isCaptain = isCaptainOf(dsTeams, currentUserPk);
     const canControl = isStaff || isCaptain;
-    const isMyTurn = currentUserPk != null && activeCaptain?.pk === currentUserPk;
+    const isMyTurn =
+      currentUserPk != null && activeCaptain?.pk === currentUserPk;
     const teams: ClockTeam[] = [...dsTeams]
       .sort((a, b) => (a.draft_order ?? 0) - (b.draft_order ?? 0))
       .map((t) => ({
@@ -51,9 +65,20 @@ export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaf
       }));
     const isManualPause = ds?.is_manual_pause === true;
 
-    const act = (fn: (pk: number) => Promise<unknown>, loading: string, success: string, fallback: string) => async () => {
-      if (draftPk != null) await runTimerAction(() => fn(draftPk), fallback, { loading, success });
-    };
+    const act =
+      (
+        fn: (pk: number) => Promise<unknown>,
+        loading: string,
+        success: string,
+        fallback: string,
+      ) =>
+      async () => {
+        if (draftPk != null)
+          await runTimerAction(() => fn(draftPk), fallback, {
+            loading,
+            success,
+          });
+      };
 
     return {
       showLobby: (draftStatus ?? userStoreDraftState) === 'pending',
@@ -67,8 +92,18 @@ export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaf
         canControl,
         isStaff,
         reserveTotalMs: ds?.draft_options?.reserve_time_ms ?? 0,
-        onPause: act(pauseTeamDraft, 'Pausing…', 'Draft paused', 'Failed to pause'),
-        onStartClock: act(startTeamDraft, 'Starting clock…', 'Clock started', 'Failed to start clock'),
+        onPause: act(
+          pauseTeamDraft,
+          'Pausing…',
+          'Draft paused',
+          'Failed to pause',
+        ),
+        onStartClock: act(
+          startTeamDraft,
+          'Starting clock…',
+          'Clock started',
+          'Failed to start clock',
+        ),
       },
       pauseOverlayProps: {
         draftStatus,
@@ -77,9 +112,16 @@ export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaf
         isActiveCaptainDisconnected,
         canResume: canControl,
         isStaff,
-        onResume: act(resumeTeamDraft, 'Resuming…', 'Resuming draft', 'Failed to resume'),
+        onResume: act(
+          resumeTeamDraft,
+          'Resuming…',
+          'Resuming draft',
+          'Failed to resume',
+        ),
         onPickForCaptain: () =>
-          document.querySelector('[data-testid="available-players-section"]')?.scrollIntoView({ behavior: 'smooth' }),
+          document
+            .querySelector('[data-testid="available-players-section"]')
+            ?.scrollIntoView({ behavior: 'smooth' }),
       },
     };
   }, [

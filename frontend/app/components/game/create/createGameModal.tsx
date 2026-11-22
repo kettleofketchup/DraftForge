@@ -34,10 +34,7 @@ export const GameCreateModal: React.FC<Props> = (props) => {
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <PrimaryButton
-              size="lg"
-              onClick={() => setOpen(true)}
-            >
+            <PrimaryButton size="lg" onClick={() => setOpen(true)}>
               <PlusCircleIcon className="text-white" />
               Create Game
             </PrimaryButton>

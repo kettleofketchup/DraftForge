@@ -13,14 +13,21 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from cacheops.conf import settings as cacheops_settings
+from cacheops.signals import cache_read
 from django.db import OperationalError, connection, reset_queries, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from app.functions.tournament import serialize_tournament
 from app.models import CustomUser, Team, Tournament
-from app.serializers import DraftSerializerSlim, _tournament_organization
+from app.serializers import (
+    DraftSerializerSlim,
+    TournamentSerializer,
+    tournament_organization,
+)
+from app.tournament_state import tournament_state_queryset
 from draft.consumers.team import DraftConsumer
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
 from draft.services import team_broadcast as broadcast
@@ -41,34 +48,40 @@ from draft.tests.team_fixtures import (
     mid_draft_fixture,
     rename_team,
 )
-from org.models import Organization
+from events.models import Event
+from league.models import LeagueUser
+from org.models import Organization, OrgUser
 
 # Paused org draft: draft, tournament, rounds, teams, members, dropins, lefts,
 # users (8 prefetch), users_remaining (1), draft_options (1), league +
 # organization (2), OrgUser lookup, missing-OrgUser probe, OrgUser profiles,
-# league memberships (4), bulk _users core (1). latest_round, active_round and
-# clock_armed read the prefetched rounds.
-DRAFT_STATE_QUERIES: int = 17
+# league memberships, game MMRs (5), bulk _users core (1). latest_round,
+# active_round and clock_armed read the prefetched rounds.
+DRAFT_STATE_QUERIES: int = 18
 # Ready = the post-commit broadcast + the tournament response (with its
 # league/source_event/games/captains/draft lookups) + the view's own captain
 # check, row locks, update and event insert. Same for 4 and 8 teams. The
-# leagueless fixture's source_event org lookup runs once per users dict.
+# leagueless fixture's source_event org lookup runs once per users dict; it has
+# no org, so no OrgUser batch (and no OrgUserGameMmr prefetch) runs.
 READY_ENDPOINT_QUERIES: int = 41
 # Pick, outermost transaction (TransactionTestCase, cacheops off): 26 for
 # auth, locks, the pick, timing, next-round activation and two event inserts
-# (+BEGIN/COMMIT), 17 for the one shared broadcast state behind both events,
+# (+BEGIN/COMMIT), 18 for the one shared broadcast state behind both events,
 # 2 data_version stamps (build + reuse), BEGIN/COMMIT around the autocommit
-# build, 22 for the tournament response, 1 for the hero draft chat tenure
-# lookup the roster change triggers on commit.
-PICK_QUERIES: int = 72
-# Upper bounds at the time of writing; the 4 == 8 team equality is the real pin.
-RESUME_ENDPOINT_QUERIES: int = 54
+# build, 23 for the tournament response, 1 for the hero draft chat tenure
+# lookup the roster change triggers on commit. The broadcast state and the
+# tournament response each include one OrgUserGameMmr prefetch.
+PICK_QUERIES: int = 74
+# The draft state plus the broadcast's data_version stamp.
+BROADCAST_EVENT_QUERIES: int = DRAFT_STATE_QUERIES + 1
+# Includes the OrgUserGameMmr prefetch in the broadcast state and tournament response.
+RESUME_ENDPOINT_QUERIES: int = 56
 # Includes the hero draft chat tenure lookup the roster change triggers.
-UNDO_ENDPOINT_QUERIES: int = 66
+UNDO_ENDPOINT_QUERIES: int = 68
 
 
 def organization_pk(tournament: Tournament) -> int | None:
-    org = _tournament_organization(tournament)
+    org = tournament_organization(tournament)
     return org.pk if org else None
 
 
@@ -120,7 +133,7 @@ class DraftStateOutputTests(TestCase):
         self.assertEqual(dumps(initial_state(self.fx.draft.pk)), expected)
 
     def test_state_carries_the_overlay_organization(self) -> None:
-        org = _tournament_organization(self.fx.tournament)
+        org = tournament_organization(self.fx.tournament)
         self.assertIsNotNone(org)
         for fresh in (True, False):
             with self.subTest(fresh=fresh):
@@ -251,7 +264,7 @@ class DraftStateQueryCountTests(TestCase):
                 counts.append(self.count(lambda e=event: broadcast_event(e)))
             self.assertTrue(layer.messages)
         self.assertEqual(counts[0], counts[1])
-        self.assertLessEqual(counts[0], DRAFT_STATE_QUERIES + 2)
+        self.assertEqual(counts[0], BROADCAST_EVENT_QUERIES)
 
     def test_resume_endpoint_is_constant(self) -> None:
         counts = []
@@ -269,7 +282,7 @@ class DraftStateQueryCountTests(TestCase):
                     )
                 )
         self.assertEqual(counts[0], counts[1])
-        self.assertLessEqual(counts[0], RESUME_ENDPOINT_QUERIES)
+        self.assertEqual(counts[0], RESUME_ENDPOINT_QUERIES)
 
     def test_undo_endpoint_is_constant(self) -> None:
         counts = []
@@ -279,7 +292,7 @@ class DraftStateQueryCountTests(TestCase):
             ):
                 counts.append(self.count(lambda f=fx: self.undo_with_commit(f)))
         self.assertEqual(counts[0], counts[1])
-        self.assertLessEqual(counts[0], UNDO_ENDPOINT_QUERIES)
+        self.assertEqual(counts[0], UNDO_ENDPOINT_QUERIES)
 
     def post_with_commit(self, client: APIClient, url: str) -> None:
         with self.captureOnCommitCallbacks(execute=True):
@@ -615,3 +628,108 @@ class SharedDraftStateTests(TransactionTestCase):
                     transaction.on_commit(lambda: broadcast_event(event))
         self.assertEqual(spy.call_count, 2)
         self.assertTrue(layer.messages)
+
+
+class FreshCallerTests(TransactionTestCase):
+    """Broadcasts ignore a warm, stale cache."""
+
+    def setUp(self) -> None:
+        if not cacheops_settings.CACHEOPS_ENABLED:
+            self.skipTest("cacheops disabled")
+        self.fx = TimedDraftFixture(prefix="caller")
+        self.team = self.fx.teams[0]
+        build_draft_state(self.fx.draft.pk, fresh=False)
+        _ = TournamentSerializer(
+            tournament_state_queryset(fresh=False).get(pk=self.fx.tournament.pk)
+        ).data
+        rename_team(self.team.pk)
+
+    def team_name(self, tournament: dict) -> str:
+        return next(t["name"] for t in tournament["teams"] if t["pk"] == self.team.pk)
+
+    def test_cache_is_stale(self) -> None:
+        state = build_draft_state(self.fx.draft.pk, fresh=False)
+        self.assertEqual(self.team_name(state["tournament"]), "T1")
+
+    def test_broadcast_event_reads_fresh_state(self) -> None:
+        layer = FakeChannelLayer()
+        event = DraftEvent.objects.create(
+            draft=self.fx.draft, event_type="captain_ready"
+        )
+        with patch(
+            "draft.services.team_broadcast.get_channel_layer", return_value=layer
+        ):
+            broadcast_event(event)
+        self.assertEqual(
+            self.team_name(layer.messages[0]["draft_state"]["tournament"]), "Renamed"
+        )
+
+
+class DraftStateFreshReadTests(TransactionTestCase):
+    """fresh=True payloads never read through cacheops, at any level."""
+
+    def setUp(self) -> None:
+        if not cacheops_settings.CACHEOPS_ENABLED:
+            self.skipTest("cacheops disabled")
+
+    def cached_reads(self, fn: Callable[[], object]) -> list[str]:
+        reads: list[str] = []
+
+        def record(sender: type | None, func: object = None, **kwargs: object) -> None:
+            reads.append(getattr(sender, "__name__", None) or repr(func))
+
+        cache_read.connect(record)
+        try:
+            fn()
+        finally:
+            cache_read.disconnect(record)
+        return reads
+
+    def org_fixture(self, prefix: str) -> TimedDraftFixture:
+        fx = mid_draft_fixture(4, prefix)
+        league = fx.tournament.league
+        org_user = OrgUser.objects.get(user=fx.captains[0])
+        LeagueUser.objects.create(
+            user=fx.captains[0], org_user=org_user, league=league, mmr=1111
+        )
+        league.admins.add(fx.staff)
+        return fx
+
+    def event_fixture(self, prefix: str) -> TimedDraftFixture:
+        fx = TimedDraftFixture(prefix=prefix)
+        org = Organization.objects.create(name=f"{prefix} org")
+        Event.objects.create(
+            name=f"{prefix} event",
+            organization=org,
+            scheduled_at=timezone.now(),
+            tournament=fx.tournament,
+        )
+        return fx
+
+    def serialize_all(self, fx: TimedDraftFixture) -> None:
+        build_draft_state(fx.draft.pk, fresh=True)
+        serialize_tournament(fx.tournament)
+
+    def test_fresh_payloads_make_no_cached_reads(self) -> None:
+        for label, make in (("org", self.org_fixture), ("event", self.event_fixture)):
+            with self.subTest(fixture=label):
+                fx = make(f"fr{label}")
+                build_draft_state(fx.draft.pk, fresh=False)
+                self.assertEqual(self.cached_reads(lambda: self.serialize_all(fx)), [])
+
+    def test_fresh_state_sees_raw_sql_draft_options_change(self) -> None:
+        fx = self.org_fixture("frdo")
+        tournament_pk = fx.tournament.pk
+        build_draft_state(fx.draft.pk, fresh=False)
+        serialize_tournament(fx.tournament)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE app_draftoptions SET grace_time_ms = %s "
+                "WHERE tournament_id = %s",
+                [12345, tournament_pk],
+            )
+        state = build_draft_state(fx.draft.pk, fresh=True)
+        self.assertEqual(state["draft_options"]["grace_time_ms"], 12345)
+        response = serialize_tournament(fx.tournament)
+        self.assertEqual(response["draft_options"]["grace_time_ms"], 12345)
+        self.assertEqual(response["draft"]["draft_options"]["grace_time_ms"], 12345)

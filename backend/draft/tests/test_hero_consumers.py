@@ -6,16 +6,24 @@ from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 from channels.db import database_sync_to_async
+from channels.layers import get_channel_layer
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.test import SimpleTestCase, TransactionTestCase
 from django.urls import re_path
 from django.utils import timezone
 
 from app.models import Game, Team, Tournament
 from draft.consumers.hero import HeroDraftConsumer
-from draft.models import DraftTeam, HeroDraft, HeroDraftRound, HeroDraftState
+from draft.models import (
+    DraftTeam,
+    HeroDraft,
+    HeroDraftEvent,
+    HeroDraftRound,
+    HeroDraftState,
+)
 from draft.tasks import hero_tick
 from draft.tasks.hero_tick import HERO_TICK_DRIVER
 from draft.tests.ws_helpers import read_until_type
@@ -275,8 +283,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         await read_until_type(communicator, "chat_history")
 
         # Send event through channel layer
-        from channels.layers import get_channel_layer
-
         channel_layer = get_channel_layer()
         await channel_layer.group_send(
             f"herodraft_{self.draft.id}",
@@ -311,8 +317,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         await read_until_type(communicator, "chat_history")
 
         # Send tick through channel layer
-        from channels.layers import get_channel_layer
-
         channel_layer = get_channel_layer()
         await channel_layer.group_send(
             f"herodraft_{self.draft.id}",
@@ -446,8 +450,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         # Verify captain1 is connected but state is still PAUSED
         @database_sync_to_async
         def check_still_paused():
-            from django.db import transaction
-
             with transaction.atomic():
                 # select_for_update ensures we wait for any locks to be released
                 draft = HeroDraft.objects.select_for_update().get(pk=self.draft.pk)
@@ -475,8 +477,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         # Manually resume the draft (simulating Resume button click)
         @database_sync_to_async
         def manual_resume():
-            from django.db import transaction
-
             with transaction.atomic():
                 self.draft.refresh_from_db()
                 active_round.refresh_from_db()
@@ -501,8 +501,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         # Simulate countdown completion
         @database_sync_to_async
         def complete_countdown():
-            from django.db import transaction
-
             with transaction.atomic():
                 self.draft.refresh_from_db()
                 # Directly transition to DRAFTING (as check_resume_countdown does)
@@ -554,8 +552,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         # Set up draft in RESUMING state
         @database_sync_to_async
         def setup_resuming_state():
-            from django.db import transaction
-
             with transaction.atomic():
                 self.draft.state = HeroDraftState.RESUMING
                 self.draft.resuming_until = timezone.now() + timedelta(seconds=3)
@@ -583,8 +579,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         # Verify draft is still RESUMING (not PAUSED)
         @database_sync_to_async
         def check_still_resuming():
-            from django.db import transaction
-
             with transaction.atomic():
                 draft = HeroDraft.objects.select_for_update().get(pk=self.draft.pk)
                 return draft.state
@@ -603,8 +597,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         @database_sync_to_async
         def set_rolling_state():
-            from django.db import transaction
-
             with transaction.atomic():
                 self.draft.state = HeroDraftState.ROLLING
                 self.draft.save()
@@ -626,8 +618,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         @database_sync_to_async
         def check_state():
-            from django.db import transaction
-
             with transaction.atomic():
                 draft = HeroDraft.objects.select_for_update().get(pk=self.draft.pk)
                 return draft.state
@@ -646,8 +636,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         @database_sync_to_async
         def set_drafting():
-            from django.db import transaction
-
             with transaction.atomic():
                 self.draft.state = HeroDraftState.DRAFTING
                 self.draft.save()
@@ -680,10 +668,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         @database_sync_to_async
         def check_paused_state():
-            from django.db import transaction
-
-            from draft.models import HeroDraftEvent
-
             with transaction.atomic():
                 draft = HeroDraft.objects.select_for_update().get(pk=self.draft.pk)
                 pause_events = HeroDraftEvent.objects.filter(
@@ -713,8 +697,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         @database_sync_to_async
         def set_drafting():
-            from django.db import transaction
-
             with transaction.atomic():
                 self.draft.state = HeroDraftState.DRAFTING
                 self.draft.save()
@@ -748,8 +730,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         # Draft should still be DRAFTING (kicked connection should not trigger pause)
         @database_sync_to_async
         def check_still_drafting():
-            from django.db import transaction
-
             with transaction.atomic():
                 draft = HeroDraft.objects.select_for_update().get(pk=self.draft.pk)
                 draft_team1 = DraftTeam.objects.select_for_update().get(

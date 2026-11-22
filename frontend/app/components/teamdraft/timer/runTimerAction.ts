@@ -17,7 +17,10 @@ export async function runTimerAction<T>(
 ): Promise<T | undefined> {
   const promise = (async () => action())();
   if (progress) {
-    toast.promise(promise, { ...progress, error: (err: unknown) => describeTimerActionError(err, fallback) });
+    toast.promise(promise, {
+      ...progress,
+      error: (err: unknown) => describeTimerActionError(err, fallback),
+    });
   }
   try {
     return await promise;

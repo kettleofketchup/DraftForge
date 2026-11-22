@@ -1,5 +1,5 @@
 import type { BrowserContext, Locator, Page } from '@playwright/test';
-import { test, expect, getTournamentByKey } from '../../fixtures';
+import { expect, getTournamentByKey, test } from '../../fixtures';
 import { TournamentPage } from '../../helpers/tournament';
 
 const NAMES = {
@@ -23,10 +23,14 @@ interface StripStatsTournament {
   leaguePk: number;
 }
 
-async function resolveTournament(context: BrowserContext): Promise<StripStatsTournament> {
+async function resolveTournament(
+  context: BrowserContext,
+): Promise<StripStatsTournament> {
   const tournament = await getTournamentByKey(context, 'strip_stats');
   if (!tournament) {
-    throw new Error('strip_stats tournament missing. Run: just db::populate::fresh');
+    throw new Error(
+      'strip_stats tournament missing. Run: just db::populate::fresh',
+    );
   }
   if (tournament.league_pk == null) {
     throw new Error('strip_stats tournament has no league_pk');
@@ -36,11 +40,16 @@ async function resolveTournament(context: BrowserContext): Promise<StripStatsTou
 
 function summariesResponse(page: Page, leaguePk: number) {
   return page.waitForResponse(
-    (r) => r.url().includes(`/api/steam/leagues/${leaguePk}/player-summaries/`) && r.ok(),
+    (r) =>
+      r.url().includes(`/api/steam/leagues/${leaguePk}/player-summaries/`) &&
+      r.ok(),
   );
 }
 
-async function openTeamsTab(page: Page, t: StripStatsTournament): Promise<TournamentPage> {
+async function openTeamsTab(
+  page: Page,
+  t: StripStatsTournament,
+): Promise<TournamentPage> {
   const summaries = summariesResponse(page, t.leaguePk);
   const tournamentPage = new TournamentPage(page);
   await tournamentPage.goto(t.pk, 'teams');
@@ -49,7 +58,10 @@ async function openTeamsTab(page: Page, t: StripStatsTournament): Promise<Tourna
   return tournamentPage;
 }
 
-async function openDraftModal(page: Page, t: StripStatsTournament): Promise<Locator> {
+async function openDraftModal(
+  page: Page,
+  t: StripStatsTournament,
+): Promise<Locator> {
   const tournamentPage = await openTeamsTab(page, t);
   await tournamentPage.clickStartDraft();
   await tournamentPage.waitForDraftModal();
@@ -79,7 +91,9 @@ function nameTrigger(strip: Locator, name: string): Locator {
 }
 
 function avatarTrigger(strip: Locator, name: string): Locator {
-  return strip.getByRole('button', { name: `View profile for ${name}` }).first();
+  return strip
+    .getByRole('button', { name: `View profile for ${name}` })
+    .first();
 }
 
 async function expectAceVisible(dialog: Locator): Promise<void> {
@@ -93,7 +107,9 @@ async function expectHiddenByDesign(dialog: Locator): Promise<void> {
   await expect(ace).toHaveCount(1);
   await expect(ace).toBeVisible();
   await expect(ace.getByTestId('strip-league-stats')).toBeAttached();
-  await expect(dialog.getByTestId('strip-league-stats').filter({ visible: true })).toHaveCount(0);
+  await expect(
+    dialog.getByTestId('strip-league-stats').filter({ visible: true }),
+  ).toHaveCount(0);
 }
 
 interface Box {
@@ -122,7 +138,9 @@ const STATS_ONLY_AT_1920 =
 
 function draftStrips(dialog: Locator): Locator {
   return dialog
-    .locator('[data-testid="available-player"]:has([aria-label^="View profile for"])')
+    .locator(
+      '[data-testid="available-player"]:has([aria-label^="View profile for"])',
+    )
     .filter({ visible: true });
 }
 
@@ -134,50 +152,66 @@ function teamCardStrips(card: Locator): Locator {
 
 async function measureStrips(strips: Locator): Promise<StripLayout[]> {
   return strips.evaluateAll((strips) =>
-      strips.map((strip) => {
-        const box = (label: string, el: Element): Box => {
-          const r = el.getBoundingClientRect();
-          return { label, left: r.left, right: r.right, top: r.top, bottom: r.bottom };
-        };
-        const parts: Box[] = [];
-        const triggers = strip.querySelectorAll('[aria-label^="View profile for"]');
-        const nameSpan = triggers[triggers.length - 1]?.firstElementChild;
-        if (nameSpan) parts.push(box('name', nameSpan));
-        const children = Array.from(strip.children);
-        const mmr = children.find((c) => c.textContent?.includes('B:'));
-        if (mmr) parts.push(box('mmr', mmr));
-        const fit = (label: string, el: Element): Fit => ({
-          label,
-          scrollWidth: el.scrollWidth,
-          clientWidth: el.clientWidth,
-        });
-        const fits: Fit[] = [fit('strip', strip)];
-        const stats = strip.querySelector('[data-testid="strip-league-stats"]');
-        if (stats && stats.getBoundingClientRect().width > 0) {
-          parts.push(box('stats', stats));
-          fits.push(fit('stats', stats));
-          const badge = stats.querySelector('[data-testid="strip-league-stats-rank"]')?.parentElement;
-          if (badge) fits.push(fit('stats badge', badge));
-        }
-        const last = children[children.length - 1];
-        if (last && last.classList.contains('flex-1')) {
-          const context = last.firstElementChild;
-          if (context && context.getBoundingClientRect().width > 0) parts.push(box('context', context));
-        } else if (last && last.getBoundingClientRect().width > 0) {
-          parts.push(box('action', last));
-        }
+    strips.map((strip) => {
+      const box = (label: string, el: Element): Box => {
+        const r = el.getBoundingClientRect();
         return {
-          width: strip.getBoundingClientRect().width,
-          fits,
-          outer: box('strip', strip),
-          parts,
+          label,
+          left: r.left,
+          right: r.right,
+          top: r.top,
+          bottom: r.bottom,
         };
-      }),
-    );
+      };
+      const parts: Box[] = [];
+      const triggers = strip.querySelectorAll(
+        '[aria-label^="View profile for"]',
+      );
+      const nameSpan = triggers[triggers.length - 1]?.firstElementChild;
+      if (nameSpan) parts.push(box('name', nameSpan));
+      const children = Array.from(strip.children);
+      const mmr = children.find((c) => c.textContent?.includes('B:'));
+      if (mmr) parts.push(box('mmr', mmr));
+      const fit = (label: string, el: Element): Fit => ({
+        label,
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      });
+      const fits: Fit[] = [fit('strip', strip)];
+      const stats = strip.querySelector('[data-testid="strip-league-stats"]');
+      if (stats && stats.getBoundingClientRect().width > 0) {
+        parts.push(box('stats', stats));
+        fits.push(fit('stats', stats));
+        const badge = stats.querySelector(
+          '[data-testid="strip-league-stats-rank"]',
+        )?.parentElement;
+        if (badge) fits.push(fit('stats badge', badge));
+      }
+      const last = children[children.length - 1];
+      if (last && last.classList.contains('flex-1')) {
+        const context = last.firstElementChild;
+        if (context && context.getBoundingClientRect().width > 0)
+          parts.push(box('context', context));
+      } else if (last && last.getBoundingClientRect().width > 0) {
+        parts.push(box('action', last));
+      }
+      return {
+        width: strip.getBoundingClientRect().width,
+        fits,
+        outer: box('strip', strip),
+        parts,
+      };
+    }),
+  );
 }
 
 function overlaps(a: Box, b: Box): boolean {
-  return a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  return (
+    a.left < b.right - 0.5 &&
+    b.left < a.right - 0.5 &&
+    a.top < b.bottom - 0.5 &&
+    b.top < a.bottom - 0.5
+  );
 }
 
 function inside(inner: Box, outer: Box): boolean {
@@ -193,16 +227,25 @@ function expectCleanLayout(layouts: StripLayout[], where: string): void {
   expect(layouts.length, `strips at ${where}`).toBeGreaterThan(0);
   for (const layout of layouts) {
     for (const f of layout.fits) {
-      expect(f.scrollWidth, `${f.label} scrollWidth at ${where}`).toBeLessThanOrEqual(f.clientWidth);
+      expect(
+        f.scrollWidth,
+        `${f.label} scrollWidth at ${where}`,
+      ).toBeLessThanOrEqual(f.clientWidth);
     }
     for (const part of layout.parts) {
-      expect(inside(part, layout.outer), `${part.label} inside strip at ${where}`).toBe(true);
+      expect(
+        inside(part, layout.outer),
+        `${part.label} inside strip at ${where}`,
+      ).toBe(true);
     }
     for (let i = 0; i < layout.parts.length; i++) {
       for (let j = i + 1; j < layout.parts.length; j++) {
         const a = layout.parts[i];
         const b = layout.parts[j];
-        expect(overlaps(a, b), `${a.label}/${b.label} overlap at ${where}`).toBe(false);
+        expect(
+          overlaps(a, b),
+          `${a.label}/${b.label} overlap at ${where}`,
+        ).toBe(false);
       }
     }
   }
@@ -213,7 +256,9 @@ function statsBadge(stats: Locator): Locator {
 }
 
 function winRateChip(stats: Locator): Locator {
-  return statsBadge(stats).locator('span').filter({ hasText: /^\d+%$/ });
+  return statsBadge(stats)
+    .locator('span')
+    .filter({ hasText: /^\d+%$/ });
 }
 
 test.describe('Strip league stats (@cicd)', () => {
@@ -237,7 +282,9 @@ test.describe('Strip league stats (@cicd)', () => {
       await expect(winRateChip(aceStats)).toHaveClass(/\btext-success\b/);
       await expect(winRateChip(aceStats)).not.toHaveClass(/destructive/);
 
-      const midStats = availableStrip(dialog, NAMES.mid).getByTestId('strip-league-stats');
+      const midStats = availableStrip(dialog, NAMES.mid).getByTestId(
+        'strip-league-stats',
+      );
       await expect(statsBadge(midStats)).toHaveText('#6 · 7g · 29%');
       await expect(winRateChip(midStats)).toHaveClass(/\bbg-destructive\//);
       await expect(winRateChip(midStats)).not.toHaveClass(/text-success/);
@@ -248,10 +295,16 @@ test.describe('Strip league stats (@cicd)', () => {
         .evaluateAll((els) => els.map((el) => el.getAttribute('data-result')));
       expect(form).toEqual(['W', 'W', 'W', 'L', 'W']);
 
-      await expect(availableStrip(dialog, NAMES.hot).getByTestId('streak-badge')).toHaveText('W4');
-      await expect(availableStrip(dialog, NAMES.cold).getByTestId('streak-badge')).toHaveText('L3');
+      await expect(
+        availableStrip(dialog, NAMES.hot).getByTestId('streak-badge'),
+      ).toHaveText('W4');
+      await expect(
+        availableStrip(dialog, NAMES.cold).getByTestId('streak-badge'),
+      ).toHaveText('L3');
 
-      const rookieStats = availableStrip(dialog, NAMES.rookie).getByTestId('strip-league-stats');
+      const rookieStats = availableStrip(dialog, NAMES.rookie).getByTestId(
+        'strip-league-stats',
+      );
       await expect(rookieStats).toBeVisible();
       await expect(rookieStats).toContainText('3g ·');
       await expect(rookieStats).not.toContainText('#');
@@ -271,15 +324,22 @@ test.describe('Strip league stats (@cicd)', () => {
       await expect(summary).toContainText('#1 / 7');
       await expect(summary).toContainText('top 15%');
       await expect(
-        summary.getByTestId('win-rate-histogram').locator('[data-highlighted="true"]'),
+        summary
+          .getByTestId('win-rate-histogram')
+          .locator('[data-highlighted="true"]'),
       ).toHaveCount(1);
       await expect(summary).toContainText(/KDA .* · GPM \d+ · XPM \d+/);
 
       await page.keyboard.press('Escape');
       await expect(summary).toBeHidden();
 
-      await nameTrigger(availableStrip(dialog, NAMES.rookie), NAMES.rookie).click();
-      await expect(page.getByTestId('player-league-summary')).toContainText('— / 7');
+      await nameTrigger(
+        availableStrip(dialog, NAMES.rookie),
+        NAMES.rookie,
+      ).click();
+      await expect(page.getByTestId('player-league-summary')).toContainText(
+        '— / 7',
+      );
     });
 
     test('League filter narrows the available players', async ({ page }) => {
@@ -297,7 +357,9 @@ test.describe('Strip league stats (@cicd)', () => {
         New: [NAMES.rookie, NAMES.zero],
       };
       for (const [filter, names] of Object.entries(expected)) {
-        await section.getByRole('button', { name: filter, exact: true }).click();
+        await section
+          .getByRole('button', { name: filter, exact: true })
+          .click();
         await expect(count).toContainText(`${names.length}/8 players`);
         for (const name of names) {
           await expect(availableStrip(section, name)).toHaveCount(1);
@@ -319,7 +381,9 @@ test.describe('Strip league stats (@cicd)', () => {
       await expect(summary).not.toContainText('KDA');
     });
 
-    test('stats badge opens the hover card and the player panel', async ({ page }) => {
+    test('stats badge opens the hover card and the player panel', async ({
+      page,
+    }) => {
       const dialog = await openDraftModal(page, tournament);
       await expectAceVisible(dialog);
       const badge = availableStrip(dialog, NAMES.hot).getByRole('button', {
@@ -328,7 +392,9 @@ test.describe('Strip league stats (@cicd)', () => {
 
       await badge.hover();
       const card = page.getByRole('tooltip').filter({ hasText: NAMES.hot });
-      await expect(card.getByTestId('hover-league-summary')).toContainText('#2 / 7');
+      await expect(card.getByTestId('hover-league-summary')).toContainText(
+        '#2 / 7',
+      );
 
       await badge.click();
       const panel = page.getByTestId('player-league-summary');
@@ -341,12 +407,16 @@ test.describe('Strip league stats (@cicd)', () => {
       await expect(card.getByTestId('strip-league-stats')).toBeVisible();
 
       await avatarTrigger(card, NAMES.captA).hover();
-      const hoverCard = page.getByRole('tooltip').filter({ hasText: NAMES.captA });
+      const hoverCard = page
+        .getByRole('tooltip')
+        .filter({ hasText: NAMES.captA });
       await expect(hoverCard).toBeVisible();
       // Cross from the trigger onto the card the way a pointer does, in steps.
       const box = await hoverCard.boundingBox();
       if (!box) throw new Error('hover card has no bounding box');
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 });
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, {
+        steps: 12,
+      });
       await page.mouse.down();
       await page.mouse.up();
       const summary = page.getByTestId('player-league-summary');
@@ -396,11 +466,17 @@ test.describe('Strip league stats (@cicd)', () => {
       await expect(stats).toBeVisible();
       await expect(statsBadge(stats)).toHaveText('#7 · 5g · 20%');
 
-      const cards = page.locator('[data-testid^="completed-team-card-"]').filter({ visible: true });
+      const cards = page
+        .locator('[data-testid^="completed-team-card-"]')
+        .filter({ visible: true });
       const layouts = await measureStrips(teamCardStrips(cards));
       expectCleanLayout(layouts, 'TeamsTab 1280');
-      expect(layouts.some((l) => l.parts.some((p) => p.label === 'stats'))).toBe(true);
-      expect(layouts.some((l) => l.parts.some((p) => p.label === 'context'))).toBe(true);
+      expect(
+        layouts.some((l) => l.parts.some((p) => p.label === 'stats')),
+      ).toBe(true);
+      expect(
+        layouts.some((l) => l.parts.some((p) => p.label === 'context')),
+      ).toBe(true);
 
       const captB = teamCard(page, NAMES.captB);
       await expect(captB).toBeVisible();
@@ -423,12 +499,22 @@ test.describe('Strip league stats (@cicd)', () => {
       measured[width] = [...new Set(layouts.map((l) => Math.round(l.width)))];
       expectCleanLayout(layouts, String(width));
       if (width === 1920) {
-        expect(layouts.some((l) => l.parts.some((p) => p.label === 'stats'))).toBe(true);
-        expect(layouts.some((l) => l.fits.some((f) => f.label === 'stats badge'))).toBe(true);
+        expect(
+          layouts.some((l) => l.parts.some((p) => p.label === 'stats')),
+        ).toBe(true);
+        expect(
+          layouts.some((l) => l.fits.some((f) => f.label === 'stats badge')),
+        ).toBe(true);
       }
     }
-    test.info().annotations.push({ type: 'strip-widths', description: JSON.stringify(measured) });
-    test.info().annotations.push({ type: 'stats-geometry', description: STATS_ONLY_AT_1920 });
+    test.info().annotations.push({
+      type: 'strip-widths',
+      description: JSON.stringify(measured),
+    });
+    test.info().annotations.push({
+      type: 'stats-geometry',
+      description: STATS_ONLY_AT_1920,
+    });
   });
 
   test.describe('375 wide', () => {

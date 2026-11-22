@@ -1,0 +1,4 @@
+# Formatting-only commits. Use with: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style(frontend): run prettier over the whole frontend (#742)
+62138a6370a5297f6ad589af4a39c96b6e56bab2

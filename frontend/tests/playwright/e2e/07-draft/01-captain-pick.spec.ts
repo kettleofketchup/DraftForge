@@ -9,15 +9,14 @@
  * Ported from Cypress: frontend/tests/cypress/e2e/07-draft/01-captain-pick.cy.ts
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   getTournamentByKey,
+  test,
   TournamentPage,
+  visitAndWaitForHydration,
 } from '../../fixtures';
-
+import { API_URL } from '../../fixtures/base-url';
 
 // Tournament and captain info fetched in beforeAll
 let tournamentPk: number;
@@ -38,14 +37,15 @@ test.describe('Captain Draft Pick', () => {
     // Extract captain PK from first team (sorted by draft_order)
     const teams = tournament.teams || [];
     const sortedTeams = [...teams].sort(
-      (a, b) => (a.draft_order || 0) - (b.draft_order || 0)
+      (a, b) => (a.draft_order || 0) - (b.draft_order || 0),
     );
     const firstTeam = sortedTeams[0];
 
     if (firstTeam && firstTeam.captain) {
-      captainPk = typeof firstTeam.captain === 'number'
-        ? firstTeam.captain
-        : (firstTeam.captain as { pk: number }).pk;
+      captainPk =
+        typeof firstTeam.captain === 'number'
+          ? firstTeam.captain
+          : (firstTeam.captain as { pk: number }).pk;
     } else {
       throw new Error('Could not find captain for first team');
     }
@@ -70,12 +70,18 @@ test.describe('Captain Draft Pick', () => {
       await visitAndWaitForHydration(page, '/');
 
       // Wait for user to be fully logged in (avatar visible)
-      await page.locator('[data-testid="user-avatar"]').waitFor({ state: 'visible', timeout: 15000 });
+      await page
+        .locator('[data-testid="user-avatar"]')
+        .waitFor({ state: 'visible', timeout: 15000 });
 
       // Check for floating indicator - shows "Active Team Draft" or "Active Hero Draft"
-      const floatingIndicator = page.locator('[data-testid="floating-draft-indicator"]');
+      const floatingIndicator = page.locator(
+        '[data-testid="floating-draft-indicator"]',
+      );
       await expect(floatingIndicator).toBeVisible({ timeout: 15000 });
-      await expect(floatingIndicator).toContainText(/Active.*Draft|Active Drafts/);
+      await expect(floatingIndicator).toContainText(
+        /Active.*Draft|Active Drafts/,
+      );
     });
 
     test('should show notification badge on user avatar when captain has active turn', async ({
@@ -89,7 +95,9 @@ test.describe('Captain Draft Pick', () => {
       await visitAndWaitForHydration(page, '/');
 
       // Wait for user to be fully logged in (avatar visible)
-      await page.locator('[data-testid="user-avatar"]').waitFor({ state: 'visible', timeout: 15000 });
+      await page
+        .locator('[data-testid="user-avatar"]')
+        .waitFor({ state: 'visible', timeout: 15000 });
 
       // Check for notification badge
       const badge = page.locator('[data-testid="draft-notification-badge"]');
@@ -111,23 +119,24 @@ test.describe('Captain Draft Pick', () => {
 
       // Check if this user happens to be a captain via current_user response
       // The active_drafts array is included in the current_user API response
-      const response = await context.request.get(
-        `${API_URL}/current_user/`,
-        { failOnStatusCode: false }
-      );
+      const response = await context.request.get(`${API_URL}/current_user/`, {
+        failOnStatusCode: false,
+      });
 
       if (response.ok()) {
         const data = await response.json();
         if (data.active_drafts && data.active_drafts.length > 0) {
           // This user is actually a captain - skip the assertion
-          console.log('User is a captain in test data - skipping floating indicator check');
+          console.log(
+            'User is a captain in test data - skipping floating indicator check',
+          );
           return;
         }
       }
 
       // User is not a captain - should not have floating indicator
       await expect(
-        page.locator('[data-testid="floating-draft-indicator"]')
+        page.locator('[data-testid="floating-draft-indicator"]'),
       ).not.toBeVisible();
     });
   });
@@ -144,7 +153,10 @@ test.describe('Captain Draft Pick', () => {
       await loginAsUser(captainPk);
 
       // Visit tournament with draft=open query param
-      await visitAndWaitForHydration(page, `/tournament/${tournamentPk}?draft=open`);
+      await visitAndWaitForHydration(
+        page,
+        `/tournament/${tournamentPk}?draft=open`,
+      );
 
       // Modal should be open
       const dialog = page.locator('[role="dialog"]');
@@ -165,10 +177,14 @@ test.describe('Captain Draft Pick', () => {
       await visitAndWaitForHydration(page, '/');
 
       // Wait for user to be fully logged in
-      await page.locator('[data-testid="user-avatar"]').waitFor({ state: 'visible', timeout: 15000 });
+      await page
+        .locator('[data-testid="user-avatar"]')
+        .waitFor({ state: 'visible', timeout: 15000 });
 
       // Click floating indicator
-      const floatingIndicator = page.locator('[data-testid="floating-draft-indicator"]');
+      const floatingIndicator = page.locator(
+        '[data-testid="floating-draft-indicator"]',
+      );
       await floatingIndicator.click();
 
       // Should navigate to tournament with draft open
@@ -222,7 +238,9 @@ test.describe('Captain Draft Pick', () => {
       await tournamentPage.waitForDraftModal();
 
       // Find an available player and pick them
-      const availablePlayer = page.locator('[data-testid="available-player"]').first();
+      const availablePlayer = page
+        .locator('[data-testid="available-player"]')
+        .first();
       const playerText = await availablePlayer.textContent();
       const playerName = playerText?.split('\n')[0].trim() || '';
 
@@ -240,7 +258,9 @@ test.describe('Captain Draft Pick', () => {
       await alertDialog.locator('[data-testid="confirmPickButton"]').click();
 
       // Verify pick was recorded (toast or UI update)
-      await expect(page.locator('text=/pick.*completed|selected/i')).toBeVisible({
+      await expect(
+        page.locator('text=/pick.*completed|selected/i'),
+      ).toBeVisible({
         timeout: 5000,
       });
     });
@@ -263,14 +283,20 @@ test.describe('Captain Draft Pick', () => {
       // Wait for player list to load - either Pick buttons or non-pickable buttons will appear
       const dialog = page.locator('[role="dialog"]');
       const pickButton = dialog.locator('[data-testid="pickPlayerButton"]');
-      const notYourTurnButton = dialog.locator('[data-testid="pickDisabledNotYourTurn"]');
-      const waitingButton = dialog.locator('[data-testid="pickDisabledWaiting"]');
+      const notYourTurnButton = dialog.locator(
+        '[data-testid="pickDisabledNotYourTurn"]',
+      );
+      const waitingButton = dialog.locator(
+        '[data-testid="pickDisabledWaiting"]',
+      );
       const nonPickable = notYourTurnButton.or(waitingButton);
 
       // Wait for either state to be visible (handles race condition)
-      await expect(pickButton.or(nonPickable).first()).toBeVisible({ timeout: 10000 });
+      await expect(pickButton.or(nonPickable).first()).toBeVisible({
+        timeout: 10000,
+      });
 
-      const hasPickButton = await pickButton.count() > 0;
+      const hasPickButton = (await pickButton.count()) > 0;
 
       if (hasPickButton) {
         // User is captain or staff in test data - they can pick
@@ -300,7 +326,7 @@ test.describe('Captain Draft Pick', () => {
             user_pk: 1,
           },
           failOnStatusCode: false,
-        }
+        },
       );
 
       // Should be forbidden or not found (404 if round doesn't exist)
@@ -329,15 +355,21 @@ test.describe('Captain Draft Pick', () => {
       const playerCount = await availablePlayers.count();
 
       if (playerCount > 0) {
-        await availablePlayers.first().waitFor({ state: 'visible', timeout: 10000 });
+        await availablePlayers
+          .first()
+          .waitFor({ state: 'visible', timeout: 10000 });
         const availablePlayerRow = availablePlayers.first().locator('..');
-        const pickButton = availablePlayerRow.locator('[data-testid="pickPlayerButton"]');
+        const pickButton = availablePlayerRow.locator(
+          '[data-testid="pickPlayerButton"]',
+        );
         await pickButton.scrollIntoViewIfNeeded();
         await expect(pickButton).toBeVisible();
       } else {
         // No available players - check for Pick buttons anywhere in dialog
         const dialog = page.locator('[role="dialog"]');
-        const anyPickButton = dialog.locator('[data-testid="pickPlayerButton"]');
+        const anyPickButton = dialog.locator(
+          '[data-testid="pickPlayerButton"]',
+        );
         // Staff should see at least one pick option
         await expect(anyPickButton.first()).toBeVisible({ timeout: 10000 });
       }
