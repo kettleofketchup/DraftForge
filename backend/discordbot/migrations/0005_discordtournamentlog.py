@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("app", "0091_tournament_auto_create_hero_drafts_and_more"),
+        ("app", "0078_squashed_0094"),
         ("discordbot", "0004_discordeventlog_category_and_more"),
     ]
 
