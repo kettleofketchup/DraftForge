@@ -6,7 +6,7 @@ creates an account carrying `discordId`, then a login created a duplicate and
 collided. See app/discord_accounts.py and app/pipelines.py.
 """
 
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest import mock
 
 from django.test import TestCase
@@ -18,7 +18,7 @@ from app.discord_accounts import (
     find_split_discord_accounts,
     merge_discord_accounts,
 )
-from app.models import CustomUser
+from app.models import CustomUser, Joke
 from app.pipelines import associate_by_discord_id, save_discord
 from common.game import GameType
 from events.constants import EventState, SignupAction, SignupStatus
@@ -113,8 +113,6 @@ class MergeDiscordAccountsTest(TestCase):
 
     def test_merge_handles_reverse_one_to_one(self):
         """Reverse O2O relations (e.g. Joke) move across without crashing."""
-        from app.models import Joke
-
         keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
         drop = CustomUser.objects.create(username="loginrow")
         _social(drop)
@@ -128,8 +126,6 @@ class MergeDiscordAccountsTest(TestCase):
 
     def test_merge_reverse_one_to_one_conflict_keeps_existing(self):
         """When both rows have the O2O, keep's wins and drop's is discarded."""
-        from app.models import Joke
-
         keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
         Joke.objects.create(user=keep, tangoes_purchased=3)
         drop = CustomUser.objects.create(username="loginrow")
@@ -303,6 +299,167 @@ class MergeDiscordAccountsTest(TestCase):
         user = CustomUser.objects.create(username="normal", discordId=DISCORD_ID)
         _social(user)
         self.assertEqual(find_split_discord_accounts(), [])
+
+
+class MergeDiscardedRowsTest(TestCase):
+    """Rows the merge cannot move are logged, and the kept account inherits
+    profile data it lacks instead of losing it with the dropped account."""
+
+    def _discarded(self, spy: mock.MagicMock) -> list[dict]:
+        return [
+            c.kwargs
+            for c in spy.info.call_args_list
+            if c.args and c.args[0] == "discord_merge_row_discarded"
+        ]
+
+    def test_conflicting_row_is_logged(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        Joke.objects.create(user=keep, tangoes_purchased=3)
+        drop = CustomUser.objects.create(username="loginrow")
+        dropped_joke_pk = Joke.objects.create(user=drop, tangoes_purchased=9).pk
+        _social(drop)
+        drop_pk = drop.pk
+
+        with mock.patch("app.discord_accounts.logger") as spy:
+            merge_discord_accounts(keep=keep, drop=drop)
+
+        rows = self._discarded(spy)
+        joke = [r for r in rows if r["model"] == "app.Joke"]
+        self.assertEqual(len(joke), 1)
+        self.assertEqual(joke[0]["pk"], dropped_joke_pk)
+        self.assertEqual(joke[0]["kept_user_id"], keep.pk)
+        self.assertEqual(joke[0]["dropped_user_id"], drop_pk)
+        self.assertEqual(joke[0]["system"], "auth")
+        self.assertEqual(joke[0]["subsystem"], "merge")
+        self.assertIn("user.BaseUserProfile", {r["model"] for r in rows})
+
+    def test_moved_rows_are_not_logged_as_discarded(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        Joke.objects.create(user=drop, tangoes_purchased=9)
+        _social(drop)
+
+        with mock.patch("app.discord_accounts.logger") as spy:
+            merge_discord_accounts(keep=keep, drop=drop)
+
+        self.assertNotIn("app.Joke", {r["model"] for r in self._discarded(spy)})
+
+    def test_nickname_carried_when_kept_account_has_none(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow", nickname="Ghosty")
+        _social(drop)
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        self.assertEqual(
+            CustomUser.objects.nocache().get(pk=keep.pk).nickname, "Ghosty"
+        )
+
+    def test_existing_nickname_kept(self) -> None:
+        keep = CustomUser.objects.create(
+            username="ph", discordId=DISCORD_ID, nickname="Mine"
+        )
+        drop = CustomUser.objects.create(username="loginrow", nickname="Theirs")
+        _social(drop)
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        self.assertEqual(CustomUser.objects.nocache().get(pk=keep.pk).nickname, "Mine")
+
+    def test_positions_carried_when_kept_account_has_none_set(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        drop_positions = drop.positions
+        drop_positions.carry = 5
+        drop_positions.mid = 3
+        drop_positions.save()
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        kept = CustomUser.objects.nocache().get(pk=keep.pk)
+        self.assertEqual(kept.positions_id, drop_positions.pk)
+        self.assertEqual((kept.positions.carry, kept.positions.mid), (5, 3))
+
+    def test_existing_positions_kept(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        keep_positions = keep.positions
+        keep_positions.offlane = 4
+        keep_positions.save()
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        drop.positions.carry = 5
+        drop.positions.save()
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        kept = CustomUser.objects.nocache().get(pk=keep.pk)
+        self.assertEqual(kept.positions_id, keep_positions.pk)
+
+    def test_mmr_verification_carried_when_kept_account_unverified(self) -> None:
+        verified_at = tz.now() - timedelta(days=2)
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        drop.has_active_dota_mmr = True
+        drop.dota_mmr_last_verified = verified_at
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        kept = CustomUser.objects.nocache().get(pk=keep.pk)
+        self.assertTrue(kept.has_active_dota_mmr)
+        self.assertEqual(kept.dota_mmr_last_verified, verified_at)
+
+    def test_deadlock_rank_carried_when_kept_account_has_none(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        dl = drop.base_profile.deadlock_user_profile
+        dl.rank = "Archon"
+        dl.rank_date = date(2026, 1, 2)
+        dl.save()
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        kept_dl = (
+            CustomUser.objects.nocache()
+            .get(pk=keep.pk)
+            .base_profile.deadlock_user_profile
+        )
+        self.assertEqual(
+            (kept_dl.rank, kept_dl.rank_date), ("Archon", date(2026, 1, 2))
+        )
+
+    def test_steam_account_carried_when_kept_account_has_none(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow", steam_account_id=123456)
+        _social(drop)
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        kept = CustomUser.objects.nocache().get(pk=keep.pk)
+        self.assertEqual(kept.steam_account_id, 123456)
+        self.assertEqual(kept.steamid, 123456 + CustomUser.STEAM_ID_64_BASE)
+
+    def test_existing_steam_account_kept(self) -> None:
+        keep = CustomUser.objects.create(
+            username="ph", discordId=DISCORD_ID, steam_account_id=111
+        )
+        drop = CustomUser.objects.create(username="loginrow", steam_account_id=222)
+        _social(drop)
+
+        with mock.patch("app.discord_accounts.logger") as spy:
+            merge_discord_accounts(keep=keep, drop=drop)
+
+        self.assertEqual(
+            CustomUser.objects.nocache().get(pk=keep.pk).steam_account_id, 111
+        )
+        [merged] = [
+            c.kwargs
+            for c in spy.info.call_args_list
+            if c.args and c.args[0] == "discord_accounts_merged"
+        ]
+        self.assertEqual(merged["dropped_steam_account_id"], 222)
 
 
 class GetOrgUserPhantomGuardTest(TestCase):

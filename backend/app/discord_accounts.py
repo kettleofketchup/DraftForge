@@ -14,6 +14,8 @@ This module reconciles the two rows: it keeps the account that already owns the
 it, moving the social-auth link and any other related data across.
 """
 
+from dataclasses import dataclass
+from datetime import date, datetime
 from uuid import uuid4
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -22,7 +24,7 @@ from django.db.models import Model
 from social_django.models import UserSocialAuth
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser
+from app.models import CustomUser, PositionsModel
 from draft.services.hero_chat import repoint_chat_attribution
 from events.ledger import SignupActor
 from events.merge import merge_user_signups
@@ -43,11 +45,59 @@ logger = get_logger(__name__)
 # `bp.save(update_fields=["avatar"])`, so it MUST NOT appear in the column-
 # level `keep.save(update_fields=...)` call below (Django would raise
 # ValueError: 'The following fields do not exist in this model... avatar').
-_CARRYOVER_PROPERTY_FIELDS = ("avatar",)  # persisted by property setter
+_CARRYOVER_PROPERTY_FIELDS = ("avatar", "nickname")  # persisted by setter
 _CARRYOVER_COLUMN_FIELDS = (
     "discordUsername",
     "discordNickname",
 )
+
+_POSITION_FIELDS = ("carry", "mid", "offlane", "soft_support", "hard_support")
+
+
+@dataclass(frozen=True)
+class _GameProfileSnapshot:
+    positions: PositionsModel | None
+    has_active_dota_mmr: bool
+    dota_mmr_last_verified: datetime | None
+    deadlock_rank: str | None
+    deadlock_rank_date: date | None
+
+
+def _positions_set(positions: PositionsModel | None) -> bool:
+    return positions is not None and any(
+        getattr(positions, f) for f in _POSITION_FIELDS
+    )
+
+
+def _snapshot_game_profiles(user: CustomUser) -> _GameProfileSnapshot:
+    bp = getattr(user, "base_profile", None)
+    deadlock = getattr(bp, "deadlock_user_profile", None) if bp else None
+    return _GameProfileSnapshot(
+        positions=user.positions,
+        has_active_dota_mmr=user.has_active_dota_mmr,
+        dota_mmr_last_verified=user.dota_mmr_last_verified,
+        deadlock_rank=deadlock.rank if deadlock else None,
+        deadlock_rank_date=deadlock.rank_date if deadlock else None,
+    )
+
+
+def _carry_over_game_profiles(keep: CustomUser, drop: _GameProfileSnapshot) -> None:
+    """Give ``keep`` the dropped account's game profile data it lacks."""
+    if _positions_set(drop.positions) and not _positions_set(keep.positions):
+        keep.positions = drop.positions
+    if (
+        drop.dota_mmr_last_verified is not None
+        and keep.dota_mmr_last_verified is None
+        and not keep.has_active_dota_mmr
+    ):
+        keep.has_active_dota_mmr = drop.has_active_dota_mmr
+        keep.dota_mmr_last_verified = drop.dota_mmr_last_verified
+    deadlock = getattr(keep.base_profile, "deadlock_user_profile", None)
+    if drop.deadlock_rank and deadlock is not None and not deadlock.rank:
+        deadlock.rank = drop.deadlock_rank
+        deadlock.rank_date = drop.deadlock_rank_date
+        deadlock.save(update_fields=["rank", "rank_date"])
+        invalidate_after_commit(deadlock)
 
 
 def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
@@ -55,7 +105,10 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
 
     Reassigns every reverse relation (FK and M2M) from ``drop`` to ``keep``,
     including the Discord ``social_auth`` link. On a unique conflict (``keep``
-    already has the equivalent row) the duplicate row on ``drop`` is discarded.
+    already has the equivalent row) the duplicate row on ``drop`` is discarded
+    and logged as ``discord_merge_row_discarded``. Profile data ``keep`` lacks
+    (nickname, avatar, Discord names, positions, MMR verification, Deadlock
+    rank, Steam account) is copied from ``drop`` first.
     ``keep`` is expected to be the account that already owns ``discordId``.
     """
     if keep.pk == drop.pk:
@@ -81,7 +134,16 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             with transaction.atomic():
                 obj.save(update_fields=[field_name])
         except IntegrityError:
-            # ``keep`` already has an equivalent row; the duplicate is junk.
+            logger.info(
+                "discord_merge_row_discarded",
+                system="auth",
+                subsystem="merge",
+                model=obj._meta.label,
+                pk=obj.pk,
+                field=field_name,
+                kept_user_id=keep.pk,
+                dropped_user_id=drop.pk,
+            )
             obj.delete()
 
     # Snapshot carryover values BEFORE the related-objects loop. The loop
@@ -95,6 +157,8 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
         field: getattr(drop, field, None)
         for field in (*_CARRYOVER_PROPERTY_FIELDS, *_CARRYOVER_COLUMN_FIELDS)
     }
+    game_snapshot = _snapshot_game_profiles(drop)
+    dropped_steam_account_id = drop.steam_account_id
 
     # All-or-nothing: a failure mid-loop must not leave a half-merged state
     # (some relations moved, both accounts still alive). (select_for_update is
@@ -176,12 +240,21 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             if not getattr(keep, field, None) and value:
                 setattr(keep, field, value)
 
+        _carry_over_game_profiles(keep, game_snapshot)
+
         changed = []
         for field in _CARRYOVER_COLUMN_FIELDS:
             value = carryover_snapshot.get(field)
             if not getattr(keep, field, None) and value:
                 setattr(keep, field, value)
                 changed.append(field)
+        if keep.steam_account_id is None and dropped_steam_account_id is not None:
+            # steam_account_id is unique: free it on drop before keep takes it.
+            CustomUser.objects.filter(pk=drop.pk).update(
+                steam_account_id=None, steamid=None
+            )
+            keep.steam_account_id = dropped_steam_account_id
+            changed.extend(["steam_account_id", "steamid"])
         if changed:
             keep.save(update_fields=changed)
 
@@ -194,6 +267,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             kept_user_id=keep.pk,
             kept_username=keep.username,
             discord_id=keep.discordId,
+            dropped_steam_account_id=dropped_steam_account_id,
         )
         drop.delete()
     invalidate_obj(keep)

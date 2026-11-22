@@ -4,3 +4,4 @@
 - A staff add that fails no longer leaves the player added to the organization.
 - The organization log entry for an approved profile claim now records which profile was merged and its Steam ID, instead of leaving both empty.
 - The stale repeater cleanup script no longer overfills the event it moves signups to: players keep a seat only while it has room, the rest join the end of its waitlist in their original order with their own places, and waitlisted players move up into any seats left free.
+- A Discord account merge now keeps the duplicate account's nickname, Steam account, Dota positions, MMR verification and Deadlock rank when the kept account has none, and logs every row it has to discard instead of deleting it silently.
