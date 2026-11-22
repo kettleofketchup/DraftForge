@@ -1,7 +1,11 @@
 import type {
+  Attendance,
+  AttendanceRow,
   ConductHistoryItem,
   ConductSettings,
   ConductSettingsValues,
+  Forecast,
+  ForecastMember,
   MemberConduct,
 } from '../schemas';
 
@@ -76,5 +80,67 @@ export function conductSettings(
   return {
     ...conductSettingsValues(overrides),
     defaults: conductSettingsValues(),
+  };
+}
+
+export function attendanceRow(
+  overrides: Partial<AttendanceRow> = {},
+): AttendanceRow {
+  return {
+    member: MEMBER,
+    org_user_pk: MEMBER.org_user_pk,
+    signup_status: 'confirmed',
+    outcome: 'pending',
+    source: 'default',
+    committed: true,
+    virtual: true,
+    finalized: false,
+    voided: false,
+    flag: null,
+    set_by: null,
+    reason: '',
+    show_rate: 0.91,
+    status: 'scored',
+    ...overrides,
+  };
+}
+
+export function attendance(overrides: Partial<Attendance> = {}): Attendance {
+  return {
+    event_id: 5,
+    state: 'in_progress',
+    finalized_at: null,
+    editable: true,
+    editable_reason: null,
+    rows: [attendanceRow()],
+    ...overrides,
+  };
+}
+
+export function forecastMember(
+  overrides: Partial<ForecastMember> = {},
+): ForecastMember {
+  return {
+    show_rate: 0.91,
+    status: 'scored',
+    tier: 'ok',
+    deferred: false,
+    ...overrides,
+  };
+}
+
+export function forecast(overrides: Partial<Forecast> = {}): Forecast {
+  return {
+    seat_holders: 30,
+    expected: 24.4,
+    low: 21,
+    high: 27,
+    waitlisted: 2,
+    pending_approval: 1,
+    capacity: 30,
+    expected_open_seats: 5.6,
+    new_members: 3,
+    members: { [String(MEMBER.user_pk)]: forecastMember() },
+    ...overrides,
   };
 }

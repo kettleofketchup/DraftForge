@@ -455,6 +455,9 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
     )
 
 
+BARE_MMR_ERROR = "mmr requires mmr_game_type; reload the page"
+
+
 def _query_int(raw: str | None) -> int | None:
     try:
         return int(raw) if raw is not None else None
@@ -485,9 +488,9 @@ def _parse_mmr_patch(data: Any) -> dict[int, int | None] | str:
                 return f"Unknown game_type: {key!r}"
             changes[game] = value
     if "mmr" in data:
-        # Temporary: a bare mmr is the legacy Dota 2 value until the edit form
-        # sends mmr_game_type; rejected once OrgUser.mmr is dropped.
-        game = _valid_game_type(data.get("mmr_game_type", GameType.DOTA2))
+        if data.get("mmr_game_type") is None:
+            return BARE_MMR_ERROR
+        game = _valid_game_type(data["mmr_game_type"])
         if game is None:
             return f"Unknown game_type: {data['mmr_game_type']!r}"
         if game in changes and changes[game] != data["mmr"]:

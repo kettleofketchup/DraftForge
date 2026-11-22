@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("events", "0034_event_conduct_finalized_at"),
+        ("events", "0001_squashed_0034"),
         ("org", "0014_move_organization_models_from_app"),
     ]
 

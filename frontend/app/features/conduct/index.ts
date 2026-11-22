@@ -1,5 +1,10 @@
+export { ConductBadge } from './ConductBadge';
 export { ConductDetail, type ConductDetailProps } from './ConductPanels';
 export { ConductRateExplainer } from './ConductRateExplainer';
+export {
+  EventConductSection,
+  type EventConductSectionProps,
+} from './EventConductSection';
 export {
   MemberConductHistory,
   type MemberConductHistoryProps,
@@ -17,3 +22,8 @@ export {
   isConductSettingsField,
   pickConductFormValues,
 } from './settingsForm';
+export {
+  useEventConduct,
+  type ConductMemberLookup,
+  type EventConduct,
+} from './useEventConduct';

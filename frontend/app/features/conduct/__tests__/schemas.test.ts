@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AttendancePutSchema,
+  AttendanceRowSchema,
+  AttendanceSchema,
   ConductSettingsFormSchema,
+  ForecastSchema,
   MemberConductSchema,
+  ReasonSchema,
   type ConductSettingsForm,
 } from '../schemas';
-import { historyItem, memberConduct } from './fixtures';
+import {
+  attendance,
+  attendanceRow,
+  forecast,
+  historyItem,
+  MEMBER,
+  memberConduct,
+} from './fixtures';
 
 const SETTINGS: ConductSettingsForm = {
   late_cancel_hours: 24,
@@ -89,5 +101,95 @@ describe('ConductSettingsFormSchema', () => {
     });
     expect(result.success).toBe(false);
     expect(result.error?.issues[0].path).toEqual(['max_age_days']);
+  });
+});
+
+describe('AttendanceSchema', () => {
+  it('parses a virtual row with a null org_user_pk', () => {
+    const parsed = AttendanceSchema.parse(
+      attendance({
+        rows: [
+          attendanceRow({
+            org_user_pk: null,
+            member: { ...MEMBER, org_user_pk: null },
+          }),
+        ],
+      }),
+    );
+    expect(parsed.rows[0].org_user_pk).toBeNull();
+    expect(parsed.rows[0].member.org_user_pk).toBeNull();
+  });
+
+  it('rejects an unknown flag', () => {
+    const result = AttendanceRowSchema.safeParse({
+      ...attendanceRow(),
+      flag: 'mystery',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('ReasonSchema', () => {
+  it('trims and needs 3 characters', () => {
+    expect(ReasonSchema.safeParse('  ab  ').success).toBe(false);
+    expect(ReasonSchema.parse(' abc ')).toBe('abc');
+    expect(ReasonSchema.safeParse('x'.repeat(501)).success).toBe(false);
+    expect(ReasonSchema.safeParse('x'.repeat(500)).success).toBe(true);
+  });
+});
+
+describe('AttendancePutSchema', () => {
+  it('accepts an org_user_pk change and a user_pk walk-in', () => {
+    const result = AttendancePutSchema.safeParse({
+      changes: [
+        { org_user_pk: 7, outcome: 'no_show' },
+        { user_pk: 12, outcome: 'attended' },
+      ],
+      reason: 'Roll call',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an empty change list', () => {
+    const result = AttendancePutSchema.safeParse({
+      changes: [],
+      reason: 'Roll call',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a change with both pks', () => {
+    const result = AttendancePutSchema.safeParse({
+      changes: [{ org_user_pk: 1, user_pk: 2, outcome: 'attended' }],
+      reason: 'Roll call',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a pending outcome', () => {
+    const result = AttendancePutSchema.safeParse({
+      changes: [{ org_user_pk: 1, outcome: 'pending' }],
+      reason: 'Roll call',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('ForecastSchema', () => {
+  it('parses members keyed by user pk', () => {
+    const parsed = ForecastSchema.parse(forecast({ capacity: null }));
+    expect(parsed.members['11'].tier).toBe('ok');
+    expect(parsed.capacity).toBeNull();
+  });
+
+  it('rejects an unknown tier', () => {
+    const result = ForecastSchema.safeParse(
+      forecast({
+        members: {
+          '11': { show_rate: 1, status: 'new', tier: 'x', deferred: false },
+        },
+      } as never),
+    );
+    expect(result.success).toBe(false);
   });
 });

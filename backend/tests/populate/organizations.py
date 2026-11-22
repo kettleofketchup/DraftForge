@@ -172,8 +172,6 @@ def populate_discord_name_sync_users(force: bool = False) -> None:
         if user.discordNickname != spec["global_name"]:
             user.discordNickname = spec["global_name"]
             user.save(update_fields=["discordNickname"])
-        org_user, _ = OrgUser.objects.get_or_create(
-            user=user, organization=dtx_org, defaults={"mmr": 0}
-        )
+        org_user, _ = OrgUser.objects.get_or_create(user=user, organization=dtx_org)
         org_user.guild_nickname = spec["guild_nickname"]
         org_user.save(update_fields=["guild_nickname"])

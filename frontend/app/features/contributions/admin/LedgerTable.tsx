@@ -37,11 +37,7 @@ import {
   type EntriesFilters,
 } from '../schemas';
 import { formatOrgDate, periodOptions } from '../timezone';
-import {
-  ManualAwardForm,
-  type AwardEvent,
-  type AwardMember,
-} from './ManualAwardForm';
+import { ManualAwardForm, type AwardEvent } from './ManualAwardForm';
 
 const log = getLogger('LedgerTable');
 
@@ -51,7 +47,6 @@ export interface LedgerTableProps {
   orgId: number;
   access: OrgFeatureAccess;
   timeZone: string | undefined;
-  members: AwardMember[];
   events: AwardEvent[];
 }
 
@@ -59,7 +54,6 @@ export function LedgerTable({
   orgId,
   access,
   timeZone,
-  members,
   events,
 }: LedgerTableProps) {
   const [filters, setFilters] = useState<EntriesFilters>({
@@ -308,7 +302,6 @@ export function LedgerTable({
               orgId={orgId}
               access={access}
               timeZone={timeZone}
-              members={members}
               events={events}
               entry={editing}
               onDone={() => setEditing(null)}
