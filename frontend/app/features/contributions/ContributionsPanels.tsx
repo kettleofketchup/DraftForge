@@ -54,7 +54,12 @@ function ContributionsAdminSection({
 }: ContributionsAdminProps) {
   const { data: orgEvents } = useEvents({ organization: orgId });
   const events = useMemo<AwardEvent[]>(
-    () => (orgEvents ?? []).map((e) => ({ id: e.id, name: e.name })),
+    () =>
+      (orgEvents ?? []).map((e) => ({
+        id: e.id,
+        name: e.name,
+        scheduled_at: e.scheduled_at,
+      })),
     [orgEvents],
   );
 
