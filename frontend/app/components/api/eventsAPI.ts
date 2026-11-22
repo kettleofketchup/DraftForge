@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import type {
   CreateSeriesEventInput,
   EligibilityReason,
@@ -9,6 +11,7 @@ import type {
   SignupOpenMode,
   StartMentionScope,
 } from '~/components/events/schemas';
+
 import axios from './axios';
 
 export async function getEvents(params?: {
@@ -321,16 +324,31 @@ export interface EventRepeaterType extends ReadyCheckSettings {
   next_event_date: string | null;
 }
 
+// backend/events/serializers.py EventRepeaterSlimSerializer
+export const EventRepeaterListItemSchema = z.object({
+  id: z.number(),
+  organization: z.number(),
+  organization_name: z.string(),
+  name: z.string(),
+  frequency: z.string(),
+  day_of_week: z.number().nullable(),
+  time_of_day: z.string(),
+  timezone: z.string(),
+  is_active: z.boolean(),
+  discord_notify_new_events: z.boolean(),
+  subscriber_count: z.number(),
+  is_subscribed: z.boolean(),
+  next_event_date: z.string().nullable(),
+});
+export type EventRepeaterListItem = z.infer<typeof EventRepeaterListItemSchema>;
+
 export async function getEventRepeaters(params?: {
   organization?: number;
-}): Promise<EventRepeaterType[]> {
-  const sp = new URLSearchParams();
-  if (params?.organization) sp.set('organization', String(params.organization));
-  const q = sp.toString();
-  const { data } = await axios.get<EventRepeaterType[]>(
-    `/events/repeaters/${q ? `?${q}` : ''}`,
-  );
-  return data;
+}): Promise<EventRepeaterListItem[]> {
+  const response = await axios.get('/events/repeaters/', {
+    params: params?.organization ? { organization: params.organization } : {},
+  });
+  return z.array(EventRepeaterListItemSchema).parse(response.data);
 }
 
 export async function createEventRepeater(
@@ -339,6 +357,13 @@ export async function createEventRepeater(
   const { data } = await axios.post<EventRepeaterType>(
     '/events/repeaters/',
     payload,
+  );
+  return data;
+}
+
+export async function getEventRepeater(id: number): Promise<EventRepeaterType> {
+  const { data } = await axios.get<EventRepeaterType>(
+    `/events/repeaters/${id}/`,
   );
   return data;
 }

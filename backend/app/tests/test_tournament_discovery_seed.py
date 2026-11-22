@@ -4,9 +4,10 @@ from unittest import mock
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from app.models import League, Tournament
+from app.models import Tournament
 from events.constants import EventState
 from events.models import Event
+from league.models import League
 from org.models import Organization, OrgUser
 from tests.populate.tournament_discovery import populate_tournament_discovery
 

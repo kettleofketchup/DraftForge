@@ -3,7 +3,7 @@ from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from app.models import League
+from league.models import League
 from steam.tests.league_summary_fixtures import make_player, record_series
 from tests.cache import flush_run_cache
 

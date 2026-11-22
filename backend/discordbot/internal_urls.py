@@ -14,10 +14,15 @@ endpoints.
 from django.urls import URLPattern, path
 
 from . import internal_signup_views as _signup_views
-from .activity_launch import activity_launch
+from .activity_launch import activity_launch, activity_notification_invite
 
 urlpatterns: list[URLPattern] = [
     path("activity-launch/", activity_launch, name="internal_activity_launch"),
+    path(
+        "activity-notification-invite/",
+        activity_notification_invite,
+        name="internal_activity_notification_invite",
+    ),
     path(
         "signup-button/",
         _signup_views.signup_button,
@@ -37,11 +42,6 @@ urlpatterns: list[URLPattern] = [
         "rank-medal-select/",
         _signup_views.rank_medal_select,
         name="internal_discord_rank_medal_select",
-    ),
-    path(
-        "previous-rank-submit/",
-        _signup_views.previous_rank_submit,
-        name="internal_discord_previous_rank_submit",
     ),
     path(
         "battle-cup-submit/",

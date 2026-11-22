@@ -8,15 +8,12 @@ from django.core.exceptions import FieldDoesNotExist
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models, transaction
 from django.db.models import (
-    BooleanField,
     Count,
-    Exists,
     F,
-    OuterRef,
+    Min,
     Prefetch,
     Q,
     QuerySet,
-    Value,
 )
 from django.db.models.functions import Abs, Coalesce, Now
 from django.http import QueryDict
@@ -178,6 +175,21 @@ def _event_payload(event_pk: int, user: CustomUser) -> dict[str, Any]:
     return data
 
 
+def _attach_is_subscribed(
+    items: list[dict[str, Any]], user: CustomUser | AnonymousUser
+) -> None:
+    """Set the per-user is_subscribed on series payloads served from the shared cache."""
+    subscribed: set[int] = set()
+    if user.is_authenticated:
+        subscribed = set(
+            RepeaterSubscription.objects.nocache()
+            .filter(user=user)
+            .values_list("event_repeater_id", flat=True)
+        )
+    for item in items:
+        item["is_subscribed"] = item["id"] in subscribed
+
+
 def _roster_sync_payload(
     event: Event, synced: RosterSyncResult, user: CustomUser
 ) -> dict[str, Any]:
@@ -288,30 +300,24 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     def get_queryset(self) -> QuerySet[EventRepeater]:
-        from django.db.models import Min
-
-        qs = EventRepeater.objects.select_related(
-            "organization", "tournament_league", "created_by"
-        ).annotate(
-            subscriber_count=Count("subscriptions"),
-            next_event_date=Min(
-                "events__scheduled_at",
-                filter=Q(
-                    events__state__in=[EventState.UPCOMING, EventState.SIGNUPS_OPEN]
+        # cacheops can't see the select_related org join; the views' cached_as
+        # blocks do the caching.
+        qs = (
+            EventRepeater.objects.nocache()
+            .select_related("organization", "tournament_league", "created_by")
+            .annotate(
+                subscriber_count=Count("subscriptions"),
+                next_event_date=Min(
+                    "events__scheduled_at",
+                    filter=Q(
+                        events__state__in=[
+                            EventState.UPCOMING,
+                            EventState.SIGNUPS_OPEN,
+                        ]
+                    ),
                 ),
-            ),
-        )
-        if self.request.user.is_authenticated:
-            qs = qs.annotate(
-                is_subscribed=Exists(
-                    RepeaterSubscription.objects.filter(
-                        event_repeater=OuterRef("pk"),
-                        user=self.request.user,
-                    )
-                )
             )
-        else:
-            qs = qs.annotate(is_subscribed=Value(False, output_field=BooleanField()))
+        )
         org_id = self.request.query_params.get("organization")
         if org_id:
             qs = qs.filter(organization_id=org_id)
@@ -325,13 +331,22 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"repeater_list:{request.get_full_path()}"
 
-        @cached_as(EventRepeater, Event, extra=cache_key, timeout=60 * 60)
+        @cached_as(
+            EventRepeater,
+            Event,
+            RepeaterSubscription,
+            Organization,
+            extra=cache_key,
+            timeout=60 * 60,
+        )
         def get_data() -> ReturnList:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
 
-        return Response(get_data())
+        data = [dict(item) for item in get_data()]
+        _attach_is_subscribed(data, request.user)
+        return Response(data)
 
     def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs.get("pk")
@@ -339,6 +354,9 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
 
         @cached_as(
             EventRepeater.objects.filter(pk=pk),
+            Event.objects.filter(event_repeater_id=pk),
+            RepeaterSubscription.objects.filter(event_repeater_id=pk),
+            Organization,
             keep_fresh=True,
             extra=cache_key,
             timeout=60 * 60,
@@ -347,7 +365,9 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             instance = self.get_object()
             return self.get_serializer(instance).data
 
-        return Response(get_data())
+        data = dict(get_data())
+        _attach_is_subscribed([data], request.user)
+        return Response(data)
 
     def perform_create(self, serializer: EventRepeaterSerializer) -> None:
         org = serializer.validated_data.get("organization")

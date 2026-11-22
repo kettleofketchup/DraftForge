@@ -75,7 +75,7 @@ class TournamentTemplateMixin(models.Model):
 
     tournament_name = models.CharField(max_length=255, blank=True, default="")
     tournament_league = models.ForeignKey(
-        "app.League",
+        "league.League",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
