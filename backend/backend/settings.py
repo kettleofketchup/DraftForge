@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/1.10/ref/settings/
 """
 
 import contextlib
+import importlib.util
 import os
 import secrets
 import sys
@@ -157,6 +158,10 @@ INSTALLED_APPS = [
     "user.apps.UserConfig",
     "cacheops",
 ]
+
+# Dev-only (poetry dev group): the release image ships without it.
+if importlib.util.find_spec("django_linear_migrations") is not None:
+    INSTALLED_APPS.append("django_linear_migrations")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
