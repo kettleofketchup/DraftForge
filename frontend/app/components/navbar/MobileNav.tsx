@@ -1,13 +1,14 @@
 import { ArrowRight, ChevronDown, Menu } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Button } from '~/components/ui/button';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '~/components/ui/collapsible';
+import { DiscordIcon } from '~/components/ui/icons';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import {
   Sheet,
@@ -16,12 +17,15 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '~/components/ui/sheet';
+import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '../../store/userStore';
 import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { LazyChangelogPreview } from './changelog/LazyChangelogPreview';
 import { DocsIcon } from './icons';
 import { BUG_REPORT_URL, DOCS_URL, GITHUB_REPO_URL } from './links';
+import { buildDiscordLoginUrl } from './login';
 
 // Icons (duplicated from navbar.tsx - could be extracted to shared file)
 const TrophyIcon = () => (
@@ -271,6 +275,8 @@ const MobileNavLink: React.FC<MobileNavLinkProps> = ({
 export function MobileNav() {
   const { t } = useTranslation('navbar');
   const currentUser = useUserStore((state) => state.currentUser);
+  const location = useLocation();
+  const loggedIn = Boolean(currentUser?.username);
   // Render client-side only to avoid Radix UI hydration mismatch with special characters in IDs
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -319,8 +325,29 @@ export function MobileNav() {
           className="flex-1 min-h-0 -mr-6 pr-6 [&_[data-slot=scroll-area-viewport]>div]:!block"
         >
           <nav className="flex flex-col gap-1 mt-6 pb-6">
+            {loggedIn ? (
+              <MobileNavLink
+                to="/profile"
+                icon={<UserAvatar user={currentUser} size="md" />}
+                title={DisplayName(currentUser)}
+                subtitle={t('account.logged_in')}
+                onClick={closeNav}
+                data-testid="mobile-nav-account"
+              />
+            ) : (
+              <MobileNavLink
+                href={buildDiscordLoginUrl(
+                  `${location.pathname}${location.search}`,
+                )}
+                icon={<DiscordIcon className="h-5 w-5" />}
+                title={t('login')}
+                subtitle={t('account.logged_out')}
+                iconClassName="text-primary"
+                data-testid="mobile-nav-login"
+              />
+            )}
             {/* Main Navigation */}
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2 mt-4">
               {t('section.navigation')}
             </div>
             <MobileNavLink

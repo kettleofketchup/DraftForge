@@ -79,16 +79,12 @@ class CacheopsSettingsTests(TestCase):
     depend on it. Without this entry, cacheops silently treats the model as
     uncached and the dep is a no-op.
 
-    When DISABLE_CACHE=1 (populate scripts, local test runs without Redis)
-    settings.py clears CACHEOPS entirely — the dep is irrelevant there, so
-    skip the assertion rather than reporting a spurious failure.
+    DISABLE_CACHE=1 sets CACHEOPS_ENABLED = False but leaves CACHEOPS intact,
+    so the assertion holds there too.
     """
 
     def test_cacheops_dict_registers_baseuserprofile(self):
-        cacheops = getattr(settings, "CACHEOPS", {}) or {}
-        if not getattr(settings, "CACHEOPS_ENABLED", True) or not cacheops:
-            self.skipTest("CACHEOPS disabled (DISABLE_CACHE env or empty dict)")
-        assert "user.baseuserprofile" in cacheops, (
+        assert "user.baseuserprofile" in settings.CACHEOPS, (
             "CACHEOPS must register 'user.baseuserprofile' so @cached_as "
             "blocks depending on BaseUserProfile actually invalidate on PATCH "
             "to /api/users/me/profile/base/. See backend/backend/settings.py."
@@ -103,6 +99,7 @@ SCAN_TARGETS = [
     REPO_ROOT / "backend" / "draft" / "views" / "team_setup.py",
     REPO_ROOT / "backend" / "draft" / "views" / "team_api.py",
     REPO_ROOT / "backend" / "events" / "views.py",
+    REPO_ROOT / "backend" / "league" / "views.py",
     REPO_ROOT / "backend" / "org" / "views_organization.py",
 ]
 

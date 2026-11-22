@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from app.models import CustomUser, League, Tournament
+from app.models import CustomUser, Tournament
 from events.models import Event
 
 
@@ -23,20 +23,6 @@ class TournamentSerializerSSR(serializers.ModelSerializer):
     def get_org_logo(self, obj: Tournament) -> str | None:
         if obj.league and obj.league.organization and obj.league.organization.logo:
             return obj.league.organization.logo
-        return None
-
-
-class LeagueSerializerSSR(serializers.ModelSerializer):
-    org_name = serializers.CharField(source="organization.name", default=None)
-    org_logo = serializers.SerializerMethodField()
-
-    class Meta:
-        model = League
-        fields = ["pk", "name", "description", "org_name", "org_logo"]
-
-    def get_org_logo(self, obj: League) -> str | None:
-        if obj.organization and obj.organization.logo:
-            return obj.organization.logo
         return None
 
 
