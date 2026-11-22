@@ -119,14 +119,6 @@ class RankMedalSelectRequest(BaseModel):
     model_config = {"extra": "ignore"}
 
 
-class PreviousRankSubmitRequest(BaseModel):
-    event_id: int
-    discord_user_id: str
-    medal: str
-    date_text: str = ""
-    model_config = {"extra": "ignore"}
-
-
 class BattleCupSubmitRequest(BaseModel):
     event_id: int
     discord_user_id: str

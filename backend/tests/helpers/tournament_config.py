@@ -12,7 +12,12 @@ import logging
 from datetime import date
 from typing import List, Literal, Optional
 
+from django.utils import timezone
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
+
+from app.models import CustomUser, Game, Team, Tournament
+from draft.models import Draft, DraftOptions, DraftRound, TeamDraftState
+from tests.helpers.steam_match import generate_steam_match, reset_match_id_tracker
 
 log = logging.getLogger(__name__)
 
@@ -34,9 +39,6 @@ class BracketGameConfig(BaseModel):
 class TestTournamentConfig(BaseModel):
     """
     Configuration for a test tournament scenario.
-
-    Each config represents a specific test scenario with explicit typing
-    and documentation of its purpose.
 
     Example:
         config = TestTournamentConfig(
@@ -119,8 +121,6 @@ class TestTournamentConfig(BaseModel):
         Returns:
             Tournament instance with teams, draft, and bracket games configured
         """
-        from app.models import Tournament
-        from draft.models import DraftOptions
 
         self._tournament = Tournament.objects.create(
             name=self.name,
@@ -156,7 +156,6 @@ class TestTournamentConfig(BaseModel):
 
     def _create_teams(self) -> None:
         """Create teams with captains and members."""
-        from app.models import CustomUser, Team
 
         users = list(CustomUser.objects.all()[: self.num_teams * 5])
         if len(users) < self.num_teams * 5:
@@ -180,9 +179,6 @@ class TestTournamentConfig(BaseModel):
 
     def _create_draft(self) -> None:
         """Create draft with rounds and apply picks."""
-        from django.utils import timezone
-
-        from draft.models import Draft, TeamDraftState
 
         draft = Draft.objects.create(
             tournament=self._tournament,
@@ -230,8 +226,6 @@ class TestTournamentConfig(BaseModel):
 
     def _create_bracket_games(self) -> None:
         """Create bracket games with steam match results."""
-        from app.models import Game
-        from tests.helpers.steam_match import generate_steam_match
 
         teams = list(self._tournament.teams.all()[:4])
         self._results = []
@@ -296,7 +290,6 @@ class TestTournamentConfig(BaseModel):
 
     def _create_pending_bracket_games(self) -> None:
         """Create bracket games with pending status and bracket links (no winners)."""
-        from app.models import Game
 
         teams = list(self._tournament.teams.order_by("draft_order").all()[:4])
         if len(teams) < 4:
@@ -378,7 +371,7 @@ class TestTournamentConfig(BaseModel):
 
     def _set_test_user_as_captain(self) -> None:
         """Make test user the first captain for auth testing."""
-        from draft.models import DraftRound
+        # circular: tests.test_auth -> tests.populate -> tests.helpers.tournament_config
         from tests.test_auth import createTestUser
 
         test_user, _ = createTestUser()
@@ -601,8 +594,6 @@ def populate_test_tournaments(force: bool = False) -> list:
     Returns:
         List of created Tournament instances
     """
-    from app.models import Tournament
-    from tests.helpers.steam_match import reset_match_id_tracker
 
     reset_match_id_tracker()
 

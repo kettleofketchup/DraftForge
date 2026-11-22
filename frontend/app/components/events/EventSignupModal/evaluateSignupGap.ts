@@ -105,8 +105,7 @@ export function evaluateSignupGap(
     }
     if (
       event.discord_require_rank_screenshot &&
-      (profile?.rank_status === 'active' ||
-        profile?.rank_status === 'previous') &&
+      profile?.rank_status === 'active' &&
       !profile.rank_screenshot
     ) {
       missing.push('rank_screenshot');

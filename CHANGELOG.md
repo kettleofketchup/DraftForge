@@ -14,6 +14,31 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.17.0] - 2026-11-21
+
+### Added
+
+- Organization pages show a Conduct tab: members ranked by show rate, new members marked
+  New, and each member's own attendance history with an explanation of how the rate is
+  worked out. Orgs can keep the ranking private so members see only their own record.
+- Organization admins tune conduct scoring, late cancels, ranking visibility and
+  enforcement (off by default) in the new Conduct section of Organization Settings.
+- The Contributions tab can rank members by points or by number of entries.
+
+### Changed
+
+- The `Frontend format` CI job now checks the whole frontend with Prettier, on pull
+  requests and on pushes to `main`. It used to check only the files a PR changed, so
+  unformatted files stayed on `main` and failed later PRs that touched them (#742).
+
+### Fixed
+
+- Events: the Discord state panel on an event now shows a member's new site nickname and
+  avatar as soon as they change them, instead of the old ones for up to a minute.
+- Events: renaming a series now updates the series name on its events' pages right away,
+  renaming an organization updates it in the events list, and the Discord state panel
+  shows signup and announcement post changes as soon as they happen.
+
 ## [0.16.0] - 2026-11-21
 
 ### Upgrading
