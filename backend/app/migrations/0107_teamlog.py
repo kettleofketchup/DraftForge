@@ -8,8 +8,8 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('app', '0106_draftoptions_hero_grace_time_ms_and_more'),
-        ('events', '0031_backfill_signup_open_policy'),
+        ("app", "0096_squashed_0106"),
+        ("events", "0001_squashed_0034"),
     ]
 
     operations = [

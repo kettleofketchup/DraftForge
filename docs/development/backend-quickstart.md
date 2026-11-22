@@ -75,6 +75,16 @@ renumber by hand. The system check (`dlm.E00x`) fails `makemigrations --check`,
 `manage.py check` and `manage.py test` when a `max_migration.txt` is stale; after editing
 migrations by hand, `just db::manage dev create_max_migration_files --recreate` rewrites them.
 
+### Squashed migrations
+
+`app` and `events` migrations up to release 0.17.0 are squashed (`app/0001_squashed_0069`,
+`0070_squashed_0077`, `0078_squashed_0094`, `0096_squashed_0106` and
+`events/0001_squashed_0034`); the files they replaced are deleted. A fresh database runs
+the squashed migrations. A database that had applied every replaced migration (any
+database at 0.17.0 or later) records them as applied without running them, because each
+keeps its `replaces` list. A database older than 0.17.0 cannot migrate on this code:
+upgrade it with a 0.17.0 checkout first, or recreate it.
+
 ### Test Data Population
 
 ```bash

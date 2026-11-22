@@ -52,7 +52,7 @@ def reverse_copy(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ("user", "0001_initial"),
-        ("app", "0094_alter_league_steam_league_id"),
+        ("app", "0078_squashed_0094"),
     ]
 
     operations = [

@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('app', '0094_alter_league_steam_league_id'),
+        ("app", "0078_squashed_0094"),
         ('user', '0002_backfill_base_profiles'),
     ]
 
