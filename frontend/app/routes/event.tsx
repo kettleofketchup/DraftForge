@@ -935,6 +935,9 @@ function SignupsTab({
   const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(
     null,
   );
+  const liveApprovalSignup = approvalSignup
+    ? (signups.find((s) => s.id === approvalSignup.id) ?? approvalSignup)
+    : null;
   const [removeSignup, setRemoveSignup] = useState<{
     signup: EventSignupType;
     name: string;
@@ -1266,7 +1269,7 @@ function SignupsTab({
         })}
       </div>
       <MmrApprovalModal
-        signup={approvalSignup}
+        signup={liveApprovalSignup}
         open={!!approvalSignup}
         onOpenChange={(open) => {
           if (!open) setApprovalSignup(null);

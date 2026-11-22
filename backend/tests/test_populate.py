@@ -14,6 +14,8 @@ from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
 from app.models import CustomUser, Tournament
+from app.permissions_steam import can_verify_steam_account
+from app.steam_accounts import mark_steam_account_verified
 from draft.models import Draft, DraftRound
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
@@ -60,17 +62,27 @@ from tests.data.tournament_discovery import (
     DISCOVERY_HOME_ORG,
     DISCOVERY_OPEN_ORG,
 )
-from tests.data.users import AUTH_MATRIX_ORG_PROMOTER_USER, EVENT_LEAGUE_STAFF_USER
+from tests.data.users import (
+    AUTH_MATRIX_ORG_PROMOTER_USER,
+    EVENT_ADMIN_USER,
+    EVENT_LEAGUE_STAFF_USER,
+)
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, populate_test_tournaments
 from tests.populate.auth_matrix import populate_auth_matrix_data
 from tests.populate.constants import (
     NAME_SYNC_GLOBAL_ONLY_USERNAME,
     NAME_SYNC_USERNAME,
+    STEAM_VERIFY_EVENT_NAME,
+    STEAM_VERIFY_UNVERIFIED_FRIEND_ID,
+    STEAM_VERIFY_UNVERIFIED_PK,
+    STEAM_VERIFY_VERIFIED_FRIEND_ID,
+    STEAM_VERIFY_VERIFIED_PK,
 )
 from tests.populate.demo import (
     populate_demo_shuffle_draft_tournament,
     populate_demo_snake_draft_tournament,
 )
+from tests.populate.events import populate_events_data
 from tests.populate.org_delete import populate_org_delete
 from tests.populate.org_features import (
     populate_org_features_data,
@@ -100,10 +112,6 @@ class EventLeagueStaffIsolationTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        from tests.populate.events import populate_events_data
-        from tests.populate.organizations import populate_organizations_and_leagues
-        from tests.populate.users import populate_test_auth_users
-
         # Run populate dependencies in order. populate_events_data creates
         # league pk=7 and is responsible for the league.staff assignment.
         populate_organizations_and_leagues(force=True)
@@ -742,4 +750,61 @@ class AuthMatrixPromoterTest(TestCase):
             OrgUser.objects.filter(
                 user_id=AUTH_MATRIX_ORG_PROMOTER_USER.pk, organization=org
             ).exists()
+        )
+
+
+class SteamVerificationPopulateTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        populate_organizations_and_leagues(force=True)
+        populate_test_auth_users(force=True)
+        populate_events_data(force=True)
+
+    def _event(self) -> Event:
+        return Event.objects.get(
+            organization_id=EVENTS_ORG.pk, name=STEAM_VERIFY_EVENT_NAME
+        )
+
+    def test_steam_verification_fixtures(self) -> None:
+        unverified = CustomUser.objects.get(pk=STEAM_VERIFY_UNVERIFIED_PK)
+        self.assertEqual(unverified.steam_account_id, STEAM_VERIFY_UNVERIFIED_FRIEND_ID)
+        self.assertFalse(unverified.steam_account_verified)
+        self.assertIsNone(unverified.steam_account_verified_org_id)
+        signup = EventSignup.objects.get(event=self._event(), user=unverified)
+        self.assertTrue(signup.self_made)
+        self.assertEqual(signup.status, SignupStatus.RSVP)
+
+        verified = CustomUser.objects.get(pk=STEAM_VERIFY_VERIFIED_PK)
+        self.assertEqual(verified.steam_account_id, STEAM_VERIFY_VERIFIED_FRIEND_ID)
+        self.assertTrue(verified.steam_account_verified)
+        self.assertEqual(verified.steam_account_verified_org_id, EVENTS_ORG.pk)
+        self.assertEqual(verified.steam_account_verified_by_id, EVENT_ADMIN_USER.pk)
+        self.assertTrue(
+            OrgUser.objects.filter(
+                user=verified, organization_id=EVENTS_ORG.pk
+            ).exists()
+        )
+
+    def test_event_admin_may_verify_the_unverified_member(self) -> None:
+        admin = CustomUser.objects.get(pk=EVENT_ADMIN_USER.pk)
+        unverified = CustomUser.objects.get(pk=STEAM_VERIFY_UNVERIFIED_PK)
+        grant = can_verify_steam_account(admin, unverified)
+        self.assertIsNotNone(grant)
+        assert grant is not None
+        self.assertEqual(grant.org_id, EVENTS_ORG.pk)
+
+    def test_repopulate_resets_the_unverified_member(self) -> None:
+        admin = CustomUser.objects.get(pk=EVENT_ADMIN_USER.pk)
+        unverified = CustomUser.objects.get(pk=STEAM_VERIFY_UNVERIFIED_PK)
+        self.assertTrue(
+            mark_steam_account_verified(unverified, admin, org_id=EVENTS_ORG.pk)
+        )
+        populate_events_data(force=True)
+        unverified = CustomUser.objects.get(pk=STEAM_VERIFY_UNVERIFIED_PK)
+        self.assertFalse(unverified.steam_account_verified)
+        self.assertEqual(
+            EventSignup.objects.filter(event=self._event(), user=unverified).count(), 1
+        )
+        self.assertTrue(
+            CustomUser.objects.get(pk=STEAM_VERIFY_VERIFIED_PK).steam_account_verified
         )

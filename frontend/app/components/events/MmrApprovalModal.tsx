@@ -104,15 +104,16 @@ export function MmrApprovalModal({
     defaultValues: { mmr: '' },
   });
 
-  // Reset when the signup or open state changes. suggested_mmr is
-  // self-report-first (see backend events.mmr_suggestions.suggest_mmr).
+  // Reset when a different signup opens, not when the same row refetches.
+  // suggested_mmr is self-report-first (see backend events.mmr_suggestions.suggest_mmr).
+  const signupId = signup?.id;
   useEffect(() => {
     if (signup && open) {
       form.reset({ mmr: signup.suggested_mmr ?? '' });
       setConfirmOpen(false);
       setApprovedMmr(null);
     }
-  }, [signup, open]);
+  }, [signupId, open]);
 
   const rawMmr = form.watch('mmr');
   const hasValue = typeof rawMmr === 'number' && Number.isFinite(rawMmr);

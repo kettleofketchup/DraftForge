@@ -99,6 +99,30 @@ describe('MmrApprovalModal Friend ID verification', () => {
     });
   });
 
+  it('shows a refetched row as verified and keeps the typed MMR', () => {
+    withGameType(GAME_TYPE.DOTA2);
+    const props = { open: true, onOpenChange: vi.fn(), onApprove: vi.fn() };
+    const { rerender } = render(
+      <MmrApprovalModal signup={verifiable} {...props} />,
+    );
+    fireEvent.change(screen.getByTestId('mmr-input'), {
+      target: { value: '4100' },
+    });
+    const refetched = {
+      ...verifiable,
+      user_data: {
+        ...verifiable.user_data,
+        steam_account_verified: true,
+        steam_account_verified_org_name: 'Org Seven',
+      },
+    } as unknown as EventSignupType;
+    rerender(<MmrApprovalModal signup={refetched} {...props} />);
+    expect(screen.getByTestId('steam-verification-verified')).toBeTruthy();
+    expect((screen.getByTestId('mmr-input') as HTMLInputElement).value).toBe(
+      '4100',
+    );
+  });
+
   it('keeps a single Dotabuff link on Dota and none on Deadlock', () => {
     renderModal(GAME_TYPE.DOTA2, verifiable);
     expect(screen.getAllByTitle('View Dotabuff profile')).toHaveLength(1);
