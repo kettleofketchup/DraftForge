@@ -12,6 +12,7 @@ from events.models import Event, EventRepeater
 from events.serializers import EventSerializer
 from events.tests.base import EventTestCase
 from events.tests.test_discord_tasks import _DiscordTaskTestCase, _ok_response
+from league.models import League
 from org.models import Organization
 
 
@@ -411,8 +412,6 @@ class CreateEventEndpointTest(EventTestCase):
         self.assertIs(event.discord_announcement, False)
 
     def test_foreign_org_league_rejected(self):
-        from league.models import League
-
         other_org = Organization.objects.create(name="Other Org", owner=self.admin)
         other = League.objects.create(name="Other", organization=other_org)
         self.client.force_authenticate(self.admin)
@@ -650,8 +649,6 @@ class RepeaterLeagueOrgValidationTest(EventTestCase):
         )
 
     def test_foreign_org_league_rejected_on_repeater(self):
-        from league.models import League
-
         other_org = Organization.objects.create(name="Other Org 19", owner=self.admin)
         other = League.objects.create(name="Other League 19", organization=other_org)
 

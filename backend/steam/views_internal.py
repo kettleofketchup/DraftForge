@@ -15,6 +15,7 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
+from league.models import League
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -216,8 +217,6 @@ def tracked_leagues(request: Request) -> Response:
     to poll — replaces the hardcoded LEAGUE_ID constant that previously
     pinned sync to a single league.
     """
-    from league.models import League
-
     ids = list(
         League.objects.filter(steam_league_id__isnull=False)
         .values_list("steam_league_id", flat=True)
