@@ -117,6 +117,14 @@ def _lock_snapshot(org: Organization, event_id: int, captain_id: int) -> EventCa
     return ec
 
 
+def _in_pool(ec: EventCaptain, rater_id: int | None) -> bool:
+    if rater_id is None or rater_id == ec.captain_id:
+        return False
+    return EventCaptain.teammates.through.objects.filter(
+        eventcaptain_id=ec.pk, orguser_id=rater_id
+    ).exists()
+
+
 def _check_writable(ec: EventCaptain, rater: OrgUser, *, now: datetime) -> None:
     if ec.voided_at is not None:
         raise ReviewRefused(
@@ -126,10 +134,7 @@ def _check_writable(ec: EventCaptain, rater: OrgUser, *, now: datetime) -> None:
         raise ReviewRefused(
             "review_window_closed", 409, "The review window has closed."
         )
-    in_pool = EventCaptain.teammates.through.objects.filter(
-        eventcaptain_id=ec.pk, orguser_id=rater.pk
-    ).exists()
-    if ec.captain_id == rater.pk or not in_pool:
+    if not _in_pool(ec, rater.pk):
         raise ReviewRefused("not_in_pool", 403, "You cannot review this captain.")
 
 
@@ -173,6 +178,7 @@ def _clear_void(review: CaptainReview) -> None:
     review.void_kind = ""
     review.voided_by = None
     review.void_reason = ""
+    review.moderated_from = ""
 
 
 @transaction.atomic
@@ -337,6 +343,8 @@ def void_review(
         return review
     if review.voided_at is None:
         review.voided_at = now
+    else:
+        review.moderated_from = review.void_kind
     review.void_kind = VoidKind.MODERATED
     review.voided_by = actor
     review.void_reason = cleaned
@@ -377,7 +385,17 @@ def unvoid_review(
         raise ReviewRefused(
             "snapshot_voided", 409, "Reviews for this event are closed."
         )
-    _clear_void(review)
+    if review.moderated_from:
+        review.void_kind = review.moderated_from
+        review.voided_by = None
+        review.void_reason = ""
+        review.moderated_from = ""
+    elif _in_pool(ec, review.rater_id):
+        _clear_void(review)
+    else:
+        raise ReviewRefused(
+            "not_in_pool", 409, "The rater is no longer in this captain's pool."
+        )
     review.save()
     before = _current_points(ec)
     after, _ = _refresh(ec, get_leadership_settings(org.pk))

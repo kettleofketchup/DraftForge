@@ -230,6 +230,9 @@ def void_event(event: Event, *, now: datetime) -> VoidResult:
         .filter(event_captain_id__in=ids, voided_at__isnull=True)
         .update(voided_at=now, void_kind=VoidKind.LIFECYCLE, updated_at=now)
     )
+    CaptainReview.objects.nocache().filter(
+        event_captain_id__in=ids, void_kind=VoidKind.MODERATED, moderated_from=""
+    ).update(moderated_from=VoidKind.LIFECYCLE, updated_at=now)
     revoked = ledger.revoke_event_kinds(event, kinds=kinds_for("leadership"))
     log.info(
         "leadership_event_voided",

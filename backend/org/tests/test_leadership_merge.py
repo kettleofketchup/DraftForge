@@ -10,6 +10,7 @@ from events.models import Event
 from org.contributions.services import award_entry, delete_user_entries
 from org.leadership import maintenance
 from org.leadership.settings import get_leadership_settings
+from org.leadership.summary import member_payload
 from org.models import (
     ContributionEntry,
     ContributionPointValue,
@@ -100,6 +101,19 @@ class UserDeleteTest(LeadershipTestCase):
         self.expire_window()
         self.delete(self.mates_a[0])
         self.assertEqual(self.points(self.cap_a, "captain_rating"), 10)
+
+    def test_released_aggregates_do_not_move_when_a_rater_leaves(self) -> None:
+        self.review(self.mates_a[2], self.cap_a, 2)
+        self.expire_window()
+        captain = self.ou(self.cap_a)
+
+        def view() -> dict:
+            return member_payload(captain, now=tz.now(), detail=True, staff=False)
+
+        before = view()
+        self.assertEqual(before["events"][0]["reviews"], 3)
+        self.delete(self.mates_a[2])
+        self.assertEqual(view(), before)
 
     def test_each_track_logs_only_its_rows(self) -> None:
         award_entry(
@@ -218,6 +232,48 @@ class ReassignMemberTest(LeadershipTestCase):
         self.assertEqual(review.rater.user, self.mates_a[1])
         self.assertEqual(set(review.scores.values_list("score", flat=True)), {2})
 
+    def test_moderated_review_wins_a_rater_collision(self) -> None:
+        self.close()
+        moderated = self.review(self.mates_a[1], self.cap_a, 1)
+        self.review(self.mates_a[0], self.cap_a, 5)
+        CaptainReview.objects.filter(pk=moderated.pk).update(
+            voided_at=tz.now(),
+            void_kind="moderated",
+            updated_at=tz.now() - timedelta(minutes=10),
+        )
+        self.reassign(self.mates_a[0], self.mates_a[1])
+        review = CaptainReview.objects.get()
+        self.assertEqual(review.pk, moderated.pk)
+        self.assertEqual(review.void_kind, "moderated")
+        self.assertIsNone(self.points(self.cap_a, "captain_rating"))
+
+    def test_moderated_drop_review_wins_a_rater_collision(self) -> None:
+        self.close()
+        live = self.review(self.mates_a[1], self.cap_a, 5)
+        moderated = self.review(self.mates_a[0], self.cap_a, 1)
+        CaptainReview.objects.filter(pk=moderated.pk).update(
+            voided_at=tz.now(),
+            void_kind="moderated",
+            updated_at=tz.now() - timedelta(minutes=10),
+        )
+        self.reassign(self.mates_a[0], self.mates_a[1])
+        review = CaptainReview.objects.get()
+        self.assertEqual(review.pk, moderated.pk)
+        self.assertEqual(review.rater.user, self.mates_a[1])
+        self.assertFalse(CaptainReview.objects.filter(pk=live.pk).exists())
+
+    def test_rater_collision_after_window_anonymizes_the_loser(self) -> None:
+        self.close()
+        newer = self.review(self.mates_a[0], self.cap_a, 2)
+        older = self.review(self.mates_a[1], self.cap_a, 5)
+        self.age(older, 10)
+        self.expire_window()
+        self.reassign(self.mates_a[0], self.mates_a[1])
+        self.assertEqual(
+            CaptainReview.objects.get(pk=newer.pk).rater.user, self.mates_a[1]
+        )
+        self.assertIsNone(CaptainReview.objects.get(pk=older.pk).rater_id)
+
     def test_rater_merged_into_captain_deletes_review(self) -> None:
         self.close()
         self.review(self.mates_a[0], self.cap_a, 4)
@@ -271,7 +327,8 @@ class ReassignMemberTest(LeadershipTestCase):
         self.review(self.mates_a[1], self.cap_a, 5)
         self.expire_window()
         self.reassign(self.mates_a[0], self.mates_a[1])
-        self.assertEqual(CaptainReview.objects.count(), 1)
+        self.assertEqual(CaptainReview.objects.filter(rater__isnull=False).count(), 1)
+        self.assertEqual(CaptainReview.objects.filter(rater__isnull=True).count(), 1)
         self.assertEqual(self.points(self.cap_a, "captain_rating"), 10)
 
     def test_contribution_rows_untouched(self) -> None:
@@ -403,8 +460,17 @@ class DeleteUserRowsTest(LeadershipTestCase):
     def test_rater_after_window_keeps_points(self) -> None:
         self.expire_window()
         self.delete_rows(self.mates_a[0])
-        self.assertEqual(CaptainReview.objects.count(), 1)
+        self.assertEqual(CaptainReview.objects.count(), 2)
+        self.assertEqual(CaptainReview.objects.filter(rater__isnull=True).count(), 1)
         self.assertEqual(self.points(self.cap_a, "captain_rating"), 10)
+
+    def test_voided_review_after_window_is_deleted(self) -> None:
+        CaptainReview.objects.filter(rater__user=self.mates_a[0]).update(
+            voided_at=tz.now(), void_kind="withdrawn"
+        )
+        self.expire_window()
+        self.delete_rows(self.mates_a[0])
+        self.assertEqual(CaptainReview.objects.count(), 1)
 
     def test_user_without_rows_is_noop(self) -> None:
         self.assertEqual(self.delete_rows(self.make_user("ld_none")), 0)

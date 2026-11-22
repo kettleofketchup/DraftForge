@@ -47,6 +47,19 @@ class Migration(migrations.Migration):
                     "void_reason",
                     models.CharField(blank=True, default="", max_length=500),
                 ),
+                (
+                    "moderated_from",
+                    models.CharField(
+                        blank=True,
+                        choices=[
+                            ("withdrawn", "Withdrawn by rater"),
+                            ("lifecycle", "Event reopened or cancelled"),
+                            ("moderated", "Voided by staff"),
+                        ],
+                        default="",
+                        max_length=16,
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
@@ -324,7 +337,9 @@ class Migration(migrations.Migration):
             model_name="captainreview",
             name="rater",
             field=models.ForeignKey(
-                on_delete=django.db.models.deletion.CASCADE,
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
                 related_name="captain_reviews_given",
                 to="org.orguser",
             ),

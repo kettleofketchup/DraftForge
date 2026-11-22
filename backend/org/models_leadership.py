@@ -154,7 +154,11 @@ class CaptainReview(models.Model):
         EventCaptain, on_delete=models.CASCADE, related_name="reviews"
     )
     rater = models.ForeignKey(
-        "org.OrgUser", on_delete=models.CASCADE, related_name="captain_reviews_given"
+        "org.OrgUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="captain_reviews_given",
     )
     submitted_at = models.DateTimeField()
     updated_at = models.DateTimeField(auto_now=True)
@@ -170,6 +174,9 @@ class CaptainReview(models.Model):
         related_name="+",
     )
     void_reason = models.CharField(max_length=500, blank=True, default="")
+    moderated_from = models.CharField(
+        max_length=16, blank=True, default="", choices=VoidKind.choices
+    )
 
     class Meta:
         constraints = [

@@ -288,6 +288,47 @@ class ModerationTest(ReviewTestCase):
         self.assertEqual(entry.details["points_after"], 10)
         self.assertNotIn("reason", entry.details)
 
+    def test_unvoid_restores_a_withdrawn_review_as_withdrawn(self) -> None:
+        review = self.review(self.mates_a[0], self.cap_a, 5)
+        self.review(self.mates_a[1], self.cap_a, 5)
+        self.review(self.mates_a[2], self.cap_a, 1)
+        self.withdraw(self.mates_a[0], self.cap_a)
+        withdrawn_at = CaptainReview.objects.nocache().get(pk=review.pk).voided_at
+        self.void(review)
+        self.expire_window()
+        restored = self.unvoid(review)
+        self.assertEqual(restored.void_kind, "withdrawn")
+        self.assertEqual(restored.voided_at, withdrawn_at)
+        self.assertIsNone(restored.voided_by_id)
+        self.assertEqual(restored.void_reason, "")
+        self.assertEqual(self.points(self.cap_a, "captain_rating"), 5)
+
+    def test_unvoid_after_reclose_restores_lifecycle(self) -> None:
+        lifecycle = self.review(self.mates_a[0], self.cap_a, 5)
+        live = self.review(self.mates_a[1], self.cap_a, 5)
+        self.void(live)
+        void_event(self.event, now=tz.now())
+        self.void(lifecycle)
+        self.run_snapshot()
+        for review in (lifecycle, live):
+            restored = self.unvoid(review)
+            self.assertEqual(restored.void_kind, "lifecycle")
+            self.assertIsNotNone(restored.voided_at)
+        self.assertIsNone(self.points(self.cap_a, "captain_rating"))
+        self.review(self.mates_a[0], self.cap_a, 4)
+
+    def test_unvoid_refused_when_rater_left_the_pool(self) -> None:
+        review = self.review(self.mates_a[0], self.cap_a, 5)
+        self.void(review)
+        EventCaptain.teammates.through.objects.filter(
+            eventcaptain_id=self.snapshot(self.cap_a).pk,
+            orguser_id=self.ou(self.mates_a[0]).pk,
+        ).delete()
+        exc = self.refused("not_in_pool", lambda: self.unvoid(review))
+        self.assertEqual(exc.status, 409)
+        review.refresh_from_db()
+        self.assertEqual(review.void_kind, "moderated")
+
     def test_unvoid_refused_on_voided_snapshot(self) -> None:
         review = self.review(self.mates_a[0], self.cap_a, 5)
         self.void(review)

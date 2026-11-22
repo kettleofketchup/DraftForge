@@ -349,7 +349,7 @@ def leadership_member(request: Request, org_id: int, org_user_id: int) -> Respon
 def _review_data(review: CaptainReview) -> dict[str, Any]:
     return {
         "pk": review.pk,
-        "rater": member_summary(review.rater),
+        "rater": member_summary(review.rater) if review.rater else None,
         "scores": _scores(review),
         "submitted_at": review.submitted_at,
         "updated_at": review.updated_at,

@@ -1,10 +1,12 @@
 from collections import Counter
+from collections.abc import Collection
 from datetime import datetime
 
 from django.db.models import Case, Count, Q, Value, When
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
+from org.leadership.constants import VoidKind
 from org.leadership.reviews import refresh_captain_rating
 from org.leadership.settings import get_leadership_settings
 from org.models import ContributionPointValue, OrgLog, OrgUser
@@ -48,20 +50,47 @@ def _recompute_open(org_id: int, snapshot_ids: set[int], *, now: datetime) -> in
     return len(snapshots)
 
 
-def _fold_reviews(target_of: dict[int, int], keep: OrgUser) -> int:
+def _beats(
+    kind: str, updated_at: datetime, other_kind: str, other_updated_at: datetime
+) -> bool:
+    moderated = kind == VoidKind.MODERATED
+    if moderated != (other_kind == VoidKind.MODERATED):
+        return moderated
+    return updated_at > other_updated_at
+
+
+def _retire_reviews(pks: Collection[int], *, now: datetime) -> set[int]:
+    if not pks:
+        return set()
+    reviews = CaptainReview.objects.nocache().filter(pk__in=list(pks))
+    anonymized = set(
+        reviews.filter(
+            voided_at__isnull=True,
+            event_captain__voided_at__isnull=True,
+            event_captain__window_closes_at__lte=now,
+        ).values_list("pk", flat=True)
+    )
+    if anonymized:
+        CaptainReview.objects.nocache().filter(pk__in=anonymized).update(rater=None)
+    CaptainReview.objects.nocache().filter(pk__in=set(pks) - anonymized).delete()
+    return anonymized
+
+
+def _fold_reviews(target_of: dict[int, int], keep: OrgUser, *, now: datetime) -> int:
     rows = list(
         CaptainReview.objects.nocache()
         .filter(event_captain_id__in=[*target_of, *target_of.values()])
-        .values_list("pk", "event_captain_id", "rater_id", "updated_at")
+        .values_list("pk", "event_captain_id", "rater_id", "updated_at", "void_kind")
     )
     on_keep = {
-        (ec_id, rater_id): (pk, updated_at)
-        for pk, ec_id, rater_id, updated_at in rows
-        if ec_id not in target_of
+        (ec_id, rater_id): (pk, updated_at, kind)
+        for pk, ec_id, rater_id, updated_at, kind in rows
+        if ec_id not in target_of and rater_id is not None
     }
     delete: list[int] = []
+    losers: dict[int, int | None] = {}
     move: dict[int, list[int]] = {}
-    for pk, ec_id, rater_id, updated_at in rows:
+    for pk, ec_id, rater_id, updated_at, kind in rows:
         target = target_of.get(ec_id)
         if target is None:
             continue
@@ -70,13 +99,17 @@ def _fold_reviews(target_of: dict[int, int], keep: OrgUser) -> int:
             continue
         other = on_keep.get((target, rater_id))
         if other is not None:
-            if updated_at <= other[1]:
-                delete.append(pk)
+            if not _beats(kind, updated_at, other[2], other[1]):
+                losers[pk] = target
                 continue
-            delete.append(other[0])
+            losers[other[0]] = None
         move.setdefault(target, []).append(pk)
     if delete:
         CaptainReview.objects.nocache().filter(pk__in=delete).delete()
+    for pk in _retire_reviews(losers, now=now):
+        target = losers[pk]
+        if target is not None:
+            move.setdefault(target, []).append(pk)
     moved = [pk for pks in move.values() for pk in pks]
     if moved:
         CaptainReview.objects.nocache().filter(pk__in=moved).update(
@@ -139,41 +172,52 @@ def _merge_snapshots(
             event_captain_id__in=plain, rater=keep
         ).delete()
     if target_of:
-        moved += _fold_reviews(target_of, keep)
+        moved += _fold_reviews(target_of, keep, now=now)
         _fold_pools(target_of, keep)
         EventCaptain.objects.nocache().filter(pk__in=list(target_of)).delete()
     return moved, {*plain, *target_of.values()}
 
 
-def _merge_reviews(drop: OrgUser, keep: OrgUser) -> tuple[int, set[int]]:
+def _merge_reviews(
+    drop: OrgUser, keep: OrgUser, *, now: datetime
+) -> tuple[int, set[int]]:
     mine = list(
         CaptainReview.objects.nocache()
         .filter(rater=drop)
         .values_list(
-            "pk", "event_captain_id", "updated_at", "event_captain__captain_id"
+            "pk",
+            "event_captain_id",
+            "updated_at",
+            "void_kind",
+            "event_captain__captain_id",
         )
     )
     if not mine:
         return 0, set()
-    touched = {ec_id for _, ec_id, _, _ in mine}
+    touched = {row[1] for row in mine}
     on_keep = {
-        ec_id: (pk, updated_at)
-        for pk, ec_id, updated_at in CaptainReview.objects.nocache()
+        ec_id: (pk, updated_at, kind)
+        for pk, ec_id, updated_at, kind in CaptainReview.objects.nocache()
         .filter(rater=keep, event_captain_id__in=touched)
-        .values_list("pk", "event_captain_id", "updated_at")
+        .values_list("pk", "event_captain_id", "updated_at", "void_kind")
     }
     delete: list[int] = []
+    losers: list[int] = []
     move: list[int] = []
-    for pk, ec_id, updated_at, captain_id in mine:
-        other = on_keep.get(ec_id)
-        if captain_id == keep.pk or (other is not None and updated_at <= other[1]):
+    for pk, ec_id, updated_at, kind, captain_id in mine:
+        if captain_id == keep.pk:
             delete.append(pk)
             continue
+        other = on_keep.get(ec_id)
         if other is not None:
-            delete.append(other[0])
+            if not _beats(kind, updated_at, other[2], other[1]):
+                losers.append(pk)
+                continue
+            losers.append(other[0])
         move.append(pk)
     if delete:
         CaptainReview.objects.nocache().filter(pk__in=delete).delete()
+    _retire_reviews(losers, now=now)
     if move:
         CaptainReview.objects.nocache().filter(pk__in=move).update(rater=keep)
     return len(move), touched
@@ -221,7 +265,7 @@ def reassign_member(drop: OrgUser, keep: OrgUser, *, now: datetime) -> int:
     if drop.pk == keep.pk or not _has_leadership(Q(pk=drop.pk)):
         return 0
     snapshots, touched = _merge_snapshots(drop, keep, now=now)
-    reviews, rated = _merge_reviews(drop, keep)
+    reviews, rated = _merge_reviews(drop, keep, now=now)
     pools = _merge_pools(drop, keep)
     entries, discarded = _merge_ledger(drop, keep, now=now)
     recomputed = _recompute_open(keep.organization_id, touched | rated, now=now)
@@ -269,13 +313,13 @@ def delete_user_rows(
 ) -> int:
     if not _has_leadership(Q(user=user)):
         return 0
-    reviews = CaptainReview.objects.nocache().filter(rater__user=user)
-    rated = set(
-        reviews.filter(voided_at__isnull=True).values_list(
-            "event_captain_id", flat=True
-        )
+    reviews = list(
+        CaptainReview.objects.nocache()
+        .filter(rater__user=user)
+        .values_list("pk", "event_captain_id", "voided_at")
     )
-    reviews.delete()
+    rated = {ec_id for _, ec_id, voided_at in reviews if voided_at is None}
+    _retire_reviews([pk for pk, _, _ in reviews], now=now)
     EventCaptain.objects.nocache().filter(captain__user=user).delete()
     recomputed = 0
     for org_id, ids in _by_org(rated).items():
