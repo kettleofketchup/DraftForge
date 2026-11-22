@@ -57,14 +57,20 @@ from events.models import (
     EventRepeater,
     EventSignup,
     EventTeam,
+    ReadyCheck,
     TournamentTemplateMixin,
 )
 from events.ready_check_constants import (
     DROPPED_SIGNUP_MESSAGE,
     REMOVED_SIGNUP_STATUSES,
+    ReadyCheckEntryState,
+    ReadyCheckPhase,
 )
 from events.ready_check_core import (
+    ACCEPTING_PHASES,
+    cancel_ready_check,
     enrol_signup_if_live,
+    live_ready_check,
     ready_check_promotion_status,
 )
 from events.reopen import ReopenNotPermitted, reopen_event
@@ -78,7 +84,7 @@ from events.roster import (
     start_phase,
     team_bound_user_pks,
 )
-from events.schemas import DotaModalConfig
+from events.schemas import DotaModalConfig, SignupSnapshot
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
 from events.tasks import delete_discord_scheduled_event
 from lobby.passwords import PasswordMode, generate_password
@@ -568,6 +574,7 @@ def apply_signup_input(
     return profile
 
 
+@transaction.atomic
 def staff_add_signup(
     event: Event,
     user: CustomUser,
@@ -582,7 +589,13 @@ def staff_add_signup(
     # has somewhere to live before they're approved.
     if event.organization_id:
         resolve_or_create_org_user(user, event.organization)
-    return _create_signup(event, user, event_team=event_team, for_staff_placement=True)
+    signup = _create_signup(
+        event, user, event_team=event_team, for_staff_placement=True
+    )
+    if event.state == EventState.ROLL_CALL:
+        lock_event(event)
+        enrol_signup_if_live(signup, actor=actor)
+    return signup
 
 
 APPROVABLE_STATUSES = [
@@ -599,6 +612,9 @@ def approve_signup(
     """Approve a signup, optionally setting the user's MMR."""
     if signup.status not in APPROVABLE_STATUSES:
         raise ValueError(f"Cannot approve signup in '{signup.status}' status.")
+    in_roll_call = signup.event.state == EventState.ROLL_CALL
+    if in_roll_call:
+        lock_event(signup.event)
 
     # Apply MMR override when provided by an admin
     if mmr_override is not None:
@@ -615,6 +631,8 @@ def approve_signup(
     cleared = clear_eligibility(signup)
     signup.save(update_fields=["status", "waitlist_position", *cleared, "updated_at"])
     _roster_add_if_joins(signup)
+    if in_roll_call:
+        enrol_signup_if_live(signup, actor=actor)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -769,9 +787,30 @@ def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Revert a confirmed signup back to approved (e.g., during roll call adjustments)."""
     if signup.status != SignupStatus.CONFIRMED:
         raise ValueError("Only confirmed signups can be unconfirmed.")
+    event = signup.event
+    check = None
+    if event.state == EventState.ROLL_CALL:
+        check = live_ready_check(lock_event(event), lock=True)
+    before = snapshot(signup)
     signup.status = SignupStatus.APPROVED
     signup.save(update_fields=["status", "updated_at"])
     _roster_remove_if_left(signup)
+    if check is not None and check.phase in (*ACCEPTING_PHASES, ReadyCheckPhase.HELD):
+        check.entries.filter(
+            signup_id=signup.pk, state=ReadyCheckEntryState.CONFIRMED
+        ).update(
+            state=ReadyCheckEntryState.PENDING, confirmed_via="", confirmed_at=None
+        )
+    record_signup_change(
+        event=event,
+        subject=signup.user,
+        actor=actor,
+        action=SignupAction.UNCONFIRMED,
+        signup=signup,
+        before=before,
+        after=snapshot(signup),
+        correlation_id=f"rc{check.pk}:unconfirm" if check is not None else "",
+    )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -809,13 +848,25 @@ def reinstate_signup(
       - roll_call:    CANCELLED or REJECTED → APPROVED, so the player
                       reappears in the Awaiting Confirmation list and admins
                       can re-confirm without leaving the rollcall screen.
+    DROPPED is reinstated like CANCELLED, by staff only; a DROPPED entry in
+    the live ready check becomes EXCUSED.
     """
     event = signup.event
+    if signup.status == SignupStatus.DROPPED and not for_staff_placement:
+        raise ValueError(DROPPED_SIGNUP_MESSAGE)
+    before = snapshot(signup)
     if event.state == "roll_call":
-        if signup.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+        if signup.status not in (
+            SignupStatus.CANCELLED,
+            SignupStatus.REJECTED,
+            SignupStatus.DROPPED,
+        ):
             raise ValueError(
                 "Only removed or rejected signups can be reinstated during roll call."
             )
+        locked = lock_event(event)
+        check = live_ready_check(locked, lock=True)
+        was_dropped = signup.status == SignupStatus.DROPPED
         signup.status = SignupStatus.APPROVED
         signup.waitlist_position = None
         signup.commitment = Commitment.MAIN
@@ -829,11 +880,17 @@ def reinstate_signup(
                 "updated_at",
             ]
         )
+        if check is not None and was_dropped:
+            check.entries.filter(
+                signup_id=signup.pk, state=ReadyCheckEntryState.DROPPED
+            ).update(state=ReadyCheckEntryState.EXCUSED)
+        enrol_signup_if_live(signup, actor=actor)
+        _record_reinstated(signup, before, actor=actor, check=check)
         invalidate_after_commit(signup, event)
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
 
-    if signup.status != SignupStatus.CANCELLED:
+    if signup.status not in (SignupStatus.CANCELLED, SignupStatus.DROPPED):
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
         raise ValueError(NOT_ACCEPTING_MESSAGE)
@@ -865,9 +922,29 @@ def reinstate_signup(
             "updated_at",
         ]
     )
+    _record_reinstated(signup, before, actor=actor, check=None)
     invalidate_after_commit(signup, event)
     transaction.on_commit(lambda: notify_signup_changed(event))
     return signup
+
+
+def _record_reinstated(
+    signup: EventSignup,
+    before: SignupSnapshot,
+    *,
+    actor: SignupActor,
+    check: ReadyCheck | None,
+) -> None:
+    record_signup_change(
+        event=signup.event,
+        subject=signup.user,
+        actor=actor,
+        action=SignupAction.REINSTATED,
+        signup=signup,
+        before=before,
+        after=snapshot(signup),
+        correlation_id=f"rc{check.pk}:reinstate" if check is not None else "",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1062,6 +1139,7 @@ def restart_event_tournament(
     event = Event.objects.nocache().select_for_update().get(pk=event.pk)
     if not event.tournament:
         raise ValueError("No tournament to restart.")
+    cancel_ready_check(event, actor=_staff_or_system_actor(actor), reason="restarted")
 
     if event.state in EVENT_REOPEN_TRANSITIONS:
         if not can_reopen:
@@ -1159,6 +1237,9 @@ def ensure_tournament_with_signups(
 
 @transaction.atomic
 def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
+    cancel_ready_check(
+        event, actor=_staff_or_system_actor(actor), reason="event_cancelled"
+    )
     if event.tournament:
         tournament = event.tournament
         event.tournament = None

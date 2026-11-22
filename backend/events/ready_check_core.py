@@ -204,6 +204,11 @@ def enrol_signup_if_live(
         return None
     entry = check.entries.filter(user_id=signup.user_id).first()
     if entry is not None:
+        if entry.signup_id is None:
+            ReadyCheckEntry.objects.filter(pk=entry.pk, signup__isnull=True).update(
+                signup=signup
+            )
+            entry.signup = signup
         if (
             entry.state == ReadyCheckEntryState.CONFIRMED
             and signup.status == SignupStatus.APPROVED
