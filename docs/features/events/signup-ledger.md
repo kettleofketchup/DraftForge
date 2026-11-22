@@ -1,6 +1,6 @@
 # Signup Ledger & Line Position
 
-Every event signup has a place in line and an original sign-up that never changes. A signup ledger is in place to hold a durable record of signup changes; for now it holds only a starting entry for each signup that existed when it was added.
+Every event signup has a place in line and an original sign-up that never changes. The signup ledger keeps a durable record of every signup change: who made it, how, when, and the signup before and after.
 
 ## Place in line
 
@@ -47,9 +47,86 @@ Entries cannot be edited or deleted through the app or the admin. They outlive t
 
 - Deleting an event or a signup leaves its entries in place, with the event snapshot still readable.
 - Deleting a user clears the link to that user, and the snapshot keeps their name and Discord ID.
-- Merging Discord accounts moves the entries to the remaining account.
+- Merging accounts, through Discord or an approved profile claim, moves the entries to the remaining account.
 
-The only entries written today are `backfilled` ones: each signup that existed when the ledger was added got one, marking where its history starts. A `backfilled` entry is not a change in itself. Signups created, cancelled or moved after that get no entry yet.
+Each signup that existed when the ledger was added got a `backfilled` entry, marking where its history starts. A `backfilled` entry is not a change in itself. Every change since then writes its own entry, as described below.
+
+## What gets recorded
+
+Each signup change writes exactly one entry, in the same database transaction as the change. If the change fails or is rolled back, no entry is kept, and if the entry cannot be written, the change fails too.
+
+| Action | Written when |
+|---|---|
+| `signed_up` | A member signs up or goes tentative for the first time. A member who only declined before still gets `signed_up`, because a decline is not a sign-up. A sign-up that lands on the waitlist is still `signed_up`, with the waitlist status in the after snapshot. |
+| `resigned_up` | A member who signed up before, then cancelled or was rejected, signs up or goes tentative again |
+| `switched_commitment` | A member switches between tentative (maybe) and RSVP (main) |
+| `staff_added` | A staff member adds someone to the event |
+| `declined` | A member declines, with or without an earlier signup |
+| `withdrew` | A signup is cancelled, by the member or by staff |
+| `approved` | Staff approve a signup |
+| `rejected` | Staff reject a signup |
+| `confirmed` / `unconfirmed` | Staff confirm a signup or undo the confirmation |
+| `demoted` | Staff move a signup to the waitlist |
+| `reinstated` | A cancelled or rejected signup is reinstated |
+| `promoted` | A waitlisted signup takes a freed seat |
+| `account_merged` | A signup moves to another account in an account merge |
+| `moved_event` | The stale repeater cleanup moves a signup to another event |
+
+The role and means show who acted and how:
+
+| Who acted | Role | Means |
+|---|---|---|
+| A member on their own signup, on the website | `member` | `web` |
+| A staff member on someone else's signup, on the website | `staff` | `web` |
+| A member using a Discord button (sign up, decline, tentative) | `member` | `discord_button` |
+| A member adding or removing a Discord reaction | `member` | `discord_reaction` |
+| The system (waitlist promotion, account merge, cleanup script, test setup) | `system` | `system` |
+
+A staff member acting on their own signup is recorded as `member`. When they used a staff-only action to do it (approve, reject, confirm, unconfirm, demote, a staff add, or a reinstate that bypasses the member rules), the after snapshot carries `extra.staff_power: true`. Approving a profile claim is recorded as the approving staff member, with means `web`.
+
+### Promotions
+
+When a cancel, decline, rejection or switch to tentative frees a seat, the waitlisted signups that take it each get their own `promoted` entry. Its `caused_by` points at the entry for the change that freed the seat, and it shares that entry's correlation id. Promotions from the `rebalance_event_waitlists` command have no cause.
+
+### Correlation ids
+
+The correlation id groups entries that belong to one action:
+
+| Source | Correlation id |
+|---|---|
+| Discord button | The Discord interaction id |
+| Discord reaction | `reaction:<message id>:<user id>`, the same for the add and the later remove |
+| Discord account merge | `merge-<id>`, one per merge |
+| Profile claim approval | `claim-<id>`, one per approval |
+| Stale repeater cleanup | `cleanup-<id>`, one per run |
+| Website | Empty |
+
+### Approve with an MMR override
+
+When staff approve a signup and set an MMR, the `approved` entry's after snapshot carries `extra.mmr_override` and `extra.game_type`. The `set_mmr` org log entry is still written as before.
+
+### Account merges
+
+Both account merges, a Discord account merge and an approved profile claim, move the merged account's signups to the kept account and write an `account_merged` entry for each one, with `extra.from_user_id` set to the merged account. When both accounts had signed up for the same event, the merged account's signup is deleted as before, and the entry is written against the kept account's signup with `extra.discarded_duplicate: true` and `extra.discarded_signup_id` in its before snapshot. The merged account's earlier entries move to the kept account.
+
+Approving a profile claim used to delete the claimed profile's signups; it now moves them to the claimer.
+
+### Moved signups
+
+When the stale repeater cleanup script moves a signup to another event, it writes a `moved_event` entry on each event. The entry on the old event closes that signup's history there, and the entry on the new event starts it, with `caused_by` pointing at the old event's entry. The before and after snapshots carry `extra.event_id` for the old and new event.
+
+### What is not recorded
+
+- Deleting an event, a user or a signup, including deletes in the Django admin, writes no entry.
+- The Django admin cannot add a signup or change its status, user, event, team, type or waitlist place. Staff change signup state through the event pages, which record it.
+- Signups created by test data population or fixtures have no starting entry.
+
+## For developers
+
+- Every signup service in `events/services.py` takes a required keyword `actor: SignupActor`. Calling one without it raises `TypeError`.
+- Build the actor with `SignupActor.for_request_on(request, subject, event)` on the website (pass `staff_only=True` on staff-only endpoints), `SignupActor.discord(user)` in Discord flows (it picks up the bound interaction id), or `SignupActor.system()` where no person acts.
+- A new signup mutation must record exactly one entry with `record_signup_change`, inside its own `transaction.atomic` block, after its guards. Take `before = snapshot(signup)` from a row read with `.nocache()` inside the transaction.
+- A mutation that frees a seat passes its entry to `_promote_from_waitlist(event, cause=entry)`.
 
 ## After deploying
 
@@ -65,4 +142,4 @@ Use `docker exec` rather than `just dev::run`, which starts a container on the d
 
 ## Coming later
 
-Recording signup changes made on the website and in Discord will come later; until then the ledger holds only `backfilled` entries. Views that show a signup's history and a member's signup records will build on this ledger, and this page will describe them when they land.
+Views that show a signup's history and a member's signup records, and the reasons staff give for their changes, will build on this ledger. This page will describe them when they land.
