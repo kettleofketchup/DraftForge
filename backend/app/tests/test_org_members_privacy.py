@@ -7,9 +7,9 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, League
+from app.models import CustomUser, GameType
 from events.models import Event, EventSignup, EventState, SignupStatus
-from league.models import LeagueUser
+from league.models import League, LeagueUser
 from org.models import Organization, OrgUser
 from tests.populate.utils import ensure_org_user
 

@@ -30,6 +30,11 @@ makemigrations *names:
     {{just}} db::touch-dbs
     {{just}} db::manage dev makemigrations {{ if names == "" { apps } else { '"$@"' } }}
 
+# Renumber this branch's migration onto main's after a max_migration.txt conflict
+[group('db')]
+rebase-migration app:
+    {{just}} db::manage dev rebase_migration "$1"
+
 # Run manage.py in backend/ with docker/.env.<stack> loaded and the cache off
 [private]
 manage stack *args:

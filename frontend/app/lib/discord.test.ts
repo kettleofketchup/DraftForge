@@ -9,6 +9,10 @@ const mocks = vi.hoisted(() => ({
   post: vi.fn(),
   construct: vi.fn(),
   patchUrlMappings: vi.fn(),
+  installActivityFocusGuard: vi.fn(),
+}));
+vi.mock('~/lib/activityFocusGuard', () => ({
+  installActivityFocusGuard: mocks.installActivityFocusGuard,
 }));
 vi.mock('~/components/api/axios', () => ({
   default: { get: mocks.get, post: mocks.post },
@@ -65,6 +69,11 @@ describe('Discord handshake', () => {
     });
     expect(session.token).toBe('draft-token');
     expect(session).not.toHaveProperty('access_token');
+  });
+  it('guards keyboard focus once the activity starts', async () => {
+    const { initializeDiscord } = await import('./discord');
+    await initializeDiscord();
+    expect(mocks.installActivityFocusGuard).toHaveBeenCalledOnce();
   });
   it('maps CDN image src attributes without replacing fetch or sockets', async () => {
     const { initializeDiscord, ACTIVITY_RESOURCE_MAPPINGS } =

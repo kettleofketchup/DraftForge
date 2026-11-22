@@ -2,7 +2,8 @@ from datetime import date
 
 from django.test import TestCase
 
-from app.models import CustomUser, Game, League, Team, Tournament
+from app.models import CustomUser, Game, Team, Tournament
+from league.models import League
 from org.models import Organization, OrgUser
 from steam.models import Match, PlayerMatchStats, SuggestionTier
 from steam.services.match_suggestions import (

@@ -6,8 +6,9 @@ import random
 
 from django.utils import timezone
 
-from app.models import CustomUser, Game, League, Team, Tournament
+from app.models import CustomUser, Game, Team, Tournament
 from draft.models import Draft, DraftOptions, DraftTeam, HeroDraft
+from league.models import League
 from org.models import Organization
 from tests.data.leagues import DEMO_CSV_LEAGUE
 from tests.data.organizations import DEMO_CSV_ORG
