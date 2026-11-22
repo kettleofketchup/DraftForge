@@ -4,6 +4,10 @@ All functions accept primitive values (str, int) so they work
 regardless of whether the caller has Django models or Pydantic objects.
 """
 
+from datetime import datetime
+from typing import Any
+from zoneinfo import ZoneInfo
+
 from django.conf import settings
 
 from app.constants import LOGO_URL
@@ -12,7 +16,7 @@ COLOR_DRAFT = 0x5865F2
 COLOR_HERODRAFT = 0xED4245
 
 
-def _dflogo_emoji():
+def _dflogo_emoji() -> dict[str, str] | None:
     """Get the DraftForge application emoji for button components.
     Returns emoji dict if DFLOGO_EMOJI_ID is configured, else None.
     """
@@ -22,21 +26,23 @@ def _dflogo_emoji():
     return {"name": "dflogo", "id": str(emoji_id)}
 
 
-def _site_url():
+def _site_url() -> str:
     return getattr(settings, "SITE_URL", "") or "https://localhost"
 
 
 def build_draft_link_embed(
-    tournament_name, draft_type_display, tournament_id, date_played=None, timezone=None
-):
+    tournament_name: str,
+    draft_type_display: str,
+    tournament_id: int,
+    date_played: datetime | None = None,
+    timezone: str | None = None,
+) -> dict[str, Any]:
     """Rich embed for team draft start DM."""
     url = f"{_site_url()}/tournament/{tournament_id}/teams/draft"
     fields = [{"name": "Draft Type", "value": draft_type_display, "inline": True}]
     if date_played:
         when_value = f"<t:{int(date_played.timestamp())}:F>"
         if timezone:
-            from zoneinfo import ZoneInfo
-
             local_dt = date_played.astimezone(ZoneInfo(timezone))
             when_value += f" ({local_dt.strftime('%-I:%M %p %Z')})"
         fields.append({"name": "Date / Time", "value": when_value, "inline": True})
@@ -54,7 +60,9 @@ def build_draft_link_embed(
     }
 
 
-def build_draft_link_components(tournament_id, *, draft_id=None):
+def build_draft_link_components(
+    tournament_id: int, *, draft_id: int | None = None
+) -> list[dict]:
     """Browser link and optional Activity launcher for the specific team draft."""
     btn = {
         "type": 2,
@@ -68,7 +76,9 @@ def build_draft_link_components(tournament_id, *, draft_id=None):
     return _draft_buttons(btn, "team", draft_id)
 
 
-def build_herodraft_link_embed(tournament_name, herodraft_pk, radiant_name, dire_name):
+def build_herodraft_link_embed(
+    tournament_name: str, herodraft_pk: int, radiant_name: str, dire_name: str
+) -> dict[str, Any]:
     """Rich embed for hero draft creation DM."""
     url = f"{_site_url()}/herodraft/{herodraft_pk}"
     return {
@@ -85,7 +95,7 @@ def build_herodraft_link_embed(tournament_name, herodraft_pk, radiant_name, dire
     }
 
 
-def build_herodraft_link_components(herodraft_pk):
+def build_herodraft_link_components(herodraft_pk: int) -> list[dict]:
     """Link button to join hero draft."""
     btn = {
         "type": 2,

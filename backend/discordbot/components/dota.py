@@ -47,7 +47,7 @@ from discordbot.internal_client.signup_actions import (
     signup_modal_submit,
 )
 from discordbot.log_context import discord_log_context
-from events.schemas import signed_up_text
+from events.schemas import DotaModalConfig, dota_require_screenshot, signed_up_text
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -583,8 +583,6 @@ class DotaSignupModal(ui.Modal):
             ctx.set_outcome(result["action"])
 
             if result["action"] == "needs_rank_details":
-                from events.schemas import DotaModalConfig, dota_require_screenshot
-
                 rank_status = values.get("rank_status", "never")
                 cfg = DotaModalConfig(
                     **{
