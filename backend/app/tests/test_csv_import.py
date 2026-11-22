@@ -556,6 +556,13 @@ class OrgCSVImportGameTypeTest(OrgCSVImportGameTypeFixtures, TestCase):
         self.assertEqual(resp.data["results"][0]["status"], "skipped")
         self.assertEqual(self.rows_for(self.org_user)[GameType.DEADLOCK], 700)
 
+    def test_org_import_new_member_zero_mmr_has_no_row(self) -> None:
+        resp = self.post([{"steam_friend_id": "76561198011111194", "mmr": "0"}])
+
+        self.assertEqual(resp.data["results"][0]["status"], "added")
+        added = OrgUser.objects.get(user__steamid=76561198011111194)
+        self.assertEqual(self.rows_for(added), {})
+
     def test_org_import_without_update_mmr_seeds_only_new_members(self) -> None:
         resp = self.client.post(
             self.url,

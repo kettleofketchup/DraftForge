@@ -82,6 +82,7 @@ Adds users to a tournament's player pool with optional team assignment:
 - Multiple rows with the same `team_name` are grouped into the same team
 - The `mmr` column always sets the tournament's game; the **league** MMR target is offered only for Dota 2 tournaments
 - Without **Update MMR for existing members**, the `mmr` column only seeds members the import adds to the organization; existing members keep their org MMR and league MMR
+- A league MMR created by the import (Dota 2 tournaments) takes the org MMR the import wrote; league MMRs that already existed change only with the **league** target and **Update MMR for existing members** on
 
 ---
 
