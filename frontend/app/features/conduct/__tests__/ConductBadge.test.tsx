@@ -18,12 +18,11 @@ describe('ConductBadge', () => {
         member={forecastMember({ show_rate: 0.871, status: 'scored' })}
       />,
     );
-    expect(screen.getByTestId('conduct-badge')).toHaveTextContent(
-      'Show rate 87%',
-    );
-    expect(
-      screen.queryByTestId('conduct-badge-approval'),
-    ).not.toBeInTheDocument();
+    const badge = screen.getByTestId('conduct-badge');
+    expect(badge).toHaveTextContent('Show rate 87%');
+    expect(badge).toHaveAttribute('title', 'Show rate');
+    expect(badge.querySelector('.sr-only')).toHaveTextContent('rate');
+    expect(screen.queryByTestId('conduct-badge-tier')).not.toBeInTheDocument();
   });
 
   it('labels a new member New', () => {
@@ -33,20 +32,16 @@ describe('ConductBadge', () => {
     );
   });
 
-  it.each(['require_approval', 'block'] as const)(
-    'flags tier %s as needing approval',
-    (tier) => {
-      render(<ConductBadge member={forecastMember({ tier })} />);
-      expect(screen.getByTestId('conduct-badge-approval')).toHaveTextContent(
-        'Needs approval',
-      );
-    },
-  );
+  it.each([
+    ['require_approval', 'Needs approval'],
+    ['block', 'Blocked'],
+  ] as const)('labels tier %s as %s', (tier, label) => {
+    render(<ConductBadge member={forecastMember({ tier })} />);
+    expect(screen.getByTestId('conduct-badge-tier')).toHaveTextContent(label);
+  });
 
   it('shows no approval badge for back_of_line', () => {
     render(<ConductBadge member={forecastMember({ tier: 'back_of_line' })} />);
-    expect(
-      screen.queryByTestId('conduct-badge-approval'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('conduct-badge-tier')).not.toBeInTheDocument();
   });
 });

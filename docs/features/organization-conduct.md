@@ -59,8 +59,9 @@ event of an organization with Conduct unlocked. Nobody else sees them.
   signups awaiting approval and, when the event has a capacity, the expected open
   seats. See [Turnout forecast](#turnout-forecast) for how it is worked out.
 - **Show-rate badge.** On the signup tabs and the roll-call page, each member's row
-  shows their show rate, or **New** for members without enough history, plus a
-  **Needs approval** badge when enforcement would hold their signup for review.
+  shows their show rate (for example "Show 87%"), or "Show New" for members without
+  enough history. A **Needs approval** badge marks members whose signup enforcement
+  would hold for review, and a **Blocked** badge marks members it would block.
 - **Attendance.** From roll call onwards, a table lists every expected member with
   their outcome, its source, any flag and their show rate. Tick the checkbox on
   several rows and use **Mark attended**, **Mark no-show**, **Mark late cancel** or

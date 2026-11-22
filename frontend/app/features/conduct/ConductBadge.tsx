@@ -1,7 +1,19 @@
 import { Badge } from '~/components/ui/badge';
 import { cn } from '~/lib/utils';
 import { formatShowRate } from './format';
-import type { ForecastMember } from './schemas';
+import type { ForecastMember, Tier } from './schemas';
+
+const TIER_BADGES: Partial<Record<Tier, { label: string; className: string }>> =
+  {
+    require_approval: {
+      label: 'Needs approval',
+      className: 'border-warning/30 bg-warning/20 text-warning',
+    },
+    block: {
+      label: 'Blocked',
+      className: 'border-destructive/30 bg-destructive/20 text-destructive',
+    },
+  };
 
 export function ConductBadge({
   member,
@@ -11,8 +23,8 @@ export function ConductBadge({
   className?: string;
 }) {
   if (!member) return null;
-  const needsApproval =
-    member.tier === 'require_approval' || member.tier === 'block';
+  const tierBadge = TIER_BADGES[member.tier];
+  const rate = formatShowRate(member);
 
   return (
     <span className={cn('inline-flex items-center gap-1', className)}>
@@ -20,17 +32,17 @@ export function ConductBadge({
         variant="outline"
         className="border-border bg-muted text-muted-foreground"
         data-testid="conduct-badge"
+        title="Show rate"
       >
-        <span className="sr-only">Show rate </span>
-        {formatShowRate(member)}
+        Show<span className="sr-only"> rate</span> {rate}
       </Badge>
-      {needsApproval && (
+      {tierBadge && (
         <Badge
           variant="outline"
-          className="border-destructive/30 bg-destructive/20 text-destructive"
-          data-testid="conduct-badge-approval"
+          className={tierBadge.className}
+          data-testid="conduct-badge-tier"
         >
-          Needs approval
+          {tierBadge.label}
         </Badge>
       )}
     </span>
