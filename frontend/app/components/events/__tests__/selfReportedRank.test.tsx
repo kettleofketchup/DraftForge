@@ -10,7 +10,7 @@ import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { UserEventStrip } from '~/components/user/UserEventStrip';
 import type { UserType } from '~/components/user/types';
-import { useGameTypeStore } from '~/store/gameTypeStore';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 
 function signup(over: Partial<EventSignupType> = {}): EventSignupType {
   return {
@@ -32,13 +32,11 @@ function signup(over: Partial<EventSignupType> = {}): EventSignupType {
 
 const noop = () => {};
 
-beforeEach(() => {
-  useGameTypeStore.getState().setCurrentGameType(GAME_TYPE.DEADLOCK);
-});
+beforeEach(() => withGameType(GAME_TYPE.DEADLOCK));
 
 afterEach(() => {
   cleanup();
-  useGameTypeStore.getState().setCurrentGameType(null);
+  resetGameType();
 });
 
 describe('Deadlock rank signals', () => {

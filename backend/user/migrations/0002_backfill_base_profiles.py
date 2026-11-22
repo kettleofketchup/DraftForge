@@ -1,24 +1,10 @@
-from django.core.cache import cache
 from django.db import migrations
 
 
 def copy_nickname_avatar_to_base_profile(apps, schema_editor):
-    """Backfill BaseUserProfile rows from CustomUser.nickname / .avatar.
-
-    Disables cacheops during the bulk write to avoid mid-migration cache
-    poisoning, then explicitly invalidates the affected models at end.
-    """
+    """Backfill BaseUserProfile rows from CustomUser.nickname / .avatar."""
     CustomUser = apps.get_model("app", "CustomUser")
     BaseUserProfile = apps.get_model("user", "BaseUserProfile")
-
-    # Clear any existing cacheops state. cache.clear() hits django-redis
-    # which hard-fails on connection errors (unlike cacheops, which degrades
-    # gracefully via CACHEOPS_DEGRADE_ON_FAILURE). Be defensive so cold-start
-    # CI or broken-Redis envs don't fail the migration.
-    try:
-        cache.clear()
-    except Exception:
-        pass
 
     to_create = []
     seen = set()
@@ -51,8 +37,7 @@ def reverse_copy(apps, schema_editor):
     """Reverse: copy BaseUserProfile nickname/avatar back onto CustomUser.
 
     Only used in tests / rollback. Production reverses by re-adding the
-    columns and re-running this reverse path; see migration 00XX in
-    backend/app/migrations/.
+    columns and re-running this reverse path; see app/0095.
     """
     CustomUser = apps.get_model("app", "CustomUser")
     BaseUserProfile = apps.get_model("user", "BaseUserProfile")

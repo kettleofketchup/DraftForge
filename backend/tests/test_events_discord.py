@@ -1,6 +1,7 @@
 """
 Test-only endpoints for Discord event lifecycle E2E testing.
 
+- discord_status: Whether the stack can post to Discord at all
 - simulate_discord_signup: Drives the full signup handler chain
 - verify_discord_messages: Reads back signup/announcement embeds from Discord
 """
@@ -53,6 +54,17 @@ def discord_auth_failure() -> Response | None:
     except requests.RequestException:
         return None
     return None
+
+
+@csrf_exempt
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def discord_status(request: Request) -> Response:
+    """TEST ONLY: whether this stack has a Discord bot token to post with."""
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+    return Response({"bot_token_configured": bool(settings.DISCORD_BOT_TOKEN)})
 
 
 @csrf_exempt

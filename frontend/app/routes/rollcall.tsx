@@ -52,7 +52,7 @@ import {
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
 import { canRestoreSignup } from '~/components/events/signupPartitions';
-import type { GameTypeValue } from '~/components/game/constants';
+import { toGameType } from '~/components/game/constants';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -83,10 +83,10 @@ import {
   useOptimisticEventSignups,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
+import { useProvideGameType } from '~/hooks/useGameType';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { cn } from '~/lib/utils';
-import { useGameTypeStore } from '~/store/gameTypeStore';
 
 export default function RollCallPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -99,7 +99,11 @@ export default function RollCallPage() {
     signups,
     pendingIds,
   } = useOptimisticEventSignups(id, event?.state);
-  useEventSignupUsers(serverSignups, event?.organization ?? null);
+  useEventSignupUsers(
+    serverSignups,
+    event?.organization ?? null,
+    toGameType(event?.game_type),
+  );
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
 
@@ -122,15 +126,7 @@ export default function RollCallPage() {
     eventOrgAccess,
   );
 
-  const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
-  useEffect(() => {
-    if (event?.game_type) {
-      setCurrentGameType(event.game_type as GameTypeValue);
-    }
-    return () => {
-      setCurrentGameType(null);
-    };
-  }, [event?.game_type, setCurrentGameType]);
+  useProvideGameType(event ? toGameType(event.game_type) : null);
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -478,7 +474,6 @@ export default function RollCallPage() {
         )}
       </div>
 
-      {/* MMR approval modal — shows the previously-approved MMR */}
       <MmrApprovalModal
         signup={approvalSignup}
         open={!!approvalSignup}
