@@ -135,6 +135,7 @@ import {
   useEventConduct,
   type ConductMemberLookup,
 } from '~/features/conduct';
+import { EventLeadershipBanner } from '~/features/leadership';
 import {
   invalidateConductQueries,
   removeFeatureQueries,
@@ -615,6 +616,8 @@ export default function EventPage() {
           </div>
         )}
       </div>
+
+      <EventLeadershipBanner event={event} access={eventOrgAccess} />
 
       <div>
         <Tabs value={activeTab} onValueChange={handleTabChange}>

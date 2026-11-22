@@ -1,5 +1,6 @@
 export { CaptainReviewDialog } from './CaptainReviewDialog';
 export { refusalCode, refusalMessage, refusalText } from './errors';
+export { EventLeadershipBanner } from './EventLeadershipBanner';
 export { LeadershipBanner, LeadershipDetail } from './LeadershipPanels';
 export { MemberLeadershipPanel } from './MemberLeadershipPanel';
 export { MyReviewsList } from './MyReviewsList';
