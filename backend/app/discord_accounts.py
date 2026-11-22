@@ -29,7 +29,11 @@ from draft.services.hero_chat import repoint_chat_attribution
 from events.ledger import SignupActor
 from events.merge import merge_user_signups
 from events.staff import dedupe_host_helpers
-from org.accounts import repoint_org_attribution
+from org.accounts import (
+    delete_counts,
+    merge_member_dependents,
+    repoint_org_attribution,
+)
 from org.mmr import merge_org_mmrs
 from org.models import OrgUser
 from org.promotion.services import demote_colliding_earning_sends
@@ -92,7 +96,8 @@ def _carry_over_game_profiles(keep: CustomUser, drop: _GameProfileSnapshot) -> N
     ):
         keep.has_active_dota_mmr = drop.has_active_dota_mmr
         keep.dota_mmr_last_verified = drop.dota_mmr_last_verified
-    deadlock = getattr(keep.base_profile, "deadlock_user_profile", None)
+    bp = getattr(keep, "base_profile", None)
+    deadlock = getattr(bp, "deadlock_user_profile", None) if bp else None
     if drop.deadlock_rank and deadlock is not None and not deadlock.rank:
         deadlock.rank = drop.deadlock_rank
         deadlock.rank_date = drop.deadlock_rank_date
@@ -104,15 +109,38 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
     """Fold ``drop`` into ``keep`` and delete ``drop``.
 
     Reassigns every reverse relation (FK and M2M) from ``drop`` to ``keep``,
-    including the Discord ``social_auth`` link. On a unique conflict (``keep``
-    already has the equivalent row) the duplicate row on ``drop`` is discarded
-    and logged as ``discord_merge_row_discarded``. Profile data ``keep`` lacks
-    (nickname, avatar, Discord names, positions, MMR verification, Deadlock
-    rank, Steam account) is copied from ``drop`` first.
+    including the Discord ``social_auth`` link. Rows on a shared org
+    membership (league memberships, event DMs, org game profiles) move to
+    ``keep``'s membership first. Every row deleted, with the rows its delete
+    cascades to, is logged as ``discord_merge_row_discarded``.
+
+    LEAD'S CALL, carryover policy: ``keep`` wins every conflict. Only profile
+    data ``keep`` lacks (nickname, avatar, Discord names, positions, MMR
+    verification, Deadlock rank, Steam account) is copied from ``drop``; a
+    conflicting league membership keeps the higher MMR. Other conflicting rows
+    are logged and discarded, not merged: steam.LeaguePlayerStats, app.Joke,
+    RepeaterSubscription, EventVoicePresence, ReadyCheckEntry,
+    ProfileClaimRequest and org game profiles (PlayerDotaProfile,
+    PlayerDeadlockProfile).
     ``keep`` is expected to be the account that already owns ``discordId``.
     """
     if keep.pk == drop.pk:
         return keep
+
+    def _discard(obj: Model, field_name: str | None = None) -> None:
+        pk = obj.pk
+        deleted = delete_counts(obj)
+        logger.info(
+            "discord_merge_row_discarded",
+            system="auth",
+            subsystem="merge",
+            model=obj._meta.label,
+            pk=pk,
+            field=field_name,
+            deleted=deleted,
+            kept_user_id=keep.pk,
+            dropped_user_id=drop.pk,
+        )
 
     def _repoint(obj: Model, field_name: str) -> None:
         """Move one related row to ``keep``; drop it if ``keep`` already has it.
@@ -134,17 +162,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             with transaction.atomic():
                 obj.save(update_fields=[field_name])
         except IntegrityError:
-            logger.info(
-                "discord_merge_row_discarded",
-                system="auth",
-                subsystem="merge",
-                model=obj._meta.label,
-                pk=obj.pk,
-                field=field_name,
-                kept_user_id=keep.pk,
-                dropped_user_id=drop.pk,
-            )
-            obj.delete()
+            _discard(obj, field_name)
 
     # Snapshot carryover values BEFORE the related-objects loop. The loop
     # walks the reverse-O2O to BaseUserProfile, hits an IntegrityError
@@ -180,8 +198,9 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
         standing.merge_users(drop, keep, member_pairs=pairs)
         repoint_org_attribution(drop, keep)
         repoint_chat_attribution(drop, keep)
-        for drop_ou, _ in pairs:
-            drop_ou.delete()
+        for drop_ou, keep_ou in pairs:
+            merge_member_dependents(drop_ou, keep_ou, discard=_discard)
+            _discard(drop_ou)
         demote_colliding_earning_sends(keep, drop)
         merge_user_signups(
             drop,

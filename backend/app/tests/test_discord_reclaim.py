@@ -6,7 +6,7 @@ creates an account carrying `discordId`, then a login created a duplicate and
 collided. See app/discord_accounts.py and app/pipelines.py.
 """
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from unittest import mock
 
 from django.test import TestCase
@@ -18,14 +18,23 @@ from app.discord_accounts import (
     find_split_discord_accounts,
     merge_discord_accounts,
 )
-from app.models import CustomUser, Joke
+from app.models import CustomUser, Joke, Team, Tournament
 from app.pipelines import associate_by_discord_id, save_discord
 from common.game import GameType
+from discordbot.models import DiscordEvent, DiscordEventDM, DMType
 from events.constants import EventState, SignupAction, SignupStatus
 from events.ledger import ActorRole, SignupMeans
 from events.models import Event, EventSignup, SignupLedgerEntry
+from league.models import League, LeagueUser
 from org.contributions.kinds import ContributionKind
-from org.models import ContributionEntry, Organization, OrgUser, OrgUserGameMmr
+from org.models import (
+    ContributionEntry,
+    Organization,
+    OrgUser,
+    OrgUserGameMmr,
+    PlayerDotaProfile,
+)
+from user.models import BaseUserProfile, DeadlockUserProfile, DotaUserProfile
 
 DISCORD_ID = "555000111222333444"
 
@@ -460,6 +469,202 @@ class MergeDiscardedRowsTest(TestCase):
             if c.args and c.args[0] == "discord_accounts_merged"
         ]
         self.assertEqual(merged["dropped_steam_account_id"], 222)
+
+
+def _discarded(spy: mock.MagicMock) -> list[dict]:
+    return [
+        c.kwargs
+        for c in spy.info.call_args_list
+        if c.args and c.args[0] == "discord_merge_row_discarded"
+    ]
+
+
+class MergeOrgMemberDependentsTest(TestCase):
+    """Rows hanging off the dropped account's org membership move to the kept
+    membership instead of cascading away with it."""
+
+    def setUp(self) -> None:
+        self.admin = CustomUser.objects.create(username="dep_admin")
+        self.org = Organization.objects.create(name="Dep Org", owner=self.admin)
+        self.league = League.objects.create(name="Dep League", organization=self.org)
+        self.keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        self.drop = CustomUser.objects.create(username="loginrow")
+        _social(self.drop)
+        self.keep_ou = OrgUser.objects.create(user=self.keep, organization=self.org)
+        self.drop_ou = OrgUser.objects.create(user=self.drop, organization=self.org)
+
+    def _team_with(self, lu: LeagueUser) -> Team:
+        tournament = Tournament.objects.create(
+            name="Dep Cup",
+            date_played=datetime(2026, 11, 14, tzinfo=UTC),
+            league=self.league,
+        )
+        team = Team.objects.create(tournament=tournament, name="Dep Team")
+        team.league_users.add(lu)
+        return team
+
+    def test_league_membership_moves_when_kept_account_has_none(self) -> None:
+        lu = LeagueUser.objects.create(
+            user=self.drop, org_user=self.drop_ou, league=self.league, mmr=4200
+        )
+
+        merge_discord_accounts(keep=self.keep, drop=self.drop)
+
+        moved = LeagueUser.objects.nocache().get(pk=lu.pk)
+        self.assertEqual(
+            (moved.user_id, moved.org_user_id, moved.mmr),
+            (self.keep.pk, self.keep_ou.pk, 4200),
+        )
+
+    def test_conflicting_league_membership_keeps_higher_mmr_and_teams(self) -> None:
+        existing = LeagueUser.objects.create(
+            user=self.keep, org_user=self.keep_ou, league=self.league, mmr=3000
+        )
+        lu = LeagueUser.objects.create(
+            user=self.drop, org_user=self.drop_ou, league=self.league, mmr=4200
+        )
+        team = self._team_with(lu)
+
+        with mock.patch("app.discord_accounts.logger") as spy:
+            merge_discord_accounts(keep=self.keep, drop=self.drop)
+
+        self.assertEqual(LeagueUser.objects.nocache().get(pk=existing.pk).mmr, 4200)
+        self.assertFalse(LeagueUser.objects.nocache().filter(pk=lu.pk).exists())
+        self.assertEqual(
+            list(team.league_users.values_list("pk", flat=True)), [existing.pk]
+        )
+        [row] = [r for r in _discarded(spy) if r["model"] == "league.LeagueUser"]
+        self.assertEqual(row["pk"], lu.pk)
+
+    def test_conflicting_league_membership_keeps_existing_higher_mmr(self) -> None:
+        existing = LeagueUser.objects.create(
+            user=self.keep, org_user=self.keep_ou, league=self.league, mmr=5000
+        )
+        LeagueUser.objects.create(
+            user=self.drop, org_user=self.drop_ou, league=self.league, mmr=4200
+        )
+
+        merge_discord_accounts(keep=self.keep, drop=self.drop)
+
+        self.assertEqual(LeagueUser.objects.nocache().get(pk=existing.pk).mmr, 5000)
+
+    def test_event_dms_move_to_kept_membership(self) -> None:
+        event = Event.objects.create(
+            organization=self.org,
+            name="Dep Event",
+            scheduled_at=tz.now() + timedelta(days=3),
+            state=EventState.SIGNUPS_OPEN,
+            created_by=self.admin,
+        )
+        de = DiscordEvent.objects.create(event=event, guild_id="111")
+        dm = DiscordEventDM.objects.create(
+            discord_event=de,
+            org_user=self.drop_ou,
+            dm_type=DMType.ATTENDANCE_CONFIRM,
+            responded=True,
+            response_text="see you there",
+        )
+
+        merge_discord_accounts(keep=self.keep, drop=self.drop)
+
+        kept = DiscordEventDM.objects.nocache().get(pk=dm.pk)
+        self.assertEqual(
+            (kept.org_user_id, kept.response_text),
+            (self.keep_ou.pk, "see you there"),
+        )
+
+    def test_org_game_profile_moves_when_kept_membership_has_none(self) -> None:
+        profile = PlayerDotaProfile.objects.create(
+            org_user=self.drop_ou, rank_medal="Legend"
+        )
+
+        merge_discord_accounts(keep=self.keep, drop=self.drop)
+
+        self.assertEqual(
+            PlayerDotaProfile.objects.nocache().get(pk=profile.pk).org_user_id,
+            self.keep_ou.pk,
+        )
+
+    def test_conflicting_org_game_profile_is_logged(self) -> None:
+        kept = PlayerDotaProfile.objects.create(
+            org_user=self.keep_ou, rank_medal="Archon"
+        )
+        dropped = PlayerDotaProfile.objects.create(
+            org_user=self.drop_ou, rank_medal="Legend"
+        )
+
+        with mock.patch("app.discord_accounts.logger") as spy:
+            merge_discord_accounts(keep=self.keep, drop=self.drop)
+
+        self.assertEqual(
+            PlayerDotaProfile.objects.nocache().get(org_user=self.keep_ou).pk, kept.pk
+        )
+        [row] = [r for r in _discarded(spy) if r["model"] == "org.PlayerDotaProfile"]
+        self.assertEqual(row["pk"], dropped.pk)
+
+    def test_merged_membership_deletion_is_logged_with_cascades(self) -> None:
+        OrgUserGameMmr.objects.create(
+            org_user=self.keep_ou, game_type=GameType.DOTA2, mmr=5000
+        )
+        OrgUserGameMmr.objects.create(
+            org_user=self.drop_ou, game_type=GameType.DOTA2, mmr=4000
+        )
+
+        with mock.patch("app.discord_accounts.logger") as spy:
+            merge_discord_accounts(keep=self.keep, drop=self.drop)
+
+        [row] = [r for r in _discarded(spy) if r["model"] == "org.OrgUser"]
+        self.assertEqual(row["pk"], self.drop_ou.pk)
+        self.assertEqual(row["deleted"]["org.OrgUserGameMmr"], 1)
+
+    def test_discarded_base_profile_reports_its_game_profiles(self) -> None:
+        with mock.patch("app.discord_accounts.logger") as spy:
+            merge_discord_accounts(keep=self.keep, drop=self.drop)
+
+        [row] = [r for r in _discarded(spy) if r["model"] == "user.BaseUserProfile"]
+        self.assertEqual(row["deleted"]["user.DotaUserProfile"], 1)
+        self.assertEqual(row["deleted"]["user.DeadlockUserProfile"], 1)
+
+
+class MergeProfileCarryoverCoverageTest(TestCase):
+    """A field added to a user profile model must get merge carryover handling
+    in app/discord_accounts.py, or be listed here as deliberately dropped."""
+
+    def _fields(self, model: type) -> set[str]:
+        return {f.name for f in model._meta.concrete_fields}
+
+    def test_profile_fields_are_covered(self) -> None:
+        self.assertEqual(
+            self._fields(BaseUserProfile), {"id", "user", "nickname", "avatar"}
+        )
+        self.assertEqual(
+            self._fields(DotaUserProfile),
+            {
+                "id",
+                "base_profile",
+                "positions",
+                "has_active_dota_mmr",
+                "dota_mmr_last_verified",
+            },
+        )
+        self.assertEqual(
+            self._fields(DeadlockUserProfile),
+            {"id", "base_profile", "rank", "rank_date"},
+        )
+
+
+class MergeWithoutBaseProfileTest(TestCase):
+    def test_merge_succeeds_when_neither_account_has_a_base_profile(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        BaseUserProfile.objects.filter(user__in=[keep, drop]).delete()
+        keep = CustomUser.objects.nocache().get(pk=keep.pk)
+        drop = CustomUser.objects.nocache().get(pk=drop.pk)
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        self.assertFalse(CustomUser.objects.nocache().filter(pk=drop.pk).exists())
 
 
 class GetOrgUserPhantomGuardTest(TestCase):
