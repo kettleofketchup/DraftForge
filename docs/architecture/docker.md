@@ -306,7 +306,7 @@ just docker::release::push
 Two workflows use hash tagging:
 
 - **`build-docker-images.yml`** — Triggers on push to `main` when Dockerfiles or lock files change. Builds and pushes hash-tagged images.
-- **`playwright.yml`** — Pulls images by hash before running tests. Falls back to building if no image matches.
+- **`playwright.yml`** — Pulls images by hash before running tests. Falls back to building if no image matches. Test jobs start the image and test-DB pulls (`just ci::prefetch-start`) right after the registry login, while Python, Node and Playwright install, and join them with `just ci::prefetch-wait images|db`. They skip the buildx builder; a fallback rebuild boots one with `just ci::buildx-builder`.
 
 ### Build Timing
 
