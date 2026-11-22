@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
 import {
   afterEach,
   beforeAll,
@@ -11,6 +12,7 @@ import {
   it,
   vi,
 } from 'vitest';
+import { getEvents } from '~/components/api/eventsAPI';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
@@ -139,9 +141,11 @@ function entry(pk: number, kind: AdminEntry['kind']): AdminEntry {
 function renderTab(access: OrgFeatureAccess, timeZone = 'UTC') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>
-      <TooltipProvider>{children}</TooltipProvider>
-    </QueryClientProvider>
+    <MemoryRouter>
+      <QueryClientProvider client={qc}>
+        <TooltipProvider>{children}</TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>
   );
   return render(
     <ContributionsAdmin orgId={7} timeZone={timeZone} access={access} />,
@@ -355,6 +359,34 @@ describe('contributions admin section', () => {
         date: '2026-10-31',
         event_id: null,
       }),
+    );
+  });
+
+  it('labels event options with their date in the org timezone', async () => {
+    vi.mocked(getEvents).mockResolvedValue([
+      {
+        id: 5,
+        name: 'Sunday Turbo Tournament',
+        scheduled_at: '2026-11-22T01:00:00Z',
+      },
+    ] as Awaited<ReturnType<typeof getEvents>>);
+    vi.mocked(getEntries).mockResolvedValue({
+      count: 1,
+      limit: 50,
+      offset: 0,
+      results: [
+        {
+          ...entry(31, 'manual'),
+          event: { id: 5, name: 'Sunday Turbo Tournament' },
+        },
+      ],
+    });
+    renderTab(admin, 'America/Chicago');
+    fireEvent.click(await screen.findByTestId('ledger-edit-31'));
+    await waitFor(() =>
+      expect(screen.getByTestId('manual-award-edit-event')).toHaveTextContent(
+        'Sunday Turbo Tournament · Nov 21, 2026',
+      ),
     );
   });
 
