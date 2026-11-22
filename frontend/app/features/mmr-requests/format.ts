@@ -8,6 +8,10 @@ export function formatMmrDate(iso: string | null | undefined): string | null {
   return Number.isNaN(date.getTime()) ? null : format(date, 'd MMM yyyy');
 }
 
+export function withPendingCount(label: string, count: number): string {
+  return count > 0 ? `${label} (${count})` : label;
+}
+
 export function requestTargetLabel(request: MmrChangeRequest): string {
   return request.target === 'org'
     ? `Org MMR · ${GAME_LABEL[toGameType(request.game_type)]}`

@@ -75,6 +75,13 @@ describe('MmrRequestsTab', () => {
     );
   });
 
+  it('shows the pending count in the mobile status picker', async () => {
+    await renderTab();
+    await waitFor(() =>
+      expect(screen.getAllByText('Pending (1)').length).toBeGreaterThan(0),
+    );
+  });
+
   it('approves an adjusted large change after a second confirm', async () => {
     await renderTab();
     fireEvent.click(screen.getByTestId('mmr-approve-btn-77'));

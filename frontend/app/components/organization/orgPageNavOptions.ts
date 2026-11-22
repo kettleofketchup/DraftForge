@@ -1,3 +1,4 @@
+import { withPendingCount } from '~/features/mmr-requests/format';
 import type { PageNavOption } from '~/store/pageNavStore';
 
 export interface OrgPageNavInput {
@@ -9,6 +10,7 @@ export interface OrgPageNavInput {
   canUsePromotion: boolean;
   canViewClaims: boolean;
   canReviewMmr: boolean;
+  mmrPendingCount: number;
 }
 
 // Mobile page-nav entries; must match the desktop TabsList gates.
@@ -32,7 +34,10 @@ export function buildOrgPageNavOptions(
     opts.push({ value: 'claims', label: 'Claims' });
   }
   if (input.canReviewMmr) {
-    opts.push({ value: 'mmr-requests', label: 'MMR requests' });
+    opts.push({
+      value: 'mmr-requests',
+      label: withPendingCount('MMR requests', input.mmrPendingCount),
+    });
   }
   return opts;
 }

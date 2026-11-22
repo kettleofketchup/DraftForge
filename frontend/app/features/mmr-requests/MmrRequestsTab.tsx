@@ -6,6 +6,7 @@ import { SecondaryButton } from '~/components/ui/buttons';
 import { MobileNavDropdown } from '~/components/ui/mobile-nav-dropdown';
 import { Spinner } from '~/components/ui/spinner';
 import { Tabs, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { withPendingCount } from './format';
 import { MmrRequestCard } from './MmrRequestCard';
 import { useMmrPendingCount, useMmrQueue } from './queries';
 import type { MmrScope } from './queryKeys';
@@ -31,6 +32,11 @@ export function MmrRequestsTab({ scope }: MmrRequestsTabProps) {
   const queue = useMmrQueue(scope, status);
   const pendingCount = useMmrPendingCount(scope).data?.count ?? 0;
   const rows = queue.data ?? [];
+  const mobileOptions = STATUS_OPTIONS.map((option) =>
+    option.value === 'pending'
+      ? { ...option, label: withPendingCount(option.label, pendingCount) }
+      : option,
+  );
   const label =
     STATUS_OPTIONS.find((o) => o.value === status)?.label.toLowerCase() ?? '';
 
@@ -53,7 +59,7 @@ export function MmrRequestsTab({ scope }: MmrRequestsTabProps) {
         onValueChange={(v) => setStatus(v as MmrQueueStatus)}
       >
         <MobileNavDropdown
-          options={STATUS_OPTIONS}
+          options={mobileOptions}
           value={status}
           onValueChange={(v) => setStatus(v as MmrQueueStatus)}
           variant="secondary"

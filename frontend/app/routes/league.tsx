@@ -50,6 +50,7 @@ import {
   EntityBreadcrumb,
   type BreadcrumbSegment,
 } from '~/components/ui/entity-breadcrumb';
+import { useMmrPendingCount, withPendingCount } from '~/features/mmr-requests';
 import { useProvideGameType } from '~/hooks/useGameType';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { usePageNav } from '~/hooks/usePageNav';
@@ -144,6 +145,9 @@ export default function LeaguePage() {
       ? currentOrg
       : null;
   const canReviewMmr = useIsLeagueStaff(league, leagueOrg);
+  const mmrPendingCount =
+    useMmrPendingCount({ league: pk ?? 0 }, canReviewMmr && !!pk).data?.count ??
+    0;
 
   const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
     if (!league) return [];
@@ -185,10 +189,21 @@ export default function LeaguePage() {
         : []),
       { value: 'matches', label: 'Matches' },
       ...(canReviewMmr
-        ? [{ value: 'mmr-requests', label: 'MMR requests' }]
+        ? [
+            {
+              value: 'mmr-requests',
+              label: withPendingCount('MMR requests', mmrPendingCount),
+            },
+          ]
         : []),
     ],
-    [leagueTournaments.length, userCountDisplay, canViewMembers, canReviewMmr],
+    [
+      leagueTournaments.length,
+      userCountDisplay,
+      canViewMembers,
+      canReviewMmr,
+      mmrPendingCount,
+    ],
   );
 
   usePageNav(league ? pageNavOptions : null, activeTab, handleTabChange);

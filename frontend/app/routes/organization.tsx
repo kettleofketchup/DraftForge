@@ -360,6 +360,7 @@ export default function OrganizationDetailPage() {
         canUsePromotion,
         canViewClaims,
         canReviewMmr,
+        mmrPendingCount,
       }),
     [
       leagues.length,
@@ -370,6 +371,7 @@ export default function OrganizationDetailPage() {
       canUsePromotion,
       canViewClaims,
       canReviewMmr,
+      mmrPendingCount,
     ],
   );
 

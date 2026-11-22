@@ -1,4 +1,5 @@
 export * from './api';
+export { withPendingCount } from './format';
 export { MmrRequestCard, type MmrRequestCardProps } from './MmrRequestCard';
 export { MmrRequestsTab, type MmrRequestsTabProps } from './MmrRequestsTab';
 export { MmrStatusBadge, type MmrStatusBadgeProps } from './MmrStatusBadge';
