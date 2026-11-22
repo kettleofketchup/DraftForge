@@ -6,6 +6,11 @@ from typing import TYPE_CHECKING, Any
 import requests
 
 from app.internal_client import transport
+from discordbot.schemas import (
+    DiscordEventStateSchema,
+    MessageLogSchema,
+    SyncDiscordStateSchema,
+)
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -119,7 +124,6 @@ def check_message_log_exists(source: str, source_id: int) -> bool:
 
 def search_message_logs(**params: Any) -> list["MessageLogSchema"]:
     """Search DiscordMessageLog entries. Returns list of MessageLogEntry."""
-    from discordbot.schemas import MessageLogSchema
 
     resp = transport.get("/discord/message-logs/", params)
     if resp and resp.ok:
@@ -250,7 +254,6 @@ def update_event_dm(pk: int, **data: Any) -> requests.Response | None:
 
 def get_sync_discord_state() -> "SyncDiscordStateSchema | None":
     """Get bulk Discord sync state. Returns SyncDiscordState or None."""
-    from discordbot.schemas import SyncDiscordStateSchema
 
     resp = transport.get("/discord/sync-state/")
     if resp and resp.ok:
@@ -260,7 +263,6 @@ def get_sync_discord_state() -> "SyncDiscordStateSchema | None":
 
 def get_discord_event_state(event_id: int) -> "DiscordEventStateSchema | None":
     """Get Discord event state. Returns DiscordEventState or None."""
-    from discordbot.schemas import DiscordEventStateSchema
 
     resp = transport.get(f"/discord/event-state/{event_id}/")
     if resp and resp.ok:

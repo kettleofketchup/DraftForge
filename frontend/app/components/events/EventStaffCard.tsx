@@ -1,17 +1,13 @@
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Crown, UserPlus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import type {
-  AddMemberPayload,
-  DiscordSearchResult,
-  SearchUserResult,
-} from '~/components/api/api';
+import type { AddMemberPayload } from '~/components/api/api';
 import type { EventStaffUser, EventType } from '~/components/events/schemas';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
-import { AddUserModal } from '~/components/user/AddUserModal';
+import { AddUserModal, findSearchedUser } from '~/components/user/AddUserModal';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -48,43 +44,6 @@ function staffKey(state: StaffState): string {
     state.host?.pk ?? null,
     state.helpers.map((h) => h.pk).sort((a, b) => a - b),
   ]);
-}
-
-function findSearchedUser(
-  queryClient: QueryClient,
-  pk: number,
-): EventStaffUser | null {
-  for (const [, results] of queryClient.getQueriesData<SearchUserResult[]>({
-    queryKey: ['userSearch'],
-  })) {
-    const match = results?.find((u) => u.pk === pk);
-    if (match) {
-      return {
-        pk,
-        username: match.username ?? `User #${pk}`,
-        nickname: match.nickname ?? null,
-        avatarUrl: match.avatarUrl ?? null,
-      };
-    }
-  }
-  for (const [, results] of queryClient.getQueriesData<DiscordSearchResult[]>({
-    queryKey: ['discordSearch'],
-  })) {
-    const member = results?.find((m) => m.site_user_pk === pk);
-    if (member) {
-      return {
-        pk,
-        username: member.user.username,
-        nickname: null,
-        discordNickname: member.user.global_name ?? null,
-        guildNickname: member.nick ?? null,
-        avatarUrl: member.user.avatar
-          ? `https://cdn.discordapp.com/avatars/${member.user.id}/${member.user.avatar}`
-          : null,
-      };
-    }
-  }
-  return null;
 }
 
 function logSaveFailure(eventId: number, err: unknown): void {

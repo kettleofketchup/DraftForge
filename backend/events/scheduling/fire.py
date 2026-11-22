@@ -25,6 +25,7 @@ from celery import current_app
 from dateutil.parser import isoparse
 from django.utils import timezone
 
+from app.internal_client import check_message_log_exists, get_events_list
 from events.scheduling.registry import REMINDERS, ScheduledReminder
 
 
@@ -33,7 +34,6 @@ def fire_due_reminders() -> str:
 
     Returns a status string for celery worker logs.
     """
-    from app.internal_client import check_message_log_exists, get_events_list
 
     now = timezone.now()
     dispatched = 0

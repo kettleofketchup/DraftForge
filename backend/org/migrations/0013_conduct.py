@@ -11,7 +11,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("app", "0110_orglog_conduct_actions"),
-        ("events", "0034_event_conduct_finalized_at"),
+        ("events", "0001_squashed_0034"),
         ("org", "0012_merge_orgsettings_rank_declared_at"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
