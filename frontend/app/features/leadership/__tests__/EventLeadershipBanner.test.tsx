@@ -130,5 +130,9 @@ describe('EventLeadershipBanner', () => {
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith('Review saved'),
     );
+    await waitFor(() =>
+      expect(screen.queryByTestId('leadership-review-dialog')).toBeNull(),
+    );
+    expect(view.container).toBeEmptyDOMElement();
   });
 });

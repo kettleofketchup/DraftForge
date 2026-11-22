@@ -14,11 +14,10 @@ export function EventLeadershipBanner({
   access,
 }: EventLeadershipBannerProps) {
   const pending = (event.pending_captain_reviews ?? 0) > 0;
-  // Stays mounted once shown: a submit refetches the event to 0 pending while
-  // the dialog still has to show its toast or refusal.
-  const [shown, setShown] = useState(pending);
-  if (pending && !shown) setShown(true);
-  if (!leadershipAccess(access).member || !(pending || shown)) return null;
+  // A submit refetches the event to 0 pending while the dialog still has to
+  // show its toast or refusal, so stay mounted until it closes.
+  const [dialogOpen, setDialogOpen] = useState(false);
+  if (!leadershipAccess(access).member || !(pending || dialogOpen)) return null;
   return (
     <PendingReviewsCard
       orgId={event.organization}
@@ -26,6 +25,7 @@ export function EventLeadershipBanner({
       eventId={event.id}
       testIdPrefix="event-leadership"
       className="mb-4"
+      onDialogOpenChange={setDialogOpen}
     />
   );
 }

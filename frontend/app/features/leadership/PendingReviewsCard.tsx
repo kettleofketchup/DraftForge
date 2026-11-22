@@ -28,6 +28,7 @@ export interface PendingReviewsCardProps {
   eventId?: number | null;
   testIdPrefix?: string;
   className?: string;
+  onDialogOpenChange?: (open: boolean) => void;
 }
 
 export function pendingCount(items: PendingReview[]): number {
@@ -110,6 +111,7 @@ export function PendingReviewsCard({
   eventId = null,
   testIdPrefix = 'leadership-pending',
   className,
+  onDialogOpenChange,
 }: PendingReviewsCardProps) {
   const { data, isError, error } = usePendingReviews(orgId, access, eventId);
   const [openItem, setOpenItem] = useState<PendingReview | null>(null);
@@ -134,7 +136,9 @@ export function PendingReviewsCard({
       review={opened}
       open
       onOpenChange={(open) => {
-        if (!open) setOpenItem(null);
+        if (open) return;
+        setOpenItem(null);
+        onDialogOpenChange?.(false);
       }}
     />
   );
@@ -170,7 +174,10 @@ export function PendingReviewsCard({
                   key={itemKey(item)}
                   item={item}
                   prefix={testIdPrefix}
-                  onOpen={() => setOpenItem(item)}
+                  onOpen={() => {
+                    setOpenItem(item);
+                    onDialogOpenChange?.(true);
+                  }}
                 />
               ))}
             </ul>
