@@ -8,7 +8,9 @@ the next read gets the defaults), feature switches, role membership, org
 memberships (non-seeded OrgUsers are deleted), the seeded tournaments (non-seeded
 ones in the features leagues are deleted), org name and timezone, and the
 conduct seed (finalized attendance outcomes on completed events, conduct
-settings deleted, approved signups on the forecast event).
+settings deleted, approved signups on the forecast event), and the leadership
+seed (tournament 264 and a completed event with one released and one open
+captain snapshot; traits and leadership settings deleted).
 org_features_test_data is the lookup the specs read.
 """
 
@@ -64,9 +66,8 @@ from tests.data.org_features import (
     ORG_FEATURES_CONDUCT_RANKED,
     ORG_FEATURES_CONDUCT_SIGNUPS,
     ORG_FEATURES_LEADERSHIP_EVENT_NAME,
-    ORG_FEATURES_LEADERSHIP_REVIEWS,
     ORG_FEATURES_LEADERSHIP_TEAMS,
-    ORG_FEATURES_LEADERSHIP_TOURNAMENT_PK,
+    ORG_FEATURES_LEADERSHIP_TOURNAMENT,
     ORG_FEATURES_MANUAL_AWARDS,
     ORG_FEATURES_MEMBERS,
     ORG_FEATURES_ORG_LEAGUES,
@@ -351,7 +352,18 @@ def _seed_conduct(
 def _seed_leadership(
     org: Organization, users: dict[int, CustomUser], now: datetime
 ) -> None:
-    start = now - timedelta(hours=6)
+    admin = users[OF_ADMIN.pk]
+    pk, name = ORG_FEATURES_LEADERSHIP_TOURNAMENT
+    # Dated before the seeded cups so it stays out of the promotion pool window.
+    tournament = Tournament.objects.create(
+        pk=pk,
+        name=name,
+        league_id=FEATURES_LEAGUE.pk,
+        date_played=now - timedelta(days=60),
+        state="past",
+        tournament_type="double_elimination",
+    )
+    start = now - timedelta(days=1)
     event = Event.objects.create(
         organization=org,
         name=ORG_FEATURES_LEADERSHIP_EVENT_NAME,
@@ -359,49 +371,50 @@ def _seed_leadership(
         scheduled_at=start,
         ends_at=start + timedelta(hours=3),
         state=EventState.COMPLETED,
-        created_by=users[OF_ADMIN.pk],
-        tournament_id=ORG_FEATURES_LEADERSHIP_TOURNAMENT_PK,
+        created_by=admin,
+        tournament=tournament,
+        conduct_finalized_at=now,
     )
-    for name, captain, mates, placement in ORG_FEATURES_LEADERSHIP_TEAMS:
-        team = Team.objects.create(
-            tournament_id=ORG_FEATURES_LEADERSHIP_TOURNAMENT_PK,
-            name=name,
-            captain=users[captain.pk],
-            placement=placement,
-        )
-        team.members.set([users[u.pk] for u in [captain, *mates]])
-        for member in [captain, *mates]:
-            EventSignup.objects.create(
-                event=event, user=users[member.pk], status=SignupStatus.APPROVED
-            )
     org_users = {
         ou.user_id: ou for ou in OrgUser.objects.nocache().filter(organization=org)
     }
-    AttendanceOutcome.objects.bulk_create(
-        _outcome_row(
-            org,
-            org_users[member.pk],
-            event,
-            Outcome.ATTENDED,
-            admin=users[OF_ADMIN.pk],
-            now=now,
+    for team_name, captain, members, placement, _, _ in ORG_FEATURES_LEADERSHIP_TEAMS:
+        roster = [captain, *members]
+        team = Team.objects.create(
+            tournament=tournament,
+            name=team_name,
+            captain=users[captain.pk],
+            placement=placement,
         )
-        for _, captain, mates, _ in ORG_FEATURES_LEADERSHIP_TEAMS
-        for member in [captain, *mates]
-    )
-    Event.objects.nocache().filter(pk=event.pk).update(conduct_finalized_at=now)
+        team.members.set([users[u.pk] for u in roster])
+        EventSignup.objects.bulk_create(
+            EventSignup(event=event, user=users[u.pk], status=SignupStatus.APPROVED)
+            for u in roster
+        )
+        AttendanceOutcome.objects.bulk_create(
+            _outcome_row(
+                org, org_users[u.pk], event, Outcome.ATTENDED, admin=admin, now=now
+            )
+            for u in roster
+        )
     snapshot_event(event, now=now)
     materialize_traits(org)
     keys = [t.key for t in effective_traits(org) if t.active]
-    for rater, captain, score in ORG_FEATURES_LEADERSHIP_REVIEWS:
-        submit_review(
-            org,
-            event_id=event.pk,
-            captain_org_user_id=org_users[captain.pk].pk,
-            rater=org_users[rater.pk],
-            scores=dict.fromkeys(keys, score),
-            now=now,
-        )
+    for _, captain, _, _, window_open, reviews in ORG_FEATURES_LEADERSHIP_TEAMS:
+        captain_pk = org_users[captain.pk].pk
+        for rater, score in reviews:
+            submit_review(
+                org,
+                event_id=event.pk,
+                captain_org_user_id=captain_pk,
+                rater=org_users[rater.pk],
+                scores=dict.fromkeys(keys, score),
+                now=now,
+            )
+        if not window_open:
+            EventCaptain.objects.nocache().filter(
+                event=event, captain_id=captain_pk
+            ).update(window_closes_at=now - timedelta(hours=1))
 
 
 @transaction.atomic
@@ -414,10 +427,6 @@ def _rebuild() -> list[Organization]:
     OrgConductSettings.objects.nocache().filter(organization__in=org_pks).delete()
     EventCaptain.objects.nocache().filter(organization__in=org_pks).delete()
     OrgLeadershipSettings.objects.nocache().filter(organization__in=org_pks).delete()
-    Team.objects.nocache().filter(
-        tournament_id=ORG_FEATURES_LEADERSHIP_TOURNAMENT_PK,
-        name__in=[name for name, _, _, _ in ORG_FEATURES_LEADERSHIP_TEAMS],
-    ).delete()
     ContributionEntry.objects.nocache().filter(organization__in=org_pks).delete()
     PromoSend.objects.nocache().filter(organization__in=org_pks).delete()
     ContributionPointValue.objects.nocache().filter(organization__in=org_pks).delete()
@@ -506,18 +515,15 @@ def _leadership_payload(org: Organization) -> dict[str, Any]:
     org_user_pks = dict(
         OrgUser.objects.nocache().filter(organization=org).values_list("user_id", "pk")
     )
+    captains = {
+        window_open: org_user_pks[captain.pk]
+        for _, captain, _, _, window_open, _ in ORG_FEATURES_LEADERSHIP_TEAMS
+    }
     return {
-        "event": _event_payload(org, ORG_FEATURES_LEADERSHIP_EVENT_NAME),
-        "teams": [
-            {
-                "name": name,
-                "captain_org_user_pk": org_user_pks[captain.pk],
-                "captain_user_pk": captain.pk,
-                "teammate_user_pks": [m.pk for m in mates],
-            }
-            for name, captain, mates, _ in ORG_FEATURES_LEADERSHIP_TEAMS
-        ],
-        "reviewed_by_user_pks": [r.pk for r, _, _ in ORG_FEATURES_LEADERSHIP_REVIEWS],
+        "event_pk": _event_payload(org, ORG_FEATURES_LEADERSHIP_EVENT_NAME)["pk"],
+        "released_captain_org_user_pk": captains[False],
+        "open_captain_org_user_pk": captains[True],
+        "pending_rater_role": "promoter",
     }
 
 

@@ -15,6 +15,8 @@ Users (pk 7300-7399):
   7305 outsider (no org), 7306 owner/admin of org 41,
   7307 member of org 42.
 - 7310-7319 Discord-linked players of the past tournaments 260-263 in org 40.
+
+Tournament 264 holds the leadership event's captained teams.
 """
 
 from typing import Final
@@ -184,25 +186,37 @@ ORG_FEATURES_CONDUCT_NEW_MEMBER: Final[TestUser] = ORG_FEATURES_PLAYERS[9]
 # Approved on the forecast event.
 ORG_FEATURES_CONDUCT_SIGNUPS: Final[list[TestUser]] = ORG_FEATURES_PLAYERS[0:6]
 
-# Leadership seed: a completed event on Features Cup 4 with two captained teams.
-ORG_FEATURES_LEADERSHIP_EVENT_NAME: Final[str] = "Features Leadership Event"
-ORG_FEATURES_LEADERSHIP_TOURNAMENT_PK: Final[int] = 263
-# (team name, captain, teammates, placement)
+# Leadership seed: a completed event with two captained teams, one past its
+# review window (released rating) and one still open (promoter yet to rate).
+ORG_FEATURES_LEADERSHIP_EVENT_NAME: Final = "Features Leadership Event"
+ORG_FEATURES_LEADERSHIP_TOURNAMENT: Final[tuple[int, str]] = (
+    264,
+    "Features Leadership Cup",
+)
+# (team name, captain, members, placement, window_open, [(rater, score)])
 ORG_FEATURES_LEADERSHIP_TEAMS: Final[
-    list[tuple[str, TestUser, list[TestUser], int]]
+    list[tuple[str, TestUser, list[TestUser], int, bool, list[tuple[TestUser, int]]]]
 ] = [
-    ("Leadership Radiant", ORG_FEATURES_PLAYERS[4], ORG_FEATURES_PLAYERS[5:8], 1),
     (
-        "Leadership Dire",
-        ORG_FEATURES_PLAYERS[8],
-        [ORG_FEATURES_PLAYERS[3]],
-        2,
+        "Leaders Released",
+        OF_MEMBER,
+        ORG_FEATURES_PLAYERS[0:3],
+        1,
+        False,
+        [
+            (ORG_FEATURES_PLAYERS[0], 5),
+            (ORG_FEATURES_PLAYERS[1], 4),
+            (ORG_FEATURES_PLAYERS[2], 4),
+        ],
     ),
-]
-# (rater, captain, score on every trait); players[7] and players[3] are left to rate.
-ORG_FEATURES_LEADERSHIP_REVIEWS: Final[list[tuple[TestUser, TestUser, int]]] = [
-    (ORG_FEATURES_PLAYERS[5], ORG_FEATURES_PLAYERS[4], 5),
-    (ORG_FEATURES_PLAYERS[6], ORG_FEATURES_PLAYERS[4], 4),
+    (
+        "Leaders Open",
+        ORG_FEATURES_PLAYERS[4],
+        [OF_PROMOTER, *ORG_FEATURES_PLAYERS[5:7]],
+        2,
+        True,
+        [(ORG_FEATURES_PLAYERS[5], 3)],
+    ),
 ]
 
 ORG_FEATURES_TEMPLATES: Final[list[tuple[str, str]]] = [

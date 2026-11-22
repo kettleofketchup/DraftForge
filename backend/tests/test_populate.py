@@ -22,6 +22,7 @@ from org.conduct.constants import Outcome
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry, set_point_value
 from org.features import FeatureKey, org_has_feature, set_org_feature
+from org.leadership.kinds import LeadershipKind
 from org.models import (
     ContributionEntry,
     ContributionPointValue,
@@ -31,7 +32,7 @@ from org.models import (
     PromoSend,
 )
 from org.models_conduct import AttendanceOutcome
-from org.models_leadership import CaptainReview, EventCaptain
+from org.models_leadership import CaptainReview, CaptainTrait, EventCaptain
 from org.models_promotion import PromoTemplate
 from org.promotion.recipients import candidates
 from org.promotion.services import record_promo_send
@@ -380,26 +381,91 @@ class OrgFeaturesPopulateTest(TestCase):
         self.assertGreaterEqual(len(rows), 5)
         self.assertTrue(all(r["discordId"] for r in rows))
 
-    def test_leadership_seeded(self) -> None:
+    def test_leadership_seed(self) -> None:
         data = reset_org_features_data()
         leadership = data["leadership"]
-        snaps = EventCaptain.objects.filter(event_id=leadership["event"]["pk"])
+        self.assertEqual(leadership["pending_rater_role"], "promoter")
+        snaps = {
+            s.captain_id: s
+            for s in EventCaptain.objects.nocache().filter(
+                event_id=leadership["event_pk"]
+            )
+        }
+        released_pk = leadership["released_captain_org_user_pk"]
+        open_pk = leadership["open_captain_org_user_pk"]
+        self.assertEqual(set(snaps), {released_pk, open_pk})
+        now = timezone.now()
+        self.assertLess(snaps[released_pk].window_closes_at, now)
+        self.assertGreater(snaps[open_pk].window_closes_at, now)
         self.assertEqual(
-            sorted(snaps.values_list("captain_id", flat=True)),
-            sorted(t["captain_org_user_pk"] for t in leadership["teams"]),
+            CaptainReview.objects.nocache()
+            .filter(event_captain=snaps[released_pk], voided_at__isnull=True)
+            .count(),
+            3,
         )
         self.assertEqual(
-            CaptainReview.objects.filter(
-                event_captain__event_id=leadership["event"]["pk"]
-            ).count(),
-            len(leadership["reviewed_by_user_pks"]),
+            CaptainReview.objects.nocache()
+            .filter(event_captain=snaps[open_pk], voided_at__isnull=True)
+            .count(),
+            1,
         )
-        self.assertTrue(
-            ContributionEntry.objects.filter(
-                event_id=leadership["event"]["pk"], track="leadership"
+        ledger = ContributionEntry.objects.nocache().filter(
+            event_id=leadership["event_pk"], track="leadership"
+        )
+        self.assertEqual(
+            ledger.get(
+                org_user_id=released_pk, kind=LeadershipKind.CAPTAIN_RATING
+            ).points,
+            8,
+        )
+        self.assertFalse(
+            ledger.filter(
+                org_user_id=open_pk, kind=LeadershipKind.CAPTAIN_RATING
             ).exists()
         )
+        kinds = set(ledger.values_list("org_user_id", "kind"))
+        for row in (
+            (released_pk, LeadershipKind.CAPTAINED.value),
+            (released_pk, LeadershipKind.PLACEMENT_1.value),
+            (open_pk, LeadershipKind.CAPTAINED.value),
+            (open_pk, LeadershipKind.PLACEMENT_2.value),
+        ):
+            self.assertIn(row, kinds)
+        promoter = OrgUser.objects.nocache().get(
+            organization_id=FEATURES_ORG.pk,
+            user_id=ORG_FEATURES_ROLE_USERS["promoter"].pk,
+        )
+        self.assertIn(promoter, snaps[open_pk].teammates.all())
+        self.assertFalse(
+            CaptainReview.objects.nocache()
+            .filter(event_captain=snaps[open_pk], rater=promoter)
+            .exists()
+        )
+        self.assertEqual(
+            OrgUser.objects.nocache().get(pk=released_pk).user_id,
+            ORG_FEATURES_ROLE_USERS["member"].pk,
+        )
+
+        counts = (
+            EventCaptain.objects.nocache().count(),
+            CaptainReview.objects.nocache().count(),
+            CaptainTrait.objects.nocache()
+            .filter(organization_id=FEATURES_ORG.pk)
+            .count(),
+            ContributionEntry.objects.nocache().filter(track="leadership").count(),
+        )
         reset_org_features_data()
+        self.assertEqual(
+            (
+                EventCaptain.objects.nocache().count(),
+                CaptainReview.objects.nocache().count(),
+                CaptainTrait.objects.nocache()
+                .filter(organization_id=FEATURES_ORG.pk)
+                .count(),
+                ContributionEntry.objects.nocache().filter(track="leadership").count(),
+            ),
+            counts,
+        )
 
     def test_conduct_seeded(self) -> None:
         data = reset_org_features_data()
@@ -622,7 +688,7 @@ class OrgFeaturesPopulateTest(TestCase):
         )
         self.assertEqual(
             Tournament.objects.nocache().filter(league_id=FEATURES_LEAGUE.pk).count(),
-            len(ORG_FEATURES_TOURNAMENTS),
+            len(ORG_FEATURES_TOURNAMENTS) + 1,
         )
         org = Organization.objects.nocache().get(pk=org.pk)
         self.assertEqual(org.timezone, FEATURES_ORG.timezone)
