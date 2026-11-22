@@ -27,6 +27,7 @@ from org.models import (
 )
 from org.permissions import is_org_role_holder
 from org.standing import ledger
+from org.standing.kinds import kinds_for
 from org.standing.ledger import points_for
 from org.standing.periods import local_day_start_utc, local_noon_utc
 from telemetry.logging import get_logger
@@ -502,9 +503,9 @@ def reassign_member(drop: OrgUser, keep: OrgUser) -> int:
 def repoint_ledger_attribution(drop: CustomUser, keep: CustomUser) -> int:
     return _own_rows().filter(awarded_by=drop).update(
         awarded_by=keep
-    ) + ContributionPointValue.objects.nocache().filter(updated_by=drop).update(
-        updated_by=keep
-    )
+    ) + ContributionPointValue.objects.nocache().filter(
+        updated_by=drop, kind__in=sorted(kinds_for("contribution"))
+    ).update(updated_by=keep)
 
 
 def has_promo_entry(send: PromoSend) -> bool:

@@ -16,6 +16,11 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AddField(
+            model_name="contributionentry",
+            name="track",
+            field=models.CharField(default="contribution", max_length=32),
+        ),
         migrations.CreateModel(
             name="CaptainReview",
             fields=[
@@ -218,11 +223,6 @@ class Migration(migrations.Migration):
             model_name="contributionentry",
             name="org_contrib_org_use_da3340_idx",
         ),
-        migrations.AddField(
-            model_name="contributionentry",
-            name="track",
-            field=models.CharField(default="contribution", max_length=32),
-        ),
         migrations.AlterField(
             model_name="contributionentry",
             name="kind",
@@ -292,14 +292,14 @@ class Migration(migrations.Migration):
             model_name="contributionentry",
             index=models.Index(
                 fields=["organization", "track", "occurred_at"],
-                name="org_contrib_organiz_e904d6_idx",
+                name="ledger_org_track_at_idx",
             ),
         ),
         migrations.AddIndex(
             model_name="contributionentry",
             index=models.Index(
                 fields=["org_user", "track", "occurred_at"],
-                name="org_contrib_org_use_28d584_idx",
+                name="ledger_mbr_track_at_idx",
             ),
         ),
         migrations.AddConstraint(

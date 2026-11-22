@@ -1,9 +1,8 @@
-from collections.abc import Collection, Mapping
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, override
+from typing import override
 
 from django.contrib.auth.models import AnonymousUser
-from django.db.models import QuerySet
 from django.utils import timezone
 
 from app.models import CustomUser
@@ -15,7 +14,6 @@ from org.leadership.queries import CaptainRating, captain_ratings, points_by_mem
 from org.leadership.store import effective_traits, get_leadership_settings
 from org.leadership.summary import member_payload, round_score
 from org.models import Organization, OrgUser
-from org.standing import ledger
 from org.standing.base import TrackBase
 from org.standing.periods import Period
 from org.standing.types import (
@@ -117,12 +115,6 @@ class LeadershipTrack(TrackBase):
     ) -> TrackOutput:
         merge.delete_user(user, actor=actor, now=timezone.now())
         return TrackOutput()
-
-    @override
-    def deletion_blockers(self, user_pks: Collection[int]) -> list[QuerySet[Any]]:
-        return [
-            ledger.track_rows("leadership").filter(org_user__user__in=list(user_pks))
-        ]
 
     @override
     def metrics_for(self, org_id: int) -> tuple[Metric, ...]:

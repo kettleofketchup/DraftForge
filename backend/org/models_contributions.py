@@ -94,8 +94,14 @@ class ContributionEntry(models.Model):
             ),
         ]
         indexes = [
-            models.Index(fields=["organization", "track", "occurred_at"]),
-            models.Index(fields=["org_user", "track", "occurred_at"]),
+            models.Index(
+                fields=["organization", "track", "occurred_at"],
+                name="ledger_org_track_at_idx",
+            ),
+            models.Index(
+                fields=["org_user", "track", "occurred_at"],
+                name="ledger_mbr_track_at_idx",
+            ),
         ]
 
     def __str__(self) -> str:

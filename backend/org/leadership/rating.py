@@ -92,7 +92,6 @@ def upsert_captain_rating(
         org_user=snapshot.captain,
         kind=LeadershipKind.CAPTAIN_RATING.value,
         points=points or None,
-        occurred_at=event.ends_at or event.scheduled_at,
     )
     log.info(
         "captain_rating_upserted",
