@@ -1,4 +1,4 @@
-import { Building2, Trophy } from 'lucide-react';
+import { Building2, ExternalLink, Trophy } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -7,6 +7,7 @@ import { SecondaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { Skeleton } from '~/components/ui/skeleton';
+import { mmrScreenshotUrl } from './api';
 import { formatMmrDate } from './format';
 import { MmrStatusBadge } from './MmrStatusBadge';
 import {
@@ -122,6 +123,16 @@ function MmrRow({
               Pending: {pending.requested_mmr}
               {pendingDate ? ` since ${pendingDate}` : ''}
             </span>
+            <a
+              href={mmrScreenshotUrl(pending.id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
+              data-testid={`mmr-pending-screenshot-${pending.id}`}
+            >
+              View screenshot
+              <ExternalLink className="size-3.5" aria-hidden />
+            </a>
             <SecondaryButton
               type="button"
               size="sm"
@@ -130,6 +141,12 @@ function MmrRow({
             >
               Cancel request
             </SecondaryButton>
+            <span
+              className="basis-full text-xs text-muted-foreground"
+              data-testid={`mmr-pending-hint-${pending.id}`}
+            >
+              To ask for a different value, cancel this request first.
+            </span>
           </div>
         )}
         {decision && lastDecision && (
@@ -141,7 +158,7 @@ function MmrRow({
           </span>
         )}
       </div>
-      {isOwnProfile && onRequest && (
+      {isOwnProfile && onRequest && !pending && (
         <SecondaryButton
           type="button"
           size="sm"

@@ -129,10 +129,34 @@ describe('OrgsMmrTab', () => {
     expect(
       await screen.findByTestId('mmr-request-btn-org-3-1'),
     ).toBeInTheDocument();
-    expect(screen.getByTestId('mmr-request-btn-league-5')).toBeInTheDocument();
     expect(screen.getByTestId('mmr-pending-77')).toHaveTextContent('5100');
     expect(screen.getByTestId('mmr-cancel-btn-77')).toBeInTheDocument();
     expect(screen.getByTestId('mmr-last-decision-70')).toBeInTheDocument();
+  });
+
+  it('offers no request button on a row with a pending request', async () => {
+    renderTab(mmrSummary(), true);
+    const row = await screen.findByTestId('mmr-row-league-5');
+    expect(screen.getByTestId('mmr-pending-77')).toBeInTheDocument();
+    expect(
+      row.querySelector('[data-testid="mmr-request-btn-league-5"]'),
+    ).toBeNull();
+    expect(screen.getByTestId('mmr-pending-hint-77')).toHaveTextContent(
+      'cancel this request first',
+    );
+  });
+
+  it('offers the request button again once nothing is pending', async () => {
+    renderTab(withLastDecision(null), true);
+    expect(await screen.findByTestId('mmr-request-btn-league-5')).toBeEnabled();
+  });
+
+  it('links your pending request screenshot', async () => {
+    renderTab(mmrSummary(), true);
+    const link = await screen.findByTestId('mmr-pending-screenshot-77');
+    expect(link).toHaveAttribute('href', '/api/mmr-requests/77/screenshot/');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveTextContent('View screenshot');
   });
 
   it('hides member actions and request state from other viewers', async () => {
@@ -142,6 +166,7 @@ describe('OrgsMmrTab', () => {
     expect(screen.queryByTestId('mmr-request-btn-league-5')).toBeNull();
     expect(screen.queryByTestId('mmr-pending-77')).toBeNull();
     expect(screen.queryByTestId('mmr-cancel-btn-77')).toBeNull();
+    expect(screen.queryByTestId('mmr-pending-screenshot-77')).toBeNull();
     expect(screen.queryByTestId('mmr-last-decision-70')).toBeNull();
     expect(fetchMyMmrRequests).not.toHaveBeenCalled();
   });
