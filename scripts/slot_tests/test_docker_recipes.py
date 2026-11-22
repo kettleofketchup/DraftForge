@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.slot_tests._docker_stub import DOCKER, PODMAN
+from scripts.slot_tests._docker_stub import DOCKER, PODMAN, calls, docker_stub
 
 ROOT = Path(__file__).resolve().parents[2]
 JUST = shutil.which("just")
@@ -210,33 +210,45 @@ fi
 """
 
 
-def build_test_db(tmp_path: Path, version: str) -> list[str]:
-    assert JUST is not None
-    log = tmp_path / "argv"
+def populate_stub_env(tmp_path: Path, env: dict[str, str]) -> dict[str, str]:
+    """Stub out db::populate::fresh: a no-op python and temp DB paths."""
     bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    docker = bin_dir / "docker"
-    docker.write_text(TEST_DB_DOCKER_STUB.format(version=version, log=log))
+    bin_dir.mkdir(exist_ok=True)
     python = bin_dir / "python"
     python.write_text("#!/usr/bin/env bash\n")
-    for stub in (docker, python):
-        stub.chmod(0o755)
+    python.chmod(0o755)
     db_dir = tmp_path / "dbs"
     db_dir.mkdir()
-    env = {
-        **os.environ,
-        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+    return {
+        **env,
         "DF_JUST_PYTHON": str(python),
         "DF_TEST_DB_FILE": str(tmp_path / "test.db.sqlite3"),
         "DF_DB_DIR": str(db_dir),
     }
-    result = subprocess.run(
-        [JUST, "--justfile", str(ROOT / "justfile"), "docker::db::build"],
+
+
+def run_test_db_build(
+    env: dict[str, str], *flags: str
+) -> subprocess.CompletedProcess[str]:
+    assert JUST is not None
+    return subprocess.run(
+        [JUST, "--justfile", str(ROOT / "justfile"), "docker::db::build", *flags],
         cwd=ROOT,
         env=env,
         capture_output=True,
         text=True,
     )
+
+
+def build_test_db(tmp_path: Path, version: str) -> list[str]:
+    log = tmp_path / "argv"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(TEST_DB_DOCKER_STUB.format(version=version, log=log))
+    docker.chmod(0o755)
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    result = run_test_db_build(populate_stub_env(tmp_path, env))
     assert result.returncode == 0, result.stderr
     return log.read_bytes().decode().split("\0")[:-1]
 
@@ -288,6 +300,16 @@ def _recorded_just(
 def _hash(service: str) -> str:
     return subprocess.run(
         [str(ROOT / "scripts" / "hash-docker-image.sh"), service],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def db_content_hash() -> str:
+    return subprocess.run(
+        [str(ROOT / "scripts/hash-test-db-sources.sh")],
+        cwd=ROOT,
         capture_output=True,
         text=True,
         check=True,
@@ -355,3 +377,33 @@ def test_test_db_push_hash_only_skips_latest(tmp_path: Path) -> None:
     registry = "ghcr.io/kettleofketchup/draftforge/test-db"
     calls = _recorded_just(tmp_path, "docker::db::push", "--hash-only")
     assert [c[1] for c in calls if c[0] == "push"] == [f"{registry}:{db_hash}"]
+
+
+def test_test_db_pr_mode_pushes_through_buildx(tmp_path: Path) -> None:
+    # The home runner has no daemon: everything goes through the remote buildx builder.
+    env, log = docker_stub(tmp_path)
+    result = run_test_db_build(populate_stub_env(tmp_path, env), "--mode=pr", "--pr=42")
+    assert result.returncode == 0, result.stderr
+    recorded = calls(log)
+    builds = [c for c in recorded if c[:2] == ["buildx", "build"]]
+    assert len(builds) == 1
+    argv = builds[0]
+    tag = f"ghcr.io/kettleofketchup/draftforge-ci/test-db:pr-42-{db_content_hash()}"
+    assert values(argv, "--tag") == [tag]
+    assert values(argv, "--platform") == ["linux/amd64"]
+    assert "--provenance=false" in argv
+    assert values(argv, "--build-arg") == [f"CONTENT_HASH={db_content_hash()}"]
+    assert "--push" in argv
+    assert "--load" not in argv
+    assert not any(c[:1] in (["image"], ["tag"], ["push"], ["build"]) for c in recorded)
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [("--mode=pr",), ("--mode=pr", "--pr=abc"), ("--pr=5",), ("--mode=nightly",)],
+)
+def test_test_db_pr_mode_requires_pr(tmp_path: Path, flags: tuple[str, ...]) -> None:
+    env, log = docker_stub(tmp_path)
+    result = run_test_db_build(populate_stub_env(tmp_path, env), *flags)
+    assert result.returncode == 2, result.stderr
+    assert calls(log) == []
