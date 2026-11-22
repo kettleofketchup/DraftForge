@@ -846,7 +846,9 @@ def _promote_from_waitlist(
         if skip is not None:
             waiting = waiting.exclude(pk=skip.pk)
         candidates = list(
-            waiting.select_related("user__base_profile").order_by("waitlist_position")
+            waiting.nocache()
+            .select_related("user__base_profile")
+            .order_by("waitlist_position")
         )
         cache = StandingCache()
         system = SignupActor.system(
