@@ -27,6 +27,7 @@ import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
 import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
+import { useGameType } from '~/hooks/useGameType';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
 import { useLeagueStore } from '~/store/leagueStore';
@@ -62,7 +63,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
 
-  const gameType = ctx?.gameType;
+  // The page's game only; null (org and global pages) shows every game.
+  const gameType = useGameType();
 
   const editScope = React.useMemo<EditUserScope>(() => {
     // Org context: only trust currentOrg if its pk matches the popover's request.

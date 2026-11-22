@@ -1,9 +1,8 @@
 // frontend/app/components/teamdraft/TeamPositionCoverage.tsx
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { GAME_TYPE, type GameTypeValue } from '~/components/game/constants';
+import { GAME_TYPE } from '~/components/game/constants';
 import { PlayerPopover } from '~/components/player';
-import { useTeamGameType } from '~/components/team/useTeamGameType';
 import type { TeamType } from '~/components/tournament/types';
 import { InfoDialog } from '~/components/ui/dialogs';
 import {
@@ -463,15 +462,7 @@ PositionCoverageCard.displayName = 'PositionCoverageCard';
 
 // Single Player Card - shows avatar with name above and MMR below
 const PlayerCard = memo(
-  ({
-    player,
-    isBest,
-    gameType,
-  }: {
-    player: PlayerWithRank;
-    isBest?: boolean;
-    gameType?: GameTypeValue;
-  }) => {
+  ({ player, isBest }: { player: PlayerWithRank; isBest?: boolean }) => {
     const { user, rank } = player;
     const displayName = DisplayName(user);
 
@@ -494,7 +485,7 @@ const PlayerCard = memo(
           {displayName.length > 6 ? `${displayName.slice(0, 5)}…` : displayName}
         </span>
         {/* Avatar with rank badge - wrapped in PlayerPopover for hover */}
-        <PlayerPopover player={user} gameType={gameType}>
+        <PlayerPopover player={user}>
           <div className="relative">
             <UserAvatar
               user={user}
@@ -529,12 +520,10 @@ const BestPlayersRow = memo(
     players,
     assignedPlayerPk,
     maxDisplay = 3,
-    gameType,
   }: {
     players: PlayerWithRank[];
     assignedPlayerPk?: number;
     maxDisplay?: number;
-    gameType?: GameTypeValue;
   }) => {
     if (players.length === 0) {
       return (
@@ -563,7 +552,6 @@ const BestPlayersRow = memo(
           <PlayerCard
             key={player.user.pk}
             player={player}
-            gameType={gameType}
             isBest={
               player.user.pk === assignedPlayerPk ||
               (idx === 0 && !assignedPlayerPk)
@@ -579,11 +567,10 @@ BestPlayersRow.displayName = 'BestPlayersRow';
 // Position Conflict Table - shows all positions with conflicts
 interface PositionConflictTableProps {
   teamPositionCoverage: TeamPositionCoverageResult;
-  gameType?: GameTypeValue;
 }
 
 const PositionConflictTable = memo(
-  ({ teamPositionCoverage, gameType }: PositionConflictTableProps) => {
+  ({ teamPositionCoverage }: PositionConflictTableProps) => {
     const {
       positions,
       positionHasWarning,
@@ -674,7 +661,6 @@ const PositionConflictTable = memo(
                     players={coverage.playersWithRanks}
                     assignedPlayerPk={positionAssignments.get(pos)}
                     maxDisplay={3}
-                    gameType={gameType}
                   />
                 </div>
               </div>
@@ -695,8 +681,6 @@ interface TeamPositionCoverageRowProps {
   teamName?: string;
   /** Show full table instead of compact cards */
   showFullTable?: boolean;
-  /** Context game for player popovers; defaults to the team's tournament game. */
-  gameType?: GameTypeValue;
 }
 
 export const TeamPositionCoverageRow = memo(
@@ -705,11 +689,8 @@ export const TeamPositionCoverageRow = memo(
     className,
     teamName,
     showFullTable = false,
-    gameType: gameTypeProp,
   }: TeamPositionCoverageRowProps) => {
     const [modalOpen, setModalOpen] = useState(false);
-    const teamGameType = useTeamGameType(team?.tournament);
-    const gameType = gameTypeProp ?? teamGameType;
 
     // Subscribe ONCE to a pk→positions record (Rules of Hooks: cannot call the
     // hook per-member inside the pure compute fn). Explicit GAME_TYPE.DOTA2 because
@@ -752,10 +733,7 @@ export const TeamPositionCoverageRow = memo(
     if (showFullTable) {
       return (
         <div className={className}>
-          <PositionConflictTable
-            teamPositionCoverage={teamPositionCoverage}
-            gameType={gameType}
-          />
+          <PositionConflictTable teamPositionCoverage={teamPositionCoverage} />
         </div>
       );
     }
@@ -807,7 +785,6 @@ export const TeamPositionCoverageRow = memo(
           >
             <PositionConflictTable
               teamPositionCoverage={teamPositionCoverage}
-              gameType={gameType}
             />
           </HoverCardContent>
         </HoverCard>
@@ -820,10 +797,7 @@ export const TeamPositionCoverageRow = memo(
           size="lg"
           showClose
         >
-          <PositionConflictTable
-            teamPositionCoverage={teamPositionCoverage}
-            gameType={gameType}
-          />
+          <PositionConflictTable teamPositionCoverage={teamPositionCoverage} />
         </InfoDialog>
       </>
     );

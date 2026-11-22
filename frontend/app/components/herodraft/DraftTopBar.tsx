@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { GAME_TYPE } from '~/components/game/constants';
 import type {
   DraftTeam,
   HeroDraft,
@@ -10,7 +9,6 @@ import {
   useDraftCountdown,
 } from '~/components/herodraft/useDraftCountdown';
 import { PlayerPopover } from '~/components/player';
-import { useTeamGameType } from '~/components/team/useTeamGameType';
 import { brandBg } from '~/components/ui/buttons/styles';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types.d';
@@ -65,7 +63,6 @@ function captainToUser(captain: {
 export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   // Get current user and isMyTurn from stores
   const { currentUser } = useUserStore();
-  const gameType = useTeamGameType(draft.tournament_id) ?? GAME_TYPE.DOTA2;
   const isMyTurn = useHeroDraftStore((state) =>
     heroDraftSelectors.isMyTurn(state, currentUser?.pk),
   );
@@ -164,11 +161,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
     isCaptain: boolean,
     testIdPrefix: string,
   ) => (
-    <PlayerPopover
-      key={`player-${player.pk}`}
-      player={captainToUser(player)}
-      gameType={gameType}
-    >
+    <PlayerPopover key={`player-${player.pk}`} player={captainToUser(player)}>
       <button
         className="flex flex-col items-center hover:bg-white/10 rounded p-0.5 sm:p-1 min-w-[32px] sm:min-w-[48px]"
         data-testid={`${testIdPrefix}-button`}

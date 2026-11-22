@@ -3,15 +3,12 @@ import type {
   DiscordSearchResult,
   SearchUserResult,
 } from '~/components/api/api';
-import type { GameTypeValue } from '~/components/game/constants';
 import type { UserType } from '~/components/user/types';
 
 export interface EntityContext {
   orgId?: number;
   leagueId?: number;
   tournamentId?: number;
-  /** Tournament game; the CSV import's MMR column applies to it. */
-  gameType?: GameTypeValue;
 }
 
 export interface AddUserModalProps {

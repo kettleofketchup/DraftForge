@@ -1,7 +1,17 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import { GAME_TYPE } from '~/components/game/constants';
 import type { EntityContext } from '~/components/user/AddUserModal/types';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 import { CSVImportModal } from './CSVImportModal';
 
 const api = vi.hoisted(() => ({
@@ -38,6 +48,8 @@ beforeEach(() => {
   api.importCSVToOrg.mockResolvedValue(emptyResult);
   api.importCSVToTournament.mockResolvedValue(emptyResult);
 });
+
+afterEach(resetGameType);
 
 async function toPreview(entityContext: EntityContext) {
   render(
@@ -88,7 +100,8 @@ describe('CSVImportModal org MMR game', () => {
   });
 
   it('tournament mode names the tournament game and hides the league target', async () => {
-    await toPreview({ orgId: 4, tournamentId: 9, gameType: 2 });
+    withGameType(GAME_TYPE.DEADLOCK);
+    await toPreview({ orgId: 4, tournamentId: 9 });
     expect(screen.queryByTestId('csv-game-select')).toBeNull();
     expect(screen.getByTestId('csv-mmr-game-note').textContent).toBe(
       'MMR column applies to: Deadlock',
@@ -104,7 +117,8 @@ describe('CSVImportModal org MMR game', () => {
   });
 
   it('tournament mode keeps the league target for Dota and sends no game_type', async () => {
-    await toPreview({ orgId: 4, tournamentId: 9, gameType: 1 });
+    withGameType(GAME_TYPE.DOTA2);
+    await toPreview({ orgId: 4, tournamentId: 9 });
     expect(screen.getByTestId('csv-mmr-game-note').textContent).toBe(
       'MMR column applies to: Dota 2',
     );

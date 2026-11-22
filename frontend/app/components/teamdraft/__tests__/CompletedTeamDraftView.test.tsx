@@ -2,7 +2,6 @@
 import { render as rtlRender, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { GAME_TYPE } from '~/components/game/constants';
 import {
   CompletedTeamDraftView,
   TeamCard,
@@ -39,12 +38,7 @@ describe('CompletedTeamDraftView', () => {
       },
     ] as unknown as DraftRoundType[];
     render(
-      <CompletedTeamDraftView
-        gameType={GAME_TYPE.DOTA2}
-        teams={[team]}
-        leaguePk={null}
-        rounds={rounds}
-      />,
+      <CompletedTeamDraftView teams={[team]} leaguePk={null} rounds={rounds} />,
     );
     expect(screen.getByTestId('pick-duration-50')).toHaveTextContent('0:42');
     expect(screen.getByTestId('pick-skips-50')).toHaveTextContent('skipped ×1');
@@ -52,13 +46,7 @@ describe('CompletedTeamDraftView', () => {
   });
 
   it('renders without rounds (untimed drafts)', () => {
-    render(
-      <CompletedTeamDraftView
-        gameType={GAME_TYPE.DOTA2}
-        teams={[team]}
-        leaguePk={null}
-      />,
-    );
+    render(<CompletedTeamDraftView teams={[team]} leaguePk={null} />);
     expect(screen.queryByTestId(/pick-duration-/)).toBeNull();
   });
 });
@@ -93,13 +81,7 @@ describe('TeamCard roster roles and leadership flags', () => {
   const renderCard = (t: TeamType, extra: Record<string, unknown> = {}) =>
     rtlRender(
       <TooltipProvider>
-        <TeamCard
-          gameType={GAME_TYPE.DOTA2}
-          team={t}
-          rank={1}
-          leaguePk={null}
-          {...extra}
-        />
+        <TeamCard team={t} rank={1} leaguePk={null} {...extra} />
       </TooltipProvider>,
     );
 

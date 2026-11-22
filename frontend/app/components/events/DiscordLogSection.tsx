@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import { getEventDiscordState } from '~/components/api/api';
 import type { DiscordEventState } from '~/components/events/schemas';
 import { LOG_CATEGORY_LABELS, LogCategory } from '~/components/events/schemas';
-import type { GameTypeValue } from '~/components/game/constants';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { ScrollArea } from '~/components/ui/scroll-area';
@@ -19,7 +18,6 @@ interface DiscordLogSectionProps {
   eventId: number;
   isAdmin?: boolean;
   eventTimezone?: string;
-  gameType: GameTypeValue;
 }
 
 const CATEGORY_COLORS: Record<number, string> = {
@@ -40,7 +38,6 @@ export function DiscordLogSection({
   eventId,
   isAdmin,
   eventTimezone,
-  gameType,
 }: DiscordLogSectionProps) {
   const { data: discordState, isLoading } = useQuery({
     queryKey: ['event-discord', eventId],
@@ -287,7 +284,6 @@ export function DiscordLogSection({
                 compact
                 showPositions={false}
                 showMmr={false}
-                gameType={gameType}
                 contextSlot={
                   <div className="flex flex-wrap items-center justify-end gap-1">
                     <Badge

@@ -7,7 +7,6 @@
 
 import { Loader2, Search, Users, X } from 'lucide-react';
 import { memo, useEffect, useMemo, useState } from 'react';
-import type { GameTypeValue } from '~/components/game/constants';
 import { Input } from '~/components/ui/input';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
@@ -94,7 +93,6 @@ const UserCardWrapper = memo(
     deleteButtonType,
     organizationId,
     leagueId,
-    gameType,
   }: {
     userData: UserType;
     animationIndex: number;
@@ -102,7 +100,6 @@ const UserCardWrapper = memo(
     deleteButtonType?: 'normal' | 'tournament';
     organizationId?: number;
     leagueId?: number;
-    gameType?: GameTypeValue;
   }) => {
     return (
       <UserCard
@@ -114,7 +111,6 @@ const UserCardWrapper = memo(
         compact={compact}
         organizationId={organizationId}
         leagueId={leagueId}
-        gameType={gameType}
       />
     );
   },
@@ -169,8 +165,6 @@ interface UserListProps {
   organizationId?: number;
   /** League ID for scoped MMR display */
   leagueId?: number;
-  /** Context game for org MMR (tournament); undefined shows every game */
-  gameType?: GameTypeValue;
 }
 
 /**
@@ -191,7 +185,6 @@ export function UserList({
   deleteButtonType,
   organizationId,
   leagueId,
-  gameType,
 }: UserListProps) {
   // Internal search state (used when showSearch is true)
   const [internalQuery, setInternalQuery] = useState('');
@@ -286,7 +279,6 @@ export function UserList({
         deleteButtonType={deleteButtonType}
         organizationId={organizationId}
         leagueId={leagueId}
-        gameType={gameType}
       />
     </>
   );

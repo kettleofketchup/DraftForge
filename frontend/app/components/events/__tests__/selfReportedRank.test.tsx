@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { RankSignalsCard } from '~/components/events/games/RankSignalsCard';
@@ -10,6 +10,7 @@ import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { UserEventStrip } from '~/components/user/UserEventStrip';
 import type { UserType } from '~/components/user/types';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 
 function signup(over: Partial<EventSignupType> = {}): EventSignupType {
   return {
@@ -31,15 +32,17 @@ function signup(over: Partial<EventSignupType> = {}): EventSignupType {
 
 const noop = () => {};
 
+beforeEach(() => withGameType(GAME_TYPE.DEADLOCK));
+
 afterEach(() => {
   cleanup();
+  resetGameType();
 });
 
 describe('Deadlock rank signals', () => {
   it('shows the self-reported Deadlock rank and its date', () => {
     render(
       <RankSignalsCard
-        gameType={GAME_TYPE.DEADLOCK}
         signup={signup({
           self_reported_rank: 'Emissary 1',
           self_reported_rank_date: '2026-10-02',
@@ -54,7 +57,7 @@ describe('Deadlock rank signals', () => {
   });
 
   it('shows a dash when the player has no Deadlock rank', () => {
-    render(<RankSignalsCard gameType={GAME_TYPE.DEADLOCK} signup={signup()} />);
+    render(<RankSignalsCard signup={signup()} />);
     expect(
       screen.getByTestId('rank-signals-deadlock-rank').textContent,
     ).toContain('—');
@@ -66,7 +69,6 @@ describe('MmrApprovalModal on a Deadlock event', () => {
     render(
       <MmrApprovalModal
         signup={signup({ self_reported_rank: 'Emissary 1' })}
-        gameType={GAME_TYPE.DEADLOCK}
         open
         onOpenChange={noop}
         onApprove={noop}
@@ -86,11 +88,7 @@ describe('UserEventStrip self-reported rank', () => {
     render(
       <TooltipProvider>
         <SharedPopoverProvider>
-          <UserEventStrip
-            user={user}
-            gameType={GAME_TYPE.DEADLOCK}
-            selfReportedRank="Emissary 1"
-          />
+          <UserEventStrip user={user} selfReportedRank="Emissary 1" />
         </SharedPopoverProvider>
       </TooltipProvider>,
     );
@@ -103,11 +101,7 @@ describe('UserEventStrip self-reported rank', () => {
     render(
       <TooltipProvider>
         <SharedPopoverProvider>
-          <UserEventStrip
-            user={user}
-            gameType={GAME_TYPE.DEADLOCK}
-            selfReportedRank={null}
-          />
+          <UserEventStrip user={user} selfReportedRank={null} />
         </SharedPopoverProvider>
       </TooltipProvider>,
     );

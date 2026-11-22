@@ -1,5 +1,6 @@
 import type { EventSignupType } from '~/components/events/schemas';
-import { GAME_TYPE, type GameTypeValue } from '~/components/game/constants';
+import { GAME_TYPE } from '~/components/game/constants';
+import { useContextGameType } from '~/hooks/useGameType';
 
 import { BaseRankSignalsCard } from './BaseRankSignalsCard';
 import { DeadlockRankSignalsCard } from './DeadlockRankSignalsCard';
@@ -7,14 +8,14 @@ import { Dota2RankSignalsCard } from './dota2/Dota2RankSignalsCard';
 
 interface RankSignalsCardProps {
   signup: EventSignupType;
-  gameType: GameTypeValue;
 }
 
 /**
- * Game-aware dispatcher: a game-specific card when the event's game has one,
+ * Game-aware dispatcher: a game-specific card when the page's game has one,
  * otherwise the universal `BaseRankSignalsCard`.
  */
-export function RankSignalsCard({ signup, gameType }: RankSignalsCardProps) {
+export function RankSignalsCard({ signup }: RankSignalsCardProps) {
+  const gameType = useContextGameType();
   if (gameType === GAME_TYPE.DOTA2) {
     return <Dota2RankSignalsCard signup={signup} />;
   }

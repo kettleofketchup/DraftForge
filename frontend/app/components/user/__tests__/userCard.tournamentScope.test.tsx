@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GAME_TYPE, type GameTypeValue } from '~/components/game/constants';
 import type { OrganizationType } from '~/components/organization/schemas';
 import { TooltipProvider } from '~/components/ui/tooltip';
@@ -12,6 +12,7 @@ import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 
 const openPlayerModal = vi.hoisted(() => vi.fn());
 vi.mock('~/components/ui/shared-popover-context', () => ({
@@ -54,16 +55,12 @@ function renderCard(
   opts: { gameType?: GameTypeValue; leagueId?: number } = {},
 ) {
   const { gameType = GAME_TYPE.DEADLOCK, leagueId } = opts;
+  withGameType(gameType);
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <TooltipProvider>
         <MemoryRouter>
-          <UserCard
-            user={user}
-            organizationId={ORG_PK}
-            leagueId={leagueId}
-            gameType={gameType}
-          />
+          <UserCard user={user} organizationId={ORG_PK} leagueId={leagueId} />
         </MemoryRouter>
       </TooltipProvider>
     </QueryClientProvider>,
@@ -71,6 +68,8 @@ function renderCard(
 }
 
 describe('UserCard in a Deadlock tournament', () => {
+  afterEach(resetGameType);
+
   beforeEach(() => {
     vi.clearAllMocks();
     useUserCacheStore.getState().reset?.();
@@ -170,12 +169,13 @@ describe('UserCard in a Deadlock tournament', () => {
     );
   });
 
-  it('opens the player modal with the tournament game', () => {
+  it('opens the player modal, which reads the page game itself', () => {
     renderCard(deadlockPlayer());
     fireEvent.click(screen.getByRole('button', { name: /View Profile/ }));
     expect(openPlayerModal).toHaveBeenCalledWith(
       expect.objectContaining({ pk: 42 }),
-      expect.objectContaining({ organizationId: ORG_PK, gameType: 2 }),
+      expect.objectContaining({ organizationId: ORG_PK }),
     );
+    expect(openPlayerModal.mock.calls[0][1]).not.toHaveProperty('gameType');
   });
 });

@@ -51,7 +51,7 @@ import {
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
 import { canRestoreSignup } from '~/components/events/signupPartitions';
-import { type GameTypeValue, toGameType } from '~/components/game/constants';
+import { toGameType } from '~/components/game/constants';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -73,9 +73,9 @@ import {
   useOptimisticEventSignups,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
+import { useProvideGameType } from '~/hooks/useGameType';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { cn } from '~/lib/utils';
-import { useGameTypeStore } from '~/store/gameTypeStore';
 
 export default function RollCallPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -101,15 +101,7 @@ export default function RollCallPage() {
   );
   const isAdmin = event?.user_can_manage ?? false;
 
-  const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
-  useEffect(() => {
-    if (event?.game_type) {
-      setCurrentGameType(event.game_type as GameTypeValue);
-    }
-    return () => {
-      setCurrentGameType(null);
-    };
-  }, [event?.game_type, setCurrentGameType]);
+  useProvideGameType(event ? toGameType(event.game_type) : null);
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -301,7 +293,6 @@ export default function RollCallPage() {
       userMap={userMap}
       isAdmin={isAdmin}
       leaguePk={event.tournament_league ?? null}
-      gameType={toGameType(event.game_type)}
       pending={pendingIds.has(signup.id)}
       focused={isAdmin && signup.id === activeId}
       onSelect={setFocusedId}
@@ -459,7 +450,6 @@ export default function RollCallPage() {
 
       <MmrApprovalModal
         signup={approvalSignup}
-        gameType={toGameType(event?.game_type)}
         open={!!approvalSignup}
         onOpenChange={(open) => {
           if (!open) setApprovalSignup(null);
@@ -497,7 +487,6 @@ export default function RollCallPage() {
                     user={stripUser}
                     showBorder={false}
                     organizationId={event?.organization ?? undefined}
-                    gameType={toGameType(event?.game_type)}
                     className={brandDialogPanel}
                     data-testid="rollcall-confirm-user-strip"
                   />
@@ -547,7 +536,6 @@ export default function RollCallPage() {
                     user={stripUser}
                     showBorder={false}
                     organizationId={event?.organization ?? undefined}
-                    gameType={toGameType(event?.game_type)}
                     className={brandDialogPanel}
                     data-testid="rollcall-reject-user-strip"
                   />
@@ -596,7 +584,6 @@ export default function RollCallPage() {
                     user={stripUser}
                     showBorder={false}
                     organizationId={event?.organization ?? undefined}
-                    gameType={toGameType(event?.game_type)}
                     className={brandDialogPanel}
                     data-testid="rollcall-cancel-user-strip"
                   />
@@ -664,7 +651,6 @@ const SignupStrip = memo(function SignupStrip({
   userMap,
   isAdmin,
   leaguePk,
-  gameType,
   pending,
   focused,
   onSelect,
@@ -678,7 +664,6 @@ const SignupStrip = memo(function SignupStrip({
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
   leaguePk: number | null;
-  gameType: GameTypeValue;
   pending: boolean;
   focused: boolean;
   onSelect: (id: number) => void;
@@ -805,7 +790,6 @@ const SignupStrip = memo(function SignupStrip({
           compact
           showPositions
           organizationId={signup.organization ?? undefined}
-          gameType={gameType}
           statsLeagueId={leaguePk}
           statsBreakpoint="wide"
           contextSlot={statusBadge}

@@ -42,6 +42,7 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserStrip } from '~/components/user/UserStrip';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
+import { useContextGameType } from '~/hooks/useGameType';
 import { cn } from '~/lib/utils';
 
 const LARGE_CHANGE_THRESHOLD = 0.2;
@@ -78,7 +79,6 @@ interface MmrApprovalModalProps {
   onReject?: (signupId: number) => void;
   isApproving?: boolean;
   isRejecting?: boolean;
-  gameType: GameTypeValue;
 }
 
 export function MmrApprovalModal({
@@ -89,8 +89,8 @@ export function MmrApprovalModal({
   onReject,
   isApproving = false,
   isRejecting = false,
-  gameType,
 }: MmrApprovalModalProps) {
+  const gameType = useContextGameType();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [approvedMmr, setApprovedMmr] = useState<number | null>(null);
   const mmrSchema = useMemo(() => buildMmrSchema(gameType), [gameType]);
@@ -210,7 +210,6 @@ export function MmrApprovalModal({
         <UserStrip
           user={stripUser}
           showBorder={false}
-          gameType={gameType}
           className={brandDialogPanel}
           data-testid="mmr-confirm-user-strip"
         />
@@ -250,7 +249,7 @@ export function MmrApprovalModal({
             </div>
           </DialogHeader>
 
-          <RankSignalsCard signup={signup} gameType={gameType} />
+          <RankSignalsCard signup={signup} />
 
           {screenshotUrl && (
             <div className="rounded-lg border border-border overflow-hidden bg-base-800">

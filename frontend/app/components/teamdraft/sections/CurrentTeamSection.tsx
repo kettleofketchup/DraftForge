@@ -1,5 +1,4 @@
 import { memo, useMemo } from 'react';
-import { toGameType } from '~/components/game/constants';
 import { TeamTable } from '~/components/team/teamTable/teamTable';
 import { DisplayName } from '~/components/user/avatar';
 import { useUserStore } from '~/store/userStore';
@@ -17,15 +16,12 @@ const selectCurDraftRoundCaptain = (
 const selectOrganizationPk = (
   state: ReturnType<typeof useUserStore.getState>,
 ) => state.tournament?.organization_pk;
-const selectGameType = (state: ReturnType<typeof useUserStore.getState>) =>
-  toGameType(state.tournament?.game_type);
 
 export const CurrentTeamSection = memo(() => {
   const teams = useUserStore(selectTeams);
   const curDraftRoundCaptainPk = useUserStore(selectCurDraftRoundCaptainPk);
   const curDraftRoundCaptain = useUserStore(selectCurDraftRoundCaptain);
   const organizationPk = useUserStore(selectOrganizationPk);
-  const gameType = useUserStore(selectGameType);
 
   // Get current team
   const currentTeam = useMemo(() => {
@@ -55,7 +51,6 @@ export const CurrentTeamSection = memo(() => {
           compact
           useStrips
           organizationId={organizationPk ?? undefined}
-          gameType={gameType}
         />
       </div>
     </div>

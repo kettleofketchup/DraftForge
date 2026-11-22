@@ -2,11 +2,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { EventSignupType } from '~/components/events/schemas';
 import { GAME_TYPE, type GameTypeValue } from '~/components/game/constants';
 import { TooltipProvider } from '~/components/ui/tooltip';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 import { MmrApprovalModal } from './MmrApprovalModal';
+
+afterEach(resetGameType);
 
 vi.mock('~/components/ui/shared-popover-context', () => ({
   useSharedPopoverActions: () => ({
@@ -53,6 +56,7 @@ function wrap(node: ReactNode) {
 
 function renderModal(gameType: GameTypeValue, s: EventSignupType) {
   const onApprove = vi.fn();
+  withGameType(gameType);
   render(
     wrap(
       <MmrApprovalModal
@@ -60,7 +64,6 @@ function renderModal(gameType: GameTypeValue, s: EventSignupType) {
         open
         onOpenChange={() => {}}
         onApprove={onApprove}
-        gameType={gameType}
       />,
     ),
   );

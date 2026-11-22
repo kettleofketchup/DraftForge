@@ -27,6 +27,7 @@ import { DisplayName } from '~/components/user/avatar';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useGameType } from '~/hooks/useGameType';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
@@ -60,8 +61,6 @@ interface Props {
   leagueId?: number;
   /** Optional organization ID for context-specific stats in mini profile */
   organizationId?: number;
-  /** Context game (tournament scope); undefined = org scope, every game. */
-  gameType?: GameTypeValue;
 }
 
 export const UserCard: React.FC<Props> = memo(
@@ -73,8 +72,9 @@ export const UserCard: React.FC<Props> = memo(
     animationIndex = 0,
     leagueId,
     organizationId,
-    gameType,
   }) => {
+    // The page's game only; null (org and global pages) shows every game.
+    const gameType = useGameType() ?? undefined;
     const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
     // gameType-aware positions over the list-populated entity adapter; fall back
@@ -167,7 +167,6 @@ export const UserCard: React.FC<Props> = memo(
       openPlayerModal(user, {
         organizationId: currentOrg?.pk,
         leagueId,
-        ...(gameType != null ? { gameType } : {}),
       });
     };
 

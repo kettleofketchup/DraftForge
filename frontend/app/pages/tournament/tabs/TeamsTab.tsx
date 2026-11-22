@@ -1,5 +1,4 @@
 import { memo, useMemo, useState } from 'react';
-import { toGameType } from '~/components/game/constants';
 import { TeamLeadershipAlert } from '~/components/team/manage/TeamLeadershipAlert';
 import { useCanEditCurrentTournament } from '~/components/team/manage/useTeamManagement';
 import { SearchTeamsDropdown } from '~/components/team/searchTeams';
@@ -78,7 +77,6 @@ export const TeamsTab: React.FC = memo(() => {
             team={team}
             rank={index + 1}
             key={`TeamCard-${team.pk}`}
-            gameType={toGameType(tournament?.game_type)}
             organizationId={tournament?.organization_pk ?? undefined}
             leaguePk={tournament?.league_pk ?? null}
             canEdit={canEdit}

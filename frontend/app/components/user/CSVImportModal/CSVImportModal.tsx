@@ -53,6 +53,7 @@ import {
 } from '~/components/ui/select';
 import type { UserType } from '~/components/user/types';
 import { UserStrip } from '~/components/user/UserStrip';
+import { useContextGameType } from '~/hooks/useGameType';
 
 import { parseCSV, validateRows } from './csvParser';
 import type {
@@ -142,11 +143,10 @@ export function CSVImportModal({
   );
 
   const isTournament = Boolean(entityContext.tournamentId);
+  const tournamentGame = useContextGameType();
   // Tournament imports always use the tournament's game (the backend ignores
   // game_type there); org imports send the selected game.
-  const mmrGame: GameTypeValue = isTournament
-    ? toGameType(entityContext.gameType)
-    : orgGame;
+  const mmrGame: GameTypeValue = isTournament ? tournamentGame : orgGame;
   const leagueTargetAllowed = isTournament && mmrGame === GAME_TYPE.DOTA2;
   const importOptions = useCallback(
     () => ({
@@ -285,6 +285,7 @@ export function CSVImportModal({
 
   const downloadExampleCSV = useCallback(() => {
     const isTournament = Boolean(entityContext.tournamentId);
+    const tournamentGame = useContextGameType();
     const comment =
       '# A steam_friend_id, discord_id, or discord_username is required. name, mmr, positions, team_name, team_captain are optional.';
     const headers = [

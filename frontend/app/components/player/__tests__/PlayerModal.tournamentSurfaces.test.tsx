@@ -18,6 +18,7 @@ import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import type { UserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 
 const api = vi.hoisted(() => ({ fetchUser: vi.fn() }));
 vi.mock('~/components/api/api', async (importOriginal) => ({
@@ -130,11 +131,13 @@ beforeEach(() => {
     } as unknown as TournamentType,
     draft: { users_remaining: [player] } as never,
   });
+  withGameType(GAME_TYPE.DEADLOCK);
 });
 
 afterEach(() => {
   useOrgStore.setState({ currentOrg: null });
   useUserStore.setState({ tournament: null as never, draft: null as never });
+  resetGameType();
 });
 
 describe('PlayerModal opened from Deadlock tournament surfaces', () => {

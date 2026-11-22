@@ -6,7 +6,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import type { GameTypeValue } from '~/components/game/constants';
 import type { TeamType } from '~/components/tournament/types';
 import type { UserType } from '~/components/user/types';
 
@@ -26,16 +25,12 @@ interface SharedPopoverState {
 
 export interface PlayerPopoverContext {
   statsLeagueId?: number | null;
-  /** Context game of the surface; labels and scopes the org MMR. */
-  gameType?: GameTypeValue;
 }
 
 export interface PlayerModalContext {
   leagueId?: number;
   organizationId?: number;
   statsLeagueId?: number | null;
-  /** Context game; unset (org scope) shows every cached game. */
-  gameType?: GameTypeValue;
 }
 
 /** Stable callbacks. The value is constructed once and never changes. */

@@ -15,6 +15,7 @@ import {
 } from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useContextGameType } from '~/hooks/useGameType';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { cn } from '~/lib/utils';
 import { selectOrgMmr } from '~/store/selectOrgMmr';
@@ -41,8 +42,8 @@ export interface UserStripProps {
   /** Optional organization ID for context-specific stats in mini profile */
   organizationId?: number;
 
-  /** Game of the surface; picks and labels the org MMR badge. */
-  gameType: GameTypeValue;
+  /** Overrides the page's game (useContextGameType) for the org MMR badge. */
+  gameType?: GameTypeValue;
 
   /** League pk for the ticket-match stats column; independent of the L: badge */
   statsLeagueId?: number | null;
@@ -125,7 +126,7 @@ export const UserStrip = memo(
     actionSlot,
     leagueId,
     organizationId,
-    gameType,
+    gameType: gameTypeOverride,
     statsLeagueId,
     statsBreakpoint = 'default',
     compact = false,
@@ -136,6 +137,7 @@ export const UserStrip = memo(
     className,
     'data-testid': testId,
   }: UserStripProps) => {
+    const gameType = useContextGameType(gameTypeOverride);
     // Memoize display names to avoid recalculating
     const { fullName, displayedName, displayedNameMobile } = useMemo(
       () => ({
@@ -248,11 +250,7 @@ export const UserStrip = memo(
         data-testid={testId}
       >
         {/* Column 1: Avatar */}
-        <PlayerPopover
-          player={user}
-          statsLeagueId={statsLeagueId}
-          gameType={gameType}
-        >
+        <PlayerPopover player={user} statsLeagueId={statsLeagueId}>
           <UserAvatar
             user={user}
             size={compact ? 'md' : 'lg'}
@@ -263,11 +261,7 @@ export const UserStrip = memo(
         {/* Column 2: Name + Positions (grouped) */}
         <div className="min-w-0 flex flex-col justify-center">
           {/* Row 1: Name */}
-          <PlayerPopover
-            player={user}
-            statsLeagueId={statsLeagueId}
-            gameType={gameType}
-          >
+          <PlayerPopover player={user} statsLeagueId={statsLeagueId}>
             <span
               className={cn(
                 'text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight inline-block truncate',
@@ -308,7 +302,6 @@ export const UserStrip = memo(
             leaguePk={statsLeagueId}
             player={user}
             breakpoint={statsBreakpoint}
-            gameType={gameType}
           />
         ) : null}
 
