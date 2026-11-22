@@ -214,3 +214,14 @@ export {
   type OrgFeaturesRole,
   type OrgFeaturesTestData,
 } from './org-features';
+
+// MMR update request utilities (11-org-mmr/05-mmr-update-requests)
+export {
+  MMR_SCREENSHOT_PATH,
+  getMmrRequestsData,
+  resetMmrRequests,
+  type MmrRequestsData,
+  type MmrRequestsRole,
+  type MmrRequestsUser,
+  type ResetMmrRequestsOptions,
+} from './mmr-requests';

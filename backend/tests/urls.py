@@ -61,6 +61,7 @@ from .test_herodraft import (
     reset_herodraft,
     warp_herodraft_round,
 )
+from .test_mmr_requests import mmr_requests_data, mmr_requests_reset
 from .test_org_features import login_org_features, org_features_data, reset_org_features
 from .test_steam import create_test_match
 from .test_teamdraft import expire_draft_clock, stale_draft_heartbeat
@@ -366,6 +367,8 @@ urlpatterns = [
         game_org_mmr_approve_setup,
         name="test-game-org-mmr-approve-setup",
     ),
+    path("mmr-requests/data/", mmr_requests_data, name="test-mmr-requests-data"),
+    path("mmr-requests/reset/", mmr_requests_reset, name="test-mmr-requests-reset"),
     path("healthz/", healthz, name="test-healthz"),
     # Bracket scenario helpers (gated on TEST=true)
     path(

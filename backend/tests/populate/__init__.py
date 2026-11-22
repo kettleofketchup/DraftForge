@@ -54,6 +54,7 @@ from tests.populate.league_stats import (
     populate_league_stats_data,
     populate_league_stats_showcase,
 )
+from tests.populate.mmr_requests import populate_mmr_requests_data
 from tests.populate.org_delete import populate_org_delete
 from tests.populate.org_features import populate_org_features_data
 from tests.populate.organizations import (
@@ -121,6 +122,8 @@ def populate_all(force: bool = False) -> None:
         # Last: explicit pks (org/league 50, users 8000-8007) bump the
         # auto-increment counters every step above relies on.
         ("Game Org MMR Data", populate_game_org_mmr_data),
+        # Explicit pks (org/league 60, users 8100-8105), after Game Org MMR.
+        ("MMR Requests Data", populate_mmr_requests_data),
     ]
 
     console = Console()
@@ -170,6 +173,7 @@ __all__ = [
     "populate_user_edit_data",
     "populate_events_data",
     "populate_game_org_mmr_data",
+    "populate_mmr_requests_data",
     "populate_auth_matrix_data",
     "populate_demo_tournaments",
     "populate_league_stats_data",
