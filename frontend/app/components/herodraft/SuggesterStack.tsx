@@ -13,7 +13,7 @@ export interface SuggesterStackProps {
   heroId: number;
 }
 
-/** Overlapping suggester avatars: picks top-left in green, bans top-right in red. */
+/** Overlapping suggester avatars: picks top-left in green, bans bottom-right in red. */
 export const SuggesterStack = memo(function SuggesterStack({
   users,
   kind,
@@ -26,10 +26,10 @@ export const SuggesterStack = memo(function SuggesterStack({
   return (
     <span
       className={cn(
-        'pointer-events-none absolute -top-1 z-10 flex -space-x-1',
+        'pointer-events-none absolute z-10 flex -space-x-1',
         kind === 'pick'
-          ? '-left-1'
-          : '-right-1 flex-row-reverse space-x-reverse',
+          ? '-top-1 -left-1'
+          : '-bottom-1 -right-1 flex-row-reverse space-x-reverse',
       )}
       data-testid={`herodraft-hero-${heroId}-${kind}-suggesters`}
       data-count={users.length}

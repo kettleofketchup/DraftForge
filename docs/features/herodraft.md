@@ -334,7 +334,7 @@ During the ban/pick phase (`drafting`), a team member can right-click a hero in 
 
 Live suggestions also show on the grid itself, to the suggesting team only:
 
-- Each hero with pick suggestions carries a small stack of the suggesters' avatars, ringed green, at its top-left. Ban suggestions show at the top-right, ringed red, and only during a ban round. Up to three avatars show; the rest collapse into a `+N` chip. Hovering the hero lists every suggester.
+- Each hero with pick suggestions carries a small stack of the suggesters' avatars, ringed green, at its top-left. Ban suggestions show at the bottom-right, ringed red, and only during a ban round. Up to three avatars show; the rest collapse into a `+N` chip. Hovering the hero lists every suggester.
 - On your team's turn, heroes suggested for the current action (picks on a pick round, bans on a ban round) get a bright green or red ring. Heroes with only the other kind of suggestion are not emphasised.
 - Right-clicking a hero you suggested shows **Remove pick suggestion** / **Remove ban suggestion** in place of the suggest item. Removing posts a muted "removed" line to team chat and clears your avatar from the hero. You can only remove your own suggestions.
 - Suggestions on a hero that has been picked or banned disappear.

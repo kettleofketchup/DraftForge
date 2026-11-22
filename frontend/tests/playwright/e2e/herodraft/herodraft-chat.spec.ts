@@ -1078,7 +1078,7 @@ test.describe('@cicd HeroDraft suggestion badges', () => {
       ).not.toHaveAttribute('data-hero-emphasis', /.*/);
     }
 
-    // Pick badges sit top-left, ban badges top-right.
+    // Pick badges sit top-left, ban badges bottom-right.
     const heroBox = (await captainF.page
       .getByTestId(`herodraft-hero-${PICK_TARGET}`)
       .boundingBox())!;
@@ -1090,6 +1090,9 @@ test.describe('@cicd HeroDraft suggestion badges', () => {
     expect(pickBox.x + pickBox.width / 2).toBeLessThan(
       heroBox.x + heroBox.width / 2,
     );
+    expect(pickBox.y + pickBox.height / 2).toBeLessThan(
+      heroBox.y + heroBox.height / 2,
+    );
     const banHeroBox = (await captainF.page
       .getByTestId(`herodraft-hero-${BAN_TARGET}`)
       .boundingBox())!;
@@ -1100,6 +1103,9 @@ test.describe('@cicd HeroDraft suggestion badges', () => {
     ).boundingBox())!;
     expect(banBox.x + banBox.width / 2).toBeGreaterThan(
       banHeroBox.x + banHeroBox.width / 2,
+    );
+    expect(banBox.y + banBox.height / 2).toBeGreaterThan(
+      banHeroBox.y + banHeroBox.height / 2,
     );
 
     // The second-pick team sees its own badge but no emphasis off-turn.
