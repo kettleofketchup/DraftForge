@@ -44,13 +44,19 @@ PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 39
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
+# leadership FKs: +5 collector queries; leadership merge hook: +3
 MERGE_DISCORD_QUERIES = 181
+# leadership FKs: +5 collector queries; leadership merge hook: +3
 MERGE_CLAIM_QUERIES = 165
+# leadership FKs: +5 collector queries; leadership delete hook: +1
 DELETE_API_QUERIES = 103
+# leadership FKs: +8 collector queries; leadership delete hook: +1
 DELETE_ADMIN_QUERIES = 152
+# leadership FKs: +3 collector queries
 DELETE_ADMIN_CONFIRM_QUERIES = 51
 PROMO_SEND_QUERIES = 23
 PROMO_UNDO_QUERIES = 8
+# leadership FKs: +5 collector queries; leadership delete hook: +1
 PROMO_RELEASE_QUERIES = 117
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3

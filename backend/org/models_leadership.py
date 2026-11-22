@@ -67,6 +67,7 @@ class OrgLeadershipSettings(models.Model):
         blank=True,
         related_name="+",
     )
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -140,7 +141,7 @@ class EventCaptain(models.Model):
         indexes = [
             models.Index(
                 fields=["organization", "window_closes_at"],
-                name="leadership_snap_org_win_idx",
+                name="leadership_ec_org_window_idx",
             ),
         ]
 
@@ -178,13 +179,13 @@ class CaptainReview(models.Model):
             models.CheckConstraint(
                 condition=(Q(voided_at__isnull=True) & Q(void_kind=""))
                 | (Q(voided_at__isnull=False) & ~Q(void_kind="")),
-                name="captain_review_void_kind_matches",
+                name="captain_review_void_pair",
             ),
         ]
         indexes = [
             models.Index(
                 fields=["event_captain", "voided_at"],
-                name="leadership_review_live_idx",
+                name="leadership_review_ec_void_idx",
             ),
             models.Index(fields=["rater"], name="leadership_review_rater_idx"),
         ]
@@ -209,7 +210,7 @@ class CaptainTraitScore(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["review", "trait"], name="uniq_captain_trait_score"
+                fields=["review", "trait"], name="uniq_review_trait"
             ),
             models.CheckConstraint(
                 condition=Q(score__gte=SCORE_MIN) & Q(score__lte=SCORE_MAX),
