@@ -1,9 +1,9 @@
 from django.db.models import Q
 
 from app.models import CustomUser
-from league.models import League
+from league.models import League, LeagueUser
 from league.permissions import has_league_admin_access, has_league_staff_access
-from org.models import MmrChangeRequest, Organization
+from org.models import MmrChangeRequest, Organization, OrgUser
 from org.permissions import has_org_admin_access, has_org_staff_access
 
 
@@ -11,6 +11,28 @@ def may_self_verify(actor: CustomUser | None, subject_user_id: int) -> bool:
     if actor is None or actor.is_superuser:
         return True
     return actor.pk != subject_user_id
+
+
+def may_verify_org_mmr(actor: CustomUser | None, org_user: OrgUser) -> bool:
+    if not may_self_verify(actor, org_user.user_id):
+        return False
+    if actor is None or actor.is_superuser:
+        return True
+    org = org_user.organization
+    if has_org_staff_access(org_user.user, org):
+        return has_org_admin_access(actor, org)
+    return True
+
+
+def may_verify_league_mmr(actor: CustomUser | None, league_user: LeagueUser) -> bool:
+    if not may_self_verify(actor, league_user.user_id):
+        return False
+    if actor is None or actor.is_superuser:
+        return True
+    league = league_user.league
+    if has_league_staff_access(league_user.user, league):
+        return has_league_admin_access(actor, league)
+    return True
 
 
 def can_review_target(

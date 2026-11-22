@@ -9,7 +9,7 @@ from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
 from league.models import LeagueLog, LeagueUser
 from org.mmr import LEAGUE_GAME, invalidate_org_user_tournaments, validate_org_mmr
-from org.mmr_requests.permissions import may_self_verify
+from org.mmr_requests.permissions import may_verify_league_mmr
 from org.models import MmrChangeRequest, OrgLog, OrgUser
 from telemetry.logging import get_logger
 
@@ -64,7 +64,7 @@ def set_league_mmr(
 ) -> LeagueMmrWriteResult:
     if mmr != 0:
         validate_org_mmr(LEAGUE_GAME, mmr)
-    verified = verified and may_self_verify(actor, league_user.user_id) and mmr > 0
+    verified = verified and may_verify_league_mmr(actor, league_user) and mmr > 0
     with transaction.atomic():
         row = (
             LeagueUser.objects.nocache()

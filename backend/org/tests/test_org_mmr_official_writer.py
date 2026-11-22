@@ -7,9 +7,11 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, GameType
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
+from league.mmr import set_league_mmr
 from league.models import League, LeagueUser
 from org.mmr import set_org_mmr
 from org.mmr_official import apply_official_org_mmr
+from org.mmr_requests.permissions import may_verify_league_mmr, may_verify_org_mmr
 from org.models import MmrChangeRequest, Organization, OrgLog, OrgUser, OrgUserGameMmr
 from org.tests.mmr_request_mixin import MmrRequestTestMixin
 
@@ -311,6 +313,47 @@ class PatchThroughWriterTests(WriterBase):
         [entry] = self.set_mmr_logs()
         self.assertFalse(entry.details["verified"])
 
+    def test_patch_staff_colleague_by_plain_staff_writes_unverified(self) -> None:
+        colleague = CustomUser.objects.create(username="ow_colleague")
+        self.org.staff.add(colleague)
+        colleague_ou = OrgUser.objects.create(user=colleague, organization=self.org)
+        pending = self.make_request(org_user=colleague_ou, requested_mmr=6000)
+
+        response = self.client.patch(
+            f"/api/organizations/{self.org.pk}/users/{colleague_ou.pk}/",
+            {"game_mmrs": {"1": 7000}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        r = row(colleague_ou, DOTA)
+        assert r is not None
+        self.assertEqual(r.mmr, 7000)
+        self.assertIsNone(r.verified_at)
+        self.assertIsNone(r.verified_by)
+        self.assertEqual(fresh(pending).status, PENDING)
+        [entry] = self.set_mmr_logs()
+        self.assertFalse(entry.details["verified"])
+
+    def test_patch_staff_colleague_by_owner_verifies(self) -> None:
+        colleague = CustomUser.objects.create(username="ow_colleague2")
+        self.org.staff.add(colleague)
+        colleague_ou = OrgUser.objects.create(user=colleague, organization=self.org)
+        pending = self.make_request(org_user=colleague_ou, requested_mmr=6000)
+        self.client.force_authenticate(self.owner)
+
+        response = self.client.patch(
+            f"/api/organizations/{self.org.pk}/users/{colleague_ou.pk}/",
+            {"game_mmrs": {"1": 7000}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        r = row(colleague_ou, DOTA)
+        assert r is not None
+        self.assertEqual(r.verified_by, self.owner)
+        self.assertEqual(fresh(pending).status, SUPERSEDED)
+
     def test_patch_logs_once(self) -> None:
         response = self.patch({"game_mmrs": {"1": 4100, "2": 2000}})
 
@@ -378,3 +421,64 @@ class EventApproveThroughWriterTests(WriterBase):
         self.assertEqual(superseded.status, SUPERSEDED)
         self.assertEqual(superseded.approved_mmr, 4300)
         self.assertEqual(superseded.reviewed_by, self.owner)
+
+    def test_event_approve_staff_colleague_by_plain_staff_unverified(self) -> None:
+        colleague = CustomUser.objects.create(username="ow_ev_colleague")
+        self.org.staff.add(colleague)
+        colleague_ou = OrgUser.objects.create(user=colleague, organization=self.org)
+        pending = self.make_request(org_user=colleague_ou, requested_mmr=6000)
+
+        response = self.approve(self.staff, colleague, 7000)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        r = row(colleague_ou, DOTA)
+        assert r is not None
+        self.assertEqual(r.mmr, 7000)
+        self.assertIsNone(r.verified_at)
+        self.assertEqual(fresh(pending).status, PENDING)
+        [entry] = self.set_mmr_logs()
+        self.assertFalse(entry.details["verified"])
+
+
+class MayVerifyTests(WriterBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.admin = CustomUser.objects.create(username="ow_admin")
+        self.org.admins.add(self.admin)
+        self.staff_ou = OrgUser.objects.create(user=self.staff, organization=self.org)
+        self.admin_ou = OrgUser.objects.create(user=self.admin, organization=self.org)
+        self.league = League.objects.create(name="Verify League", organization=self.org)
+        self.league_staff = CustomUser.objects.create(username="ow_league_staff")
+        self.league.staff.add(self.league_staff)
+        lstaff_ou = OrgUser.objects.create(
+            user=self.league_staff, organization=self.org
+        )
+        self.member_lu = LeagueUser.objects.create(
+            user=self.member, org_user=self.ou, league=self.league
+        )
+        self.lstaff_lu = LeagueUser.objects.create(
+            user=self.league_staff, org_user=lstaff_ou, league=self.league
+        )
+
+    def test_org_rules(self) -> None:
+        self.assertTrue(may_verify_org_mmr(None, self.staff_ou))
+        self.assertTrue(may_verify_org_mmr(self.staff, self.ou))
+        self.assertFalse(may_verify_org_mmr(self.staff, self.staff_ou))
+        self.assertFalse(may_verify_org_mmr(self.staff, self.admin_ou))
+        self.assertTrue(may_verify_org_mmr(self.admin, self.staff_ou))
+        self.assertTrue(may_verify_org_mmr(self.owner, self.admin_ou))
+
+    def test_league_rules(self) -> None:
+        self.assertTrue(may_verify_league_mmr(self.league_staff, self.member_lu))
+        self.assertFalse(may_verify_league_mmr(self.staff, self.lstaff_lu))
+        self.assertTrue(may_verify_league_mmr(self.admin, self.lstaff_lu))
+
+    def test_set_league_mmr_by_plain_staff_on_staff_subject_unverified(self) -> None:
+        result = set_league_mmr(
+            self.lstaff_lu, 3000, actor=self.staff, verified=True, source="test"
+        )
+
+        self.assertFalse(result.verified)
+        lu = LeagueUser.objects.nocache().get(pk=self.lstaff_lu.pk)
+        self.assertEqual(lu.mmr, 3000)
+        self.assertIsNone(lu.mmr_verified_at)

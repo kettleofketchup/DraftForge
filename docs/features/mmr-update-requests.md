@@ -109,7 +109,10 @@ screenshot and a note. The value is Official immediately. An approved request ro
 source "staff" is kept for the audit trail, and any pending member request for that
 target becomes Superseded.
 
-Saving an org MMR in the normal member edit form also marks it Official.
+Saving an org MMR in the normal member edit form, or approving an event signup with an
+MMR, also marks it Official when you could review that member's requests. Otherwise
+(your own MMR, or a staff member's MMR when you are not an admin) the value is saved as
+Unverified and any pending request stays in the queue.
 
 ### Who can review
 

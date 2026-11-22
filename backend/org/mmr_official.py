@@ -16,7 +16,7 @@ from org.mmr import (
     set_org_mmr,
     validate_org_mmr,
 )
-from org.mmr_requests.permissions import may_self_verify
+from org.mmr_requests.permissions import may_verify_org_mmr
 from org.models import MmrChangeRequest, OrgLog, OrgUser, OrgUserGameMmr
 from telemetry.logging import get_logger
 
@@ -74,7 +74,7 @@ def apply_official_org_mmr(
     log_unchanged: bool = False,
 ) -> OrgMmrWriteResult:
     validate_org_mmr(game_type, value)
-    verified = may_self_verify(actor, org_user.user_id)
+    verified = may_verify_org_mmr(actor, org_user)
     with transaction.atomic():
         previous = (
             OrgUserGameMmr.objects.nocache()
