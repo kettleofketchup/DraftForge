@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { READY_CHECK_TEST_IDS } from '../form/testIds';
 import {
   event,
   openTab,
@@ -59,6 +60,15 @@ vi.mock('~/components/league/LeagueCombobox', () => ({
   LeagueCombobox: () => null,
 }));
 
+// Heavy tabs these tests never use; rendering them timed tests out under load.
+vi.mock('../form/sections/EventTournamentFields', () => ({
+  EventTournamentFields: () => null,
+}));
+vi.mock('../form/sections/EventLobbyFields', () => ({
+  EventLobbyFields: () => null,
+}));
+vi.mock('../form/fields/TimezoneField', () => ({ TimezoneField: () => null }));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
@@ -69,22 +79,22 @@ import { EditEventModal } from '../EditEventModal';
 import { EditRepeaterModal } from '../EditRepeaterModal';
 import { OrgEventDefaultsHarness } from './orgEventDefaultsHarness';
 
-const ROSTER_LABEL = 'Mandatory RSVP Confirmation';
-const SELF_SERVE_LABEL = 'Members can sign themselves up';
+const ROSTER_SWITCH = READY_CHECK_TEST_IDS.toggle;
+const SELF_SERVE_BOX = 'signup-rules-allow_user_signups';
 
 async function toggleRules(selfServeTab: RegExp = /approval/i) {
   openTab(/ready check/i);
-  fireEvent.click(await screen.findByLabelText(ROSTER_LABEL));
+  fireEvent.click(await screen.findByTestId(ROSTER_SWITCH));
   openTab(selfServeTab);
-  fireEvent.click(await screen.findByLabelText(SELF_SERVE_LABEL));
+  fireEvent.click(await screen.findByTestId(SELF_SERVE_BOX));
 }
 
 async function expectRules(roster: boolean, selfServe: boolean) {
   openTab(/ready check/i);
-  const rosterSwitch = await screen.findByLabelText(ROSTER_LABEL);
+  const rosterSwitch = await screen.findByTestId(ROSTER_SWITCH);
   expect(rosterSwitch.getAttribute('aria-checked')).toBe(String(roster));
   openTab(/approval/i);
-  const selfServeBox = await screen.findByLabelText(SELF_SERVE_LABEL);
+  const selfServeBox = await screen.findByTestId(SELF_SERVE_BOX);
   if (selfServe) expect(selfServeBox).toBeChecked();
   else expect(selfServeBox).not.toBeChecked();
 }
@@ -154,7 +164,7 @@ describe('CreateSeriesEventModal signup rules', () => {
     });
     await expectRules(false, false);
     openTab(/ready check/i);
-    fireEvent.click(await screen.findByLabelText(ROSTER_LABEL));
+    fireEvent.click(await screen.findByTestId(ROSTER_SWITCH));
     submit();
     await waitFor(() => expect(api.createSeriesOneOffEvent).toHaveBeenCalled());
     expect(api.createSeriesOneOffEvent.mock.calls[0][1]).toMatchObject(TOGGLED);
@@ -204,7 +214,9 @@ describe('org event defaults signup rules', () => {
       wrapper: Wrapper,
     });
     await waitFor(() => expect(api.getOrgEventDefaults).toHaveBeenCalled());
-    await screen.findByDisplayValue('Night Cup');
+    expect(
+      await screen.findByTestId('org-defaults-max-players-input'),
+    ).toHaveValue(orgDefaults.max_players);
     await toggleRules(/^event$/i);
     submit();
     await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());

@@ -32,6 +32,15 @@ vi.mock('~/components/league/LeagueCombobox', () => ({
   LeagueCombobox: () => null,
 }));
 
+// Heavy tabs these tests never use; rendering them timed tests out under load.
+vi.mock('../form/sections/EventTournamentFields', () => ({
+  EventTournamentFields: () => null,
+}));
+vi.mock('../form/sections/EventLobbyFields', () => ({
+  EventLobbyFields: () => null,
+}));
+vi.mock('../form/fields/TimezoneField', () => ({ TimezoneField: () => null }));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
@@ -63,7 +72,7 @@ async function renderReady() {
 }
 
 function chooseDays(days: string) {
-  fireEvent.click(screen.getByLabelText('Open days before event'));
+  fireEvent.click(screen.getByTestId('signup-open-mode-scheduled'));
   fireEvent.change(screen.getByTestId('signup-open-days-input'), {
     target: { value: days },
   });
@@ -86,7 +95,7 @@ describe('CreateEventModal signup open policy', () => {
 
   it('opens a single event at once when immediate is chosen', async () => {
     await renderReady();
-    fireEvent.click(screen.getByLabelText('Open immediately'));
+    fireEvent.click(screen.getByTestId('signup-open-mode-immediate'));
     submit();
     await waitFor(() => expect(api.createEvent).toHaveBeenCalled());
     const [body, openNow] = api.createEvent.mock.calls[0];
@@ -124,7 +133,7 @@ describe('CreateEventModal signup open policy', () => {
       <CreateEventModal open onOpenChange={() => {}} organizationId={1} />,
       { wrapper: Wrapper },
     );
-    expect(await screen.findByLabelText('Open manually')).toBeChecked();
+    expect(await screen.findByTestId('signup-open-mode-manual')).toBeChecked();
   });
 
   it('sends the org default policy for an untouched recurring create', async () => {
@@ -161,7 +170,9 @@ describe('org event defaults signup open policy', () => {
     render(<OrgEventDefaultsHarness organizationId={1} />, {
       wrapper: Wrapper,
     });
-    await screen.findByDisplayValue('Night Cup');
+    expect(
+      await screen.findByTestId('org-defaults-max-players-input'),
+    ).toHaveValue(orgDefaults.max_players);
     expect(screen.getByTestId('signup-open-days-input')).toHaveValue(3);
     fireEvent.change(screen.getByTestId('signup-open-days-input'), {
       target: { value: '5' },
