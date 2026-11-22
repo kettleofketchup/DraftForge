@@ -30,6 +30,7 @@ from org.models import (
     PromoSend,
 )
 from org.models_conduct import AttendanceOutcome
+from org.models_leadership import CaptainReview, EventCaptain
 from org.models_promotion import PromoTemplate
 from org.promotion.recipients import candidates
 from org.promotion.services import record_promo_send
@@ -378,6 +379,27 @@ class OrgFeaturesPopulateTest(TestCase):
         self.assertGreaterEqual(len(rows), 5)
         self.assertTrue(all(r["discordId"] for r in rows))
 
+    def test_leadership_seeded(self) -> None:
+        data = reset_org_features_data()
+        leadership = data["leadership"]
+        snaps = EventCaptain.objects.filter(event_id=leadership["event"]["pk"])
+        self.assertEqual(
+            sorted(snaps.values_list("captain_id", flat=True)),
+            sorted(t["captain_org_user_pk"] for t in leadership["teams"]),
+        )
+        self.assertEqual(
+            CaptainReview.objects.filter(
+                event_captain__event_id=leadership["event"]["pk"]
+            ).count(),
+            len(leadership["reviewed_by_user_pks"]),
+        )
+        self.assertTrue(
+            ContributionEntry.objects.filter(
+                event_id=leadership["event"]["pk"], track="leadership"
+            ).exists()
+        )
+        reset_org_features_data()
+
     def test_conduct_seeded(self) -> None:
         data = reset_org_features_data()
         conduct = data["conduct"]
@@ -573,7 +595,10 @@ class OrgFeaturesPopulateTest(TestCase):
             .exists()
         )
         self.assertEqual(
-            ContributionEntry.objects.nocache().filter(organization=org).count(), 2
+            ContributionEntry.objects.nocache()
+            .filter(organization=org, track="contribution")
+            .count(),
+            2,
         )
         self.assertFalse(
             OrgUser.objects.nocache().filter(user=outsider, organization=org).exists()

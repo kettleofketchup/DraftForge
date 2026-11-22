@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Literal
 
 from django.db.models import Count, Q, QuerySet, Sum
+from django.utils import timezone
 
 from app.models import CustomUser
 from events.models import Event
@@ -11,9 +12,10 @@ from org.models import (
     ContributionEntry,
     ContributionPointValue,
     Organization,
+    OrgUser,
     PromoSend,
 )
-from org.standing.kinds import KINDS, kinds_for
+from org.standing.kinds import KINDS
 from org.standing.periods import Period
 from org.standing.types import TrackKey
 
@@ -49,8 +51,12 @@ def in_period(
 
 def _track_entries(org_id: int, *, track: TrackKey) -> QuerySet[ContributionEntry]:
     return ContributionEntry.objects.nocache().filter(
-        organization_id=org_id, kind__in=kinds_for(track)
+        organization_id=org_id, track=track
     )
+
+
+def track_rows(track: TrackKey) -> QuerySet[ContributionEntry]:
+    return ContributionEntry.objects.nocache().filter(track=track)
 
 
 def total(org_id: int, *, track: TrackKey, period: Period) -> int:
@@ -92,6 +98,7 @@ def award(
     return ContributionEntry.objects.create(
         org_user=org_user,
         organization=org,
+        track=KINDS[kind].track,
         kind=kind,
         points=points,
         event=event,
@@ -110,7 +117,53 @@ def revoke_event_kinds(event: Event, *, kinds: Collection[str]) -> int:
             organization_id=event.organization_id,
             event_id=event.pk,
             kind__in=list(kinds),
+            track__in={KINDS[k].track for k in kinds if k in KINDS},
         )
         .delete()
     )
     return deleted
+
+
+UpsertOutcome = Literal["created", "updated", "deleted", "noop"]
+
+
+def upsert_event_entry(
+    *,
+    event: Event,
+    org_user: OrgUser,
+    kind: str,
+    points: int | None,
+    occurred_at: datetime,
+) -> UpsertOutcome:
+    kind = _check_kind(kind)
+    if not KINDS[kind].once_per_event:
+        raise ValueError(f"kind {kind!r} is not once per event")
+    rows = ContributionEntry.objects.nocache().filter(
+        event_id=event.pk, org_user_id=org_user.pk, kind=kind
+    )
+    if not points:
+        deleted, _ = rows.delete()
+        return "deleted" if deleted else "noop"
+    existing = rows.values_list("pk", "points", "occurred_at", "event_name").first()
+    if existing is None:
+        ContributionEntry.objects.create(
+            org_user_id=org_user.pk,
+            organization_id=event.organization_id,
+            track=KINDS[kind].track,
+            kind=kind,
+            points=points,
+            event=event,
+            event_name=event.name,
+            occurred_at=occurred_at,
+        )
+        return "created"
+    pk, old_points, old_at, old_name = existing
+    if (old_points, old_at, old_name) == (points, occurred_at, event.name):
+        return "noop"
+    ContributionEntry.objects.nocache().filter(pk=pk).update(
+        points=points,
+        occurred_at=occurred_at,
+        event_name=event.name,
+        updated_at=timezone.now(),
+    )
+    return "updated"

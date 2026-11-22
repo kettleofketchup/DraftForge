@@ -246,6 +246,18 @@ the per-viewer flags on the org detail (`can_use_promotion`,
 The event page shows the forecast, badges and Attendance panel when the event payload's
 `user_can_manage` is true and the event's org has `conduct` in `features`.
 
+### Leadership
+
+| Action | Who | Switch |
+| ------ | --- | ------ |
+| Edit leadership settings, point values and traits; delete an unscored trait | org owner, admin | Leadership |
+| List traits, see own pending reviews | org members | Leadership |
+| Submit, edit or withdraw a captain review | teammates in the captain's rater pool, while the window is open | Leadership |
+| Leadership leaderboard rows | org staff and above, or members who pass `can_view_org_members` when the board is public; members always get their own row | Leadership |
+| A captain's rating summary | the captain, org admins, or members when the board is public | Leadership |
+| A captain's per-event history | the captain (released events only) and org admins | Leadership |
+| See raters, void and restore reviews | org owner, admin, except on reviews of themselves | Leadership |
+
 ## Adding a New Gate
 
 1. Pick the right hook in `usePermissions.ts` — or add one if none fits

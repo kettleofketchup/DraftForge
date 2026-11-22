@@ -33,8 +33,11 @@ class LedgerKindsTest(SimpleTestCase):
             {"promo_message", "event_host", "event_helper", "manual"},
         )
 
-    def test_once_per_event_matches_staff_kinds(self) -> None:
-        self.assertEqual(ONCE_PER_EVENT_KINDS, {k.value for k in EVENT_STAFF_KINDS})
+    def test_once_per_event_covers_staff_and_leadership_kinds(self) -> None:
+        self.assertEqual(
+            ONCE_PER_EVENT_KINDS,
+            {k.value for k in EVENT_STAFF_KINDS} | kinds_for("leadership"),
+        )
 
 
 class LedgerTest(TestCase):

@@ -2,6 +2,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from org.contributions.kinds import DEFAULT_POINTS, EVENT_STAFF_KINDS, ContributionKind
+from org.leadership.kinds import DEFAULT_POINTS as LEADERSHIP_POINTS
+from org.leadership.kinds import FORMULA_KINDS, LeadershipKind
 from org.standing.types import TrackKey
 
 
@@ -26,6 +28,20 @@ CONTRIBUTION_KINDS: tuple[tuple[str, LedgerKind], ...] = tuple(
 )
 
 
+LEADERSHIP_KINDS: tuple[tuple[str, LedgerKind], ...] = tuple(
+    (
+        kind.value,
+        LedgerKind(
+            track="leadership",
+            default_points=LEADERSHIP_POINTS.get(kind.value),
+            once_per_event=True,
+            formula=kind in FORMULA_KINDS,
+        ),
+    )
+    for kind in LeadershipKind
+)
+
+
 def build_kinds(*groups: Iterable[tuple[str, LedgerKind]]) -> dict[str, LedgerKind]:
     table: dict[str, LedgerKind] = {}
     for group in groups:
@@ -36,7 +52,7 @@ def build_kinds(*groups: Iterable[tuple[str, LedgerKind]]) -> dict[str, LedgerKi
     return table
 
 
-KINDS: Mapping[str, LedgerKind] = build_kinds(CONTRIBUTION_KINDS)
+KINDS: Mapping[str, LedgerKind] = build_kinds(CONTRIBUTION_KINDS, LEADERSHIP_KINDS)
 
 
 def kinds_for(track: TrackKey) -> frozenset[str]:
@@ -45,4 +61,7 @@ def kinds_for(track: TrackKey) -> frozenset[str]:
 
 ONCE_PER_EVENT_KINDS: frozenset[str] = frozenset(
     name for name, kind in KINDS.items() if kind.once_per_event
+)
+FORMULA_KIND_NAMES: frozenset[str] = frozenset(
+    name for name, kind in KINDS.items() if kind.formula
 )

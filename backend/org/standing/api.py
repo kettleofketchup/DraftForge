@@ -252,7 +252,7 @@ def leaderboard(
     now: datetime | None = None,
 ) -> Leaderboard:
     adapter = registry.track(track)
-    chosen = next((m for m in adapter.metrics if m.key == metric), None)
+    chosen = next((m for m in adapter.metrics_for(org.pk) if m.key == metric), None)
     if chosen is None:
         raise UnknownMetric(metric)
     if not org_has_feature(org, adapter.feature):
@@ -325,5 +325,6 @@ def member_standing(
     return found
 
 
-def track_metrics(track: str) -> tuple[Metric, ...]:
-    return registry.track(track).metrics
+def track_metrics(track: str, org_id: int | None = None) -> tuple[Metric, ...]:
+    adapter = registry.track(track)
+    return adapter.metrics if org_id is None else adapter.metrics_for(org_id)

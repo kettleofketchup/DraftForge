@@ -184,6 +184,27 @@ ORG_FEATURES_CONDUCT_NEW_MEMBER: Final[TestUser] = ORG_FEATURES_PLAYERS[9]
 # Approved on the forecast event.
 ORG_FEATURES_CONDUCT_SIGNUPS: Final[list[TestUser]] = ORG_FEATURES_PLAYERS[0:6]
 
+# Leadership seed: a completed event on Features Cup 4 with two captained teams.
+ORG_FEATURES_LEADERSHIP_EVENT_NAME: Final[str] = "Features Leadership Event"
+ORG_FEATURES_LEADERSHIP_TOURNAMENT_PK: Final[int] = 263
+# (team name, captain, teammates, placement)
+ORG_FEATURES_LEADERSHIP_TEAMS: Final[
+    list[tuple[str, TestUser, list[TestUser], int]]
+] = [
+    ("Leadership Radiant", ORG_FEATURES_PLAYERS[4], ORG_FEATURES_PLAYERS[5:8], 1),
+    (
+        "Leadership Dire",
+        ORG_FEATURES_PLAYERS[8],
+        [ORG_FEATURES_PLAYERS[3]],
+        2,
+    ),
+]
+# (rater, captain, score on every trait); players[7] and players[3] are left to rate.
+ORG_FEATURES_LEADERSHIP_REVIEWS: Final[list[tuple[TestUser, TestUser, int]]] = [
+    (ORG_FEATURES_PLAYERS[5], ORG_FEATURES_PLAYERS[4], 5),
+    (ORG_FEATURES_PLAYERS[6], ORG_FEATURES_PLAYERS[4], 4),
+]
+
 ORG_FEATURES_TEMPLATES: Final[list[tuple[str, str]]] = [
     (
         "First invite",

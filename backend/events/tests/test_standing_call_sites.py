@@ -112,7 +112,14 @@ class StandingCallSiteTest(TestCase):
         self.assertEqual(self.fake.hooks, ["on_event_reopened"])
         self.assertEqual(self.fake.calls[0].kwargs["state"], EventState.SIGNUPS_OPEN)
         self.assertEqual(
-            result.details, {"revoked": 0, "attendance_reopened": 0, "fake_count": 1}
+            result.details,
+            {
+                "revoked": 0,
+                "attendance_reopened": 0,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
+                "fake_count": 1,
+            },
         )
         details = OrgLog.objects.get(action="reopen_event").details
         self.assertEqual(details["fake_count"], 1)

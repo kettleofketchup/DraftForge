@@ -89,6 +89,9 @@ class TrackBase(abc.ABC):
     ) -> list[T]:
         return list(candidates)
 
+    def metrics_for(self, org_id: int) -> tuple[Metric, ...]:
+        return self.metrics
+
     @abc.abstractmethod
     def access(
         self,

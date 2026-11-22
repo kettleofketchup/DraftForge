@@ -676,6 +676,16 @@ where `reasons` holds the `conduct_below_threshold` reason with `severity: "bloc
 [Signup requirements](#signup-requirements)). Staff placements of the same member are
 held as pending approval instead.
 
+### Leadership
+
+All under `/api/organizations/{id}/leadership/`, all gated on Leadership. Guide and the
+full endpoint table: [Organization Leadership](../features/organization-leadership.md#api).
+Every lookup is scoped to the URL's org (`404` otherwise). Refusals carry
+`{code, detail}`: `review_window_closed` (409), `not_in_pool` (403), `review_moderated`
+(403), `cannot_moderate_own_reviews` (403), `invalid_scores` (400), `trait_in_use`
+(409). Review `PUT`/`DELETE` are throttled per user. Leaderboards (`rating`, `points`,
+`rating.<trait>`) go through the [standing endpoints](#organization-standing).
+
 ### Internal
 
 | Method | Endpoint | Description |

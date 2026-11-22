@@ -1,0 +1,1 @@
+- Organization Leadership (locked feature): captains earn points for captaining, placing and finishing the draft, and teammates rate them 1 to 5 on per-org traits during a review window after the event. Ratings stay hidden until the window closes with enough reviews, and org admins can moderate reviews. Backend and API only; the screens ship in a later release.

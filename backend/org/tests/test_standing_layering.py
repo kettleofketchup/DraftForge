@@ -10,6 +10,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 STANDING_DIR = BACKEND_DIR / "org" / "standing"
 CONTRIBUTIONS_DIR = BACKEND_DIR / "org" / "contributions"
 CONDUCT_DIR = BACKEND_DIR / "org" / "conduct"
+LEADERSHIP_DIR = BACKEND_DIR / "org" / "leadership"
+LEADERSHIP_LEAF = "org.leadership.kinds"
 CONDUCT_CHECK = "events.eligibility.checks.conduct"
 CONDUCT_CHECK_IMPORTS = frozenset({"org.conduct.eligibility", "org.standing.cache"})
 CONDUCT_CHECK_TARGET = "org.conduct.eligibility"
@@ -33,6 +35,7 @@ DISPATCHERS = (
     "org.standing.registry",
     "org.contributions.adapter",
     "org.conduct.adapter",
+    "org.leadership.adapter",
     "org.standing.views",
     "org.standing.urls",
 )
@@ -201,6 +204,16 @@ class StandingLayeringTest(SimpleTestCase):
                         _matches_any(name, LEAF_FORBIDDEN), f"{leaf} imports {name}"
                     )
 
+    def test_leaves_reach_only_the_leadership_kind_table(self) -> None:
+        for leaf in LEAVES:
+            for name in _imported_modules(STANDING_DIR / f"{leaf}.py"):
+                if _matches(name, "org.leadership"):
+                    with self.subTest(leaf=leaf, imported=name):
+                        self.assertTrue(_matches(name, LEADERSHIP_LEAF), name)
+
+    def test_registry_reaches_leadership_adapter(self) -> None:
+        self.assertIn("org.leadership.adapter", _graph()["org.standing.registry"])
+
     def test_scoring_is_pure(self) -> None:
         for name in _imported_modules(STANDING_DIR / "scoring.py"):
             with self.subTest(imported=name):
@@ -213,6 +226,7 @@ class StandingLayeringTest(SimpleTestCase):
         paths = [
             *CONTRIBUTIONS_DIR.glob("*.py"),
             *CONDUCT_DIR.glob("*.py"),
+            *LEADERSHIP_DIR.glob("*.py"),
             *STANDING_DIR.glob("*.py"),
         ]
         for path in sorted(paths):
@@ -231,7 +245,11 @@ class StandingLayeringTest(SimpleTestCase):
                     targets = [imported, *(f"{imported}.{m}" for m in members)]
                     with self.subTest(module=module, imported=imported):
                         self.assertFalse(
-                            any(_matches(t, "org.contributions") for t in targets),
+                            any(
+                                _matches(t, "org.contributions")
+                                or _matches(t, "org.leadership")
+                                for t in targets
+                            ),
                             f"{module} imports {imported} {members}",
                         )
                         for target in targets:

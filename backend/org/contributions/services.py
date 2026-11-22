@@ -46,6 +46,10 @@ class _Unset(Enum):
 UNSET: Final = _Unset.UNSET
 
 
+def _own_rows() -> QuerySet[ContributionEntry]:
+    return ledger.track_rows("contribution")
+
+
 @dataclass(frozen=True)
 class RescoreResult:
     old: int
@@ -163,7 +167,7 @@ def sync_event_staff_entries(event: Event) -> SyncResult:
     for helper in helpers:
         wanted[(helper.pk, ContributionKind.EVENT_HELPER.value)] = helper
 
-    existing = ContributionEntry.objects.nocache().filter(
+    existing = _own_rows().filter(
         organization=org, event=event, kind__in=EVENT_STAFF_KINDS
     )
     have: set[tuple[int, str]] = set()
@@ -386,9 +390,7 @@ def set_point_value(
 
     changed = 0
     if apply_to_past:
-        entries = ContributionEntry.objects.nocache().filter(
-            organization=org, kind=kind
-        )
+        entries = _own_rows().filter(organization=org, kind=kind)
         if since is not None:
             entries = entries.filter(occurred_at__gte=local_day_start_utc(org, since))
         changed = entries.update(points=new, updated_at=timezone.now())
@@ -423,7 +425,7 @@ def set_point_value(
 
 @transaction.atomic
 def delete_user_entries(user: CustomUser, *, actor: CustomUser | None) -> int:
-    entries = ContributionEntry.objects.nocache().filter(org_user__user=user)
+    entries = _own_rows().filter(org_user__user=user)
     per_org = {
         row["organization_id"]: row["count"]
         for row in entries.values("organization_id").annotate(count=Count("pk"))
@@ -458,7 +460,7 @@ def reassign_member(drop: OrgUser, keep: OrgUser) -> int:
         raise ValueError("cannot reassign contributions across organizations")
     if drop.pk == keep.pk:
         return 0
-    entries = ContributionEntry.objects.nocache()
+    entries = _own_rows()
     kept_staff = set(
         entries.filter(
             org_user=keep, kind__in=EVENT_STAFF_KINDS, event__isnull=False
@@ -498,7 +500,7 @@ def reassign_member(drop: OrgUser, keep: OrgUser) -> int:
 
 
 def repoint_ledger_attribution(drop: CustomUser, keep: CustomUser) -> int:
-    return ContributionEntry.objects.nocache().filter(awarded_by=drop).update(
+    return _own_rows().filter(awarded_by=drop).update(
         awarded_by=keep
     ) + ContributionPointValue.objects.nocache().filter(updated_by=drop).update(
         updated_by=keep
@@ -524,4 +526,4 @@ def revoke_promo_entry(send: PromoSend) -> int:
 
 
 def user_entries(user_pks: Collection[int]) -> QuerySet[ContributionEntry]:
-    return ContributionEntry.objects.nocache().filter(org_user__user__in=list(user_pks))
+    return _own_rows().filter(org_user__user__in=list(user_pks))
