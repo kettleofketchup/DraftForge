@@ -26,6 +26,9 @@ log = get_logger(__name__)
 
 @dataclass(frozen=True)
 class ReadyCheckChange:
+    """user_ids: on ready_check_closed, members still pending at close (dropped
+    ones included; ready_check_member_dropped carries the dropped subset)."""
+
     event_id: int
     ready_check_id: int
     phase: str

@@ -682,9 +682,13 @@ def close_ready_check(event: Event, *, actor: SignupActor) -> CloseResult:
         member_rows = (SignupAction.READY_CHECK_KEPT, "staff_verified", pending)
     elif threshold_met or low_action == ReadyCheckLowCompletionAction.DROP_ANYWAY:
         phase, outcome = ReadyCheckPhase.CLOSED, ReadyCheckOutcome.BINDING
-        member_rows = None
         dropped_user_ids, promoted_signup_ids = _drop(
             locked, check, droppable, actor=actor, step=step
+        )
+        member_rows = (
+            SignupAction.READY_CHECK_KEPT,
+            "signup_confirmed",
+            _pending(active),
         )
     elif low_action == ReadyCheckLowCompletionAction.HOLD_FOR_STAFF:
         step = "hold"

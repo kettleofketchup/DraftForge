@@ -693,6 +693,24 @@ class CloseTests(LifecycleTestCase):
                 if total == 0:
                     self.assertEqual(result.check.completion_pct, 100)
 
+    def test_binding_close_keeps_confirmed_signup_with_pending_entry(self) -> None:
+        event, signups = self._setup(AUTO, 7, 10)
+        mismatched = signups[9]
+        EventSignup.objects.filter(pk=mismatched.pk).update(
+            status=SignupStatus.CONFIRMED
+        )
+        result = self._close(event)
+        assert result.check is not None
+        self.assertEqual(result.check.outcome, ReadyCheckOutcome.BINDING)
+        self.assertEqual(len(result.dropped_user_ids), 2)
+        self.assertNotIn(mismatched.user_id, result.dropped_user_ids)
+        mismatched.refresh_from_db()
+        self.assertEqual(mismatched.status, SignupStatus.CONFIRMED)
+        kept = self._rows(SignupAction.READY_CHECK_KEPT, event)
+        self.assertEqual([r.signup_id for r in kept], [mismatched.pk])
+        self.assertEqual(kept[0].reason, "signup_confirmed")
+        self.assertEqual(kept[0].correlation_id, f"rc{result.check.pk}:close")
+
     def test_manual_below_min_hold_for_staff_closes_staff_verified(self) -> None:
         event, _ = self._setup(MANUAL, 6, 10, HOLD)
         check = self._close(event).check
@@ -984,6 +1002,33 @@ class PromotionTests(LifecycleTestCase):
         self.assertEqual(asked[0].actor_user, self.helper)
         self.assertEqual(asked[0].actor_role, ActorRole.STAFF)
         self.assertEqual(asked[0].correlation_id, f"rc{check.pk}:enrol")
+
+    def test_unconfirmed_fill_member_present_at_open_is_dropped(self) -> None:
+        event = self.make_event(
+            roll_call_enabled=True,
+            roll_call_mode=AUTO,
+            ready_check_scope=ReadyCheckScope.MAIN_AND_FILL,
+            max_players=10,
+        )
+        main = [self._signup(SignupStatus.APPROVED, event=event) for _ in range(10)]
+        fill = EventSignup.objects.create(
+            event=event,
+            user=self.make_user(),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
+        check = self._open(event).check
+        for signup in main[:8]:
+            self._confirm_member(signup)
+        result = self._close(event)
+        assert result.check is not None
+        self.assertEqual(result.check.outcome, ReadyCheckOutcome.BINDING)
+        self.assertIn(fill.user_id, result.dropped_user_ids)
+        self.assertEqual(result.promoted_signup_ids, ())
+        fill.refresh_from_db()
+        self.assertEqual(fill.status, SignupStatus.DROPPED)
+        self.assertIsNone(fill.waitlist_position)
+        self.assertEqual(self._entry(check, fill).state, ReadyCheckEntryState.DROPPED)
 
     def test_unlimited_capacity_promotes_nobody(self) -> None:
         event, _ = self._setup(AUTO, 7, 10)

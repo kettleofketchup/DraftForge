@@ -10,8 +10,10 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models, transaction
 from django.db.models import (
     Count,
+    Exists,
     F,
     Min,
+    OuterRef,
     Prefetch,
     Q,
     QuerySet,
@@ -167,24 +169,23 @@ def _attach_user_can_manage(
         return payload
     events_by_pk = {
         e.pk: e
-        for e in Event.objects.filter(pk__in=[p["id"] for p in items]).select_related(
-            "organization", "tournament_league"
+        for e in Event.objects.filter(pk__in=[p["id"] for p in items])
+        .select_related("organization", "tournament_league")
+        .annotate(
+            user_is_helper=Exists(
+                Event.helpers.through.objects.filter(
+                    event_id=OuterRef("pk"), customuser_id=user.pk
+                )
+            )
         )
     }
-    helper_event_ids = set(
-        Event.helpers.through.objects.filter(
-            event_id__in=list(events_by_pk), customuser_id=user.pk
-        ).values_list("event_id", flat=True)
-    )
     admin_by_org: dict[int, bool] = {}
     for p in items:
         ev = events_by_pk.get(p["id"])
         if ev is not None:
             p["user_can_manage"] = has_event_staff_access(user, ev)
             p["user_is_event_operator"] = (
-                p["user_can_manage"]
-                or ev.host_id == user.pk
-                or ev.pk in helper_event_ids
+                p["user_can_manage"] or ev.host_id == user.pk or ev.user_is_helper
             )
             if ev.organization_id not in admin_by_org:
                 admin_by_org[ev.organization_id] = has_org_admin_access(

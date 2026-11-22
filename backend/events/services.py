@@ -710,11 +710,8 @@ def _promote_one(
     )
     stamped = stamp_eligibility(signup, result)
     in_roll_call = locked.state == EventState.ROLL_CALL
-    decided = _decide_signup_status(locked, result)
-    signup.status = (
-        ready_check_promotion_status(locked, decided, signup)
-        if in_roll_call
-        else decided
+    signup.status = ready_check_promotion_status(
+        locked, _decide_signup_status(locked, result), signup
     )
     _roster_add_if_joins(signup)
     signup.save(update_fields=["status", "waitlist_position", *stamped, "updated_at"])
