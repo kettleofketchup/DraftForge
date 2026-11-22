@@ -60,7 +60,7 @@ vi.mock('~/components/league/LeagueCombobox', () => ({
   LeagueCombobox: () => null,
 }));
 
-// Heavy tabs these tests never use; rendering them timed tests out under load.
+// Heavy fields these tests never use; rendering them timed tests out under load.
 vi.mock('../form/sections/EventTournamentFields', () => ({
   EventTournamentFields: () => null,
 }));
