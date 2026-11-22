@@ -1,9 +1,13 @@
 import inspect
 from collections.abc import Callable
+from io import StringIO
 from typing import Any
 from unittest.mock import patch
 
+from django.core.management import call_command
+from django.db import connection, transaction
 from django.test import SimpleTestCase
+from django.test.utils import CaptureQueriesContext
 
 from app.models import CustomUser
 from events.constants import (
@@ -31,8 +35,11 @@ from events.services import (
     staff_add_signup,
     unconfirm_signup,
 )
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.mmr import game_for_event
+
+BASE_PER_ROW = 5
 
 SIGNUP_SERVICES: list[Callable[..., Any]] = [
     process_rsvp,
@@ -352,3 +359,214 @@ class LeafMutationLedgerTests(LedgerContractMixin, EventTestCase):
             before_status=SignupStatus.APPROVED,
             after_status=SignupStatus.CONFIRMED,
         )
+
+
+@patch("events.services.notify_signup_changed")
+class WithdrawRejectLedgerTests(LedgerContractMixin, EventTestCase):
+    def _seated_event(self, *, waitlisted: int) -> tuple[Event, EventSignup]:
+        event = self.make_event(max_players=1)
+        seated = EventSignup.objects.create(
+            event=event, user=self.subject, status=SignupStatus.APPROVED
+        )
+        for pos in range(1, waitlisted + 1):
+            EventSignup.objects.create(
+                event=event,
+                user=self.make_user(),
+                status=SignupStatus.WAITLISTED,
+                waitlist_position=pos,
+            )
+        return event, seated
+
+    def test_withdraw_table_records_one_entry(self, _notify: Any) -> None:
+        rows: list[tuple[str, Callable[..., Any], str, SignupAction, bool]] = [
+            (
+                "member_cancels_own",
+                cancel_signup,
+                "member",
+                SignupAction.WITHDREW,
+                False,
+            ),
+            (
+                "staff_cancels_other",
+                cancel_signup,
+                "staff",
+                SignupAction.WITHDREW,
+                True,
+            ),
+            ("staff_rejects", reject_signup, "staff", SignupAction.REJECTED, True),
+        ]
+        for name, fn, who, action, on_behalf in rows:
+            with self.subTest(row=name):
+                actor = self.member_actor if who == "member" else self.staff_actor
+                event, seated = self._seated_event(waitlisted=0)
+                fn(seated, actor=actor)
+                seated.refresh_from_db()
+                self.assert_single_entry(
+                    event,
+                    action=action,
+                    actor=actor,
+                    signup=seated,
+                    before_status=SignupStatus.APPROVED,
+                    after_status=seated.status,
+                    on_behalf=on_behalf,
+                )
+
+    def test_promotes_with_caused_by(self, _notify: Any) -> None:
+        rows: list[tuple[Callable[..., Any], SignupAction]] = [
+            (cancel_signup, SignupAction.WITHDREW),
+            (reject_signup, SignupAction.REJECTED),
+        ]
+        for fn, action in rows:
+            with self.subTest(fn=fn.__name__):
+                event, seated = self._seated_event(waitlisted=2)
+                first = EventSignup.objects.get(event=event, waitlist_position=1)
+                actor = SignupActor(
+                    user=self.staff,
+                    role=ActorRole.STAFF,
+                    means=SignupMeans.WEB,
+                    correlation_id="c-1",
+                )
+                fn(seated, actor=actor)
+                entries = self.ledger(event)
+                self.assertEqual(
+                    [e.action for e in entries], [action, SignupAction.PROMOTED]
+                )
+                primary, promoted = entries
+                self.assertIsNone(primary.caused_by_id)
+                self.assertEqual(primary.correlation_id, "c-1")
+                self.assertEqual(promoted.actor_role, ActorRole.SYSTEM)
+                self.assertEqual(promoted.means, SignupMeans.SYSTEM)
+                self.assertIsNone(promoted.actor_user_id)
+                self.assertFalse(promoted.on_behalf)
+                self.assertEqual(promoted.caused_by_id, primary.pk)
+                self.assertEqual(promoted.correlation_id, "c-1")
+                self.assertEqual(promoted.signup_id, first.pk)
+                self.assertEqual(promoted.subject_user_id, first.user_id)
+                self.assertEqual(promoted.before["status"], SignupStatus.WAITLISTED)
+                first.refresh_from_db()
+                self.assertEqual(promoted.after["status"], first.status)
+                self.assertNotEqual(first.status, SignupStatus.WAITLISTED)
+                self.assertIsNone(promoted.after["waitlist_position"])
+
+    def test_rebalance_promotions_have_no_cause(self, _notify: Any) -> None:
+        event = self.make_event(max_players=2)
+        EventSignup.objects.create(
+            event=event, user=self.make_user(), status=SignupStatus.APPROVED
+        )
+        waiting = EventSignup.objects.create(
+            event=event,
+            user=self.make_user(),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
+        call_command("rebalance_event_waitlists", stdout=StringIO())
+        entries = self.ledger(event)
+        self.assertEqual([e.action for e in entries], [SignupAction.PROMOTED])
+        self.assertIsNone(entries[0].caused_by_id)
+        self.assertEqual(entries[0].signup_id, waiting.pk)
+        self.assertEqual(entries[0].actor_role, ActorRole.SYSTEM)
+        self.assertEqual(entries[0].correlation_id, "")
+
+    def test_withdraw_by_member_matches_actor_role(self, _notify: Any) -> None:
+        rows: list[tuple[str, SignupActor, bool]] = [
+            ("member", self.member_actor, True),
+            (
+                "discord_member",
+                SignupActor.discord(self.subject, correlation_id="i-1"),
+                True,
+            ),
+            ("staff", self.staff_actor, False),
+            ("system", SYSTEM, False),
+        ]
+        for name, actor, expected in rows:
+            with self.subTest(actor=name):
+                event, seated = self._seated_event(waitlisted=0)
+                with patch("events.services.standing.on_signup_withdrawn") as withdrawn:
+                    cancel_signup(seated, actor=actor)
+                withdrawn.assert_called_once()
+                self.assertIs(withdrawn.call_args.kwargs["by_member"], expected)
+                self.assertEqual(
+                    withdrawn.call_args.kwargs["prior_status"], SignupStatus.APPROVED
+                )
+
+    def test_rollback_leaves_no_entry(self, _notify: Any) -> None:
+        rows: list[tuple[str, Callable[[Event, EventSignup], Any]]] = [
+            (
+                "cancel_signup",
+                lambda _e, s: cancel_signup(s, actor=self.member_actor),
+            ),
+        ]
+        for name, call in rows:
+            with self.subTest(fn=name):
+                event, seated = self._seated_event(waitlisted=1)
+                before = {
+                    s.pk: s.status for s in EventSignup.objects.filter(event=event)
+                }
+                with self.assertRaises(RuntimeError):
+                    with transaction.atomic():
+                        call(event, seated)
+                        raise RuntimeError("rollback")
+                self.assertEqual(self.ledger(event), [])
+                self.assertEqual(
+                    {
+                        s.pk: s.status
+                        for s in EventSignup.objects.nocache().filter(event=event)
+                    },
+                    before,
+                )
+
+    def test_ledger_write_failure_aborts_cancel(self, _notify: Any) -> None:
+        event, seated = self._seated_event(waitlisted=2)
+        before = {s.pk: s.status for s in EventSignup.objects.filter(event=event)}
+        with patch(
+            "events.services.record_signup_change",
+            side_effect=RuntimeError("ledger down"),
+        ):
+            with self.assertRaises(RuntimeError):
+                cancel_signup(seated, actor=self.member_actor)
+        self.assertEqual(
+            {s.pk: s.status for s in EventSignup.objects.nocache().filter(event=event)},
+            before,
+        )
+        self.assertEqual(SignupLedgerEntry.objects.filter(event=event).count(), 0)
+
+
+class PromotionQueryCostTests(EventTestCase):
+    def _promote(self, n: int) -> list[dict[str, str]]:
+        event = self.make_event(max_players=2)
+        for _ in range(2):
+            EventSignup.objects.create(
+                event=event, user=self.make_user(), status=SignupStatus.APPROVED
+            )
+        for pos in range(1, 5):
+            EventSignup.objects.create(
+                event=event,
+                user=self.make_user(),
+                status=SignupStatus.WAITLISTED,
+                waitlist_position=pos,
+            )
+        Event.objects.filter(pk=event.pk).update(max_players=2 + n)
+        with CaptureQueriesContext(connection) as ctx:
+            promoted = _promote_from_waitlist(event, cause=None)
+        self.assertEqual(len(promoted), n)
+        self.assertEqual(
+            SignupLedgerEntry.objects.filter(
+                event=event, action=SignupAction.PROMOTED
+            ).count(),
+            n,
+        )
+        return ctx.captured_queries
+
+    def test_promotion_query_cost_is_constant_per_row(self) -> None:
+        profile_table = CustomUser._meta.get_field(
+            "base_profile"
+        ).related_model._meta.db_table
+        self._promote(1)
+        q1, q2, q3 = (self._promote(n) for n in (1, 2, 3))
+        self.assertEqual(len(q2) - len(q1), BASE_PER_ROW + 1)
+        self.assertEqual(len(q3) - len(q2), BASE_PER_ROW + 1)
+
+        def profile_reads(queries: list[dict[str, str]]) -> int:
+            return sum(profile_table in q["sql"] for q in queries)
+
+        self.assertEqual(profile_reads(q3), profile_reads(q1))

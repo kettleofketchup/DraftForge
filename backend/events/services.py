@@ -611,8 +611,8 @@ def _record_leaf(
     action: SignupAction,
     before: SignupSnapshot,
     extra: dict[str, Any] | None = None,
-) -> None:
-    record_signup_change(
+) -> SignupLedgerEntry:
+    return record_signup_change(
         event=event,
         subject=signup.user,
         actor=actor,
@@ -665,14 +665,23 @@ def approve_signup(
 @transaction.atomic
 def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Reject a signup."""
+    _reread_signup(signup)
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
+    before = snapshot(signup)
     prior_status = signup.status
     signup.status = SignupStatus.REJECTED
     signup.save(update_fields=["status", "updated_at"])
     _roster_remove_if_left(signup)
+    entry = _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.REJECTED,
+        before=before,
+    )
     if prior_status in seat_holding_statuses(signup.event):
-        _promote_from_waitlist(signup.event, cause=None)
+        _promote_from_waitlist(signup.event, cause=entry)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -700,22 +709,14 @@ def confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     return signup
 
 
-@transaction.atomic
-def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
-    """Cancel a signup."""
+def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
     signup.save(update_fields=["status", "updated_at"])
-    standing.on_signup_withdrawn(
-        signup, prior_status=prior_status, by_member=_by_member(actor)
-    )
+    standing.on_signup_withdrawn(signup, prior_status=prior_status, by_member=by_member)
     _roster_remove_if_left(signup)
-    if prior_status in seat_holding_statuses(signup.event):
-        _promote_from_waitlist(signup.event, cause=None)
-    invalidate_after_commit(signup, signup.event)
-    transaction.on_commit(lambda: notify_signup_changed(signup.event))
     # Log on commit, not on entry — same reason as signup_created in process_rsvp:
     # callers may roll back the outer transaction, in which case the cancellation
     # never persisted.
@@ -730,6 +731,26 @@ def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
             user_id=signup.user_id,
         )
     )
+    return prior_status
+
+
+@transaction.atomic
+def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+    """Cancel a signup."""
+    _reread_signup(signup)
+    before = snapshot(signup)
+    prior_status = _withdraw(signup, by_member=_by_member(actor))
+    entry = _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.WITHDREW,
+        before=before,
+    )
+    if prior_status in seat_holding_statuses(signup.event):
+        _promote_from_waitlist(signup.event, cause=entry)
+    invalidate_after_commit(signup, signup.event)
+    transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
@@ -763,14 +784,28 @@ def _promote_from_waitlist(
         candidates = list(
             EventSignup.objects.nocache()
             .filter(event=locked, status=SignupStatus.WAITLISTED)
-            .select_related("user")
+            .select_related("user__base_profile")
             .order_by("waitlist_position")
         )
         cache = StandingCache()
+        system = SignupActor.system(
+            correlation_id=cause.correlation_id if cause is not None else ""
+        )
         for candidate in standing.promotion_order(locked, candidates, cache=cache):
             if not has_free_seat(locked):
                 break
+            before = snapshot(candidate)
             promoted.append(_promote_one(locked, candidate, cache=cache))
+            record_signup_change(
+                event=locked,
+                subject=candidate.user,
+                actor=system,
+                action=SignupAction.PROMOTED,
+                signup=candidate,
+                before=before,
+                after=snapshot(candidate),
+                caused_by=cause,
+            )
     if promoted:
         invalidate_after_commit(locked)
     return promoted
