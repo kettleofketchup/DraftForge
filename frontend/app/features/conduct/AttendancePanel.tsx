@@ -246,7 +246,10 @@ export function AttendancePanel({
           </Alert>
         )}
         {data && editable && (
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div
+            className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center"
+            data-testid="attendance-bulk-actions"
+          >
             {BULK_ACTIONS.map(({ outcome, label, testId, Button }) => (
               <Button
                 key={outcome}
@@ -262,7 +265,7 @@ export function AttendancePanel({
               <SecondaryButton
                 data-testid="attendance-add-walkin"
                 onClick={() => setWalkInOpen(true)}
-                className="min-h-11 sm:min-h-9"
+                className="col-span-2 min-h-11 sm:col-auto sm:min-h-9"
               >
                 Add walk-in
               </SecondaryButton>

@@ -377,6 +377,18 @@ describe('AttendancePanel', () => {
     expect(screen.queryByTestId('attendance-walkin-search')).toBeNull();
   });
 
+  it('lays the bulk actions out two per row below sm', async () => {
+    vi.mocked(getAttendance).mockResolvedValue(attendance());
+    renderPanel();
+    await screen.findByTestId('attendance-row-11');
+    const bar = screen.getByTestId('attendance-bulk-actions');
+    expect(bar).toHaveClass('grid', 'grid-cols-2', 'sm:flex');
+    expect(screen.getByTestId('attendance-add-walkin')).toHaveClass(
+      'col-span-2',
+      'sm:col-auto',
+    );
+  });
+
   it('bulk late cancel and excuse set those outcomes', async () => {
     vi.mocked(getAttendance).mockResolvedValue(attendance());
     renderPanel();
