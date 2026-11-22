@@ -113,3 +113,10 @@ class ClaimRequestReviewTests(TestCase):
         self.assertEqual(response.status_code, 400, response.content)
         self.assertFalse(OrgLog.objects.filter(action="reject_claim").exists())
         self.assertEqual(self._status(claim), ProfileClaimRequest.Status.APPROVED)
+
+    def test_str_survives_missing_target(self) -> None:
+        claim = self._claim("cr_str")
+        self.target.delete()
+        claim.refresh_from_db()
+
+        self.assertEqual(str(claim), "cr_str -> (deleted profile) (pending)")
