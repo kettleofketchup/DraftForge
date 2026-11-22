@@ -59,6 +59,7 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
+import { PendingClaimsBadge, usePendingClaimsCount } from '~/features/claims';
 import {
   LockedFeaturesPanel,
   removeFeatureQueries,
@@ -301,6 +302,7 @@ export default function OrganizationDetailPage() {
   const canEditEvents = isOrgStaff;
   const canAddMembers = isOrgStaff;
   const canViewClaims = isOrgStaff;
+  const pendingClaimsCount = usePendingClaimsCount(pk, !!canViewClaims);
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
@@ -353,6 +355,7 @@ export default function OrganizationDetailPage() {
         standingTabs,
         canUsePromotion,
         canViewClaims,
+        pendingClaimsCount,
       }),
     [
       leagues.length,
@@ -362,6 +365,7 @@ export default function OrganizationDetailPage() {
       standingTabs,
       canUsePromotion,
       canViewClaims,
+      pendingClaimsCount,
     ],
   );
 
@@ -499,6 +503,10 @@ export default function OrganizationDetailPage() {
               <TabsTrigger value="claims" data-testid="org-tab-claims">
                 <ClipboardList className="w-4 h-4 mr-2" />
                 Claims
+                <PendingClaimsBadge
+                  count={pendingClaimsCount}
+                  testId="org-tab-claims-pending-count"
+                />
               </TabsTrigger>
             )}
           </TabsList>
