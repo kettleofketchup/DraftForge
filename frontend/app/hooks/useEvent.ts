@@ -422,9 +422,9 @@ export function useEventSignupUsers(
    * `<UserStrip organizationId={...} />` can show the right MMR badge
    * without a second fetch.
    */
-  eventOrgId?: number | null,
-  /** The event's game: `org_user_mmr` is filed under it (Dota 2 if omitted). */
-  gameType?: GameTypeValue,
+  eventOrgId: number | null | undefined,
+  /** The event's game: `org_user_mmr` is filed under it. */
+  gameType: GameTypeValue,
 ) {
   useEffect(() => {
     if (!signups) return;
@@ -435,7 +435,7 @@ export function useEventSignupUsers(
       if (eventOrgId && s.org_user_pk != null && s.org_user_mmr != null) {
         base.orgUserPk = s.org_user_pk;
         base.mmr = s.org_user_mmr;
-        if (gameType != null) base.mmr_game_type = gameType;
+        base.mmr_game_type = gameType;
         if (s.org_user_game_mmrs) base.game_mmrs = s.org_user_game_mmrs;
       }
       users.push(base);
