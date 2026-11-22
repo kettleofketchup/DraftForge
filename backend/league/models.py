@@ -112,7 +112,6 @@ class League(models.Model):
             invalidate_obj(self.organization)
 
     def delete(self, *args: object, **kwargs: object) -> None:
-        # Invalidate related organization before deletion
         if self.organization:
             invalidate_obj(self.organization)
         super().delete(*args, **kwargs)

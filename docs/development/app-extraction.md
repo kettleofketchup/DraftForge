@@ -187,7 +187,7 @@ Commit an `<new_app>/tests/test_<new_app>_routes.py` that resolves every moved p
 Add a `MovedSlice` to `backend/tests/test_app_boundaries.py` and append it to `MOVED_SLICES`:
 
 - `moved`: fully qualified `(old_module, name)` pairs. Include names the old modules only imported, if tests used to patch them there (for example `("app.consumers", "broadcast_herodraft_state")`).
-- `retired_modules`: module paths that no longer exist. Every top-level class and function a retired module defined also goes into `moved`, under the old module path. The anywhere-redefinition check reads only `moved`, so an unlisted name could be redefined in the source app unnoticed.
+- `retired_modules`: module paths that no longer exist. Every top-level class and function a retired module defined also goes into `moved`, under the old module path. The anywhere-redefinition check reads only `moved`, so an unlisted name could be redefined in the source app unnoticed. `test_retired_module_defs_listed_in_moved` enforces this: it reads each retired module's new home (the same path under the new app, or its entry in `RETIRED_MODULE_HOMES`, where `None` marks a module renamed within the source app) and fails on any top-level class or function missing from `moved`.
 - `model_labels`: lower-case model names. The guard checks `app_label` and `db_table` for each.
 - `move_migration`: `(source_app, name)` of the source app's move migration. The guard scans every other app's migrations for references to the moved models under the source label and requires each one to be an ancestor of this migration.
 - `cached_labels`: the moved models that have a `CACHEOPS` profile. The guard checks that `"<new_app>.<label>"` is present.
