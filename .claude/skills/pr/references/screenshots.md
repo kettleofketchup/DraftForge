@@ -1,4 +1,4 @@
-# Phase 3 — Before/after screenshots
+# Phase 4 — Before/after screenshots
 
 Post one PR comment (never the PR body) that pairs a BEFORE and an AFTER image for
 each visual change. Run this on every new PR, on a reused PR that has never had a
@@ -26,7 +26,7 @@ migrate, slot and compose recipes.
 gh pr diff <n> --name-only | grep -E '^frontend/app/(components|routes|features)/|^frontend/app/app\.css$|tokens'
 ```
 
-- **No match** → post the skip comment and go to Phase 4:
+- **No match** → post the skip comment and go to Phase 5:
 
   ```bash
   gh pr comment <n> --body "No screenshots: this PR has no visual changes (no files under frontend/app/components, routes or features, app.css or design tokens)."

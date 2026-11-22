@@ -5,8 +5,9 @@ from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League
+from app.models import CustomUser
 from events.models import Event
+from league.models import League
 from org.contributions.kinds import ContributionKind
 from org.contributions.queries import (
     MAX_MONTHS,

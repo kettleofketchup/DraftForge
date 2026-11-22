@@ -31,7 +31,7 @@ test.describe('navbar i18n — anonymous @cicd', () => {
   }) => {
     const errors = attachErrorCapture(page);
     await page.goto('/?lang=es');
-    await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
+    await expect(page.locator(LOGIN_BUTTON)).toHaveAccessibleName(ES_LOGIN);
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
     expect(errors, 'unexpected runtime errors').toEqual([]);
   });
@@ -42,7 +42,7 @@ test.describe('navbar i18n — anonymous @cicd', () => {
   }) => {
     const errors = attachErrorCapture(page);
     await page.goto('/?lang=es');
-    await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
+    await expect(page.locator(LOGIN_BUTTON)).toHaveAccessibleName(ES_LOGIN);
     const cookies = await context.cookies();
     const dfLocale = cookies.find((c) => c.name === 'df-locale');
     expect(dfLocale?.value).toBe('es');
@@ -52,9 +52,9 @@ test.describe('navbar i18n — anonymous @cicd', () => {
   test('cookie persists Spanish across navigation', async ({ page }) => {
     const errors = attachErrorCapture(page);
     await page.goto('/?lang=es');
-    await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
+    await expect(page.locator(LOGIN_BUTTON)).toHaveAccessibleName(ES_LOGIN);
     await page.goto('/tournaments');
-    await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
+    await expect(page.locator(LOGIN_BUTTON)).toHaveAccessibleName(ES_LOGIN);
     expect(errors).toEqual([]);
   });
 
@@ -63,7 +63,7 @@ test.describe('navbar i18n — anonymous @cicd', () => {
     const page = await ctx.newPage();
     const errors = attachErrorCapture(page);
     await page.goto('/');
-    await expect(page.locator(LOGIN_BUTTON)).toHaveText(EN_LOGIN);
+    await expect(page.locator(LOGIN_BUTTON)).toHaveAccessibleName(EN_LOGIN);
     expect(errors).toEqual([]);
     await ctx.close();
   });
@@ -75,7 +75,7 @@ test.describe('navbar i18n — anonymous @cicd', () => {
     const page = await ctx.newPage();
     const errors = attachErrorCapture(page);
     await page.goto('/tournaments');
-    await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
+    await expect(page.locator(LOGIN_BUTTON)).toHaveAccessibleName(ES_LOGIN);
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
     // Aria-label regression check.
     await expect(
@@ -94,7 +94,7 @@ test.describe('navbar i18n — anonymous @cicd', () => {
     const page = await ctx.newPage();
     const errors = attachErrorCapture(page);
     await page.goto('/tournaments');
-    await expect(page.locator(LOGIN_BUTTON)).toHaveText(EN_LOGIN);
+    await expect(page.locator(LOGIN_BUTTON)).toHaveAccessibleName(EN_LOGIN);
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     expect(errors).toEqual([]);
     await ctx.close();
@@ -106,7 +106,7 @@ test.describe('navbar i18n — anonymous @cicd', () => {
     const page = await ctx.newPage();
     const errors = attachErrorCapture(page);
     await page.goto('/tournaments?lang=en');
-    await expect(page.locator(LOGIN_BUTTON)).toHaveText(EN_LOGIN);
+    await expect(page.locator(LOGIN_BUTTON)).toHaveAccessibleName(EN_LOGIN);
     expect(errors).toEqual([]);
     await ctx.close();
   });
@@ -122,13 +122,13 @@ test.describe('navbar i18n — anonymous @cicd', () => {
     const p1 = await ctx.newPage();
     const errorsP1 = attachErrorCapture(p1);
     await p1.goto('/tournaments');
-    await expect(p1.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
+    await expect(p1.locator(LOGIN_BUTTON)).toHaveAccessibleName(ES_LOGIN);
     expect(errorsP1).toEqual([]);
     await ctx.clearCookies();
     const p2 = await ctx.newPage();
     const errorsP2 = attachErrorCapture(p2);
     await p2.goto('/tournaments');
-    await expect(p2.locator(LOGIN_BUTTON)).toHaveText(EN_LOGIN);
+    await expect(p2.locator(LOGIN_BUTTON)).toHaveAccessibleName(EN_LOGIN);
     expect(errorsP2).toEqual([]);
     await ctx.close();
   });
@@ -157,7 +157,7 @@ test.describe('navbar i18n — anonymous @cicd', () => {
     const response = await page.goto('/');
     const html = (await response?.text()) ?? '';
     expect(html).not.toContain('data-testid="navbarLoginButton"');
-    await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
+    await expect(page.locator(LOGIN_BUTTON)).toHaveAccessibleName(ES_LOGIN);
     expect(errors).toEqual([]);
     await ctx.close();
   });

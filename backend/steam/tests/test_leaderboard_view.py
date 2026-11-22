@@ -6,9 +6,9 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework.request import Request
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League
+from app.models import CustomUser
 from common.game import GameType
-from league.models import LeagueUser
+from league.models import League, LeagueUser
 from org.models import Organization
 from steam.constants import LEAGUE_ID
 from steam.models import LeaguePlayerStats

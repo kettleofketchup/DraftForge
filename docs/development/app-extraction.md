@@ -2,7 +2,7 @@
 
 `backend/app` started as the only Django app and still holds most of the backend. We are splitting it into domain apps one slice per PR, models included. Each PR moves one slice, and `app/` only ever gets smaller.
 
-The first slice moved the hero draft family into the new `draft` app, and the second moved the team draft family into the same app. The third moved `Organization`, `OrgLog` and the org permissions into the existing `org` app. This page is the recipe they followed, written so later slices can repeat it step by step.
+The first slice moved the hero draft family into the new `draft` app, and the second moved the team draft family into the same app. The third moved `Organization`, `OrgLog` and the org permissions into the existing `org` app, and the fourth moved the league domain into the existing `league` app. This page is the recipe they followed, written so later slices can repeat it step by step.
 
 Planned slices, in order:
 
@@ -11,14 +11,12 @@ Planned slices, in order:
 | Hero draft (done) | `app` | `draft` |
 | Team draft (done: `Draft`, `DraftRound`, `DraftEvent`, `DraftOptions`, teamdraft/shuffle/draft_picks, `draft_tick`, `teamdraft_tick`) | `app` | `draft` |
 | Organization (done: `Organization`, `OrgLog`, org permissions) | `app` | `org` |
-| League (next) | `app` | `league` |
-| Ratings, matches | `app` | per domain |
-| League logs | `app` | per domain |
-| Bracket and tournament | `bracket` | `tournament` |
+| League (done: `League`, `LeagueRating`, `LeagueMatch`, `LeagueMatchParticipant`, `LeagueLog`, league permissions, rating and match services) | `app` | `league` |
+| Bracket and tournament (next) | `bracket` | `tournament` |
 
 `CustomUser` stays in `app` (it is `AUTH_USER_MODEL`).
 
-League goes to `league` next. `app/models.py` already points at `org` through three lazy `"org.Organization"` FK strings: `CustomUser.default_organization`, `League.organization` and `ProfileClaimRequest.organization`. Lazy strings are not import edges, so they are not in `ALLOWED_BACK_EDGES`; the League slice moves `League.organization` with the model.
+After the league slice, `app/models.py` points at `league` through three lazy strings, all of which leave with the bracket and tournament slice: `"league.League"` in `Tournament.league` and `Game.league`, and `"league.LeagueUser"` in `Team.league_users` (plus its method-body use through `self.league_users.model`). Two lazy `"org.Organization"` strings remain, on `CustomUser.default_organization` and `ProfileClaimRequest.organization`; `League.organization` left with the model. Lazy strings are not import edges, so they are not in `ALLOWED_BACK_EDGES`.
 
 ## Rules for every slice
 
@@ -126,6 +124,10 @@ The order is:
 2. One migration per app with FKs to the moved models, holding state-only `AlterField`s. A real `AlterField` on SQLite rebuilds the referencing table for nothing.
 3. `<source_app>/<next>`: `RemoveField` for fields that close a cycle, then `DeleteModel`, then a `RunPython` that relabels the `django_content_type` rows from `<source_app>` to `<new_app>`. It depends on the other two and on `("contenttypes", "0002_remove_content_type_name")`.
 
+After adding or renumbering a migration, update that app's `migrations/max_migration.txt` (django-linear-migrations).
+
+Every new migration in an app other than the source app also lists its own app's previous leaf as a dependency, or that app ends up with two leaf nodes. Check that each touched app has exactly one leaf afterwards (`backend/league/tests/test_league_move_migration.py` pins this with `test_one_leaf_per_app`).
+
 The ContentType relabel is required. Without it, `post_migrate` creates new permission rows that nobody holds, and the existing user and group grants stay behind on stale rows. The relabel must be symmetric and defensive: for each model, skip it (and log once) when the destination row already exists, in both directions. Then neither direction can hit `UNIQUE(app_label, model)`. See `backend/app/migrations/0108_move_hero_draft_models_to_draft.py`.
 
 Move migrations log with `structlog.get_logger(__name__)`, never `telemetry.logging`: a historical migration must not import app code, and stdlib `extra=` fields are dropped from rendered logs.
@@ -174,6 +176,8 @@ Keep paths and `name=`s identical. Include the new app's `urls.py` at the same p
 
 Dump the URL inventory (pattern, name, callback module) before and after the change. The diff should show only callback module changes.
 
+Commit an `<new_app>/tests/test_<new_app>_routes.py` that resolves every moved path to its new module and `url_name`, and checks that the API root still lists any moved router prefix (`backend/league/tests/test_league_routes.py`).
+
 ### 8. Cacheops, signals, admin
 
 - Rename the `CACHEOPS` keys in `backend/backend/settings.py` to `"<new_app>.<model_label>"`. A moved model without a profile raises `ImproperlyConfigured` from `@cached_as`.
@@ -185,7 +189,7 @@ Dump the URL inventory (pattern, name, callback module) before and after the cha
 Add a `MovedSlice` to `backend/tests/test_app_boundaries.py` and append it to `MOVED_SLICES`:
 
 - `moved`: fully qualified `(old_module, name)` pairs. Include names the old modules only imported, if tests used to patch them there (for example `("app.consumers", "broadcast_herodraft_state")`).
-- `retired_modules`: module paths that no longer exist.
+- `retired_modules`: module paths that no longer exist. Every top-level class and function a retired module defined also goes into `moved`, under the old module path. The anywhere-redefinition check reads only `moved`, so an unlisted name could be redefined in the source app unnoticed. `test_retired_module_defs_listed_in_moved` enforces this: it reads each retired module's new home (the same path under the new app, or its entry in `RETIRED_MODULE_HOMES`, where `None` marks a module renamed within the source app) and fails on any top-level class or function missing from `moved`.
 - `model_labels`: lower-case model names. The guard checks `app_label` and `db_table` for each.
 - `move_migration`: `(source_app, name)` of the source app's move migration. The guard scans every other app's migrations for references to the moved models under the source label and requires each one to be an ancestor of this migration.
 - `cached_labels`: the moved models that have a `CACHEOPS` profile. The guard checks that `"<new_app>.<label>"` is present.
@@ -198,7 +202,7 @@ Update `ALLOWED_BACK_EDGES[<new_app>]` with each production file in the source a
 
 - The list must match reality exactly. The guard fails on an unlisted file or name and on a listed name that is no longer imported.
 - Every entry carries a non-empty `reason`.
-- The list may grow, but only for class-definition-time uses or code owned by a later slice (tournament, Team). An unlisted edge the guard reports is a design question, not something to add without thought.
+- The list may grow, but only for class-definition-time uses, code owned by a later slice (tournament, Team) or cross-domain aggregate endpoints (`home_stats` in `app/views_main.py` counts leagues next to tournaments, games and organizations). An unlisted edge the guard reports is a design question, not something to add without thought.
 - Names imported only under `if TYPE_CHECKING:` go in `type_only`. A runtime import of a `type_only` name is a violation.
 
 Each listed name also becomes an attribute of that source-app module, so the guard blocks importing it from there (for example `from app.tournament_state import HeroDraft`) in every other file.
@@ -298,6 +302,18 @@ python manage.py shell -c "from django.contrib.contenttypes.models import Conten
 
 `migrate app 0110` reverses the relabel first. Never delete `app_label='org'` alone: `org` holds many other models (`OrgUser`, `OrgFeature`, `OrgSettings` and more), and the delete would cascade through all their permissions and grants. If the prep PR (3a) shipped and the model-move PR (3b) is rolled back, 3a stays: it has no migrations.
 
+For the league slice, the clean rollback is:
+
+```bash
+python manage.py migrate app 0111
+python manage.py migrate events 0035
+python manage.py migrate org 0016
+python manage.py migrate league 0002
+python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='league', model__in=['league', 'leaguerating', 'leaguematch', 'leaguematchparticipant', 'leaguelog']).delete()"
+```
+
+`migrate app 0111` reverses the relabel first. `org 0016` is the migration before `org/0017_retarget_default_league_to_league`; going further back would also unapply unrelated `org` migrations. Never delete `app_label='league'` alone: `leagueuser` is a pre-existing `league` model, and deleting its ContentType cascades its permissions and grants. If the prep PR (4a) shipped and the model-move PR (4b) is rolled back, 4a stays: it has no migrations.
+
 !!! danger "Never delete by `app_label` alone"
     `ContentType.objects.filter(app_label='<new_app>').delete()` also hits every other model in the destination app, including slices moved earlier. The delete cascades through `auth_permission`, `auth_user_user_permissions` and `auth_group_permissions`, so their real grants are wiped, and `django_admin_log.content_type` is set to NULL for their log entries. Always filter on the moved model names.
 
@@ -320,7 +336,7 @@ python manage.py shell -c "from django.contrib.contenttypes.models import Conten
 ## What the organization slice learned
 
 - **A mixed helper module splits.** The domain part moves, and the remainder is renamed after what will remain once the next slice leaves: `app/permissions_org.py` became `org/permissions.py` plus `app/permissions_tournament.py`.
-- **Serializers used at class-definition time in the source app stay until their consumer moves**, even when their own domain has left. `OrganizationsSerializer` stays in `app.serializers` because `LeagueSerializer` and `LeaguesSerializer` declare it as a field.
+- **Serializers used at class-definition time in the source app stay until their consumer moves**, even when their own domain has left. `OrganizationsSerializer` stays in `app.serializers` because `LeaguesSerializer` (still in `app`) declares it as a field. `LeagueSerializer`, now in `league.serializers`, imports it forward from `app.serializers`.
 - **Shared pipelines with one front door per domain move whole when the last foreign door leaves.** `app/views/csv_import.py` serves both the org and the tournament import, so it stays in `app` until the tournament slice.
 - **Check whether the moved models are registered in admin before promising admin URL changes.** Neither `Organization` nor `OrgLog` has an admin, so no admin URL changed.
 - **Inbound FK retargets inside the target app go in the target app's create migration, after the `CreateModel`s.** `org/0014` creates `Organization` and `OrgLog` and then retargets the nine `org` FKs; `events/0035` and `opsnotices/0003` depend on it, and `app/0111` depends on all three.
@@ -330,3 +346,12 @@ python manage.py shell -c "from django.contrib.contenttypes.models import Conten
 - **A source-app migration that alters a moved model lands in the move's `CreateModel`.** `app/0110_orglog_conduct_actions` added three `OrgLog.action` choices on `main` while the slice was open. The move migrations follow it (`org/0014` and `app/0111` depend on it), and `org/0014`'s `CreateModel(OrgLog)` carries the same choices, so `makemigrations --check` stays clean.
 - **When a source module is renamed, carry every earlier slice's `moved` entries for it over to the new path.** The guard's redefinition and patch-string checks are keyed on the module path, so `TEAM_DRAFT.moved` lists `CanEditDraft` and `CanEditDraftRound` under both `app.permissions_org` and `app.permissions_tournament`.
 - **Lazy FK strings from the source app to the new app are not import edges.** `"org.Organization"` in `app/models.py` is not in `ALLOWED_BACK_EDGES`. List such strings in the slice's spec and in the slice table note above.
+
+## What the league slice learned
+
+- **A mutual FK between the target app and another non-source app resolves through ordering.** `League.organization` and `Organization.default_league` point at each other. The order `org/0014 → app/0111 → league/0003 → org/0017 → app/0112` handles it with no `RemoveField`: `league/0003` creates `League` pointing at `org.Organization`, `org/0017` retargets `default_league` to `league.League`, and only then does `app/0112` delete the old state.
+- **The rollback ContentType delete lists only the moved models.** It must never cover the target app's own pre-existing models (`leagueuser`).
+- **Services with no production caller still move whole with their domain.** `LeagueMatchService` and the rating systems have no production caller, but deleting them is a separate product decision, not part of a move.
+- **Eager package re-exports are dropped, not carried over.** `app/services/__init__.py` re-exported the league services; it now holds only its docstring, and the new `league/services/` package has an empty `__init__`.
+- **Serializers embedded in source-app serializers stay even when their domain moves.** `LeaguesSerializer` and `LeagueMinimalSerializer` stay in `app.serializers`. `LeagueSerializer`, which only the moved view uses, moved.
+- **Revisit the slice table during recon.** Ratings, matches and league logs were listed as separate later slices but belonged to the league domain, so they moved with it.

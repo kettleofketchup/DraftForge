@@ -42,6 +42,7 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
+import { LEAGUE_MMR_GAME } from '~/components/game/constants';
 import { EditLeagueModal, LeagueTabs, useLeague } from '~/components/league';
 import { Badge } from '~/components/ui/badge';
 import { PrimaryButton } from '~/components/ui/buttons';
@@ -49,6 +50,7 @@ import {
   EntityBreadcrumb,
   type BreadcrumbSegment,
 } from '~/components/ui/entity-breadcrumb';
+import { useProvideGameType } from '~/hooks/useGameType';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
@@ -65,6 +67,9 @@ export default function LeaguePage() {
   const { league, isLoading, error, refetch } = useLeague(pk);
   const tournaments = useUserStore((state) => state.tournaments);
   const getTournaments = useUserStore((state) => state.getTournaments);
+
+  // League MMR snapshots are single-game, so league pages are that game's context.
+  useProvideGameType(LEAGUE_MMR_GAME);
 
   const [activeTab, setActiveTab] = useState(tab || 'info');
   const [editModalOpen, setEditModalOpen] = useState(false);

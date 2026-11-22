@@ -9,8 +9,9 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import League, Tournament
+from app.models import Tournament
 from app.tournament_buckets import tournament_bucket_cutoff
+from league.models import League
 from org.models import Organization
 
 LIST_URL = "/api/tournaments-list/"

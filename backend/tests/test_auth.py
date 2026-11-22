@@ -25,8 +25,9 @@ from app.models import CustomUser
 from common.game import GameType
 from common.utils import isTestEnvironment
 from draft.models import Draft
+from league.models import League, LeagueUser
 from org.mmr import game_mmrs_prefetch, get_org_mmr, get_org_mmrs
-from org.models import Organization
+from org.models import Organization, OrgUser
 from tests.data.tournaments import (
     BRACKET_UNSET_WINNER_TOURNAMENT,
     SHUFFLE_TIE_TOURNAMENT,
@@ -653,8 +654,6 @@ def login_league_admin(request):
     user, created = createLeagueAdminTestUser()
 
     # Make this user an admin of league 1 if not already
-    from app.models import League
-
     league = League.objects.filter(pk=1).first()
     if league and user not in league.admins.all():
         league.admins.add(user)
@@ -676,8 +675,6 @@ def login_league_staff(request):
     user, created = createLeagueStaffTestUser()
 
     # Make this user staff of league 1 if not already
-    from app.models import League
-
     league = League.objects.filter(pk=1).first()
     if league and user not in league.staff.all():
         league.staff.add(user)
@@ -797,8 +794,6 @@ def login_auth_matrix_league_admin(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixLeagueAdminTestUser()
-    from app.models import League
-
     league = League.objects.filter(pk=AUTH_MATRIX_LEAGUE_ADMIN_USER.league_id).first()
     if league and user not in league.admins.all():
         league.admins.add(user)
@@ -816,8 +811,6 @@ def login_auth_matrix_league_staff(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixLeagueStaffTestUser()
-    from app.models import League
-
     league = League.objects.filter(pk=AUTH_MATRIX_LEAGUE_STAFF_USER.league_id).first()
     if league and user not in league.staff.all():
         league.staff.add(user)
@@ -1134,9 +1127,6 @@ def get_user_org_membership(request, user_pk: int):
             {"error": f"User with pk {user_pk} not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
-
-    from league.models import LeagueUser
-    from org.models import OrgUser
 
     org_users = (
         OrgUser.objects.nocache()

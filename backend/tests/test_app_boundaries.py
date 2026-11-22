@@ -1,4 +1,5 @@
 import ast
+import tempfile
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -222,7 +223,106 @@ ORG = MovedSlice(
     cached_labels=frozenset({"organization"}),
 )
 
-MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG)
+_LEAGUE_PERMISSION_NAMES = (
+    "has_league_admin_access",
+    "has_league_staff_access",
+    "_is_league_member",
+    "can_view_league_members",
+    "can_view_league_members_from_payload",
+    "IsLeagueAdmin",
+    "IsLeagueStaff",
+)
+
+_LEAGUE_ADMIN_TEAM_VIEWS = (
+    "add_league_admin",
+    "remove_league_admin",
+    "add_league_staff",
+    "remove_league_staff",
+    "add_league_member",
+)
+
+_LEAGUE_RETIRED_TEST_DEFS = {
+    "app.tests.test_league": ("LeagueAPITest",),
+    "app.tests.test_league_role_fields": ("LeagueRoleFieldsTest",),
+    "app.tests.test_league_serializer": (
+        "LeaguePatchSteamLeagueIdCacheTest",
+        "LeaguePatchSteamLeagueIdTest",
+        "LeagueUsersNameFieldsTest",
+        "ValidateSteamLeagueIdTest",
+    ),
+    "app.tests.test_match_finalization": (
+        "AgeDecayCalculationTest",
+        "MatchFinalizationServiceTest",
+    ),
+}
+
+LEAGUE = MovedSlice(
+    name="league",
+    source_app="app",
+    new_app="league",
+    moved=frozenset(
+        {
+            ("app.views_main", "LeagueView"),
+            ("app.serializers", "LeagueSerializer"),
+            ("app.serializers_ssr", "LeagueSerializerSSR"),
+            ("app.views.ssr", "LeagueSSRView"),
+            ("app.services", "LeagueMatchService"),
+            ("app.services", "get_rating_system"),
+            ("app.services", "EloRatingSystem"),
+            ("app.services", "FixedDeltaRatingSystem"),
+            ("app.services.rating", "RatingSystem"),
+            ("app.services.rating", "EloRatingSystem"),
+            ("app.services.rating", "FixedDeltaRatingSystem"),
+            ("app.services.rating", "get_rating_system"),
+            ("app.services.match_finalization", "LeagueMatchService"),
+            ("app.models", "League"),
+            ("app.models", "LeagueRating"),
+            ("app.models", "LeagueMatch"),
+            ("app.models", "LeagueMatchParticipant"),
+            ("app.models", "LeagueLog"),
+            *(("app.views.admin_team", name) for name in _LEAGUE_ADMIN_TEAM_VIEWS),
+            *(
+                ("app.permissions_tournament", name)
+                for name in _LEAGUE_PERMISSION_NAMES
+            ),
+            *(
+                (module, name)
+                for module, names in _LEAGUE_RETIRED_TEST_DEFS.items()
+                for name in names
+            ),
+        }
+    ),
+    retired_modules=frozenset(
+        {
+            "app.services.rating",
+            "app.services.match_finalization",
+            "app.tests.test_league",
+            "app.tests.test_league_role_fields",
+            "app.tests.test_league_serializer",
+            "app.tests.test_match_finalization",
+            "app.tests.test_league_rating",
+        }
+    ),
+    model_labels=frozenset(
+        {"league", "leaguerating", "leaguematch", "leaguematchparticipant", "leaguelog"}
+    ),
+    move_migration=("app", "0112_move_league_models_to_league"),
+    cached_labels=frozenset({"league"}),
+)
+
+MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG, LEAGUE)
+
+# Slices cut before the rule that a retired module's defs go into `moved`;
+# their modules were renamed or split on the way out.
+RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
+    {HERO_DRAFT.name, TEAM_DRAFT.name, ORG.name}
+)
+
+# retired module -> where its defs live now, when that is not the same path
+# under the new app; None means renamed within the source app.
+RETIRED_MODULE_HOMES: dict[str, str | None] = {
+    "app.tests.test_league_rating": None,
+}
 
 # target app -> production file (relative to backend/) -> what it may import from that app
 ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
@@ -320,16 +420,8 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "reloading users",
         ),
         "app/permissions_tournament.py": BackEdge(
-            frozenset(
-                {
-                    "_payload_lists_user",
-                    "can_view_org_members",
-                    "has_org_admin_access",
-                    "has_org_staff_access",
-                }
-            ),
-            "league access and member-visibility checks fall back to the league "
-            "org's roles; leaves with the league slice",
+            frozenset({"has_org_staff_access"}),
+            "has_event_staff_access grants event staff via the event org's staff role",
         ),
         "app/serializers.py": BackEdge(
             frozenset(
@@ -343,15 +435,11 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "org_mmr_map",
                 }
             ),
-            "tournament and league user serializers auto-create OrgUser rows and "
-            "embed the context game's org MMR via org.mmr and OrgUserSerializer; "
-            "OrganizationsSerializer, "
-            "LeagueSerializer.organization_id and UserSerializer."
-            "default_organization read Organization at class definition",
-        ),
-        "app/services/match_finalization.py": BackEdge(
-            frozenset({"LEAGUE_GAME", "org_mmr_map"}),
-            "league rating creation seeds base MMR from the league org's Dota 2 org MMR",
+            "tournament, team and draft user serializers auto-create OrgUser rows "
+            "and embed the context game's org MMR via org.mmr and "
+            "OrgUserSerializer; OrganizationsSerializer and "
+            "UserSerializer.default_organization read Organization at class "
+            "definition",
         ),
         "app/services/team_leadership.py": BackEdge(
             frozenset({"OrgUser", "OrgUserGameMmr", "game_for_tournament"}),
@@ -375,19 +463,15 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset(
                 {
                     "OrgUser",
-                    "LEAGUE_GAME",
                     "Organization",
-                    "has_org_admin_access",
                     "has_org_staff_access",
-                    "member_nick",
-                    "org_mmr_for",
                     "resolve_member_user",
                     "user_name_q",
                 }
             ),
-            "user search scopes by Organization, and league/tournament member "
-            "adds use org roles, the org guild member cache and OrgUser; leaves "
-            "with the league and tournament slices",
+            "user search scopes by Organization, checks org staff and reports org "
+            "membership; tournament member adds resolve the user against the "
+            "league org's guild members; leaves with the tournament slice",
         ),
         "app/views/csv_import.py": BackEdge(
             frozenset(
@@ -419,7 +503,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "Organization",
                     "api",
                     "has_org_staff_access",
-                    "member_access",
                     "member_organization_ids",
                     "not_permitted",
                     "release_earning_sends",
@@ -428,9 +511,58 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             ),
             "UserView org-staff checks, profile claims and deletion standing; "
             "TeamView feature errors and team log scope; current_user and "
-            "tournament list membership ids; LeagueView member flag and org "
-            "checks; tournament list, home stats and scope checks read "
-            "Organization",
+            "tournament list membership ids; tournament list, home stats and "
+            "scope checks read Organization",
+        ),
+    },
+    "league": {
+        "app/permissions_tournament.py": BackEdge(
+            frozenset({"League", "has_league_admin_access", "has_league_staff_access"}),
+            "event, tournament and game permissions fall back to league staff; "
+            "tournament league changes and lobby Steam league IDs need league "
+            "admin, and the Steam league ID check looks up the owning League; "
+            "leaves with the tournament slice",
+        ),
+        "app/serializers.py": BackEdge(
+            frozenset({"League", "LeagueUser"}),
+            "LeaguesSerializer and LeagueMinimalSerializer are embedded in "
+            "tournament serializers at class definition and TournamentSerializer "
+            "validates league_id against League; tournament, team and draft user "
+            "serializers prefetch the league membership behind league MMR; "
+            "TournamentSerializer.update creates LeagueUser rows for added users",
+        ),
+        "app/services/team_management.py": BackEdge(
+            frozenset({"LeagueUser"}),
+            "team member adds report whether the tournament add created a LeagueUser",
+        ),
+        "app/signals.py": BackEdge(
+            frozenset({"LeagueUser"}),
+            "tournament user auto-add creates the tournament league's LeagueUser",
+        ),
+        "app/tournament_state.py": BackEdge(
+            frozenset({"League"}),
+            "tournament prefetch plan prefetches the tournament's League",
+        ),
+        "app/views/admin_team.py": BackEdge(
+            frozenset({"League", "LeagueUser", "has_league_staff_access"}),
+            "user search resolves ?league_id= to a League and flags league "
+            "membership; tournament member adds check league staff; leaves with "
+            "the tournament slice",
+        ),
+        "app/views/csv_import.py": BackEdge(
+            frozenset({"League", "LeagueUser", "has_league_staff_access"}),
+            "shared CSV import pipeline checks league staff on the tournament "
+            "door and writes LeagueUser MMR; League annotates the MMR target "
+            "helper; moves whole with the tournament slice",
+            type_only=frozenset({"League"}),
+        ),
+        "app/views_main.py": BackEdge(
+            frozenset({"League", "has_league_staff_access"}),
+            "GameCreateView and GameView.perform_create resolve league_id to a "
+            "League and check league staff (leave with the game slice); the "
+            "tournament list caches on League (leaves with the tournament slice); "
+            "home_stats caches on and counts League as a cross-domain home-page "
+            "aggregate",
         ),
     },
 }
@@ -726,6 +858,39 @@ def _migration_files(base: Path) -> Iterator[tuple[str, str]]:
             yield file.relative_to(base).as_posix(), file.read_text()
 
 
+def find_unlisted_retired_defs(
+    slices: tuple[MovedSlice, ...],
+    base: Path,
+    homes: dict[str, str | None] = RETIRED_MODULE_HOMES,
+    grandfathered: frozenset[str] = RETIRED_DEFS_GRANDFATHERED,
+) -> list[str]:
+    """Retired modules whose new home defines a top-level name not in `moved`."""
+    found: list[str] = []
+    for s in slices:
+        if s.name in grandfathered:
+            continue
+        for module in sorted(s.retired_modules):
+            if module in homes:
+                home = homes[module]
+            else:
+                home = s.new_app + module.removeprefix(s.source_app)
+            if home is None:
+                continue
+            path = base / Path(*home.split(".")).with_suffix(".py")
+            if not path.exists():
+                found.append(
+                    f"[{s.name}] {module}: new home {home} not found; "
+                    "map it in RETIRED_MODULE_HOMES"
+                )
+                continue
+            listed = {name for old, name in s.moved if old == module}
+            tree = ast.parse(path.read_text(), filename=str(path))
+            for name, _line in _top_level_defs(tree):
+                if name not in listed:
+                    found.append(f"[{s.name}] {module}.{name} missing from moved")
+    return found
+
+
 FIXTURE_SLICE = MovedSlice(
     name="fixture",
     source_app="src",
@@ -945,6 +1110,31 @@ class GuardSelfTests(SimpleTestCase):
         self.assertIn(path, violations[0])
         self.assertEqual(self.ancestry(source, {("dst", "0003_x")}, path), [])
 
+    def unlisted_retired_defs(
+        self, source: str, homes: dict[str, str | None] | None = None
+    ) -> list[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "dst").mkdir()
+            (Path(tmp) / "dst" / "old.py").write_text(source)
+            return find_unlisted_retired_defs(
+                (FIXTURE_SLICE,), Path(tmp), homes or {}, frozenset()
+            )
+
+    def test_retired_module_def_missing_from_moved(self) -> None:
+        found = self.unlisted_retired_defs("class Moved:\n    pass\n")
+        self.assertEqual(found, ["[fixture] src.old.Moved missing from moved"])
+
+    def test_retired_module_home_not_found(self) -> None:
+        found = self.unlisted_retired_defs("", {"src.old": "dst.renamed"})
+        self.assertEqual(len(found), 1)
+        self.assertIn("RETIRED_MODULE_HOMES", found[0])
+
+    def test_retired_module_renamed_in_source_app_skipped(self) -> None:
+        found = self.unlisted_retired_defs(
+            "def gone() -> None: ...\n", {"src.old": None}
+        )
+        self.assertEqual(found, [])
+
     def test_two_argument_get_model(self) -> None:
         self.assertFlagged('apps.get_model("src", "Moved")\n', "x.py")
         self.assertFlagged('apps.get_model("src", "moved")\n', "src/signals.py")
@@ -1014,6 +1204,9 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("draft/models/team.py", rels)
         self.assertIn("org/permissions.py", rels)
         self.assertIn("org/models.py", rels)
+        self.assertIn("league/permissions.py", rels)
+        self.assertIn("league/models.py", rels)
+        self.assertIn("league/models_rating.py", rels)
         self.assertNotIn(GUARD_FILE, rels)
         self.assertFalse(any("/migrations/" in rel for rel in rels))
 
@@ -1024,6 +1217,9 @@ class AppBoundaryTests(SimpleTestCase):
                 with self.subTest(module=module):
                     self.assertFalse((self.base / rel.with_suffix(".py")).exists())
                     self.assertFalse((self.base / rel / "__init__.py").exists())
+
+    def test_retired_module_defs_listed_in_moved(self) -> None:
+        self.assertEqual(find_unlisted_retired_defs(MOVED_SLICES, self.base), [])
 
     def test_new_apps_registered(self) -> None:
         labels = {entry.split(".")[0] for entry in MODEL_APPS}
@@ -1039,8 +1235,6 @@ class AppBoundaryTests(SimpleTestCase):
                     self.assertNotIn(f"{s.source_app}.{label}", keys)
 
     def test_new_cacheops_keys_present(self) -> None:
-        if not settings.CACHEOPS:
-            self.skipTest("CACHEOPS is empty (DISABLE_CACHE)")
         for s in MOVED_SLICES:
             for label in s.cached_labels:
                 with self.subTest(label=label):

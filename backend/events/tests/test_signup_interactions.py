@@ -5,10 +5,13 @@ from structlog.contextvars import clear_contextvars
 
 from app.models import CustomUser, GameType
 from events.constants import EventState
+from events.discord import handle_rank_medal_select
 from events.models import EventSignup
 from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
+
+DISCORD_ID = "100000000000000001"
 
 
 class HandleSignupButtonTest(EventTestCase):
@@ -117,7 +120,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
     def test_dota_modal_writes_rank_status_and_returns_needs_rank_details(self):
         """Dota modal submit persists rank_status and friend ID, returns needs_rank_details.
 
-        Positions are no longer written by the modal — they flow through
+        Positions are not written by the modal — they flow through
         PositionConfirmButton.callback after the modal closes.
         """
         from events.discord import handle_signup_modal_submit
@@ -142,9 +145,8 @@ class HandleSignupModalSubmitTest(EventTestCase):
 
         # Verify CustomUser.steam_account_id was NOT modified by the modal.
         # The setUp sets steamid, and CustomUser.save() syncs steam_account_id
-        # from steamid (32-bit vs 64-bit are the same identity — see T1.5
-        # resurrection of the steam-id sync). So the baseline is the derived
-        # value, not None. Confirm the modal handler didn't *change* it.
+        # from steamid (32-bit vs 64-bit are the same identity). So the
+        # baseline is the derived value, not None. Confirm the modal handler didn't *change* it.
         baseline_steam_account_id = self.user.steam_account_id
         self.user.refresh_from_db()
         self.assertEqual(self.user.steam_account_id, baseline_steam_account_id)
@@ -355,6 +357,27 @@ class HandleRankMedalSelectTest(EventTestCase):
         self.assertIsInstance(patch_arg, SignupInputPatch)
         self.assertEqual(patch_arg.rank_medal, "Legend 3")
 
+    def test_active_rank_without_screenshot_needs_screenshot(self) -> None:
+        self.event.discord_require_rank_screenshot = True
+        self.event.save()
+
+        result = handle_rank_medal_select(self.event.pk, DISCORD_ID, "Legend 3")
+
+        self.assertEqual(
+            result, {"action": "needs_screenshot", "screenshot_type": "rank"}
+        )
+
+    def test_previous_rank_never_needs_screenshot(self) -> None:
+        self.event.discord_require_rank_screenshot = True
+        self.event.save()
+        PlayerDotaProfile.objects.filter(org_user=self.org_user).update(
+            rank_status="previous"
+        )
+
+        result = handle_rank_medal_select(self.event.pk, DISCORD_ID, "Legend 3")
+
+        self.assertEqual(result["action"], "signed_up")
+
 
 class HandleRankStatusSelectTest(EventTestCase):
     def setUp(self):
@@ -391,44 +414,6 @@ class HandleRankStatusSelectTest(EventTestCase):
         patch_arg = spy.call_args.kwargs["patch"]
         self.assertIsInstance(patch_arg, SignupInputPatch)
         self.assertEqual(patch_arg.rank_status, "active")
-
-
-class HandlePreviousRankSubmitTest(EventTestCase):
-    def setUp(self):
-        super().setUp()
-        clear_contextvars()
-        self.event.state = EventState.SIGNUPS_OPEN
-        self.event.auto_approve = True
-        self.event.save()
-        self.user.discordId = "100000000000000001"
-        self.user.save()
-        self.org_user = OrgUser.objects.create(
-            user=self.user,
-            organization=self.event.organization,
-        )
-
-    def tearDown(self):
-        clear_contextvars()
-        super().tearDown()
-
-    def test_handle_previous_rank_submit_calls_apply_signup_input(self):
-        """rank_medal write (previous rank flow) flows through apply_signup_input."""
-        from unittest.mock import patch as mock_patch
-
-        from events.discord import handle_previous_rank_submit
-        from events.schemas import SignupInputPatch
-
-        with mock_patch("events.services.apply_signup_input") as spy:
-            handle_previous_rank_submit(
-                event_id=self.event.pk,
-                discord_user_id="100000000000000001",
-                medal="Legend 4",
-                date_text="2024",
-            )
-        spy.assert_called_once()
-        patch_arg = spy.call_args.kwargs["patch"]
-        self.assertIsInstance(patch_arg, SignupInputPatch)
-        self.assertEqual(patch_arg.rank_medal, "Legend 4")
 
 
 class HandleBattleCupSubmitTest(EventTestCase):

@@ -28,7 +28,6 @@ from app.functions.tournament import serialize_tournament
 from app.models import (
     CustomUser,
     Game,
-    League,
     Team,
     TeamLog,
     TeamLogAction,
@@ -59,6 +58,7 @@ from draft.services.team_state import build_draft_state
 from draft.tests.team_fixtures import mid_draft_fixture
 from events.models import EventTeam
 from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
+from league.models import League
 from org.models import Organization
 from user.tests.test_cacheops_integration import _redis_reachable
 

@@ -137,3 +137,42 @@ class TournamentEmbedBuildersTest(TestCase):
             len(build_draft_link_components(100, draft_id=42)[0]["components"]), 1
         )
         self.assertEqual(len(build_herodraft_link_components(99)[0]["components"]), 1)
+
+    @override_settings(DISCORD_ACTIVITY_ENABLED=True)
+    def test_known_channel_makes_launch_a_one_click_invite_link(self):
+        from events.discord.tournament_embeds import (
+            build_draft_link_components,
+            build_draft_link_embed,
+            build_herodraft_link_components,
+            build_herodraft_link_embed,
+        )
+
+        invite = "https://discord.gg/team-room"
+        for buttons in (
+            build_draft_link_components(100, draft_id=42, invite_url=invite),
+            build_herodraft_link_components(99, invite_url=invite),
+        ):
+            launch = buttons[0]["components"][1]
+            self.assertEqual(
+                launch,
+                {
+                    "type": 2,
+                    "style": 5,
+                    "label": "Launch / Join Activity",
+                    "url": invite,
+                },
+            )
+        for embed in (
+            build_draft_link_embed("Tournament", "Snake", 100, one_click=True),
+            build_herodraft_link_embed("Tournament", 99, "A", "B", one_click=True),
+        ):
+            self.assertIn("join the draft's voice channel", embed["description"])
+            self.assertNotIn("Open the invite", embed["description"])
+
+    def test_disabled_activity_ignores_invite_url(self):
+        from events.discord.tournament_embeds import build_draft_link_components
+
+        components = build_draft_link_components(
+            100, draft_id=42, invite_url="https://discord.gg/x"
+        )
+        self.assertEqual(len(components[0]["components"]), 1)

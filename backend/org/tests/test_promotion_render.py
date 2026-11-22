@@ -5,8 +5,9 @@ from typing import TypedDict
 
 from django.test import SimpleTestCase, TestCase, override_settings
 
-from app.models import CustomUser, League
+from app.models import CustomUser
 from events.models import Event
+from league.models import League
 from org.models import Organization, OrgUser
 from org.promotion.render import (
     ANY_TOKEN_RE,

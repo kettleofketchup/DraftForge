@@ -6,8 +6,9 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from structlog.testing import capture_logs
 
-from app.models import GameType, League, Tournament
+from app.models import GameType, Tournament
 from events.models import Event, EventState
+from league.models import League
 from org import activity
 from org.activity import (
     active_org_ids,
