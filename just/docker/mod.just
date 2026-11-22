@@ -60,20 +60,21 @@ hash service="all":
         ./scripts/hash-docker-image.sh "$1"
     fi
 
-# docker buildx build one image: tags :latest and :<content-hash> (plus :<version> with --release); --push pushes, otherwise loads locally; --hash-only tags only :<content-hash> and leaves :buildcache alone (PR pushes)
+# docker buildx build one image: tags :latest and :<content-hash> (plus :<version> with --release); --push pushes, otherwise loads locally; --hash-only tags only :<content-hash> and leaves :buildcache alone (PR pushes); --no-cache neither reads nor writes :buildcache
 [private]
 buildx service image target dockerfile context *flags:
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{quote(root)}}
     service=$1 image="{{registry}}/$2" target=$3 dockerfile=$4 context=$5
-    push=false release=false hash_only=false
+    push=false release=false hash_only=false no_cache=false
     for flag in "${@:6}"; do
         case "$flag" in
             --push) push=true ;;
             --release) release=true ;;
             --hash-only) hash_only=true ;;
-            *) echo "docker: unknown option $flag (use --push, --release, --hash-only)" >&2; exit 2 ;;
+            --no-cache) no_cache=true ;;
+            *) echo "docker: unknown option $flag (use --push, --release, --hash-only, --no-cache)" >&2; exit 2 ;;
         esac
     done
     if [[ "$hash_only" == true && "$release" == true ]]; then
@@ -95,11 +96,14 @@ buildx service image target dockerfile context *flags:
     if docker --version 2>/dev/null | grep -qi podman; then
         registry_cache=false
     fi
-    if [[ "$registry_cache" == true ]]; then
+    # A release neither reads nor overwrites the :buildcache that main and previews read.
+    if [[ "$no_cache" == true ]]; then
+        args+=(--no-cache)
+    elif [[ "$registry_cache" == true ]]; then
         args+=(--cache-from "type=registry,ref=$image:buildcache")
     fi
     if [[ "$push" == true ]]; then
-        if [[ "$registry_cache" == true && "$hash_only" == false ]]; then
+        if [[ "$registry_cache" == true && "$hash_only" == false && "$no_cache" == false ]]; then
             args+=(--cache-to "type=registry,ref=$image:buildcache,mode=max")
         fi
         args+=(--push)

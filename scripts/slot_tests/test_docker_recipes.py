@@ -63,6 +63,27 @@ def test_docker_push_writes_registry_cache(tmp_path: Path) -> None:
     assert "--push" in argv
 
 
+def test_no_cache_drops_cache_from_and_to(tmp_path: Path) -> None:
+    # A release must neither read nor overwrite the :buildcache main and previews read.
+    argv = build(tmp_path, DOCKER, "--push", "--no-cache")
+    assert "--no-cache" in argv
+    assert "--push" in argv
+    assert "--cache-from" not in argv
+    assert "--cache-to" not in argv
+
+
+def test_release_push_passes_no_cache() -> None:
+    assert JUST is not None
+    result = subprocess.run(
+        [JUST, "--justfile", str(ROOT / "justfile"), "--show", "docker::release::push"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--no-cache" in result.stdout
+
+
 @pytest.mark.parametrize("flags", [(), ("--push",)])
 def test_podman_build_skips_registry_cache(
     tmp_path: Path, flags: tuple[str, ...]
