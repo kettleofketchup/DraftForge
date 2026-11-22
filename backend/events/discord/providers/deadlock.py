@@ -16,7 +16,7 @@ from django.core.exceptions import ValidationError
 
 from app.cache_utils import invalidate_obj
 from events.discord._shared import _direct_signup, _steam_friend_id_prefill
-from events.eligibility import refresh_unmet_requirements, validate_friend_id
+from events.eligibility import claim_friend_id, refresh_unmet_requirements
 from events.models import Event
 from events.schemas import DeadlockModalConfig
 from org.models_profiles import PlayerDeadlockProfile
@@ -48,7 +48,7 @@ class DeadlockHandler:
         return _check_deadlock_profile_complete(org_user)
 
     def prefill(self, org_user: OrgUser) -> dict:
-        return {"unverified_friend_id": _steam_friend_id_prefill(org_user)}
+        return {"friend_id": _steam_friend_id_prefill(org_user)}
 
     def modal_config(self, event: Event) -> DeadlockModalConfig:
         return DeadlockModalConfig(require_steam_id=event.require_steam_id)
@@ -57,9 +57,7 @@ class DeadlockHandler:
         self, event: Event, org_user: OrgUser, user: CustomUser, values: dict
     ) -> dict:
         try:
-            friend_id = validate_friend_id(
-                values.get("unverified_friend_id", ""), org_user
-            )
+            claim_friend_id(user, values.get("friend_id"), event=event)
         except ValidationError as e:
             log.info(
                 "signup_input_rejected",
@@ -71,8 +69,6 @@ class DeadlockHandler:
 
         # Save Deadlock profile and sign up directly
         profile, _ = PlayerDeadlockProfile.objects.get_or_create(org_user=org_user)
-        if friend_id:
-            profile.unverified_friend_id = friend_id
         profile.rank = values.get("deadlock_rank", "")
         profile.save()
         invalidate_obj(profile)

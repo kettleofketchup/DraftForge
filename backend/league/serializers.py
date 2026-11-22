@@ -9,6 +9,7 @@ from app.serializers import (
     TournamentUserSerializer,
 )
 from league.models import League
+from org.mmr import get_org_mmrs
 from org.models import Organization
 
 from .models import LeagueUser
@@ -37,6 +38,14 @@ class LeagueUserSerializer(serializers.ModelSerializer):
     )
     avatarUrl = serializers.CharField(source="user.avatarUrl", read_only=True)
     mmr = serializers.IntegerField(read_only=True)  # LeagueUser's snapshot MMR
+    orgUserPk = serializers.IntegerField(source="org_user_id", read_only=True)
+    game_mmrs = serializers.SerializerMethodField()
+    league_mmr = serializers.IntegerField(source="mmr", read_only=True)
+
+    def get_game_mmrs(self, league_user: LeagueUser) -> dict[str, int]:
+        return {
+            str(game): mmr for game, mmr in get_org_mmrs(league_user.org_user).items()
+        }
 
     class Meta:
         model = LeagueUser
@@ -53,6 +62,9 @@ class LeagueUserSerializer(serializers.ModelSerializer):
             "steam_account_id",
             "avatarUrl",
             "mmr",
+            "orgUserPk",
+            "game_mmrs",
+            "league_mmr",
         )
 
 

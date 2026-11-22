@@ -11,7 +11,7 @@ class SignupInputPatchTest(SimpleTestCase):
 
     def test_full_patch_parses(self) -> None:
         patch = SignupInputPatch(
-            unverified_friend_id="12345678",
+            steam_account_id="12345678",
             positions=[1, 2, 3],
             rank_status="active",
             rank_medal="Crusader 3",
@@ -19,6 +19,16 @@ class SignupInputPatchTest(SimpleTestCase):
         )
         self.assertEqual(patch.rank_status, "active")
         self.assertEqual(patch.positions, [1, 2, 3])
+
+    def test_deprecated_friend_id_alias_folds_into_steam_account_id(self) -> None:
+        patch = SignupInputPatch(unverified_friend_id=" 4294967295 ")
+        self.assertEqual(
+            patch.model_dump(exclude_unset=True), {"steam_account_id": "4294967295"}
+        )
+
+    def test_integer_friend_id_is_accepted(self) -> None:
+        patch = SignupInputPatch(steam_account_id=3000000000)
+        self.assertEqual(patch.steam_account_id, "3000000000")
 
     def test_rank_status_rejects_invalid(self) -> None:
         with self.assertRaises(PydanticValidationError):

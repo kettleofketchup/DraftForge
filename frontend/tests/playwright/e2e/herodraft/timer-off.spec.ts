@@ -5,13 +5,14 @@
  * tournament option, resets the shared two_captain_test draft, and restores
  * both afterwards. Warping far past grace + reserve must not auto-pick.
  */
-import { chromium, expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import {
   loginAdmin,
   loginAsDiscordId,
   waitForHydration,
 } from '../../fixtures/auth';
 import { API_URL, BASE_URL } from '../../fixtures/base-url';
+import { launchChromium } from '../../fixtures/browser';
 import { patchWithCsrf } from '../../fixtures/events';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
@@ -19,7 +20,7 @@ test.describe('HeroDraft without a turn timer', () => {
   test('@cicd shows no countdowns and never auto-picks', async () => {
     test.setTimeout(180000);
 
-    const browser = await chromium.launch({
+    const browser = await launchChromium({
       headless: true,
       args: [
         '--disable-web-security',
