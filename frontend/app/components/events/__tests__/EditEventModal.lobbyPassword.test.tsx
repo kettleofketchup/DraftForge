@@ -35,6 +35,31 @@ vi.mock('~/components/league/LeagueCombobox', () => ({
   LeagueCombobox: () => null,
 }));
 
+// Heavy fields these tests never use; rendering them timed tests out under load.
+vi.mock('../form/fields/TimezoneField', () => ({ TimezoneField: () => null }));
+
+// Each describe mounts only the heavy tabs its tests use.
+const stubbed = vi.hoisted(() => ({ tournament: false, lobby: false }));
+vi.mock('../form/sections/EventTournamentFields', async (importOriginal) => {
+  const { EventTournamentFields } =
+    await importOriginal<
+      typeof import('../form/sections/EventTournamentFields')
+    >();
+  return {
+    EventTournamentFields: (
+      props: Parameters<typeof EventTournamentFields>[0],
+    ) => (stubbed.tournament ? null : <EventTournamentFields {...props} />),
+  };
+});
+vi.mock('../form/sections/EventLobbyFields', async (importOriginal) => {
+  const { EventLobbyFields } =
+    await importOriginal<typeof import('../form/sections/EventLobbyFields')>();
+  return {
+    EventLobbyFields: (props: Parameters<typeof EventLobbyFields>[0]) =>
+      stubbed.lobby ? null : <EventLobbyFields {...props} />,
+  };
+});
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
@@ -170,6 +195,7 @@ async function submittedBody() {
 
 describe('EditEventModal lobby password', () => {
   beforeEach(() => {
+    Object.assign(stubbed, { tournament: true, lobby: false });
     mutateAsync.mockClear();
     regenerate.mockReset();
     savedPassword.current = undefined;
@@ -282,6 +308,7 @@ describe('EditEventModal end time', () => {
   };
 
   beforeEach(() => {
+    Object.assign(stubbed, { tournament: true, lobby: true });
     mutateAsync.mockClear();
   });
 
@@ -318,6 +345,7 @@ describe('EditEventModal end time', () => {
 
 describe('EditEventModal draft settings', () => {
   beforeEach(() => {
+    Object.assign(stubbed, { tournament: false, lobby: true });
     mutateAsync.mockClear();
     savedPassword.current = undefined;
   });
@@ -371,6 +399,7 @@ describe('EditEventModal draft settings', () => {
 
 describe('EditEventModal tabs and payload parity', () => {
   beforeEach(() => {
+    Object.assign(stubbed, { tournament: false, lobby: true });
     mutateAsync.mockClear();
     savedPassword.current = undefined;
   });

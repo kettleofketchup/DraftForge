@@ -93,6 +93,17 @@ vi.mock('../tabs/orgSettings/StaffPlacementSection', () => ({
 vi.mock('~/components/admin-team', () => ({
   AdminTeamSection: () => <div data-testid="admin-team-section" />,
 }));
+// Heavy fields these tests never use; rendering them timed tests out under load.
+vi.mock('~/components/events/form/sections/EventTournamentFields', () => ({
+  EventTournamentFields: () => null,
+}));
+vi.mock('~/components/events/form/fields/TimezoneField', () => ({
+  TimezoneField: () => null,
+}));
+vi.mock('~/components/events/ReadyCheckConfigSection', () => ({
+  ReadyCheckConfigSection: () => null,
+}));
+
 vi.mock('sonner', () => ({
   toast: { error: toastError, success: toastSuccess, warning: toastWarning },
 }));
@@ -247,11 +258,10 @@ const tab = (value: string) => screen.getByTestId(`org-settings-tab-${value}`);
 const isActive = (value: string) =>
   tab(value).getAttribute('data-state') === 'active';
 
+// The defaults fields mount only once the form holds the loaded values.
 async function defaultsLoaded() {
   fireEvent.mouseDown(tab('defaults-event'), { button: 0 });
-  await waitFor(() =>
-    expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20),
-  );
+  await screen.findByTestId('org-defaults-max-players-input');
 }
 
 function editBoth() {
