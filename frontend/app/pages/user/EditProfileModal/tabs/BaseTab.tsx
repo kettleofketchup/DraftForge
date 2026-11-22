@@ -104,9 +104,8 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
 
   const onSubmit = form.handleSubmit((values) => {
     // Only send dirty fields — dirtyFields semantics per react-hook-form.
-    const { dirtyFields } = form.formState;
     const payload: BasePatchPayload = {};
-    if (dirtyFields.nickname) {
+    if (form.getFieldState('nickname').isDirty) {
       payload.nickname = values.nickname ?? null;
     }
     if (Object.keys(payload).length === 0) {

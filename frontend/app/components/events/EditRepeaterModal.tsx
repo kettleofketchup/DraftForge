@@ -264,7 +264,6 @@ export function EditRepeaterModal({
           content: (
             <EventLobbyFields
               control={form.control}
-              watch={form.watch}
               scope="series"
               saved={savedPassword}
             />
@@ -276,7 +275,6 @@ export function EditRepeaterModal({
           content: (
             <DiscordConfigSection
               control={form.control}
-              watch={form.watch}
               isRepeater={true}
               organizationId={repeater?.organization ?? 0}
             />

@@ -543,7 +543,7 @@ export const TournamentEditForm: React.FC<Props> = ({
     ),
     config: (
       <>
-        <LobbyConfigSection control={form.control} watch={form.watch} />
+        <LobbyConfigSection control={form.control} />
         <TournamentConfigSection control={form.control} />
         <DraftSettingsSection
           control={form.control}
