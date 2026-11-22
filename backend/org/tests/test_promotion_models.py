@@ -4,9 +4,10 @@ from django.db import IntegrityError, transaction
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League
+from app.models import CustomUser
 from common.discord_format import discord_timestamp
 from events.models import Event
+from league.models import League
 from org.accounts import repoint_org_attribution
 from org.contributions.kinds import ContributionKind
 from org.feature_keys import FeatureKey

@@ -66,7 +66,7 @@ class Organization(models.Model):
         blank=True,
     )
     default_league = models.ForeignKey(
-        "app.League",
+        "league.League",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

@@ -13,9 +13,9 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from app.models import CustomUser, Game, League, Tournament
+from app.models import CustomUser, Game, Tournament
 from app.serializers import LeagueMatchSerializer, LeaguesSerializer
-from league.models import LeagueUser
+from league.models import League, LeagueUser
 from league.permissions import (
     IsLeagueAdmin,
     can_view_league_members,

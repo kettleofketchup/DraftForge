@@ -5,9 +5,10 @@ from typing import ClassVar
 from django.test import TestCase
 from django.utils import timezone as tz
 
-from app.models import CustomUser, League, PositionsModel
+from app.models import CustomUser, PositionsModel
 from events.constants import EventState
 from events.models import Event
+from league.models import League
 from org.models import Organization, OrgUser
 
 _helper_ids = itertools.count(1)

@@ -15,7 +15,9 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 
-from app.models import CustomUser, GameType, League, PositionsModel
+from app.models import CustomUser, GameType, PositionsModel
+from discordbot.services.users import get_discord_members_data
+from league.models import League, LeagueUser
 from org.mmr import LEAGUE_GAME, org_mmr_for, validate_org_mmr
 from org.models import Organization, OrgUser, OrgUserGameMmr, PromoSend
 from org.standing import api as standing
@@ -205,7 +207,6 @@ def ensure_league_user(
     user: CustomUser, org_user: OrgUser, league: League
 ) -> "LeagueUser":
     """Ensure LeagueUser exists for user in league."""
-    from league.models import LeagueUser
 
     league_user, created = LeagueUser.objects.get_or_create(
         user=user,
@@ -360,8 +361,6 @@ def _get_discord_avatar_cache() -> dict[str, str]:
         return _discord_avatar_cache
 
     try:
-        from discordbot.services.users import get_discord_members_data
-
         members = get_discord_members_data()
         _discord_avatar_cache = {}
         for member in members:

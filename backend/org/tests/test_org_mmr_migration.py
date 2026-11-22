@@ -1,6 +1,5 @@
 import unittest
 
-from django.db import connection
 from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.operations import DeleteModel, RemoveField
 from django.test import SimpleTestCase
@@ -20,7 +19,7 @@ DEADLOCK = 2
 
 class ForwardBackfillTest(MigratorTestCase):
     migrate_from = ("org", "0014_move_organization_models_from_app")
-    migrate_to = ("org", "0017_remove_orguser_mmr")
+    migrate_to = ("org", "0018_remove_orguser_mmr")
 
     def prepare(self) -> None:
         apps = self.old_state.apps
@@ -114,8 +113,8 @@ class BackfillReverseTest(MigratorTestCase):
 
 
 class ReverseRestoreTest(MigratorTestCase):
-    migrate_from = ("org", "0017_remove_orguser_mmr")
-    migrate_to = ("org", "0014_move_organization_models_from_app")
+    migrate_from = ("org", "0018_remove_orguser_mmr")
+    migrate_to = ("org", "0017_retarget_default_league_to_league")
 
     def prepare(self) -> None:
         apps = self.old_state.apps
@@ -151,26 +150,27 @@ class ReverseRestoreTest(MigratorTestCase):
             {self.pks["both"]: 4200, self.pks["deadlock"]: 0, self.pks["none"]: 0},
         )
 
-    def test_rating_table_dropped(self) -> None:
-        self.assertNotIn("org_orgusergamemmr", connection.introspection.table_names())
+    def test_game_rows_kept(self) -> None:
+        Row = self.new_state.apps.get_model("org", "OrgUserGameMmr")
+        self.assertEqual(Row.objects.filter(game_type=DEADLOCK).count(), 2)
 
 
 class OrgMmrMigrationShapeTest(SimpleTestCase):
-    def test_only_0017_is_destructive(self) -> None:
+    def test_only_0018_is_destructive(self) -> None:
         graph = MigrationLoader(None, ignore_no_migrations=True).graph
         destructive: list[tuple[str, str, str]] = []
         for name in (
             "0015_orgusergamemmr",
             "0016_backfill_org_user_game_mmr",
-            "0017_remove_orguser_mmr",
+            "0018_remove_orguser_mmr",
         ):
             for op in graph.nodes[("org", name)].operations:
                 if isinstance(op, RemoveField):
                     destructive.append((name, op.model_name, op.name))
                 elif isinstance(op, DeleteModel):
                     destructive.append((name, op.name, ""))
-        self.assertEqual(destructive, [("0017_remove_orguser_mmr", "orguser", "mmr")])
+        self.assertEqual(destructive, [("0018_remove_orguser_mmr", "orguser", "mmr")])
         self.assertIn(
-            ("org", "0016_backfill_org_user_game_mmr"),
-            graph.nodes[("org", "0017_remove_orguser_mmr")].dependencies,
+            ("org", "0017_retarget_default_league_to_league"),
+            graph.nodes[("org", "0018_remove_orguser_mmr")].dependencies,
         )

@@ -9,7 +9,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 import app.internal_client as internal_client
-from app.models import CustomUser, League, Tournament
+from app.models import CustomUser, Tournament
+from league.models import League
 from org.activity import guild_sync_lock
 from org.models import Organization, OrgUser
 from user.internal import discord_names as internal_discord_names

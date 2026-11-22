@@ -6,8 +6,9 @@ from django.db.migrations.loader import MigrationLoader
 from django.test import TransactionTestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League
+from app.models import CustomUser
 from events.models import Event
+from league.models import League
 from org.models import Organization, OrgLog, OrgUser
 
 ORG_MODELS = ("organization", "orglog")
@@ -171,7 +172,7 @@ class OrganizationMoveMigrationTests(TransactionTestCase):
         self.assertEqual(self._labels(ids), {m: (APP, m) for m in ORG_MODELS})
         self._assert_grant(perm, user, group, ids["organization"])
         self.assertEqual(_row_counts(), counts)
-        # Reversing past org.0017 re-adds OrgUser.mmr; the forward run drops it.
+        # Reversing past org.0018 re-adds OrgUser.mmr; the forward run drops it.
         self.assertEqual(
             _without(_table_sql(), "org_orguser"), _without(sql_before, "org_orguser")
         )
