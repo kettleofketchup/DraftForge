@@ -7,11 +7,10 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, Literal
 
-from cacheops import invalidate_obj
 from django.db import transaction
 from django.db.models import Q
 
-from app.cache_utils import invalidate_after_commit
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import (
     CustomUser,
     Team,
