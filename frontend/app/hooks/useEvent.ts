@@ -96,6 +96,16 @@ export function useEventSignups(eventId: number | null) {
   });
 }
 
+/** The server fills an empty `steam_account_id` from the signup; mirror it. */
+export function syncCurrentUserFriendId(body: SignupBody): void {
+  const submitted = String(body.profile?.steam_account_id ?? '').trim();
+  const { currentUser, patchCurrentUser } = useUserStore.getState();
+  if (!submitted || !currentUser || currentUser.steam_account_id != null) {
+    return;
+  }
+  patchCurrentUser({ steam_account_id: Number(submitted) });
+}
+
 export function useSignupMutation(eventId: number) {
   const queryClient = useQueryClient();
   // Use a Zustand selector so the hook reactively tracks user changes.
@@ -103,7 +113,8 @@ export function useSignupMutation(eventId: number) {
 
   return useMutation({
     mutationFn: (body: SignupBody) => signupForEvent(eventId, body),
-    onSuccess: () => {
+    onSuccess: (_signup, body) => {
+      syncCurrentUserFriendId(body);
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
       queryClient.invalidateQueries({

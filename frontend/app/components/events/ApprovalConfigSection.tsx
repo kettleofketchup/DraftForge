@@ -12,7 +12,7 @@
  * a typo'd name is a compile error rather than silent dead UI.
  */
 
-import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
+import { useWatch, type Control, type FieldValues } from 'react-hook-form';
 import type { z } from 'zod';
 import { GAME_TYPE } from '~/components/game/constants';
 import {
@@ -31,7 +31,6 @@ type ApprovalFields = z.input<typeof discordConfigSchema> & {
 
 interface ApprovalConfigSectionProps<T extends FieldValues & ApprovalFields> {
   control: Control<T>;
-  watch: UseFormWatch<T>;
 }
 
 /** Reusable checkbox field bound to a known approval field name. */
@@ -74,17 +73,18 @@ function CheckboxField({
 
 export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
   control: parentControl,
-  watch: parentWatch,
 }: ApprovalConfigSectionProps<T>) {
   // T extends ApprovalFields by the generic constraint, so narrowing to
   // Control<ApprovalFields> is sound: we touch only the discord-config slice
   // of the parent form, never the parent's extra keys.
   const control = parentControl as unknown as Control<ApprovalFields>;
-  const watch = parentWatch as unknown as UseFormWatch<ApprovalFields>;
 
-  const isDota = watch('game_type') === GAME_TYPE.DOTA2;
-  const allowActiveMmr = watch('allow_active_mmr');
-  const allowBattlecupRating = watch('allow_battlecup_rating');
+  const isDota = useWatch({ control, name: 'game_type' }) === GAME_TYPE.DOTA2;
+  const allowActiveMmr = useWatch({ control, name: 'allow_active_mmr' });
+  const allowBattlecupRating = useWatch({
+    control,
+    name: 'allow_battlecup_rating',
+  });
 
   return (
     <div className="space-y-6">

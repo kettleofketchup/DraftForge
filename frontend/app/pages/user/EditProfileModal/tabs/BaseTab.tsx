@@ -80,8 +80,8 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
       queryClient.invalidateQueries({ queryKey: ['userProfile', profile.pk] });
       // The profile-page header (UserProfilePage) reads the ['user', pk] query
       // (fetchUser), a DIFFERENT key — invalidate it too or the header keeps the
-      // stale nickname until a manual refresh. (Pre-existing key mismatch; the
-      // 06-profile-edit acceptance spec asserts the header updates without reload.)
+      // stale nickname until a manual refresh. The 06-profile-edit acceptance
+      // spec asserts the header updates without reload.
       queryClient.invalidateQueries({ queryKey: ['user', profile.pk] });
 
       log.debug('base_patch_success', { userPk: profile.pk, updated });
@@ -103,10 +103,9 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
   });
 
   const onSubmit = form.handleSubmit((values) => {
-    // Only send dirty fields — dirtyFields semantics per react-hook-form.
-    const { dirtyFields } = form.formState;
+    // Only send dirty fields.
     const payload: BasePatchPayload = {};
-    if (dirtyFields.nickname) {
+    if (form.getFieldState('nickname').isDirty) {
       payload.nickname = values.nickname ?? null;
     }
     if (Object.keys(payload).length === 0) {

@@ -97,7 +97,7 @@ def build_friend_id_input(
     game_type: GameType | None,
 ) -> ui.TextInput | None:
     """Shared Steam Friend ID field; returns None when already known or not required."""
-    if not required or prefill.get("unverified_friend_id"):
+    if not required or prefill.get("friend_id"):
         return None
     placeholder = (
         DOTA_FRIEND_ID_PLACEHOLDER
@@ -111,7 +111,7 @@ def build_friend_id_input(
         required=True,
         max_length=20,
         style=discord.TextStyle.short,
-        default=str(prefill.get("unverified_friend_id", "")),
+        default=str(prefill.get("friend_id", "")),
     )
 
 

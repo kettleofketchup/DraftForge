@@ -36,7 +36,7 @@ The signup-modal field set is selected by `game_type`. Most rank/skill fields ar
 
 - **Profile fields** (Dota-only): `positions` (carry/mid/offlane/soft_support/hard_support priorities 0–5), `rank_status` (active / previous / never), `rank_medal` (e.g. "Legend 4"), `battle_cup_tier` (1–8), `rank_screenshot`, `battlecup_screenshot`.
 - **Profile fields** (Deadlock-only): `rank` (free-text), `rank_date`.
-- **Profile fields** (shared): `unverified_friend_id` (mirrored to `CustomUser.steam_account_id` first-write-wins on approve).
+- **Player field** (shared): `steam_account_id`, the Steam Friend ID. It is stored once per player on `CustomUser.steam_account_id`, not on a game profile. A signup fills it when it is empty, accepts the same value again, and refuses a different value ("Your Friend ID is already set to X; contact an admin to change it"). Changing it is a profile or admin edit.
 - **Event-config flags** (Dota-only): `allow_active_mmr`, `allow_previous_rank`, `allow_battlecup_rating`, `min_mmr`, `require_mmr_verified`, `discord_require_rank_screenshot`, `discord_require_battlecup_screenshot`.
 
 !!! note "Deadlock web parity"
@@ -123,7 +123,7 @@ Both signup paths funnel through `apply_signup_input` and write the same per-org
 
 | Field | Web (`/signup/`) | Discord modal | Storage |
 |---|---|---|---|
-| `unverified_friend_id` | ✓ when `require_steam_id` | ✓ modal text input | `PlayerDotaProfile.unverified_friend_id` (Dota) or `PlayerDeadlockProfile.unverified_friend_id`. First-write-wins mirror to `CustomUser.steam_account_id`. |
+| `steam_account_id` (Friend ID) | ✓ when `require_steam_id` | ✓ modal text input, hidden once the player has one | `CustomUser.steam_account_id`, filled only when empty (Dota and Deadlock). The web form shows a stored ID read-only. |
 | `positions` (Dota) | ✓ priority dict 0–5 per role (PositionForm) | ✓ slot-ordered list (1st / 2nd / 3rd choice selects) | `PlayerDotaProfile.pos_1..5` booleans (derived) **and** `CustomUser.positions` PositionsModel (priorities 1–5). Web sends a literal dict; Discord's `list[int]` is mapped to priorities by slot index (1st pick → priority 1, 2nd → 2, capped at 5; earliest slot wins on duplicate role). |
 | `rank_status` (Dota) | ✓ RankStatusRadioGroup | ✓ rank select | `PlayerDotaProfile.rank_status` |
 | `rank_medal` (Dota) | ✓ medal+star → joined ("Legend 4") | ✓ MedalSelect + StarSelect follow-up | `PlayerDotaProfile.rank_medal` |
@@ -143,7 +143,6 @@ Admin approve uses `POST /api/event-signups/{id}/approve/` with optional `{ "mmr
 - If `mmr` is supplied, the org MMR of the event's game is written and the OrgLog records `set_mmr` with `game_type`. An `OrgUser` row is created if missing. The value is checked against that game's range (0–20000); an out-of-range value returns 400.
 - The Dota verification flags (`has_active_dota_mmr`, `dota_mmr_last_verified`) are set only when the event is Dota 2.
 - The approval dialog suggests a value only for Dota events (`suggested_mmr`). For Deadlock signups `suggested_mmr_range` is `null` with source `"none"`, and `suggested_mmr` is the member's existing Deadlock org MMR or `null`; the dialog shows the self-reported Deadlock rank instead and the input is required.
-- Friend ID is mirrored to `CustomUser.steam_account_id` if not yet set (first-write-wins).
 - **Approve does NOT mutate positions.** The legacy behavior that flattened `pos_N` booleans into `priority=1` on `CustomUser.positions` at approve time has been removed — priorities now come exclusively from the signup write via `apply_signup_input`, which is authoritative. The per-org `PlayerDotaProfile.pos_N` booleans are the derived binary view for that event.
 
 ### Repeater Subscriptions

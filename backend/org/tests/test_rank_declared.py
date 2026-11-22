@@ -88,7 +88,7 @@ class RankDeclaredViewTest(TestCase):
                 "rank_status": "never",
                 "rank_medal": "",
                 "battle_cup_tier": None,
-                "unverified_friend_id": "123456",
+                "steam_account_id": "123456",
                 "pos_1": True,
             }
         )
@@ -109,25 +109,25 @@ class RankDeclaredViewTest(TestCase):
 
 
 class DotaProfileFriendIdTest(TestCase):
+    """``steam_account_id`` reads and fills the user's Friend ID."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         cls.owner = CustomUser.objects.create_user(username="fid_owner", password="x")
         cls.member = CustomUser.objects.create_user(username="fid_member", password="x")
-        cls.other = CustomUser.objects.create_user(username="fid_other", password="x")
+        cls.other = CustomUser.objects.create_user(
+            username="fid_other", password="x", steam_account_id=5150
+        )
         cls.org = Organization.objects.create(name="Friend ID Org", owner=cls.owner)
         cls.org.staff.add(cls.owner)
         cls.org_user = OrgUser.objects.create(user=cls.member, organization=cls.org)
-        other_ou = OrgUser.objects.create(user=cls.other, organization=cls.org)
-        PlayerDotaProfile.objects.create(org_user=other_ou, unverified_friend_id="5150")
-        PlayerDotaProfile.objects.create(
-            org_user=cls.org_user, unverified_friend_id="111"
-        )
+        PlayerDotaProfile.objects.create(org_user=cls.org_user)
 
     def _patch(self, actor: CustomUser, url: str, fid: str) -> Response:
         client = APIClient()
         client.force_authenticate(actor)
         return client.patch(
-            url, {"unverified_friend_id": fid, "pos_1": True}, format="json"
+            url, {"steam_account_id": fid, "pos_1": True}, format="json"
         )
 
     def _my_url(self) -> str:
@@ -139,53 +139,74 @@ class DotaProfileFriendIdTest(TestCase):
     def _profile(self) -> PlayerDotaProfile:
         return PlayerDotaProfile.objects.get(org_user=self.org_user)
 
+    def _stored(self) -> int | None:
+        return CustomUser.objects.get(pk=self.member.pk).steam_account_id
+
+    def _set_stored(self, account_id: int) -> None:
+        member = CustomUser.objects.get(pk=self.member.pk)
+        member.steam_account_id = account_id
+        member.save()
+
     def test_rejected_ids_leave_profile_unchanged(self) -> None:
         cases = [
             (self.member, self._my_url(), "5150"),
             (self.member, self._my_url(), "abc"),
+            (self.member, self._my_url(), str(2**32)),
             (self.owner, self._staff_url(), "05150"),
         ]
         for actor, url, fid in cases:
             with self.subTest(actor=actor.username, fid=fid):
                 resp = self._patch(actor, url, fid)
                 self.assertEqual(resp.status_code, 400)
-                self.assertTrue(resp.data["unverified_friend_id"])
-                profile = self._profile()
-                self.assertEqual(profile.unverified_friend_id, "111")
-                self.assertFalse(profile.pos_1)
+                self.assertTrue(resp.data["steam_account_id"])
+                self.assertIsNone(self._stored())
+                self.assertFalse(self._profile().pos_1)
 
-    def test_valid_id_is_stored_canonical(self) -> None:
+    def test_valid_id_fills_the_user_canonical(self) -> None:
         resp = self._patch(self.member, self._my_url(), " 0222 ")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(self._profile().unverified_friend_id, "222")
+        self.assertEqual(self._stored(), 222)
+        self.assertEqual(resp.data["steam_account_id"], 222)
 
-    def test_empty_id_clears(self) -> None:
+    def test_id_above_signed_32_bit_is_stored(self) -> None:
+        resp = self._patch(self.member, self._my_url(), "3000000000")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(self._stored(), 3000000000)
+
+    def test_empty_id_keeps_the_stored_id(self) -> None:
+        self._set_stored(111)
         resp = self._patch(self.member, self._my_url(), "")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(self._profile().unverified_friend_id, "")
+        self.assertEqual(self._stored(), 111)
 
-    def test_same_users_id_in_other_org_is_accepted(self) -> None:
-        other_org = Organization.objects.create(name="Friend ID Org 2")
-        other_ou = OrgUser.objects.create(user=self.member, organization=other_org)
-        PlayerDotaProfile.objects.create(org_user=other_ou, unverified_friend_id="777")
+    def test_same_id_is_a_no_op(self) -> None:
+        self._set_stored(111)
         for actor, url in (
             (self.member, self._my_url()),
             (self.owner, self._staff_url()),
         ):
             with self.subTest(actor=actor.username):
-                resp = self._patch(actor, url, "777")
+                resp = self._patch(actor, url, "0111")
                 self.assertEqual(resp.status_code, 200, resp.content)
-                self.assertEqual(self._profile().unverified_friend_id, "777")
-
-    def test_unchanged_stored_id_skips_collision_check(self) -> None:
-        PlayerDotaProfile.objects.filter(org_user=self.org_user).update(
-            unverified_friend_id="5150"
-        )
-        for actor, url in (
-            (self.member, self._my_url()),
-            (self.owner, self._staff_url()),
-        ):
-            with self.subTest(actor=actor.username):
-                resp = self._patch(actor, url, "5150")
-                self.assertEqual(resp.status_code, 200, resp.content)
+                self.assertEqual(self._stored(), 111)
                 self.assertTrue(self._profile().pos_1)
+
+    def test_different_id_is_refused(self) -> None:
+        self._set_stored(111)
+        for actor, url in (
+            (self.member, self._my_url()),
+            (self.owner, self._staff_url()),
+        ):
+            with self.subTest(actor=actor.username):
+                resp = self._patch(actor, url, "222")
+                self.assertEqual(resp.status_code, 400)
+                self.assertIn("already set to 111", resp.data["steam_account_id"])
+                self.assertEqual(self._stored(), 111)
+
+    def test_get_returns_the_users_id(self) -> None:
+        self._set_stored(424242)
+        client = APIClient()
+        client.force_authenticate(self.member)
+        resp = client.get(reverse("my-dota-profile", args=[self.org.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["steam_account_id"], 424242)

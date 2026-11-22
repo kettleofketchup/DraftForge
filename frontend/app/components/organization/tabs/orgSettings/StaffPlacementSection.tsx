@@ -104,12 +104,13 @@ export function useStaffPlacementSection(
   const onSubmit = async (
     values: StaffPlacementFormValues,
   ): Promise<boolean> => {
-    const dirty = form.formState.dirtyFields;
+    const isDirty = (name: keyof StaffPlacementFormValues): boolean =>
+      form.getFieldState(name).isDirty;
     const changes: Partial<StaffPlacementFormValues> = {};
-    if (dirty.staff_override_policy) {
+    if (isDirty('staff_override_policy')) {
       changes.staff_override_policy = values.staff_override_policy;
     }
-    if (dirty.staff_override_warning_codes) {
+    if (isDirty('staff_override_warning_codes')) {
       changes.staff_override_warning_codes =
         values.staff_override_warning_codes;
     }

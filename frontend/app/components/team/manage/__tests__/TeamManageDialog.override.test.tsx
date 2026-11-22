@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OverrideRequired } from '~/components/api/overridesAPI';
@@ -98,9 +98,9 @@ describe('TeamManageDialog overrides', () => {
     const dialog = await screen.findByTestId('override-warning-dialog');
     expect(dialog).toHaveTextContent('Team rule');
     expect(dialog).toHaveTextContent('Stand-in cap 2 reached');
-    expect(screen.getByLabelText('Reason (recorded in team history)')).toBe(
-      screen.getByTestId('override-reason'),
-    );
+    expect(
+      within(dialog).getByLabelText('Reason (recorded in team history)'),
+    ).toBe(screen.getByTestId('override-reason'));
     expect(screen.getByTestId('override-reason')).toHaveValue(REASON);
 
     fireEvent.click(screen.getByTestId('override-confirm'));

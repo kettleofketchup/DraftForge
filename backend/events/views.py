@@ -112,6 +112,7 @@ from events.services import (
     sync_future_events,
     sync_tournament_from_event,
     teardown_event,
+    teardown_event_repeater,
     unconfirm_signup,
 )
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS
@@ -300,19 +301,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
                 self.permission_denied(request)
 
     def perform_destroy(self, instance: EventRepeater) -> None:
-        """Tear down the series' still-active occurrences (and their live Discord
-        scheduled events) before deleting the series, so sync_discord_events can't
-        resurrect them as ghosts. Terminal (completed/cancelled) occurrences are
-        left as orphans via Event.event_repeater=SET_NULL for historical record.
-        """
-        active_states = [
-            EventState.UPCOMING,
-            EventState.SIGNUPS_OPEN,
-            EventState.ROLL_CALL,
-        ]
-        for event in list(instance.events.filter(state__in=active_states)):
-            teardown_event(event, actor=self.request.user)
-        instance.delete()
+        teardown_event_repeater(instance, actor=self.request.user)
 
     def get_queryset(self) -> QuerySet[EventRepeater]:
         # cacheops can't see the select_related org join; the views' cached_as
@@ -997,20 +986,11 @@ class EventViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         result = evaluate_signup(event, request.user, intent=intent)
-        org_user = (
-            OrgUser.objects.filter(
-                user=request.user, organization_id=event.organization_id
-            ).first()
-            if event.organization_id
-            else None
-        )
         return Response(
             {
                 "admissible": result.admissible,
                 "reasons": result.as_dicts(),
-                "has_registered_steam_id": has_registered_steam_id(
-                    request.user, org_user
-                ),
+                "has_registered_steam_id": has_registered_steam_id(request.user),
             }
         )
 

@@ -1,4 +1,4 @@
-import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
+import { useWatch, type Control, type FieldValues } from 'react-hook-form';
 import { GAME_TYPE } from '~/components/game/constants';
 import { LobbyPasswordSettings } from '~/components/lobby/LobbyPasswordSettings';
 import type { LobbyPasswordMode } from '~/components/lobby/password';
@@ -19,7 +19,6 @@ interface DotaLobbyEventFields {
 
 interface Props<T extends FieldValues & DotaLobbyEventFields> {
   control: Control<T>;
-  watch: UseFormWatch<T>;
   scope: 'series' | 'event';
   saved?: LobbyPasswordInfo | null;
   followsSeries?: boolean;
@@ -33,18 +32,14 @@ interface Props<T extends FieldValues & DotaLobbyEventFields> {
  */
 export function DotaLobbyEventSettings<
   T extends FieldValues & DotaLobbyEventFields,
->({ control: parentControl, watch: parentWatch, ...passwordProps }: Props<T>) {
+>({ control: parentControl, ...passwordProps }: Props<T>) {
   const control = parentControl as unknown as Control<DotaLobbyEventFields>;
-  const watch = parentWatch as unknown as UseFormWatch<DotaLobbyEventFields>;
-  if (watch('game_type') !== GAME_TYPE.DOTA2) return null;
+  const gameType = useWatch({ control, name: 'game_type' });
+  if (gameType !== GAME_TYPE.DOTA2) return null;
   return (
     <div className="space-y-4">
       <DotaLobbyConfigSection control={control} includeLobbyInfo />
-      <LobbyPasswordSettings
-        control={control}
-        watch={watch}
-        {...passwordProps}
-      />
+      <LobbyPasswordSettings control={control} {...passwordProps} />
     </div>
   );
 }

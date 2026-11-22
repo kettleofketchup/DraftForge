@@ -1,4 +1,4 @@
-"""Contract tests for the #268 PR2 discriminated `modal_config` envelope.
+"""Contract tests for the discriminated `modal_config` envelope (#268).
 
 Written as SimpleTestCase (no DB) so they run under the canonical
 `manage.py test` runner that CI uses — the def-style pytest tests in

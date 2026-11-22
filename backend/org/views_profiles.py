@@ -9,7 +9,11 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
-from events.eligibility import refresh_unmet_requirements, validate_friend_id
+from events.eligibility import (
+    claim_friend_id,
+    refresh_unmet_requirements,
+    validate_friend_id,
+)
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
 from org.permissions import has_org_staff_access
@@ -27,11 +31,13 @@ DOTA_PROFILE_FIELDS = {
     "pos_3",
     "pos_4",
     "pos_5",
-    "unverified_friend_id",
 }
+FRIEND_ID_FIELD = "steam_account_id"
 
 
-def _serialize_dota_profile(profile: PlayerDotaProfile) -> dict[str, Any]:
+def _serialize_dota_profile(
+    profile: PlayerDotaProfile, org_user: OrgUser
+) -> dict[str, Any]:
     return {
         "id": profile.pk,
         "org_user_id": profile.org_user_id,
@@ -42,7 +48,7 @@ def _serialize_dota_profile(profile: PlayerDotaProfile) -> dict[str, Any]:
         "mmr": profile.mmr,
         "rank_screenshot": profile.rank_screenshot or None,
         "battlecup_screenshot": profile.battlecup_screenshot or None,
-        "unverified_friend_id": profile.unverified_friend_id,
+        FRIEND_ID_FIELD: org_user.user.steam_account_id,
         "pos_1": profile.pos_1,
         "pos_2": profile.pos_2,
         "pos_3": profile.pos_3,
@@ -66,31 +72,20 @@ def _invalid_rank_status(data: dict[str, Any]) -> Response | None:
     return None
 
 
-def _canonical_friend_id(fid: str) -> str:
-    return str(int(fid)) if fid.isascii() and fid.isdigit() else fid
-
-
 def _apply_dota_profile_patch(
     org_user: OrgUser, data: dict[str, Any]
 ) -> PlayerDotaProfile:
     """Raises ValidationError for a bad friend ID before writing anything."""
     fields = {f: data[f] for f in DOTA_PROFILE_FIELDS if f in data}
-    if "unverified_friend_id" in fields:
-        submitted = str(fields["unverified_friend_id"] or "").strip()
-        stored = (
-            PlayerDotaProfile.objects.filter(org_user=org_user)
-            .values_list("unverified_friend_id", flat=True)
-            .first()
-        )
-        if stored and _canonical_friend_id(submitted) == stored:
-            fields["unverified_friend_id"] = stored
-        else:
-            fields["unverified_friend_id"] = validate_friend_id(submitted, org_user)
+    user = org_user.user
+    friend_id = str(data.get(FRIEND_ID_FIELD) or "")
+    validate_friend_id(friend_id, user)
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     previous_status = profile.rank_status
     for field, value in fields.items():
         setattr(profile, field, value)
     profile.sync_rank_declaration(previous_status)
+    claim_friend_id(user, friend_id)
     profile.save()
     invalidate_obj(profile)
     invalidate_obj(org_user)
@@ -113,7 +108,7 @@ def get_my_dota_profile(request: Request, org_id: int) -> Response:
         )
 
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    return Response(_serialize_dota_profile(profile))
+    return Response(_serialize_dota_profile(profile, org_user))
 
 
 @api_view(["PATCH"])
@@ -136,10 +131,10 @@ def update_my_dota_profile(request: Request, org_id: int) -> Response:
         profile = _apply_dota_profile_patch(org_user, request.data)
     except ValidationError as e:
         return Response(
-            {"unverified_friend_id": e.messages[0]},
+            {FRIEND_ID_FIELD: e.messages[0]},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    return Response(_serialize_dota_profile(profile))
+    return Response(_serialize_dota_profile(profile, org_user))
 
 
 @api_view(["GET"])
@@ -165,7 +160,7 @@ def get_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Respon
         )
 
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    return Response(_serialize_dota_profile(profile))
+    return Response(_serialize_dota_profile(profile, org_user))
 
 
 @api_view(["PATCH"])
@@ -196,10 +191,10 @@ def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
         profile = _apply_dota_profile_patch(org_user, request.data)
     except ValidationError as e:
         return Response(
-            {"unverified_friend_id": e.messages[0]},
+            {FRIEND_ID_FIELD: e.messages[0]},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    return Response(_serialize_dota_profile(profile))
+    return Response(_serialize_dota_profile(profile, org_user))
 
 
 @api_view(["DELETE"])

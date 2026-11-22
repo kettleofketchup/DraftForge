@@ -74,7 +74,7 @@ class TournamentUserSerializer(serializers.ModelSerializer):
     positions = PositionsSerializer(many=False, read_only=True)
     # Auto-computed 32-bit Steam Account ID from 64-bit Friend ID
     steam_account_id = serializers.IntegerField(read_only=True)
-    # nickname/avatar live on BaseUserProfile (T1 epic). Use `source="nickname"`
+    # nickname/avatar live on BaseUserProfile. Use `source="nickname"`
     # so DRF goes through the CustomUser transitional @property — the getter
     # reads from base_profile, the setter writes to base_profile + invalidates
     # cacheops. Critically, this keeps PATCH /users/<pk>/ working for admin
@@ -1465,7 +1465,7 @@ class UserSerializer(serializers.ModelSerializer):
     staff_organization_ids = serializers.SerializerMethodField()
     admin_league_ids = serializers.SerializerMethodField()
     staff_league_ids = serializers.SerializerMethodField()
-    # nickname/avatar live on BaseUserProfile (T1 epic). Use `source="nickname"`
+    # nickname/avatar live on BaseUserProfile. Use `source="nickname"`
     # so DRF goes through the CustomUser transitional @property — the getter
     # reads from base_profile, the setter writes to base_profile + invalidates
     # cacheops. Keeps PATCH /users/<pk>/ working for admin user-edit flows

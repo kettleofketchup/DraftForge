@@ -1,4 +1,4 @@
-"""T1.9 — Cacheops integration guardrails for BaseUserProfile.
+"""Cacheops integration guardrails for BaseUserProfile.
 
 Local CI runs without a live Redis (cacheops degrades gracefully via
 CACHEOPS_DEGRADE_ON_FAILURE=True), so we cannot reliably warm a real cached
@@ -10,7 +10,7 @@ invariants directly:
 2. Every cacheops decorator block that depends on ``CustomUser`` *also*
    depends on ``BaseUserProfile`` — otherwise a PATCH to
    ``/api/users/me/profile/base/`` silently serves stale nickname/avatar to
-   any cached endpoint that ships those fields (T1 epic regression risk).
+   any cached endpoint that ships those fields.
 
 A real-Redis integration test that warms a cached list endpoint, PATCHes the
 nickname, and re-fetches to confirm invalidation belongs in the

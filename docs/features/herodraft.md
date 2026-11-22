@@ -116,6 +116,7 @@ Besides the existing draft actions, the client sends two chat messages. See [Cha
 |--------------|---------|
 | `chat_send` | `{body: "<raw composer text>", client_msg_id?}` |
 | `chat_suggest` | `{kind, hero_id, client_msg_id?}`, where `kind` is `suggest_pick` or `suggest_ban` |
+| `chat_unsuggest` | `{kind, hero_id, client_msg_id?}`: withdraws the sender's own live suggestion of that `kind`; stored and delivered as an `unsuggest_pick` / `unsuggest_ban` team message |
 
 ### Tick Updates
 
@@ -329,7 +330,14 @@ The server decides where a message goes from the raw text. The client only previ
 
 ### Hero suggestions
 
-During the ban/pick phase (`drafting`), a team member can right-click a hero in the grid and choose **Suggest pick** or **Suggest ban**. The suggestion is posted to their team chat only and shows the hero's icon and name. Heroes that are already picked or banned cannot be suggested; the menu items are disabled and the server refuses them. Clicking a suggestion in the log selects that hero in the grid.
+During the ban/pick phase (`drafting`), a team member can right-click a hero in the grid and choose **Suggest pick** or **Suggest ban**. The suggestion is posted to their team chat only and shows the hero's icon and name. Heroes that are already picked or banned cannot be suggested; the menu items are disabled and the server refuses them. Clicking a suggestion in the log selects that hero in the grid; for the captain on turn it also opens the pick/ban confirm dialog, provided the hero is still available.
+
+Live suggestions also show on the grid itself, to the suggesting team only:
+
+- Each hero with pick suggestions carries a small stack of the suggesters' avatars, ringed green, at its top-left. Ban suggestions show at the bottom-right, ringed red, and only during a ban round. Up to three avatars show; the rest collapse into a `+N` chip. Hovering the hero lists every suggester.
+- On your team's turn, heroes suggested for the current action (picks on a pick round, bans on a ban round) get a bright green or red ring. Heroes with only the other kind of suggestion are not emphasised.
+- Right-clicking a hero you suggested shows **Remove pick suggestion** / **Remove ban suggestion** in place of the suggest item. Removing posts a muted "removed" line to team chat and clears your avatar from the hero. You can only remove your own suggestions.
+- Suggestions on a hero that has been picked or banned disappear.
 
 Spectators get the browser's normal right-click menu. Suggestions are not available while the draft is paused, because the pause overlay covers the grid.
 
@@ -394,6 +402,7 @@ Messages are plain text. Newlines and Unicode line or paragraph separators becom
 | `draft_closed` | Draft is completed or abandoned |
 | `draft_inactive` | Suggestion sent outside `drafting` |
 | `hero_unavailable` | Hero does not exist or is already picked or banned |
+| `not_suggested` | `chat_unsuggest` for a suggestion the sender does not currently have live |
 | `bad_request` | Malformed message |
 | `unavailable` | Chat failed on the server (including the rate limiter being down); the draft socket stays open |
 
@@ -695,6 +704,9 @@ All components have `data-testid` attributes for Playwright testing:
 | `herodraft-chat-unread` | Unread count on the toggle; your own messages never count. Kept across reconnects of the same user, and messages that arrived during the gap are added |
 | `herodraft-hero-suggest-menu` | Right-click menu on a hero |
 | `herodraft-hero-suggest-pick` / `herodraft-hero-suggest-ban` | Suggest pick / ban menu items |
+| `herodraft-hero-unsuggest-pick` / `herodraft-hero-unsuggest-ban` | Remove pick / ban suggestion menu items |
+| `herodraft-hero-{heroId}-pick-suggesters` / `-ban-suggesters` | Suggester avatar stack on a hero (`data-count` = total suggesters) |
+| `herodraft-chat-withdrawal-{id}` | A "removed suggestion" row in the log |
 
 ## Testing
 

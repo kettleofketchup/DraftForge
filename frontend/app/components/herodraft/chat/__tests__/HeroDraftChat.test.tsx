@@ -233,6 +233,35 @@ describe('HeroDraftChat log', () => {
     expect(useHeroDraftStore.getState().selectedHeroId).toBe(74);
   });
 
+  it('passes the clicked suggestion hero to onSuggestionClick', () => {
+    const m = msg(3, { kind: 'suggest_ban', hero_id: 74, body: '' });
+    seed(member, [m]);
+    const onSuggestionClick = vi.fn();
+    render(
+      <HeroDraftChat
+        draftState="drafting"
+        onSuggestionClick={onSuggestionClick}
+      />,
+    );
+    openPanel();
+    fireEvent.click(screen.getByTestId(`herodraft-chat-suggestion-${m.id}`));
+    expect(onSuggestionClick).toHaveBeenCalledWith(74);
+    expect(useHeroDraftStore.getState().selectedHeroId).toBe(74);
+  });
+
+  it('renders a withdrawn suggestion as a muted, unclickable line', () => {
+    const m = msg(4, { kind: 'unsuggest_pick', hero_id: 74, body: '' });
+    seed(member, [m]);
+    render(<HeroDraftChat draftState="drafting" />);
+    openPanel();
+    const row = screen.getByTestId(`herodraft-chat-withdrawal-${m.id}`);
+    expect(row).toHaveTextContent('removed');
+    expect(row).toHaveTextContent(getHeroName(74));
+    expect(
+      screen.queryByTestId(`herodraft-chat-suggestion-${m.id}`),
+    ).toBeNull();
+  });
+
   it('shows the unread count on the toggle', () => {
     seed(member);
     useHeroDraftStore.setState({
@@ -240,6 +269,24 @@ describe('HeroDraftChat log', () => {
     });
     render(<HeroDraftChat draftState="drafting" />);
     expect(screen.getByTestId('herodraft-chat-unread')).toHaveTextContent('3');
+  });
+
+  it('stays open through clicks in a dialog and closes on other outside clicks', () => {
+    seed(member);
+    render(
+      <>
+        <HeroDraftChat draftState="drafting" />
+        <div role="alertdialog">
+          <button type="button">Confirm</button>
+        </div>
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    fireEvent.focus(input());
+    fireEvent.pointerDown(screen.getByText('Confirm'), { button: 0 });
+    expect(screen.getByTestId('herodraft-chat-panel')).toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByText('Elsewhere'), { button: 0 });
+    expect(screen.queryByTestId('herodraft-chat-panel')).toBeNull();
   });
 
   it('opens the panel when the input is focused', () => {

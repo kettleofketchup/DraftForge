@@ -227,22 +227,13 @@ export function CreateSeriesEventModal({
         },
         {
           value: 'lobby',
-          content: (
-            <EventLobbyFields
-              control={form.control}
-              watch={form.watch}
-              scope="event"
-            />
-          ),
+          content: <EventLobbyFields control={form.control} scope="event" />,
         },
         {
           value: 'approval',
           content: (
             <div className="space-y-6">
-              <ApprovalConfigSection
-                control={form.control}
-                watch={form.watch}
-              />
+              <ApprovalConfigSection control={form.control} />
               <SignupRulesSection control={form.control} />
             </div>
           ),
@@ -253,7 +244,6 @@ export function CreateSeriesEventModal({
           content: (
             <DiscordConfigSection
               control={form.control}
-              watch={form.watch}
               isRepeater
               showNotifyNewEvents={false}
               organizationId={repeater.organization}

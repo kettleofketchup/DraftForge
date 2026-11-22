@@ -610,6 +610,14 @@ export function HeroDraftModal({
   const rollWinnerTeam = draft?.roll_winner ?? null;
 
   const currentAction = currentRoundData?.action_type;
+  const confirmHeroName =
+    confirmHeroId !== null ? getHeroNameFromLib(confirmHeroId) : 'this hero';
+
+  const handleChatSuggestionClick = (heroId: number) => {
+    if (draft?.state !== 'drafting' || !isMyCaptainTurn) return;
+    if (draft.rounds.some((r) => r.hero_id === heroId)) return;
+    setConfirmHeroId(heroId);
+  };
 
   return (
     <>
@@ -970,8 +978,10 @@ export function HeroDraftModal({
                       onHeroClick={handleHeroClick}
                       disabled={!isMyCaptainTurn || draft.state !== 'drafting'}
                       showActionButton={isCaptain ?? false}
-                      currentAction={currentAction}
-                      isMyTurn={isMyCaptainTurn}
+                      currentAction={
+                        draft.state === 'drafting' ? currentAction : undefined
+                      }
+                      isMyTurn={isMyTurn}
                       canSuggest={
                         chatViewerRole === 'member' &&
                         draft.state === 'drafting'
@@ -997,7 +1007,11 @@ export function HeroDraftModal({
                 className="h-12 sm:h-14 md:h-16 shrink-0 border-t border-border flex items-center px-2 sm:px-4 gap-2 sm:gap-4"
                 data-testid="herodraft-bottom-toolbar"
               >
-                <HeroDraftChat key={draftId} draftState={draft.state} />
+                <HeroDraftChat
+                  key={draftId}
+                  draftState={draft.state}
+                  onSuggestionClick={handleChatSuggestionClick}
+                />
 
                 {/* Right side controls */}
                 <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0">
@@ -1221,9 +1235,29 @@ export function HeroDraftModal({
           }
         }}
         title={`${currentAction === 'ban' ? 'Ban' : 'Pick'} this hero?`}
-        description={`Are you sure you want to ${currentAction} this hero?`}
+        description={`Are you sure you want to ${currentAction} ${confirmHeroName}?`}
+        bodyContent={
+          confirmHeroId !== null && (
+            <div
+              className="flex items-center gap-3"
+              data-testid="herodraft-confirm-hero"
+            >
+              <img
+                src={getHeroIcon(confirmHeroId)}
+                alt=""
+                className={cn(
+                  'size-14 rounded-full border-2 object-cover shadow-lg shadow-black/50',
+                  currentAction === 'ban'
+                    ? 'border-destructive'
+                    : 'border-success',
+                )}
+              />
+              <span className="text-lg font-semibold">{confirmHeroName}</span>
+            </div>
+          )
+        }
         confirmLabel={`Confirm ${currentAction === 'ban' ? 'Ban' : 'Pick'}`}
-        variant="default"
+        variant={currentAction === 'ban' ? 'destructive' : 'default'}
         isLoading={isSubmitting}
         onConfirm={handleConfirmPick}
         contentTestId="herodraft-confirm-dialog"

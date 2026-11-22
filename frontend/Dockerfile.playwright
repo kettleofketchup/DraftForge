@@ -1,0 +1,8 @@
+# Playwright test runner for CI: the official image's bundled browsers
+# (chromium-headless-shell) plus this lockfile's node_modules. Keep the tag
+# equal to @playwright/test in package.json.
+FROM mcr.microsoft.com/playwright:v1.64.1-noble AS runner
+LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/draftforge"
+WORKDIR /app
+COPY package.json package-lock.json /app/
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund

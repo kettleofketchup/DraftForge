@@ -51,10 +51,10 @@ class PositionsModel(models.Model):
 
     def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
-        # T2: positions live on user.DotaUserProfile (default reverse accessor
+        # Positions live on user.DotaUserProfile (default reverse accessor
         # dotauserprofile_set). Walk it + bubbled parents. Org positions are
         # pos_1..5 booleans on org.PlayerDotaProfile (no PositionsModel FK) —
-        # cacheops auto-invalidates that model; not this loop. Org branch is T3.
+        # cacheops auto-invalidates that model; not this loop.
         # .nocache(): invalidation must walk the live rows — a cached join
         # (invalidated only on DotaUserProfile) could miss a freshly linked
         # profile and skip its parents.
@@ -110,8 +110,9 @@ class CustomUser(AbstractUser):
     # Override username to allow blank (users can be created from Steam only)
     username = models.CharField(max_length=150, unique=True, blank=True, null=True)
 
-    # 32-bit Friend ID (Dotabuff URL) - set by user, primary identifier
-    steam_account_id = models.IntegerField(null=True, unique=True, blank=True)
+    # 32-bit Friend ID (Dotabuff URL) - set by user, primary identifier.
+    # Unsigned 32-bit, so wider than IntegerField.
+    steam_account_id = models.BigIntegerField(null=True, unique=True, blank=True)
     # 64-bit Steam ID - auto-calculated from steam_account_id
     steamid = models.BigIntegerField(null=True, blank=True, db_index=True)
 

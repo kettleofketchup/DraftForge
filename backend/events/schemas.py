@@ -257,8 +257,9 @@ class SignupInputPatch(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # Format and uniqueness are checked by eligibility.validate_friend_id.
-    unverified_friend_id: Optional[str] = None
+    # Format, uniqueness and the already-set rule are checked by
+    # eligibility.validate_friend_id.
+    steam_account_id: Optional[str] = None
     positions: Optional[PositionPriorities | list[int]] = None
     rank_status: Optional[Literal["active", "previous", "never"]] = None
     rank_medal: Optional[str] = Field(default=None, max_length=64)
@@ -266,9 +267,11 @@ class SignupInputPatch(BaseModel):
     rank_screenshot: Optional[str] = Field(default=None, max_length=500)
     battlecup_screenshot: Optional[str] = Field(default=None, max_length=500)
 
-    @field_validator("unverified_friend_id", mode="before")
+    @field_validator("steam_account_id", mode="before")
     @classmethod
     def _strip_friend_id(cls, v: object) -> object:
+        if isinstance(v, int) and not isinstance(v, bool):
+            return str(v)
         return v.strip() if isinstance(v, str) else v
 
     @field_validator("positions")

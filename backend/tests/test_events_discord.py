@@ -101,7 +101,7 @@ def simulate_discord_signup(request, event_pk):
 
     # Step 2: Submit modal
     values = {
-        "unverified_friend_id": data.get("friend_id", ""),
+        "friend_id": data.get("friend_id", ""),
         "positions": data.get("positions", []),
         "rank_status": data.get("rank_status", "active"),
     }

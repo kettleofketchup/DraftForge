@@ -58,6 +58,7 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
 | GET | `/api/tournaments/` | List tournaments |
 | POST | `/api/tournaments/` | Create tournament |
 | GET | `/api/tournaments/{id}/` | Get tournament |
+| GET | `/api/tournaments/{id}/viewer/` | What the requesting user may do: `{"can_edit_tournament": bool}`. Uncached, unlike the detail payload |
 | PUT | `/api/tournaments/{id}/` | Update tournament |
 | DELETE | `/api/tournaments/{id}/` | Delete tournament |
 | GET | `/api/tournaments-list/` | Lightweight tournament list (the `/tournaments` page) |
@@ -160,7 +161,7 @@ tournament's signups are open as defined above.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/teams/` | List teams |
-| POST | `/api/teams/` | Create team |
+| POST | `/api/teams/` | Create team (tournament staff; site staff for a team with no tournament) |
 | GET | `/api/teams/{id}/` | Get team |
 | PATCH / PUT | `/api/teams/{id}/` | Update team (tournament staff) |
 | DELETE | `/api/teams/{id}/` | Delete team (tournament staff) |
@@ -748,7 +749,7 @@ approve the signup.
 
 | Code | Meaning |
 |------|---------|
-| `steam_id_missing` | "Require Friend ID" is on and neither a game profile friend ID nor a linked Steam account is known |
+| `steam_id_missing` | "Require Friend ID" is on and the player has no Friend ID (`steam_account_id`) |
 | `mmr_unverified` | The event requires verified MMR and the player's MMR is not verified |
 | `profile_incomplete` | The event requires a complete profile and the player's is not |
 | `dota_rank_undeclared` | The event has Dota rank gates and the player never declared a rank |
