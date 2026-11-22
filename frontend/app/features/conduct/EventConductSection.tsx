@@ -20,29 +20,29 @@ export function EventConductSection({
   access,
   org,
 }: EventConductSectionProps) {
-  const enabled = eventConductEnabled(event, org, access);
-  if (!enabled || event.organization == null) return null;
+  if (!eventConductEnabled(event, org, access) || event.organization == null)
+    return null;
   const orgId = event.organization;
   return (
     <>
       {FORECAST_STATES.has(event.state) && (
         <div className="mb-4">
           <ConductForecastCard
+            key={`${orgId}:${event.id}`}
             orgId={orgId}
             eventId={event.id}
             access={access}
-            enabled={enabled}
           />
         </div>
       )}
       {ATTENDANCE_STATES.has(event.state) && (
         <div className="mb-4">
           <AttendancePanel
+            key={`${orgId}:${event.id}`}
             orgId={orgId}
             eventId={event.id}
             eventState={event.state}
             access={access}
-            enabled={enabled}
           />
         </div>
       )}

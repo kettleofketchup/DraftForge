@@ -43,7 +43,7 @@ describe('ConductForecastCard', () => {
         expected_open_seats: 5.6,
       }),
     );
-    wrap(<ConductForecastCard orgId={1} eventId={7} access={access} enabled />);
+    wrap(<ConductForecastCard orgId={1} eventId={7} access={access} />);
 
     expect(
       await screen.findByTestId('conduct-forecast-summary'),
@@ -69,7 +69,7 @@ describe('ConductForecastCard', () => {
         new_members: 1,
       }),
     );
-    wrap(<ConductForecastCard orgId={1} eventId={7} access={access} enabled />);
+    wrap(<ConductForecastCard orgId={1} eventId={7} access={access} />);
 
     await screen.findByTestId('conduct-forecast-summary');
     expect(
@@ -87,23 +87,10 @@ describe('ConductForecastCard', () => {
     vi.mocked(getForecast).mockRejectedValue({
       response: { status: 500, data: { detail: 'Server error' } },
     });
-    wrap(<ConductForecastCard orgId={1} eventId={7} access={access} enabled />);
+    wrap(<ConductForecastCard orgId={1} eventId={7} access={access} />);
 
     expect(
       await screen.findByTestId('conduct-forecast-error'),
     ).toHaveTextContent('Server error');
-  });
-
-  it('renders nothing and calls no API when disabled', () => {
-    const { container } = wrap(
-      <ConductForecastCard
-        orgId={1}
-        eventId={7}
-        access={access}
-        enabled={false}
-      />,
-    );
-    expect(container).toBeEmptyDOMElement();
-    expect(getForecast).not.toHaveBeenCalled();
   });
 });

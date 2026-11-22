@@ -22,23 +22,20 @@ export interface ConductForecastCardProps {
   orgId: number;
   eventId: number;
   access: OrgFeatureAccess;
-  enabled: boolean;
 }
 
 export function ConductForecastCard({
   orgId,
   eventId,
   access,
-  enabled,
 }: ConductForecastCardProps) {
-  const { data, isError, error } = useForecast(orgId, access, eventId, enabled);
+  const { data, isError, error } = useForecast(orgId, access, eventId, true);
 
   useEffect(() => {
     if (isError)
       log.error('conduct forecast failed to load', { orgId, eventId, error });
   }, [isError, error, orgId, eventId]);
 
-  if (!enabled) return null;
   if (isError) {
     return (
       <Card data-testid="conduct-forecast">

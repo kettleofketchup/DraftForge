@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OrganizationType } from '~/components/organization/schemas';
@@ -8,7 +8,7 @@ import type { OrgFeatureAccess } from '~/features/org-features';
 import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { getAttendance, getForecast, putAttendance } from '../api';
 import { EventConductSection } from '../EventConductSection';
-import { attendance, forecast } from './fixtures';
+import { attendance, attendanceRow, forecast, MEMBER } from './fixtures';
 
 vi.mock('../api', () => ({
   getAttendance: vi.fn(),
@@ -126,5 +126,38 @@ describe('EventConductSection', () => {
     expect(getForecast).not.toHaveBeenCalled();
     expect(getAttendance).not.toHaveBeenCalled();
     expect(putAttendance).not.toHaveBeenCalled();
+  });
+
+  it('drops an unsaved draft when the event changes', async () => {
+    vi.mocked(getAttendance).mockImplementation(async (_org, eventId) =>
+      attendance({ event_id: eventId, rows: [attendanceRow()] }),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const section = (eventId: number) => (
+      <QueryClientProvider client={client}>
+        <EventConductSection
+          event={{
+            id: eventId,
+            organization: ORG,
+            state: 'in_progress',
+            user_can_manage: true,
+          }}
+          org={org()}
+          access={staffAccess}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(section(5));
+    const key = String(MEMBER.org_user_pk);
+    fireEvent.click(await screen.findByTestId(`attendance-select-${key}`));
+    fireEvent.click(screen.getByTestId('attendance-bulk-no-show'));
+    expect(screen.getByTestId('attendance-save')).toBeEnabled();
+
+    rerender(section(6));
+    await screen.findByTestId(`attendance-select-${key}`);
+    expect(screen.getByTestId('attendance-save')).toBeDisabled();
+    expect(screen.getByTestId(`attendance-select-${key}`)).not.toBeChecked();
   });
 });

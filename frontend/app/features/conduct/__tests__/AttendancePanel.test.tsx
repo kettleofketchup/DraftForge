@@ -119,7 +119,6 @@ function renderPanel(
       eventId={EVENT}
       eventState={eventState}
       access={panelAccess}
-      enabled
     />,
     { wrapper },
   );

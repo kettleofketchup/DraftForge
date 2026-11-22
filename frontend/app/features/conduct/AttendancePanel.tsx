@@ -79,7 +79,6 @@ export interface AttendancePanelProps {
   eventId: number;
   eventState: string;
   access: OrgFeatureAccess;
-  enabled: boolean;
 }
 
 export function AttendancePanel({
@@ -87,13 +86,12 @@ export function AttendancePanel({
   eventId,
   eventState,
   access,
-  enabled,
 }: AttendancePanelProps) {
   const { data, isPending, isError, error } = useAttendance(
     orgId,
     access,
     eventId,
-    enabled,
+    true,
   );
   const put = usePutAttendance(orgId, access, eventId);
 
@@ -217,7 +215,7 @@ export function AttendancePanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {isPending && enabled && <Skeleton className="h-32 w-full" />}
+        {isPending && <Skeleton className="h-32 w-full" />}
         {isError && (
           <p
             data-testid="attendance-error"
