@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_model, invalidate_obj
 from common.game import GameType
+from league.mmr_sync import sync_league_mmrs_from_org
 from org.models import OrgUser, OrgUserGameMmr
 from telemetry.logging import get_logger
 
@@ -233,6 +234,8 @@ def set_org_mmr(
             verified=mark_verified,
             verified_by_id=verified_by.pk if verified_by is not None else None,
         )
+        if game_type == LEAGUE_GAME and value != old:
+            sync_league_mmrs_from_org({org_user.pk: value})
         invalidate_after_commit(org_user)
         invalidate_org_user_tournaments(org_user)
     return row
@@ -376,6 +379,10 @@ def bulk_set_org_mmrs(
             upserted=len(upserts),
             cleared=len(cleared),
         )
+        if game_type == LEAGUE_GAME:
+            sync_league_mmrs_from_org(
+                {by_user[uid].pk: value or 0 for uid, value in values.items()}
+            )
         user_ids = list(by_user)
 
         def _do() -> None:

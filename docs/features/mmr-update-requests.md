@@ -21,7 +21,10 @@ verified it and when. Values verified before review history existed show Officia
 no name. Values written any other way (CSV import, the league recompute) are
 **Unverified**.
 
-The league MMR recompute from match history never overwrites an Official league MMR.
+League MMR follows org MMR: when your Dota 2 org MMR changes (staff edit, approved
+request, CSV import), every Unverified league MMR you hold in that organization's
+leagues is updated to the new value. An Official league MMR stays pinned; neither this
+sync nor the league MMR recompute from match history overwrites it.
 
 ---
 

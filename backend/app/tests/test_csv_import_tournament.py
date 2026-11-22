@@ -328,9 +328,21 @@ class TournamentCSVImportDotaRowTest(TestCase):
         self.assertEqual(self.dota_row(), 6500)
         self.assertEqual(self.snapshot(self.user), 6500)
 
-    def test_org_target_keeps_existing_snapshot(self) -> None:
+    def test_org_target_resyncs_unverified_league_mmr(self) -> None:
         LeagueUser.objects.create(
             user=self.user, league=self.league, org_user=self.org_user, mmr=1100
+        )
+        self.post(6500, update_mmr=True, mmr_target="organization")
+        self.assertEqual(self.dota_row(), 6500)
+        self.assertEqual(self.snapshot(self.user), 6500)
+
+    def test_org_target_keeps_official_league_mmr(self) -> None:
+        LeagueUser.objects.create(
+            user=self.user,
+            league=self.league,
+            org_user=self.org_user,
+            mmr=1100,
+            mmr_verified_at=timezone.now(),
         )
         self.post(6500, update_mmr=True, mmr_target="organization")
         self.assertEqual(self.dota_row(), 6500)
