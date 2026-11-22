@@ -73,7 +73,9 @@ taken it since (`slot N now belongs to <owner>; run just test::slot`).
 
 `just test::run` never allocates either. With a slot it runs in that slot's project and
 stops whatever it started; without one it uses an ephemeral `df-run-<hex>` project
-that is removed afterwards.
+that is removed afterwards. Ctrl-C, SIGTERM and SIGHUP all run that removal. A run
+killed with SIGKILL leaves the project behind (usually just its `redis-run-<hex>`
+container); see [Orphaned `test::run` projects](#orphaned-testrun-projects).
 
 ## Commands
 
@@ -84,8 +86,8 @@ that is removed afterwards.
 | `just test::slot-release` | Release this worktree's slot. Refuses while its containers exist; run `just test::down` first |
 | `just test::slot-release --slot N` | Release another worktree's reservation N, only if `df-sN` (or `df`) has zero containers. Run the [pre-checks](#before-touching-another-worktrees-slot) first |
 | `just test::slot-claim N` | Move slot N to this worktree (releases this worktree's current slot first). Needs the current owner to have zero containers and the ports free. Run the [pre-checks](#before-touching-another-worktrees-slot) first |
-| `just test::slot-reap <project>` | `down -v --remove-orphans` an orphaned `df`, `df-sN`, `df-dev` or `df-run-<hex>` project whose owner worktree no longer exists, and drop its reservation. Refuses while the owner is a live worktree. Run the [pre-checks](#before-touching-another-worktrees-slot) first |
-| `just test::slot-reap --stale` | Run the [auto-reap](#auto-reap) sweep now and print what it removed |
+| `just test::slot-reap <project>` | `down -v --remove-orphans` an orphaned `df`, `df-sN` or `df-dev` project whose owner worktree no longer exists, and drop its reservation. Refuses while the owner is a live worktree. A `df-run-<hex>` project follows the [orphaned `test::run` rule](#orphaned-testrun-projects) instead, live worktree or not. Run the [pre-checks](#before-touching-another-worktrees-slot) first |
+| `just test::slot-reap --stale` | Run the [auto-reap](#auto-reap) sweep and the [orphaned `test::run`](#orphaned-testrun-projects) sweep now, and print what they removed |
 | `just test::background on\|off` | Enable or disable the Discord bot and celery beat (and real tokens) for this slot. `on` refuses if a bot or beat already runs in another project. Takes effect on the next `test::upd` |
 | `just test::compose <args>` | Run `docker compose` against this worktree's slot with the right `-p` and `-f` files. `--stack dev` targets `df-dev`; `--as-slot 0 config` renders slot 0's config without allocating |
 | `just test::slots-unit` | Slot helper unit tests (pytest, no containers) |
@@ -315,6 +317,41 @@ A slot is never auto-reaped when:
 runs the sweep on demand. `just test::slots` stays read-only and only notes when a
 reservation's lease is past the threshold. CI never reaps.
 
+## Orphaned `test::run` projects
+
+Each slotless `just test::run` holds an exclusive `flock` on
+`<git-common-dir>/df-runs/df-run-<hex>.lock` for as long as it runs, and deletes the
+file once its `down` succeeds. The kernel drops the lock when the process dies, even on
+SIGKILL, so a lock file nobody holds means its creator is gone.
+
+A `df-run-<hex>` project is **orphaned**, and reapable, when:
+
+1. none of its containers is a running one-off (`com.docker.compose.oneoff=True`, the
+   `...-backend-run-...` container that runs the command), and
+2. either its lock file exists and no process holds it, or it has no lock file (a run
+   from a branch older than the lock) and its newest container started or finished
+   more than 10 minutes ago. The 10 minutes cover the moment `compose run` has started
+   redis but not yet the one-off container.
+
+A running one-off container or a held lock always keeps the project, whichever worktree
+or session it came from. Unknown container activity keeps it too.
+
+The rule is applied by:
+
+- `just test::slot-reap df-run-<hex>`, which refuses with the reason (one-off running,
+  lock held, or started too recently) instead of pointing at `test::down`;
+- `just test::slot-reap --stale`;
+- every slotless `just test::run`, which sweeps orphaned run projects before it starts.
+
+Each sweep reap prints a notice:
+
+```text
+reaped orphaned test::run project df-run-e792e383 (worktree /path/to/wt); 1 container(s) and volumes removed
+```
+
+`just test::slots` labels each `df-run-*` project as `orphaned test::run` (with the reap
+command) or `test::run in progress or starting` (with the reason it is kept).
+
 ## Before touching another worktree's slot
 
 `just test::slot-reap`, `just test::slot-claim` and `just test::slot-release --slot N`
@@ -384,3 +421,4 @@ If in doubt, don't touch it.
 | Redis fails to start, permission denied on `dump.rdb` (dev stack) | Rootless podman: `backend/.redis_data-dev/dump.rdb` is owned by the container's uid 999 (a subuid on the host). Remove the directory without sudo: `podman unshare rm -rf backend/.redis_data-dev`. Test stacks use the named volume `<project>_redis_data` and do not hit this. If that fails, ask the user |
 | Frontend `EACCES` writing the worktree | Rootless podman maps the frontend user to uid 100999. Run `setfacl -R -m u:100999:rwX -m d:u:100999:rwX <worktree>`, then `just test::compose restart frontend nginx` (restart **both**: nginx caches the frontend upstream IP) |
 | Orphan stacks (owner worktree deleted) | `just test::slots` flags them; run the [pre-checks](#before-touching-another-worktrees-slot), then `just test::slot-reap <project>` |
+| `redis-run-<hex>` left running after a killed `test::run` | `just test::slot-reap --stale`, or `just test::slot-reap df-run-<hex>` (see [Orphaned `test::run` projects](#orphaned-testrun-projects)) |
