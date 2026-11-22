@@ -1,14 +1,19 @@
-from datetime import datetime, time
-from datetime import timezone as dt_timezone
 from typing import Any
 
 import requests
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db import transaction
-from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_datetime
 
-from app.models import CustomUser, Game, PositionsModel, Team, Tournament
+from app.management.prod_payload import (
+    TeamLookup,
+    UserRef,
+    create_positions,
+    index_users,
+    parse_date_played,
+    resolve_user,
+    steam_account_id,
+)
+from app.models import CustomUser, Game, Team, Tournament
 from common.game import GameType
 from draft.models import Draft, DraftOptions, DraftRound
 from league.models import League
@@ -20,11 +25,6 @@ log = get_logger(__name__)
 
 PROD_BASE_URL = "https://dota.kettle.sh/api"
 
-# A user is a pk into the payload's ``_users`` dict, or (older payloads) the
-# serialized user itself.
-UserRef = dict[str, Any] | int | str | None
-TeamRef = dict[str, Any] | int | None
-
 
 class Command(BaseCommand):
     help = "Import tournament data from production API"
@@ -34,8 +34,7 @@ class Command(BaseCommand):
         self.user_map: dict[str, CustomUser] = {}  # Map discordId -> local user
         self.prod_users: dict[str, dict[str, Any]] = {}
         self.new_user_mmrs: dict[int, int] = {}
-        self.teams_by_pk: dict[int, Team] = {}
-        self.teams_by_name: dict[str, Team] = {}
+        self.teams = TeamLookup()
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("tournament_id", type=int, help="Production tournament ID")
@@ -142,7 +141,7 @@ class Command(BaseCommand):
 
     def _show_dry_run_info(self, tournament_data: dict[str, Any]) -> None:
         """Show information about what would be imported."""
-        self.prod_users = self._index_users(tournament_data)
+        self.prod_users = index_users(tournament_data)
         self.stdout.write(f"  Tournament: {tournament_data.get('name')}")
         self.stdout.write(f"  State: {tournament_data.get('state')}")
         self.stdout.write(f"  Type: {tournament_data.get('tournament_type')}")
@@ -165,14 +164,8 @@ class Command(BaseCommand):
                 f"  Draft: {draft.get('draft_style')} ({len(rounds)} rounds)"
             )
 
-    @staticmethod
-    def _index_users(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
-        return {str(pk): user for pk, user in (data.get("_users") or {}).items()}
-
     def _user_data(self, ref: UserRef) -> dict[str, Any] | None:
-        if ref is None or isinstance(ref, dict):
-            return ref
-        return self.prod_users.get(str(ref))
+        return resolve_user(ref, self.prod_users)
 
     def get_or_create_user_by_discord(self, ref: UserRef) -> CustomUser | None:
         """Get or create user by Discord ID."""
@@ -192,26 +185,13 @@ class Command(BaseCommand):
             self.user_map[discord_id] = user
             return user
 
-        positions_data = user_data.get("positions")
-        if positions_data:
-            positions = PositionsModel.objects.create(
-                carry=positions_data.get("carry", 0),
-                mid=positions_data.get("mid", 0),
-                offlane=positions_data.get("offlane", 0),
-                soft_support=positions_data.get("soft_support", 0),
-                hard_support=positions_data.get("hard_support", 0),
-            )
-        else:
-            positions = PositionsModel.objects.create()
-
         user = CustomUser.objects.create(
             username=user_data.get("username", f"user_{discord_id}"),
             discordId=discord_id,
-            steam_account_id=user_data.get("steam_account_id"),
-            steamid=user_data.get("steamid"),
+            steam_account_id=steam_account_id(user_data),
             avatar=user_data.get("avatar"),
             nickname=user_data.get("nickname"),
-            positions=positions,
+            positions=create_positions(user_data),
         )
 
         mmr = user_data.get("mmr")
@@ -249,28 +229,6 @@ class Command(BaseCommand):
             OrgUser.objects.get_or_create(user_id=user_id, organization=organization)
         bulk_set_org_mmrs(organization.pk, game_type, values)
 
-    @staticmethod
-    def _parse_date_played(value: str | None) -> datetime:
-        if value:
-            parsed = parse_datetime(value)
-            if parsed is None:
-                day = parse_date(value)
-                parsed = datetime.combine(day, time.min) if day else None
-            if parsed is not None:
-                if timezone.is_naive(parsed):
-                    parsed = timezone.make_aware(parsed, dt_timezone.utc)
-                return parsed
-        return timezone.now()
-
-    def _local_team(self, ref: TeamRef) -> Team | None:
-        if ref is None:
-            return None
-        if isinstance(ref, dict):
-            pk, name = ref.get("pk"), ref.get("name")
-            team = self.teams_by_pk.get(pk) if isinstance(pk, int) else None
-            return team or (self.teams_by_name.get(name) if name else None)
-        return self.teams_by_pk.get(ref)
-
     def create_tournament(
         self,
         data: dict[str, Any],
@@ -280,7 +238,7 @@ class Command(BaseCommand):
         organization: Organization | None = None,
     ) -> Tournament:
         """Create tournament and related objects."""
-        self.prod_users = self._index_users(data)
+        self.prod_users = index_users(data)
         game_type = resolve_game_type(data.get("game_type"))
 
         users = []
@@ -294,7 +252,7 @@ class Command(BaseCommand):
         # "Real-" prefix distinguishes imported tournaments from test data
         tournament = Tournament.objects.create(
             name=f"Real-{data['name']}",
-            date_played=self._parse_date_played(data.get("date_played")),
+            date_played=parse_date_played(data.get("date_played")),
             timezone=data.get("timezone", "US/Eastern"),
             state=data.get("state", "past"),
             tournament_type=data.get("tournament_type", "double_elimination"),
@@ -307,12 +265,9 @@ class Command(BaseCommand):
         self.stdout.write(f"  Created tournament: {tournament.name}")
 
         for team_data in data.get("teams", []):
-            team = self._create_team(tournament, team_data)
-            if team_data.get("pk") is not None:
-                self.teams_by_pk[team_data["pk"]] = team
-            self.teams_by_name[team.name] = team
+            self.teams.add(team_data, self._create_team(tournament, team_data))
 
-        winning_team = self._local_team(data.get("winning_team"))
+        winning_team = self.teams.get(data.get("winning_team"))
         if winning_team:
             tournament.winning_team = winning_team
             tournament.save(update_fields=["winning_team"])
@@ -383,7 +338,7 @@ class Command(BaseCommand):
             tournament=tournament,
             round=game_data.get("round", 1),
             gameid=game_data.get("gameid"),
-            radiant_team=self._local_team(game_data.get("radiant_team")),
-            dire_team=self._local_team(game_data.get("dire_team")),
-            winning_team=self._local_team(game_data.get("winning_team")),
+            radiant_team=self.teams.get(game_data.get("radiant_team")),
+            dire_team=self.teams.get(game_data.get("dire_team")),
+            winning_team=self.teams.get(game_data.get("winning_team")),
         )

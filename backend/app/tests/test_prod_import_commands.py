@@ -5,7 +5,11 @@ from unittest.mock import MagicMock, patch
 from django.core.management import call_command
 from django.test import TestCase
 
-from app.management.commands import import_prod_tournament, sync_prod_users
+from app.management.commands import (
+    import_prod_tournament,
+    sync_prod_tournaments,
+    sync_prod_users,
+)
 from app.models import CustomUser, GameType, Team, Tournament
 from draft.models import Draft
 from league.models import League
@@ -14,6 +18,7 @@ from tests.populate.utils import ensure_org_user
 
 TOURNAMENT_GET = "app.management.commands.import_prod_tournament.requests.get"
 USERS_GET = "app.management.commands.sync_prod_users.requests.get"
+TOURNAMENTS_GET = "app.management.commands.sync_prod_tournaments.requests.get"
 
 
 def fake_response(payload: Any) -> MagicMock:
@@ -143,6 +148,35 @@ class SyncProdUsersCommandTest(TestCase):
         self.assertTrue(user.is_staff)
         self.assertEqual(user.positions.offlane, 3)
 
+    def test_org_owner_is_kept_and_updated_in_place(self) -> None:
+        owner = CustomUser.objects.create(username="local_owner", discordId="d11")
+        org = Organization.objects.create(name="Owned Org", owner=owner)
+        CustomUser.objects.create(username="stale", discordId="d99")
+
+        output = self.run_command([prod_user(11, "d11"), prod_user(12, "d12")])
+
+        self.assertNotIn("Skipped", output)
+        org.refresh_from_db()
+        self.assertEqual(org.owner_id, owner.pk)
+        owner.refresh_from_db()
+        self.assertEqual(owner.username, "prod_11")
+        self.assertEqual(owner.steam_account_id, 1011)
+        self.assertEqual(owner.positions.offlane, 3)
+        self.assertEqual(CustomUser.objects.filter(discordId="d11").count(), 1)
+        self.assertTrue(CustomUser.objects.filter(discordId="d12").exists())
+        self.assertFalse(CustomUser.objects.filter(discordId="d99").exists())
+
+    def test_failed_user_does_not_roll_back_the_rest(self) -> None:
+        clash = {**prod_user(12, "d12"), "username": "prod_11"}
+
+        output = self.run_command([prod_user(11, "d11"), clash, prod_user(13, "d13")])
+
+        self.assertIn("Skipped user prod_11", output)
+        self.assertEqual(
+            set(CustomUser.objects.values_list("discordId", flat=True)),
+            {"d11", "d13"},
+        )
+
 
 class ImportProdTournamentCommandTest(TestCase):
     def setUp(self) -> None:
@@ -221,3 +255,100 @@ class ImportProdTournamentCommandTest(TestCase):
         )
         self.assertFalse(OrgUser.objects.exists())
         self.assertFalse(OrgUserGameMmr.objects.exists())
+
+
+class SyncProdTournamentsCommandTest(TestCase):
+    def setUp(self) -> None:
+        self.u501 = CustomUser.objects.create(username="local_501", discordId="d501")
+        self.u502 = CustomUser.objects.create(username="local_502", discordId="d502")
+        # matched by Steam Friend ID alone
+        self.u503 = CustomUser.objects.create(
+            username="local_503", steam_account_id=1503
+        )
+
+    def run_command(self, responses: dict[str, Any]) -> tuple[str, list[str]]:
+        urls: list[str] = []
+
+        def get(url: str, **kwargs: Any) -> MagicMock:
+            urls.append(url)
+            return fake_response(responses[url])
+
+        out = StringIO()
+        with patch(TOURNAMENTS_GET, side_effect=get):
+            call_command("sync_prod_tournaments", stdout=out)
+        return out.getvalue(), urls
+
+    def test_syncs_current_payload_via_detail_users(self) -> None:
+        detail = tournament_payload()
+        detail["_users"]["503"] = {
+            **prod_user(503, "d-other"),
+            "discordId": None,
+            "steam_account_id": 1503,
+        }
+        listed = {k: v for k, v in detail.items() if k != "_users"}
+        base = sync_prod_tournaments.PROD_API_URL
+
+        output, urls = self.run_command({base: [listed], f"{base}77/": detail})
+
+        self.assertEqual(urls, [base, f"{base}77/"])
+        self.assertNotIn("Skipped", output)
+        tournament = Tournament.objects.get(name="Spring Cup")
+        self.assertEqual(
+            tournament.date_played.isoformat(), "2026-03-14T18:00:00+00:00"
+        )
+        self.assertEqual(tournament.timezone, "America/Chicago")
+        self.assertEqual(set(tournament.users.all()), {self.u501, self.u502, self.u503})
+        team_one = Team.objects.get(tournament=tournament, name="Team One")
+        team_two = Team.objects.get(tournament=tournament, name="Team Two")
+        self.assertEqual(team_one.captain, self.u501)
+        self.assertEqual(set(team_one.members.all()), {self.u501, self.u502})
+        self.assertEqual(team_two.captain, self.u503)
+        self.assertEqual(tournament.winning_team, team_one)
+        game = tournament.games.get()
+        self.assertEqual(
+            (game.radiant_team, game.dire_team, game.winning_team),
+            (team_one, team_two, team_one),
+        )
+        rounds = Draft.objects.get(tournament=tournament).draft_rounds.order_by(
+            "pick_number"
+        )
+        self.assertEqual(
+            [(r.captain, r.choice) for r in rounds],
+            [(self.u501, self.u502), (self.u503, None)],
+        )
+
+    def test_syncs_legacy_nested_payload_with_date_only(self) -> None:
+        legacy = {
+            "name": "Old Cup",
+            "date_played": "2024-05-06",
+            "state": "past",
+            "tournament_type": "double_elimination",
+            "users": [{"discordId": "d501"}, {"username": "local_502"}],
+            "teams": [
+                {
+                    "name": "Old Team",
+                    "captain": {"discordId": "d501"},
+                    "members": [{"discordId": "d501"}, {"username": "local_502"}],
+                }
+            ],
+            "games": [
+                {
+                    "round": 1,
+                    "radiant_team": {"name": "Old Team"},
+                    "winning_team": {"name": "Old Team"},
+                }
+            ],
+        }
+
+        output, urls = self.run_command({sync_prod_tournaments.PROD_API_URL: [legacy]})
+
+        self.assertEqual(len(urls), 1)
+        self.assertNotIn("Skipped", output)
+        tournament = Tournament.objects.get(name="Old Cup")
+        self.assertEqual(
+            tournament.date_played.isoformat(), "2024-05-06T00:00:00+00:00"
+        )
+        self.assertEqual(set(tournament.users.all()), {self.u501, self.u502})
+        team = Team.objects.get(tournament=tournament)
+        self.assertEqual(team.captain, self.u501)
+        self.assertEqual(tournament.games.get().winning_team, team)
