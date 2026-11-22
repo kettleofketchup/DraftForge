@@ -1,4 +1,7 @@
-- Event staff of an organization with Conduct see a turnout forecast on the event page
-  and, from roll call on, an attendance table: mark members attended, no-show, late
-  cancel or excused in bulk, add walk-ins from the org's members, and save with a
-  reason. Signup and roll-call rows show each member's show rate to staff.
+- Event staff see a turnout forecast on upcoming events of organizations with Conduct:
+  how many signed up, how many are expected to show, and how many await approval.
+- Event staff record attendance on the event page from roll call onwards: select
+  members and mark them attended, no-show, late cancel or excused with one audited
+  reason, and add org members who played without signing up as walk-ins.
+- Signup rows on the event page and on roll call show each member's show rate (or New)
+  to event staff.
