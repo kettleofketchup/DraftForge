@@ -1,1 +1,0 @@
-- Draft-started DMs now open the Discord Activity in one click when the draft has a known voice channel: the channel already assigned to the draft, or, for team drafts, the event's voice channel. The **Launch / Join Activity** button links straight to an invite for that channel. Drafts without a known channel keep the current two-step launch from your own voice channel.
