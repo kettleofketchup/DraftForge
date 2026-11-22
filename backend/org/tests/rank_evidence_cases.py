@@ -12,8 +12,8 @@ RANK_EVIDENCE_CASES: dict[str, tuple[dict[str, object], bool]] = {
     "medal": ({"rank_status": "never", "rank_medal": "Herald"}, True),
     "tier": ({"rank_status": "never", "battle_cup_tier": 3}, True),
     "default": ({"rank_status": "never"}, False),
-    "positions_and_friend_id": (
-        {"rank_status": "never", "pos_1": True, "unverified_friend_id": "123456"},
+    "positions_only": (
+        {"rank_status": "never", "pos_1": True},
         False,
     ),
 }

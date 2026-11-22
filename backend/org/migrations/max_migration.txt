@@ -1,1 +1,1 @@
-0018_remove_orguser_mmr
+0019_remove_unverified_friend_id

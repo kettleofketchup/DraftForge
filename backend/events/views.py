@@ -986,20 +986,11 @@ class EventViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         result = evaluate_signup(event, request.user, intent=intent)
-        org_user = (
-            OrgUser.objects.filter(
-                user=request.user, organization_id=event.organization_id
-            ).first()
-            if event.organization_id
-            else None
-        )
         return Response(
             {
                 "admissible": result.admissible,
                 "reasons": result.as_dicts(),
-                "has_registered_steam_id": has_registered_steam_id(
-                    request.user, org_user
-                ),
+                "has_registered_steam_id": has_registered_steam_id(request.user),
             }
         )
 

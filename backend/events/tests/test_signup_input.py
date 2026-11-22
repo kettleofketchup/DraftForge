@@ -14,7 +14,7 @@ from events.schemas import SignupInputPatch
 from events.services import apply_signup_input, resolve_or_create_org_user
 from events.tests.base import EventTestCase
 from org.models import Organization, OrgUser
-from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
+from org.models_profiles import PlayerDotaProfile
 
 
 class ApplySignupInputTests(TestCase):
@@ -49,10 +49,10 @@ class ApplySignupInputTests(TestCase):
         apply_signup_input(
             org_user=self.org_user,
             event=self.event,
-            patch=SignupInputPatch(unverified_friend_id="12345678"),
+            patch=SignupInputPatch(steam_account_id="12345678"),
         )
-        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
-        self.assertEqual(profile.unverified_friend_id, "12345678")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.steam_account_id, 12345678)
 
     def test_writes_positions_and_dedups(self):
         apply_signup_input(
@@ -229,16 +229,13 @@ class ApplySignupInputTests(TestCase):
     def test_duplicate_friend_id_raises(self):
         # Other-org user owns Friend ID 9999. Global dedup must still reject.
         other_org = Organization.objects.create(name="Other Org")
-        bob = CustomUser.objects.create(username="bob")
-        bob_org_user = resolve_or_create_org_user(bob, other_org)
-        PlayerDotaProfile.objects.create(
-            org_user=bob_org_user, unverified_friend_id="9999"
-        )
+        bob = CustomUser.objects.create(username="bob", steam_account_id=9999)
+        resolve_or_create_org_user(bob, other_org)
         with self.assertRaises(DjangoValidationError) as ctx:
             apply_signup_input(
                 org_user=self.org_user,
                 event=self.event,
-                patch=SignupInputPatch(unverified_friend_id="9999"),
+                patch=SignupInputPatch(steam_account_id="9999"),
             )
         self.assertEqual(ctx.exception.code, "duplicate_friend_id")
         self.assertIn("9999", str(ctx.exception))
@@ -335,50 +332,32 @@ class FriendIdInputTests(EventTestCase):
             apply_signup_input(
                 org_user=self._org_user(u),
                 event=ev,
-                patch=SignupInputPatch(unverified_friend_id="4242"),
+                patch=SignupInputPatch(steam_account_id="4242"),
             )
         self.assertEqual(cm.exception.code, "duplicate_friend_id")
         self.assertFalse(
             PlayerDotaProfile.objects.filter(org_user=self._org_user(u)).exists()
         )
 
-    def test_collides_with_deadlock_profile_of_other_user(self) -> None:
-        ev = self.make_event()
-        other = self._org_user(self.make_user())
-        PlayerDeadlockProfile.objects.create(
-            org_user=other, unverified_friend_id="373737"
-        )
-        with self.assertRaises(DjangoValidationError) as cm:
-            apply_signup_input(
-                org_user=self._org_user(self.make_user()),
-                event=ev,
-                patch=SignupInputPatch(unverified_friend_id="373737"),
-            )
-        self.assertEqual(cm.exception.code, "duplicate_friend_id")
-
-    def test_own_id_from_other_org_is_accepted(self) -> None:
+    def test_existing_id_is_never_replaced(self) -> None:
         ev = self.make_event()
         u = self.make_user()
-        other_org = Organization.objects.create(name="Other Signup Org")
-        other_ou = OrgUser.objects.create(user=u, organization=other_org)
-        PlayerDotaProfile.objects.create(
-            org_user=other_ou, unverified_friend_id="383838"
-        )
-        apply_signup_input(
-            org_user=self._org_user(u),
-            event=ev,
-            patch=SignupInputPatch(unverified_friend_id="383838"),
-        )
-        self.assertEqual(
-            PlayerDotaProfile.objects.get(
-                org_user=self._org_user(u)
-            ).unverified_friend_id,
-            "383838",
-        )
+        u.steam_account_id = 383838
+        u.save()
+        with self.assertRaises(DjangoValidationError) as cm:
+            apply_signup_input(
+                org_user=resolve_or_create_org_user(u, self.org),
+                event=ev,
+                patch=SignupInputPatch(steam_account_id="393939"),
+            )
+        self.assertEqual(cm.exception.code, "friend_id_already_set")
+        self.assertIn("383838", cm.exception.messages[0])
+        u.refresh_from_db()
+        self.assertEqual(u.steam_account_id, 383838)
 
     def test_schema_strips_friend_id(self) -> None:
-        patch = SignupInputPatch(unverified_friend_id=" 123 ")
-        self.assertEqual(patch.unverified_friend_id, "123")
+        patch = SignupInputPatch(steam_account_id=" 123 ")
+        self.assertEqual(patch.steam_account_id, "123")
 
     def test_malformed_friend_id_rejected_by_validator(self) -> None:
         ev = self.make_event()
@@ -389,30 +368,34 @@ class FriendIdInputTests(EventTestCase):
                     apply_signup_input(
                         org_user=ou,
                         event=ev,
-                        patch=SignupInputPatch(unverified_friend_id=fid),
+                        patch=SignupInputPatch(steam_account_id=fid),
                     )
                 self.assertEqual(cm.exception.code, "invalid_friend_id")
         self.assertFalse(PlayerDotaProfile.objects.filter(org_user=ou).exists())
 
-    def test_empty_string_still_clears(self) -> None:
+    def test_empty_string_keeps_the_stored_id(self) -> None:
         ev = self.make_event()
-        ou = self._org_user(self.make_user())
-        PlayerDotaProfile.objects.create(org_user=ou, unverified_friend_id="191919")
+        u = self.make_user()
+        u.steam_account_id = 191919
+        u.save()
         apply_signup_input(
-            org_user=ou, event=ev, patch=SignupInputPatch(unverified_friend_id="")
+            org_user=resolve_or_create_org_user(u, self.org),
+            event=ev,
+            patch=SignupInputPatch(steam_account_id=""),
         )
-        self.assertEqual(
-            PlayerDotaProfile.objects.get(org_user=ou).unverified_friend_id, ""
-        )
+        u.refresh_from_db()
+        self.assertEqual(u.steam_account_id, 191919)
 
 
 class SignupViewFriendIdTests(EventTestCase):
-    def _post(self, user: CustomUser, event: Event, fid: str) -> object:
+    def _post(
+        self, user: CustomUser, event: Event, fid: str, key: str = "steam_account_id"
+    ) -> object:
         client = APIClient()
         client.force_authenticate(user)
         return client.post(
             f"/api/events/{event.pk}/signup/",
-            {"intent": "rsvp", "profile": {"unverified_friend_id": fid}},
+            {"intent": "rsvp", "profile": {key: fid}},
             format="json",
         )
 
@@ -421,10 +404,28 @@ class SignupViewFriendIdTests(EventTestCase):
         u = self.make_user()
         resp = self._post(u, ev, " 0777123 ")
         self.assertEqual(resp.status_code, 201, resp.data)
-        ou = OrgUser.objects.get(user=u, organization=self.org)
-        self.assertEqual(
-            PlayerDotaProfile.objects.get(org_user=ou).unverified_friend_id, "777123"
-        )
+        u.refresh_from_db()
+        self.assertEqual(u.steam_account_id, 777123)
+
+    def test_deprecated_key_fills_the_user(self) -> None:
+        ev = self.make_event(require_steam_id=True)
+        u = self.make_user()
+        resp = self._post(u, ev, "3000000000", key="unverified_friend_id")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["status"], "approved")
+        u.refresh_from_db()
+        self.assertEqual(u.steam_account_id, 3000000000)
+
+    def test_different_id_is_refused(self) -> None:
+        ev = self.make_event()
+        u = self.make_user()
+        u.steam_account_id = 787878
+        u.save()
+        resp = self._post(u, ev, "797979")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("already set to 787878", resp.data["error"])
+        u.refresh_from_db()
+        self.assertEqual(u.steam_account_id, 787878)
 
     def test_non_numeric_friend_id_gets_friendly_error(self) -> None:
         ev = self.make_event()
