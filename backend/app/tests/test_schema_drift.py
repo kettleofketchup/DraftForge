@@ -13,11 +13,6 @@ from django.test import TestCase
 from django.utils import timezone
 from pydantic import ValidationError
 
-from app.schemas import (
-    GameWithoutHeroDraftSchema,
-    TournamentParticipantSchema,
-    TournamentTaskSchema,
-)
 from discordbot.schemas import (
     DiscordEventStateSchema,
     MessageLogSchema,
@@ -29,6 +24,11 @@ from events.schemas import (
     ScheduledEventDueSchema,
 )
 from org.models import Organization
+from tournament.schemas import (
+    GameWithoutHeroDraftSchema,
+    TournamentParticipantSchema,
+    TournamentTaskSchema,
+)
 
 
 class EventTaskSchemaDriftTest(TestCase):

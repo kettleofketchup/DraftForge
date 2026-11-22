@@ -37,7 +37,7 @@ class TournamentDiscoverySeedTests(TestCase):
         self.client = APIClient()
 
     def _rows(self, query: str) -> list[dict[str, object]]:
-        with mock.patch("app.tournament_buckets._now", return_value=NOW):
+        with mock.patch("tournament.buckets._now", return_value=NOW):
             response = self.client.get(f"{LIST_URL}{query}")
         self.assertEqual(response.status_code, 200)
         return response.json()

@@ -12,10 +12,10 @@ from app.serializers import (
     build_users_dict,
     tournament_organization,
 )
-from app.tournament_state import tournament_state_queryset
 from org.display_names import guild_nicknames, org_nicknames_public
 from telemetry.logging import get_logger
 from tournament.permissions import can_edit_tournament
+from tournament.state import tournament_state_queryset
 
 log = get_logger(__name__)
 

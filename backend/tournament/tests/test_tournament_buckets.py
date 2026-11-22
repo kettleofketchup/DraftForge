@@ -11,13 +11,13 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
-from app.tournament_buckets import (
+from tournament.buckets import (
     tournament_bucket_cutoff,
     upcoming_q,
     upcoming_rank,
     utc_day_start,
 )
-from app.tournament_list import (
+from tournament.listing import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
     ArchiveCursor,
@@ -45,7 +45,7 @@ class TournamentBucketCutoffTests(SimpleTestCase):
         )
 
     def test_cutoff_defaults_to_patched_clock(self) -> None:
-        with mock.patch("app.tournament_buckets._now", return_value=NOW):
+        with mock.patch("tournament.buckets._now", return_value=NOW):
             self.assertEqual(tournament_bucket_cutoff(), CUTOFF)
 
     def test_utc_day_start_converts_non_utc_now(self) -> None:
@@ -225,7 +225,7 @@ class TournamentsListCacheKeyTests(SimpleTestCase):
         )
 
     def test_cache_key_reads_prefix_at_call_time(self) -> None:
-        with mock.patch("app.tournament_list.TOURNAMENTS_LIST_CACHE_PREFIX", "other"):
+        with mock.patch("tournament.listing.TOURNAMENTS_LIST_CACHE_PREFIX", "other"):
             self.assertTrue(self._key("bucket=upcoming").startswith("other:"))
 
 

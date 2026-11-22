@@ -29,26 +29,8 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from social_django.utils import load_strategy
 
-from app import tournament_buckets
 from app.cache_utils import invalidate_after_commit
 from app.tasks.avatar_refresh import refresh_avatars_batched
-from app.tournament_buckets import (
-    tournament_bucket_cutoff,
-    upcoming_q,
-    upcoming_rank,
-    utc_day_start,
-)
-from app.tournament_list import (
-    ArchiveCursor,
-    TournamentListPagination,
-    TournamentListParams,
-    archive_after_q,
-    build_cursor_envelope,
-    build_page_envelope,
-    parse_tournament_list_params,
-    resolve_organizations,
-    tournaments_list_cache_key,
-)
 from discordbot.models import DiscordTournamentLog
 from draft.models import Draft, DraftRound, DraftTeam
 from draft.services.team import apply_draft_options
@@ -65,6 +47,24 @@ from org.permissions import (
 from org.promotion.services import release_earning_sends
 from org.standing import api as standing
 from telemetry.logging import get_logger
+from tournament import buckets
+from tournament.buckets import (
+    tournament_bucket_cutoff,
+    upcoming_q,
+    upcoming_rank,
+    utc_day_start,
+)
+from tournament.listing import (
+    ArchiveCursor,
+    TournamentListPagination,
+    TournamentListParams,
+    archive_after_q,
+    build_cursor_envelope,
+    build_page_envelope,
+    parse_tournament_list_params,
+    resolve_organizations,
+    tournaments_list_cache_key,
+)
 from tournament.permissions import (
     CanEditTeam,
     CanEditTournament,
@@ -1399,7 +1399,7 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
 
     def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
         super().initial(request, *args, **kwargs)
-        self._now = tournament_buckets._now()
+        self._now = buckets._now()
         self._cutoff = tournament_bucket_cutoff(self._now)
         self._today_start = utc_day_start(self._now)
         self._params = resolve_organizations(

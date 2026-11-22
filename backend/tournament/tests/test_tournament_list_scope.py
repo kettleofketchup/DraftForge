@@ -65,7 +65,7 @@ class TournamentListScopeTests(TestCase):
         self.client = APIClient()
 
     def get(self, qs: str = "") -> Response:
-        with mock.patch("app.tournament_buckets._now", return_value=NOW):
+        with mock.patch("tournament.buckets._now", return_value=NOW):
             return self.client.get(f"{LIST_URL}{qs}")
 
     def rows_for(self, qs: str) -> list[dict[str, Any]]:
@@ -195,7 +195,7 @@ class TournamentListScopeTests(TestCase):
         event.signups_open_at = NOW + timedelta(hours=1)
         event.save()
         later = event.scheduled_at - timedelta(minutes=30)
-        with mock.patch("app.tournament_buckets._now", return_value=later):
+        with mock.patch("tournament.buckets._now", return_value=later):
             response = self.client.get(f"{LIST_URL}?bucket=upcoming&open_signups=1")
         self.assertEqual(
             {row["pk"] for row in response.json()}, self.pk_set("away_open")

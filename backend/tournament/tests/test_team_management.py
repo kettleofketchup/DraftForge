@@ -20,7 +20,6 @@ from app.models import (
     Tournament,
 )
 from app.serializers import users_remaining_pks
-from app.tournament_state import tournament_state_queryset
 from draft.models import (
     Draft,
     DraftEvent,
@@ -63,6 +62,7 @@ from tournament.services.team_management import (
     sub_in,
 )
 from tournament.services.team_signals import TeamRosterChange, team_roster_changed
+from tournament.state import tournament_state_queryset
 from user.tests.test_cacheops_integration import _redis_reachable
 
 

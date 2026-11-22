@@ -325,6 +325,21 @@ _TOURNAMENT_PERMISSION_NAMES = (
     "_lobby_league_error",
 )
 
+_TOURNAMENT_CLIENT_NAMES = (
+    "create_herodraft_for_game",
+    "get_auto_herodraft_games",
+    "get_match_participants",
+    "get_tournament_for_task",
+    "get_tournament_participants",
+)
+
+_TOURNAMENT_SCHEMA_NAMES = (
+    "TournamentParticipantSchema",
+    "TournamentTaskSchema",
+    "GameWithoutHeroDraftSchema",
+    "AutoHeroDraftGameSchema",
+)
+
 _TOURNAMENT_RETIRED_DEFS = {
     "app.services.team_management": (
         "TeamChange",
@@ -448,6 +463,70 @@ _TOURNAMENT_RETIRED_DEFS = {
         "SteamLinkCompletionTest",
         "TournamentCompletionTestBase",
     ),
+    "app.tournament_state": (
+        "draft_round_prefetch",
+        "qs",
+        "team_prefetches",
+        "tournament_prefetches",
+        "tournament_state_queryset",
+    ),
+    "app.tournament_list": (
+        "ArchiveCursor",
+        "TournamentListPagination",
+        "TournamentListParams",
+        "_parse_cursor",
+        "_parse_int",
+        "_parse_open_signups",
+        "_parse_organizations",
+        "archive_after_q",
+        "build_cursor_envelope",
+        "build_page_envelope",
+        "decode_archive_cursor",
+        "normalize_search",
+        "parse_tournament_list_params",
+        "resolve_organizations",
+        "tournaments_list_cache_key",
+        "TOURNAMENTS_LIST_CACHE_PREFIX",
+    ),
+    "app.tournament_buckets": (
+        "_now",
+        "tournament_bucket_cutoff",
+        "upcoming_q",
+        "upcoming_rank",
+        "utc_day_start",
+    ),
+    "app.functions.tournament": (
+        "CreateTournamentTeamRequestSerializer",
+        "create_team_from_captain",
+        "serialize_tournament",
+    ),
+    "app.internal_client.tournaments": _TOURNAMENT_CLIENT_NAMES,
+    "app.tests.test_tournament_list": (
+        "LeagueMinimalSerializerTests",
+        "TournamentListArchivedCursorTests",
+        "TournamentListBucketTests",
+        "TournamentListPaginationTests",
+        "_BucketFixtureMixin",
+    ),
+    "app.tests.test_tournament_buckets": (
+        "ArchiveCursorTests",
+        "BuildPageEnvelopeTests",
+        "NormalizeSearchTests",
+        "ParseTournamentListParamsTests",
+        "ResolveOrganizationsTests",
+        "TournamentBucketCutoffTests",
+        "TournamentListPaginationTests",
+        "TournamentsListCacheKeyTests",
+        "_b64",
+    ),
+    "app.tests.test_tournament_state_queries": (
+        "TournamentResponseFreshTests",
+        "TournamentResponseOutputTests",
+        "TournamentResponseQueryCountTests",
+    ),
+    "app.tests.test_tournament_discovery_seed": ("TournamentDiscoverySeedTests",),
+    "app.tests.test_tournament_list_cache": ("TournamentListCacheTests",),
+    "app.tests.test_tournament_list_scope": ("TournamentListScopeTests",),
 }
 
 TOURNAMENT = MovedSlice(
@@ -465,6 +544,8 @@ TOURNAMENT = MovedSlice(
                 for module, names in _TOURNAMENT_RETIRED_DEFS.items()
                 for name in names
             ),
+            *(("app.internal_client", name) for name in _TOURNAMENT_CLIENT_NAMES),
+            *(("app.schemas", name) for name in _TOURNAMENT_SCHEMA_NAMES),
         }
     ),
     retired_modules=frozenset(
@@ -488,6 +569,11 @@ RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
 RETIRED_MODULE_HOMES: dict[str, str | None] = {
     "app.tests.test_league_rating": None,
     "app.permissions_tournament": "tournament.permissions",
+    "app.tournament_state": "tournament.state",
+    "app.tournament_list": "tournament.listing",
+    "app.tournament_buckets": "tournament.buckets",
+    "app.functions.tournament": "tournament.functions",
+    "app.internal_client.tournaments": "tournament.internal_client",
 }
 
 # target app -> production file (relative to backend/) -> what it may import from that app
@@ -505,10 +591,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         "app/serializers.py": BackEdge(
             frozenset({"Draft", "DraftOptions", "DraftRound"}),
             "draft serializers embedded in TournamentSerializer",
-        ),
-        "app/tournament_state.py": BackEdge(
-            frozenset({"Draft", "DraftOptions", "DraftRound", "HeroDraft"}),
-            "tournament prefetch plan prefetches the team draft and games__herodraft",
         ),
         "app/views_main.py": BackEdge(
             frozenset({"Draft", "DraftRound", "DraftTeam", "apply_draft_options"}),
@@ -543,10 +625,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "user account merge pairs org memberships, merges per-game org MMR "
             "and standing, and repoints org contribution and promo attribution",
         ),
-        "app/functions/tournament.py": BackEdge(
-            frozenset({"guild_nicknames", "org_nicknames_public"}),
-            "tournament player payloads show the league org's guild nicknames",
-        ),
         "app/management/commands/sync_prod_users.py": BackEdge(
             frozenset(
                 {
@@ -577,10 +655,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "OrgUserSerializer; OrganizationsSerializer and "
             "UserSerializer.default_organization read Organization at class "
             "definition",
-        ),
-        "app/tournament_state.py": BackEdge(
-            frozenset({"Organization"}),
-            "tournament state prefetch loads the league's Organization",
         ),
         "app/views/admin_team.py": BackEdge(
             frozenset(
@@ -648,10 +722,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "serializers prefetch the league membership behind league MMR; "
             "TournamentSerializer.update creates LeagueUser rows for added users",
         ),
-        "app/tournament_state.py": BackEdge(
-            frozenset({"League"}),
-            "tournament prefetch plan prefetches the tournament's League",
-        ),
         "app/views/admin_team.py": BackEdge(
             frozenset({"League", "LeagueUser", "has_league_staff_access"}),
             "user search resolves ?league_id= to a League and flags league "
@@ -679,10 +749,10 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"TeamManagementError"}),
             "global DRF handler maps TeamManagementError",
         ),
-        "app/functions/tournament.py": BackEdge(
-            frozenset({"can_edit_tournament"}),
-            "tournament draft actions check tournament edit rights; the module "
-            "moves to tournament later in 5a",
+        "app/views/admin_team.py": BackEdge(
+            frozenset({"serialize_tournament"}),
+            "tournament member add returns the serialized tournament; leaves "
+            "with tournament 5b",
         ),
         "app/views/bracket.py": BackEdge(
             frozenset({"IsTournamentStaff"}),
@@ -723,11 +793,26 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "team_references",
                     "team_usage",
                     "write_team_log",
+                    "ArchiveCursor",
+                    "TournamentListPagination",
+                    "TournamentListParams",
+                    "archive_after_q",
+                    "buckets",
+                    "build_cursor_envelope",
+                    "build_page_envelope",
+                    "parse_tournament_list_params",
+                    "resolve_organizations",
+                    "tournament_bucket_cutoff",
+                    "tournaments_list_cache_key",
+                    "upcoming_q",
+                    "upcoming_rank",
+                    "utc_day_start",
                 }
             ),
             "tournament, team and game views check tournament permissions and "
-            "drive the team roster, audit and reference services; leaves with "
-            "tournament 5b",
+            "drive the team roster, audit and reference services; the "
+            "tournament list parses its params, buckets and pages through "
+            "tournament.listing and tournament.buckets; leaves with tournament 5b",
         ),
     },
 }
@@ -737,9 +822,15 @@ ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {
     ("app/tests/test_team_management_api.py", "TeamUsageTests"): (
         "twin moves to tournament in 5b"
     ),
-    ("app/internal_client/tournaments.py", "create_herodraft_for_game"): (
-        "worker-side HTTP client for the moved internal view; it calls the "
-        "draft endpoint rather than redefining it"
+    ("app/views/csv_import.py", "_parse_int"): "twin moves to tournament in 5b",
+    ("app/views/internal.py", "get_tournament_for_task"): (
+        "twin moves to tournament in 5b"
+    ),
+    ("app/views/internal.py", "get_tournament_participants"): (
+        "twin moves to tournament in 5b"
+    ),
+    ("app/views/internal.py", "get_match_participants"): (
+        "twin moves to tournament in 5b"
     ),
 }
 

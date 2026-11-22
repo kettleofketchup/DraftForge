@@ -24,7 +24,6 @@ from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
 from app.exception_handler import exception_handler
-from app.functions.tournament import serialize_tournament
 from app.models import (
     CustomUser,
     Game,
@@ -55,6 +54,7 @@ from events.models import EventTeam
 from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
 from league.models import League
 from org.models import Organization
+from tournament.functions import serialize_tournament
 from tournament.services import team_management
 from tournament.services.team_audit import log_snapshot_fields
 from tournament.services.team_references import team_references, team_usage
