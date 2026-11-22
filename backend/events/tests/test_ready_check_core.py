@@ -24,6 +24,7 @@ from events.models import (
     SignupLedgerEntry,
 )
 from events.ready_check_constants import (
+    ReadyCheckConfirmVia,
     ReadyCheckEntryState,
     ReadyCheckOutcome,
     ReadyCheckPhase,
@@ -309,6 +310,24 @@ class EnrolTests(ReadyCheckCoreTestCase):
             signup.user_id, set(tournament.users.values_list("pk", flat=True))
         )
         self.assertFalse(self._rows(SignupAction.READY_CHECK_ASKED))
+        confirmed_rows = self._rows(SignupAction.CONFIRMED)
+        self.assertEqual(len(confirmed_rows), 1)
+        self.assertEqual(confirmed_rows[0].correlation_id, f"rc{check.pk}:enrol")
+        self.assertEqual(confirmed_rows[0].actor_user_id, self.admin.pk)
+
+    def test_confirmed_signup_gets_confirmed_staff_entry(self) -> None:
+        check = self._check(mode=RollCallMode.MANUAL)
+        signup = self._signup(SignupStatus.CONFIRMED)
+        with transaction.atomic():
+            entry = enrol_signup_if_live(signup, actor=self._staff_actor())
+        assert entry is not None
+        entry.refresh_from_db()
+        self.assertEqual(entry.ready_check_id, check.pk)
+        self.assertEqual(entry.state, ReadyCheckEntryState.CONFIRMED)
+        self.assertEqual(entry.confirmed_via, ReadyCheckConfirmVia.STAFF)
+        self.assertIsNotNone(entry.confirmed_at)
+        asked = self._rows(SignupAction.READY_CHECK_ASKED)
+        self.assertEqual([row.signup_id for row in asked], [signup.pk])
 
     def test_existing_dropped_entry_returned_unchanged(self) -> None:
         check = self._check()
@@ -357,6 +376,17 @@ class PromotionStatusTests(ReadyCheckCoreTestCase):
     def test_auto_confirm_kept_in_manual_mode(self) -> None:
         self._check(mode=RollCallMode.MANUAL)
         signup = self._signup(SignupStatus.WAITLISTED)
+        self.assertEqual(
+            ready_check_promotion_status(self.rc_event, SignupStatus.CONFIRMED, signup),
+            SignupStatus.CONFIRMED,
+        )
+
+    @override_settings(READY_CHECK_AUTOMATIC_LIVE=True)
+    def test_event_not_in_roll_call_keeps_decided(self) -> None:
+        self._check(phase=ReadyCheckPhase.CLOSED, mode=RollCallMode.AUTOMATIC)
+        signup = self._signup(SignupStatus.WAITLISTED)
+        Event.objects.filter(pk=self.rc_event.pk).update(state=EventState.IN_PROGRESS)
+        self.rc_event.refresh_from_db()
         self.assertEqual(
             ready_check_promotion_status(self.rc_event, SignupStatus.CONFIRMED, signup),
             SignupStatus.CONFIRMED,

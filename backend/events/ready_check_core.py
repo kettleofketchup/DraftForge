@@ -9,7 +9,7 @@ from django.utils import timezone as tz
 
 from app.cache_utils import invalidate_after_commit
 from events.capacity import lock_event
-from events.constants import SignupAction, SignupStatus
+from events.constants import EventState, SignupAction, SignupStatus
 from events.ledger import (
     SignupActor,
     record_ready_check_transition,
@@ -18,10 +18,12 @@ from events.ledger import (
 )
 from events.models import Event, EventSignup, ReadyCheck, ReadyCheckEntry, RollCallMode
 from events.ready_check_constants import (
+    ReadyCheckConfirmVia,
     ReadyCheckEntryState,
     ReadyCheckPhase,
     ReadyCheckScope,
 )
+from events.roster import joins_roster
 from telemetry.logging import get_logger
 
 __all__ = [
@@ -62,12 +64,12 @@ def effective_mode(event: Event) -> str:
     return RollCallMode.MANUAL
 
 
-def check_mode(check: ReadyCheck, event: Event) -> str:
-    return check.settings_snapshot.get("effective_mode") or effective_mode(event)
+def check_mode(check: ReadyCheck) -> str:
+    return check.settings_snapshot["effective_mode"]
 
 
-def check_scope(check: ReadyCheck, event: Event) -> str:
-    return check.settings_snapshot.get("ready_check_scope") or event.ready_check_scope
+def check_scope(check: ReadyCheck) -> str:
+    return check.settings_snapshot["ready_check_scope"]
 
 
 def scope_statuses(scope: str) -> tuple[str, ...]:
@@ -160,6 +162,7 @@ def cancel_ready_check(event: Event, *, actor: SignupActor, reason: str) -> bool
 def _confirm_signup_from_entry(
     signup: EventSignup, check: ReadyCheck, *, actor: SignupActor
 ) -> None:
+    """Callers queue notify_signup_changed."""
     updated = (
         EventSignup.objects.nocache()
         .filter(pk=signup.pk, status=SignupStatus.APPROVED)
@@ -170,9 +173,13 @@ def _confirm_signup_from_entry(
     before = snapshot(signup)
     signup.status = SignupStatus.CONFIRMED
     event = signup.event
+    invalidate_after_commit(signup, event)
     tournament = event.tournament
-    invalidate_after_commit(signup)
-    if tournament is not None and tournament.state == "future":
+    if (
+        tournament is not None
+        and tournament.state == "future"
+        and joins_roster(event, SignupStatus.CONFIRMED)
+    ):
         tournament.users.add(signup.user)
         invalidate_after_commit(tournament)
     record_signup_change(
@@ -205,9 +212,13 @@ def enrol_signup_if_live(
         return entry
     if check.phase not in ACCEPTING_PHASES:
         return None
-    if signup.status not in scope_statuses(check_scope(check, event)):
+    if signup.status not in scope_statuses(check_scope(check)):
         return None
     entry = ReadyCheckEntry.for_signup(check, signup)
+    if signup.status == SignupStatus.CONFIRMED:
+        entry.state = ReadyCheckEntryState.CONFIRMED
+        entry.confirmed_via = ReadyCheckConfirmVia.STAFF
+        entry.confirmed_at = tz.now()
     entry.save()
     record_signup_change(
         event=event,
@@ -224,6 +235,7 @@ def enrol_signup_if_live(
         "ready_check_id": check.pk,
         "phase": check.phase,
         "signup_id": signup.pk,
+        "entry_state": entry.state,
         "actor_user_id": _actor_user_id(actor),
     }
     transaction.on_commit(
@@ -240,6 +252,8 @@ def enrol_signup_if_live(
 def ready_check_promotion_status(
     event: Event, decided: str, signup: EventSignup
 ) -> str:
+    if event.state != EventState.ROLL_CALL:
+        return decided
     check = live_ready_check(event)
     if check is None:
         return decided
@@ -249,7 +263,7 @@ def ready_check_promotion_status(
         return SignupStatus.CONFIRMED
     if (
         decided == SignupStatus.CONFIRMED
-        and check_mode(check, event) == RollCallMode.AUTOMATIC
+        and check_mode(check) == RollCallMode.AUTOMATIC
     ):
         return SignupStatus.APPROVED
     return decided
