@@ -6,14 +6,14 @@ from typing import Any
 
 from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Exists, QuerySet
 from django.utils import timezone
 
 from app.models import CustomUser
 from events.models import Event, EventSignup
 from org.feature_keys import FeatureKey
 from org.features import org_has_feature
-from org.models import Organization, OrgUser
+from org.models import Organization, OrgFeature, OrgUser
 from org.permissions import (
     can_view_org_members,
     has_org_admin_access,
@@ -288,21 +288,35 @@ def event_viewer_flags(
 ) -> dict[str, object]:
     if org_id is None or viewer is None or not viewer.is_authenticated:
         return {}
-    tracks = [
+    hooked = [
         t
         for t in registry.tracks()
         if type(t).event_viewer_flags is not TrackBase.event_viewer_flags
-        and org_has_feature(org_id, t.feature)
     ]
-    if not tracks:
+    if not hooked:
         return {}
-    member = OrgUser.objects.filter(organization_id=org_id, user_id=viewer.pk).first()
+    member = (
+        OrgUser.objects.nocache()
+        .filter(organization_id=org_id, user_id=viewer.pk)
+        .annotate(
+            **{
+                f"_unlocked_{t.key}": Exists(
+                    OrgFeature.objects.filter(
+                        organization_id=org_id, feature=str(t.feature), enabled=True
+                    )
+                )
+                for t in hooked
+            }
+        )
+        .first()
+    )
     if member is None:
         return {}
     now = timezone.now()
     flags: dict[str, object] = {}
-    for track in tracks:
-        flags.update(track.event_viewer_flags(event_id, member, now=now))
+    for track in hooked:
+        if getattr(member, f"_unlocked_{track.key}"):
+            flags.update(track.event_viewer_flags(event_id, member, now=now))
     return flags
 
 

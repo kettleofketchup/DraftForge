@@ -90,7 +90,15 @@ class ContributionAdapterTest(TestCase):
             result.orglog_details(),
             {"awarded": 3, "captains_snapshotted": 0, "leadership_awarded": 0},
         )
-        self.assertEqual(result.log_fields(), {"awarded": True, "created": 3})
+        self.assertEqual(
+            result.log_fields(),
+            {
+                "awarded": True,
+                "created": 3,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
+            },
+        )
         self.assertEqual(self._entries(), 3)
         self.assertEqual(self.event.contributions_awarded_at, now)
         self.assertEqual(
@@ -103,7 +111,15 @@ class ContributionAdapterTest(TestCase):
             result.orglog_details(),
             {"awarded": 0, "captains_snapshotted": 0, "leadership_awarded": 0},
         )
-        self.assertEqual(result.log_fields(), {"awarded": False, "created": 0})
+        self.assertEqual(
+            result.log_fields(),
+            {
+                "awarded": False,
+                "created": 0,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
+            },
+        )
         self.assertEqual(self._entries(), 0)
 
     def test_close_auto_cancel_with_host_awards(self) -> None:
@@ -116,14 +132,30 @@ class ContributionAdapterTest(TestCase):
         self.event.save(update_fields=["host"])
         self._add_helpers(1)
         result = self._close(cancelled=True, source="auto")
-        self.assertEqual(result.log_fields(), {"awarded": True, "created": 1})
+        self.assertEqual(
+            result.log_fields(),
+            {
+                "awarded": True,
+                "created": 1,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
+            },
+        )
         self.assertEqual(self._entries(), 1)
 
     def test_close_auto_cancel_without_staff_no_award(self) -> None:
         self.event.host = None
         self.event.save(update_fields=["host"])
         result = self._close(cancelled=True, source="auto")
-        self.assertEqual(result.log_fields(), {"awarded": False, "created": 0})
+        self.assertEqual(
+            result.log_fields(),
+            {
+                "awarded": False,
+                "created": 0,
+                "captain_reviews_voided": 0,
+                "leadership_revoked": 0,
+            },
+        )
         self.assertIsNone(self.event.contributions_awarded_at)
 
     def test_close_awards_while_feature_locked(self) -> None:

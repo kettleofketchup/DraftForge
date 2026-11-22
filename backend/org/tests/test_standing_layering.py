@@ -44,6 +44,12 @@ LEAF_FORBIDDEN = (
     "org.contributions.services",
     "org.contributions.queries",
     "org.conduct",
+    "org.leadership.adapter",
+    "org.leadership.lifecycle",
+    "org.leadership.reviews",
+    "org.leadership.maintenance",
+    "org.leadership.queries",
+    "org.leadership.views",
 )
 EVENT_FLOWS = (
     "events.services",
@@ -57,6 +63,9 @@ PUBLIC_STANDING = ("org.standing.api", "org.standing.cache")
 RESTAMP = "org.standing.restamp"
 RESTAMP_IMPORTER = "events.eligibility.store"
 LEDGER_MODELS = frozenset({"ContributionEntry", "ContributionPointValue"})
+LEADERSHIP_MODELS = frozenset(
+    {"CaptainTrait", "EventCaptain", "CaptainReview", "CaptainTraitScore"}
+)
 SKIPPED_DIRS = frozenset({"tests", "migrations", "__pycache__"})
 
 
@@ -248,6 +257,7 @@ class StandingLayeringTest(SimpleTestCase):
                             any(
                                 _matches(t, "org.contributions")
                                 or _matches(t, "org.leadership")
+                                or _matches(t, "org.models_leadership")
                                 for t in targets
                             ),
                             f"{module} imports {imported} {members}",
@@ -264,7 +274,7 @@ class StandingLayeringTest(SimpleTestCase):
                                 )
                         if imported == "org.models":
                             self.assertFalse(
-                                LEDGER_MODELS & set(members),
+                                (LEDGER_MODELS | LEADERSHIP_MODELS) & set(members),
                                 f"{module} imports {members} from org.models",
                             )
 

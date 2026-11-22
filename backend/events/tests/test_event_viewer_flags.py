@@ -44,11 +44,11 @@ class EventViewerFlagsTest(LeadershipTestCase):
         for key in FLAGS:
             self.assertNotIn(key, body)
 
-    def test_locked_feature_omits_flags_and_costs_one_check(self) -> None:
+    def test_locked_feature_omits_flags_and_skips_the_pool_count(self) -> None:
         client = self.client_for(self.mates_a[0])
         _, unlocked = self.detail(client)
         set_org_feature(self.org, FeatureKey.LEADERSHIP, enabled=False, actor=None)
         body, locked = self.detail(client)
         for key in FLAGS:
             self.assertNotIn(key, body)
-        self.assertEqual(unlocked - locked, 2)
+        self.assertEqual(unlocked - locked, 1)

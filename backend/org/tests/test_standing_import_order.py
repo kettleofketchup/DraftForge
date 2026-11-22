@@ -19,6 +19,8 @@ ENTRY_POINTS = (
     "events.reopen",
     "app.discord_accounts",
     "org.conduct.adapter",
+    "org.leadership.adapter",
+    "org.leadership.reviews",
     "org.conduct.eligibility",
     "org.conduct.services",
     "events.eligibility.checks.conduct",

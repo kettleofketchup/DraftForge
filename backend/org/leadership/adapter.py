@@ -43,9 +43,12 @@ def _is_member(viewer: CustomUser | AnonymousUser | None, org_id: int) -> bool:
     return OrgUser.objects.filter(organization_id=org_id, user_id=viewer.pk).exists()
 
 
-def _close_output(snapshotted: int, awarded: int) -> TrackOutput:
+def _close_output(
+    *, snapshotted: int, awarded: int, voided: int, revoked: int
+) -> TrackOutput:
     return TrackOutput(
-        orglog={"captains_snapshotted": snapshotted, "leadership_awarded": awarded}
+        orglog={"captains_snapshotted": snapshotted, "leadership_awarded": awarded},
+        log={"captain_reviews_voided": voided, "leadership_revoked": revoked},
     )
 
 
@@ -61,7 +64,8 @@ class LeadershipTrack(TrackBase):
     )
     output_keys: Mapping[HookName, OutputKeys] = {
         "on_event_closed": OutputKeys(
-            orglog=("captains_snapshotted", "leadership_awarded")
+            orglog=("captains_snapshotted", "leadership_awarded"),
+            log=("captain_reviews_voided", "leadership_revoked"),
         ),
         "on_event_reopened": OutputKeys(
             orglog=("captain_reviews_voided", "leadership_revoked")
@@ -79,10 +83,17 @@ class LeadershipTrack(TrackBase):
         now: datetime,
     ) -> TrackOutput:
         if cancelled:
-            lifecycle.void_event(event, now=now)
-            return _close_output(0, 0)
+            voided = lifecycle.void_event(event, now=now)
+            return _close_output(
+                snapshotted=0,
+                awarded=0,
+                voided=voided.reviews_voided,
+                revoked=voided.revoked,
+            )
         result = lifecycle.snapshot_event(event, now=now)
-        return _close_output(result.captains, result.awarded)
+        return _close_output(
+            snapshotted=result.captains, awarded=result.awarded, voided=0, revoked=0
+        )
 
     @override
     def on_event_reopened(
@@ -210,20 +221,39 @@ class LeadershipTrack(TrackBase):
         own_user_id = (
             viewer.pk if viewer is not None and viewer.is_authenticated else None
         )
+        total: int | None = None
         if metric.key == "points":
             rows, own_row = self._points_rows(org, period, own_user_id, now=now)
+            total = sum(int(r.value or 0) for r in rows)
             label = period.label
         else:
             rows, own_row = self._rating_rows(org, metric, own_user_id, now=now)
             label = "current"
+        if own_row is None and access.can_view_own and own_user_id is not None:
+            own_row = self._unrated_row(org, own_user_id)
         return Leaderboard(
             track=self.key,
             metric=metric,
             period=label,
             rows=rows[:LEADERBOARD_LIMIT] if access.can_view_rows else [],
-            total=None,
+            total=total,
             own_row=own_row if access.can_view_own else None,
             rows_visible=access.can_view_rows,
+        )
+
+    @staticmethod
+    def _unrated_row(org: Organization, user_id: int) -> LeaderboardRow | None:
+        member = with_user_profiles(
+            OrgUser.objects.filter(organization=org, user_id=user_id), "user"
+        ).first()
+        if member is None:
+            return None
+        return LeaderboardRow(
+            org_user_id=member.pk,
+            member=member_summary(member),
+            value=None,
+            sample=0,
+            status="new",
         )
 
     @staticmethod
