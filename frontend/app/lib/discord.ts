@@ -7,6 +7,7 @@ import type {
   ActivityView,
   LaunchIntentRef,
 } from '~/lib/activity-types';
+import { installActivityFocusGuard } from '~/lib/activityFocusGuard';
 import { getLogger } from '~/lib/logger';
 
 const log = getLogger('activity');
@@ -118,6 +119,7 @@ async function connect(mode: SessionMode): Promise<DraftActivitySession> {
       patchXhr: false,
       patchSrcAttributes: true,
     });
+    installActivityFocusGuard();
   }
   await sdk.ready();
   const { code } = await sdk.commands.authorize({
