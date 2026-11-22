@@ -17,6 +17,62 @@ shellcheck *recipes:
     python3 -I scripts/shellcheck_just.py "$@" || fail=1
     exit "$fail"
 
+# Pull the stack images and the test DB in the background; ci::prefetch-wait joins them (each workflow step is its own shell, so sentinel files, not `wait`)
+[group('ci')]
+prefetch-start:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="${RUNNER_TEMP:-/tmp}/df-prefetch"
+    rm -rf "$dir" && mkdir -p "$dir"
+    just={{quote(just_executable())}}
+    justfile={{quote(root / "justfile")}}
+    for task in images:docker::all-pull db:docker::db::pull; do
+        name="${task%%:*}" recipe="${task#*:}"
+        # shellcheck disable=SC2016 # expanded by the inner bash
+        nohup bash -c '
+            start=$SECONDS
+            if "$1" --justfile "$2" "$3" > "$4/$5.log" 2>&1; then s=ok; else s=fail; fi
+            echo "$((SECONDS - start))" > "$4/$5.$s"
+        ' _ "$just" "$justfile" "$recipe" "$dir" "$name" >/dev/null 2>&1 &
+        echo "prefetch $name started ($recipe)"
+    done
+
+# Wait for a ci::prefetch-start task (images | db), print its log, and exit with its status
+[group('ci')]
+prefetch-wait name timeout="900":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="${RUNNER_TEMP:-/tmp}/df-prefetch"
+    name={{quote(name)}}
+    waited=0
+    while [[ ! -f "$dir/$name.ok" && ! -f "$dir/$name.fail" ]]; do
+        if (( waited >= {{timeout}} )); then
+            echo "prefetch $name still running after ${waited}s" >&2
+            cat "$dir/$name.log" 2>/dev/null || true
+            exit 1
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    cat "$dir/$name.log" 2>/dev/null || true
+    if [[ -f "$dir/$name.ok" ]]; then
+        echo "prefetch $name: ok in $(cat "$dir/$name.ok")s (waited ${waited}s here)"
+        exit 0
+    fi
+    echo "prefetch $name: failed after $(cat "$dir/$name.fail")s" >&2
+    exit 1
+
+# Boot a docker-container buildx builder unless one is already in use (jobs set up with buildx: 'false')
+[group('ci')]
+buildx-builder:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if docker buildx inspect 2>/dev/null | grep -qE '^Driver:\s+docker-container'; then
+        exit 0
+    fi
+    docker buildx create --name df-ci --driver docker-container --use --bootstrap >/dev/null
+    echo "buildx builder df-ci ready"
+
 # Every event: fragment rules (including [Unreleased] holding only the pointer and no
 # fragment a release already consumed) and the checker's tests. push to main: HEAD
 # must not hand-edit CHANGELOG.md. pull_request: CHANGELOG.md untouched unless

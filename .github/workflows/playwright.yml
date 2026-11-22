@@ -377,6 +377,7 @@ jobs:
         with:
           registry-token: ${{ secrets.GITHUB_TOKEN }}
           github-actor: ${{ github.actor }}
+          buildx: 'false'
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
