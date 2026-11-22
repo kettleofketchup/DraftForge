@@ -343,7 +343,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     }
   }, [wsDraftState, handleDraftStateUpdate]);
 
-  // Show TieResolutionOverlay when pendingTieResolution is set in the WS store.
+  // Show the tie roll popup when pendingTieResolution is set in the WS store.
   // Set from two paths: HTTP response (choosePlayerHook) and live WS draft_event.
   // NOT set from initial_events, so historical tie_rolls don't re-trigger on remount.
   useEffect(() => {
