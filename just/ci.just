@@ -73,6 +73,114 @@ buildx-builder:
     docker buildx create --name df-ci --driver docker-container --use --bootstrap >/dev/null
     echo "buildx builder df-ci ready"
 
+# Build and push, under the content-hash tag only, every Playwright-stack image and the test DB the registry lacks (the Playwright `prepare` job); DF_PREPARE_READONLY=1 only reports. Failures warn and exit 0: test jobs rebuild what is still missing.
+[group('ci')]
+prepare-images:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{quote(root)}}
+    start=$SECONDS
+    just={{quote(just_executable())}}
+    justfile={{quote(root / "justfile")}}
+    registry=ghcr.io/kettleofketchup/draftforge
+    db_registry="${DF_TEST_DB_REGISTRY:-$registry/test-db}"
+    dir=$(mktemp -d)
+    trap 'rm -rf "$dir"' EXIT
+    # name, service hashed by hash-docker-image.sh, build recipe
+    images=(
+        "frontend-dev frontend docker::frontend::build-dev"
+        "backend-dev backend docker::backend::build-dev"
+        "playwright-runner playwright docker::frontend::build-pw"
+        "nginx nginx docker::nginx::build"
+    )
+    declare -A ref recipe
+    names=()
+    for entry in "${images[@]}"; do
+        read -r name service build <<< "$entry"
+        names+=("$name")
+        ref[$name]="$registry/$name:$(./scripts/hash-docker-image.sh "$service")"
+        recipe[$name]=$build
+    done
+    names+=(test-db)
+    ref[test-db]="$db_registry:$(./scripts/hash-test-db-sources.sh)"
+
+    for name in "${names[@]}"; do
+        ( docker buildx imagetools inspect "${ref[$name]}" >/dev/null 2>&1 && touch "$dir/$name.present" ) &
+    done
+    wait
+    missing=()
+    for name in "${names[@]}"; do
+        [[ -f "$dir/$name.present" ]] || missing+=("$name")
+    done
+
+    line() { printf '%-18s %s  %s\n' "$1" "${ref[$1]##*:}" "$2" | tee -a "$dir/summary"; }
+    readonly_reason=""
+    if [[ "${DF_PREPARE_READONLY-}" == 1 ]]; then
+        readonly_reason="no registry write access"
+    fi
+
+    if [[ ${#missing[@]} -gt 0 && -z "$readonly_reason" ]]; then
+        if [[ " ${missing[*]} " != " test-db " ]]; then
+            "$just" --justfile "$justfile" ci::buildx-builder
+        fi
+        for name in "${missing[@]}"; do
+            (
+                t=$SECONDS
+                if [[ "$name" == test-db ]]; then
+                    # Populate runs on the host: DF_JUST_PYTHON must have Django, else ci::venv makes one.
+                    if python="${DF_JUST_PYTHON:-$("$just" --justfile "$justfile" ci::venv)}" \
+                        && DF_JUST_PYTHON="$python" "$just" --justfile "$justfile" docker::db::build \
+                        && "$just" --justfile "$justfile" docker::db::push --hash-only; then
+                        s=ok
+                    else
+                        s=fail
+                    fi
+                elif "$just" --justfile "$justfile" "${recipe[$name]}" --push --hash-only; then
+                    s=ok
+                else
+                    s=fail
+                fi
+                echo "$((SECONDS - t))" > "$dir/$name.$s"
+            ) > "$dir/$name.log" 2>&1 &
+        done
+        wait
+        for name in "${missing[@]}"; do
+            echo "::group::$name build log"
+            cat "$dir/$name.log"
+            echo "::endgroup::"
+        done
+    fi
+
+    failed=()
+    for name in "${names[@]}"; do
+        if [[ -f "$dir/$name.present" ]]; then
+            line "$name" present
+        elif [[ -n "$readonly_reason" ]]; then
+            line "$name" "missing; not built ($readonly_reason)"
+        elif [[ -f "$dir/$name.ok" ]]; then
+            line "$name" "built+pushed in $(cat "$dir/$name.ok")s"
+        else
+            line "$name" "build or push failed after $(cat "$dir/$name.fail" 2>/dev/null || echo '?')s"
+            failed+=("$name")
+        fi
+    done
+    if [[ -n "$readonly_reason" && ${#missing[@]} -gt 0 ]]; then
+        echo "::warning::prepare: ${missing[*]} missing and not built ($readonly_reason); each test job builds them itself"
+    fi
+    if [[ ${#failed[@]} -gt 0 ]]; then
+        hint=""
+        for name in "${failed[@]}"; do
+            if grep -qiE 'denied|unauthorized|forbidden|403' "$dir/$name.log"; then
+                hint=" (registry refused the push: fork PR or no package write access)"
+            fi
+        done
+        echo "::warning::prepare: ${failed[*]} not pushed${hint}; each test job builds them itself"
+    fi
+    echo "prepare-images: done in $((SECONDS - start))s"
+    if [[ -n "${GITHUB_STEP_SUMMARY-}" ]]; then
+        { echo '```'; cat "$dir/summary"; echo "done in $((SECONDS - start))s"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+    fi
+
 # Create .venv with Poetry for a job set up with python: 'false' that needs Django on the host (the test-DB populate fallback); prints its python
 [group('ci')]
 venv:
