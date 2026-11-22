@@ -15,6 +15,7 @@ Tournament:
           - frontend/app/components/tournament/**
           - backend/app/**/tournament*
           - backend/app/views/tournament*
+          - backend/tournament/**
 
 brackets:
   - changed-files:
