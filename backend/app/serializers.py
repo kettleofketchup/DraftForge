@@ -1437,7 +1437,6 @@ class TournamentSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    teams = TeamSerializer(many=True, read_only=True)  # Associated teams
     positions = PositionsSerializer(many=False, read_only=False, required=False)
     default_organization = serializers.PrimaryKeyRelatedField(
         queryset=Organization.objects.all(),
@@ -1497,7 +1496,6 @@ class UserSerializer(serializers.ModelSerializer):
             "avatarUrl",
             "email",
             "date_joined",
-            "teams",  # Include associated teams
             "positions",
             "default_organization",
             "admin_organization_ids",
