@@ -15,16 +15,16 @@ from django.test import TestCase
 from django.utils import timezone
 
 from app.models import CustomUser, Game, PositionsModel, Team, TeamLog, Tournament
-from app.services.team_leadership import successor_after_removal
-from app.services.team_signals import (
-    TeamRosterChange,
-    owning_team_audit,
-    team_roster_changed,
-)
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
 from league.models import League
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
+from tournament.services.team_leadership import successor_after_removal
+from tournament.services.team_signals import (
+    TeamRosterChange,
+    owning_team_audit,
+    team_roster_changed,
+)
 
 
 class TeamMemberRemovalTests(TestCase):
@@ -331,7 +331,7 @@ class TeamValidationTests(TestCase):
         team.full_clean()
 
 
-def _make_user(name: str) -> CustomUser:
+def _roster_user(name: str) -> CustomUser:
     return CustomUser.objects.create(
         username=name,
         discordId=f"discord_{name}",
@@ -346,7 +346,7 @@ class EmptyTeamAuditTests(TestCase):
             tournament_type="single_elimination",
             date_played=timezone.now(),
         )
-        self.user = _make_user("solo")
+        self.user = _roster_user("solo")
         self.tournament.users.add(self.user)
         self.team = Team.objects.create(tournament=self.tournament, name="Solo Team")
         self.team.members.add(self.user)
@@ -435,7 +435,7 @@ class SuccessionAuditTests(TestCase):
             tournament_type="single_elimination",
             date_played=timezone.now(),
         )
-        self.users = [_make_user(f"succ_{i}") for i in range(4)]
+        self.users = [_roster_user(f"succ_{i}") for i in range(4)]
         self.tournament.users.set(self.users)
         self.team = Team.objects.create(tournament=self.tournament, name="Succ Team")
         self.team.members.set(self.users)
@@ -572,7 +572,7 @@ class SuccessorAfterRemovalTests(TestCase):
             date_played=timezone.now(),
             league=self.league,
         )
-        self.users = [_make_user(f"order_{i}") for i in range(4)]
+        self.users = [_roster_user(f"order_{i}") for i in range(4)]
         self.team = Team.objects.create(tournament=self.tournament, name="Order Team")
         self.team.members.set(self.users)
         Team.objects.filter(pk=self.team.pk).update(
@@ -631,7 +631,7 @@ class SuccessorAfterRemovalTests(TestCase):
         )
 
     def test_ghost_deputy_not_promoted(self) -> None:
-        outsider = _make_user("order_ghost")
+        outsider = _roster_user("order_ghost")
         Team.objects.filter(pk=self.team.pk).update(deputy_captain=outsider)
         self.team.refresh_from_db()
         self._remove_rows(self.users[0])
@@ -649,7 +649,7 @@ class SystemRowSignalTests(TestCase):
             tournament_type="single_elimination",
             date_played=timezone.now(),
         )
-        self.users = [_make_user(f"sig_{i}") for i in range(3)]
+        self.users = [_roster_user(f"sig_{i}") for i in range(3)]
         self.tournament.users.set(self.users)
         self.team = Team.objects.create(tournament=self.tournament, name="Sig Team")
         self.team.members.set(self.users)
@@ -665,7 +665,7 @@ class SystemRowSignalTests(TestCase):
         self.addCleanup(team_roster_changed.disconnect, receiver, sender=Team)
 
     def test_succession_row_sends_signal_and_invalidates(self) -> None:
-        with patch("app.signals.invalidate_after_commit") as invalidate:
+        with patch("tournament.signals.invalidate_after_commit") as invalidate:
             with self.captureOnCommitCallbacks(execute=True):
                 self.tournament.users.remove(self.users[0])
 

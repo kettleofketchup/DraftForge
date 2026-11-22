@@ -46,11 +46,6 @@ from app.serializers import (
     TeamUserActionRequestSerializer,
     UserSerializer,
 )
-from app.services import team_management
-from app.services.team_audit import log_snapshot_fields
-from app.services.team_references import team_references, team_usage
-from app.services.team_signals import TeamRosterChange, team_roster_changed
-from app.tests.test_team_management import TeamManagementFixture
 from app.views_main import TeamView
 from draft.models import DraftTeam, HeroDraft
 from draft.serializers.hero import HeroDraftSerializer
@@ -60,6 +55,11 @@ from events.models import EventTeam
 from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
 from league.models import League
 from org.models import Organization
+from tournament.services import team_management
+from tournament.services.team_audit import log_snapshot_fields
+from tournament.services.team_references import team_references, team_usage
+from tournament.services.team_signals import TeamRosterChange, team_roster_changed
+from tournament.tests.test_team_management import TeamManagementFixture
 from user.tests.test_cacheops_integration import _redis_reachable
 
 

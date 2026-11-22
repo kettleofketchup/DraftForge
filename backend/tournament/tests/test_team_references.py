@@ -12,14 +12,14 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.services.team_references import (
+from bracket.models import BracketSlot, TournamentBracket
+from league.models import League
+from org.models import Organization
+from tournament.services.team_references import (
     all_reference_keys,
     team_references,
     team_usage,
 )
-from bracket.models import BracketSlot, TournamentBracket
-from league.models import League
-from org.models import Organization
 
 
 class TeamReferencesFixture:

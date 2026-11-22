@@ -10,7 +10,6 @@ from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
 from app.permissions import request_user
-from app.services.team_references import team_references
 from draft.models import Draft, DraftOptions, DraftRound
 from events.overrides import (
     REASON_MAX_LENGTH,
@@ -22,6 +21,7 @@ from league.permissions import check_lobby_steam_league_id
 from org.mmr import LEAGUE_GAME, game_for_tournament, game_mmrs_prefetch, org_mmr_map
 from org.models import Organization, OrgUser
 from telemetry.logging import get_logger
+from tournament.services.team_references import team_references
 from user.querysets import with_user_profiles
 
 from .models import (
@@ -981,7 +981,7 @@ class TeamSerializer(serializers.ModelSerializer):
             )
         return attrs
 
-    # Members last: emptying them may delete the team (see app.signals).
+    # Members last: emptying them may delete the team (see tournament.signals).
     _ROSTER_FIELDS: ClassVar[tuple[str, ...]] = (
         "dropin_members",
         "left_members",

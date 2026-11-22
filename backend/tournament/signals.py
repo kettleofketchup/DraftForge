@@ -24,21 +24,24 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.services.team_audit import log_snapshot_fields, roster_snapshot, write_team_log
-from app.services.team_leadership import successor_after_removal
-from app.services.team_management import follow_captain
-from app.services.team_references import team_references
-from app.services.team_signals import (
-    change_from_log,
-    send_roster_changed_on_commit,
-    team_audit_owner,
-)
-from app.services.team_signals import team_roster_changed as team_roster_changed
-from app.services.tournament_completion import sync_tournament_completion
 from league.models import LeagueUser
 from org.mmr import LEAGUE_GAME, org_mmr_map
 from org.models import OrgUser
 from telemetry.logging import get_logger
+from tournament.services.team_audit import (
+    log_snapshot_fields,
+    roster_snapshot,
+    write_team_log,
+)
+from tournament.services.team_leadership import successor_after_removal
+from tournament.services.team_management import follow_captain
+from tournament.services.team_references import team_references
+from tournament.services.team_signals import (
+    change_from_log,
+    send_roster_changed_on_commit,
+    team_audit_owner,
+)
+from tournament.services.tournament_completion import sync_tournament_completion
 
 log = get_logger(__name__)
 

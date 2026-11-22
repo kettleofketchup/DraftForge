@@ -5,20 +5,17 @@ from unittest.mock import MagicMock, patch
 from django.core.management import call_command
 from django.test import TestCase
 
-from app.management.commands import (
-    import_prod_tournament,
-    sync_prod_tournaments,
-    sync_prod_users,
-)
+from app.management.commands import sync_prod_users
 from app.models import CustomUser, GameType, Team, Tournament
 from draft.models import Draft
 from league.models import League
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
+from tournament.management.commands import import_prod_tournament, sync_prod_tournaments
 
-TOURNAMENT_GET = "app.management.commands.import_prod_tournament.requests.get"
+TOURNAMENT_GET = "tournament.management.commands.import_prod_tournament.requests.get"
 USERS_GET = "app.management.commands.sync_prod_users.requests.get"
-TOURNAMENTS_GET = "app.management.commands.sync_prod_tournaments.requests.get"
+TOURNAMENTS_GET = "tournament.management.commands.sync_prod_tournaments.requests.get"
 
 
 def fake_response(payload: Any) -> MagicMock:

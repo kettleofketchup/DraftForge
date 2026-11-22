@@ -57,7 +57,8 @@ class CelerySettingsBootTest(SimpleTestCase):
             "import json, sys\n"
             "from config.celery_light import app\n"
             "app.loader.import_default_modules()\n"
-            "names = ['user.models', 'bracket.models', 'events.tournament_tasks']\n"
+            "names = ['user.models', 'bracket.models', 'events.tournament_tasks',"
+            " 'tournament.signals']\n"
             "print(json.dumps({n: n in sys.modules for n in names}))"
         )
         result = subprocess.run(
@@ -76,6 +77,7 @@ class CelerySettingsBootTest(SimpleTestCase):
                 "user.models": False,
                 "bracket.models": False,
                 "events.tournament_tasks": True,
+                "tournament.signals": True,
             },
         )
 

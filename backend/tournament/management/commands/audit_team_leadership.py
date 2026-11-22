@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from app.services.team_leadership import teams_with_leadership_problems
+from tournament.services.team_leadership import teams_with_leadership_problems
 
 
 class Command(BaseCommand):

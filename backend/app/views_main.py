@@ -31,30 +31,6 @@ from social_django.utils import load_strategy
 
 from app import tournament_buckets
 from app.cache_utils import invalidate_after_commit
-from app.services.team_audit import (
-    log_snapshot_fields,
-    roster_snapshot,
-    write_team_log,
-)
-from app.services.team_management import (
-    TeamChange,
-    add_standin,
-    follow_captain,
-    mark_dropout,
-    other_team_user_ids,
-    remove_standin,
-    rename,
-    restore_member,
-    set_captain,
-    set_deputy,
-    sub_in,
-)
-from app.services.team_references import TeamUsage, team_references, team_usage
-from app.services.team_signals import (
-    change_from_log,
-    owning_team_audit,
-    send_roster_changed_on_commit,
-)
 from app.tournament_buckets import (
     tournament_bucket_cutoff,
     upcoming_q,
@@ -95,6 +71,30 @@ from tournament.permissions import (
     can_edit_tournament,
     can_manage_game,
     check_tournament_league_change,
+)
+from tournament.services.team_audit import (
+    log_snapshot_fields,
+    roster_snapshot,
+    write_team_log,
+)
+from tournament.services.team_management import (
+    TeamChange,
+    add_standin,
+    follow_captain,
+    mark_dropout,
+    other_team_user_ids,
+    remove_standin,
+    rename,
+    restore_member,
+    set_captain,
+    set_deputy,
+    sub_in,
+)
+from tournament.services.team_references import TeamUsage, team_references, team_usage
+from tournament.services.team_signals import (
+    change_from_log,
+    owning_team_audit,
+    send_roster_changed_on_commit,
 )
 
 # BaseUserProfile owns nickname/avatar; DotaUserProfile owns

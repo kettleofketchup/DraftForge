@@ -224,7 +224,7 @@ class StandingLayeringTest(SimpleTestCase):
                     )
 
     def test_events_and_app_use_only_the_api(self) -> None:
-        for package in ("events", "app"):
+        for package in ("events", "app", "tournament"):
             for path in _caller_files(package):
                 module = _module_name(path)
                 for imported, members in _imports(path):
@@ -252,7 +252,11 @@ class StandingLayeringTest(SimpleTestCase):
 
     def test_only_conduct_check_imports_conduct(self) -> None:
         paths = [
-            *(path for package in ("events", "app") for path in _caller_files(package)),
+            *(
+                path
+                for package in ("events", "app", "tournament")
+                for path in _caller_files(package)
+            ),
             *(BACKEND_DIR / "org" / name for name in FEATURE_TOGGLE_CALLERS),
         ]
         for path in paths:
