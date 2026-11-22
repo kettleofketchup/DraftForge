@@ -213,7 +213,7 @@ class SignupLineStampingTests(TestCase):
         )
 
     def test_demote_diverges_line_from_waitlist_order(self) -> None:
-        """Pinned for #493: demote sets waitlist_position only, not line_seq."""
+        """Pins current behaviour: demote sets waitlist_position only, not line_seq."""
         event = self._event(max_players=3)
         a, _b, _c = (process_rsvp(event, u, actor=SYSTEM) for u in self.users[:3])
         d = process_rsvp(event, self.users[3], actor=SYSTEM)
@@ -226,7 +226,7 @@ class SignupLineStampingTests(TestCase):
         self.assertEqual(self._waitlist_order(event), [e.pk, a.pk])
 
     def test_reinstate_to_waitlist_diverges_line_from_waitlist_order(self) -> None:
-        """Pinned for #493: reinstate onto the waitlist keeps the old line_seq."""
+        """Pins current behaviour: reinstate onto the waitlist keeps the old line_seq."""
         event = self._event(max_players=3)
         a = process_rsvp(event, self.users[0], actor=SYSTEM)
         process_rsvp(event, self.users[1], actor=SYSTEM)

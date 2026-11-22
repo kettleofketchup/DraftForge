@@ -1075,7 +1075,7 @@ class EventViewSet(viewsets.ModelViewSet):
     def start_tournament(self, request: Request, pk: str | None = None) -> Response:
         """Start the tournament (after roll call or directly).
 
-        Self-heals legacy events whose tournament is missing or empty (#200).
+        Self-heals events whose tournament is missing or has an empty roster.
         """
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
