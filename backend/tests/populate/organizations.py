@@ -4,7 +4,8 @@ Organization and League population for test database.
 
 from typing import Any, Final
 
-from app.models import CustomUser, League
+from app.models import CustomUser
+from league.models import League
 from org.models import Organization, OrgUser
 
 from .constants import (

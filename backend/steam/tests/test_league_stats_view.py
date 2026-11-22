@@ -2,7 +2,7 @@ from django.http import HttpResponse
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import League
+from league.models import League
 from steam.constants import LEAGUE_ID
 from steam.models import LeaguePlayerStats
 from steam.tests.league_summary_fixtures import make_player

@@ -20,7 +20,7 @@ from events.overrides import (
     OverrideReasonRequired,
     OverrideRequestSerializer,
 )
-from league.models import LeagueUser
+from league.models import League, LeagueUser
 from org.mmr import LEAGUE_GAME, game_for_tournament, game_mmrs_prefetch, org_mmr_map
 from org.models import Organization, OrgUser
 from telemetry.logging import get_logger
@@ -32,7 +32,6 @@ from .models import (
     GameMode,
     GameType,
     Joke,
-    League,
     PositionsModel,
     Team,
     TeamLog,

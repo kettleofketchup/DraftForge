@@ -10,7 +10,6 @@ from rest_framework.test import APIClient
 from app.models import (
     CustomUser,
     Game,
-    League,
     Team,
     TeamLog,
     TeamLogAction,
@@ -22,7 +21,7 @@ from app.tournament_state import tournament_state_queryset
 from bracket.models import BracketSlot, TournamentBracket
 from draft.models import Draft, DraftEvent, DraftOptions, DraftTeam, HeroDraft
 from draft.services.team_reset import reset_draft_teams
-from league.models import LeagueUser
+from league.models import League, LeagueUser
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
 from user.tests.test_cacheops_integration import _redis_reachable
