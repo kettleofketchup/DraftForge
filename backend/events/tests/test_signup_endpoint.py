@@ -414,19 +414,24 @@ class SignupEndpointAdmissionOnceTests(EventTestCase):
         self.assertEqual(resp.status_code, 201, resp.content)
         self.assertEqual(evaluated.call_count, 1)
 
-    def test_closed_event_checks_state_once(self) -> None:
+    def test_closed_event_is_refused_by_the_service_only(self) -> None:
         ev = self.make_event(state=EventState.CANCELLED)
         self.api.force_authenticate(self.make_user())
-        with patch(
-            "events.admission.self_serve_refusal",
-            wraps=admission.self_serve_refusal,
-        ) as refused:
+        with (
+            patch("events.views.ensure_self_serve") as view_check,
+            patch(
+                "events.admission.self_serve_refusal",
+                wraps=admission.self_serve_refusal,
+            ) as refused,
+        ):
             resp = self._post(ev, "rsvp")
         self.assertEqual(resp.status_code, 400, resp.content)
         self.assertIn("not accepting signups", resp.json()["error"])
+        view_check.assert_not_called()
         self.assertEqual(refused.call_count, 1)
 
-    def test_refusal_leaves_no_org_user_or_profile_write(self) -> None:
+    def test_closed_event_refusal_writes_no_org_user_or_profile(self) -> None:
+        """Guard: the refusal rolls back the membership and profile input."""
         ev = self.make_event(state=EventState.CANCELLED)
         user = CustomUser.objects.create_user(username="no_org_user", password="pw")
         self.api.force_authenticate(user)
