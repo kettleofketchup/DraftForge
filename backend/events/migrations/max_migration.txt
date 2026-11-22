@@ -1,1 +1,1 @@
-0036_retarget_tournament_league_to_league
+0037_ready_check_recipient_help_text

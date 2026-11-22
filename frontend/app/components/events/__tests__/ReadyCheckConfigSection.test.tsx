@@ -154,6 +154,35 @@ describe('ReadyCheckConfigSection', () => {
     expect(screen.getByTestId(IDS.voiceConfirms)).toBeInTheDocument();
   });
 
+  it('names who gets each message', () => {
+    renderSection({ initial: { roll_call_enabled: true } });
+    click(IDS.settingsTrigger);
+    const section = screen.getByTestId(IDS.section);
+    expect(section).toHaveTextContent(
+      'Nudge unconfirmed members by DM (minutes)',
+    );
+    expect(section).toHaveTextContent(
+      'Ops notice per unconfirmed member (minutes)',
+    );
+    expect(section).toHaveTextContent('Shown to org and league staff');
+    expect(section).toHaveTextContent(
+      'DM members on their first sign-up that confirmation is mandatory',
+    );
+    expect(section).toHaveTextContent('DM members who are dropped');
+  });
+
+  it('says the ready check and start cull are not active yet', () => {
+    renderSection({ initial: { roll_call_enabled: true } });
+    click(IDS.settingsTrigger);
+    click(IDS.voiceTrigger);
+    expect(screen.getByTestId(IDS.settingsNotActive)).toHaveTextContent(
+      'Not active yet',
+    );
+    expect(screen.getByTestId(IDS.voiceNotActive)).toHaveTextContent(
+      'Not active yet',
+    );
+  });
+
   it('reads the low-completion row as a sentence', () => {
     renderSection({ initial: { roll_call_enabled: true } });
     click(IDS.settingsTrigger);
