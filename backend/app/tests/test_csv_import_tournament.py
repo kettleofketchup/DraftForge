@@ -277,10 +277,75 @@ class TournamentCSVImportDotaRowTest(TestCase):
         self.assertEqual(data["summary"]["updated"], 1)
         self.assertEqual(self.dota_row(), 6000)
 
-    def test_existing_org_member_added_writes_dota_row(self) -> None:
-        data = self.post(6500)
+    def test_existing_org_member_added_with_update_mmr_writes_dota_row(
+        self,
+    ) -> None:
+        data = self.post(6500, update_mmr=True)
         self.assertEqual(data["summary"]["added"], 1)
         self.assertEqual(self.dota_row(), 6500)
+
+    def test_existing_org_member_added_without_update_mmr_keeps_dota_row(
+        self,
+    ) -> None:
+        data = self.post(6500)
+        self.assertEqual(data["summary"]["added"], 1)
+        self.assertTrue(self.tournament.users.filter(pk=self.user.pk).exists())
+        self.assertEqual(self.dota_row(), 1000)
+
+    def test_new_member_seeded_without_update_mmr(self) -> None:
+        resp = self.client.post(
+            self.url,
+            {"rows": [{"steam_friend_id": "76561198012345690", "mmr": 4200}]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["summary"]["added"], 1)
+        new_user = CustomUser.objects.get(steamid=76561198012345690)
+        self.assertEqual(org_mmr_for(self.org.pk, new_user.pk, GameType.DOTA2), 4200)
+
+    def test_existing_league_snapshot_kept_without_update_mmr(self) -> None:
+        LeagueUser.objects.create(
+            user=self.user, league=self.league, org_user=self.org_user, mmr=1100
+        )
+        data = self.post(6500, mmr_target="league")
+        self.assertEqual(data["summary"]["added"], 1)
+        self.assertEqual(
+            LeagueUser.objects.get(user=self.user, league=self.league).mmr, 1100
+        )
+        self.assertEqual(self.dota_row(), 1000)
+
+    def test_missing_league_snapshot_taken_from_org_without_update_mmr(
+        self,
+    ) -> None:
+        self.post(6500, mmr_target="league")
+        self.assertEqual(
+            LeagueUser.objects.get(user=self.user, league=self.league).mmr, 1000
+        )
+
+    def test_existing_league_snapshot_updated_with_update_mmr(self) -> None:
+        LeagueUser.objects.create(
+            user=self.user, league=self.league, org_user=self.org_user, mmr=1100
+        )
+        data = self.post(6500, update_mmr=True, mmr_target="league")
+        self.assertEqual(data["summary"]["added"], 1)
+        self.assertEqual(
+            LeagueUser.objects.get(user=self.user, league=self.league).mmr, 6500
+        )
+
+    def test_new_member_league_snapshot_seeded_without_update_mmr(self) -> None:
+        resp = self.client.post(
+            self.url,
+            {
+                "rows": [{"steam_friend_id": "76561198012345690", "mmr": 4200}],
+                "mmr_target": "league",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        new_user = CustomUser.objects.get(steamid=76561198012345690)
+        self.assertEqual(
+            LeagueUser.objects.get(user=new_user, league=self.league).mmr, 4200
+        )
 
     def test_out_of_range_for_existing_org_member_is_row_error(self) -> None:
         data = self.post(25000)
@@ -390,7 +455,9 @@ class TournamentCSVImportGameTest(TestCase):
         self,
     ) -> None:
         resp = self.post(
-            self.dl_tournament, [{"steam_friend_id": str(self.STEAM_ID), "mmr": 2700}]
+            self.dl_tournament,
+            [{"steam_friend_id": str(self.STEAM_ID), "mmr": 2700}],
+            update_mmr=True,
         )
 
         self.assertEqual(resp.data["summary"]["added"], 1)
@@ -398,6 +465,27 @@ class TournamentCSVImportGameTest(TestCase):
             self.rows_for(self.org_user),
             {GameType.DOTA2: 1000, GameType.DEADLOCK: 2700},
         )
+
+    def test_tournament_import_without_update_mmr_keeps_tournament_game(
+        self,
+    ) -> None:
+        resp = self.post(
+            self.dl_tournament,
+            [
+                {"steam_friend_id": str(self.STEAM_ID), "mmr": 2700},
+                {"steam_friend_id": str(self.NEW_STEAM_ID), "mmr": 1900},
+            ],
+        )
+
+        self.assertEqual(resp.data["summary"]["added"], 2)
+        self.assertEqual(
+            self.rows_for(self.org_user),
+            {GameType.DOTA2: 1000, GameType.DEADLOCK: 700},
+        )
+        new_ou = OrgUser.objects.get(
+            user__steamid=self.NEW_STEAM_ID, organization=self.org
+        )
+        self.assertEqual(self.rows_for(new_ou), {GameType.DEADLOCK: 1900})
 
     def test_tournament_import_new_member_out_of_range_row_error(self) -> None:
         resp = self.post(

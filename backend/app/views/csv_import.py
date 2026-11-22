@@ -575,21 +575,27 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
                 summary["skipped"] += 1
             continue
 
-        # Create OrgUser if tournament has an org (savepoint for SQLite)
+        # Create OrgUser if tournament has an org (savepoint for SQLite).
+        # Without update_mmr the CSV MMR only seeds members created here.
+        org_member_created = False
         if org:
             try:
                 with transaction.atomic():
                     created_ou = OrgUser.objects.create(user=user, organization=org)
             except IntegrityError:
-                # Already a member of the org -- update MMR if provided
-                if base_mmr is not None:
+                if update_mmr and base_mmr is not None:
                     pending_mmrs[user.pk] = base_mmr
             else:
+                org_member_created = True
                 if base_mmr:
                     pending_mmrs[created_ou.user_id] = base_mmr
 
-        # For league-level MMR, also create/update LeagueUser
-        if league and mmr_target == "league" and base_mmr is not None:
+        if (
+            league
+            and mmr_target == "league"
+            and base_mmr is not None
+            and (update_mmr or org_member_created)
+        ):
             org_user = OrgUser.objects.filter(user=user, organization=org).first()
             if org_user:
                 LeagueUser.objects.update_or_create(

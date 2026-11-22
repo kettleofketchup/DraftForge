@@ -556,6 +556,29 @@ class OrgCSVImportGameTypeTest(OrgCSVImportGameTypeFixtures, TestCase):
         self.assertEqual(resp.data["results"][0]["status"], "skipped")
         self.assertEqual(self.rows_for(self.org_user)[GameType.DEADLOCK], 700)
 
+    def test_org_import_without_update_mmr_seeds_only_new_members(self) -> None:
+        resp = self.client.post(
+            self.url,
+            {
+                "rows": [
+                    {"steam_friend_id": str(self.STEAM_ID), "mmr": 2600},
+                    {"steam_friend_id": "76561198011111195", "mmr": 3100},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(
+            [r["status"] for r in resp.data["results"]], ["skipped", "added"]
+        )
+        self.assertEqual(
+            self.rows_for(self.org_user),
+            {GameType.DOTA2: 1000, GameType.DEADLOCK: 700},
+        )
+        added = OrgUser.objects.get(user__steamid=76561198011111195)
+        self.assertEqual(self.rows_for(added), {GameType.DOTA2: 3100})
+
 
 class OrgCSVImportCacheTest(OrgCSVImportGameTypeFixtures, TransactionTestCase):
     @classmethod
