@@ -7,6 +7,7 @@ import {
 import { useEffect, useMemo } from 'react';
 
 import type {
+  EventRepeaterListItem,
   EventRepeaterType,
   EventStaffPayload,
   EventWritePayload,
@@ -23,6 +24,7 @@ import {
   deleteEvent as deleteEventAPI,
   demoteSignup as demoteSignupAPI,
   getEvent,
+  getEventRepeater,
   getEventRepeaters,
   getEvents,
   getEventSignups,
@@ -183,9 +185,17 @@ export function useEventActionMutation(eventId: number) {
 }
 
 export function useEventRepeaters(params?: { organization?: number }) {
-  return useQuery<EventRepeaterType[]>({
+  return useQuery<EventRepeaterListItem[]>({
     queryKey: ['event-repeaters', params],
     queryFn: () => getEventRepeaters(params),
+  });
+}
+
+export function useEventRepeater(id: number | null) {
+  return useQuery<EventRepeaterType>({
+    queryKey: ['repeater', id],
+    queryFn: () => getEventRepeater(id as number),
+    enabled: id !== null,
   });
 }
 
@@ -224,6 +234,7 @@ export function useUpdateEventRepeaterMutation(repeaterId: number) {
       updateEventRepeaterAPI(repeaterId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
+      queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       // The series cascade may have changed its events' passwords.
       queryClient.invalidateQueries({
