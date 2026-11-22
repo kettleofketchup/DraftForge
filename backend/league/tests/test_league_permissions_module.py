@@ -21,7 +21,7 @@ NOT_REIMPORTED = (
 
 
 class LeaguePermissionsModuleTests(SimpleTestCase):
-    def test_league_helpers_live_in_league(self):
+    def test_league_helpers_live_in_league(self) -> None:
         module = importlib.import_module("league.permissions")
         for name in MOVED:
             with self.subTest(name=name):
@@ -30,7 +30,7 @@ class LeaguePermissionsModuleTests(SimpleTestCase):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(app.permissions_tournament, name))
 
-    def test_event_staff_helper_stays_in_app(self):
+    def test_event_staff_helper_stays_in_app(self) -> None:
         self.assertEqual(
             app.permissions_tournament.has_event_staff_access.__module__,
             "app.permissions_tournament",

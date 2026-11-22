@@ -15,7 +15,7 @@ def _rating(player_id: int, base_mmr: int, games_played: int = 10) -> LeagueRati
 
 
 class RatingSystemTests(SimpleTestCase):
-    def test_get_rating_system_returns_elo_and_fixed_delta(self):
+    def test_get_rating_system_returns_elo_and_fixed_delta(self) -> None:
         self.assertIsInstance(
             get_rating_system(League(rating_system="elo")), EloRatingSystem
         )
@@ -26,7 +26,7 @@ class RatingSystemTests(SimpleTestCase):
         with self.assertRaisesMessage(ValueError, "Unknown rating system: glicko2"):
             get_rating_system(League(rating_system="glicko2"))
 
-    def test_elo_expected_score_and_delta(self):
+    def test_elo_expected_score_and_delta(self) -> None:
         elo = get_rating_system(League(rating_system="elo"))
 
         self.assertEqual(
@@ -60,7 +60,7 @@ class RatingSystemTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             elo.calculate_team_deltas([], [_rating(2, 3000)])
 
-    def test_fixed_delta_win_and_loss(self):
+    def test_fixed_delta_win_and_loss(self) -> None:
         fixed = get_rating_system(League(rating_system="fixed_delta"))
 
         self.assertEqual(
