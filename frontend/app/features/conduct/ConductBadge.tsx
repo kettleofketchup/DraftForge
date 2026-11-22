@@ -27,7 +27,12 @@ export function ConductBadge({
   const rate = formatShowRate(member);
 
   return (
-    <span className={cn('inline-flex items-center gap-1', className)}>
+    <span
+      className={cn(
+        'inline-flex flex-wrap items-center justify-end gap-1',
+        className,
+      )}
+    >
       <Badge
         variant="outline"
         className="border-border bg-muted text-muted-foreground"

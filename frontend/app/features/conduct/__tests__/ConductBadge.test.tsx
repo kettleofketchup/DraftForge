@@ -40,6 +40,12 @@ describe('ConductBadge', () => {
     expect(screen.getByTestId('conduct-badge-tier')).toHaveTextContent(label);
   });
 
+  it('wraps its badges right-aligned when its slot is narrow', () => {
+    render(<ConductBadge member={forecastMember({ tier: 'block' })} />);
+    const wrap = screen.getByTestId('conduct-badge').parentElement;
+    expect(wrap).toHaveClass('flex-wrap', 'justify-end');
+  });
+
   it('shows no approval badge for back_of_line', () => {
     render(<ConductBadge member={forecastMember({ tier: 'back_of_line' })} />);
     expect(screen.queryByTestId('conduct-badge-tier')).not.toBeInTheDocument();

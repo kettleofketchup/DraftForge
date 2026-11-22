@@ -1195,11 +1195,16 @@ function SignupsTab({
             ? signupHoldReason(signup, autoApprove)
             : null;
           const statusSlot = (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-mono text-muted-foreground">
-                #{position}
+            <div
+              className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1"
+              data-testid={`event-signup-status-${signup.id}`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="text-xs font-mono text-muted-foreground">
+                  #{position}
+                </span>
+                <EventStateBadge state={signup.status} />
               </span>
-              <EventStateBadge state={signup.status} />
               <ConductBadge member={conductMemberFor?.(signup.user)} />
               {holdReason && (
                 <span

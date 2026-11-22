@@ -713,15 +713,20 @@ const SignupStrip = memo(function SignupStrip({
   const removeKey = focused ? '2' : undefined;
 
   const statusBadge = (
-    <span className="inline-flex items-center gap-1">
-      {pending && (
-        <Loader2
-          className="h-3.5 w-3.5 animate-spin text-muted-foreground"
-          data-testid="rollcall-row-pending"
-          aria-label="Saving"
-        />
-      )}
-      <EventStateBadge state={signup.status} />
+    <span
+      className="inline-flex flex-wrap items-center justify-end gap-1"
+      data-testid={`rollcall-row-status-${signup.id}`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {pending && (
+          <Loader2
+            className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+            data-testid="rollcall-row-pending"
+            aria-label="Saving"
+          />
+        )}
+        <EventStateBadge state={signup.status} />
+      </span>
       <ConductBadge member={conductMember} />
     </span>
   );
