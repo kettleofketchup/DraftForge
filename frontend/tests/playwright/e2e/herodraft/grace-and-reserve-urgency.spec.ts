@@ -9,16 +9,17 @@
  * Driven by /api/tests/herodraft/<pk>/warp/ to skip the 25-90s of real-time
  * waiting needed to reach each threshold organically.
  */
-import { chromium, expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
 import { API_URL, BASE_URL } from '../../fixtures/base-url';
+import { launchChromium } from '../../fixtures/browser';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
 test.describe('@cicd HeroDraft Timer Urgency Animations', () => {
   test('grace<10s pulses grace-urgent; grace=0 + reserve<30s pulses reserve-critical', async () => {
     test.setTimeout(180000);
 
-    const browser = await chromium.launch({
+    const browser = await launchChromium({
       headless: true,
       args: [
         '--disable-web-security',

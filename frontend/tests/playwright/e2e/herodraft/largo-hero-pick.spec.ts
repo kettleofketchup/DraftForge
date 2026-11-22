@@ -1,6 +1,7 @@
-import { chromium, expect, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
 import { API_URL, BASE_URL } from '../../fixtures/base-url';
+import { launchChromium } from '../../fixtures/browser';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
 /**
@@ -12,7 +13,7 @@ test.describe('@cicd Largo Hero Pick', () => {
     // Set longer timeout for this test
     test.setTimeout(120000);
 
-    const browser = await chromium.launch({
+    const browser = await launchChromium({
       headless: true,
       args: [
         '--disable-web-security',

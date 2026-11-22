@@ -238,7 +238,8 @@ ghcr.io/kettleofketchup/draftforge/
 ├── frontend-dev:latest
 ├── backend:latest
 ├── backend-dev:latest
-└── nginx:latest
+├── nginx:latest
+└── playwright-runner:latest   # CI only: runs the Playwright tests
 ```
 
 ## Content-Hash Tagging
@@ -250,6 +251,7 @@ Docker images are tagged with a SHA256 hash of the files that determine their in
 | Service | Files | Script |
 |---------|-------|--------|
 | **frontend** / **frontend-dev** | `frontend/Dockerfile`, `frontend/package-lock.json` | `scripts/hash-docker-image.sh frontend` |
+| **playwright-runner** | `frontend/Dockerfile.playwright`, `frontend/package-lock.json` | `scripts/hash-docker-image.sh playwright` |
 | **backend** / **backend-dev** | `backend/Dockerfile`, `poetry.lock` | `scripts/hash-docker-image.sh backend` |
 | **nginx** | `nginx/Dockerfile`, `nginx/entrypoint.sh`, `nginx/default.template.conf` | `scripts/hash-docker-image.sh nginx` |
 
@@ -305,8 +307,9 @@ just docker::release::push
 
 Two workflows use hash tagging:
 
-- **`build-docker-images.yml`** — Triggers on push to `main` when Dockerfiles or lock files change. Builds and pushes hash-tagged images.
-- **`playwright.yml`** — Pulls images by hash before running tests. Falls back to building if no image matches. Test jobs start the image and test-DB pulls (`just ci::prefetch-start`) right after the registry login, while Python, Node and Playwright install, and join them with `just ci::prefetch-wait images|db`. They skip the buildx builder; a fallback rebuild boots one with `just ci::buildx-builder`.
+- **`build-docker-images.yml`** — Triggers on push to `main` when Dockerfiles or lock files change. Builds and pushes hash-tagged images (`just docker::all-push`, which also pushes `playwright-runner`).
+- **`playwright.yml`** — Pulls images by hash before running tests. A missing or stale `frontend-dev`, `backend-dev` or `playwright-runner` image (no tag for the current hash, e.g. on a PR that changes `package-lock.json`) is rebuilt in the job. Test jobs start the image and test-DB pulls (`just ci::prefetch-start`) right after the registry login and join them with `just ci::prefetch-wait images|db`. They skip the buildx builder; a fallback rebuild boots one with `just ci::buildx-builder`.
+- Playwright and backend test jobs set up no Python, Poetry, Node or browsers on the runner. The host helpers (`scripts/slots.py`, `scripts/compose.py`) are stdlib-only and run on the runner's `python3` (`DF_JUST_PYTHON=python3`). With `DF_PW_CONTAINER=1`, `just docker::all-pull` also pulls `playwright-runner` and `just test::pw::run` runs Playwright inside it (`docker run --network host`, the checkout's `frontend/` mounted at the same path, `frontend/node_modules` linked to the image's `/app/node_modules`). `frontend/Dockerfile.playwright` is the official Playwright image pinned to the `@playwright/test` version in `frontend/package.json` plus `npm ci`, so tests use Playwright's bundled `chromium-headless-shell` (glibc; the Alpine `frontend-dev` image can only run the full system Chromium, which made the suite 1.1-2.9x slower). Bump its `FROM` tag together with `@playwright/test`. Local runs are unchanged. If the cached test DB is missing, `just ci::venv` installs Poetry and the venv for the host-side `db::populate::fresh`.
 
 ### Build Timing
 

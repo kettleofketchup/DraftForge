@@ -7,7 +7,6 @@
  */
 
 import {
-  chromium,
   expect,
   test,
   type Browser,
@@ -16,6 +15,7 @@ import {
 } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
 import { API_URL, BASE_URL } from '../../fixtures/base-url';
+import { launchChromium } from '../../fixtures/browser';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
 /**
@@ -104,8 +104,8 @@ test.describe('@cicd HeroDraft Timeout Auto-Random Pick', () => {
       ],
     };
 
-    browserA = await chromium.launch(browserOptions);
-    browserB = await chromium.launch(browserOptions);
+    browserA = await launchChromium(browserOptions);
+    browserB = await launchChromium(browserOptions);
 
     const windowWidth = 960;
     const windowHeight = 800;
