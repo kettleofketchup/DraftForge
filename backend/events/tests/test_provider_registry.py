@@ -117,11 +117,6 @@ class RankFlowGuardTest(SimpleTestCase):
                 "rank_medal_select",
                 {"medal": "Crusader 3"},
             ),
-            (
-                handlers.handle_previous_rank_submit,
-                "previous_rank_submit",
-                {"medal": "m", "date_text": "d"},
-            ),
             (handlers.handle_battle_cup_submit, "battle_cup_submit", {"tier": "1"}),
             (handlers.handle_set_position, "set_position", {"position": 1}),
             (handlers.handle_save_positions, "save_positions", {"positions": [1]}),

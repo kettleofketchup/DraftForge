@@ -1,5 +1,4 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
-import { toGameType } from '~/components/game/constants';
 import { TeamTable } from '~/components/team/teamTable/teamTable';
 import type { DraftRoundType, TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
@@ -44,10 +43,7 @@ export const CurrentTeamView: React.FC<CurrentTeamViewProps> = () => {
 
   return (
     <Suspense fallback={<Spinner />}>
-      <TeamTable
-        team={currentTeam}
-        gameType={toGameType(tournament?.game_type)}
-      />
+      <TeamTable team={currentTeam} />
     </Suspense>
   );
 };

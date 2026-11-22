@@ -16,7 +16,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { GameTypeValue } from '~/components/game/constants';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
 
@@ -88,8 +87,6 @@ interface Props {
   organizationId?: number;
   /** Forwarded to UserCard. */
   leagueId?: number;
-  /** Forwarded to UserCard. */
-  gameType?: GameTypeValue;
 }
 
 export function VirtualizedUserGrid({
@@ -101,7 +98,6 @@ export function VirtualizedUserGrid({
   deleteButtonType,
   organizationId,
   leagueId,
-  gameType,
 }: Props) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const [columns, setColumns] = useState(() => cols.base);
@@ -206,7 +202,6 @@ export function VirtualizedUserGrid({
                 compact={compact}
                 organizationId={organizationId}
                 leagueId={leagueId}
-                gameType={gameType}
               />
             ))}
           </div>

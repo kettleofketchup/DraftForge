@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, render } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { toGameType } from '~/components/game/constants';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType } from '~/components/user/types';
@@ -14,6 +15,7 @@ import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import type { UserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 import { hasErrors } from './hasErrors';
 
 const captured = vi.hoisted(
@@ -283,6 +285,8 @@ describe('hasErrors per-game MMR issue', () => {
     useLeagueStore.setState({ currentLeague: null });
   });
 
+  afterEach(resetGameType);
+
   function seed(mmrs: Record<number, number>, game_type: number) {
     useUserCacheStore.setState({
       entities: {
@@ -298,6 +302,7 @@ describe('hasErrors per-game MMR issue', () => {
         users: [10],
       },
     } as never);
+    withGameType(toGameType(game_type));
   }
 
   it('Deadlock tournament flags a Dota-only member as No Deadlock MMR', () => {

@@ -1,5 +1,4 @@
 import { memo } from 'react';
-import type { GameTypeValue } from '~/components/game/constants';
 import { RecentForm } from '~/components/league-stats/RecentForm';
 import { MIN_STREAK, StreakBadge } from '~/components/league-stats/StreakBadge';
 import { PlayerPopoverTrigger as PlayerPopover } from '~/components/player/PlayerPopoverTrigger';
@@ -51,16 +50,10 @@ interface UserStripLeagueStatsProps {
   leaguePk: number;
   player: UserType | UserEntry;
   breakpoint?: StatsBreakpoint;
-  gameType?: GameTypeValue;
 }
 
 export const UserStripLeagueStats = memo(
-  ({
-    leaguePk,
-    player,
-    breakpoint = 'default',
-    gameType,
-  }: UserStripLeagueStatsProps) => {
+  ({ leaguePk, player, breakpoint = 'default' }: UserStripLeagueStatsProps) => {
     const { data } = usePlayerLeagueSummary(leaguePk, player.pk ?? -1);
 
     const summary = data?.summary;
@@ -79,7 +72,6 @@ export const UserStripLeagueStats = memo(
         <PlayerPopover
           player={player as UserType}
           statsLeagueId={leaguePk}
-          gameType={gameType}
           label={label}
           className="flex flex-col justify-center gap-0.5"
         >

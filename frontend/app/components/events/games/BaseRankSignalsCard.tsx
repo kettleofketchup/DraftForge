@@ -14,9 +14,8 @@ interface BaseRankSignalsCardProps {
 }
 
 /**
- * Universal "Rank Signals" card shown for every game. Always renders the prior
- * org MMR row (`signup.org_user_mmr`, resolved server-side for the event's
- * game). Game-specific cards compose this base and add rows via `children`.
+ * "Rank Signals" card for every game: the prior org MMR row (resolved
+ * server-side for the event's game), then game-specific rows via `children`.
  */
 export function BaseRankSignalsCard({
   signup,

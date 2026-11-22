@@ -17,7 +17,7 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.serializers import _users_remaining_pks
+from app.serializers import users_remaining_pks
 from app.tournament_state import tournament_state_queryset
 from bracket.models import BracketSlot, TournamentBracket
 from draft.models import Draft, DraftEvent, DraftOptions, DraftTeam, HeroDraft
@@ -387,7 +387,7 @@ class InitDraftEndpointTests(TestCase):
         remaining = set(draft.users_remaining.values_list("pk", flat=True))
         self.assertEqual(remaining, {self.p1.pk, self.p2.pk, p4.pk})
         state = tournament_state_queryset(fresh=True).get(pk=self.tournament.pk)
-        self.assertNotIn(p3.pk, _users_remaining_pks(state.draft))
+        self.assertNotIn(p3.pk, users_remaining_pks(state.draft))
         first = draft.draft_rounds.order_by("pick_number").first()
         with self.assertRaises(ValueError):
             first.pick_player(p3)

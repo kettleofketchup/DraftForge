@@ -3,7 +3,6 @@ import { Calendar, Link as LinkIcon, Trophy } from 'lucide-react';
 import { useState } from 'react';
 
 import { DotaMatchStatsModal } from '~/components/bracket/modals/DotaMatchStatsModal';
-import { GAME_TYPE } from '~/components/game/constants';
 import { PlayerPopover } from '~/components/player/PlayerPopover';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -63,10 +62,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
               )}
             >
               {match.radiant_captain ? (
-                <PlayerPopover
-                  player={match.radiant_captain}
-                  gameType={GAME_TYPE.DOTA2}
-                >
+                <PlayerPopover player={match.radiant_captain}>
                   <div className="flex items-center gap-2 cursor-pointer">
                     <UserAvatar user={match.radiant_captain} size="lg" />
                     <div>
@@ -113,10 +109,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
               )}
             >
               {match.dire_captain ? (
-                <PlayerPopover
-                  player={match.dire_captain}
-                  gameType={GAME_TYPE.DOTA2}
-                >
+                <PlayerPopover player={match.dire_captain}>
                   <div className="flex items-center gap-2 cursor-pointer">
                     <div className="text-right">
                       <p className="font-medium text-dire">

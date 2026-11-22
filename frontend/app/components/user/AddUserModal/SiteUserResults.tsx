@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { SearchUserResult } from '~/components/api/api';
-import { GAME_TYPE } from '~/components/game/constants';
 import { Badge } from '~/components/ui/badge';
 import { ConfirmButton } from '~/components/ui/buttons';
 import { ScrollArea } from '~/components/ui/scroll-area';
@@ -134,7 +133,6 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
               <UserStrip
                 user={result}
                 data-testid={`site-user-result-${result.username}`}
-                gameType={GAME_TYPE.DOTA2}
                 compact
                 showPositions={false}
                 contextSlot={

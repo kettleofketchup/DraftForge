@@ -1,5 +1,4 @@
 import React, { useCallback, useRef } from 'react';
-import type { GameTypeValue } from '~/components/game/constants';
 import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
 import type { UserType } from '~/components/user/types';
 import { cn } from '~/lib/utils';
@@ -10,8 +9,6 @@ interface PlayerPopoverTriggerProps {
   player: UserType;
   children: React.ReactNode;
   statsLeagueId?: number | null;
-  /** Context game, forwarded to the hover card and the player modal. */
-  gameType?: GameTypeValue;
   /** Accessible name; defaults to "View profile for <name>". */
   label?: string;
   className?: string;
@@ -21,7 +18,6 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   player,
   children,
   statsLeagueId,
-  gameType,
   label,
   className,
 }) => {
@@ -35,13 +31,12 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   const currentLeague = useLeagueStore((s) => s.currentLeague);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const playerName = player.nickname || player.username || 'Unknown';
-  const game = gameType != null ? { gameType } : {};
 
   const handleMouseEnter = useCallback(() => {
     if (triggerRef.current) {
-      showPlayerPopover(player, triggerRef.current, { statsLeagueId, ...game });
+      showPlayerPopover(player, triggerRef.current, { statsLeagueId });
     }
-  }, [player, showPlayerPopover, statsLeagueId, gameType]);
+  }, [player, showPlayerPopover, statsLeagueId]);
 
   const handleMouseLeave = useCallback(() => {
     scheduleHidePopover();
@@ -55,17 +50,9 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
         organizationId: currentOrg?.pk,
         leagueId: currentLeague?.pk,
         statsLeagueId,
-        ...game,
       });
     },
-    [
-      player,
-      openPlayerModal,
-      currentOrg?.pk,
-      currentLeague?.pk,
-      statsLeagueId,
-      gameType,
-    ],
+    [player, openPlayerModal, currentOrg?.pk, currentLeague?.pk, statsLeagueId],
   );
 
   const handleKeyDown = useCallback(
@@ -76,7 +63,6 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
           organizationId: currentOrg?.pk,
           leagueId: currentLeague?.pk,
           statsLeagueId,
-          ...game,
         });
       } else if (e.key === 'Escape') {
         hidePopover();
@@ -89,7 +75,6 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
       currentOrg?.pk,
       currentLeague?.pk,
       statsLeagueId,
-      gameType,
     ],
   );
 

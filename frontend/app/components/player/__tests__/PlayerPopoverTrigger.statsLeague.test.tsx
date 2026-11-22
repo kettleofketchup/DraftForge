@@ -87,24 +87,3 @@ describe('PlayerPopoverTrigger statsLeagueId', () => {
     expect(ctx.statsLeagueId).toBeUndefined();
   });
 });
-
-describe('PlayerPopoverTrigger gameType', () => {
-  it('passes gameType to the hover card and the modal', () => {
-    render(
-      <PlayerPopoverTrigger player={player} gameType={2}>
-        x
-      </PlayerPopoverTrigger>,
-    );
-    fireEvent.mouseEnter(trigger());
-    expect(actions.showPlayerPopover).toHaveBeenCalledWith(
-      player,
-      trigger(),
-      expect.objectContaining({ gameType: 2 }),
-    );
-    fireEvent.click(trigger());
-    expect(actions.openPlayerModal).toHaveBeenCalledWith(
-      player,
-      expect.objectContaining({ gameType: 2 }),
-    );
-  });
-});

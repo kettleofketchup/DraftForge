@@ -3,7 +3,6 @@ import { Plus, Upload } from 'lucide-react';
 import { memo, useCallback, useMemo, useState } from 'react';
 import type { AddMemberPayload } from '~/components/api/api';
 import { addTournamentMember } from '~/components/api/api';
-import { toGameType } from '~/components/game/constants';
 import type { TournamentType } from '~/components/tournament/types';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { UserList } from '~/components/user';
@@ -34,7 +33,6 @@ export const PlayersTab: React.FC = memo(() => {
   // Org/league context: scopes each UserCard's edit (editable MMR) and keys
   // the scoped half of the cache entries seeded below.
   const { organizationId, leagueId } = tournamentEditContext(tournament);
-  const gameType = toGameType(tournament?.game_type);
 
   const rawUsers = useMemo(() => tournament?.users ?? [], [tournament?.users]);
   const tournamentUsers = useTournamentUsers(rawUsers, {
@@ -132,7 +130,6 @@ export const PlayersTab: React.FC = memo(() => {
           emptyMessage="No players in this tournament"
           organizationId={organizationId}
           leagueId={leagueId}
-          gameType={gameType}
         />
       </div>
 
@@ -143,7 +140,6 @@ export const PlayersTab: React.FC = memo(() => {
           entityContext={{
             orgId: currentOrg?.pk,
             tournamentId: tournament.pk,
-            gameType,
           }}
           onComplete={() => {
             // Invalidate React Query cache so useTournament refetches

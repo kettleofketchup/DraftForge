@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { GAME_TYPE } from '~/components/game/constants';
 import type { UserType } from '~/components/user/types';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 import type { PlayerPopoverContext } from '../shared-popover-context';
 import { SharedPopoverRenderer } from '../shared-popover-renderer';
 
@@ -49,20 +51,21 @@ vi.mock('~/components/team/TeamPopoverContent', () => ({
 
 afterEach(() => {
   popover.context = undefined;
+  resetGameType();
   vi.clearAllMocks();
 });
 
 describe('player hover card org MMR line', () => {
-  it('labels the MMR with the context game', () => {
+  it('labels the MMR with the page game', () => {
     popover.player = { pk: 42, username: 'a', mmr: 2500 } as UserType;
-    popover.context = { gameType: 2 };
+    withGameType(GAME_TYPE.DEADLOCK);
     render(<SharedPopoverRenderer />);
     expect(screen.getByTestId('player-popover-mmr').textContent).toBe(
       'DL 2,500',
     );
   });
 
-  it('falls back to the payload game when the context has none', () => {
+  it('falls back to the payload game outside any game context', () => {
     popover.player = {
       pk: 42,
       username: 'a',
@@ -72,17 +75,6 @@ describe('player hover card org MMR line', () => {
     render(<SharedPopoverRenderer />);
     expect(screen.getByTestId('player-popover-mmr').textContent).toBe(
       'D2 4,200',
-    );
-  });
-
-  it('forwards the context game to the player modal', () => {
-    popover.player = { pk: 42, username: 'a', mmr: 2500 } as UserType;
-    popover.context = { gameType: 2 };
-    render(<SharedPopoverRenderer />);
-    fireEvent.click(screen.getByRole('tooltip'));
-    expect(popover.openPlayerModal).toHaveBeenCalledWith(
-      popover.player,
-      expect.objectContaining({ gameType: 2 }),
     );
   });
 });

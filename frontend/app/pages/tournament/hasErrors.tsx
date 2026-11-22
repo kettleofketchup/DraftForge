@@ -4,7 +4,6 @@ import { useShallow } from 'zustand/react/shallow';
 import {
   GAME_LABEL,
   GAME_TYPE,
-  toGameType,
   type GameTypeValue,
 } from '~/components/game/constants';
 import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
@@ -21,6 +20,7 @@ import {
   resolveOrgUserLink,
   type EditUserScope,
 } from '~/components/user/userCard/editUserSchema';
+import { useContextGameType } from '~/hooks/useGameType';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
@@ -67,7 +67,7 @@ function hasNoPositions(positions: PositionsType | undefined): boolean {
 
 export const hasErrors = () => {
   const tournament = useUserStore((state) => state.tournament);
-  const gameType = toGameType(tournament?.game_type);
+  const gameType = useContextGameType();
   const entities = useUserCacheStore((state) => state.entities);
   const league = useLeagueStore((state) => state.currentLeague);
   // SSR-safe default closed; md+ viewports auto-expand on mount to avoid hydration mismatch.
@@ -148,7 +148,6 @@ export const hasErrors = () => {
     return issues;
   }, [
     tournament?.users,
-    tournament?.game_type,
     gameType,
     entities,
     orgId,

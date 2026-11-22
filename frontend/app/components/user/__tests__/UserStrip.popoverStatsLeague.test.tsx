@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GAME_TYPE } from '~/components/game/constants';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { UserType } from '~/components/user/types';
 import { UserStrip } from '../UserStrip';
@@ -48,15 +47,7 @@ describe('UserStrip popover statsLeagueId', () => {
   it.each([0, 1])(
     'trigger %i (avatar, name) opens the modal with statsLeagueId',
     (idx) => {
-      render(
-        wrap(
-          <UserStrip
-            gameType={GAME_TYPE.DOTA2}
-            user={user}
-            statsLeagueId={7}
-          />,
-        ),
-      );
+      render(wrap(<UserStrip user={user} statsLeagueId={7} />));
       const triggers = screen.getAllByRole('button', {
         name: 'View profile for Alice',
       });
@@ -68,17 +59,4 @@ describe('UserStrip popover statsLeagueId', () => {
       );
     },
   );
-});
-
-describe('UserStrip popover gameType', () => {
-  it('threads its gameType into the player modal', () => {
-    render(wrap(<UserStrip gameType={GAME_TYPE.DEADLOCK} user={user} />));
-    fireEvent.click(
-      screen.getAllByRole('button', { name: 'View profile for Alice' })[0],
-    );
-    expect(actions.openPlayerModal).toHaveBeenCalledWith(
-      user,
-      expect.objectContaining({ gameType: GAME_TYPE.DEADLOCK }),
-    );
-  });
 });

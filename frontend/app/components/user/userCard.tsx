@@ -27,6 +27,7 @@ import { DisplayName } from '~/components/user/avatar';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useGameType } from '~/hooks/useGameType';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
@@ -60,8 +61,6 @@ interface Props {
   leagueId?: number;
   /** Optional organization ID for context-specific stats in mini profile */
   organizationId?: number;
-  /** Context game (tournament scope); undefined = org scope, every game. */
-  gameType?: GameTypeValue;
 }
 
 export const UserCard: React.FC<Props> = memo(
@@ -73,8 +72,9 @@ export const UserCard: React.FC<Props> = memo(
     animationIndex = 0,
     leagueId,
     organizationId,
-    gameType,
   }) => {
+    // The page's game only; null (org and global pages) shows every game.
+    const gameType = useGameType() ?? undefined;
     const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
     // gameType-aware positions over the list-populated entity adapter; fall back
@@ -167,7 +167,6 @@ export const UserCard: React.FC<Props> = memo(
       openPlayerModal(user, {
         organizationId: currentOrg?.pk,
         leagueId,
-        ...(gameType != null ? { gameType } : {}),
       });
     };
 
@@ -343,10 +342,8 @@ export const UserCard: React.FC<Props> = memo(
                   </ItemContent>
                 </Item>
               )}
-              {/* MMR row — only meaningful inside an org or league context.
-                  On the global /users grid neither id is provided, so the
-                  whole row is hidden (there's no "base" MMR concept).
-                  flex-wrap so the shown MMR tiles share the full width. */}
+              {/* Org/league context only; the global /users grid has no MMR.
+                  flex-wrap lets the tiles share the full width. */}
               {(organizationId || leagueId) && (
                 <div className="flex flex-wrap gap-1 w-full">
                   {organizationId &&

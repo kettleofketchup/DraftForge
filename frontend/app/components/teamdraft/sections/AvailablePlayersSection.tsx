@@ -1,11 +1,7 @@
 import { Search } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import {
-  GAME_TYPE,
-  type GameTypeValue,
-  toGameType,
-} from '~/components/game/constants';
+import { GAME_TYPE } from '~/components/game/constants';
 import type { TeamType } from '~/components/tournament/types';
 import { Button } from '~/components/ui/button';
 import { brandGlowLift, brandGradient } from '~/components/ui/buttons/styles';
@@ -79,8 +75,6 @@ const selectCurDraftRoundChoice = (
 const selectOrganizationPk = (
   state: ReturnType<typeof useUserStore.getState>,
 ) => state.tournament?.organization_pk;
-const selectGameType = (state: ReturnType<typeof useUserStore.getState>) =>
-  toGameType(state.tournament?.game_type);
 const selectLeaguePk = (state: ReturnType<typeof useUserStore.getState>) =>
   state.tournament?.league_pk ?? null;
 
@@ -138,7 +132,6 @@ const AvailablePlayerStrip = memo(
     isShuffle,
     projected,
     organizationId,
-    gameType,
     statsLeagueId,
   }: {
     user: UserType;
@@ -149,13 +142,11 @@ const AvailablePlayerStrip = memo(
       isDoublePick: boolean;
     } | null;
     organizationId?: number;
-    gameType: GameTypeValue;
     statsLeagueId: number | null;
   }) => (
     <UserStrip
       user={user}
       organizationId={organizationId}
-      gameType={gameType}
       statsLeagueId={statsLeagueId}
       className={
         projected?.isDoublePick
@@ -182,7 +173,6 @@ export const AvailablePlayersSection = memo(() => {
   const curDraftRoundChoice = useUserStore(selectCurDraftRoundChoice);
   const organizationPk = useUserStore(selectOrganizationPk);
   const leaguePk = useUserStore(selectLeaguePk);
-  const gameType = useUserStore(selectGameType);
   const { data: leagueSummaries } = useLeaguePlayerSummaries(leaguePk);
 
   // Subscribe ONCE to a pk→positions record off the list-populated entity
@@ -528,7 +518,6 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
-                gameType={gameType}
                 statsLeagueId={leaguePk}
               />
             ))}
@@ -543,7 +532,6 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
-                gameType={gameType}
                 statsLeagueId={leaguePk}
               />
             ))}
@@ -558,7 +546,6 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
-                gameType={gameType}
                 statsLeagueId={leaguePk}
               />
             ))}
@@ -577,7 +564,6 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
-                gameType={gameType}
                 statsLeagueId={leaguePk}
               />
             ))}
@@ -592,7 +578,6 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
-                gameType={gameType}
                 statsLeagueId={leaguePk}
               />
             ))}
@@ -610,7 +595,6 @@ export const AvailablePlayersSection = memo(() => {
               isShuffle={isShuffle}
               projected={getProjectedData(user.mmr || 0)}
               organizationId={organizationPk ?? undefined}
-              gameType={gameType}
               statsLeagueId={leaguePk}
             />
           ))}

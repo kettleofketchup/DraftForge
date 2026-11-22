@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { EventSignupType } from '~/components/events/schemas';
 import { GAME_TYPE } from '~/components/game/constants';
-import { useGameTypeStore } from '~/store/gameTypeStore';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 import { RankSignalsCard } from './RankSignalsCard';
 
 function signup(over: Partial<EventSignupType> = {}): EventSignupType {
@@ -20,27 +20,25 @@ function signup(over: Partial<EventSignupType> = {}): EventSignupType {
   } as EventSignupType;
 }
 
-beforeEach(() => {
-  useGameTypeStore.setState({ currentGameType: null } as never);
-});
+afterEach(resetGameType);
 
-describe('RankSignalsCard gameType prop', () => {
-  it('Dota prop renders the Dota card even with no ambient game', () => {
-    render(<RankSignalsCard signup={signup()} gameType={GAME_TYPE.DOTA2} />);
+describe('RankSignalsCard reads the page game', () => {
+  it('renders the Dota card outside any game context', () => {
+    render(<RankSignalsCard signup={signup()} />);
     expect(screen.getByTestId('rank-signals-self-report')).toBeTruthy();
     expect(screen.getByTestId('rank-signals-prior-mmr').textContent).toContain(
       'Prior Dota 2 org MMR',
     );
   });
 
-  it('Deadlock prop renders the Deadlock card with the self-reported rank', () => {
+  it('renders the Deadlock card with the self-reported rank on a Deadlock page', () => {
+    withGameType(GAME_TYPE.DEADLOCK);
     render(
       <RankSignalsCard
         signup={signup({
           self_reported_rank: 'Archon 3',
           self_reported_rank_date: '2026-10-01',
         })}
-        gameType={GAME_TYPE.DEADLOCK}
       />,
     );
     expect(screen.queryByTestId('rank-signals-self-report')).toBeNull();
@@ -53,15 +51,10 @@ describe('RankSignalsCard gameType prop', () => {
   });
 
   it('Deadlock card shows a dash when no rank is reported', () => {
-    render(<RankSignalsCard signup={signup()} gameType={GAME_TYPE.DEADLOCK} />);
+    withGameType(GAME_TYPE.DEADLOCK);
+    render(<RankSignalsCard signup={signup()} />);
     expect(
       screen.getByTestId('rank-signals-deadlock-rank').textContent,
     ).toContain('—');
-  });
-
-  it('ambient Dota game does not override a Deadlock prop', () => {
-    useGameTypeStore.setState({ currentGameType: GAME_TYPE.DOTA2 } as never);
-    render(<RankSignalsCard signup={signup()} gameType={GAME_TYPE.DEADLOCK} />);
-    expect(screen.getByTestId('rank-signals-deadlock-rank')).toBeTruthy();
   });
 });

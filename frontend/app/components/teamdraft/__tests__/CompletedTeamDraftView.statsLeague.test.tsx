@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GAME_TYPE } from '~/components/game/constants';
 import type { TeamType } from '~/components/tournament/types';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { UserType } from '~/components/user/types';
@@ -112,7 +111,6 @@ describe('CompletedTeamDraftView league stats', () => {
     const fetchSpy = stubFetch();
     wrap(
       <CompletedTeamDraftView
-        gameType={GAME_TYPE.DOTA2}
         teams={[team]}
         organizationId={1}
         leaguePk={10}
@@ -128,7 +126,6 @@ describe('CompletedTeamDraftView league stats', () => {
     const fetchSpy = stubFetch();
     wrap(
       <CompletedTeamDraftView
-        gameType={GAME_TYPE.DOTA2}
         teams={[team]}
         organizationId={1}
         leaguePk={null}
@@ -143,7 +140,6 @@ describe('CompletedTeamDraftView league stats', () => {
     stubFetch();
     wrap(
       <CompletedTeamDraftView
-        gameType={GAME_TYPE.DOTA2}
         teams={[team]}
         organizationId={1}
         leaguePk={null}
@@ -156,15 +152,7 @@ describe('CompletedTeamDraftView league stats', () => {
 
   it('TeamCard renders the column directly (TeamsTab path)', async () => {
     stubFetch();
-    wrap(
-      <TeamCard
-        gameType={GAME_TYPE.DOTA2}
-        team={team}
-        rank={1}
-        organizationId={1}
-        leaguePk={10}
-      />,
-    );
+    wrap(<TeamCard team={team} rank={1} organizationId={1} leaguePk={10} />);
     expect(await screen.findByTestId('strip-league-stats')).toBeTruthy();
   });
 });

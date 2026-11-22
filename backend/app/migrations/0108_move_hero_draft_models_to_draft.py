@@ -1,10 +1,9 @@
+import structlog
 from django.apps.registry import Apps
 from django.db import migrations
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 
-from telemetry.logging import get_logger
-
-log = get_logger(__name__)
+log = structlog.get_logger(__name__)
 
 HERO_MODELS = ("herodraft", "draftteam", "herodraftround", "herodraftevent")
 

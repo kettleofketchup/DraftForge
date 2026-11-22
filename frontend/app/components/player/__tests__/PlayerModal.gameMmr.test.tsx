@@ -20,6 +20,7 @@ import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import type { UserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 import { PlayerPopoverTrigger } from '../PlayerPopoverTrigger';
 
 const api = vi.hoisted(() => ({
@@ -64,15 +65,14 @@ function seedEntry(mmrs: Partial<Record<GameTypeValue, number>>) {
   } as never);
 }
 
-function openFromTrigger(gameType?: GameTypeValue) {
+function openFromTrigger(gameType: GameTypeValue | null = null) {
+  withGameType(gameType);
   render(
     <MemoryRouter>
       <QueryClientProvider client={new QueryClient()}>
         <TooltipProvider>
           <SharedPopoverProvider>
-            <PlayerPopoverTrigger player={player} gameType={gameType}>
-              open
-            </PlayerPopoverTrigger>
+            <PlayerPopoverTrigger player={player}>open</PlayerPopoverTrigger>
             <SharedPopoverRenderer />
           </SharedPopoverProvider>
         </TooltipProvider>
@@ -106,6 +106,7 @@ afterEach(async () => {
   cleanup();
   await new Promise((resolve) => setTimeout(resolve, 0));
   useOrgStore.setState({ currentOrg: null });
+  resetGameType();
 });
 
 describe('PlayerModal per-game org MMR', () => {

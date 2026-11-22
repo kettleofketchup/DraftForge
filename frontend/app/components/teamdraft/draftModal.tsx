@@ -16,7 +16,6 @@ import React, {
 } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import { toGameType } from '~/components/game/constants';
 import type { TournamentType } from '~/components/tournament/types';
 import { Button } from '~/components/ui/button';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
@@ -595,7 +594,6 @@ export const DraftModal: React.FC<DraftModalParams> = ({
       return (
         <CompletedTeamDraftView
           teams={tournament?.teams || []}
-          gameType={toGameType(tournament?.game_type)}
           organizationId={tournament?.organization_pk ?? undefined}
           leaguePk={tournament?.league_pk ?? null}
           rounds={draft?.draft_rounds ?? []}

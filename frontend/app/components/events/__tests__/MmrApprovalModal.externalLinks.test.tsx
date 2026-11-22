@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { GAME_TYPE, type GameTypeValue } from '~/components/game/constants';
 
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 import { MmrApprovalModal } from '../MmrApprovalModal';
 import type { EventSignupType } from '../schemas';
 
@@ -21,10 +22,10 @@ const signup = {
 } as unknown as EventSignupType;
 
 function renderModal(gameType: GameTypeValue) {
+  withGameType(gameType);
   render(
     <MmrApprovalModal
       signup={signup}
-      gameType={gameType}
       open
       onOpenChange={vi.fn()}
       onApprove={vi.fn()}
@@ -35,6 +36,7 @@ function renderModal(gameType: GameTypeValue) {
 describe('MmrApprovalModal external profile links', () => {
   afterEach(() => {
     cleanup();
+    resetGameType();
   });
 
   it('shows the Dotabuff link on a Dota 2 event', () => {

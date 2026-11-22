@@ -6,11 +6,7 @@ import React, {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  GAME_SHORT_LABEL,
-  toGameType,
-  type GameTypeValue,
-} from '~/components/game/constants';
+import { GAME_SHORT_LABEL, toGameType } from '~/components/game/constants';
 import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
 import { PlayerModal } from '~/components/player/PlayerModal';
 import { TeamModal } from '~/components/team/TeamModal';
@@ -18,6 +14,7 @@ import { TeamPopoverContent } from '~/components/team/TeamPopoverContent';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useGameType } from '~/hooks/useGameType';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
@@ -27,8 +24,8 @@ import { useSharedPopover } from './shared-popover-context';
 const PlayerPopoverContent: React.FC<{
   player: UserType;
   statsLeagueId?: number | null;
-  gameType?: GameTypeValue;
-}> = ({ player, statsLeagueId, gameType }) => {
+}> = ({ player, statsLeagueId }) => {
+  const gameType = useGameType();
   const playerName = player.nickname || player.username || 'Unknown';
   const mmrGame = gameType ?? toGameType(player.mmr_game_type);
 
@@ -152,9 +149,6 @@ export const SharedPopoverRenderer: React.FC = () => {
         organizationId: currentOrg?.pk,
         leagueId: currentLeague?.pk,
         statsLeagueId: state.context?.statsLeagueId,
-        ...(state.context?.gameType != null
-          ? { gameType: state.context.gameType }
-          : {}),
       });
     } else if (state.type === 'team' && state.team) {
       openTeamModal(state.team);
@@ -204,7 +198,6 @@ export const SharedPopoverRenderer: React.FC = () => {
         <PlayerPopoverContent
           player={state.player}
           statsLeagueId={state.context?.statsLeagueId}
-          gameType={state.context?.gameType}
         />
       )}
       {state.type === 'team' && state.team && (

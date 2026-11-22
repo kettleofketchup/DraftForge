@@ -2,12 +2,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GAME_TYPE } from '~/components/game/constants';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { UserType } from '~/components/user/types';
 import type { UserEntry } from '~/store/userCacheTypes';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 import { UserStrip, userStripPropsAreEqual } from '../UserStrip';
+
+afterEach(resetGameType);
 
 vi.mock('~/components/ui/shared-popover-context', () => ({
   useSharedPopoverActions: () => ({
@@ -54,17 +57,10 @@ function orgBadge(): HTMLElement {
   return badge;
 }
 
-describe('UserStrip gameType', () => {
+describe('UserStrip page game', () => {
   it('Deadlock shows the DL prefix and the Deadlock value', () => {
-    render(
-      wrap(
-        <UserStrip
-          user={entry}
-          organizationId={5}
-          gameType={GAME_TYPE.DEADLOCK}
-        />,
-      ),
-    );
+    withGameType(GAME_TYPE.DEADLOCK);
+    render(wrap(<UserStrip user={entry} organizationId={5} />));
     const text = orgBadge().textContent ?? '';
     expect(text).toContain('DL:');
     expect(text).toContain('2,500');
@@ -72,36 +68,23 @@ describe('UserStrip gameType', () => {
   });
 
   it('Dota keeps the B: prefix and shows the Dota value', () => {
-    render(
-      wrap(
-        <UserStrip
-          user={entry}
-          organizationId={5}
-          gameType={GAME_TYPE.DOTA2}
-        />,
-      ),
-    );
+    withGameType(GAME_TYPE.DOTA2);
+    render(wrap(<UserStrip user={entry} organizationId={5} />));
     const text = orgBadge().textContent ?? '';
     expect(text).toContain('B:');
     expect(text).toContain('3,000');
   });
 
-  it('server-resolved UserType mmr is labelled with the passed game', () => {
+  it('server-resolved UserType mmr is labelled with the page game', () => {
+    withGameType(GAME_TYPE.DEADLOCK);
     const user = { pk: 1, username: 'a', mmr: 1800 } as UserType;
-    render(wrap(<UserStrip user={user} gameType={GAME_TYPE.DEADLOCK} />));
+    render(wrap(<UserStrip user={user} />));
     expect(orgBadge().textContent).toContain('DL:');
   });
 
   it('tooltip names the game org MMR', async () => {
-    render(
-      wrap(
-        <UserStrip
-          user={entry}
-          organizationId={5}
-          gameType={GAME_TYPE.DEADLOCK}
-        />,
-      ),
-    );
+    withGameType(GAME_TYPE.DEADLOCK);
+    render(wrap(<UserStrip user={entry} organizationId={5} />));
     await act(async () => {
       fireEvent.focus(orgBadge());
     });
@@ -116,16 +99,8 @@ describe('UserStrip gameType', () => {
       ...entry,
       leagueData: { 9: { id: 1, mmr: 2000, _fetchedAt: 0 } },
     };
-    render(
-      wrap(
-        <UserStrip
-          user={user}
-          organizationId={5}
-          leagueId={9}
-          gameType={GAME_TYPE.DEADLOCK}
-        />,
-      ),
-    );
+    withGameType(GAME_TYPE.DEADLOCK);
+    render(wrap(<UserStrip user={user} organizationId={5} leagueId={9} />));
     expect(screen.queryByText('L:')).toBeNull();
     expect(orgBadge().textContent).toContain('DL:');
   });
@@ -135,28 +110,50 @@ describe('UserStrip gameType', () => {
       ...entry,
       leagueData: { 9: { id: 1, mmr: 2000, _fetchedAt: 0 } },
     };
-    render(
-      wrap(
-        <UserStrip
-          user={user}
-          organizationId={5}
-          leagueId={9}
-          gameType={GAME_TYPE.DOTA2}
-        />,
-      ),
-    );
+    withGameType(GAME_TYPE.DOTA2);
+    render(wrap(<UserStrip user={user} organizationId={5} leagueId={9} />));
     expect(screen.getByText('L:').parentElement?.textContent).toContain(
       '2,000',
     );
   });
 
   it('Deadlock hides a raw-payload league_mmr too', () => {
+    withGameType(GAME_TYPE.DEADLOCK);
     const user = { pk: 1, username: 'a', league_mmr: 2000 } as UserType;
-    render(wrap(<UserStrip user={user} gameType={GAME_TYPE.DEADLOCK} />));
+    render(wrap(<UserStrip user={user} />));
     expect(screen.queryByText('L:')).toBeNull();
   });
 
-  it('comparator returns false when gameType changes', () => {
+  it('falls back to Dota outside any game context', () => {
+    render(wrap(<UserStrip user={entry} organizationId={5} />));
+    const text = orgBadge().textContent ?? '';
+    expect(text).toContain('B:');
+    expect(text).toContain('3,000');
+  });
+
+  it('an explicit gameType overrides the page game', () => {
+    withGameType(GAME_TYPE.DOTA2);
+    render(
+      wrap(
+        <UserStrip
+          user={entry}
+          organizationId={5}
+          gameType={GAME_TYPE.DEADLOCK}
+        />,
+      ),
+    );
+    expect(orgBadge().textContent).toContain('DL:');
+  });
+
+  it('follows the page game when it changes', () => {
+    withGameType(GAME_TYPE.DEADLOCK);
+    render(wrap(<UserStrip user={entry} organizationId={5} />));
+    expect(orgBadge().textContent).toContain('DL:');
+    act(() => withGameType(GAME_TYPE.DOTA2));
+    expect(orgBadge().textContent).toContain('B:');
+  });
+
+  it('comparator returns false when the gameType override changes', () => {
     expect(
       userStripPropsAreEqual(
         { user: entry, gameType: GAME_TYPE.DOTA2 },
