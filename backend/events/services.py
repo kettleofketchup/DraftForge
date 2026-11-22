@@ -394,6 +394,7 @@ def create_tentative_signup(
       - If existing CANCELLED/REJECTED row -> delete it, create fresh TENTATIVE.
       - Records one ledger entry and dispatches notify_signup_changed once.
     """
+    event = _reread_event(event)
     ensure_self_serve(event, user, intent=Commitment.MAYBE)
 
     existing = (
@@ -440,9 +441,10 @@ def decline_signup(
     a user who never signed up still appears in the Declined list.
     Raises ValueError if the user has already declined.
     """
+    event = _reread_event(event)
     existing = (
         EventSignup.objects.nocache()
-        .select_related("event", "user__base_profile")
+        .select_related("user__base_profile")
         .filter(event=event, user=user)
         .first()
     )
@@ -463,15 +465,15 @@ def decline_signup(
     prior_status = _withdraw(existing, by_member=_by_member(actor))
     entry = _record_leaf(
         existing,
-        event=existing.event,
+        event=event,
         actor=actor,
         action=SignupAction.DECLINED,
         before=before,
     )
-    if prior_status in seat_holding_statuses(existing.event):
-        _promote_from_waitlist(existing.event, cause=entry)
-    invalidate_after_commit(existing, existing.event)
-    transaction.on_commit(lambda: notify_signup_changed(existing.event))
+    if prior_status in seat_holding_statuses(event):
+        _promote_from_waitlist(event, cause=entry)
+    invalidate_after_commit(existing, event)
+    transaction.on_commit(lambda: notify_signup_changed(event))
     return existing
 
 
@@ -649,6 +651,11 @@ APPROVABLE_STATUSES = [
     SignupStatus.PENDING_APPROVAL,
     SignupStatus.WAITLISTED,
 ]
+
+
+def _reread_event(event: Event) -> Event:
+    # The caller's instance can come from cacheops and be stale.
+    return Event.objects.nocache().get(pk=event.pk)
 
 
 def _reread_signup(signup: EventSignup) -> None:
