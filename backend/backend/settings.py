@@ -127,7 +127,6 @@ REDIS_KEY_NAMESPACE: str = test_process_namespace() if RUNNING_TESTS else ""
 # All other DMs return a fake success. Prevents spamming real users during testing.
 TEST_DISCORD_USER_ID = os.environ.get("TEST_DISCORD_USER_ID", "243497113906970625")
 
-# Configure logging - default to INFO, allow override via LOG_LEVEL env var
 _log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=getattr(logging, _log_level, logging.INFO),
