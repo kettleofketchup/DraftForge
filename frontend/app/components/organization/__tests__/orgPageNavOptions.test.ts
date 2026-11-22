@@ -12,6 +12,7 @@ const base: OrgPageNavInput = {
   standingTabs: [],
   canUsePromotion: false,
   canViewClaims: false,
+  canReviewMmr: false,
 };
 
 const tracks = [
@@ -36,6 +37,16 @@ describe('buildOrgPageNavOptions', () => {
 
   it('omits claims for a plain member', () => {
     expect(values(base)).not.toContain('claims');
+  });
+
+  it('lists MMR requests for org staff', () => {
+    expect(
+      buildOrgPageNavOptions({ ...base, canReviewMmr: true }),
+    ).toContainEqual({ value: 'mmr-requests', label: 'MMR requests' });
+  });
+
+  it('omits MMR requests for a plain member', () => {
+    expect(values(base)).not.toContain('mmr-requests');
   });
 
   it('never lists settings; settings open from the header cog', () => {
@@ -67,6 +78,7 @@ describe('buildOrgPageNavOptions', () => {
         standingTabs: tracks,
         canUsePromotion: true,
         canViewClaims: true,
+        canReviewMmr: true,
       }),
     ).toEqual([
       'leagues',
@@ -76,6 +88,7 @@ describe('buildOrgPageNavOptions', () => {
       'conduct',
       'promotion',
       'claims',
+      'mmr-requests',
     ]);
   });
 });

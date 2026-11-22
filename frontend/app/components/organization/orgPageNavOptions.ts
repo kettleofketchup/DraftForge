@@ -8,6 +8,7 @@ export interface OrgPageNavInput {
   standingTabs: readonly { value: string; label: string }[];
   canUsePromotion: boolean;
   canViewClaims: boolean;
+  canReviewMmr: boolean;
 }
 
 // Mobile page-nav entries; must match the desktop TabsList gates.
@@ -29,6 +30,9 @@ export function buildOrgPageNavOptions(
   }
   if (input.canViewClaims) {
     opts.push({ value: 'claims', label: 'Claims' });
+  }
+  if (input.canReviewMmr) {
+    opts.push({ value: 'mmr-requests', label: 'MMR requests' });
   }
   return opts;
 }

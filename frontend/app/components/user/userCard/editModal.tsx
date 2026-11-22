@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
+import { BadgeCheck } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -8,11 +9,16 @@ import {
   mmrTestId,
   type GameTypeValue,
 } from '~/components/game/constants';
-import { EditIconButton } from '~/components/ui/buttons';
+import { EditIconButton, SecondaryButton } from '~/components/ui/buttons';
 import { FormDialog } from '~/components/ui/dialogs';
 import { Form } from '~/components/ui/form';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserClassType } from '~/components/user/types';
+import {
+  SetOfficialMmrDialog,
+  type MmrScope,
+  type SetOfficialMember,
+} from '~/features/mmr-requests';
 import { extractApiError } from '~/lib/apiError';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { UserEditForm } from './editForm';
@@ -30,6 +36,16 @@ import {
 } from './editUserSchema';
 import { steamAccountIdConflictFromError } from './steamAccountIdConflict';
 
+function officialMmrScope(scope: EditUserScope): MmrScope | null {
+  if (scope.kind === 'org' && scope.organization.pk != null) {
+    return { org: scope.organization.pk };
+  }
+  if (scope.kind === 'league' && scope.league.pk != null) {
+    return { league: scope.league.pk };
+  }
+  return null;
+}
+
 interface Props {
   user: UserClassType;
   /** Defaults to global scope so legacy call sites continue compiling
@@ -46,6 +62,7 @@ export function UserEditModal({
   const canEdit = useScopedEditPermission(scope);
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [setOfficialOpen, setSetOfficialOpen] = useState(false);
   // FormDialog stays eagerly mounted — Radix Dialog with `open=false`
   // already hides its DialogContent (it's not in the DOM until the
   // dialog opens), so the per-card cost of having FormDialog in the
@@ -219,6 +236,16 @@ export function UserEditModal({
     return () => window.removeEventListener('keydown', handler);
   }, [open]);
 
+  const mmrScope = officialMmrScope(scope);
+  const officialMember: SetOfficialMember | null =
+    mmrScope && user.pk != null
+      ? {
+          userPk: user.pk,
+          orgUserPk: user.orgUserPk ?? undefined,
+          name: DisplayName(user),
+        }
+      : null;
+
   if (!canEdit) return null;
 
   return (
@@ -241,6 +268,22 @@ export function UserEditModal({
         escapeBlursToContent
         data-testid="edit-user-modal"
       >
+        {mmrScope && officialMember && (
+          <div className="flex justify-end">
+            <SecondaryButton
+              type="button"
+              size="sm"
+              onClick={() => {
+                setOpen(false);
+                setSetOfficialOpen(true);
+              }}
+              data-testid="set-official-mmr-btn"
+            >
+              <BadgeCheck className="mr-2 size-4" />
+              Set official MMR…
+            </SecondaryButton>
+          </div>
+        )}
         <Form {...form}>
           <UserEditForm
             form={form}
@@ -249,6 +292,14 @@ export function UserEditModal({
           />
         </Form>
       </FormDialog>
+      {mmrScope && officialMember && (
+        <SetOfficialMmrDialog
+          scope={mmrScope}
+          member={officialMember}
+          open={setOfficialOpen}
+          onOpenChange={setSetOfficialOpen}
+        />
+      )}
     </>
   );
 }

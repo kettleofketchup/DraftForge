@@ -53,7 +53,7 @@ import {
 import { useProvideGameType } from '~/hooks/useGameType';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { usePageNav } from '~/hooks/usePageNav';
-import { useIsLeagueAdmin } from '~/hooks/usePermissions';
+import { useIsLeagueAdmin, useIsLeagueStaff } from '~/hooks/usePermissions';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
@@ -138,6 +138,12 @@ export default function LeaguePage() {
 
   // Permission check for edit - includes org admins via useIsLeagueAdmin
   const canEdit = useIsLeagueAdmin(league);
+  const currentOrg = useOrgStore((s) => s.currentOrg);
+  const leagueOrg =
+    currentOrg && league?.organization?.pk === currentOrg.pk
+      ? currentOrg
+      : null;
+  const canReviewMmr = useIsLeagueStaff(league, leagueOrg);
 
   const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
     if (!league) return [];
@@ -178,8 +184,11 @@ export default function LeaguePage() {
         ? [{ value: 'users', label: `${userCountDisplay} Users` }]
         : []),
       { value: 'matches', label: 'Matches' },
+      ...(canReviewMmr
+        ? [{ value: 'mmr-requests', label: 'MMR requests' }]
+        : []),
     ],
-    [leagueTournaments.length, userCountDisplay, canViewMembers],
+    [leagueTournaments.length, userCountDisplay, canViewMembers, canReviewMmr],
   );
 
   usePageNav(league ? pageNavOptions : null, activeTab, handleTabChange);
@@ -251,6 +260,7 @@ export default function LeaguePage() {
           onTabChange={handleTabChange}
           canViewMembers={canViewMembers}
           memberAccessSettled={memberAccessSettled}
+          canReviewMmr={canReviewMmr}
         />
       </div>
 

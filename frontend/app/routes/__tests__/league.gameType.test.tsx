@@ -22,7 +22,10 @@ vi.mock('~/hooks/useMemberAccess', () => ({
   useMemberAccess: () => ({ canView: false, settled: false }),
 }));
 vi.mock('~/hooks/usePageNav', () => ({ usePageNav: () => undefined }));
-vi.mock('~/hooks/usePermissions', () => ({ useIsLeagueAdmin: () => false }));
+vi.mock('~/hooks/usePermissions', () => ({
+  useIsLeagueAdmin: () => false,
+  useIsLeagueStaff: () => false,
+}));
 
 afterEach(() => {
   cleanup();
