@@ -244,11 +244,11 @@ jobs:
       # cicd-dota-lobby sets DOTA_LOBBY_SIMULATOR_REQUIRED=1, so a spec that
       # would skip for lack of the simulator fails instead.
       - name: Start the simulated dota_lobby
-        if: matrix.shard == 1
+        if: matrix.shard == 2
         run: just test::dota-lobby up
 
       - name: Run Playwright (dota-lobby-sequential)
-        if: matrix.shard == 1
+        if: matrix.shard == 2
         env:
           CI: 'true'
         run: just test::pw::cicd-dota-lobby
