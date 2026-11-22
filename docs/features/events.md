@@ -274,7 +274,7 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/event-signups/{id}/reject/` | Reject a signup |
 | POST | `/api/event-signups/{id}/confirm/` | Confirm attendance (roll-call) |
 | POST | `/api/event-signups/{id}/unconfirm/` | Reverse a confirm |
-| POST | `/api/event-signups/{id}/demote/` | Demote approved/confirmed back to pending |
+| POST | `/api/event-signups/{id}/demote/` | Move an active signup to the end of the waitlist. Nobody is promoted into the freed seat; staff fill it by hand |
 | POST | `/api/event-signups/{id}/cancel_signup/` | Cancel a signup (user or admin) |
 | POST | `/api/event-signups/{id}/reinstate/` | Re-enable a cancelled signup |
 
