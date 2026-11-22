@@ -310,16 +310,17 @@ class MergeDiscordAccountsTest(TestCase):
         self.assertEqual(find_split_discord_accounts(), [])
 
 
+def _discarded(spy: mock.MagicMock) -> list[dict]:
+    return [
+        c.kwargs
+        for c in spy.info.call_args_list
+        if c.args and c.args[0] == "discord_merge_row_discarded"
+    ]
+
+
 class MergeDiscardedRowsTest(TestCase):
     """Rows the merge cannot move are logged, and the kept account inherits
     profile data it lacks instead of losing it with the dropped account."""
-
-    def _discarded(self, spy: mock.MagicMock) -> list[dict]:
-        return [
-            c.kwargs
-            for c in spy.info.call_args_list
-            if c.args and c.args[0] == "discord_merge_row_discarded"
-        ]
 
     def test_conflicting_row_is_logged(self) -> None:
         keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
@@ -332,7 +333,7 @@ class MergeDiscardedRowsTest(TestCase):
         with mock.patch("app.discord_accounts.logger") as spy:
             merge_discord_accounts(keep=keep, drop=drop)
 
-        rows = self._discarded(spy)
+        rows = _discarded(spy)
         joke = [r for r in rows if r["model"] == "app.Joke"]
         self.assertEqual(len(joke), 1)
         self.assertEqual(joke[0]["pk"], dropped_joke_pk)
@@ -351,7 +352,7 @@ class MergeDiscardedRowsTest(TestCase):
         with mock.patch("app.discord_accounts.logger") as spy:
             merge_discord_accounts(keep=keep, drop=drop)
 
-        self.assertNotIn("app.Joke", {r["model"] for r in self._discarded(spy)})
+        self.assertNotIn("app.Joke", {r["model"] for r in _discarded(spy)})
 
     def test_nickname_carried_when_kept_account_has_none(self) -> None:
         keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
@@ -469,14 +470,6 @@ class MergeDiscardedRowsTest(TestCase):
             if c.args and c.args[0] == "discord_accounts_merged"
         ]
         self.assertEqual(merged["dropped_steam_account_id"], 222)
-
-
-def _discarded(spy: mock.MagicMock) -> list[dict]:
-    return [
-        c.kwargs
-        for c in spy.info.call_args_list
-        if c.args and c.args[0] == "discord_merge_row_discarded"
-    ]
 
 
 class MergeOrgMemberDependentsTest(TestCase):
