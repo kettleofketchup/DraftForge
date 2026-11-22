@@ -5,13 +5,17 @@
  * Only the tournament key and output names differ between draft types.
  */
 
+import { chromium, expect } from '@playwright/test';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { loginAdminFromPage, waitForHydration } from '../fixtures/auth';
 import { API_URL, BASE_URL } from '../fixtures/base-url';
 import { isCsrfCookie, isSessionCookie } from '../fixtures/cookies';
-import { test, expect, chromium } from '@playwright/test';
-import { loginAdminFromPage, waitForHydration } from '../fixtures/auth';
-import { waitForDemoReady, waitForDraftReady, waitForLoadingComplete } from '../fixtures/demo-utils';
-import * as path from 'path';
-import * as fs from 'fs/promises';
+import {
+  waitForDemoReady,
+  waitForDraftReady,
+  waitForLoadingComplete,
+} from '../fixtures/demo-utils';
 
 const VIDEO_OUTPUT_DIR = 'demo-results/videos';
 
@@ -44,12 +48,16 @@ export interface DraftDemoConfig {
 
 export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   const { tournamentKey, draftStyle, outputName, docsVideoDir } = config;
-  const DEMO_METADATA_FILE = path.join(VIDEO_OUTPUT_DIR, `${outputName}.demo.yaml`);
+  const DEMO_METADATA_FILE = path.join(
+    VIDEO_OUTPUT_DIR,
+    `${outputName}.demo.yaml`,
+  );
 
   const windowSize = 1200;
 
   // Use system chromium in Docker (Alpine) since Playwright's bundled chromium requires glibc
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
+  const executablePath =
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
   const browserOptions = {
     headless: true,
     slowMo: 100,
@@ -84,12 +92,12 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   // Get tournament by key
   const response = await setupContext.request.get(
     `${API_URL}/tests/tournament-by-key/${tournamentKey}/`,
-    { failOnStatusCode: false, timeout: 10000 }
+    { failOnStatusCode: false, timeout: 10000 },
   );
 
   if (!response.ok()) {
     throw new Error(
-      `Failed to get tournament data for '${tournamentKey}'. Run 'just db::populate::all' first.`
+      `Failed to get tournament data for '${tournamentKey}'. Run 'just db::populate::all' first.`,
     );
   }
 
@@ -99,7 +107,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   // Reset the draft to initial state via demo reset endpoint
   const resetResp = await setupContext.request.post(
     `${API_URL}/tests/demo/${tournamentKey}/reset/`,
-    { failOnStatusCode: false }
+    { failOnStatusCode: false },
   );
   console.log(`Demo: Reset response: ${resetResp.status()}`);
 
@@ -122,7 +130,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
 
   // Open draft modal
   const startDraftButton = setupPage.locator(
-    '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")'
+    '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")',
   );
   await startDraftButton.first().click();
 
@@ -132,7 +140,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
 
   // Get CSRF token from cookies
   const cookies = await setupContext.cookies();
-  const csrfCookie = cookies.find(c => isCsrfCookie(c.name));
+  const csrfCookie = cookies.find((c) => isCsrfCookie(c.name));
   const csrfToken = csrfCookie?.value || '';
   console.log(`Setup: CSRF token available: ${!!csrfToken}`);
 
@@ -147,7 +155,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
         'X-CSRFToken': csrfToken,
       },
       failOnStatusCode: false,
-    }
+    },
   );
   console.log(`Setup: Init draft API response: ${initResponse.status()}`);
   if (!initResponse.ok()) {
@@ -169,7 +177,9 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   // Dismiss any dialog that auto-opens after reload
   const postReloadDialog = setupPage.locator('[role="dialog"]');
   if (await postReloadDialog.isVisible({ timeout: 2000 }).catch(() => false)) {
-    const dismissBtn = postReloadDialog.locator('button[aria-label="Close"], [data-testid="close-draft-modal"]').first();
+    const dismissBtn = postReloadDialog
+      .locator('button[aria-label="Close"], [data-testid="close-draft-modal"]')
+      .first();
     if (await dismissBtn.isVisible().catch(() => false)) {
       await dismissBtn.click();
       await setupPage.waitForTimeout(300);
@@ -186,7 +196,12 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   await setupPage.waitForTimeout(300);
 
   // Re-open draft modal
-  await setupPage.locator('[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")').first().click();
+  await setupPage
+    .locator(
+      '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")',
+    )
+    .first()
+    .click();
   await expect(setupPage.locator('[role="dialog"]')).toBeVisible();
   await setupPage.waitForTimeout(500);
 
@@ -194,7 +209,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   console.log(`Setup: Setting draft style to '${draftStyle}' via API...`);
   const tournamentResponse = await setupContext.request.get(
     `${API_URL}/tests/tournament-by-key/${tournamentKey}/`,
-    { failOnStatusCode: false }
+    { failOnStatusCode: false },
   );
   const updatedTournament = await tournamentResponse.json();
   const draftPk = updatedTournament.draft?.pk;
@@ -210,9 +225,11 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
           'X-CSRFToken': csrfToken,
         },
         failOnStatusCode: false,
-      }
+      },
     );
-    console.log(`Setup: Set draft style API response: ${styleResponse.status()}`);
+    console.log(
+      `Setup: Set draft style API response: ${styleResponse.status()}`,
+    );
   }
 
   // Restart the draft to apply the style and generate rounds
@@ -226,7 +243,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
         'X-CSRFToken': csrfToken,
       },
       failOnStatusCode: false,
-    }
+    },
   );
   console.log(`Setup: Restart draft API response: ${restartResponse.status()}`);
 
@@ -251,7 +268,12 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   // Open draft modal and verify
   await setupPage.locator('[data-testid="teamsTab"]').click({ force: true });
   await setupPage.waitForTimeout(300);
-  await setupPage.locator('[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")').first().click();
+  await setupPage
+    .locator(
+      '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")',
+    )
+    .first()
+    .click();
 
   dialog = setupPage.locator('[role="dialog"]');
   await expect(dialog).toBeVisible();
@@ -259,7 +281,9 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   console.log(`Setup: Draft ready with ${draftStyle} style`);
 
   // Wait for draft to be ready (Pick buttons exist in DOM)
-  const allPickButtons = dialog.locator('[data-testid="available-player"] button:has-text("Pick")');
+  const allPickButtons = dialog.locator(
+    '[data-testid="available-player"] button:has-text("Pick")',
+  );
   await allPickButtons.first().waitFor({ state: 'attached', timeout: 15000 });
   console.log('Setup: Pick buttons attached to DOM, draft ready');
 
@@ -267,13 +291,15 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   console.log('Setup: Testing a pick to verify auth...');
 
   let setupPickStatus: number | null = null;
-  setupPage.on('response', response => {
+  setupPage.on('response', (response) => {
     if (response.url().includes('pick_player')) {
       setupPickStatus = response.status();
     }
   });
 
-  const testPickBtn = dialog.locator('[data-testid="available-player"]:visible button:has-text("Pick")').first();
+  const testPickBtn = dialog
+    .locator('[data-testid="available-player"]:visible button:has-text("Pick")')
+    .first();
   await testPickBtn.scrollIntoViewIfNeeded();
   await testPickBtn.click();
   await setupPage.waitForTimeout(300);
@@ -281,7 +307,9 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   // Handle confirmation dialog
   const confirmDialog = setupPage.locator('[role="alertdialog"]');
   if (await confirmDialog.isVisible().catch(() => false)) {
-    const pickConfirmBtn = confirmDialog.locator('button:has-text("Confirm"), button:has-text("Pick")');
+    const pickConfirmBtn = confirmDialog.locator(
+      'button:has-text("Confirm"), button:has-text("Pick")',
+    );
     if (await pickConfirmBtn.isVisible().catch(() => false)) {
       await pickConfirmBtn.first().click();
     }
@@ -297,37 +325,43 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   if (setupPickStatus === 403) {
     throw new Error('Setup: Test pick got 403 at network level');
   }
-  console.log(`Setup: Test pick successful (network status: ${setupPickStatus})`);
+  console.log(
+    `Setup: Test pick successful (network status: ${setupPickStatus})`,
+  );
 
   // Reset draft for clean video recording
   const resetResp2 = await setupContext.request.post(
     `${API_URL}/tests/demo/${tournamentKey}/reset/`,
-    { failOnStatusCode: false }
+    { failOnStatusCode: false },
   );
-  console.log(`Setup: Reset draft for video recording (status: ${resetResp2.status()})`);
+  console.log(
+    `Setup: Reset draft for video recording (status: ${resetResp2.status()})`,
+  );
 
   // Re-initialize draft with correct style
   try {
-    await setupContext.request.post(
-      `${API_URL}/tournaments/init-draft`,
-      {
-        data: { tournament_pk: tournament.pk },
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-        failOnStatusCode: false,
-      }
-    );
+    await setupContext.request.post(`${API_URL}/tournaments/init-draft`, {
+      data: { tournament_pk: tournament.pk },
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      failOnStatusCode: false,
+    });
   } catch (e) {
     // Context may be degraded after many API calls - fall back to fetch from page
-    console.log(`Setup: Re-init via context failed (${e}), retrying via page fetch...`);
+    console.log(
+      `Setup: Re-init via context failed (${e}), retrying via page fetch...`,
+    );
     const setupPage2 = await setupContext.newPage();
     await setupPage2.goto(`${BASE_URL}/tournament/${tournament.pk}`);
-    await setupPage2.evaluate(async ({ apiUrl, tournamentPk, csrf }) => {
-      await fetch(`${apiUrl}/tournaments/init-draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-        body: JSON.stringify({ tournament_pk: tournamentPk }),
-      });
-    }, { apiUrl: API_URL, tournamentPk: tournament.pk, csrf: csrfToken });
+    await setupPage2.evaluate(
+      async ({ apiUrl, tournamentPk, csrf }) => {
+        await fetch(`${apiUrl}/tournaments/init-draft`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+          body: JSON.stringify({ tournament_pk: tournamentPk }),
+        });
+      },
+      { apiUrl: API_URL, tournamentPk: tournament.pk, csrf: csrfToken },
+    );
     await setupPage2.close();
   }
 
@@ -361,16 +395,21 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   await page.goto(`${BASE_URL}/`);
   await loginAdminFromPage(page);
   const videoCookies = await videoContext.cookies();
-  const hasSession = videoCookies.some(c => isSessionCookie(c.name));
-  const hasCSRF = videoCookies.some(c => isCsrfCookie(c.name));
-  console.log(`Video: Fresh login (sessionid: ${hasSession}, csrftoken: ${hasCSRF})`);
+  const hasSession = videoCookies.some((c) => isSessionCookie(c.name));
+  const hasCSRF = videoCookies.some((c) => isCsrfCookie(c.name));
+  console.log(
+    `Video: Fresh login (sessionid: ${hasSession}, csrftoken: ${hasCSRF})`,
+  );
 
   // Capture console errors for debugging (filter out harmless React DevTools errors)
-  page.on('console', msg => {
+  page.on('console', (msg) => {
     if (msg.type() === 'error') {
       const text = msg.text();
       // Ignore React DevTools manifest fetch errors - harmless dev tooling
-      if (text.includes('manifest patches') || text.includes('fetchAndApplyManifestPatches')) {
+      if (
+        text.includes('manifest patches') ||
+        text.includes('fetchAndApplyManifestPatches')
+      ) {
         return;
       }
       console.log(`Console Error: ${text}`);
@@ -379,9 +418,11 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
 
   // Capture pick_player requests and fail on 403
   let networkError: string | null = null;
-  page.on('response', response => {
+  page.on('response', (response) => {
     if (response.url().includes('pick_player')) {
-      console.log(`Network ${response.status()}: ${response.request().method()} ${response.url()}`);
+      console.log(
+        `Network ${response.status()}: ${response.request().method()} ${response.url()}`,
+      );
       if (response.status() === 403) {
         networkError = `403 Forbidden on ${response.url()}`;
       }
@@ -402,7 +443,12 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   await page.waitForTimeout(1500);
 
   // Open draft modal
-  await page.locator('[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")').first().click();
+  await page
+    .locator(
+      '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")',
+    )
+    .first()
+    .click();
   await expect(page.locator('[role="dialog"]')).toBeVisible();
   await waitForDraftReady(page, { timeout: 15000 });
   await waitForLoadingComplete(page, { timeout: 5000 });
@@ -410,17 +456,19 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   // THIS is the actual trim point - when draft modal is ready with Pick buttons
   const contentVisibleTime = Date.now();
   const trimStartSeconds = (contentVisibleTime - recordingStartTime) / 1000;
-  console.log(`Video: Draft modal ready (trim first ${trimStartSeconds.toFixed(2)}s)`);
+  console.log(
+    `Video: Draft modal ready (trim first ${trimStartSeconds.toFixed(2)}s)`,
+  );
 
   // Save trim metadata
   await fs.mkdir(VIDEO_OUTPUT_DIR, { recursive: true });
   await fs.writeFile(
     DEMO_METADATA_FILE,
     `# Auto-generated by ${draftStyle} draft demo test\n# Use 'just demo::trim' to apply these trim values\n\n` +
-    `${outputName}:\n` +
-    `  video: ${outputName}.webm\n` +
-    `  trim_start_seconds: ${trimStartSeconds.toFixed(2)}\n\n` +
-    `recorded_at: ${new Date().toISOString()}\n`
+      `${outputName}:\n` +
+      `  video: ${outputName}.webm\n` +
+      `  trim_start_seconds: ${trimStartSeconds.toFixed(2)}\n\n` +
+      `recorded_at: ${new Date().toISOString()}\n`,
   );
   console.log(`Video: Saved trim metadata to ${DEMO_METADATA_FILE}`);
 
@@ -432,21 +480,32 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
 
   for (let i = 0; i < maxPicks; i++) {
     const dialogEl = page.locator('[role="dialog"]');
-    const scrollArea = dialogEl.locator('[data-radix-scroll-area-viewport]').first();
+    const scrollArea = dialogEl
+      .locator('[data-radix-scroll-area-viewport]')
+      .first();
 
     // Start each pick at the top to show current captain/pick order
-    await scrollArea.evaluate((el) => el.scrollTo({ top: 0, behavior: 'instant' }));
+    await scrollArea.evaluate((el) =>
+      el.scrollTo({ top: 0, behavior: 'instant' }),
+    );
     await page.waitForTimeout(800);
 
     // Select visible Pick buttons only (responsive layouts render same buttons multiple times)
-    const pickBtns = dialogEl.locator('[data-testid="available-player"]:visible button:has-text("Pick")');
+    const pickBtns = dialogEl.locator(
+      '[data-testid="available-player"]:visible button:has-text("Pick")',
+    );
 
     // Scroll dialog content to show the player list
-    await scrollArea.evaluate((el) => el.scrollTo({ top: 400, behavior: 'smooth' }));
+    await scrollArea.evaluate((el) =>
+      el.scrollTo({ top: 400, behavior: 'smooth' }),
+    );
     await page.waitForTimeout(600);
 
     // Wait for pick buttons to be visible after scroll
-    await pickBtns.first().waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+    await pickBtns
+      .first()
+      .waitFor({ state: 'visible', timeout: 10000 })
+      .catch(() => {});
     const pickCount = await pickBtns.count();
 
     if (pickCount === 0) {
@@ -455,7 +514,9 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
     }
 
     // Get the player row containing the first pick button
-    const firstPlayerRow = dialogEl.locator('[data-testid="available-player"]:visible').first();
+    const firstPlayerRow = dialogEl
+      .locator('[data-testid="available-player"]:visible')
+      .first();
     await firstPlayerRow.scrollIntoViewIfNeeded();
     await page.waitForTimeout(200);
 
@@ -475,7 +536,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
     const confirmDialogEl = page.locator('[role="alertdialog"]');
     if (await confirmDialogEl.isVisible().catch(() => false)) {
       const pickConfirmBtn = confirmDialogEl.locator(
-        'button:has-text("Confirm"), button:has-text("Pick")'
+        'button:has-text("Confirm"), button:has-text("Pick")',
       );
       if (await pickConfirmBtn.isVisible().catch(() => false)) {
         await pickConfirmBtn.first().click();
@@ -501,7 +562,9 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
 
     // Check if there are more picks available
     const remainingPicks = await dialogEl
-      .locator('[data-testid="available-player"]:visible button:has-text("Pick")')
+      .locator(
+        '[data-testid="available-player"]:visible button:has-text("Pick")',
+      )
       .count()
       .catch(() => 0);
     if (remainingPicks === 0) {
@@ -510,7 +573,9 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
     }
 
     // Scroll back to top of dialog to show pick order update
-    await scrollArea.evaluate((el) => el.scrollTo({ top: 0, behavior: 'smooth' }));
+    await scrollArea.evaluate((el) =>
+      el.scrollTo({ top: 0, behavior: 'smooth' }),
+    );
     // Move mouse offscreen to avoid triggering popovers
     await page.mouse.move(0, 0);
     await page.waitForTimeout(1500); // Pause to show pick order update
@@ -536,5 +601,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   await videoContext.close();
   await browser.close();
 
-  console.log(`${draftStyle.charAt(0).toUpperCase() + draftStyle.slice(1)} Draft Demo complete! Made ${picksMade} picks.`);
+  console.log(
+    `${draftStyle.charAt(0).toUpperCase() + draftStyle.slice(1)} Draft Demo complete! Made ${picksMade} picks.`,
+  );
 }

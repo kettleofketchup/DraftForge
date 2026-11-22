@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
-  shouldLookupSteamAccountId,
   describeSteamAccountIdConflict,
+  shouldLookupSteamAccountId,
   steamAccountIdConflictFromError,
 } from '../steamAccountIdConflict';
 
@@ -58,7 +58,8 @@ describe('steamAccountIdConflictFromError', () => {
   it('extracts the message from a 409 conflict body', () => {
     const body = {
       code: 'steam_account_id_taken',
-      error: 'Friend ID 765353730 is already assigned to George Potter (@geo.potter).',
+      error:
+        'Friend ID 765353730 is already assigned to George Potter (@geo.potter).',
       conflict: holder,
     };
     expect(steamAccountIdConflictFromError(body)).toBe(
@@ -67,7 +68,9 @@ describe('steamAccountIdConflictFromError', () => {
   });
 
   it('ignores unrelated error bodies', () => {
-    expect(steamAccountIdConflictFromError({ error: 'No valid fields to update' })).toBeNull();
+    expect(
+      steamAccountIdConflictFromError({ error: 'No valid fields to update' }),
+    ).toBeNull();
   });
 
   it('ignores a missing body', () => {
@@ -75,7 +78,11 @@ describe('steamAccountIdConflictFromError', () => {
   });
 
   it('reads the global endpoint validation shape', () => {
-    const body = { steam_account_id: ['This Friend ID is already assigned to another account.'] };
+    const body = {
+      steam_account_id: [
+        'This Friend ID is already assigned to another account.',
+      ],
+    };
     expect(steamAccountIdConflictFromError(body)).toBe(
       'This Friend ID is already assigned to another account.',
     );

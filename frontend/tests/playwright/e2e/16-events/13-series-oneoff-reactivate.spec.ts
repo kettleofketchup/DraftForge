@@ -11,19 +11,18 @@
  * that one would poison later specs in the events-sequential project.
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
   getEventsTestData,
-  resetEventsData,
   loginEventAdmin,
   loginEventPlayer,
   postWithCsrf,
+  resetEventsData,
+  test,
+  visitAndWaitForHydration,
   type EventInfo,
 } from '../../fixtures';
-
+import { API_URL } from '../../fixtures/base-url';
 
 /** Today's date as YYYY-MM-DD (UTC — every series here is timezone: 'UTC'). */
 function todayISO(): string {
@@ -74,9 +73,15 @@ async function createSeries(
   context: import('@playwright/test').BrowserContext,
   payload: Record<string, unknown>,
 ) {
-  const resp = await postWithCsrf(context, `${API_URL}/events/repeaters/`, payload);
+  const resp = await postWithCsrf(
+    context,
+    `${API_URL}/events/repeaters/`,
+    payload,
+  );
   if (!resp.ok()) {
-    throw new Error(`Create series failed: ${resp.status()} ${await resp.text()}`);
+    throw new Error(
+      `Create series failed: ${resp.status()} ${await resp.text()}`,
+    );
   }
   return resp.json();
 }
@@ -129,7 +134,9 @@ test.describe('Events - Series one-off + reactivate (@cicd)', () => {
     await expect(page.getByTestId('create-one-off-modal')).toBeHidden();
 
     // The new row lands in the Upcoming grid carrying the one-off badge.
-    await expect(page.getByRole('heading', { name: /^Upcoming/ })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /^Upcoming/ }),
+    ).toBeVisible();
     const card = page
       .locator('a[href^="/events/"]')
       .filter({ hasText: ONE_OFF_NAME });
@@ -142,11 +149,15 @@ test.describe('Events - Series one-off + reactivate (@cicd)', () => {
     );
     expect(eventsResp.ok()).toBeTruthy();
     const events = await eventsResp.json();
-    const created = events.find((e: { name: string }) => e.name === ONE_OFF_NAME);
+    const created = events.find(
+      (e: { name: string }) => e.name === ONE_OFF_NAME,
+    );
     expect(created).toBeTruthy();
     expect(created.is_off_schedule).toBe(true);
     expect(created.state).toBe('upcoming');
-    expect(new Date(created.scheduled_at).toISOString().slice(0, 16)).toBe(slot);
+    expect(new Date(created.scheduled_at).toISOString().slice(0, 16)).toBe(
+      slot,
+    );
   });
 
   test('staff reactivates a paused series and gets non-duplicated events', async ({
@@ -164,7 +175,9 @@ test.describe('Events - Series one-off + reactivate (@cicd)', () => {
 
     await visitAndWaitForHydration(page, `/event-series/${series.id}`);
 
-    await expect(page.getByTestId('series-active-badge')).toHaveText('Inactive');
+    await expect(page.getByTestId('series-active-badge')).toHaveText(
+      'Inactive',
+    );
     await expect(page.getByTestId('reactivate-series-btn')).toBeVisible();
 
     await page.getByTestId('reactivate-series-btn').click();
@@ -182,7 +195,9 @@ test.describe('Events - Series one-off + reactivate (@cicd)', () => {
 
     await expect(page.getByTestId('series-active-badge')).toHaveText('Active');
     await expect(page.getByTestId('reactivate-series-btn')).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: /^Upcoming/ })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /^Upcoming/ }),
+    ).toBeVisible();
 
     const eventsResp = await context.request.get(
       `${API_URL}/events/?event_repeater=${series.id}`,
@@ -197,7 +212,9 @@ test.describe('Events - Series one-off + reactivate (@cicd)', () => {
     expect(new Set(slots).size).toBe(slots.length);
 
     // The UI shows the same number of upcoming cards the API reports.
-    await expect(page.locator('a[href^="/events/"]')).toHaveCount(events.length);
+    await expect(page.locator('a[href^="/events/"]')).toHaveCount(
+      events.length,
+    );
   });
 
   test('non-staff sees neither the one-off nor the reactivate action', async ({

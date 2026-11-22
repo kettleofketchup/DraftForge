@@ -10,6 +10,7 @@ from org.permissions import (
     can_view_org_members,
     can_view_org_members_from_payload,
 )
+from tests.populate.utils import ensure_org_user
 
 
 class OrgMembersPrivacyTest(TestCase):
@@ -28,7 +29,7 @@ class OrgMembersPrivacyTest(TestCase):
         self.org = Organization.objects.create(name="Privacy Org", owner=self.owner)
         self.org.admins.add(self.admin)
         self.org.staff.add(self.staff)
-        OrgUser.objects.create(user=self.member, organization=self.org, mmr=4200)
+        ensure_org_user(self.member, self.org, mmr=4200)
 
         self.client = APIClient()
         self.url = f"/api/organizations/{self.org.pk}/users/"

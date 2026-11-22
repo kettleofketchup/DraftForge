@@ -303,11 +303,12 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "OrgUser",
                     "api",
                     "demote_colliding_earning_sends",
+                    "merge_org_mmrs",
                     "repoint_org_attribution",
                 }
             ),
-            "user account merge pairs org memberships, merges standing and "
-            "repoints org contribution and promo attribution",
+            "user account merge pairs org memberships, merges per-game org MMR "
+            "and standing, and repoints org contribution and promo attribution",
         ),
         "app/functions/tournament.py": BackEdge(
             frozenset({"guild_nicknames", "org_nicknames_public"}),
@@ -331,27 +332,40 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "org's roles; leaves with the league slice",
         ),
         "app/serializers.py": BackEdge(
-            frozenset({"Organization", "OrgUser", "OrgUserSerializer"}),
+            frozenset(
+                {
+                    "LEAGUE_GAME",
+                    "Organization",
+                    "OrgUser",
+                    "OrgUserSerializer",
+                    "game_for_tournament",
+                    "game_mmrs_prefetch",
+                    "org_mmr_map",
+                }
+            ),
             "tournament and league user serializers auto-create OrgUser rows and "
-            "embed org MMR via OrgUserSerializer; OrganizationsSerializer, "
+            "embed the context game's org MMR via org.mmr and OrgUserSerializer; "
+            "OrganizationsSerializer, "
             "LeagueSerializer.organization_id and UserSerializer."
             "default_organization read Organization at class definition",
         ),
         "app/services/match_finalization.py": BackEdge(
-            frozenset({"OrgUser"}),
-            "league rating creation seeds base MMR from the league org's OrgUser",
+            frozenset({"LEAGUE_GAME", "org_mmr_map"}),
+            "league rating creation seeds base MMR from the league org's Dota 2 org MMR",
         ),
         "app/services/team_leadership.py": BackEdge(
-            frozenset({"OrgUser"}),
-            "captain succession falls back to the highest-MMR OrgUser of the league org",
+            frozenset({"OrgUser", "OrgUserGameMmr", "game_for_tournament"}),
+            "captain succession falls back to the highest org MMR (tournament game) "
+            "in the league org",
         ),
         "app/services/team_management.py": BackEdge(
             frozenset({"OrgSettings", "OrgUser", "get_org_settings"}),
             "roster rules read the league org's settings; member adds report OrgUser creation",
         ),
         "app/signals.py": BackEdge(
-            frozenset({"OrgUser"}),
-            "tournament user auto-add creates the league org's OrgUser",
+            frozenset({"LEAGUE_GAME", "OrgUser", "org_mmr_map"}),
+            "tournament user auto-add creates the league org's OrgUser and seeds "
+            "league MMR from its Dota 2 org MMR",
         ),
         "app/tournament_state.py": BackEdge(
             frozenset({"Organization"}),
@@ -361,10 +375,12 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset(
                 {
                     "OrgUser",
+                    "LEAGUE_GAME",
                     "Organization",
                     "has_org_admin_access",
                     "has_org_staff_access",
                     "member_nick",
+                    "org_mmr_for",
                     "resolve_member_user",
                     "user_name_q",
                 }
@@ -374,7 +390,19 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "with the league and tournament slices",
         ),
         "app/views/csv_import.py": BackEdge(
-            frozenset({"OrgLog", "OrgUser", "Organization", "has_org_staff_access"}),
+            frozenset(
+                {
+                    "LEAGUE_GAME",
+                    "OrgLog",
+                    "OrgMmrError",
+                    "OrgUser",
+                    "Organization",
+                    "bulk_set_org_mmrs",
+                    "game_for_tournament",
+                    "has_org_staff_access",
+                    "validate_org_mmr",
+                }
+            ),
             "shared CSV import pipeline, including the org door, resolves the "
             "Organization, writes OrgUser MMR and OrgLog rows; moves whole with "
             "the tournament slice",
@@ -387,6 +415,7 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset(
                 {
                     "OrgUser",
+                    "OrgUserGameMmr",
                     "Organization",
                     "api",
                     "has_org_staff_access",
@@ -404,6 +433,14 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "Organization",
         ),
     },
+}
+
+# (file relative to backend/, name) -> why a source-app module may define a moved name
+ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {
+    ("app/internal_client/tournaments.py", "create_herodraft_for_game"): (
+        "worker-side HTTP client for the moved internal view; it calls the "
+        "draft endpoint rather than redefining it"
+    ),
 }
 
 GUARD_FILE = "tests/test_app_boundaries.py"
@@ -450,6 +487,17 @@ def _top_level_names(tree: ast.Module) -> Iterator[tuple[str, int]]:
                     yield target.id, node.lineno
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             yield node.target.id, node.lineno
+
+
+def _top_level_defs(tree: ast.Module) -> Iterator[tuple[str, int]]:
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            yield node.name, node.lineno
+
+
+def _is_migration_code(path: str) -> bool:
+    p = Path(path)
+    return "migrations" in p.parts or (_is_test_module(path) and "migration" in p.stem)
 
 
 def _is_type_checking(test: ast.expr) -> bool:
@@ -514,6 +562,7 @@ def find_violations(
     path: str,
     slices: tuple[MovedSlice, ...] = MOVED_SLICES,
     back_edges: dict[str, dict[str, BackEdge]] = ALLOWED_BACK_EDGES,
+    collisions: dict[tuple[str, str], str] = ALLOWED_NAME_COLLISIONS,
 ) -> list[str]:
     tree = ast.parse(source, filename=path)
     module_name = _module_of(path)
@@ -532,6 +581,14 @@ def find_violations(
                 found.append(
                     f"{path}:{line}: [{s.name}] {name} redefined in {module_name}"
                 )
+        if _within(module_name, s.source_app):
+            moved_names = {name for _old, name in s.moved} - moved_here
+            for name, line in _top_level_defs(tree):
+                if name in moved_names and (path, name) not in collisions:
+                    found.append(
+                        f"{path}:{line}: [{s.name}] moved name {name} redefined "
+                        f"in {module_name}; not in ALLOWED_NAME_COLLISIONS"
+                    )
 
         for module, name, line, _type_checking in _imported(tree, path):
             full = f"{module}.{name}" if name else module
@@ -540,6 +597,9 @@ def find_violations(
             if any(_within(module, r) or _within(full, r) for r in s.retired_modules):
                 found.append(f"{path}:{line}: [{s.name}] imports retired module {full}")
 
+        if not _is_migration_code(path):
+            for line, what in _references_moved_model(tree, s):
+                found.append(f"{path}:{line}: [{s.name}] {what}")
         lazy_labels = {f"{s.source_app}.{label}" for label in s.model_labels}
         prefixes = [f"{old}.{name}" for old, name in s.moved] + sorted(
             s.retired_modules
@@ -548,11 +608,9 @@ def find_violations(
             if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
                 continue
             value = node.value
-            if value.casefold() in lazy_labels:
-                found.append(
-                    f"{path}:{node.lineno}: [{s.name}] lazy model label {value!r}"
-                )
-            elif any(_within(value, p) for p in prefixes):
+            if value.casefold() not in lazy_labels and any(
+                _within(value, p) for p in prefixes
+            ):
                 found.append(
                     f"{path}:{node.lineno}: [{s.name}] string back-door {value!r}"
                 )
@@ -597,12 +655,14 @@ def _migration_key(path: str) -> tuple[str, str]:
     return p.parent.parent.name, p.stem
 
 
-def _references_moved_model(tree: ast.Module, s: MovedSlice) -> Iterator[int]:
+def _references_moved_model(
+    tree: ast.Module, s: MovedSlice
+) -> Iterator[tuple[int, str]]:
     lazy_labels = {f"{s.source_app}.{label}" for label in s.model_labels}
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             if node.value.casefold() in lazy_labels:
-                yield node.lineno
+                yield node.lineno, f"lazy model label {node.value!r}"
         elif isinstance(node, ast.Call):
             func = node.func
             name = func.attr if isinstance(func, ast.Attribute) else None
@@ -618,7 +678,10 @@ def _references_moved_model(tree: ast.Module, s: MovedSlice) -> Iterator[int]:
                 and isinstance(model_arg.value, str)
                 and model_arg.value.casefold() in s.model_labels
             ):
-                yield node.lineno
+                yield (
+                    node.lineno,
+                    f"get_model({app_arg.value!r}, {model_arg.value!r})",
+                )
 
 
 def find_migration_ancestry_violations(
@@ -635,7 +698,8 @@ def find_migration_ancestry_violations(
             key = _migration_key(path)
             if key[0] == s.source_app:
                 continue
-            lines = sorted(set(_references_moved_model(ast.parse(source, path), s)))
+            tree = ast.parse(source, path)
+            lines = sorted({line for line, _ in _references_moved_model(tree, s)})
             if not lines:
                 continue
             if before_move is None:
@@ -682,6 +746,10 @@ FIXTURE_EDGES: dict[str, dict[str, BackEdge]] = {
     },
 }
 
+FIXTURE_COLLISIONS: dict[tuple[str, str], str] = {
+    ("src/client.py", "MovedView"): "fixture",
+}
+
 FIXTURE_MIGRATION = ("other", "0003_x")
 FIXTURE_MIGRATION_PATH = "other/migrations/0003_x.py"
 
@@ -689,7 +757,11 @@ FIXTURE_MIGRATION_PATH = "other/migrations/0003_x.py"
 class GuardSelfTests(SimpleTestCase):
     def violations(self, source: str, path: str) -> list[str]:
         return find_violations(
-            source, path, slices=(FIXTURE_SLICE,), back_edges=FIXTURE_EDGES
+            source,
+            path,
+            slices=(FIXTURE_SLICE,),
+            back_edges=FIXTURE_EDGES,
+            collisions=FIXTURE_COLLISIONS,
         )
 
     def assertFlagged(self, source: str, path: str) -> None:
@@ -873,6 +945,45 @@ class GuardSelfTests(SimpleTestCase):
         self.assertIn(path, violations[0])
         self.assertEqual(self.ancestry(source, {("dst", "0003_x")}, path), [])
 
+    def test_two_argument_get_model(self) -> None:
+        self.assertFlagged('apps.get_model("src", "Moved")\n', "x.py")
+        self.assertFlagged('apps.get_model("src", "moved")\n', "src/signals.py")
+        self.assertFlagged('get_model("src", "Moved")\n', "x.py")
+        self.assertClean('apps.get_model("dst", "Moved")\n', "x.py")
+        self.assertClean('apps.get_model("src", "Other")\n', "x.py")
+
+    def test_migration_code_exempt_from_lazy_labels(self) -> None:
+        for path in (
+            "src/migrations/0003_x.py",
+            "other/migrations/0003_x.py",
+            "other/tests/test_x_migration.py",
+        ):
+            with self.subTest(path=path):
+                self.assertClean('apps.get_model("src", "Moved")\n', path)
+                self.assertClean('apps.get_model("src.Moved")\n', path)
+                self.assertFlagged('patch("src.models.Moved")\n', path)
+        self.assertFlagged('apps.get_model("src", "Moved")\n', "other/tests/test_x.py")
+
+    def test_redefinition_in_new_module(self) -> None:
+        self.assertFlagged("class Moved(models.Model):\n    pass\n", "src/new.py")
+        self.assertFlagged("def MovedView():\n    pass\n", "src/views/extra.py")
+        self.assertFlagged("async def MovedView():\n    pass\n", "src/tests/test_x.py")
+        self.assertClean("class Moved:\n    pass\n", "other/new.py")
+        self.assertClean("class Moved:\n    pass\n", "dst/new.py")
+        self.assertClean(
+            "class Other:\n    def Moved(self):\n        pass\n", "src/new.py"
+        )
+
+    def test_allowlisted_name_collision(self) -> None:
+        self.assertClean("def MovedView():\n    pass\n", "src/client.py")
+        self.assertFlagged("class Moved:\n    pass\n", "src/client.py")
+        self.assertFlagged("def MovedView():\n    pass\n", "src/other.py")
+
+    def test_name_collision_reasons_non_empty(self) -> None:
+        for (path, name), reason in ALLOWED_NAME_COLLISIONS.items():
+            with self.subTest(path=path, name=name):
+                self.assertTrue(reason.strip())
+
 
 class AppBoundaryTests(SimpleTestCase):
     base: Path = settings.BASE_DIR_PATH
@@ -887,6 +998,14 @@ class AppBoundaryTests(SimpleTestCase):
                 observed.setdefault(new_app, {})[rel] = names
         violations.extend(find_stale_back_edges(observed))
         self.assertEqual(violations, [])
+
+    def test_name_collisions_not_stale(self) -> None:
+        moved = {name for s in MOVED_SLICES for _old, name in s.moved}
+        for path, name in ALLOWED_NAME_COLLISIONS:
+            with self.subTest(path=path, name=name):
+                self.assertIn(name, moved)
+                tree = ast.parse((self.base / path).read_text(), filename=path)
+                self.assertIn(name, {defined for defined, _ in _top_level_defs(tree)})
 
     def test_walk_covers_the_tree(self) -> None:
         rels = {rel for _file, rel in _python_files(self.base)}

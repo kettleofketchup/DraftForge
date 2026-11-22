@@ -45,6 +45,7 @@ class TournamentUserSchema(BaseModel):
     steam_account_id: Optional[int] = None
     avatarUrl: Optional[str] = None
     mmr: Optional[int] = None
+    mmr_game_type: int | None = None
     league_mmr: Optional[int] = None
 
     @property

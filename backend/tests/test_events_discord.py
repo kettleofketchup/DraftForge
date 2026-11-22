@@ -17,8 +17,10 @@ from rest_framework.decorators import (
     permission_classes,
 )
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 from rest_framework.response import Response
 
+from common.game import GameType
 from common.utils import isTestEnvironment
 from discordbot.utils import (
     DISCORD_API_BASE,
@@ -26,6 +28,8 @@ from discordbot.utils import (
     _get_headers,
     _rate_limited_request,
 )
+from org.mmr import OrgMmrError, set_org_mmr
+from org.models import OrgUser
 
 log = logging.getLogger(__name__)
 
@@ -256,23 +260,20 @@ def send_test_notification(request, event_pk):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
-def set_org_user_approved_mmr(request, org_pk: int, user_pk: int):
-    """TEST ONLY: Set OrgUser.mmr for (org_pk, user_pk) and invalidate cacheops.
+def set_org_user_approved_mmr(request: Request, org_pk: int, user_pk: int) -> Response:
+    """TEST ONLY: Set the org MMR of (org_pk, user_pk) for one game.
 
-    Body: {"mmr": int}
+    Body: {"mmr": int, "game_type"?: int (default Dota 2)}
     """
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from cacheops import invalidate_obj
-
-    from org.models import OrgUser
-
     try:
         mmr = int(request.data.get("mmr"))
+        game_type = int(request.data.get("game_type", GameType.DOTA2))
     except (TypeError, ValueError):
         return Response(
-            {"detail": "mmr must be an integer"},
+            {"detail": "mmr and game_type must be integers"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -284,8 +285,11 @@ def set_org_user_approved_mmr(request, org_pk: int, user_pk: int):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    org_user.mmr = mmr
-    org_user.save(update_fields=["mmr"])
-    invalidate_obj(org_user)
+    try:
+        set_org_mmr(org_user, game_type, mmr, mark_verified=False)
+    except OrgMmrError as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    return Response({"org_pk": org_pk, "user_pk": user_pk, "mmr": mmr})
+    return Response(
+        {"org_pk": org_pk, "user_pk": user_pk, "mmr": mmr, "game_type": game_type}
+    )

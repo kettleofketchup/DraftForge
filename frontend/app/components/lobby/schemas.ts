@@ -43,7 +43,9 @@ const nullableList = <T extends z.ZodType>(item: T) =>
     .nullish()
     .transform((v) => v ?? []);
 
-const LobbyTeamSchema = z.object({ id: z.number(), name: z.string() }).nullable();
+const LobbyTeamSchema = z
+  .object({ id: z.number(), name: z.string() })
+  .nullable();
 
 export const LobbyPlayerSchema = z.object({
   user_id: z.number(),
@@ -100,7 +102,9 @@ export const LobbyEligibilitySchema = z.object({
   code: z.string().nullable(),
   details: z
     .object({
-      players: nullableList(z.object({ id: z.number(), name: z.string() })).optional(),
+      players: nullableList(
+        z.object({ id: z.number(), name: z.string() }),
+      ).optional(),
     })
     .loose()
     .default({}),
@@ -120,7 +124,9 @@ export const GameLobbyResponseSchema = z.object({
 
 export const InviteResultSchema = z.object({
   invited: nullableList(z.number()),
-  skipped: nullableList(z.object({ account_id: z.number(), reason: z.string() })),
+  skipped: nullableList(
+    z.object({ account_id: z.number(), reason: z.string() }),
+  ),
 });
 
 export type GameLobby = z.infer<typeof GameLobbySchema>;

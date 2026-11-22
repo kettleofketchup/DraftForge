@@ -9,10 +9,15 @@ const base: OrgPageNavInput = {
   eventsCount: 3,
   userCountDisplay: 4,
   canViewMembers: false,
-  canViewContributions: false,
+  standingTabs: [],
   canUsePromotion: false,
   canViewClaims: false,
 };
+
+const tracks = [
+  { value: 'contributions', label: 'Contributions' },
+  { value: 'conduct', label: 'Conduct' },
+];
 
 const values = (input: OrgPageNavInput): string[] =>
   buildOrgPageNavOptions(input).map((o) => o.value);
@@ -38,11 +43,20 @@ describe('buildOrgPageNavOptions', () => {
       values({
         ...base,
         canViewMembers: true,
-        canViewContributions: true,
+        standingTabs: tracks,
         canUsePromotion: true,
         canViewClaims: true,
       }),
     ).not.toContain('settings');
+  });
+
+  it('labels standing tabs with the track label', () => {
+    expect(buildOrgPageNavOptions({ ...base, standingTabs: tracks })).toEqual([
+      { value: 'leagues', label: 'Leagues (2)' },
+      { value: 'events', label: 'Events (3)' },
+      { value: 'contributions', label: 'Contributions' },
+      { value: 'conduct', label: 'Conduct' },
+    ]);
   });
 
   it('keeps the tab order of the desktop tab list', () => {
@@ -50,7 +64,7 @@ describe('buildOrgPageNavOptions', () => {
       values({
         ...base,
         canViewMembers: true,
-        canViewContributions: true,
+        standingTabs: tracks,
         canUsePromotion: true,
         canViewClaims: true,
       }),
@@ -59,6 +73,7 @@ describe('buildOrgPageNavOptions', () => {
       'events',
       'users',
       'contributions',
+      'conduct',
       'promotion',
       'claims',
     ]);

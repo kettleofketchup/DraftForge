@@ -6,28 +6,28 @@
  * Only the skipped captain connects; the re-selected captain never does, so nothing auto-pauses.
  */
 
-import type { BrowserContext, Browser, Page } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 import {
-  test,
+  activeRound,
+  captainsOf,
+  DraftWebSocketHelper,
   expect,
+  expireDraftClock,
+  fetchTimerTournament,
   loginAdmin,
   loginAsUser,
-  resetTimerTournament,
-  fetchTimerTournament,
-  readyUp,
-  startDraftAsStaff,
-  expireDraftClock,
-  captainsOf,
-  activeRound,
   openDraftModal,
-  DraftWebSocketHelper,
+  readyUp,
+  resetTimerTournament,
+  startDraftAsStaff,
+  test,
   type TimerTournament,
 } from '../../fixtures';
 
 const KEY = 'shuffle_timer_skip';
 
 async function resetReadyAndStart(
-  browser: Browser
+  browser: Browser,
 ): Promise<{ t: TimerTournament; admin: BrowserContext }> {
   const admin = await browser.newContext({ ignoreHTTPSErrors: true });
   await loginAdmin(admin);
@@ -84,7 +84,9 @@ test.describe.serial('Shuffle draft timeout skip', () => {
     const popup = page.getByTestId('tie-roll-popup');
     await expect(popup).toBeVisible();
     await expect(popup).toHaveAttribute('data-pick-number', '1');
-    await expect(page.getByTestId('tie-roll-countdown')).toContainText('Clock starts in');
+    await expect(page.getByTestId('tie-roll-countdown')).toContainText(
+      'Clock starts in',
+    );
     // The server holds the next clock while the dice roll: grace stays full, then runs.
     const grace = page.getByTestId('draft-clock-grace');
     await expect(grace).toHaveText('0:20');
@@ -98,7 +100,9 @@ test.describe.serial('Shuffle draft timeout skip', () => {
     expect(after.captain).not.toBe(before.captain);
     expect(after.skip_count).toBe(1);
 
-    await expect(page.getByTestId('pickDisabledNotYourTurn').first()).toBeVisible();
+    await expect(
+      page.getByTestId('pickDisabledNotYourTurn').first(),
+    ).toBeVisible();
   });
 
   test('@cicd history lists the timeout events newest first', async () => {

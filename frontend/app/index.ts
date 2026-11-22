@@ -7,8 +7,11 @@ import type {
 } from '~/components/user';
 import { PositionEnum, User } from '~/components/user';
 import { DisplayName } from '~/components/user/avatar';
+import type {
+  UserAvatarBorder,
+  UserAvatarSize,
+} from '~/components/user/UserAvatar';
 import { AvatarUrl, UserAvatar } from '~/components/user/UserAvatar';
-import type { UserAvatarSize, UserAvatarBorder } from '~/components/user/UserAvatar';
 import type { GameType, GamesType } from './components/game/types';
 import type { TeamType } from './components/team';
 import type {
@@ -18,8 +21,15 @@ import type {
   TournamentsType,
 } from './components/tournament/types';
 export { AvatarUrl, DisplayName, PositionEnum, User, UserAvatar };
-export type { UserAvatarSize, UserAvatarBorder };
-export type { GuildMember, GuildMembers, UserClassType, UserType, UsersType };
+export type {
+  GuildMember,
+  GuildMembers,
+  UserAvatarBorder,
+  UserAvatarSize,
+  UserClassType,
+  UserType,
+  UsersType,
+};
 
 export type {
   GameType,
@@ -31,7 +41,12 @@ export type {
   TournamentsType,
 };
 
-import type { TeamDraftRoundType, TeamDraftType, DraftRoundType, DraftType } from '~/components/teamdraft/types';
+import type {
+  DraftRoundType,
+  DraftType,
+  TeamDraftRoundType,
+  TeamDraftType,
+} from '~/components/teamdraft/types';
 // Primary exports with explicit TeamDraft naming
 export type { TeamDraftRoundType, TeamDraftType };
 // Backwards compatibility aliases

@@ -7,21 +7,21 @@
  * so captain A's closed pages cannot auto-pause it. Do not add steps that wait on the clock.
  */
 
-import type { BrowserContext, Browser, Page } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 import {
-  test,
+  captainsOf,
+  DraftWebSocketHelper,
   expect,
+  expireDraftClock,
+  fetchTimerTournament,
   loginAdmin,
   loginAsUser,
-  resetTimerTournament,
-  fetchTimerTournament,
-  readyUp,
-  startDraftAsStaff,
-  expireDraftClock,
-  captainsOf,
   openDraftModal,
   postWithCsrf,
-  DraftWebSocketHelper,
+  readyUp,
+  resetTimerTournament,
+  startDraftAsStaff,
+  test,
   type TimerTournament,
 } from '../../fixtures';
 import { API_URL } from '../../fixtures/auth';
@@ -33,7 +33,7 @@ function teamsInOrder(t: TimerTournament): TimerTournament['teams'] {
 }
 
 async function resetReadyAndStart(
-  browser: Browser
+  browser: Browser,
 ): Promise<{ t: TimerTournament; admin: BrowserContext }> {
   const admin = await browser.newContext({ ignoreHTTPSErrors: true });
   await loginAdmin(admin);
@@ -83,27 +83,34 @@ test.describe.serial('Team draft timeout skip', () => {
 
     await expireDraftClock(admin, t.draft.pk, 90_000);
 
-    await wsHelper.waitForToast(/ran out of time — .* is up, .* picks at #2/, 5_000);
+    await wsHelper.waitForToast(
+      /ran out of time — .* is up, .* picks at #2/,
+      5_000,
+    );
     await expect(active).not.toHaveText(before, { timeout: 5_000 });
     await expect(
-      page.locator('[data-testid^="upcoming-pick-"][data-pick-number="1"]')
+      page.locator('[data-testid^="upcoming-pick-"][data-pick-number="1"]'),
     ).toHaveAttribute('data-team-pk', String(teamB.pk));
     await expect(
-      page.locator('[data-testid^="upcoming-pick-"][data-pick-number="2"]')
+      page.locator('[data-testid^="upcoming-pick-"][data-pick-number="2"]'),
     ).toHaveAttribute('data-team-pk', String(teamA.pk));
-    await expect(page.getByTestId('pickDisabledNotYourTurn').first()).toBeVisible();
+    await expect(
+      page.getByTestId('pickDisabledNotYourTurn').first(),
+    ).toBeVisible();
   });
 
   test('@cicd captain A navigating to their deferred round sees the deferred indicator, not YOUR turn', async () => {
     const { page } = a;
     await page.getByTestId('nextRoundButton').filter({ visible: true }).click();
     await expect(page.getByTestId('turn-indicator-deferred')).toContainText(
-      /Pick #2 — deferred, .* picks after #1/
+      /Pick #2 — deferred, .* picks after #1/,
     );
     await expect(page.getByTestId('turn-indicator')).toHaveCount(0);
 
     await page.getByTestId('prevRoundButton').filter({ visible: true }).click();
-    await expect(page.getByTestId('turn-indicator')).toContainText('Waiting for');
+    await expect(page.getByTestId('turn-indicator')).toContainText(
+      'Waiting for',
+    );
   });
 
   test('@cicd a pick against the deferred round is redirected (409 not_active_round)', async () => {
@@ -111,10 +118,14 @@ test.describe.serial('Team draft timeout skip', () => {
     const deferred = cur.draft.draft_rounds.find((r) => r.pick_number === 2);
     expect(deferred).toBeDefined();
 
-    const resp = await postWithCsrf(a.context, `${API_URL}/tournaments/pick_player`, {
-      draft_round_pk: deferred!.pk,
-      user_pk: cur.draft.users_remaining[0],
-    });
+    const resp = await postWithCsrf(
+      a.context,
+      `${API_URL}/tournaments/pick_player`,
+      {
+        draft_round_pk: deferred!.pk,
+        user_pk: cur.draft.users_remaining[0],
+      },
+    );
     expect(resp.status()).toBe(409);
     const body = await resp.json();
     expect(body.code).toBe('not_active_round');
@@ -125,11 +136,13 @@ test.describe.serial('Team draft timeout skip', () => {
     const { page } = a;
     await page.getByTestId('draft-history-button').click();
     await expect(page.getByTestId('draft-event-history-title')).toBeVisible();
-    await expect(page.getByTestId('draft-event-row-pick_timed_out').first()).toBeVisible();
+    await expect(
+      page.getByTestId('draft-event-row-pick_timed_out').first(),
+    ).toBeVisible();
     const skipped = page.getByTestId('draft-event-row-pick_skipped').first();
     await expect(skipped).toBeVisible();
     await expect(skipped.getByTestId('draft-event-text')).toHaveText(
-      /ran out of time — .* is up, .* picks at #2$/
+      /ran out of time — .* is up, .* picks at #2$/,
     );
   });
 });

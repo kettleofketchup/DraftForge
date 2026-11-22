@@ -1,16 +1,12 @@
 import { EllipsisVertical } from 'lucide-react';
 import { Button } from '~/components/ui/button';
+import { brandBg, brandGlowLift, buttonLift } from '~/components/ui/buttons';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
-import {
-  brandBg,
-  brandGlowLift,
-  buttonLift,
-} from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
 export interface MobileAction {
@@ -66,7 +62,10 @@ export function MobileActionsDropdown({
           <span className="sr-only">Actions</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className={cn(brandBg, 'border-primary/30 min-w-[180px] p-1.5')}>
+      <DropdownMenuContent
+        align="end"
+        className={cn(brandBg, 'border-primary/30 min-w-[180px] p-1.5')}
+      >
         {actions.map((action) => (
           <DropdownMenuItem
             key={action.key}

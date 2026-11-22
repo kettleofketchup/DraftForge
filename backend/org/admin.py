@@ -4,10 +4,12 @@ from typing import Any, cast
 from django import forms
 from django.contrib import admin
 from django.db import transaction
+from django.db.models import QuerySet
 from django.forms import ModelForm
 from django.http import HttpRequest
 
 from app.models import CustomUser
+from common.game import GameType
 from org.features import FeatureKey, set_org_feature
 from org.settings_service import (
     EDITABLE_FIELDS,
@@ -17,12 +19,41 @@ from org.settings_service import (
 )
 from org.standing import api as standing
 
-from .models import OrgFeature, OrgSettings, OrgUser
+from .models import OrgFeature, OrgSettings, OrgUser, OrgUserGameMmr
+
+GAME_SHORT_LABELS: dict[int, str] = {GameType.DOTA2: "D2", GameType.DEADLOCK: "DL"}
+
+
+def game_short_label(game_type: int) -> str:
+    if game_type in GAME_SHORT_LABELS:
+        return GAME_SHORT_LABELS[game_type]
+    if game_type in GameType.values:
+        return GameType(game_type).label
+    return str(game_type)
+
+
+class ReadOnlyAdminMixin:
+    def has_add_permission(self, request: HttpRequest, obj: Any = None) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: Any = None) -> bool:
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: Any = None) -> bool:
+        return False
+
+
+class OrgUserGameMmrInline(ReadOnlyAdminMixin, admin.TabularInline):
+    model = OrgUserGameMmr
+    fields = ["game_type", "mmr", "updated_at"]
+    readonly_fields = ["game_type", "mmr", "updated_at"]
+    extra = 0
+    can_delete = False
 
 
 @admin.register(OrgUser)
 class OrgUserAdmin(admin.ModelAdmin):
-    list_display = ["user", "organization", "mmr", "joined_at"]
+    list_display = ["user", "organization", "mmrs", "joined_at"]
     list_filter = ["organization"]
     search_fields = [
         "user__username",
@@ -32,6 +63,25 @@ class OrgUserAdmin(admin.ModelAdmin):
     ]
     raw_id_fields = ["user", "organization"]
     readonly_fields = ["guild_nickname"]
+    inlines = [OrgUserGameMmrInline]
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[OrgUser]:
+        return super().get_queryset(request).prefetch_related("game_mmrs")
+
+    @admin.display(description="MMRs")
+    def mmrs(self, obj: OrgUser) -> str:
+        by_game = {row.game_type: row.mmr for row in obj.game_mmrs.all()}
+        ordered = [g for g in GameType.values if g in by_game]
+        ordered += sorted(g for g in by_game if g not in GameType.values)
+        return " · ".join(f"{game_short_label(g)} {by_game[g]}" for g in ordered)
+
+
+@admin.register(OrgUserGameMmr)
+class OrgUserGameMmrAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
+    list_display = ["org_user", "game_type", "mmr", "updated_at"]
+    list_filter = ["game_type"]
+    raw_id_fields = ["org_user"]
+    readonly_fields = ["org_user", "game_type", "mmr", "updated_at"]
 
 
 @admin.register(OrgFeature)

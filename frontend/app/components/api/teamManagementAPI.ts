@@ -23,6 +23,7 @@ export const RosterUserSchema = z
     guildNickname: z.string().nullable().optional(),
     positions: PositionSchema.nullable().optional(),
     mmr: z.number().nullable().optional(),
+    mmr_game_type: z.number().nullable().optional(),
     league_mmr: z.number().nullable().optional(),
     steam_account_id: z.number().nullable().optional(),
     orgUserPk: z.number().optional(),

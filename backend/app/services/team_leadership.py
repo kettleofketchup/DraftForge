@@ -1,7 +1,9 @@
-from django.db.models import Q, QuerySet
+from django.db.models import OuterRef, Q, QuerySet, Subquery
+from django.db.models.functions import Coalesce
 
 from app.models import CustomUser, LeadershipProblem, Team
-from org.models import OrgUser
+from org.mmr import game_for_tournament
+from org.models import OrgUser, OrgUserGameMmr
 
 
 def teams_with_leadership_problems(
@@ -48,11 +50,15 @@ def successor_after_removal(
     league = team.tournament.league if team.tournament else None
     org_id = league.organization_id if league else None
     if org_id is not None:
+        game_mmr = OrgUserGameMmr.objects.nocache().filter(
+            org_user=OuterRef("pk"), game_type=game_for_tournament(team.tournament)
+        )
         best = (
             OrgUser.objects.nocache()
             .filter(user__in=remaining, organization_id=org_id)
             .select_related("user")
-            .order_by("-mmr")
+            .annotate(game_mmr=Coalesce(Subquery(game_mmr.values("mmr")[:1]), 0))
+            .order_by("-game_mmr", "pk")
             .first()
         )
         if best:

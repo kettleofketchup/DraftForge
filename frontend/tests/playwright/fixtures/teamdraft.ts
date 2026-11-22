@@ -1,9 +1,13 @@
-import type { Browser, BrowserContext, Page, WebSocket } from '@playwright/test';
-import { API_URL } from './base-url';
-import { loginAsUser } from './auth';
-import { postWithCsrf } from './events';
+import type {
+  Browser,
+  BrowserContext,
+  Page,
+  WebSocket,
+} from '@playwright/test';
 import { TournamentPage } from '../helpers/tournament';
-
+import { loginAsUser } from './auth';
+import { API_URL } from './base-url';
+import { postWithCsrf } from './events';
 
 /**
  * Kill all WebSocket connections for a team draft.
@@ -17,11 +21,11 @@ import { TournamentPage } from '../helpers/tournament';
  */
 export async function killDraftWebSocket(
   context: BrowserContext,
-  draftId: number
+  draftId: number,
 ): Promise<boolean> {
   const response = await context.request.post(
     `${API_URL}/tests/kill-draft-ws/${draftId}/`,
-    { ignoreHTTPSErrors: true, failOnStatusCode: false }
+    { ignoreHTTPSErrors: true, failOnStatusCode: false },
   );
   return response.ok();
 }
@@ -35,11 +39,11 @@ export async function killDraftWebSocket(
  */
 export async function resetTeamDraft(
   context: BrowserContext,
-  key: string
+  key: string,
 ): Promise<unknown | null> {
   const response = await context.request.post(
     `${API_URL}/tests/reset-tournament/${key}/`,
-    { failOnStatusCode: false }
+    { failOnStatusCode: false },
   );
 
   if (!response.ok()) {
@@ -66,35 +70,44 @@ export interface TimerTournament {
     }>;
     users_remaining: number[];
   };
-  teams: Array<{ pk: number; name: string; captain: number; draft_order: number }>;
+  teams: Array<{
+    pk: number;
+    name: string;
+    captain: number;
+    draft_order: number;
+  }>;
 }
 
 type TimerRound = TimerTournament['draft']['draft_rounds'][number];
 
 export async function resetTimerTournament(
   context: BrowserContext,
-  key: string
+  key: string,
 ): Promise<TimerTournament> {
   const response = await postWithCsrf(
     context,
-    `${API_URL}/tests/reset-tournament/${key}/`
+    `${API_URL}/tests/reset-tournament/${key}/`,
   );
   if (!response.ok()) {
-    throw new Error(`resetTimerTournament(${key}) failed: ${response.status()}`);
+    throw new Error(
+      `resetTimerTournament(${key}) failed: ${response.status()}`,
+    );
   }
   return response.json();
 }
 
 export async function fetchTimerTournament(
   context: BrowserContext,
-  key: string
+  key: string,
 ): Promise<TimerTournament> {
   const response = await context.request.get(
     `${API_URL}/tests/tournament-by-key/${key}/`,
-    { failOnStatusCode: false }
+    { failOnStatusCode: false },
   );
   if (!response.ok()) {
-    throw new Error(`fetchTimerTournament(${key}) failed: ${response.status()}`);
+    throw new Error(
+      `fetchTimerTournament(${key}) failed: ${response.status()}`,
+    );
   }
   return response.json();
 }
@@ -102,15 +115,17 @@ export async function fetchTimerTournament(
 export async function expireDraftClock(
   context: BrowserContext,
   draftPk: number,
-  ms = 120_000
+  ms = 120_000,
 ): Promise<void> {
   const response = await postWithCsrf(
     context,
     `${API_URL}/tests/draft/${draftPk}/expire-clock/`,
-    { ms }
+    { ms },
   );
   if (!response.ok()) {
-    throw new Error(`expireDraftClock(${draftPk}) failed: ${response.status()}`);
+    throw new Error(
+      `expireDraftClock(${draftPk}) failed: ${response.status()}`,
+    );
   }
 }
 
@@ -118,47 +133,51 @@ export async function staleDraftHeartbeat(
   context: BrowserContext,
   draftPk: number,
   userPk: number,
-  mode: 'delete' | 'backdate' = 'delete'
+  mode: 'delete' | 'backdate' = 'delete',
 ): Promise<void> {
   const response = await postWithCsrf(
     context,
     `${API_URL}/tests/draft/${draftPk}/stale-heartbeat/`,
-    { user_pk: userPk, mode }
+    { user_pk: userPk, mode },
   );
   if (!response.ok()) {
-    throw new Error(`staleDraftHeartbeat(${draftPk}) failed: ${response.status()}`);
+    throw new Error(
+      `staleDraftHeartbeat(${draftPk}) failed: ${response.status()}`,
+    );
   }
 }
 
 async function postDraftAction(
   context: BrowserContext,
   path: string,
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
 ): Promise<void> {
   const response = await postWithCsrf(context, `${API_URL}${path}`, data);
   if (!response.ok()) {
-    throw new Error(`POST ${path} failed: ${response.status()} ${await response.text()}`);
+    throw new Error(
+      `POST ${path} failed: ${response.status()} ${await response.text()}`,
+    );
   }
 }
 
 export async function readyUp(
   context: BrowserContext,
   draftPk: number,
-  ready = true
+  ready = true,
 ): Promise<void> {
   await postDraftAction(context, `/draft/${draftPk}/ready/`, { ready });
 }
 
 export async function startDraftAsStaff(
   adminContext: BrowserContext,
-  draftPk: number
+  draftPk: number,
 ): Promise<void> {
   await postDraftAction(adminContext, `/draft/${draftPk}/start/`);
 }
 
 export async function resumeDraftAsStaff(
   adminContext: BrowserContext,
-  draftPk: number
+  draftPk: number,
 ): Promise<void> {
   await postDraftAction(adminContext, `/draft/${draftPk}/resume/`);
 }
@@ -166,7 +185,7 @@ export async function resumeDraftAsStaff(
 export async function staffPick(
   adminContext: BrowserContext,
   draftRoundPk: number,
-  userPk: number
+  userPk: number,
 ): Promise<void> {
   await postDraftAction(adminContext, '/tournaments/pick_player', {
     draft_round_pk: draftRoundPk,
@@ -212,20 +231,25 @@ function draftSocketReady(page: Page, timeoutMs = 15_000): Promise<void> {
     };
     const timer = setTimeout(() => {
       page.off('websocket', onSocket);
-      reject(new Error(`no initial_state on a draft socket within ${timeoutMs} ms`));
+      reject(
+        new Error(`no initial_state on a draft socket within ${timeoutMs} ms`),
+      );
     }, timeoutMs);
     page.on('websocket', onSocket);
   });
 }
 
-export async function openDraftModal(page: Page, tournamentPk: number): Promise<void> {
+export async function openDraftModal(
+  page: Page,
+  tournamentPk: number,
+): Promise<void> {
   const socketReady = draftSocketReady(page);
   socketReady.catch(() => undefined);
   const tournamentPage = new TournamentPage(page);
   await tournamentPage.goto(tournamentPk, 'teams');
   await page
     .locator(
-      '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], [data-testid="viewTeamDraftButton"], [data-testid="viewCompletedTeamDraftButton"]'
+      '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], [data-testid="viewTeamDraftButton"], [data-testid="viewCompletedTeamDraftButton"]',
     )
     .first()
     .click();
@@ -236,7 +260,7 @@ export async function openDraftModal(page: Page, tournamentPk: number): Promise<
 export async function openCaptainPage(
   browser: Browser,
   captainPk: number,
-  tournamentPk: number
+  tournamentPk: number,
 ): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   await loginAsUser(context, captainPk);
@@ -245,7 +269,9 @@ export async function openCaptainPage(
   return { context, page };
 }
 
-export async function suppressDraftHeartbeats(page: Page): Promise<{ resume(): void }> {
+export async function suppressDraftHeartbeats(
+  page: Page,
+): Promise<{ resume(): void }> {
   let suppressed = true;
   await page.routeWebSocket('**/api/draft/**', (ws) => {
     const server = ws.connectToServer();
@@ -267,6 +293,9 @@ export async function suppressDraftHeartbeats(page: Page): Promise<{ resume(): v
   };
 }
 
-export async function draftStateOf(context: BrowserContext, key: string): Promise<string> {
+export async function draftStateOf(
+  context: BrowserContext,
+  key: string,
+): Promise<string> {
   return (await fetchTimerTournament(context, key)).draft.state;
 }

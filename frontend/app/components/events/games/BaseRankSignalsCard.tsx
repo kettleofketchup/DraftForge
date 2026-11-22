@@ -18,7 +18,11 @@ interface BaseRankSignalsCardProps {
  *
  * The dispatcher (`./RankSignalsCard`) returns this directly for non-Dota games.
  */
-export function BaseRankSignalsCard({ signup, children, warning }: BaseRankSignalsCardProps) {
+export function BaseRankSignalsCard({
+  signup,
+  children,
+  warning,
+}: BaseRankSignalsCardProps) {
   const priorMmr = signup.org_user_mmr;
 
   return (
@@ -31,9 +35,14 @@ export function BaseRankSignalsCard({ signup, children, warning }: BaseRankSigna
       </div>
 
       {/* Previously Approved MMR — universal across games */}
-      <div className="flex justify-between items-center" data-testid="rank-signals-prior-mmr">
+      <div
+        className="flex justify-between items-center"
+        data-testid="rank-signals-prior-mmr"
+      >
         <span className="text-muted-foreground">Previously Approved MMR</span>
-        <span className={priorMmr != null ? 'font-mono' : 'text-muted-foreground'}>
+        <span
+          className={priorMmr != null ? 'font-mono' : 'text-muted-foreground'}
+        >
           {priorMmr != null ? priorMmr.toLocaleString() : '—'}
         </span>
       </div>

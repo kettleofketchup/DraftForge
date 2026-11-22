@@ -67,13 +67,20 @@ export function TournamentGrid({
 
 export function TournamentGridSkeleton({ count = 8 }: { count?: number }) {
   return (
-    <div className={GRID_CLASSES} aria-hidden data-testid="tournaments-skeleton">
+    <div
+      className={GRID_CLASSES}
+      aria-hidden
+      data-testid="tournaments-skeleton"
+    >
       {Array.from({ length: count }, (_, index) => (
         <div key={index} className="col-span-1 flex h-full">
           <div className={TOURNAMENT_CARD_CELL}>
             <div
               data-testid="tournaments-skeleton-card"
-              className={cn(TOURNAMENT_CARD_SURFACE, 'pointer-events-none gap-3')}
+              className={cn(
+                TOURNAMENT_CARD_SURFACE,
+                'pointer-events-none gap-3',
+              )}
             >
               <Skeleton className="h-5 w-40" />
               <Skeleton className="h-4 w-24" />
@@ -114,7 +121,11 @@ export function EmptyState({
 
 export function BrowseAllButton({ onClick }: { onClick: () => void }) {
   return (
-    <SecondaryButton size="sm" data-testid="tournaments-empty-browse-all" onClick={onClick}>
+    <SecondaryButton
+      size="sm"
+      data-testid="tournaments-empty-browse-all"
+      onClick={onClick}
+    >
       Browse all organizations
     </SecondaryButton>
   );

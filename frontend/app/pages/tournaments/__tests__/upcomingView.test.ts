@@ -46,17 +46,25 @@ describe('resolveUpcomingView', () => {
   });
 
   it('shows the skeleton while data is undefined', () => {
-    expect(resolveUpcomingView({ ...BASE, data: undefined })).toEqual({ kind: 'skeleton' });
+    expect(resolveUpcomingView({ ...BASE, data: undefined })).toEqual({
+      kind: 'skeleton',
+    });
   });
 
   it('renders flat when the refetch settled without membership ids', () => {
     const data = [tournament(1, 30)];
-    const view = resolveUpcomingView({ ...BASE, data, memberOrgIds: undefined });
+    const view = resolveUpcomingView({
+      ...BASE,
+      data,
+      memberOrgIds: undefined,
+    });
     expect(view).toEqual({ kind: 'flat', items: data });
   });
 
   it('renders empty for a member with no data, never tiers', () => {
-    expect(resolveUpcomingView({ ...BASE, data: [] })).toEqual({ kind: 'empty' });
+    expect(resolveUpcomingView({ ...BASE, data: [] })).toEqual({
+      kind: 'empty',
+    });
   });
 
   it('puts other-org tournaments in others with an empty yours tier', () => {
@@ -83,7 +91,11 @@ describe('resolveUpcomingView', () => {
 
   it('renders flat when an org or league filter is set', () => {
     const data = [tournament(1, 30)];
-    const view = resolveUpcomingView({ ...BASE, data, orgOrLeagueFilter: true });
+    const view = resolveUpcomingView({
+      ...BASE,
+      data,
+      orgOrLeagueFilter: true,
+    });
     expect(view).toEqual({ kind: 'flat', items: data });
   });
 

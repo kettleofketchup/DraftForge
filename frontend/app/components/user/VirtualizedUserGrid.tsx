@@ -13,8 +13,8 @@
  * correctly inside tab panels and constrained layouts.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
@@ -34,7 +34,8 @@ function getOutletScrollElement(): HTMLElement | null {
   // data-slot="scroll-area-viewport". That's the actual scrolling element
   // — listen there. Fall back to the root if it hasn't mounted yet.
   return (
-    root.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]') ?? root
+    root.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]') ??
+    root
   );
 }
 

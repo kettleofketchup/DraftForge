@@ -1,20 +1,7 @@
-import { generateMeta } from '~/lib/seo';
 import { Plus, Trophy } from 'lucide-react';
-
-export function meta() {
-  return generateMeta({
-    title: 'Leagues',
-    description: 'Competitive Dota 2 league seasons',
-    url: '/leagues',
-  });
-}
-import { memo, useEffect, useState, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import {
-  CreateLeagueModal,
-  LeagueCard,
-  useLeagues,
-} from '~/components/league';
+import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import type { LeagueType } from '~/components/league/schemas';
 import { useOrganizations } from '~/components/organization';
 import { PrimaryButton } from '~/components/ui/buttons';
@@ -26,8 +13,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { useUserStore } from '~/store/userStore';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
+import { generateMeta } from '~/lib/seo';
+import { useUserStore } from '~/store/userStore';
+
+export function meta() {
+  return generateMeta({
+    title: 'Leagues',
+    description: 'Competitive Dota 2 league seasons',
+    url: '/leagues',
+  });
+}
 
 /** Skeleton loader for league cards */
 const LeagueCardSkeleton = () => (
@@ -72,11 +68,7 @@ const EmptyLeagues = ({ hasOrgFilter }: { hasOrgFilter: boolean }) => (
 );
 
 /** Memoized wrapper for individual league cards */
-const LeagueCardWrapper = memo(({
-  league,
-}: {
-  league: LeagueType;
-}) => {
+const LeagueCardWrapper = memo(({ league }: { league: LeagueType }) => {
   return <LeagueCard league={league} />;
 });
 
@@ -99,7 +91,9 @@ export default function LeaguesPage() {
   const selectedOrgId = searchParams.get('organization');
   const selectedOrgIdNum = selectedOrgId ? parseInt(selectedOrgId, 10) : null;
 
-  const { leagues: storeLeagues, isLoading } = useLeagues(selectedOrgIdNum ?? undefined);
+  const { leagues: storeLeagues, isLoading } = useLeagues(
+    selectedOrgIdNum ?? undefined,
+  );
   const { organizations } = useOrganizations();
   const currentUser = useUserStore((state) => state.currentUser);
   const hasHydrated = useUserStore((state) => state.hasHydrated);
@@ -108,7 +102,7 @@ export default function LeaguesPage() {
   // Get selected organization for permission checks
   const selectedOrg = useMemo(
     () => organizations.find((o) => o.pk === selectedOrgIdNum) || null,
-    [organizations, selectedOrgIdNum]
+    [organizations, selectedOrgIdNum],
   );
   const isOrgAdmin = useIsOrganizationAdmin(selectedOrg);
 
@@ -125,7 +119,9 @@ export default function LeaguesPage() {
   // Note: useLeagues hook already filters by organizationId, so no additional filtering needed
   const leagues = hasHydrated
     ? storeLeagues
-    : (mounted && cachedLeagues.length > 0 ? cachedLeagues : storeLeagues);
+    : mounted && cachedLeagues.length > 0
+      ? cachedLeagues
+      : storeLeagues;
 
   // Can create leagues when org is selected AND user is org admin (includes owner, superuser)
   const canCreate = isOrgAdmin && selectedOrgIdNum;
@@ -164,55 +160,55 @@ export default function LeaguesPage() {
 
   return (
     <div className="container mx-auto p-4">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Trophy className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-bold">Leagues</h1>
-          </div>
-          {canCreate && (
-            <PrimaryButton onClick={() => setCreateModalOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Create League
-            </PrimaryButton>
-          )}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Trophy className="h-8 w-8 text-primary" />
+          <h1 className="text-2xl font-bold">Leagues</h1>
         </div>
-
-        {/* Organization Filter */}
-        <div className="mb-6">
-          <div className="w-64">
-            <label className="text-sm font-medium mb-1 block">
-              Filter by Organization
-            </label>
-            <Select
-              value={selectedOrgId || 'all'}
-              onValueChange={(v) => setOrgFilter(v === 'all' ? null : v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="All organizations" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All organizations</SelectItem>
-                {organizations
-                  .filter((org) => org.pk != null)
-                  .map((org) => (
-                    <SelectItem key={org.pk} value={org.pk!.toString()}>
-                      {org.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {renderLeagueGrid()}
-
-        {selectedOrgIdNum && (
-          <CreateLeagueModal
-            open={createModalOpen}
-            onOpenChange={setCreateModalOpen}
-            organizationId={selectedOrgIdNum}
-          />
+        {canCreate && (
+          <PrimaryButton onClick={() => setCreateModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Create League
+          </PrimaryButton>
         )}
+      </div>
+
+      {/* Organization Filter */}
+      <div className="mb-6">
+        <div className="w-64">
+          <label className="text-sm font-medium mb-1 block">
+            Filter by Organization
+          </label>
+          <Select
+            value={selectedOrgId || 'all'}
+            onValueChange={(v) => setOrgFilter(v === 'all' ? null : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="All organizations" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All organizations</SelectItem>
+              {organizations
+                .filter((org) => org.pk != null)
+                .map((org) => (
+                  <SelectItem key={org.pk} value={org.pk!.toString()}>
+                    {org.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {renderLeagueGrid()}
+
+      {selectedOrgIdNum && (
+        <CreateLeagueModal
+          open={createModalOpen}
+          onOpenChange={setCreateModalOpen}
+          organizationId={selectedOrgIdNum}
+        />
+      )}
     </div>
   );
 }

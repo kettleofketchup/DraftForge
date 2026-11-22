@@ -1,7 +1,11 @@
 import { winRateTone } from './format';
 import type { PlayerLeagueSummary } from './schemas';
 
-export type LeagueStatsFilter = 'all' | 'high_winrate' | 'experienced' | 'new_players';
+export type LeagueStatsFilter =
+  | 'all'
+  | 'high_winrate'
+  | 'experienced'
+  | 'new_players';
 
 export const EXPERIENCED_GAMES = 10;
 

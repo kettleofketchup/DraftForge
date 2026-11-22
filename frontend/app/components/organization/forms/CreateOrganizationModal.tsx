@@ -15,7 +15,10 @@ import {
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
 import { useUserStore } from '~/store/userStore';
-import { CreateOrganizationSchema, type CreateOrganizationInput } from '../schemas';
+import {
+  CreateOrganizationSchema,
+  type CreateOrganizationInput,
+} from '../schemas';
 
 interface CreateOrganizationModalProps {
   open: boolean;
@@ -106,10 +109,7 @@ export function CreateOrganizationModal({
             <FormItem>
               <FormLabel>Logo URL</FormLabel>
               <FormControl>
-                <Input
-                  placeholder="https://example.com/logo.png"
-                  {...field}
-                />
+                <Input placeholder="https://example.com/logo.png" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

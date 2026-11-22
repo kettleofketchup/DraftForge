@@ -12,7 +12,11 @@ vi.mock('~/lib/test-utils', async (importOriginal) => ({
   shouldShowTestFeatures,
 }));
 
-const user = { pk: 7, username: 'alice', discordId: '123' } as unknown as UserClassType;
+const user = {
+  pk: 7,
+  username: 'alice',
+  discordId: '123',
+} as unknown as UserClassType;
 
 describe('LoginAsUserButton', () => {
   it('renders nothing when test features are off', () => {
@@ -41,10 +45,14 @@ describe('LoginAsUserButton', () => {
     document.body.appendChild(host);
 
     shouldShowTestFeatures.mockReturnValue(false);
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
     const recoverable = vi.fn();
     const root = await act(async () =>
-      hydrateRoot(host, <LoginAsUserButton user={user} />, { onRecoverableError: recoverable }),
+      hydrateRoot(host, <LoginAsUserButton user={user} />, {
+        onRecoverableError: recoverable,
+      }),
     );
 
     expect(recoverable).not.toHaveBeenCalled();

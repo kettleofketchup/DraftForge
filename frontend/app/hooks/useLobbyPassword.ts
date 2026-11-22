@@ -7,14 +7,18 @@ import {
 
 export const eventLobbyPasswordKey = (eventId: number | null | undefined) =>
   ['event-lobby-password', eventId] as const;
-export const repeaterLobbyPasswordKey = (repeaterId: number | null | undefined) =>
-  ['repeater-lobby-password', repeaterId] as const;
+export const repeaterLobbyPasswordKey = (
+  repeaterId: number | null | undefined,
+) => ['repeater-lobby-password', repeaterId] as const;
 
 /**
  * The event's lobby password, or null when the user may not see it (only
  * staff and registered players can). Signup changes invalidate it.
  */
-export function useEventLobbyPassword(eventId: number | null | undefined, enabled = true) {
+export function useEventLobbyPassword(
+  eventId: number | null | undefined,
+  enabled = true,
+) {
   return useQuery({
     queryKey: eventLobbyPasswordKey(eventId),
     queryFn: () => getEventLobbyPassword(eventId!),
@@ -25,7 +29,10 @@ export function useEventLobbyPassword(eventId: number | null | undefined, enable
 }
 
 /** The series' password settings (staff only). */
-export function useRepeaterLobbyPassword(repeaterId: number | null | undefined, enabled = true) {
+export function useRepeaterLobbyPassword(
+  repeaterId: number | null | undefined,
+  enabled = true,
+) {
   return useQuery({
     queryKey: repeaterLobbyPasswordKey(repeaterId),
     queryFn: () => getRepeaterLobbyPassword(repeaterId!),
@@ -35,7 +42,9 @@ export function useRepeaterLobbyPassword(repeaterId: number | null | undefined, 
   });
 }
 
-export function useRegenerateEventLobbyPassword(eventId: number | null | undefined) {
+export function useRegenerateEventLobbyPassword(
+  eventId: number | null | undefined,
+) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => {

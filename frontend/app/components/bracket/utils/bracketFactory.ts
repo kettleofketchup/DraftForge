@@ -16,7 +16,7 @@ export interface BracketResult {
 export function generateBracket(
   type: BracketType,
   teams: TeamType[],
-  seedingMethod: SeedingMethod = 'mmr_total'
+  seedingMethod: SeedingMethod = 'mmr_total',
 ): BracketResult {
   switch (type) {
     case 'double_elimination': {
@@ -54,7 +54,7 @@ export function generateBracket(
 export function reseedBracket(
   matches: BracketMatch[],
   teams: TeamType[],
-  seedingMethod: SeedingMethod
+  seedingMethod: SeedingMethod,
 ): BracketMatch[] {
   // Clear existing team assignments
   const clearedMatches = matches.map((match) => ({

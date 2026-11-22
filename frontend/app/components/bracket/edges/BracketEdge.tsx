@@ -1,5 +1,5 @@
-import { memo } from 'react';
 import { BaseEdge, getSmoothStepPath, type EdgeProps } from '@xyflow/react';
+import { memo } from 'react';
 
 interface BracketEdgeData {
   isWinnerPath?: boolean;
@@ -44,7 +44,7 @@ export const BracketEdge = memo(
         }}
       />
     );
-  }
+  },
 );
 
 BracketEdge.displayName = 'BracketEdge';

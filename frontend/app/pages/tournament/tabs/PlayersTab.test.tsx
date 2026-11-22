@@ -17,7 +17,10 @@ const captured = vi.hoisted(
 vi.mock('~/components/user', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   UserList: (props: { organizationId?: number; leagueId?: number }) => {
-    captured.push({ organizationId: props.organizationId, leagueId: props.leagueId });
+    captured.push({
+      organizationId: props.organizationId,
+      leagueId: props.leagueId,
+    });
     return null;
   },
 }));
@@ -41,8 +44,12 @@ function renderTab() {
 describe('PlayersTab org/league context', () => {
   beforeEach(() => {
     captured.length = 0;
-    useOrgStore.setState({ currentOrg: { pk: 9, name: 'Stale' } as OrganizationType });
-    useLeagueStore.setState({ currentLeague: { pk: 9, name: 'Stale' } as LeagueType });
+    useOrgStore.setState({
+      currentOrg: { pk: 9, name: 'Stale' } as OrganizationType,
+    });
+    useLeagueStore.setState({
+      currentLeague: { pk: 9, name: 'Stale' } as LeagueType,
+    });
   });
 
   it('passes the tournament org/league ids, not the store ones', () => {
@@ -60,6 +67,9 @@ describe('PlayersTab org/league context', () => {
     } as never);
     renderTab();
     expect(captured.length).toBeGreaterThan(0);
-    expect(captured.at(-1)).toEqual({ organizationId: undefined, leagueId: undefined });
+    expect(captured.at(-1)).toEqual({
+      organizationId: undefined,
+      leagueId: undefined,
+    });
   });
 });

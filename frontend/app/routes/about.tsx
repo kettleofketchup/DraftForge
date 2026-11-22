@@ -1,5 +1,5 @@
-import { About } from '../pages/about/about';
 import { generateMeta } from '~/lib/seo';
+import { About } from '../pages/about/about';
 
 export function meta() {
   return generateMeta({

@@ -1,11 +1,12 @@
 export {
-  ContributionsTab,
-  type ContributionsTabProps,
-} from './ContributionsTab';
-export { Leaderboard } from './Leaderboard';
+  ContributionsAdmin,
+  ContributionsDetail,
+  type ContributionsAdminProps,
+  type ContributionsDetailProps,
+} from './ContributionsPanels';
 export { MemberBreakdown } from './MemberBreakdown';
 export { describePointValue, type PointValueDescription } from './pointValues';
-export { useLeaderboard, useMemberBreakdown, usePointValues } from './queries';
+export { useMemberBreakdown, usePointValues } from './queries';
 export * from './schemas';
 export {
   formatOrgDate,

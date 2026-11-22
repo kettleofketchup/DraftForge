@@ -1,6 +1,6 @@
 /** Tournament detail mobile (#232): breadcrumb hidden, no h-overflow, page-nav drives tabs. */
 
-import { test, expect, getTournamentByKey } from '../../fixtures';
+import { expect, getTournamentByKey, test } from '../../fixtures';
 
 test.describe('Tournament detail on mobile', () => {
   let tournamentPk: number;
@@ -28,9 +28,13 @@ test.describe('Tournament detail on mobile', () => {
 
   test('no horizontal overflow on players tab', async ({ page }) => {
     const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
     );
-    expect(overflow, 'horizontal overflow on /tournament/:pk/players').toBe(false);
+    expect(overflow, 'horizontal overflow on /tournament/:pk/players').toBe(
+      false,
+    );
   });
 
   test('Import CSV button is fully visible (no clipping)', async ({ page }) => {
@@ -47,17 +51,27 @@ test.describe('Tournament detail on mobile', () => {
     }
   });
 
-  test('desktop TabsList is hidden, page-nav dropdown is visible', async ({ page }) => {
+  test('desktop TabsList is hidden, page-nav dropdown is visible', async ({
+    page,
+  }) => {
     // Desktop tabs (in TournamentTabs) are `hidden md:block`.
-    await expect(page.locator('[data-testid="tournamentTabsList"]')).toBeHidden();
+    await expect(
+      page.locator('[data-testid="tournamentTabsList"]'),
+    ).toBeHidden();
     // Page-nav dropdown (centered in the navbar at mobile widths) drives tabs.
-    await expect(page.locator('[data-testid="page-nav-trigger"]')).toBeVisible();
+    await expect(
+      page.locator('[data-testid="page-nav-trigger"]'),
+    ).toBeVisible();
   });
 
-  test('?modal=captains deep-link opens the Choose Captains dialog', async ({ page }) => {
+  test('?modal=captains deep-link opens the Choose Captains dialog', async ({
+    page,
+  }) => {
     // ?modal=captains is bookmarkable — opens the dialog without clicking the in-page trigger.
     await page.goto(`/tournament/${tournamentPk}/teams?modal=captains`);
-    const dialog = page.locator('[role="dialog"]', { hasText: 'Choose Captains' });
+    const dialog = page.locator('[role="dialog"]', {
+      hasText: 'Choose Captains',
+    });
     await expect(dialog).toBeVisible({ timeout: 15_000 });
   });
 });

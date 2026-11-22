@@ -18,7 +18,9 @@ export type LobbyPasswordIssue =
 const PRINTABLE_ASCII = /^[\x20-\x7E]*$/;
 
 /** Why a fixed password cannot be used, or null when it can. */
-export function lobbyPasswordIssue(value: string | null | undefined): LobbyPasswordIssue | null {
+export function lobbyPasswordIssue(
+  value: string | null | undefined,
+): LobbyPasswordIssue | null {
   if (!value) return 'required';
   if (value.length > LOBBY_PASSWORD_MAX_LENGTH) return 'too_long';
   if (!PRINTABLE_ASCII.test(value)) return 'invalid_characters';
@@ -50,7 +52,11 @@ const keepsSavedPassword = (values: LobbyPasswordValues): boolean =>
   !values.dota_lobby_password && !!values.dota_lobby_password_saved;
 
 interface IssueContext {
-  addIssue: (issue: { code: 'custom'; path: string[]; message: string }) => void;
+  addIssue: (issue: {
+    code: 'custom';
+    path: string[];
+    message: string;
+  }) => void;
 }
 
 /**
@@ -59,11 +65,20 @@ interface IssueContext {
  * or the field is empty and the saved fixed password stays. The message is
  * the issue code; LobbyPasswordSettings shows the translated text.
  */
-export function refineLobbyPassword(values: LobbyPasswordValues, ctx: IssueContext): void {
-  if (isOtherGame(values) || values.dota_lobby_password_mode !== 'fixed') return;
+export function refineLobbyPassword(
+  values: LobbyPasswordValues,
+  ctx: IssueContext,
+): void {
+  if (isOtherGame(values) || values.dota_lobby_password_mode !== 'fixed')
+    return;
   if (keepsSavedPassword(values)) return;
   const issue = lobbyPasswordIssue(values.dota_lobby_password);
-  if (issue) ctx.addIssue({ code: 'custom', path: ['dota_lobby_password'], message: issue });
+  if (issue)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['dota_lobby_password'],
+      message: issue,
+    });
 }
 
 /**
@@ -71,9 +86,15 @@ export function refineLobbyPassword(values: LobbyPasswordValues, ctx: IssueConte
  * does a fixed one that keeps its saved password; another game sends
  * neither field, so the saved setting stays.
  */
-export function lobbyPasswordPayload(values: LobbyPasswordValues): LobbyPasswordPayload {
+export function lobbyPasswordPayload(
+  values: LobbyPasswordValues,
+): LobbyPasswordPayload {
   if (isOtherGame(values)) return {};
   const mode = values.dota_lobby_password_mode ?? 'random';
-  if (mode !== 'fixed' || keepsSavedPassword(values)) return { dota_lobby_password_mode: mode };
-  return { dota_lobby_password_mode: mode, dota_lobby_password: values.dota_lobby_password ?? '' };
+  if (mode !== 'fixed' || keepsSavedPassword(values))
+    return { dota_lobby_password_mode: mode };
+  return {
+    dota_lobby_password_mode: mode,
+    dota_lobby_password: values.dota_lobby_password ?? '',
+  };
 }

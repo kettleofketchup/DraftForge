@@ -544,7 +544,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         api.force_authenticate(self.admin)
         resp = api.patch(
             f"/api/organizations/{self.org.pk}/users/{self._org_user(u).pk}/",
-            {"mmr": 5000},
+            {"game_mmrs": {"1": 5000}},
             format="json",
         )
         self.assertEqual(resp.status_code, 200, resp.content)

@@ -1,9 +1,9 @@
-import { Gamepad2, Loader2, Check } from 'lucide-react';
+import { Check, Gamepad2, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
+import { Button } from '~/components/ui/button';
 import { LeagueMatchCard } from '../LeagueMatchCard';
 import { useLeagueMatches } from '../hooks/useLeagueMatches';
-import { Button } from '~/components/ui/button';
 
 interface Props {
   leaguePk: number;
@@ -11,7 +11,9 @@ interface Props {
 
 export const MatchesTab: React.FC<Props> = ({ leaguePk }) => {
   const [linkedOnly, setLinkedOnly] = useState(false);
-  const { matches, isLoading, error } = useLeagueMatches(leaguePk, { linkedOnly });
+  const { matches, isLoading, error } = useLeagueMatches(leaguePk, {
+    linkedOnly,
+  });
 
   if (isLoading) {
     return (

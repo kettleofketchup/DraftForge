@@ -1,5 +1,14 @@
+import {
+  ArrowDownUp,
+  Building2,
+  CalendarDays,
+  ChevronDown,
+  Filter,
+  ListFilter,
+  Plus,
+  Search,
+} from 'lucide-react';
 import { generateMeta } from '~/lib/seo';
-import { ArrowDownUp, Building2, CalendarDays, ChevronDown, Filter, ListFilter, Plus, Search } from 'lucide-react';
 
 export function meta() {
   return generateMeta({
@@ -9,17 +18,24 @@ export function meta() {
   });
 }
 
-import { useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
+import api from '~/components/api/axios';
 import { EventStateBadge } from '~/components/events';
-import type { EventType } from '~/components/events/schemas';
 import { RepeaterCard } from '~/components/events/RepeaterCard';
+import type { EventType } from '~/components/events/schemas';
 import { useOrganization, useOrganizations } from '~/components/organization';
+import { Badge } from '~/components/ui/badge';
+import { Button } from '~/components/ui/button';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '~/components/ui/popover';
 import {
   Sheet,
   SheetContent,
@@ -27,14 +43,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '~/components/ui/sheet';
-import { Button } from '~/components/ui/button';
-import { Badge } from '~/components/ui/badge';
-import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
 import { Switch } from '~/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useEvents } from '~/hooks/useEvent';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
-import api from '~/components/api/axios';
-import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 
 /** Skeleton loader for event cards */
 const EventCardSkeleton = () => (
@@ -81,7 +94,9 @@ function EventCard({ event }: { event: EventType }) {
           <h3 className="font-semibold truncate" data-testid="event-card-name">
             {event.name}
           </h3>
-          <p className="text-sm text-muted-foreground">{event.organization_name}</p>
+          <p className="text-sm text-muted-foreground">
+            {event.organization_name}
+          </p>
         </CardHeader>
         <CardContent>
           <div className="flex items-end justify-between gap-2">
@@ -111,7 +126,12 @@ const EVENT_STATES = [
 ] as const;
 
 // Default: show active events only (hide completed/cancelled)
-const DEFAULT_STATES = new Set(['upcoming', 'signups_open', 'roll_call', 'in_progress']);
+const DEFAULT_STATES = new Set([
+  'upcoming',
+  'signups_open',
+  'roll_call',
+  'in_progress',
+]);
 
 const SORT_OPTIONS = [
   { value: 'closest', label: 'Closest' },
@@ -158,7 +178,11 @@ function FilterControls({
               data-testid="events-org-filter"
             >
               <span className="truncate">
-                {selectedOrgId ? organizations.find((o) => o.pk?.toString() === selectedOrgId)?.name || 'Org' : 'All'}
+                {selectedOrgId
+                  ? organizations.find(
+                      (o) => o.pk?.toString() === selectedOrgId,
+                    )?.name || 'Org'
+                  : 'All'}
               </span>
               <ChevronDown className="h-4 w-4 opacity-50" />
             </Button>
@@ -242,7 +266,8 @@ function FilterControls({
               data-testid="events-sort"
             >
               <span className="truncate">
-                {SORT_OPTIONS.find((s) => s.value === sortBy)?.label || 'Closest'}
+                {SORT_OPTIONS.find((s) => s.value === sortBy)?.label ||
+                  'Closest'}
               </span>
               <ChevronDown className="h-4 w-4 opacity-50" />
             </Button>
@@ -268,14 +293,20 @@ function useRepeaters(orgId?: number) {
   return useQuery({
     queryKey: ['repeaters', orgId],
     queryFn: () =>
-      api.get('/events/repeaters/', { params: orgId ? { organization: orgId } : {} }).then((r) => r.data),
+      api
+        .get('/events/repeaters/', {
+          params: orgId ? { organization: orgId } : {},
+        })
+        .then((r) => r.data),
   });
 }
 
 export default function EventsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedOrgId = searchParams.get('organization');
-  const selectedOrgIdNum = selectedOrgId ? parseInt(selectedOrgId, 10) : undefined;
+  const selectedOrgIdNum = selectedOrgId
+    ? parseInt(selectedOrgId, 10)
+    : undefined;
 
   const { data: repeaters } = useRepeaters(selectedOrgIdNum);
   const { organizations } = useOrganizations();
@@ -284,7 +315,9 @@ export default function EventsPage() {
   // Filters + sort
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
-  const [selectedStates, setSelectedStates] = useState<Set<string>>(new Set(DEFAULT_STATES));
+  const [selectedStates, setSelectedStates] = useState<Set<string>>(
+    new Set(DEFAULT_STATES),
+  );
   const [sortBy, setSortBy] = useState<string>('closest');
 
   // Map sort UI values to backend ordering params
@@ -300,7 +333,9 @@ export default function EventsPage() {
   const { data: events, isLoading } = useEvents({
     ...(selectedOrgIdNum ? { organization: selectedOrgIdNum } : {}),
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
-    ...(selectedStates.size < EVENT_STATES.length ? { states: [...selectedStates] } : {}),
+    ...(selectedStates.size < EVENT_STATES.length
+      ? { states: [...selectedStates] }
+      : {}),
     ordering: SORT_TO_ORDERING[sortBy] || 'closest',
   });
 
@@ -327,7 +362,8 @@ export default function EventsPage() {
   // Events come pre-filtered/sorted from backend — no client-side filtering needed
   const filteredEvents = events || [];
 
-  const statesChanged = selectedStates.size !== DEFAULT_STATES.size ||
+  const statesChanged =
+    selectedStates.size !== DEFAULT_STATES.size ||
     [...DEFAULT_STATES].some((s) => !selectedStates.has(s));
   const hasActiveFilter = !!debouncedSearch || statesChanged || !!selectedOrgId;
   const activeFilterCount = [
@@ -358,9 +394,20 @@ export default function EventsPage() {
     if (repeaters && repeaters.length > 0) {
       return (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {repeaters.map((repeater: { id: number; name: string; organization: number; organization_name?: string; frequency: string; is_active: boolean; subscriber_count: number; next_event_date: string | null }) => (
-            <RepeaterCard key={repeater.id} repeater={repeater} />
-          ))}
+          {repeaters.map(
+            (repeater: {
+              id: number;
+              name: string;
+              organization: number;
+              organization_name?: string;
+              frequency: string;
+              is_active: boolean;
+              subscriber_count: number;
+              next_event_date: string | null;
+            }) => (
+              <RepeaterCard key={repeater.id} repeater={repeater} />
+            ),
+          )}
         </div>
       );
     }
@@ -384,7 +431,9 @@ export default function EventsPage() {
           <h1 className="text-2xl font-bold">Events</h1>
           {events && (
             <span className="text-sm text-muted-foreground">
-              {hasActiveFilter ? `${filteredEvents.length} of ${events.length}` : `${events.length} total`}
+              {hasActiveFilter
+                ? `${filteredEvents.length} of ${events.length}`
+                : `${events.length} total`}
             </span>
           )}
         </div>
@@ -420,11 +469,14 @@ export default function EventsPage() {
             setOrgFilter={setOrgFilter}
             organizations={organizations}
             selectedStates={selectedStates}
-            toggleState={(v) => setSelectedStates((prev) => {
-              const next = new Set(prev);
-              if (next.has(v)) next.delete(v); else next.add(v);
-              return next;
-            })}
+            toggleState={(v) =>
+              setSelectedStates((prev) => {
+                const next = new Set(prev);
+                if (next.has(v)) next.delete(v);
+                else next.add(v);
+                return next;
+              })
+            }
             sortBy={sortBy}
             setSortBy={setSortBy}
           />
@@ -434,7 +486,12 @@ export default function EventsPage() {
         <div className="md:hidden">
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="relative" data-testid="events-filter-btn">
+              <Button
+                variant="outline"
+                size="icon"
+                className="relative"
+                data-testid="events-filter-btn"
+              >
                 <Filter className="h-4 w-4" />
                 {activeFilterCount > 0 && (
                   <Badge className="absolute -top-1.5 -right-1.5 h-4 w-4 p-0 flex items-center justify-center text-[10px] bg-primary">
@@ -453,11 +510,14 @@ export default function EventsPage() {
                   setOrgFilter={setOrgFilter}
                   organizations={organizations}
                   selectedStates={selectedStates}
-                  toggleState={(v) => setSelectedStates((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(v)) next.delete(v); else next.add(v);
-                    return next;
-                  })}
+                  toggleState={(v) =>
+                    setSelectedStates((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(v)) next.delete(v);
+                      else next.add(v);
+                      return next;
+                    })
+                  }
                   sortBy={sortBy}
                   setSortBy={setSortBy}
                   vertical
@@ -472,20 +532,17 @@ export default function EventsPage() {
       <Tabs defaultValue="events">
         <TabsList className="mb-4">
           <TabsTrigger value="events" data-testid="events-tab-events">
-            Events {filteredEvents.length > 0 ? `(${filteredEvents.length})` : ''}
+            Events{' '}
+            {filteredEvents.length > 0 ? `(${filteredEvents.length})` : ''}
           </TabsTrigger>
           <TabsTrigger value="series" data-testid="events-tab-series">
             Series {repeaters ? `(${repeaters.length})` : ''}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="events">
-          {renderEventGrid()}
-        </TabsContent>
+        <TabsContent value="events">{renderEventGrid()}</TabsContent>
 
-        <TabsContent value="series">
-          {renderRepeaterGrid()}
-        </TabsContent>
+        <TabsContent value="series">{renderRepeaterGrid()}</TabsContent>
       </Tabs>
     </div>
   );

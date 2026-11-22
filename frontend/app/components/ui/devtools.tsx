@@ -1,27 +1,27 @@
-"use client";
+'use client';
 
 import {
+  useCallback,
   useEffect,
   useState,
-  useCallback,
   type Dispatch,
   type SetStateAction,
-} from "react";
+} from 'react';
 
 import {
-  useNodes,
   Panel,
+  useNodes,
+  useReactFlow,
   useStore,
   useStoreApi,
   ViewportPortal,
-  useReactFlow,
-  type PanelPosition,
-  type OnNodesChange,
   type NodeChange,
+  type OnNodesChange,
+  type PanelPosition,
   type XYPosition,
-} from "@xyflow/react";
+} from '@xyflow/react';
 
-import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
+import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
 
 export const ViewportLogger = () => {
   const viewport = useStore(
@@ -42,22 +42,22 @@ type ChangeInfoProps = {
 };
 
 const ChangeInfo = ({ change }: ChangeInfoProps) => {
-  const id = "id" in change ? change.id : "-";
+  const id = 'id' in change ? change.id : '-';
   const { type } = change;
 
   return (
     <div className="mb-3">
       <div>node id: {id}</div>
       <div>
-        {type === "add" ? JSON.stringify(change.item, null, 2) : null}
-        {type === "dimensions"
+        {type === 'add' ? JSON.stringify(change.item, null, 2) : null}
+        {type === 'dimensions'
           ? `dimensions: ${change.dimensions?.width} × ${change.dimensions?.height}`
           : null}
-        {type === "position"
+        {type === 'position'
           ? `position: ${change.position?.x.toFixed(1)}, ${change.position?.y.toFixed(1)}`
           : null}
-        {type === "remove" ? "remove" : null}
-        {type === "select" ? (change.selected ? "select" : "unselect") : null}
+        {type === 'remove' ? 'remove' : null}
+        {type === 'select' ? (change.selected ? 'select' : 'unselect') : null}
       </div>
     </div>
   );
@@ -118,7 +118,7 @@ export const NodeInspector = () => {
               key={node.id}
               id={node.id}
               selected={!!node.selected}
-              type={node.type || "default"}
+              type={node.type || 'default'}
               position={node.position}
               absPosition={absPosition}
               width={node.measured?.width ?? 0}
@@ -158,12 +158,12 @@ const NodeInfo = ({
   const absoluteTransform = `translate(${absPosition.x}px, ${absPosition.y + height}px)`;
   const formattedPosition = `${position.x.toFixed(1)}, ${position.y.toFixed(1)}`;
   const formattedDimensions = `${width} × ${height}`;
-  const selectionStatus = selected ? "Selected" : "Not Selected";
+  const selectionStatus = selected ? 'Selected' : 'Not Selected';
 
   return (
     <div
       style={{
-        position: "absolute",
+        position: 'absolute',
         transform: absoluteTransform,
         width: width * 2,
       }}
@@ -224,20 +224,20 @@ export const DevTools = ({ position }: DevToolsProps) => {
     {
       active: nodeInspectorActive,
       setActive: setNodeInspectorActive,
-      label: "Node Inspector",
-      value: "node-inspector",
+      label: 'Node Inspector',
+      value: 'node-inspector',
     },
     {
       active: changeLoggerActive,
       setActive: setChangeLoggerActive,
-      label: "Change Logger",
-      value: "change-logger",
+      label: 'Change Logger',
+      value: 'change-logger',
     },
     {
       active: viewportLoggerActive,
       setActive: setViewportLoggerActive,
-      label: "Viewport Logger",
-      value: "viewport-logger",
+      label: 'Viewport Logger',
+      value: 'viewport-logger',
     },
   ];
 
@@ -265,4 +265,4 @@ export const DevTools = ({ position }: DevToolsProps) => {
   );
 };
 
-DevTools.displayName = "DevTools";
+DevTools.displayName = 'DevTools';

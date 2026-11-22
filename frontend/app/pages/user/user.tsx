@@ -1,12 +1,12 @@
+import { CircleX } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from '~/components/api/axios';
+import { Alert, AlertDescription } from '~/components/ui/alert';
+import { Spinner } from '~/components/ui/spinner';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
 import { getLogger } from '~/lib/logger';
-import { Spinner } from '~/components/ui/spinner';
-import { Alert, AlertDescription } from '~/components/ui/alert';
-import { CircleX } from 'lucide-react';
 
 const log = getLogger('userDetailPage');
 

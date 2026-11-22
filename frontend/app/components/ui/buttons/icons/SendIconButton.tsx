@@ -3,8 +3,10 @@ import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 
-export interface SendIconButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {}
+export interface SendIconButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'variant' | 'size'
+> {}
 
 /**
  * A send icon button with secondary styling.
@@ -25,7 +27,7 @@ const SendIconButton = React.forwardRef<HTMLButtonElement, SendIconButtonProps>(
         className={cn(
           'rounded-full',
           'shadow-lg shadow-black/30 transition-all duration-75',
-          className
+          className,
         )}
         {...props}
       >
@@ -33,7 +35,7 @@ const SendIconButton = React.forwardRef<HTMLButtonElement, SendIconButtonProps>(
         <span className="sr-only">Send</span>
       </Button>
     );
-  }
+  },
 );
 
 SendIconButton.displayName = 'SendIconButton';

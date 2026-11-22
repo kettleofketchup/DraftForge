@@ -52,9 +52,10 @@ export function findOverflow(): OverflowOffender[] {
     let cur: Element | null = el;
     while (cur && cur !== document.body && parts.length < 6) {
       const tag = cur.tagName.toLowerCase();
-      const cls = cur.className && typeof cur.className === 'string'
-        ? '.' + cur.className.split(/\s+/).slice(0, 2).join('.')
-        : '';
+      const cls =
+        cur.className && typeof cur.className === 'string'
+          ? '.' + cur.className.split(/\s+/).slice(0, 2).join('.')
+          : '';
       parts.unshift(`${tag}${cls}`);
       cur = cur.parentElement;
     }

@@ -1,7 +1,18 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from django.conf import settings
 from django.db.models import Avg, Max
 
+from common.game import GameType
+from org.mmr import org_mmr_for
 from telemetry.logging import get_logger
+
+if TYPE_CHECKING:
+    from app.models import CustomUser, League
+    from org.models import Organization
+    from steam.models import LeaguePlayerStats
 
 logger = get_logger(__name__)
 
@@ -38,7 +49,7 @@ def get_league_avg_gpm(league_id: int) -> float:
     return result["avg_gpm"] or 400  # Default to 400 GPM
 
 
-def calculate_mmr_adjustment(stats) -> int:
+def calculate_mmr_adjustment(stats: LeaguePlayerStats) -> int:
     """
     Calculate MMR adjustment based on league performance.
     Returns 0 if below minimum games threshold.
@@ -69,7 +80,11 @@ def calculate_mmr_adjustment(stats) -> int:
     return max(-500, min(500, adjustment))
 
 
-def update_user_league_mmr(user, organization=None, league=None) -> None:
+def update_user_league_mmr(
+    user: CustomUser,
+    organization: Organization | None = None,
+    league: League | None = None,
+) -> None:
     """
     Set user's league_mmr to base mmr + best league adjustment.
 
@@ -78,18 +93,9 @@ def update_user_league_mmr(user, organization=None, league=None) -> None:
         organization: Optional Organization to get base MMR from OrgUser
         league: Optional League to update LeagueUser.mmr
     """
-    # Get base MMR from OrgUser if organization provided
-    base_mmr = None
-    if organization:
-        from org.models import OrgUser
-
-        try:
-            org_user = OrgUser.objects.get(user=user, organization=organization)
-            base_mmr = org_user.mmr
-        except OrgUser.DoesNotExist:
-            base_mmr = None
-    else:
-        base_mmr = None
+    base_mmr = (
+        org_mmr_for(organization.pk, user.pk, GameType.DOTA2) if organization else 0
+    )
 
     if not base_mmr:
         # No base MMR - update LeagueUser if we have league context

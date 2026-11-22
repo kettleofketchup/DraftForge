@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 interface UseListKeyboardNavOptions {
   /** Length of the site results list */
@@ -70,12 +70,19 @@ export function useListKeyboardNav({
         case 'Tab':
           if (isDesktop && hasDiscordColumn) {
             e.preventDefault();
-            setActiveColumn((prev) => prev === 'site' ? 'discord' : 'site');
+            setActiveColumn((prev) => (prev === 'site' ? 'discord' : 'site'));
           }
           break;
       }
     },
-    [count, highlightedIndex, activeColumn, onSelect, isDesktop, hasDiscordColumn],
+    [
+      count,
+      highlightedIndex,
+      activeColumn,
+      onSelect,
+      isDesktop,
+      hasDiscordColumn,
+    ],
   );
 
   return {

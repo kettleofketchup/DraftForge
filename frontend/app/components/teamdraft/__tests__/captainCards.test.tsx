@@ -24,7 +24,11 @@ describe('CaptainCards', () => {
     );
     useUserStore.setState({
       tournament: {
-        teams: [7, 8, 9].map((c) => ({ pk: c, name: `Team ${c}`, captain: user(c) })),
+        teams: [7, 8, 9].map((c) => ({
+          pk: c,
+          name: `Team ${c}`,
+          captain: user(c),
+        })),
         draft: { pk: 1, draft_rounds: rounds },
       } as never,
       draft: { pk: 1, draft_rounds: rounds } as never,
@@ -36,7 +40,9 @@ describe('CaptainCards', () => {
 
   it('next-round card follows curDraftRound.pk, not the stale draftIndex', () => {
     render(<CaptainCards />);
-    expect(screen.getByText(new RegExp(`Next Captain:\\s*${DisplayName(user(9))}`))).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(`Next Captain:\\s*${DisplayName(user(9))}`)),
+    ).toBeInTheDocument();
   });
 
   it('renders no cards when curDraftRound.pk is not in the rounds', () => {
