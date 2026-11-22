@@ -37,6 +37,7 @@ from lobby import broadcast, states
 from lobby.models import GameLobby, GameLobbyEvent
 from lobby.schemas import LobbyEvent, LobbyView
 from lobby.services import game_teams, lobby_teams, match_abandoned, parse_team_ref
+from lobby.tasks import send_lobby_info
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -445,7 +446,5 @@ def _after_change(game_lobby: GameLobby, game: Game, result: IngestResult) -> No
     if "lobby.created" in result.applied_types:
         tournament = game.tournament
         if tournament is not None and tournament.discord_send_lobby_info:
-            from lobby.tasks import send_lobby_info
-
             pk = game_lobby.pk
             transaction.on_commit(lambda: send_lobby_info.delay(pk))

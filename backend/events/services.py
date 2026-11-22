@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
+from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
 from draft.services.team import apply_draft_options
 from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
 from events.capacity import has_free_seat, lock_event, seat_holding_statuses
@@ -73,6 +74,7 @@ from events.roster import (
 )
 from events.schemas import DotaModalConfig
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
+from events.tasks import delete_discord_scheduled_event
 from lobby.passwords import PasswordMode, generate_password
 from org.membership import resolve_or_create_org_user
 from org.mmr import game_for_event, set_org_mmr
@@ -119,7 +121,6 @@ def clear_signup_dedup_state(event_id: int) -> dict[str, int]:
 
     Returns a dict with the counts of rows changed.
     """
-    from discordbot.models import DiscordEventMsgSignup, DiscordMessageLog
 
     affected_signups = list(
         DiscordEventMsgSignup.objects.filter(event_id=event_id, has_posted=True)
@@ -915,7 +916,6 @@ def ensure_discord_event(event: Event) -> "DiscordEvent | None":
     org = event.organization
     if not org or not org.discord_server_id:
         return None
-    from discordbot.models import DiscordEvent
 
     de, created = DiscordEvent.objects.get_or_create(
         event=event,
@@ -1108,10 +1108,6 @@ def ensure_tournament_with_signups(
 
 @transaction.atomic
 def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
-    # Function-local: events.tasks imports events.services.
-    from discordbot.models import DiscordEvent
-    from events.tasks import delete_discord_scheduled_event
-
     if event.tournament:
         tournament = event.tournament
         event.tournament = None
@@ -1152,9 +1148,6 @@ def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
     Shared by EventViewSet (single delete), EventRepeaterViewSet (series delete)
     and sync_future_events' realign, so no path leaves ghost events behind.
     """
-    from app.cache_utils import invalidate_after_commit
-    from discordbot.models import DiscordEvent, DiscordMessageLog
-    from events.tasks import delete_discord_scheduled_event
 
     with transaction.atomic():
         standing.on_event_deleted(event, actor=actor)

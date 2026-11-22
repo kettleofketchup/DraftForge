@@ -38,6 +38,7 @@ from app.internal_client import (
     update_discord_event,
     update_event_dm,
 )
+from discordbot.models import DMType
 from discordbot.utils import (
     DISCORD_API_BASE,
     MessageDeletedError,
@@ -58,6 +59,7 @@ from events.discord.embeds import (
     build_announcement_v2,
     build_subscriber_dm_embed,
 )
+from events.scheduling.fire import fire_due_reminders
 from events.signup_post_lock import (
     acquire_lock,
     clear_pending,
@@ -657,12 +659,6 @@ def send_attendance_reminder(event_id: int) -> str:
     Idempotency is provided by sync_send_embed_with_components's internal
     claim/finalize lease pattern (one HTTP send per (source, source_id)).
     """
-    from app.internal_client import (
-        create_event_log,
-        get_event_for_task,
-        get_or_create_discord_event,
-    )
-    from discordbot.utils import sync_send_embed_with_components
 
     event = get_event_for_task(event_id)
     if not event:
@@ -709,12 +705,6 @@ def send_profile_reminder(event_id: int) -> str:
 
     Idempotency via sync_send_embed_with_components's lease pattern.
     """
-    from app.internal_client import (
-        create_event_log,
-        get_event_for_task,
-        get_or_create_discord_event,
-    )
-    from discordbot.utils import sync_send_embed_with_components
 
     event = get_event_for_task(event_id)
     if not event:
@@ -1470,11 +1460,6 @@ def fire_event_reminder(
     Bypasses time threshold checks but respects idempotency via message log.
     Called from the admin "Fire" button, not from celery beat.
     """
-    from app.internal_client import (
-        create_event_log,
-        get_or_create_discord_event,
-    )
-    from discordbot.utils import sync_send_embed_with_components
 
     REMINDER_MAP = {
         "signup_reminder": ("signup_reminder", build_signup_reminder_embed),
@@ -1549,7 +1534,6 @@ def check_event_reminders() -> str:
         exists() check. Stale leases (NULL >5min, False >1hr) are reaped
         by sweep_stale_discord_leases.
     """
-    from events.scheduling.fire import fire_due_reminders
 
     return fire_due_reminders()
 
@@ -1572,11 +1556,6 @@ def send_subscriber_notifications(event_id: int) -> str:
 
     Rate-limited at 1 DM/second to respect Discord limits.
     """
-
-    from app.internal_client import (
-        get_discord_event_state,
-        get_event_for_task,
-    )
 
     event = get_event_for_task(event_id)
     if not event:
@@ -1636,7 +1615,6 @@ def send_subscriber_notifications(event_id: int) -> str:
                 continue
 
             # Create DM record via internal API (crash safety + idempotency)
-            from discordbot.models import DMType
 
             dm_pk = None
             if sub.org_user_pk:
