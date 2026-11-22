@@ -266,7 +266,7 @@ class FireStartMentionEndpointTest(EventTestCase):
         self.client.force_authenticate(user=self.admin)
         self.url = f"/api/events/{self.event.pk}/task-schedule/start_mention/fire/"
 
-    @patch("celery.current_app")
+    @patch("events.views.current_app")
     def test_staff_can_fire_and_second_fire_is_409(self, mock_app: MagicMock) -> None:
         mock_send = mock_app.send_task
         resp = self.client.post(self.url)

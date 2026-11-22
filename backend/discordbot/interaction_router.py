@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import discord
+from django.conf import settings
 
+from discordbot.activity_ids import decode_draft_launch
+from discordbot.activity_launch_gateway import handle_draft_launch
 from discordbot.components import (
     DeclineButton,
     NotifyButton,
@@ -45,9 +48,6 @@ async def route_component_interaction(
     interaction: discord.Interaction, custom_id: str
 ) -> None:
     if custom_id.startswith("draft_activity:") and custom_id != "draft_activity:launch":
-        from discordbot.activity_ids import decode_draft_launch
-        from discordbot.activity_launch_gateway import handle_draft_launch
-
         draft = decode_draft_launch(custom_id)
         if draft is None:
             await interaction.response.send_message(
@@ -60,7 +60,6 @@ async def route_component_interaction(
     if custom_id == "draft_activity:launch":
         # The gateway process has no ORM. Channel resolution happens in Django
         # after the SDK exchanges an OAuth code and verifies the instance.
-        from django.conf import settings
 
         if (
             getattr(settings, "DISCORD_ACTIVITY_ENABLED", False)

@@ -201,7 +201,7 @@ export const UserSchema = z.object({
   positions: PositionSchema.optional(),
   username: z.string().min(2).max(100),
   nickname: z.string().min(2).max(100).nullable().optional(),
-  mmr: z.number().min(0).nullable().optional(),
+  mmr: z.number().min(0).nullable().optional(), // illustrative; real UserSchema adds mmr_game_type + game_mmrs (per-game org MMR)
   steamid: z.number().min(0).nullable().optional(),
   discordId: z.string().min(2).max(100).nullable().optional(),
 });

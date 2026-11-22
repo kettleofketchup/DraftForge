@@ -8,11 +8,22 @@
 import { create } from 'zustand';
 import { fetchLeague, getLeagueUsers } from '~/components/api/api';
 import type { LeagueType } from '~/components/league/schemas';
+import type { UserType } from '~/components/user/types';
 import { getLogger } from '~/lib/logger';
 import { useUserCacheStore } from '~/store/userCacheStore';
 
 // Bumped per request and on clear so a superseded response is dropped.
 let leagueUsersRequest = 0;
+// Response for leagueUsersLeagueId, kept so a later org id can be applied without a refetch.
+let leagueUsersResponse: UserType[] | null = null;
+// Org ids applied to (or queued for) the current league's users.
+let leagueUsersOrgIds = new Set<number>();
+
+function resetLeagueUsersScope(): void {
+  leagueUsersRequest++;
+  leagueUsersResponse = null;
+  leagueUsersOrgIds = new Set();
+}
 
 const log = getLogger('leagueStore');
 
@@ -34,6 +45,8 @@ interface LeagueState {
 
   /** League Users Actions */
   getLeagueUsers: (leagueId: number, orgId?: number) => Promise<void>;
+  addLeagueUser: (leagueId: number, user: UserType) => void;
+  removeLeagueUser: (leagueId: number, pk: number) => void;
   clearLeagueUsers: () => void;
 }
 
@@ -66,7 +79,7 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
   },
 
   reset: () => {
-    leagueUsersRequest++;
+    resetLeagueUsersScope();
     set({
       currentLeague: null,
       currentLeagueLoading: false,
@@ -78,18 +91,28 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
   },
 
   getLeagueUsers: async (leagueId: number, orgId?: number) => {
-    if (
-      get().leagueUsersLeagueId === leagueId &&
-      get().leagueUserPks.length > 0
-    ) {
+    const { leagueUsersLeagueId, leagueUsersLoading, leagueUserPks } = get();
+    const sameLeague = leagueUsersLeagueId === leagueId;
+
+    if (sameLeague && leagueUsersLoading) {
+      if (orgId != null) leagueUsersOrgIds.add(orgId);
+      return;
+    }
+
+    if (sameLeague && leagueUserPks.length > 0 && leagueUsersResponse) {
+      if (orgId != null && !leagueUsersOrgIds.has(orgId)) {
+        leagueUsersOrgIds.add(orgId);
+        useUserCacheStore
+          .getState()
+          .upsert(leagueUsersResponse, { leagueId, orgId });
+      }
       log.debug('LeagueUsers already loaded for league:', leagueId);
       return;
     }
 
-    if (get().leagueUsersLoading && get().leagueUsersLeagueId === leagueId)
-      return;
-
-    const request = ++leagueUsersRequest;
+    resetLeagueUsersScope();
+    const request = leagueUsersRequest;
+    if (orgId != null) leagueUsersOrgIds.add(orgId);
     set({
       leagueUsersLoading: true,
       leagueUsersError: null,
@@ -100,7 +123,12 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
     try {
       const users = await getLeagueUsers(leagueId);
       if (request !== leagueUsersRequest) return;
-      useUserCacheStore.getState().upsert(users, { leagueId, orgId });
+      leagueUsersResponse = users;
+      const cache = useUserCacheStore.getState();
+      if (leagueUsersOrgIds.size === 0) cache.upsert(users, { leagueId });
+      for (const id of leagueUsersOrgIds) {
+        cache.upsert(users, { leagueId, orgId: id });
+      }
       set({
         leagueUserPks: users.filter((u) => u.pk != null).map((u) => u.pk!),
         leagueUsersLoading: false,
@@ -120,8 +148,38 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
     }
   },
 
+  addLeagueUser: (leagueId: number, user: UserType) => {
+    const cache = useUserCacheStore.getState();
+    const loaded = get().leagueUsersLeagueId === leagueId;
+    if (!loaded || leagueUsersOrgIds.size === 0) {
+      cache.upsert(user, { leagueId });
+    }
+    if (!loaded || user.pk == null) return;
+    for (const orgId of leagueUsersOrgIds) {
+      cache.upsert(user, { leagueId, orgId });
+    }
+    if (leagueUsersResponse) {
+      leagueUsersResponse = [
+        ...leagueUsersResponse.filter((u) => u.pk !== user.pk),
+        user,
+      ];
+    }
+    const { leagueUserPks } = get();
+    if (!leagueUserPks.includes(user.pk)) {
+      set({ leagueUserPks: [...leagueUserPks, user.pk] });
+    }
+  },
+
+  removeLeagueUser: (leagueId: number, pk: number) => {
+    if (get().leagueUsersLeagueId !== leagueId) return;
+    if (leagueUsersResponse) {
+      leagueUsersResponse = leagueUsersResponse.filter((u) => u.pk !== pk);
+    }
+    set({ leagueUserPks: get().leagueUserPks.filter((p) => p !== pk) });
+  },
+
   clearLeagueUsers: () => {
-    leagueUsersRequest++;
+    resetLeagueUsersScope();
     set({
       leagueUserPks: [],
       leagueUsersLeagueId: null,

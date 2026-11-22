@@ -64,7 +64,7 @@ class SeriesDeleteCleanupTest(EventTestCase):
             state=EventState.COMPLETED,
         )
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     def test_delete_series_removes_future_events_and_discord(self, mock_delete_task):
         self.client.force_authenticate(self.admin)
         resp = self.client.delete(f"/api/events/repeaters/{self.repeater.pk}/")
@@ -83,7 +83,7 @@ class SeriesDeleteCleanupTest(EventTestCase):
         self.past_event.refresh_from_db()
         self.assertIsNone(self.past_event.event_repeater_id)
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     def test_delete_single_event_deletes_live_discord_event(self, mock_delete_task):
         self.client.force_authenticate(self.admin)
         resp = self.client.delete(f"/api/events/{self.future_event.pk}/")

@@ -16,6 +16,8 @@ from user.tests.test_cacheops_integration import _redis_reachable
 
 _discord_ids = itertools.count(920_000_000_000_000_000)
 
+BARE_MMR_ERROR = "mmr requires mmr_game_type; reload the page"
+
 
 def _make_user(name: str) -> CustomUser:
     return CustomUser.objects.create(
@@ -114,15 +116,20 @@ class OrgUserPatchGameMmrsTests(PatchFixtures, TestCase):
         self.assertTrue(active)
         self.assertIsNotNone(verified)
 
-    def test_patch_bare_mmr_writes_dota(self) -> None:
+    def test_patch_bare_mmr_400(self) -> None:
         response = self.patch({"mmr": 4100})
 
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(_rows(self.org_user), {1: 4100, 2: 2500})
-        self.assertEqual(
-            OrgUser.objects.values_list("mmr", flat=True).get(pk=self.org_user.pk),
-            4100,
-        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.json(), {"error": BARE_MMR_ERROR})
+        self.assertEqual(_rows(self.org_user), {1: 4000, 2: 2500})
+        self.assertEqual(self.flags(), (False, None))
+
+    def test_patch_bare_mmr_with_other_fields_writes_nothing(self) -> None:
+        response = self.patch({"mmr": 4100, "nickname": "Renamed"})
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.member.refresh_from_db()
+        self.assertNotEqual(self.member.nickname, "Renamed")
 
     def test_patch_legacy_mmr_with_game(self) -> None:
         response = self.patch({"mmr": 3000, "mmr_game_type": 2})

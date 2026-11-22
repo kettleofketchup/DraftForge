@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('app', '0104_org_promoters_feature_logs'),
+        ("app", "0096_squashed_0106"),
         ('org', '0006_alter_playerdeadlockprofile_unverified_friend_id_and_more'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

@@ -6,7 +6,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("app", "0106_draftoptions_hero_grace_time_ms_and_more"),
+        ("app", "0096_squashed_0106"),
     ]
 
     operations = [

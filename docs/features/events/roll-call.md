@@ -35,9 +35,11 @@ Players RSVP from the event page. Each signup shows:
 
 - **Position number** (#1, #2, ...) — first-come-first-served
 - **Status badge** — RSVP, Pending Approval, Approved, Confirmed, Waitlisted
-- **UserStrip** — avatar, name, positions, MMR badges, and league ticket-match stats (rank, games, win rate, last 5 results) when the event's tournament has a league
+- **UserStrip** — avatar, name, positions, the org MMR badge for the event's game (`B:` for Dota 2, `DL:` for Deadlock), and league ticket-match stats (rank, games, win rate, last 5 results) when the event's tournament has a league
 
 Admin actions per signup: Approve, Reject, Confirm.
+
+Approve opens the MMR dialog titled "Set {game} org MMR" for the event's game. The value is required (an empty input no longer approves at 0); Dota allows 0, other games need at least 1. Dota events show the rank signals card and a suggested range. Deadlock events show the player's self-reported rank and its date, and no suggestion. See [Org MMR per game](../org-mmr.md).
 
 ### 2. Start Roll Call
 

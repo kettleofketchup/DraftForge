@@ -1,8 +1,15 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 
-/** Editable field names matching data-testid="edit-user-{field}" */
-export type EditUserField = 'nickname' | 'mmr' | 'steam_account_id';
+/**
+ * Editable field names matching data-testid="edit-user-{field}".
+ * 'mmr' is the Dota 2 org MMR; other games use 'mmr-{slug}' (mmrTestId).
+ */
+export type EditUserField =
+  | 'nickname'
+  | 'mmr'
+  | 'mmr-deadlock'
+  | 'steam_account_id';
 
 /**
  * Click the edit button on a user card to open the edit modal.

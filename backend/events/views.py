@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from cacheops import cached_as
+from celery import current_app
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import FieldDoesNotExist
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -36,6 +37,16 @@ from rest_framework.views import APIView
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser, Game
 from app.permissions_tournament import has_event_staff_access
+from discordbot.models import (
+    DiscordEvent,
+    DiscordEventDM,
+    DiscordEventLog,
+    DiscordEventMsgAnnouncement,
+    DiscordEventMsgSignup,
+    DiscordMessageLog,
+    DMType,
+)
+from discordbot.serializers_discord_event import DiscordEventDetailSerializer
 from draft.models import Draft, HeroDraft
 from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
@@ -67,16 +78,20 @@ from events.serializers import (
     EventSignupSerializer,
     EventSlimSerializer,
     EventTeamSerializer,
+    OneOffEventCreateSerializer,
     OrgEventDefaultsSerializer,
     RepeaterSubscriptionSerializer,
 )
 from events.services import (
+    OccurrenceCollision,
     apply_signup_input,
     approve_signup,
     cancel_event,
     cancel_signup,
     changed_draft_option_fields,
+    clear_signup_dedup_state,
     confirm_signup,
+    create_off_schedule_event,
     create_tentative_signup,
     create_tournament_for_event,
     demote_to_waitlist,
@@ -449,8 +464,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     )
     def create_event(self, request: Request, pk: str | None = None) -> Response:
         """Create a single off-schedule ("one-off") event from this series."""
-        from events.serializers import OneOffEventCreateSerializer
-        from events.services import OccurrenceCollision, create_off_schedule_event
 
         repeater = self.get_object()
         if not has_org_staff_access(request.user, repeater.organization):
@@ -815,8 +828,6 @@ class EventViewSet(viewsets.ModelViewSet):
             and event.discord_announcement
             and event.discord_announcement_channel_id
         ):
-            from discordbot.models import DiscordEvent
-
             try:
                 discord_event = event.discord_event
                 has_announcement = (
@@ -828,8 +839,6 @@ class EventViewSet(viewsets.ModelViewSet):
 
             # Fall back to DiscordMessageLog for pre-migration events
             if not has_announcement:
-                from discordbot.models import DiscordMessageLog
-
                 has_announcement = DiscordMessageLog.objects.filter(
                     source="event_announcement", source_id=event.pk, success=True
                 ).exists()
@@ -1190,21 +1199,10 @@ class EventViewSet(viewsets.ModelViewSet):
         """
         event = self.get_object()
 
-        from discordbot.models import DiscordEvent
-
         try:
             discord_event = event.discord_event
         except DiscordEvent.DoesNotExist:
             return Response({"detail": "No Discord state for this event"}, status=404)
-
-        from discordbot.models import (
-            DiscordEventDM,
-            DiscordEventLog,
-            DiscordEventMsgAnnouncement,
-            DiscordEventMsgSignup,
-            DiscordMessageLog,
-        )
-        from discordbot.serializers_discord_event import DiscordEventDetailSerializer
 
         @cached_as(
             DiscordEvent,
@@ -1516,7 +1514,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
     Discord config, scheduled_at, and signups_open_at times. Checks
     DiscordMessageLog and DiscordEventLog to determine fired status.
     """
-    from discordbot.models import DiscordEventLog, DiscordMessageLog
 
     try:
         event = Event.objects.select_related(
@@ -1550,8 +1547,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
     # Check subscriber DMs
     has_dms = False
     try:
-        from discordbot.models import DiscordEventDM, DMType
-
         has_dms = DiscordEventDM.objects.filter(
             discord_event__event=event,
             dm_type=DMType.SIGNUP_REMINDER,
@@ -1849,8 +1844,6 @@ def fire_event_task(request: Request, event_id: int, task_name: str) -> Response
     # invoking celery so the task recreates instead of no-opping.
     REPOSTABLE = {"signup_post", "announcement"}
     if task_name == "signup_reminder":
-        from discordbot.models import DiscordEventDM, DMType
-
         if DiscordEventDM.objects.filter(
             discord_event__event_id=event_id,
             dm_type=DMType.SIGNUP_REMINDER,
@@ -1862,8 +1855,6 @@ def fire_event_task(request: Request, event_id: int, task_name: str) -> Response
     elif task_name not in REPOSTABLE:
         log_source = TASK_LOG_SOURCES.get(task_name)
         if log_source:
-            from discordbot.models import DiscordMessageLog
-
             if DiscordMessageLog.objects.filter(
                 source=log_source, source_id=event_id, success=True
             ).exists():
@@ -1878,11 +1869,7 @@ def fire_event_task(request: Request, event_id: int, task_name: str) -> Response
     # (sync_discord_events would otherwise skip; the manual-fire path bypasses
     # that, but we still clear so the next auto-sync agrees with the new state).
     if task_name in REPOSTABLE:
-        from events.services import clear_signup_dedup_state
-
         clear_signup_dedup_state(event_id)
-
-    from celery import current_app
 
     celery_task = FIREABLE_TASKS[task_name]
 

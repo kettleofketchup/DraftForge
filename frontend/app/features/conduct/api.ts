@@ -1,9 +1,14 @@
 import api from '~/components/api/axios';
 import {
+  AttendanceSchema,
   ConductSettingsSchema,
+  ForecastSchema,
   MemberConductSchema,
+  type Attendance,
+  type AttendancePut,
   type ConductSettings,
   type ConductSettingsForm,
+  type Forecast,
   type HistoryPage,
   type MemberConduct,
 } from './schemas';
@@ -36,4 +41,36 @@ export async function patchConductSettings(
 ): Promise<ConductSettings> {
   const response = await api.patch(`${base(orgId)}/settings/`, body);
   return ConductSettingsSchema.parse(response.data);
+}
+
+function eventBase(orgId: number, eventId: number): string {
+  return `${base(orgId)}/events/${eventId}`;
+}
+
+export async function getAttendance(
+  orgId: number,
+  eventId: number,
+): Promise<Attendance> {
+  const response = await api.get(`${eventBase(orgId, eventId)}/attendance/`);
+  return AttendanceSchema.parse(response.data);
+}
+
+export async function putAttendance(
+  orgId: number,
+  eventId: number,
+  body: AttendancePut,
+): Promise<Attendance> {
+  const response = await api.put(
+    `${eventBase(orgId, eventId)}/attendance/`,
+    body,
+  );
+  return AttendanceSchema.parse(response.data);
+}
+
+export async function getForecast(
+  orgId: number,
+  eventId: number,
+): Promise<Forecast> {
+  const response = await api.get(`${eventBase(orgId, eventId)}/forecast/`);
+  return ForecastSchema.parse(response.data);
 }
