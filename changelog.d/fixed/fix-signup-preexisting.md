@@ -1,2 +1,4 @@
 - Moving a player to the waitlist now promotes the next waitlisted player into the freed seat, instead of leaving it empty. The moved player does not take the seat straight back.
 - Merging two accounts that were both seated in the same event now promotes the next waitlisted player into the seat the duplicate signup held.
+- Approving a signup with an MMR override now saves the approval and its audit log entry together, so one can no longer be kept without the other.
+- A staff add that fails no longer leaves the player added to the organization.

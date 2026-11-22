@@ -624,6 +624,7 @@ def apply_signup_input(
     return profile
 
 
+@transaction.atomic
 def staff_add_signup(
     event: Event,
     user: CustomUser,
