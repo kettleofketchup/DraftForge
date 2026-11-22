@@ -233,6 +233,22 @@ describe('HeroDraftChat log', () => {
     expect(useHeroDraftStore.getState().selectedHeroId).toBe(74);
   });
 
+  it('passes the clicked suggestion hero to onSuggestionClick', () => {
+    const m = msg(3, { kind: 'suggest_ban', hero_id: 74, body: '' });
+    seed(member, [m]);
+    const onSuggestionClick = vi.fn();
+    render(
+      <HeroDraftChat
+        draftState="drafting"
+        onSuggestionClick={onSuggestionClick}
+      />,
+    );
+    openPanel();
+    fireEvent.click(screen.getByTestId(`herodraft-chat-suggestion-${m.id}`));
+    expect(onSuggestionClick).toHaveBeenCalledWith(74);
+    expect(useHeroDraftStore.getState().selectedHeroId).toBe(74);
+  });
+
   it('shows the unread count on the toggle', () => {
     seed(member);
     useHeroDraftStore.setState({

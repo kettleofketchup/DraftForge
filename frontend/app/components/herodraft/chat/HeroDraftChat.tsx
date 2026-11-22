@@ -42,9 +42,13 @@ const PAUSED_STATES = new Set(['paused', 'resuming']);
 
 export interface HeroDraftChatProps {
   draftState: string;
+  onSuggestionClick?: (heroId: number) => void;
 }
 
-export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
+export function HeroDraftChat({
+  draftState,
+  onSuggestionClick,
+}: HeroDraftChatProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const chat = useHeroDraftStore((s) => s.chat);
   const connected = useHeroDraftStore(heroDraftSelectors.isConnected);
@@ -254,11 +258,19 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
     </SecondaryButton>
   );
 
+  const onHeroClick = useCallback(
+    (heroId: number) => {
+      setSelectedHeroId(heroId);
+      onSuggestionClick?.(heroId);
+    },
+    [setSelectedHeroId, onSuggestionClick],
+  );
+
   const log = (props: { className?: string; viewportClassName?: string }) => (
     <ChatLog
       messages={messages}
       emptyText={emptyText}
-      onHeroClick={setSelectedHeroId}
+      onHeroClick={onHeroClick}
       {...props}
     />
   );
