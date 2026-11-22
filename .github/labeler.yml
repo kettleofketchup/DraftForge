@@ -21,6 +21,7 @@ brackets:
       - any-glob-to-any-file:
           - frontend/app/components/bracket/**
           - backend/app/**/bracket*
+          - backend/bracket/**
 
 User:
   - changed-files:
