@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   signupForEvent: vi.fn(),
   openSignups: vi.fn(),
   startRollCall: vi.fn(),
+  startTournament: vi.fn(),
   cancelEvent: vi.fn(),
   deleteEvent: vi.fn(),
   reopenSignups: vi.fn(),
@@ -92,6 +93,7 @@ describe('event mutations refresh conduct queries', () => {
     for (const name of [
       'openSignups',
       'startRollCall',
+      'startTournament',
       'cancelEvent',
       'reopenSignups',
       'restartTournament',
@@ -109,6 +111,7 @@ describe('event mutations refresh conduct queries', () => {
 
   it.each([
     'startRollCall',
+    'startTournament',
     'reopenSignups',
     'cancelEvent',
     'restartTournament',

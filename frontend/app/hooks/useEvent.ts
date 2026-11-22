@@ -150,7 +150,10 @@ export function useEventActionMutation(eventId: number) {
     }),
     startTournament: useMutation({
       mutationFn: () => startTournamentAPI(eventId),
-      onSuccess: (data) => queryClient.setQueryData(['event', eventId], data),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['event', eventId], data);
+        void invalidateConductQueries(queryClient, data.organization);
+      },
     }),
     cancelEvent: useMutation({
       mutationFn: () => cancelEventAPI(eventId),
