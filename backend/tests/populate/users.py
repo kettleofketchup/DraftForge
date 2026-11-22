@@ -5,9 +5,33 @@ User population for test database.
 import random
 
 from django.conf import settings
+from social_django.models import UserSocialAuth
 
 from app.models import CustomUser
+from discordbot.services.users import get_discord_members_data
+from league.models import League
 from org.models import Organization
+from tests.data.users import (
+    ADMIN_USER,
+    AUTH_MATRIX_LEAGUE_ADMIN_USER,
+    AUTH_MATRIX_LEAGUE_STAFF_USER,
+    AUTH_MATRIX_ORG_ADMIN_USER,
+    AUTH_MATRIX_ORG_MEMBER_USER,
+    AUTH_MATRIX_ORG_OWNER_USER,
+    AUTH_MATRIX_ORG_PROMOTER_USER,
+    AUTH_MATRIX_ORG_STAFF_USER,
+    CLAIMABLE_USER,
+    EVENT_LEAGUE_STAFF_USER,
+    LEAGUE_ADMIN_USER,
+    LEAGUE_STAFF_USER,
+    ORG_ADMIN_USER,
+    ORG_MEMBER_USER,
+    ORG_STAFF_USER,
+    REGULAR_USER,
+    STAFF_USER,
+    USER_CLAIMER,
+    TestUser,
+)
 
 from .avatars import apply_committed_avatars
 from .constants import DTX_ORG_NAME
@@ -25,7 +49,7 @@ def populate_users(force: bool = False) -> None:
     Args:
         force (bool): If True, populate users even if there are already more than 100 users.
     """
-    # local: tests.test_auth imports tests.populate.bracket, which cycles back through tests.populate
+    # circular: tests.test_auth imports tests.populate.bracket, which cycles back through tests.populate
     from tests.test_auth import createTestStaffUser, createTestSuperUser, createTestUser
 
     current_count = CustomUser.objects.count()
@@ -53,7 +77,6 @@ def populate_users(force: bool = False) -> None:
     if discord_bot_token:
         try:
             # local: import failure must fall back to mock members
-            from discordbot.services.users import get_discord_members_data
 
             discord_users = get_discord_members_data()
             print(f"Fetched {len(discord_users)} users from Discord API")
@@ -96,30 +119,6 @@ def populate_test_auth_users(force=False):
     These users have specific PKs defined in tests/data/users.py to ensure
     consistency between test runs.
     """
-    from social_django.models import UserSocialAuth
-
-    from league.models import League
-    from tests.data.users import (
-        ADMIN_USER,
-        AUTH_MATRIX_LEAGUE_ADMIN_USER,
-        AUTH_MATRIX_LEAGUE_STAFF_USER,
-        AUTH_MATRIX_ORG_ADMIN_USER,
-        AUTH_MATRIX_ORG_MEMBER_USER,
-        AUTH_MATRIX_ORG_OWNER_USER,
-        AUTH_MATRIX_ORG_PROMOTER_USER,
-        AUTH_MATRIX_ORG_STAFF_USER,
-        CLAIMABLE_USER,
-        EVENT_LEAGUE_STAFF_USER,
-        LEAGUE_ADMIN_USER,
-        LEAGUE_STAFF_USER,
-        ORG_ADMIN_USER,
-        ORG_MEMBER_USER,
-        ORG_STAFF_USER,
-        REGULAR_USER,
-        STAFF_USER,
-        USER_CLAIMER,
-        TestUser,
-    )
 
     print("Creating test auth users...")
 

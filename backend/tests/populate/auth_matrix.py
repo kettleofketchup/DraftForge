@@ -24,10 +24,16 @@ Runs last in ``populate_all`` so the auto-incremented org pk lands on 8.
 
 from cacheops import invalidate_obj
 
+from app.models import CustomUser
 from league.models import League
 from org.models import Organization
 from tests.data.leagues import AUTH_MATRIX_LEAGUE
 from tests.data.organizations import AUTH_MATRIX_ORG
+from tests.data.tournaments import (
+    AUTH_MATRIX_COMPLETED_BRACKET_CONFIG,
+    AUTH_MATRIX_NO_BRACKET_CONFIG,
+    AUTH_MATRIX_PENDING_BRACKET_CONFIG,
+)
 from tests.data.users import (
     AUTH_MATRIX_LEAGUE_ADMIN_USER,
     AUTH_MATRIX_LEAGUE_STAFF_USER,
@@ -37,12 +43,13 @@ from tests.data.users import (
     AUTH_MATRIX_ORG_PROMOTER_USER,
     AUTH_MATRIX_ORG_STAFF_USER,
 )
+from tests.populate.steam import populate_bracket_games_for_tournament
+from tests.populate.tournaments import create_dynamic_tournament
 from tests.populate.utils import ensure_org_user
 
 
 def populate_auth_matrix_data(force=False):
     """Create the auth-matrix org, league, users, and bracket tournaments."""
-    from app.models import CustomUser
 
     print("Populating auth-matrix test data...")
 
@@ -150,13 +157,6 @@ def _create_auth_matrix_tournaments(league, force=False):
     six with winners + linked Steam matches (so the matrix can test
     Link Steam Match).
     """
-    from tests.data.tournaments import (
-        AUTH_MATRIX_COMPLETED_BRACKET_CONFIG,
-        AUTH_MATRIX_NO_BRACKET_CONFIG,
-        AUTH_MATRIX_PENDING_BRACKET_CONFIG,
-    )
-    from tests.populate.steam import populate_bracket_games_for_tournament
-    from tests.populate.tournaments import create_dynamic_tournament
 
     # Same 6-match double-elim structure used by populate_steam_matches.
     bracket_structure = [

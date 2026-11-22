@@ -15,7 +15,11 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
+from app.models import CustomUser
 from league.models import League
+from steam.functions.mmr_calculation import update_user_league_mmr
+from steam.functions.stats_update import update_all_league_stats_for_league
+from steam.models import LeagueSyncState, Match, PlayerMatchStats
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -31,7 +35,6 @@ SYNC_STATE_ALLOWED_FIELDS = {"is_syncing", "last_match_id", "failed_match_ids"}
 @permission_classes(_perm)
 def steam_sync_state(request: Request, league_id: int) -> Response:
     """GET: return (or create) sync state for a league. PATCH: update allowed fields."""
-    from steam.models import LeagueSyncState
 
     if request.method == "GET":
         state, _created = LeagueSyncState.objects.get_or_create(league_id=league_id)
@@ -76,8 +79,6 @@ STEAM_ID_64_BASE = 76561197960265728
 @permission_classes(_perm)
 def store_match(request: Request) -> Response:
     """Store a match and its player stats from raw Steam API data."""
-    from app.models import CustomUser
-    from steam.models import Match, PlayerMatchStats
 
     data = request.data
     match_id = data.get("match_id")
@@ -230,7 +231,6 @@ def tracked_leagues(request: Request) -> Response:
 @permission_classes(_perm)
 def update_league_stats(request: Request, league_id: int) -> Response:
     """Recalculate LeaguePlayerStats for all users in a league."""
-    from steam.functions.stats_update import update_all_league_stats_for_league
 
     updated_count = update_all_league_stats_for_league(league_id)
     return Response({"updated_count": updated_count})
@@ -241,8 +241,6 @@ def update_league_stats(request: Request, league_id: int) -> Response:
 @permission_classes(_perm)
 def recalculate_mmr(request: Request, user_id: int) -> Response:
     """Recalculate a single user's league MMR."""
-    from app.models import CustomUser
-    from steam.functions.mmr_calculation import update_user_league_mmr
 
     try:
         user = CustomUser.objects.get(pk=user_id)

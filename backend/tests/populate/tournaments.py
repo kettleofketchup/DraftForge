@@ -3,12 +3,17 @@ Tournament population functions for test database.
 """
 
 import random
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from django.db import transaction
+from django.utils import timezone
 
-from app.models import CustomUser, Game, PositionsModel, Team
+from app.models import CustomUser, Game, PositionsModel, Team, Tournament
+from league.models import League
+from tests.data import tournaments as tournament_data
 from tests.data.models import DynamicTournamentConfig, TestUser
+from tests.data.teams import REAL_TOURNAMENT_38_TEAMS
+from tests.data.tournaments import REAL_TOURNAMENT_38
 
 from .avatars import apply_committed_avatars
 from .constants import DTX_STEAM_LEAGUE_ID, TEST_STEAM_LEAGUE_ID
@@ -29,8 +34,6 @@ def create_dynamic_tournament(config: DynamicTournamentConfig, force: bool = Fal
     Returns:
         Tournament: The created or existing Tournament instance
     """
-    from app.models import Tournament
-    from league.models import League
 
     # Check if tournament already exists
     existing = Tournament.objects.filter(name=config.name).first()
@@ -161,7 +164,6 @@ def create_dyn_tournaments(force: bool = False):
     Returns:
         list[Tournament]: List of created Tournament instances
     """
-    from tests.data import tournaments as tournament_data
 
     created = []
     for name in dir(tournament_data):
@@ -184,8 +186,6 @@ def populate_tournaments(force=False):
     Args:
         force (bool): If True, create tournaments even if some already exist.
     """
-    from app.models import Tournament
-    from league.models import League
 
     # Check if tournaments already exist
     existing_tournaments = Tournament.objects.count()
@@ -244,14 +244,6 @@ def populate_real_tournament_38(force=False):
     Args:
         force: If True, recreate the tournament even if it exists
     """
-    from datetime import datetime
-
-    from django.utils import timezone
-
-    from app.models import Tournament
-    from league.models import League
-    from tests.data.teams import REAL_TOURNAMENT_38_TEAMS
-    from tests.data.tournaments import REAL_TOURNAMENT_38
 
     # Use Pydantic model for tournament config (single source of truth)
     tournament_config = REAL_TOURNAMENT_38
