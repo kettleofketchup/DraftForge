@@ -126,7 +126,7 @@ backend-test-labels group:
             for init in */__init__.py; do
                 pkg="${init%/__init__.py}"
                 [ "$pkg" = app ] && continue
-                mods=($(modules "$pkg"))
+                mapfile -t mods < <(modules "$pkg")
                 mig=() other=()
                 for m in "${mods[@]}"; do
                     if is_migration "$m"; then mig+=("$m"); else other+=("$m"); fi

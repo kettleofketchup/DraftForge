@@ -44,11 +44,6 @@ urlpatterns: list[URLPattern] = [
         name="internal_discord_rank_medal_select",
     ),
     path(
-        "previous-rank-submit/",
-        _signup_views.previous_rank_submit,
-        name="internal_discord_previous_rank_submit",
-    ),
-    path(
         "battle-cup-submit/",
         _signup_views.battle_cup_submit,
         name="internal_discord_battle_cup_submit",
