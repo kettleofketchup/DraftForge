@@ -2,6 +2,7 @@ export { LockedFeaturesPanel } from './LockedFeaturesPanel';
 export {
   conductKeys,
   contributionsKeys,
+  invalidateConductQueries,
   invalidateContributionQueries,
   invalidateOrgContributionQueries,
   orgFeaturesKey,

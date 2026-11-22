@@ -1,0 +1,1 @@
+- CI test jobs pull the stack images and test database in the background while Python, Node and Playwright are set up, and no longer boot a buildx builder unless an image has to be rebuilt.

@@ -430,44 +430,6 @@ export class TournamentPage {
   // ============================================================================
 
   /**
-   * Open the add player dialog.
-   */
-  async openAddPlayerDialog(): Promise<void> {
-    await this.addPlayerButton.scrollIntoViewIfNeeded();
-    await this.addPlayerButton.click();
-    await this.playerSearchInput.waitFor({ state: 'visible' });
-  }
-
-  /**
-   * Add a player to the tournament.
-   *
-   * @param username - Player username to add
-   */
-  async addPlayer(username: string): Promise<void> {
-    await this.openAddPlayerDialog();
-
-    // Type username in search
-    await this.playerSearchInput.fill(username);
-
-    // Wait for and click the add button for the user
-    const addUserBtn = this.page.locator(
-      `[data-testid="add-user-btn-${username}"]`,
-    );
-    await addUserBtn.waitFor({ state: 'visible' });
-    await addUserBtn.click();
-
-    // Wait for success message
-    await expect(this.page.locator('text=/added|created/i')).toBeVisible({
-      timeout: 5000,
-    });
-
-    // Verify player card appears
-    await this.page
-      .locator(`[data-testid="usercard-${username}"]`)
-      .waitFor({ state: 'visible' });
-  }
-
-  /**
    * Remove a player from the tournament.
    *
    * @param username - Player username to remove

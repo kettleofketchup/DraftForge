@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
         # Without this, migrating to user.0001_initial picks an `app` graph
         # version that may pre-date PositionsModel and breaks setup of any
         # migration test that needs to create a CustomUser at this point.
-        ("app", "0094_alter_league_steam_league_id"),
+        ("app", "0078_squashed_0094"),
     ]
 
     operations = [

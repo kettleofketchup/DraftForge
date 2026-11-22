@@ -191,10 +191,9 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     // The dropdown should populate with matching users
     await page.waitForTimeout(1500); // Give more time for API call and UI update
 
-    // Click the add button for the user (scoped to modal, use first() in case of duplicates)
-    const addUserBtn = modal
-      .locator(`[data-testid="add-user-btn-${userToAdd!.username}"]`)
-      .first();
+    const addUserBtn = modal.locator(
+      `[data-testid="add-user-btn-${userToAdd!.username}"]`,
+    );
 
     // If the option isn't visible, check if there's a "No users" message and log it
     const noUsersMsg = page.locator('text="No users or too many users found"');

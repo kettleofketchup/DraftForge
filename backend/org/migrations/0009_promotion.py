@@ -10,8 +10,8 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('app', '0104_org_promoters_feature_logs'),
-        ('events', '0021_event_end_and_staff'),
+        ("app", "0096_squashed_0106"),
+        ("events", "0001_squashed_0034"),
         ('org', '0008_contributions'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
