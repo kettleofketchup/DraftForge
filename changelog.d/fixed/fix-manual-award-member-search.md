@@ -1,0 +1,1 @@
+- The contributions **Manual award** form now picks the member with the same user search as everywhere else (type 3+ characters, with Discord members alongside), instead of a dropdown of every org member. It's usable in large servers, and the page no longer loads the whole member list.

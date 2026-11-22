@@ -32,6 +32,8 @@ runs:
       with:
         registry-token: ${{ inputs.registry-token }}
         github-actor: ${{ inputs.github-actor }}
+        buildx: 'false'
+        prefetch: 'true'
 
     - name: Set up Node.js
       if: inputs.playwright == 'true'
@@ -78,10 +80,11 @@ runs:
     - name: Pull or Build Docker images
       shell: bash
       run: |
-        if just docker::all-pull; then
+        if just ci::prefetch-wait images; then
           echo "Images pulled successfully"
         else
           echo "Pull failed, building with buildx + registry cache..."
+          just ci::buildx-builder
           just docker::frontend::build-dev
         fi
 
@@ -96,6 +99,7 @@ runs:
           echo "frontend-dev:${FRONTEND_HASH:0:12} present (deps in sync)"
         else
           echo "frontend-dev image lacks current package-lock hash; rebuilding"
+          just ci::buildx-builder
           just docker::frontend::build-dev
         fi
 
@@ -110,13 +114,14 @@ runs:
           echo "backend-dev:${BACKEND_HASH:0:12} present (deps in sync)"
         else
           echo "backend-dev image lacks current poetry.lock hash; rebuilding"
+          just ci::buildx-builder
           just docker::backend::build-dev
         fi
 
     - name: Get test database
       shell: bash
       run: |
-        if just docker::db::pull; then
+        if just ci::prefetch-wait db; then
           HASH=$(just docker::db::hash)
           EXISTING=$(docker inspect --format='{{index .Config.Labels "org.draftforge.test-db.content-hash"}}' draftforge/test-db:latest 2>/dev/null || echo "")
           if [[ "$HASH" == "$EXISTING" ]]; then

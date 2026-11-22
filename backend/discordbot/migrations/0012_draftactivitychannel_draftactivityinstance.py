@@ -6,7 +6,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("app", "0105_orglog_reopen_event"),
+        ("app", "0096_squashed_0106"),
         ("discordbot", "0011_discordtournamentlog_lobby_info"),
     ]
 

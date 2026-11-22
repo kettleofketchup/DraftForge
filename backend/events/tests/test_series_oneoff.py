@@ -139,7 +139,7 @@ class SyncFutureEventsShieldTest(EventTestCase):
         on_schedule.refresh_from_db()
         self.assertEqual(on_schedule.name, "Renamed Series")
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
     def test_realign_delete_tears_down_discord(self, _n, _c, mock_delete):
@@ -540,7 +540,7 @@ class CancelDeletesDiscordEventTest(EventTestCase):
             discord_create_event=True,
         )
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     def test_cancel_deletes_live_discord_scheduled_event(self, mock_delete):
         from discordbot.models import DiscordEvent
 
@@ -564,7 +564,7 @@ class CancelDeletesDiscordEventTest(EventTestCase):
         discord_event.refresh_from_db()
         self.assertIsNone(discord_event.scheduled_event_id)
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     def test_cancel_without_discord_event_is_noop(self, mock_delete):
         self.client.force_authenticate(self.admin)
         with self.captureOnCommitCallbacks(execute=True):

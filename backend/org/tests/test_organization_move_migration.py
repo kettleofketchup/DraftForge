@@ -31,7 +31,7 @@ REFERRING_TABLES = (
 BEFORE_MOVE = [
     ("app", "0110_orglog_conduct_actions"),
     ("org", "0013_conduct"),
-    ("events", "0034_event_conduct_finalized_at"),
+    ("events", "0001_squashed_0034"),
     ("opsnotices", "0002_opsnotice_emit_id_uniq"),
 ]
 MOVE_MIGRATION = ("app", "0111_move_organization_models_to_org")
