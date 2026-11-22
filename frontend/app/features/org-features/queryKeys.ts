@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import type { TrackKey } from '~/features/standing/schemas';
 
 type ViewerPk = number | null;
@@ -86,6 +86,12 @@ export const conductKeys = {
     [...conductKeys.all(orgId, viewerPk), 'member'] as const,
   settings: (orgId: number, viewerPk: ViewerPk) =>
     [...conductKeys.all(orgId, viewerPk), 'settings'] as const,
+  event: (orgId: number, viewerPk: ViewerPk, eventId: number) =>
+    [...conductKeys.all(orgId, viewerPk), 'event', eventId] as const,
+  attendance: (orgId: number, viewerPk: ViewerPk, eventId: number) =>
+    [...conductKeys.event(orgId, viewerPk, eventId), 'attendance'] as const,
+  forecast: (orgId: number, viewerPk: ViewerPk, eventId: number) =>
+    [...conductKeys.event(orgId, viewerPk, eventId), 'forecast'] as const,
 };
 
 export async function invalidateContributionQueries(
@@ -112,6 +118,34 @@ export async function invalidateOrgContributionQueries(
     queryClient.invalidateQueries({
       queryKey: [STANDING, orgId],
       predicate: (query) => query.queryKey[3] === 'contribution',
+    }),
+  ]);
+}
+
+function startsWith(key: QueryKey, prefix: QueryKey): boolean {
+  return (
+    prefix.length <= key.length &&
+    prefix.every((part, index) => key[index] === part)
+  );
+}
+
+export async function invalidateConductQueries(
+  queryClient: QueryClient,
+  orgId?: number | null,
+  options: { except?: QueryKey } = {},
+): Promise<void> {
+  const { except } = options;
+  const scope = orgId == null ? [] : [orgId];
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: [CONDUCT, ...scope],
+      predicate: except
+        ? (query) => !startsWith(query.queryKey, except)
+        : undefined,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: [STANDING, ...scope],
+      predicate: (query) => query.queryKey[3] === 'conduct',
     }),
   ]);
 }

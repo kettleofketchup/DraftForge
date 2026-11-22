@@ -130,6 +130,13 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import {
+  ConductBadge,
+  EventConductSection,
+  useEventConduct,
+  type ConductMemberLookup,
+} from '~/features/conduct';
+import {
+  invalidateConductQueries,
   removeFeatureQueries,
   useOrgFeatureAccess,
 } from '~/features/org-features';
@@ -186,6 +193,11 @@ export default function EventPage() {
   const isAdmin = event?.user_can_manage ?? false;
   const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
   const canComplete = canCompleteEvent(event, eventOrgAccess);
+  const { memberFor: conductMemberFor } = useEventConduct(
+    event,
+    eventOrg,
+    eventOrgAccess,
+  );
   const showCompletePointsNote =
     eventOrgAccess.canViewContributions ||
     eventOrgAccess.canManageContributions;
@@ -634,6 +646,11 @@ export default function EventPage() {
 
           <TabsContent value="details">
             {isAdmin && <OpsNoticesCard eventId={event.id} />}
+            <EventConductSection
+              event={event}
+              org={eventOrg ?? undefined}
+              access={eventOrgAccess}
+            />
             <DetailsTab
               event={event}
               signedIn={!!currentUser?.pk}
@@ -658,6 +675,7 @@ export default function EventPage() {
               autoApprove={event.auto_approve}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              conductMemberFor={conductMemberFor}
               eventId={event.id}
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
@@ -670,6 +688,7 @@ export default function EventPage() {
               signups={tentativeSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              conductMemberFor={conductMemberFor}
               state={event.state}
             />
           </TabsContent>
@@ -679,6 +698,7 @@ export default function EventPage() {
               signups={waitlistedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              conductMemberFor={conductMemberFor}
               state={event.state}
             />
           </TabsContent>
@@ -688,6 +708,7 @@ export default function EventPage() {
               signups={removedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              conductMemberFor={conductMemberFor}
               state={event.state}
             />
           </TabsContent>
@@ -899,7 +920,9 @@ function SignupsTab({
   hasDiscordServer,
   state,
   autoApprove = true,
+  conductMemberFor,
 }: {
+  conductMemberFor?: ConductMemberLookup;
   signups: EventSignupType[];
   autoApprove?: boolean;
   isAdmin: boolean;
@@ -945,6 +968,7 @@ function SignupsTab({
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
       // Backend adds the user as an OrgUser when an admin signs them up; reset
       // the org-users cache so the org page reflects the new membership.
+      void invalidateConductQueries(queryClient, orgId);
       if (orgId) useOrgStore.getState().clearOrgUsers();
       // AddUserModal reads `.pk` off this to track optimistic adds — the signup
       // itself has no pk, so hand back the user it embeds.
@@ -1164,11 +1188,17 @@ function SignupsTab({
             ? signupHoldReason(signup, autoApprove)
             : null;
           const statusSlot = (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono text-muted-foreground">
-                #{position}
+            <div
+              className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1"
+              data-testid={`event-signup-status-${signup.id}`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="text-xs font-mono text-muted-foreground">
+                  #{position}
+                </span>
+                <EventStateBadge state={signup.status} />
               </span>
-              <EventStateBadge state={signup.status} />
+              <ConductBadge member={conductMemberFor?.(signup.user)} />
               {holdReason && (
                 <span
                   className="text-xs text-muted-foreground"

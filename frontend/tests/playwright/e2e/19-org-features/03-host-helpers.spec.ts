@@ -20,7 +20,7 @@ async function pickUser(
   const modal = page.getByTestId('add-user-modal');
   await expect(modal).toBeVisible();
   await modal.getByTestId('add-user-search').fill(username);
-  await modal.getByTestId(`add-user-btn-${username}`).first().click();
+  await modal.getByTestId(`add-user-btn-${username}`).click();
 }
 
 test.describe('Org features: host and helpers @cicd', () => {

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
@@ -150,12 +149,6 @@ def _drop_read_caches(org_user: OrgUser) -> None:
         delattr(org_user, _MEMO_ATTR)
 
 
-def _mirror_dota_column(org_user: OrgUser, value: int) -> None:
-    OrgUser.objects.filter(pk=org_user.pk).update(mmr=value)
-    org_user.mmr = value
-    org_user._loaded_mmr = value
-
-
 def _invalidate_each(objs: Iterable[Model]) -> None:
     for obj in objs:
         try:
@@ -212,10 +205,8 @@ def set_org_mmr(
                 row = existing
         elif existing is not None:
             existing.delete()
-        if game_type == GameType.DOTA2:
-            _mirror_dota_column(org_user, value)
-            if mark_verified:
-                mark_dota_mmr_verified(org_user)
+        if game_type == GameType.DOTA2 and mark_verified:
+            mark_dota_mmr_verified(org_user)
         _drop_read_caches(org_user)
         log.info(
             "org_mmr_set",
@@ -259,12 +250,6 @@ def merge_org_mmrs(loser: OrgUser, keeper: OrgUser) -> None:
             )
         if raised:
             OrgUserGameMmr.objects.bulk_update(raised, ["mmr", "updated_at"])
-        dota = next(
-            (row.mmr for row in moved + raised if row.game_type == GameType.DOTA2),
-            None,
-        )
-        if dota is not None:
-            _mirror_dota_column(keeper, dota)
         log.info(
             "org_mmr_merged",
             system="org",
@@ -317,12 +302,6 @@ def bulk_set_org_mmrs(
             OrgUserGameMmr.objects.filter(
                 org_user_id__in=cleared, game_type=game_type
             ).delete()
-        if game_type == GameType.DOTA2:
-            pks_by_value: dict[int, list[int]] = defaultdict(list)
-            for uid, value in values.items():
-                pks_by_value[value or 0].append(by_user[uid].pk)
-            for value, pks in pks_by_value.items():
-                OrgUser.objects.filter(pk__in=pks).update(mmr=value)
         log.info(
             "org_mmr_set",
             system="org",
