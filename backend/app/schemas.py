@@ -24,13 +24,6 @@ from pydantic import BaseModel
 
 from app.display_names import first_name
 
-# Backward-compat re-exports (moved to discordbot/schemas.py with new names)
-from discordbot.schemas import (  # noqa: F401
-    DiscordEventStateSchema as DiscordEventState,
-)
-from discordbot.schemas import MessageLogSchema as MessageLogEntry  # noqa: F401
-from discordbot.schemas import SyncDiscordStateSchema as SyncDiscordState  # noqa: F401
-
 
 class TournamentUserSchema(BaseModel):
     """Validates: TournamentUserSerializer (app/serializers.py)"""
@@ -107,25 +100,3 @@ class AutoHeroDraftGameSchema(GameWithoutHeroDraftSchema):
 
     tournament_id: int
     discord_send_herodraft_link: bool = False
-
-
-# Backward compat aliases — use new names for new code
-UserSchema = TournamentUserSchema
-TournamentTaskData = TournamentTaskSchema
-TournamentParticipant = TournamentParticipantSchema
-GameWithoutHeroDraft = GameWithoutHeroDraftSchema
-
-# Backward compat -- use events.schemas for new code
-from events.schemas import (  # noqa: F401, E402
-    DotaProfileSchema,
-    OrgProxy,
-)
-from events.schemas import EventSignupSchema as EventSignupData  # noqa: F401, E402
-from events.schemas import EventTaskSchema as EventTaskData  # noqa: F401, E402
-from events.schemas import EventTemplateSchema as EventTemplateData  # noqa: F401, E402
-from events.schemas import (  # noqa: F401, E402
-    RepeaterSubscriberSchema as RepeaterSubscriber,
-)
-from events.schemas import (  # noqa: F401, E402
-    ScheduledEventDueSchema as ScheduledEventDue,
-)

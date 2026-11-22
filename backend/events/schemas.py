@@ -25,12 +25,11 @@ transport package. Request bodies for the same endpoints live in
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional, Protocol
+from typing import Annotated, Any, Literal, Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-if TYPE_CHECKING:
-    from app.schemas import TournamentUserSchema
+from app.schemas import TournamentUserSchema
 
 # Error ``message`` returned by ``handle_signup_modal_submit`` when the modal
 # was built for a different game than the event's current one. The bot's
@@ -163,7 +162,7 @@ class EventSignupSchema(BaseModel):
     user: int  # user PK
     username: Optional[str] = None  # display name, org-aware behind the member gate
     user_avatar: Optional[str] = None
-    user_data: Optional["TournamentUserSchema"] = None
+    user_data: Optional[TournamentUserSchema] = None
     dota_profile: Optional[DotaProfileSchema] = None
     event_team: Optional[int] = None
     signup_type: str = "user"
@@ -444,18 +443,6 @@ class SignupSnapshot(BaseModel):
     event_team_id: int | None = None
     extra: dict[str, Any] = {}
     model_config = ConfigDict(extra="ignore")
-
-
-def _rebuild_forward_refs() -> None:
-    """Resolve deferred TournamentUserSchema reference (avoids circular import)."""
-    from app.schemas import TournamentUserSchema  # noqa: F811
-
-    EventSignupSchema.model_rebuild(
-        _types_namespace={"TournamentUserSchema": TournamentUserSchema}
-    )
-
-
-_rebuild_forward_refs()
 
 
 def signed_up_text(status: str, unmet_labels: list[str] | None) -> str:
