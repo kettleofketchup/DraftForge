@@ -8,8 +8,6 @@ export interface OrgUserData {
   id: number; // OrgUser.pk (for PATCH operations)
   /** Org MMR per game; read via selectOrgMmr/useOrgMmr. */
   mmrs: GameMmrs;
-  /** Temporary: the payload's `mmr` for screens that do not read `mmrs` yet. */
-  mmr?: number;
   _fetchedAt: number;
 }
 

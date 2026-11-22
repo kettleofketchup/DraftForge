@@ -88,10 +88,14 @@ describe('UserCard org-scoped edit for tournament players', () => {
     useUserCacheStore.getState().upsert([tournamentUser], { orgId: ORG_PK });
   });
 
-  it('shows the MMR field when the card has org context', () => {
+  it('shows a field per game in org scope', () => {
     renderCard(ORG_PK);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
     expect(screen.getByTestId('edit-user-mmr')).toHaveProperty('value', '4200');
+    expect(screen.getByTestId('edit-user-mmr-deadlock')).toHaveProperty(
+      'value',
+      '',
+    );
   });
 
   it('reopens with the saved values after an org-scoped save', async () => {
@@ -105,9 +109,12 @@ describe('UserCard org-scoped edit for tournament players', () => {
     await waitFor(() =>
       expect(screen.queryByTestId('edit-user-nickname')).toBeNull(),
     );
-    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 77, {
-      nickname: 'Renamed',
-    });
+    expect(updateOrgUser).toHaveBeenCalledWith(
+      ORG_PK,
+      77,
+      { nickname: 'Renamed' },
+      1,
+    );
 
     fireEvent.click(screen.getByTestId('edit-user-btn'));
     expect(screen.getByTestId('edit-user-nickname')).toHaveProperty(
@@ -129,9 +136,7 @@ describe('UserCard with a stale store org (finding 3)', () => {
     pk: 43,
     username: 'stale',
     nickname: 'Stale',
-    orgData: {
-      [STALE_ORG_PK]: { id: 88, mmrs: { 1: 3000 }, mmr: 3000, _fetchedAt: 0 },
-    },
+    orgData: { [STALE_ORG_PK]: { id: 88, mmrs: { 1: 3000 }, _fetchedAt: 0 } },
     leagueData: {},
     _fetchedAt: 0,
   } as UserEntry;
@@ -270,9 +275,7 @@ describe('UserCard edit for cache entries (finding 4)', () => {
       pk: 50,
       username: 'org',
       nickname: 'Org',
-      orgData: {
-        [ORG_PK]: { id: 60, mmrs: { 1: 3000 }, mmr: 3000, _fetchedAt: 0 },
-      },
+      orgData: { [ORG_PK]: { id: 60, mmrs: { 1: 3000 }, _fetchedAt: 0 } },
       leagueData: {},
       _fetchedAt: 0,
     });
@@ -280,6 +283,8 @@ describe('UserCard edit for cache entries (finding 4)', () => {
       pk: 50,
       username: 'org',
       mmr: 3500,
+      mmr_game_type: 1,
+      game_mmrs: { '1': 3500, '2': 0 },
       orgUserPk: 60,
     });
     renderEntryCard(entry, ORG_PK);
@@ -292,7 +297,12 @@ describe('UserCard edit for cache entries (finding 4)', () => {
     await waitFor(() =>
       expect(screen.queryByTestId('edit-user-mmr')).toBeNull(),
     );
-    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 60, { mmr: 3500 });
+    expect(updateOrgUser).toHaveBeenCalledWith(
+      ORG_PK,
+      60,
+      { game_mmrs: { 1: 3500 } },
+      1,
+    );
 
     fireEvent.click(screen.getByTestId('edit-user-btn'));
     expect(screen.getByTestId('edit-user-mmr')).toHaveProperty('value', '3500');
@@ -304,9 +314,7 @@ describe('UserCard edit for cache entries (finding 4)', () => {
       pk: 51,
       username: 'lg',
       nickname: 'Lg',
-      orgData: {
-        [ORG_PK]: { id: 61, mmrs: { 1: 2000 }, mmr: 2000, _fetchedAt: 0 },
-      },
+      orgData: { [ORG_PK]: { id: 61, mmrs: { 1: 2000 }, _fetchedAt: 0 } },
       leagueData: {},
       _fetchedAt: 0,
     });
@@ -317,17 +325,21 @@ describe('UserCard edit for cache entries (finding 4)', () => {
     });
     renderEntryCard(entry, ORG_PK, LEAGUE_PK);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
-    expect(screen.getByLabelText(/Org MMR/)).toBe(
+    expect(screen.getByLabelText(/Dota 2 org MMR/)).toBe(
       screen.getByTestId('edit-user-mmr'),
     );
+    expect(screen.queryByTestId('edit-user-mmr-deadlock')).toBeNull();
     fireEvent.change(screen.getByTestId('edit-user-nickname'), {
       target: { value: 'New Nick' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     await waitFor(() => expect(updateOrgUser).toHaveBeenCalled());
-    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 61, {
-      nickname: 'New Nick',
-    });
+    expect(updateOrgUser).toHaveBeenCalledWith(
+      ORG_PK,
+      61,
+      { nickname: 'New Nick' },
+      1,
+    );
   });
 
   it('a leagueData-only link opens league scope, does not prefill MMR, and saves', async () => {
@@ -359,9 +371,12 @@ describe('UserCard edit for cache entries (finding 4)', () => {
       ).toBeGreaterThan(0),
     );
     expect(toast.error).not.toHaveBeenCalled();
-    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 41, {
-      nickname: 'New Nick',
-    });
+    expect(updateOrgUser).toHaveBeenCalledWith(
+      ORG_PK,
+      41,
+      { nickname: 'New Nick' },
+      1,
+    );
   });
 
   it('a leagueData link for a different league falls back to global scope', () => {
@@ -405,9 +420,7 @@ describe('UserCard edit user carries the scope-gating link', () => {
         pk: 71,
         username: 'org',
         nickname: 'Org',
-        orgData: {
-          8: { id: 171, mmrs: { 1: 1000 }, mmr: 1000, _fetchedAt: 0 },
-        },
+        orgData: { 8: { id: 171, mmrs: { 1: 1000 }, _fetchedAt: 0 } },
         leagueData: {},
         _fetchedAt: 0,
       },
@@ -467,6 +480,7 @@ describe('UserCard edit user carries the scope-gating link', () => {
         8,
         resolveOrgUserLink(source as UserEntry, CTX),
         { nickname: 'xx' },
+        1,
       );
     },
   );
@@ -512,9 +526,7 @@ describe('UserCard edit gate follows a same-pk org refresh (MA-5)', () => {
       pk: 80,
       username: 'staffed',
       nickname: 'Staffed',
-      orgData: {
-        [ORG_PK]: { id: 180, mmrs: { 1: 1000 }, mmr: 1000, _fetchedAt: 0 },
-      },
+      orgData: { [ORG_PK]: { id: 180, mmrs: { 1: 1000 }, _fetchedAt: 0 } },
       leagueData: {},
       _fetchedAt: 0,
     });
@@ -530,5 +542,118 @@ describe('UserCard edit gate follows a same-pk org refresh (MA-5)', () => {
       }),
     );
     expect(screen.getByTestId('edit-user-btn')).toBeTruthy();
+  });
+});
+
+describe('UserCard per-game org MMR (org scope)', () => {
+  beforeEach(() => {
+    useUserCacheStore.getState().reset?.();
+    useUserStore.setState({
+      currentUser: {
+        pk: 1,
+        username: 'admin',
+        is_superuser: true,
+        is_staff: true,
+      },
+    } as never);
+    useOrgStore.setState({
+      currentOrg: { pk: ORG_PK, name: 'Org' } as OrganizationType,
+    });
+    useLeagueStore.setState({ currentLeague: null });
+  });
+
+  function member(pk: number, mmrs: Record<number, number>): UserEntry {
+    return seed({
+      pk,
+      username: `m${pk}`,
+      nickname: `M${pk}`,
+      orgData: { [ORG_PK]: { id: pk + 100, mmrs, _fetchedAt: 0 } },
+      leagueData: {},
+      _fetchedAt: 0,
+    } as UserEntry);
+  }
+
+  it('shows a tile per game with a dash for 0', () => {
+    renderEntryCard(member(90, { 1: 4200, 2: 0 }), ORG_PK);
+    expect(screen.getByTestId('usercard-org-mmr-dota2').textContent).toContain(
+      '4200',
+    );
+    expect(
+      screen.getByTestId('usercard-org-mmr-deadlock').textContent,
+    ).toContain('\u2014');
+  });
+
+  it('a Deadlock-only member is not flagged as missing MMR', () => {
+    renderEntryCard(member(91, { 1: 0, 2: 2500 }), ORG_PK);
+    expect(screen.queryByText('MMR: Not added')).toBeNull();
+  });
+
+  it('a member with no MMR in any game is flagged', () => {
+    renderEntryCard(member(92, { 1: 0, 2: 0 }), ORG_PK);
+    expect(screen.getByText('MMR: Not added')).toBeTruthy();
+  });
+
+  it('hotkeys R and K focus the Dota and Deadlock fields', () => {
+    renderEntryCard(member(93, { 1: 4200, 2: 2500 }), ORG_PK);
+    fireEvent.click(screen.getByTestId('edit-user-btn'));
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.keyDown(window, { key: 'k' });
+    expect(document.activeElement).toBe(
+      screen.getByTestId('edit-user-mmr-deadlock'),
+    );
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.keyDown(window, { key: 'r' });
+    expect(document.activeElement).toBe(screen.getByTestId('edit-user-mmr'));
+  });
+
+  it('a Deadlock edit sends only the Deadlock game', async () => {
+    updateOrgUser.mockResolvedValue({
+      pk: 94,
+      username: 'm94',
+      mmr: 4200,
+      mmr_game_type: 1,
+      game_mmrs: { '1': 4200, '2': 3000 },
+      orgUserPk: 194,
+    });
+    renderEntryCard(member(94, { 1: 4200, 2: 2500 }), ORG_PK);
+    fireEvent.click(screen.getByTestId('edit-user-btn'));
+    fireEvent.change(screen.getByTestId('edit-user-mmr-deadlock'), {
+      target: { value: '3000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() => expect(updateOrgUser).toHaveBeenCalled());
+    expect(updateOrgUser).toHaveBeenCalledWith(
+      ORG_PK,
+      194,
+      { game_mmrs: { 2: 3000 } },
+      1,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('usercard-org-mmr-deadlock').textContent,
+      ).toContain('3000'),
+    );
+  });
+
+  it('shows the server reload message when a stale bundle is rejected', async () => {
+    updateOrgUser.mockRejectedValue(
+      Object.assign(new Error('Request failed with status code 400'), {
+        response: {
+          status: 400,
+          data: { error: 'mmr requires mmr_game_type; reload the page' },
+        },
+      }),
+    );
+    renderEntryCard(member(95, { 1: 4200 }), ORG_PK);
+    fireEvent.click(screen.getByTestId('edit-user-btn'));
+    fireEvent.change(screen.getByTestId('edit-user-mmr'), {
+      target: { value: '4300' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'mmr requires mmr_game_type; reload the page',
+      ),
+    );
   });
 });

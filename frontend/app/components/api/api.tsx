@@ -154,6 +154,7 @@ export {
   getDiscordRoles,
   getEvent,
   getEventDiscordState,
+  getEventRepeater,
   getEventRepeaters,
   getEventSignups,
   getEvents,
@@ -185,6 +186,7 @@ export type {
 export type {
   DiscordChannel,
   DiscordRole,
+  EventRepeaterListItem,
   EventRepeaterType,
   EventStaffPayload,
   EventWritePayload,
