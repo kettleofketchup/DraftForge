@@ -15,6 +15,7 @@ import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useListKeyboardNav } from '~/hooks/useListKeyboardNav';
+import { useMediaQuery } from '~/hooks/useMediaQuery';
 import { cn } from '~/lib/utils';
 import { DiscordMemberResults } from './DiscordMemberResults';
 import { SiteUserResults } from './SiteUserResults';
@@ -78,15 +79,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const siteResults = siteQuery.data ?? [];
   const discordResults = discordQuery.data ?? [];
 
-  // Detect desktop layout (lg breakpoint = 1024px)
-  const [isDesktop, setIsDesktop] = useState(false);
-  useEffect(() => {
-    const mql = window.matchMedia('(min-width: 1024px)');
-    setIsDesktop(mql.matches);
-    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
-  }, []);
+  // Render one layout only: CSS-hiding the other left every result in the DOM twice.
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   // Reset state when modal closes
   const handleOpenChange = useCallback(
@@ -299,56 +293,54 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           )}
       </div>
 
-      {/* Desktop: two columns */}
-      <div className="hidden lg:grid lg:grid-cols-2 lg:gap-4">
-        <div>
-          <h3
-            className={cn(
-              'mb-2 text-sm font-medium',
-              activeColumn === 'site' ? 'text-primary' : 'text-foreground',
-            )}
-          >
-            Site Users
-          </h3>
-          <SiteUserResults
-            results={sortedSiteResults}
-            loading={siteQuery.isFetching}
-            onAdd={handleAdd}
-            isAdded={checkIsAdded}
-            queryLength={searchTerm.length}
-            highlightedIndex={activeColumn === 'site' ? highlightedIndex : -1}
-          />
+      {isDesktop ? (
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <h3
+              className={cn(
+                'mb-2 text-sm font-medium',
+                activeColumn === 'site' ? 'text-primary' : 'text-foreground',
+              )}
+            >
+              Site Users
+            </h3>
+            <SiteUserResults
+              results={sortedSiteResults}
+              loading={siteQuery.isFetching}
+              onAdd={handleAdd}
+              isAdded={checkIsAdded}
+              queryLength={searchTerm.length}
+              highlightedIndex={activeColumn === 'site' ? highlightedIndex : -1}
+            />
+          </div>
+          <div>
+            <h3
+              className={cn(
+                'mb-2 text-sm font-medium',
+                activeColumn === 'discord' ? 'text-primary' : 'text-foreground',
+              )}
+            >
+              Discord Members
+            </h3>
+            <DiscordMemberResults
+              results={sortedDiscordResults}
+              loading={discordQuery.isFetching}
+              onAdd={handleAdd}
+              isAdded={checkIsAdded}
+              isDiscordUserAdded={checkIsDiscordUserAdded}
+              orgId={entityContext.orgId}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
+              hasDiscordServer={hasDiscordServer}
+              highlightedIndex={
+                activeColumn === 'discord' ? highlightedIndex : -1
+              }
+            />
+          </div>
         </div>
-        <div>
-          <h3
-            className={cn(
-              'mb-2 text-sm font-medium',
-              activeColumn === 'discord' ? 'text-primary' : 'text-foreground',
-            )}
-          >
-            Discord Members
-          </h3>
-          <DiscordMemberResults
-            results={sortedDiscordResults}
-            loading={discordQuery.isFetching}
-            onAdd={handleAdd}
-            isAdded={checkIsAdded}
-            isDiscordUserAdded={checkIsDiscordUserAdded}
-            orgId={entityContext.orgId}
-            onRefresh={handleRefresh}
-            refreshing={refreshing}
-            hasDiscordServer={hasDiscordServer}
-            highlightedIndex={
-              activeColumn === 'discord' ? highlightedIndex : -1
-            }
-          />
-        </div>
-      </div>
-
-      {/* Mobile/Tablet: tabs */}
-      <div className="lg:hidden">
+      ) : (
         <Tabs
-          defaultValue="site"
+          value={activeColumn}
           onValueChange={(val) => setActiveColumn(val as 'site' | 'discord')}
         >
           <TabsList className="w-full">
@@ -387,7 +379,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             />
           </TabsContent>
         </Tabs>
-      </div>
+      )}
     </FormDialog>
   );
 };
