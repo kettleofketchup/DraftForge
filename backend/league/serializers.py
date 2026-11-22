@@ -70,14 +70,12 @@ class LeagueSerializer(serializers.ModelSerializer):
     staff = TournamentUserSerializer(many=True, read_only=True)
     tournament_count = serializers.IntegerField(read_only=True)
     users_count = serializers.IntegerField(read_only=True)
-    # For backwards compatibility, return first org name
+    # Flat org name, kept for backwards compatibility.
     organization_name = serializers.SerializerMethodField()
-    # Explicit declaration overrides DRF's auto-generated field, which would
-    # otherwise attach a UniqueValidator that shadows validate_steam_league_id
-    # and produces a generic "already exists" message instead of our custom
-    # "already in use by '<name>'" collision message.
-    # allow_null=True permits leagues without a Steam League ID; the unique
-    # constraint on the column ignores NULL (SQL treats NULLs as distinct).
+    # Explicit so DRF doesn't attach a UniqueValidator whose generic "already
+    # exists" shadows validate_steam_league_id's "already in use by '<name>'".
+    # allow_null=True permits leagues without a Steam League ID; the column's
+    # unique constraint ignores NULL (SQL treats NULLs as distinct).
     steam_league_id = serializers.IntegerField(allow_null=True, required=False)
 
     class Meta:
@@ -111,7 +109,7 @@ class LeagueSerializer(serializers.ModelSerializer):
         )
 
     def get_organization_name(self, obj: League) -> str | None:
-        """Return first organization name for backwards compatibility."""
+        """Return the organization's name, kept for backwards compatibility."""
         first_org = obj.organization
         return first_org.name if first_org else None
 

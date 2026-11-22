@@ -31,7 +31,6 @@ def add_league_admin(request: Request, league_id: int) -> Response:
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # Check if user is admin of the linked organization
     has_access = league.organization and has_org_admin_access(
         request.user, league.organization
     )
@@ -60,7 +59,6 @@ def add_league_admin(request: Request, league_id: int) -> Response:
     league.admins.add(user)
     invalidate_obj(league)
 
-    # Log the action
     LeagueLog.objects.create(
         league=league,
         actor=request.user,
@@ -83,7 +81,6 @@ def remove_league_admin(request: Request, league_id: int, user_id: int) -> Respo
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # Check if user is admin of the linked organization
     has_access = league.organization and has_org_admin_access(
         request.user, league.organization
     )
@@ -105,7 +102,6 @@ def remove_league_admin(request: Request, league_id: int, user_id: int) -> Respo
     league.admins.remove(user)
     invalidate_obj(league)
 
-    # Log the action
     LeagueLog.objects.create(
         league=league,
         actor=request.user,
@@ -152,7 +148,6 @@ def add_league_staff(request: Request, league_id: int) -> Response:
     league.staff.add(user)
     invalidate_obj(league)
 
-    # Log the action
     LeagueLog.objects.create(
         league=league,
         actor=request.user,
@@ -192,7 +187,6 @@ def remove_league_staff(request: Request, league_id: int, user_id: int) -> Respo
     league.staff.remove(user)
     invalidate_obj(league)
 
-    # Log the action
     LeagueLog.objects.create(
         league=league,
         actor=request.user,

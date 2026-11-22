@@ -28,7 +28,6 @@ def has_league_admin_access(user: CustomUser | AnonymousUser, league: League) ->
     if user.is_staff or user.is_superuser:
         return True
 
-    # Check if user is a league-specific admin
     if league.admins.filter(pk=user.pk).exists():
         return True
 
@@ -44,15 +43,12 @@ def has_league_staff_access(user: CustomUser | AnonymousUser, league: League) ->
     if not user.is_authenticated:
         return False
 
-    # League admin has staff access
     if has_league_admin_access(user, league):
         return True
 
-    # Check if user is a league-specific staff
     if league.staff.filter(pk=user.pk).exists():
         return True
 
-    # Check if user is staff of the linked organization
     if league.organization and has_org_staff_access(user, league.organization):
         return True
 
