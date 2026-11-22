@@ -19,6 +19,7 @@ import {
   createMmrRequest,
   fetchMmrPendingCount,
   fetchMmrQueue,
+  fetchMyMmrRequests,
   fetchUserMmrSummary,
   rejectMmrRequest,
   staffSetMmr,
@@ -118,6 +119,17 @@ export function useUserMmrSummary(
   });
 }
 
+export function useMyMmrRequests(
+  enabled = true,
+): UseQueryResult<MmrChangeRequest[]> {
+  const viewerPk = useViewerPk();
+  return useQuery({
+    queryKey: mmrKeys.mine(viewerPk),
+    queryFn: () => fetchMyMmrRequests(),
+    enabled: enabled && viewerPk != null,
+  });
+}
+
 export function useMmrQueue(
   scope: MmrScope,
   status: MmrQueueStatus,
@@ -149,7 +161,7 @@ export function useCreateMmrRequest(
 ): UseMutationResult<MmrChangeRequest, unknown, CreateMmrRequestInput> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: createMmrRequest,
+    mutationFn: (input) => createMmrRequest(input),
     onError: (error) => log.error('Failed to create MMR request', error),
     onSettled: () => invalidateFor(queryClient, subjectPk),
   });
@@ -160,7 +172,7 @@ export function useCancelMmrRequest(
 ): UseMutationResult<MmrChangeRequest, unknown, number> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: cancelMmrRequest,
+    mutationFn: (id) => cancelMmrRequest(id),
     onError: (error) => log.error('Failed to cancel MMR request', error),
     onSettled: () => invalidateFor(queryClient, subjectPk),
   });

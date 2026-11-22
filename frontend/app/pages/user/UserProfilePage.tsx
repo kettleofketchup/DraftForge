@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Award, Gamepad2, Trophy, Users } from 'lucide-react';
+import { Gamepad2, Trophy, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
@@ -23,6 +23,7 @@ import { RolePositions } from '~/components/user/positions';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
+import { OrgsMmrTab } from '~/features/mmr-requests';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { EditProfileModal } from './EditProfileModal';
@@ -174,8 +175,8 @@ export function UserProfilePage() {
               <span className="hidden sm:inline">Tournaments</span>
             </TabsTrigger>
             <TabsTrigger value="leagues" className="flex-1 min-h-11 gap-2">
-              <Award className="h-4 w-4" />
-              <span className="hidden sm:inline">Leagues</span>
+              <Trophy className="h-4 w-4" />
+              <span className="hidden sm:inline">Orgs &amp; MMR</span>
             </TabsTrigger>
             <TabsTrigger value="games" className="flex-1 min-h-11 gap-2">
               <Gamepad2 className="h-4 w-4" />
@@ -194,7 +195,7 @@ export function UserProfilePage() {
         </TabsContent>
 
         <TabsContent value="leagues" className="mt-4">
-          <LeaguesTab user={user} />
+          <OrgsMmrTab userPk={user.pk!} isOwnProfile={isOwnProfile} />
         </TabsContent>
 
         <TabsContent value="games" className="mt-4">
@@ -268,20 +269,6 @@ function TournamentsTab({ user }: { user: UserType }) {
         <div className="text-center text-muted-foreground">
           <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>Tournament history coming soon</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function LeaguesTab({ user }: { user: UserType }) {
-  // TODO: Fetch user's leagues from API
-  return (
-    <Card>
-      <CardContent className="py-8">
-        <div className="text-center text-muted-foreground">
-          <Award className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>League standings coming soon</p>
         </div>
       </CardContent>
     </Card>
