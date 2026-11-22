@@ -42,14 +42,12 @@ from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Discord identity / profile fields copied from the duplicate onto the kept
-# account when the kept account is missing them. Split into two groups because
-# `avatar` is a `@property` on CustomUser that
-# proxies to base_profile.avatar — its setter persists immediately via
-# `bp.save(update_fields=["avatar"])`, so it MUST NOT appear in the column-
-# level `keep.save(update_fields=...)` call below (Django would raise
-# ValueError: 'The following fields do not exist in this model... avatar').
-_CARRYOVER_PROPERTY_FIELDS = ("avatar", "nickname")  # persisted by setter
+# Fields copied from the duplicate onto the kept account when it lacks them.
+# The property fields proxy to base_profile and their setters save it
+# immediately, so they MUST NOT reach the column-level
+# `keep.save(update_fields=...)` below (Django raises ValueError on a
+# non-field name).
+_CARRYOVER_PROPERTY_FIELDS = ("avatar", "nickname")
 _CARRYOVER_COLUMN_FIELDS = (
     "discordUsername",
     "discordNickname",
