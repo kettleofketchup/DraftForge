@@ -15,7 +15,6 @@ class LeagueRating(models.Model):
         related_name="league_ratings",
     )
 
-    # Base MMR at time of joining league
     base_mmr = models.IntegerField(
         default=0,
         help_text="Player's MMR when joining the league",

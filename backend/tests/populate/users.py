@@ -76,8 +76,6 @@ def populate_users(force: bool = False) -> None:
 
     if discord_bot_token:
         try:
-            # local: import failure must fall back to mock members
-
             discord_users = get_discord_members_data()
             print(f"Fetched {len(discord_users)} users from Discord API")
         except Exception as e:
