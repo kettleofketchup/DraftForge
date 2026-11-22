@@ -143,8 +143,8 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 action="approve_claim",
                 target_user=claimer,
                 details={
-                    "merged_profile_id": target_user.pk,
-                    "merged_steamid": target_user.steamid,
+                    "merged_profile_id": target_pk,
+                    "merged_steamid": target_steamid,
                 },
             )
 
