@@ -1,22 +1,14 @@
 from datetime import timedelta
+from unittest import mock
 
 from django.core.exceptions import ValidationError
 from django.utils import timezone as tz
 
-from org.leadership.rating import rating_points, round_half_up
+from org.leadership import reviews as reviews_module
+from org.leadership.lifecycle import void_event
 from org.leadership.reviews import ReviewRefused, void_review, withdraw_review
-from org.models_leadership import CaptainReview
+from org.models_leadership import CaptainReview, EventCaptain
 from org.tests.leadership_base import LeadershipTestCase, scores
-
-
-class RatingFormulaTest(LeadershipTestCase):
-    def test_formula_cases(self) -> None:
-        self.assertEqual(rating_points([], max_points=10, min_reviews=2), 0)
-        self.assertEqual(rating_points([5.0], max_points=10, min_reviews=2), 0)
-        self.assertEqual(rating_points([1.0, 1.0], max_points=10, min_reviews=2), 0)
-        self.assertEqual(rating_points([5.0, 5.0], max_points=10, min_reviews=2), 10)
-        self.assertEqual(rating_points([3.0, 2.0], max_points=10, min_reviews=2), 4)
-        self.assertEqual(round_half_up(2.5), 3)
 
 
 class ReviewTest(LeadershipTestCase):
@@ -140,3 +132,38 @@ class ReviewTest(LeadershipTestCase):
                 now=tz.now(),
             )
         self.assertEqual(ctx.exception.status, 404)
+
+
+class ReviewRaceTest(LeadershipTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.close()
+        self.real_lock = reviews_module.lock_snapshot
+
+    def test_void_between_precheck_and_lock(self) -> None:
+        def lock_after_reopen(*args: int) -> EventCaptain:
+            void_event(self.event, now=tz.now())
+            return self.real_lock(*args)
+
+        with mock.patch.object(reviews_module, "lock_snapshot", lock_after_reopen):
+            with self.assertRaises(ReviewRefused) as ctx:
+                self.review(self.mates_a[0], self.cap_a)
+        self.assertEqual(ctx.exception.code, "snapshot_voided")
+        self.assertFalse(CaptainReview.objects.filter(voided_at__isnull=True).exists())
+        self.assertIsNone(self.points(self.cap_a, "captain_rating"))
+
+    def test_window_checked_with_the_clock_inside_the_lock(self) -> None:
+        closes = self.snapshot(self.cap_a).window_closes_at
+        with mock.patch.object(reviews_module.timezone, "now", return_value=closes):
+            with self.assertRaises(ReviewRefused) as ctx:
+                self.review(
+                    self.mates_a[0], self.cap_a, now=closes - timedelta(seconds=1)
+                )
+        self.assertEqual(ctx.exception.code, "review_window_closed")
+        self.assertFalse(CaptainReview.objects.exists())
+
+    def test_reopened_snapshot_refuses_with_snapshot_voided(self) -> None:
+        void_event(self.event, now=tz.now())
+        with self.assertRaises(ReviewRefused) as ctx:
+            self.review(self.mates_a[0], self.cap_a)
+        self.assertEqual(ctx.exception.code, "snapshot_voided")

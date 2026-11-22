@@ -67,6 +67,7 @@ __all__ = [
     "on_user_deleted",
     "promotion_order",
     "reopen_reset_fields",
+    "event_viewer_flags",
     "track_metrics",
     "tracks_for",
     "tracks_payload",
@@ -278,6 +279,31 @@ def leaderboard(
         own_row=board.own_row if access.can_view_own else None,
         rows_visible=access.can_view_rows,
     )
+
+
+def event_viewer_flags(
+    event_id: int,
+    org_id: int | None,
+    viewer: CustomUser | AnonymousUser | None,
+) -> dict[str, object]:
+    if org_id is None or viewer is None or not viewer.is_authenticated:
+        return {}
+    tracks = [
+        t
+        for t in registry.tracks()
+        if type(t).event_viewer_flags is not TrackBase.event_viewer_flags
+        and org_has_feature(org_id, t.feature)
+    ]
+    if not tracks:
+        return {}
+    member = OrgUser.objects.filter(organization_id=org_id, user_id=viewer.pk).first()
+    if member is None:
+        return {}
+    now = timezone.now()
+    flags: dict[str, object] = {}
+    for track in tracks:
+        flags.update(track.event_viewer_flags(event_id, member, now=now))
+    return flags
 
 
 def tracks_for(

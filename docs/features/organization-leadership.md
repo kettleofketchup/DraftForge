@@ -84,8 +84,8 @@ events with at least 3 reviews.
 - **Other members** see a captain's overall rating and points when the leaderboard is
   public, but no per-event detail.
 - **Raters** see their own scores.
-- **Org admins** see every review with its rater, for abuse handling, except reviews of
-  themselves.
+- **Org admins** see every review with its rater, for abuse handling. Reviews of
+  themselves are left out entirely, the same as for any other captain.
 
 !!! warning "Two-review events"
     With exactly two released reviews, a rater who tells the captain their own scores
@@ -124,11 +124,17 @@ All endpoints live under `api/organizations/<org_id>/leadership/` and answer
 | `PUT events/<event_id>/captains/<org_user_id>/review/` | rater | Submit or replace your review: `{"scores": {"<trait>": 1-5}}` |
 | `DELETE events/<event_id>/captains/<org_user_id>/review/` | rater | Withdraw your review |
 | `GET members/<org_user_id>/` | self, admin; members when public | Rating summary; history for self and admins |
-| `GET events/<event_id>/reviews/` | admin | Every review, raters hidden on reviews of yourself |
+| `GET events/<event_id>/reviews/` | admin | Every review with its rater, except reviews of yourself |
 | `POST reviews/<pk>/void/`, `POST reviews/<pk>/unvoid/` | admin | `{"reason": "..."}` |
 | `GET traits/`, `PUT traits/` | member / admin | List or upsert traits |
 | `DELETE traits/<key>/` | admin | `409 trait_in_use` once scored |
 | `GET/PATCH settings/` | admin | Settings and per-kind point values (`kind_points`) |
 
-Refusals carry a `code`: `review_window_closed` (409), `not_in_pool` (403),
-`review_moderated` (403), `cannot_moderate_own_reviews` (403), `invalid_scores` (400).
+Refusals carry a `code`: `review_window_closed` (409), `snapshot_voided` (409, the event
+was reopened or cancelled), `not_in_pool` (403), `review_moderated` (403),
+`cannot_moderate_own_reviews` (403), `invalid_scores` (400). Review submits and
+withdrawals are limited to 30 a minute per user.
+
+While the feature is unlocked, the event detail response (`GET /api/events/<id>/`) also
+carries `can_review_captains` and `pending_captain_reviews` for the signed-in member: the
+number of captains on that event they can still rate.

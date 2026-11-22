@@ -63,7 +63,7 @@ from user.querysets import with_user_profiles
 
 class CaptainReviewThrottle(UserRateThrottle):
     scope = "captain_review"
-    rate = "60/min"
+    rate = "30/min"
 
 
 class Refused(APIException):
@@ -283,8 +283,8 @@ def leadership_member(request: Request, org_id: int, org_user_id: int) -> Respon
     return Response(payload)
 
 
-def _review_data(review: CaptainReview, *, with_rater: bool) -> dict[str, Any]:
-    data: dict[str, Any] = {
+def _review_data(review: CaptainReview) -> dict[str, Any]:
+    return {
         "pk": review.pk,
         "captain": member_summary(review.event_captain.captain),
         "team_name": review.event_captain.team_name,
@@ -293,11 +293,8 @@ def _review_data(review: CaptainReview, *, with_rater: bool) -> dict[str, Any]:
         "void_kind": review.void_kind,
         "void_reason": review.void_reason,
         "scores": {s.trait.key: s.score for s in review.scores.all()},
-        "can_moderate": with_rater,
+        "rater": member_summary(review.rater),
     }
-    if with_rater:
-        data["rater"] = member_summary(review.rater)
-    return data
 
 
 @api_view(["GET"])
@@ -308,9 +305,9 @@ def leadership_event_reviews(request: Request, org_id: int, event_id: int) -> Re
     reviews = (
         with_user_profiles(
             with_user_profiles(
-                CaptainReview.objects.nocache().filter(
-                    event_captain__event=event, event_captain__organization=org
-                ),
+                CaptainReview.objects.nocache()
+                .filter(event_captain__event=event, event_captain__organization=org)
+                .exclude(event_captain__captain__user_id=request.user.pk),
                 "rater__user",
             ),
             "event_captain__captain__user",
@@ -322,13 +319,7 @@ def leadership_event_reviews(request: Request, org_id: int, event_id: int) -> Re
     return Response(
         {
             "event_id": event.pk,
-            "reviews": [
-                _review_data(
-                    r,
-                    with_rater=r.event_captain.captain.user_id != request.user.pk,
-                )
-                for r in reviews
-            ],
+            "reviews": [_review_data(r) for r in reviews],
         }
     )
 

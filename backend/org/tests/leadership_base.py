@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 
-from django.core.cache import cache
 from django.test import TestCase
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
@@ -26,7 +25,6 @@ def scores(value: int) -> dict[str, int]:
 
 class LeadershipTestCase(TestCase):
     def setUp(self) -> None:
-        cache.clear()
         self.admin = self.make_user("ld_admin")
         self.org = Organization.objects.create(name="Leadership Org", owner=self.admin)
         self.org.admins.add(self.admin)

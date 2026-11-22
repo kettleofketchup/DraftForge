@@ -1,16 +1,16 @@
+from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import ROUND_HALF_UP, Decimal
-
-from django.db.models import Avg
+from fractions import Fraction
 
 from events.models import Event
+from org.leadership.constants import SCORE_MAX, SCORE_MIN
 from org.leadership.kinds import LeadershipKind
 from org.leadership.store import get_leadership_settings
 from org.models import ContributionEntry
-from org.models_leadership import CaptainReview, CaptainTraitScore, EventCaptain
+from org.models_leadership import CaptainTraitScore, EventCaptain
 from org.standing import ledger
-from org.standing.scoring import from_score5, mean_normalized
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -24,33 +24,36 @@ class RatingUpsert:
     outcome: ledger.UpsertOutcome
 
 
-def round_half_up(value: float) -> int:
-    return int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+def round_half_up(value: Fraction) -> int:
+    return (2 * value.numerator + value.denominator) // (2 * value.denominator)
+
+
+def review_mean(scores: Iterable[int]) -> Fraction:
+    values = list(scores)
+    if not values:
+        raise ValueError("a review needs at least one score")
+    return Fraction(
+        sum(s - SCORE_MIN for s in values), (SCORE_MAX - SCORE_MIN) * len(values)
+    )
 
 
 def rating_points(
-    review_means: list[float], *, max_points: int, min_reviews: int
+    review_means: Sequence[Fraction], *, max_points: int, min_reviews: int
 ) -> int:
-    if len(review_means) < min_reviews:
+    if not review_means or len(review_means) < min_reviews:
         return 0
-    mean = mean_normalized(from_score5(m) for m in review_means)
-    if mean is None:
-        return 0
-    return max(0, round_half_up(max_points * mean))
+    return max(0, round_half_up(max_points * sum(review_means) / len(review_means)))
 
 
-def review_means(snapshot_id: int) -> list[float]:
-    live = CaptainReview.objects.nocache().filter(
-        event_captain_id=snapshot_id, voided_at__isnull=True
-    )
-    return [
-        float(row["mean"])
-        for row in CaptainTraitScore.objects.nocache()
-        .filter(review__in=live)
-        .values("review_id")
-        .annotate(mean=Avg("score"))
-        if row["mean"] is not None
-    ]
+def review_means(snapshot_id: int) -> list[Fraction]:
+    grouped: dict[int, list[int]] = defaultdict(list)
+    for review_id, score in (
+        CaptainTraitScore.objects.nocache()
+        .filter(review__event_captain_id=snapshot_id, review__voided_at__isnull=True)
+        .values_list("review_id", "score")
+    ):
+        grouped[review_id].append(score)
+    return [review_mean(values) for values in grouped.values()]
 
 
 def current_points(snapshot: EventCaptain) -> int:

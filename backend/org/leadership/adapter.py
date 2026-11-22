@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import override
 
 from django.contrib.auth.models import AnonymousUser
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from app.models import CustomUser
@@ -14,6 +15,7 @@ from org.leadership.queries import CaptainRating, captain_ratings, points_by_mem
 from org.leadership.store import effective_traits, get_leadership_settings
 from org.leadership.summary import member_payload, round_score
 from org.models import Organization, OrgUser
+from org.models_leadership import CaptainReview, EventCaptain
 from org.standing.base import TrackBase
 from org.standing.periods import Period
 from org.standing.types import (
@@ -115,6 +117,32 @@ class LeadershipTrack(TrackBase):
     ) -> TrackOutput:
         merge.delete_user(user, actor=actor, now=timezone.now())
         return TrackOutput()
+
+    @override
+    def event_viewer_flags(
+        self, event_id: int, viewer: OrgUser, *, now: datetime
+    ) -> Mapping[str, object]:
+        pending = (
+            EventCaptain.objects.nocache()
+            .filter(
+                event_id=event_id,
+                voided_at__isnull=True,
+                window_closes_at__gt=now,
+                teammates=viewer,
+            )
+            .exclude(captain=viewer)
+            .exclude(
+                Exists(
+                    CaptainReview.objects.filter(
+                        event_captain=OuterRef("pk"),
+                        rater=viewer,
+                        voided_at__isnull=True,
+                    )
+                )
+            )
+            .count()
+        )
+        return {"can_review_captains": pending > 0, "pending_captain_reviews": pending}
 
     @override
     def metrics_for(self, org_id: int) -> tuple[Metric, ...]:

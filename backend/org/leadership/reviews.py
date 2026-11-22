@@ -2,6 +2,7 @@ from collections.abc import Mapping
 from datetime import datetime
 
 from django.db import transaction
+from django.utils import timezone
 
 from app.models import CustomUser
 from org.leadership.constants import (
@@ -48,7 +49,7 @@ def lock_snapshot(org_id: int, event_id: int, captain_id: int) -> EventCaptain:
 
 def _check_writable(snapshot: EventCaptain, rater: OrgUser, *, now: datetime) -> None:
     if snapshot.voided_at is not None:
-        raise _refuse("review_window_closed", "Reviews for this event are closed.", 409)
+        raise _refuse("snapshot_voided", "Reviews for this event are closed.", 409)
     if now >= snapshot.window_closes_at:
         raise _refuse("review_window_closed", "The review window has closed.", 409)
     if (
@@ -107,6 +108,7 @@ def submit_review(
     now: datetime,
 ) -> CaptainReview:
     snapshot = lock_snapshot(org_id, event_id, captain_id)
+    now = max(now, timezone.now())
     _check_writable(snapshot, rater, now=now)
     review = _existing(snapshot, rater)
     by_trait = _validated_scores(org_id, scores)
@@ -150,6 +152,7 @@ def withdraw_review(
     *, org_id: int, event_id: int, captain_id: int, rater: OrgUser, now: datetime
 ) -> None:
     snapshot = lock_snapshot(org_id, event_id, captain_id)
+    now = max(now, timezone.now())
     _check_writable(snapshot, rater, now=now)
     review = _existing(snapshot, rater)
     if review is None or review.voided_at is not None:
@@ -236,6 +239,7 @@ def void_review(
 ) -> CaptainReview:
     cleaned = check_reason(reason)
     review, snapshot = _lock_review(org_id, review_pk)
+    now = max(now, timezone.now())
     _check_moderator(snapshot, actor)
     if review.void_kind == VoidKind.MODERATED:
         return review
@@ -267,11 +271,12 @@ def unvoid_review(
 ) -> CaptainReview:
     cleaned = check_reason(reason)
     review, snapshot = _lock_review(org_id, review_pk)
+    now = max(now, timezone.now())
     _check_moderator(snapshot, actor)
     if review.void_kind != VoidKind.MODERATED:
         raise _refuse("not_moderated", "Only a moderated review can be restored.", 409)
     if snapshot.voided_at is not None:
-        raise _refuse("review_window_closed", "Reviews for this event are closed.", 409)
+        raise _refuse("snapshot_voided", "Reviews for this event are closed.", 409)
     review.voided_at = None
     review.void_kind = ""
     review.voided_by = None

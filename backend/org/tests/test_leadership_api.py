@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 
 from django.db import connection
 from django.test.utils import CaptureQueriesContext, override_settings
@@ -9,7 +10,7 @@ from org.contributions.services import award_entry
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.models import Organization, OrgUser
-from org.models_leadership import CaptainReview, OrgLeadershipSettings
+from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
 from org.tests.leadership_base import LeadershipTestCase, scores
 
 
@@ -118,7 +119,14 @@ class ModerationApiTest(LeadershipTestCase):
         client = self.client_for(self.cap_a)
         res = client.get(self.url(f"events/{self.event.pk}/reviews/"))
         self.assertEqual(res.status_code, 200)
-        self.assertNotIn("rater", res.json()["reviews"][0])
+        self.assertEqual(res.json()["reviews"], [])
+        self.review(self.mates_b[0], self.cap_b, 3)
+        body = client.get(self.url(f"events/{self.event.pk}/reviews/")).json()
+        self.assertEqual(
+            [r["captain"]["org_user_pk"] for r in body["reviews"]],
+            [self.ou(self.cap_b).pk],
+        )
+        self.assertNotIn(self.first.pk, [r["pk"] for r in body["reviews"]])
         res = client.post(
             self.url(f"reviews/{self.first.pk}/void/"),
             {"reason": "mine"},
@@ -180,6 +188,7 @@ class AnonymityTest(LeadershipTestCase):
         own = self.member_view(self.cap_a)
         self.assertEqual(own["reviews"], 2)
         self.assertIsNone(own["history"][0]["traits"])
+        self.assertIsNone(own["history"][0]["reviews"])
         self.review_third()
         own = self.member_view(self.cap_a)
         self.assertIsNotNone(own["history"][0]["traits"])
@@ -325,3 +334,50 @@ class LeaderboardTest(LeadershipTestCase):
         with CaptureQueriesContext(connection) as ctx:
             self.board(self.admin)
         self.assertLessEqual(len(ctx.captured_queries), 14)
+
+    def test_unknown_trait_metric_rejected(self) -> None:
+        res = self.client_for(self.mates_b[0]).get(
+            f"/api/organizations/{self.org.pk}/standing/leadership/leaderboard/?metric=rating.bogus"
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_tracks_list_trait_metrics(self) -> None:
+        res = self.client_for(self.cap_a).get(
+            f"/api/organizations/{self.org.pk}/standing/tracks/"
+        )
+        track = next(t for t in res.json()["tracks"] if t["key"] == "leadership")
+        self.assertIn("rating.communication", [m["key"] for m in track["metrics"]])
+
+    def test_points_hide_unreleased_captain_rating(self) -> None:
+        later, tournament = self.make_event("Later Cup")
+        self.make_team(
+            "Later", self.cap_a, self.mates_a, placement=None, tournament=tournament
+        )
+        for user in [self.cap_a, *self.mates_a]:
+            self.admit(user, later)
+        self.close(later)
+        for mate in self.mates_a:
+            self.review(mate, self.cap_a, 5, event=later)
+        self.assertEqual(self.points(self.cap_a, "captain_rating", later), 10)
+        totals = {
+            r["member"]["user_pk"]: r["value"]
+            for r in self.board(self.mates_b[0], "points")["rows"]
+        }
+        self.assertEqual(totals[self.cap_a.pk], 5 + 10 + 10 + 5)
+
+    @override_settings(CACHEOPS_ENABLED=False)
+    def test_board_budget_independent_of_captain_count(self) -> None:
+        def measure(metric: str) -> int:
+            with CaptureQueriesContext(connection) as ctx:
+                self.board(self.admin, metric)
+            return len(ctx.captured_queries)
+
+        before = {m: measure(m) for m in ("rating", "points")}
+        EventCaptain.objects.filter(captain__user=self.cap_b).update(
+            window_closes_at=tz.now() + timedelta(hours=1)
+        )
+        for mate in self.mates_b:
+            self.review(mate, self.cap_b, 4)
+        self.expire_window()
+        self.assertEqual(len(self.board(self.admin)["rows"]), 2)
+        self.assertEqual({m: measure(m) for m in ("rating", "points")}, before)

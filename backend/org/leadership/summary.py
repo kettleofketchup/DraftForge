@@ -89,7 +89,7 @@ def _history(
             "team_name": snap.team_name,
             "placement": snap.placement,
             "captain_rating_points": points.get(snap.event_id, 0),
-            "reviews": snap.live,
+            "reviews": snap.live if snap.pk in shown_avgs else None,
             "released": snap.pk in released,
             "traits": (
                 [
