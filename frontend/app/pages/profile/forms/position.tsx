@@ -25,10 +25,8 @@ type PositionFieldsProps = {
   /** Tailwind grid classes for the field grid. Override when embedding in a
    *  smaller container (e.g. the EventSignupModal uses 2 fixed columns). */
   gridClassName?: string;
-  /** Override the default data-testid. Defaults to `position-choices` so any
-   *  consumer (EditProfileModal, EventSignupModal, future callers) can find
-   *  this picker by a stable name. Each Select inside also carries
-   *  `data-testid="position-choice-<role>"` for direct selection. */
+  /** Defaults to `position-choices`, a stable name for every consumer. Each
+   *  Select also carries `data-testid="position-choice-<role>"`. */
   testId?: string;
 };
 
