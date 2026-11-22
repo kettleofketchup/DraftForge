@@ -3,7 +3,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("org", "0017_retarget_default_league_to_league"),
+        ("org", "0018_remove_orguser_mmr"),
         ("app", "0114_copy_profile_friend_ids"),
     ]
 

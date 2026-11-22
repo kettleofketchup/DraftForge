@@ -112,7 +112,6 @@ class OrgUser(models.Model):
         related_name="members",
         db_index=True,
     )
-    mmr = models.IntegerField(default=0)
     guild_nickname = models.TextField(null=True, blank=True)
     joined_at = models.DateTimeField(auto_now_add=True)
 

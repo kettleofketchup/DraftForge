@@ -131,7 +131,7 @@ Both signup paths funnel through `apply_signup_input` and write the same per-org
 | `rank_screenshot` (Dota) | ✓ URL field, validated for `.png/.jpg/.jpeg/.webp` | ✓ Discord attachment URL | `PlayerDotaProfile.rank_screenshot`. Required only when `rank_status="active"` and the event sets `discord_require_rank_screenshot`. "I had an MMR" (previous) records the rank via medal+star without a screenshot. |
 | `battlecup_screenshot` (Dota) | ✓ | ✓ | `PlayerDotaProfile.battlecup_screenshot` |
 | `deadlock_rank` | **not yet** | ✓ modal text | `PlayerDeadlockProfile.rank` |
-| `mmr` numeric (admin-only) | ✓ on approve (`mmr_override`) | ✓ on approve | `OrgUser.mmr`, `has_active_dota_mmr`, `dota_mmr_last_verified` — also emits an `OrgLog` `set_mmr` entry |
+| `mmr` numeric (admin-only) | ✓ on approve (`mmr_override`) | ✓ on approve | The org MMR of the **event's game** ([Org MMR per game](org-mmr.md)). `has_active_dota_mmr` and `dota_mmr_last_verified` are set only for Dota events. Also emits an `OrgLog` `set_mmr` entry with `game_type` |
 
 The endpoint is a single canonical action accepting `{intent, profile}`; the older `/rsvp/` and `/tentative/` actions have been removed.
 
@@ -140,7 +140,9 @@ The endpoint is a single canonical action accepting `{intent, profile}`; the old
 Admin approve uses `POST /api/event-signups/{id}/approve/` with optional `{ "mmr": <int> }`. On approve:
 
 - `EventSignup.status` → `approved`.
-- If `mmr` is supplied, `OrgUser.mmr` is written and the OrgLog records `set_mmr`. An `OrgUser` row is created if missing.
+- If `mmr` is supplied, the org MMR of the event's game is written and the OrgLog records `set_mmr` with `game_type`. An `OrgUser` row is created if missing. The value is checked against that game's range (0–20000); an out-of-range value returns 400.
+- The Dota verification flags (`has_active_dota_mmr`, `dota_mmr_last_verified`) are set only when the event is Dota 2.
+- The approval dialog suggests a value only for Dota events (`suggested_mmr`). For Deadlock signups `suggested_mmr_range` is `null` with source `"none"`, and `suggested_mmr` is the member's existing Deadlock org MMR or `null`; the dialog shows the self-reported Deadlock rank instead and the input is required.
 - **Approve does NOT mutate positions.** The legacy behavior that flattened `pos_N` booleans into `priority=1` on `CustomUser.positions` at approve time has been removed — priorities now come exclusively from the signup write via `apply_signup_input`, which is authoritative. The per-org `PlayerDotaProfile.pos_N` booleans are the derived binary view for that event.
 
 ### Repeater Subscriptions
@@ -268,7 +270,7 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/event-signups/{id}/approve/` | Approve a signup. Optional body `{"mmr": <int>}` writes `OrgUser.mmr` and logs `set_mmr`. Does NOT mutate positions. |
+| POST | `/api/event-signups/{id}/approve/` | Approve a signup. Optional body `{"mmr": <int>}` writes the org MMR of the event's game and logs `set_mmr`. Does NOT mutate positions. |
 | POST | `/api/event-signups/{id}/reject/` | Reject a signup |
 | POST | `/api/event-signups/{id}/confirm/` | Confirm attendance (roll-call) |
 | POST | `/api/event-signups/{id}/unconfirm/` | Reverse a confirm |
