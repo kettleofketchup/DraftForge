@@ -22,6 +22,18 @@ vi.mock('~/components/lobby/api', async (importOriginal) => ({
   getRepeaterLobbyPassword: vi.fn().mockResolvedValue(null),
 }));
 
+// Heavy fields these tests never use; rendering them timed tests out under load.
+vi.mock('../form/sections/EventTournamentFields', () => ({
+  EventTournamentFields: () => null,
+}));
+vi.mock('../form/sections/EventLobbyFields', () => ({
+  EventLobbyFields: () => null,
+}));
+vi.mock('../form/fields/TimezoneField', () => ({ TimezoneField: () => null }));
+vi.mock('../ReadyCheckConfigSection', () => ({
+  ReadyCheckConfigSection: () => null,
+}));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
