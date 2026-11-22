@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from app.cache_utils import invalidate_obj
 from events.eligibility import (
     claim_friend_id,
+    precheck_friend_id,
     refresh_unmet_requirements,
     validate_friend_id,
 )
@@ -128,6 +129,7 @@ def update_my_dota_profile(request: Request, org_id: int) -> Response:
     if (error := _invalid_rank_status(request.data)) is not None:
         return error
     try:
+        precheck_friend_id(str(request.data.get(FRIEND_ID_FIELD) or ""), request.user)
         profile = _apply_dota_profile_patch(org_user, request.data)
     except ValidationError as e:
         return Response(

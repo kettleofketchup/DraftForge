@@ -57,6 +57,7 @@ from events.eligibility import (
     EligibilityResult,
     evaluate_signup,
     has_registered_steam_id,
+    precheck_friend_id,
     recheck_signup,
 )
 from events.ledger import SignupActor
@@ -958,6 +959,11 @@ class EventViewSet(viewsets.ModelViewSet):
             first = exc.errors()[0] if exc.errors() else {}
             msg = first.get("msg") or str(exc)
             return _signup_refusal(event, request.user, intent, msg)
+
+        try:
+            precheck_friend_id(patch.steam_account_id, request.user)
+        except DjangoValidationError as exc:
+            return _signup_refusal(event, request.user, intent, exc.messages[0])
 
         org_user = resolve_or_create_org_user(request.user, event.organization)
 

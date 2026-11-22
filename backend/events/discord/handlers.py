@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.core.exceptions import ValidationError
 from structlog.contextvars import bind_contextvars
 
 from events.constants import SignupStatus
@@ -32,6 +33,7 @@ from events.discord._shared import (
 )
 from events.discord.providers.dota import DotaHandler
 from events.discord.providers.registry import SIGNUP_HANDLERS, get_signup_handler
+from events.eligibility import precheck_friend_id
 from events.ledger import SignupActor
 from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE
 from events.schemas import STALE_MODAL_MESSAGE
@@ -200,6 +202,18 @@ def handle_signup_modal_submit(
             event_game_type=event.game_type,
         )
         return {"action": "error", "message": STALE_MODAL_MESSAGE}
+
+    try:
+        precheck_friend_id(values.get("friend_id"), user)
+    except ValidationError as exc:
+        log.info(
+            "signup_input_rejected",
+            system="discord",
+            subsystem="interaction",
+            handler="signup_modal_submit",
+            reason=exc.code,
+        )
+        return {"action": "error", "message": exc.messages[0]}
 
     handler = get_signup_handler(event.game_type)
     return handler.apply_modal_submit(event, org_user, user, values)

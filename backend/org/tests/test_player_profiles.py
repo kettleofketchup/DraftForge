@@ -1,7 +1,13 @@
-from django.test import TestCase
+from unittest.mock import patch
+
+from django.core.cache import cache
+from django.test import TestCase, override_settings
+from django.urls import reverse
+from rest_framework.test import APIClient
 
 from app.models import CustomUser, PositionsModel
 from org.models import Organization, OrgUser
+from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
 
 class PlayerDotaProfileTest(TestCase):
@@ -12,8 +18,6 @@ class PlayerDotaProfileTest(TestCase):
         self.org_user = OrgUser.objects.create(user=self.user, organization=self.org)
 
     def test_create_dota_profile(self):
-        from org.models_profiles import PlayerDotaProfile
-
         profile = PlayerDotaProfile.objects.create(
             org_user=self.org_user,
             rank_status="active",
@@ -30,14 +34,10 @@ class PlayerDotaProfileTest(TestCase):
         self.assertFalse(profile.pos_3)
 
     def test_dota_profile_one_to_one(self):
-        from org.models_profiles import PlayerDotaProfile
-
         PlayerDotaProfile.objects.create(org_user=self.org_user)
         self.assertIsNotNone(self.org_user.dota_profile)
 
     def test_rank_status_choices(self):
-        from org.models_profiles import PlayerDotaProfile
-
         for status in ["active", "previous", "never"]:
             profile, _ = PlayerDotaProfile.objects.update_or_create(
                 org_user=self.org_user, defaults={"rank_status": status}
@@ -45,8 +45,6 @@ class PlayerDotaProfileTest(TestCase):
             self.assertEqual(profile.rank_status, status)
 
     def test_battle_cup_tier_nullable(self):
-        from org.models_profiles import PlayerDotaProfile
-
         profile = PlayerDotaProfile.objects.create(
             org_user=self.org_user, rank_status="never", battle_cup_tier=5
         )
@@ -63,8 +61,6 @@ class PlayerDeadlockProfileTest(TestCase):
         self.org_user = OrgUser.objects.create(user=self.user, organization=self.org)
 
     def test_create_deadlock_profile(self):
-        from org.models_profiles import PlayerDeadlockProfile
-
         profile = PlayerDeadlockProfile.objects.create(
             org_user=self.org_user,
             rank="Phantom IV",
@@ -73,10 +69,44 @@ class PlayerDeadlockProfileTest(TestCase):
         self.assertEqual(profile.rank, "Phantom IV")
 
     def test_rank_is_loose_string(self):
-        from org.models_profiles import PlayerDeadlockProfile
-
         profile = PlayerDeadlockProfile.objects.create(
             org_user=self.org_user,
             rank="idk maybe like medium?",
         )
         self.assertEqual(profile.rank, "idk maybe like medium?")
+
+
+@override_settings(
+    STEAM_ACCOUNT_LOOKUP_ENABLED=True,
+    CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
+)
+class MyDotaProfileSteamLookupTest(TestCase):
+    def setUp(self) -> None:
+        cache.clear()
+        self.owner = CustomUser.objects.create_user(username="mdp_owner", password="x")
+        self.member = CustomUser.objects.create_user(
+            username="mdp_member", password="x"
+        )
+        self.org = Organization.objects.create(name="MDP Org", owner=self.owner)
+        self.org_user = OrgUser.objects.create(user=self.member, organization=self.org)
+        self.client = APIClient()
+        self.client.force_authenticate(self.member)
+
+    def test_my_dota_profile_not_found_400(self) -> None:
+        url = reverse("update-my-dota-profile", args=[self.org.pk])
+        with patch(
+            "events.eligibility.steam.ensure_steam_account_exists", return_value=False
+        ):
+            resp = self.client.patch(
+                url, {"steam_account_id": "676767", "pos_1": True}, format="json"
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(
+            "No Steam account has Friend ID 676767", resp.data["steam_account_id"]
+        )
+        self.assertIsNone(CustomUser.objects.get(pk=self.member.pk).steam_account_id)
+        self.assertFalse(
+            PlayerDotaProfile.objects.filter(
+                org_user=self.org_user, pos_1=True
+            ).exists()
+        )

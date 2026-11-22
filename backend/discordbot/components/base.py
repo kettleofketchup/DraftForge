@@ -129,8 +129,17 @@ async def send_unexpected_modal_result(interaction: discord.Interaction) -> None
     user sees "Something went wrong".
     """
     if interaction.response.is_done():
+        await interaction.followup.send(STALE_SIGNUP_MESSAGE, ephemeral=True)
         return
     await interaction.response.send_message(STALE_SIGNUP_MESSAGE, ephemeral=True)
+
+
+async def send_modal_error(interaction: discord.Interaction, message: str) -> None:
+    """Reply with an error, through followup once the modal has deferred."""
+    if interaction.response.is_done():
+        await interaction.followup.send(f"❌ {message}", ephemeral=True)
+        return
+    await interaction.response.send_message(f"❌ {message}", ephemeral=True)
 
 
 @runtime_checkable
