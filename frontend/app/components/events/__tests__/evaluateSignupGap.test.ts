@@ -60,6 +60,18 @@ describe('evaluateSignupGap', () => {
     );
   });
 
+  it('does not flag rank_screenshot for previous rank', () => {
+    const event = { ...baseEvent, discord_require_rank_screenshot: true };
+    const profile = {
+      ...completeProfile,
+      rank_status: 'previous' as const,
+      rank_screenshot: null,
+    };
+    expect(evaluateSignupGap(event as never, profile as never)).toBe(
+      'complete',
+    );
+  });
+
   it('does not flag screenshots for never-rank when battlecup screenshot is present', () => {
     const event = { ...baseEvent, discord_require_battlecup_screenshot: true };
     const profile = {
