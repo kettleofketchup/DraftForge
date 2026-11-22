@@ -47,7 +47,7 @@ def list_discord_linked_users(request: Request) -> Response:
     four fields the task needs (pk, discord_id, avatar, username).
     """
     User = get_user_model()
-    # T1.5+: avatar lives on base_profile, not CustomUser. Use the relation
+    # avatar lives on base_profile, not CustomUser. Use the relation
     # path in .values() — Django will JOIN BaseUserProfile in.
     rows = list(
         User.objects.filter(discordId__isnull=False)
@@ -169,7 +169,7 @@ def bulk_update_user_avatars(request: Request) -> Response:
         )
         return err
 
-    # T1.5+: avatar lives on BaseUserProfile, not CustomUser. Bulk-update the
+    # avatar lives on BaseUserProfile, not CustomUser. Bulk-update the
     # profile rows directly; the property on CustomUser proxies reads through
     # to base_profile.avatar. We need both: load each BaseUserProfile, set its
     # avatar field, then bulk_update on BaseUserProfile.

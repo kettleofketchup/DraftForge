@@ -1,9 +1,8 @@
 /**
  * User Profile API
  *
- * API functions for the T1 BaseUserProfile epic — layered profile GET
- * and base PATCH. T1 returns base only; gameUser and orgProfiles are
- * present but empty in the response (filled in by T2/T3).
+ * Layered profile GET and base PATCH. gameUser and orgProfiles are
+ * present in the response; orgProfiles is still empty.
  */
 
 import type {
@@ -28,10 +27,8 @@ export interface BasePatchResponse {
 /**
  * Fetch the current user's layered profile.
  *
- * T1 returns the base layer only; `gameUser` and `orgProfiles` are present
- * but empty. The `_userPk` argument is unused in T1 (the endpoint is
- * `/me/`-only) and is retained for forward-compat with T2/T3 where the
- * endpoint may accept a pk.
+ * `orgProfiles` is present but empty. The `_userPk` argument is unused (the
+ * endpoint is `/me/`-only) and is kept for when the endpoint accepts a pk.
  */
 export async function getUserProfile(
   _userPk: number,

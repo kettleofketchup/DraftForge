@@ -8,7 +8,7 @@ class GameProfileModelTests(TestCase):
     """Model shape/relationship tests.
 
     NOTE: `BaseUserProfile.save()` AUTO-CREATES one DotaUserProfile +
-    DeadlockUserProfile per base_profile (T2.2), so these tests use the
+    DeadlockUserProfile per base_profile, so these tests use the
     auto-created instances (`bp.dota_user_profile` / `bp.deadlock_user_profile`)
     rather than `.objects.create(...)` — creating a second would violate the
     OneToOne UNIQUE constraint on base_profile_id.

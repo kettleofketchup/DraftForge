@@ -1,8 +1,8 @@
 import importlib
 import unittest
 
-# django-test-migrations is a dev dep added by T1.4. The CI backend-dev image
-# is pulled from GHCR and may pre-date this dep until the image-build workflow
+# django-test-migrations is a dev dep. The CI backend-dev image is pulled
+# from GHCR and may pre-date this dep until the image-build workflow
 # republishes. Skip the whole module cleanly rather than failing with
 # ModuleNotFoundError when the image is stale.
 try:
@@ -58,7 +58,7 @@ class BackfillIdempotencyTest(MigratorTestCase):
 
     The implementation relies on bulk_create(ignore_conflicts=True) +
     BaseUserProfile.user being unique (OneToOne). If either guarantee is
-    weakened in T2/T3, this test catches it.
+    weakened, this test catches it.
     """
 
     migrate_from = ("user", "0001_initial")
@@ -93,9 +93,7 @@ class BackfillIdempotencyTest(MigratorTestCase):
 
         # Re-import the migration module and re-execute the forward function
         # using the new_state apps registry (where BaseUserProfile lives).
-        module = importlib.import_module(
-            "user.migrations.0002_backfill_base_profiles"
-        )
+        module = importlib.import_module("user.migrations.0002_backfill_base_profiles")
         module.copy_nickname_avatar_to_base_profile(self.new_state.apps, None)
 
         after = BaseUserProfile.objects.count()
@@ -141,9 +139,7 @@ class BackfillReverseTest(MigratorTestCase):
         dora_bp.avatar = "new_avatar_hash"
         dora_bp.save()
 
-        module = importlib.import_module(
-            "user.migrations.0002_backfill_base_profiles"
-        )
+        module = importlib.import_module("user.migrations.0002_backfill_base_profiles")
         module.reverse_copy(self.new_state.apps, None)
 
         dora_user = CustomUser.objects.get(username="dora")
