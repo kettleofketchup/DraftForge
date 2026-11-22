@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import requests
 
@@ -9,7 +10,7 @@ log = get_logger(__name__)
 
 
 class SteamAPI:
-    def __init__(self, api_key=None):
+    def __init__(self, api_key: str | None = None) -> None:
         self.api_key = api_key or os.environ.get("STEAM_API_KEY")
         if not self.api_key:
             raise ValueError(
@@ -18,13 +19,29 @@ class SteamAPI:
         self.base_url = "https://api.steampowered.com"
 
     @throttle_request(min_delay=0.5)
-    def _request(self, interface, method, version, params=None):
-        if params is None:
-            params = {}
+    def _request(
+        self,
+        interface: str,
+        method: str,
+        version: int,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        return self._request_unthrottled(interface, method, version, params)
+
+    def _request_unthrottled(
+        self,
+        interface: str,
+        method: str,
+        version: int,
+        params: dict[str, Any] | None = None,
+        *,
+        timeout: float | tuple[float, float] = 10,
+    ) -> dict[str, Any] | None:
+        params = dict(params or {})
         params["key"] = self.api_key
         url = f"{self.base_url}/{interface}/{method}/v{version}/"
         try:
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(url, params=params, timeout=timeout)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
@@ -53,7 +70,22 @@ class SteamAPI:
             )
             return None
 
-    def get_match_details(self, match_id):
+    def get_player_summaries(
+        self,
+        steamids: int | list[int],
+        *,
+        timeout: float | tuple[float, float] = 10,
+    ) -> dict[str, Any] | None:
+        ids = steamids if isinstance(steamids, list) else [steamids]
+        return self._request_unthrottled(
+            "ISteamUser",
+            "GetPlayerSummaries",
+            2,
+            {"steamids": ",".join(str(i) for i in ids)},
+            timeout=timeout,
+        )
+
+    def get_match_details(self, match_id: int) -> dict[str, Any] | None:
         """
         Get detailed information about a single match.
         """
@@ -62,25 +94,35 @@ class SteamAPI:
         )
 
     def get_match_history(
-        self, league_id, start_at_match_id=None, matches_requested=100
-    ):
+        self,
+        league_id: int,
+        start_at_match_id: int | None = None,
+        matches_requested: int = 100,
+    ) -> dict[str, Any] | None:
         """
         Fetch match history for a league.
         Use start_at_match_id for pagination (fetches matches BEFORE this ID).
         """
-        params = {"league_id": league_id, "matches_requested": matches_requested}
+        params: dict[str, Any] = {
+            "league_id": league_id,
+            "matches_requested": matches_requested,
+        }
         if start_at_match_id:
             params["start_at_match_id"] = start_at_match_id
         return self._request("IDOTA2Match_570", "GetMatchHistory", 1, params)
 
-    def get_live_league_games(self, league_id=None):
+    def get_live_league_games(
+        self, league_id: int | None = None
+    ) -> dict[str, Any] | None:
         """Fetch currently live games. Optionally filter by league."""
-        params = {}
+        params: dict[str, Any] = {}
         if league_id:
             params["league_id"] = league_id
         return self._request("IDOTA2Match_570", "GetLiveLeagueGames", 1, params)
 
-    def get_match_history_by_seq_num(self, start_at_match_seq_num, matches_requested=1):
+    def get_match_history_by_seq_num(
+        self, start_at_match_seq_num: int, matches_requested: int = 1
+    ) -> dict[str, Any] | None:
         """
         Get detailed match information using match sequence number.
         This is more reliable than GetMatchDetails for getting full player stats.
