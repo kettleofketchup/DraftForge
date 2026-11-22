@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -62,6 +62,7 @@ from telemetry.logging import get_logger
 __all__ = [
     "CloseResult",
     "ConfirmResult",
+    "NotHeldError",
     "OpenResult",
     "cancel_ready_check",
     "chase_unconfirmed",
@@ -72,12 +73,20 @@ __all__ = [
     "lock_event",
     "open_ready_check",
     "refused_confirm_message",
+    "resolve_held_ready_check",
 ]
 
 log = get_logger(__name__)
 
 IN_PROGRESS_MESSAGE = "The tournament is already running."
 TEAMS_MADE_MESSAGE = "Teams are already made for this event."
+REASON_REQUIRED_MESSAGE = "A reason is required."
+NOT_HELD_MESSAGE = "The ready check is not held."
+UNKNOWN_KEEP_MESSAGE = "Unknown signup in keep list."
+
+
+class NotHeldError(ValueError):
+    pass
 
 
 class ConfirmResult(StrEnum):
@@ -762,6 +771,132 @@ def close_ready_check(event: Event, *, actor: SignupActor) -> CloseResult:
             "phase": check.phase,
             "outcome": check.outcome,
             "low_completion_action": low_action,
+            "actor_user_id": _actor_user_id(actor),
+            **counts,
+        },
+    )
+    return CloseResult(
+        check=check,
+        changed=True,
+        dropped_user_ids=tuple(dropped_user_ids),
+        promoted_signup_ids=tuple(promoted_signup_ids),
+    )
+
+
+def _excuse(entries: Sequence[ReadyCheckEntry]) -> None:
+    ReadyCheckEntry.objects.filter(
+        pk__in=[entry.pk for entry in entries], state=ReadyCheckEntryState.PENDING
+    ).update(state=ReadyCheckEntryState.EXCUSED)
+    for entry in entries:
+        entry.state = ReadyCheckEntryState.EXCUSED
+
+
+@transaction.atomic
+def resolve_held_ready_check(
+    event: Event,
+    *,
+    actor: SignupActor,
+    apply_drops: bool,
+    keep_signup_ids: Collection[int],
+    reason: str,
+) -> CloseResult:
+    reason = reason.strip()
+    if not reason:
+        raise ValueError(REASON_REQUIRED_MESSAGE)
+    locked = lock_event(event)
+    check = live_ready_check(locked, lock=True)
+    if check is None:
+        return CloseResult(check=None, changed=False)
+    if locked.state != EventState.ROLL_CALL:
+        return CloseResult(check=check, changed=False)
+    if check.phase != ReadyCheckPhase.HELD:
+        raise NotHeldError(NOT_HELD_MESSAGE)
+
+    keep = set(keep_signup_ids)
+    known = set(
+        check.entries.filter(signup_id__in=keep).values_list("signup_id", flat=True)
+    )
+    if keep - known:
+        raise ValueError(UNKNOWN_KEEP_MESSAGE)
+
+    step = "resolve"
+    correlation_id = f"rc{check.pk}:{step}"
+    active, droppable = _active_and_droppable(check)
+    pending = _pending(active)
+    dropped_user_ids: list[int] = []
+    promoted_signup_ids: list[int] = []
+    if apply_drops:
+        excused = [entry for entry in droppable if entry.signup_id in keep]
+        to_drop = [entry for entry in droppable if entry.signup_id not in keep]
+        _excuse(excused)
+        dropped_user_ids, promoted_signup_ids = _drop(
+            locked, check, to_drop, actor=actor, step=step, reason=reason
+        )
+        kept = [
+            entry for entry in pending if entry.state != ReadyCheckEntryState.DROPPED
+        ]
+    else:
+        excused = pending
+        _excuse(excused)
+        kept = pending
+    _record_member_rows(
+        locked,
+        kept,
+        actor=actor,
+        action=SignupAction.READY_CHECK_KEPT,
+        reason=reason,
+        correlation_id=correlation_id,
+    )
+
+    confirmed = sum(
+        1 for entry in active if entry.state == ReadyCheckEntryState.CONFIRMED
+    )
+    completion_pct = confirmed * 100 // len(active) if active else 100
+    now = tz.now()
+    ReadyCheck.objects.filter(pk=check.pk).update(
+        phase=ReadyCheckPhase.CLOSED,
+        outcome=ReadyCheckOutcome.STAFF_RESOLVED,
+        completion_pct=completion_pct,
+        closed_at=now,
+        last_progress_at=now,
+        resolved_by=actor.user,
+        resolve_reason=reason,
+    )
+    check.refresh_from_db()
+
+    counts: dict[str, Any] = {
+        "mode": check_mode(check),
+        "apply_drops": apply_drops,
+        "completion_pct": completion_pct,
+        "active": len(active),
+        "confirmed": confirmed,
+        "pending": len(pending),
+        "excused": len(excused),
+        "dropped": len(dropped_user_ids),
+        "promoted": len(promoted_signup_ids),
+    }
+    record_ready_check_transition(
+        event=locked, actor=actor, check=check, step=step, reason=reason, extra=counts
+    )
+    if dropped_user_ids or promoted_signup_ids:
+        invalidate_after_commit(locked)
+        locked.refresh_signup_post_on_commit()
+
+    send_on_commit(
+        ready_check_closed,
+        _change(check, [entry.user_id for entry in pending], actor),
+    )
+    if dropped_user_ids:
+        send_on_commit(
+            ready_check_member_dropped, _change(check, dropped_user_ids, actor)
+        )
+    _log_on_commit(
+        "ready_check_resolved",
+        {
+            "event_id": locked.pk,
+            "ready_check_id": check.pk,
+            "phase": check.phase,
+            "outcome": check.outcome,
             "actor_user_id": _actor_user_id(actor),
             **counts,
         },

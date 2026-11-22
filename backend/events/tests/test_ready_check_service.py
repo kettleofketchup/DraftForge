@@ -1,5 +1,5 @@
 import inspect
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from unittest import mock
 
@@ -7,7 +7,7 @@ from django.dispatch import Signal
 from django.test import override_settings
 
 from app.models import CustomUser, Team
-from events import ready_check_signals
+from events import capacity, ready_check_core, ready_check_signals
 from events.constants import (
     ActorRole,
     EventState,
@@ -27,6 +27,7 @@ from events.models import (
 from events.ready_check import (
     CloseResult,
     ConfirmResult,
+    NotHeldError,
     OpenResult,
     cancel_ready_check,
     chase_unconfirmed,
@@ -35,6 +36,7 @@ from events.ready_check import (
     escalate_ready_check,
     open_ready_check,
     refused_confirm_message,
+    resolve_held_ready_check,
 )
 from events.ready_check_constants import (
     ReadyCheckConfirmVia,
@@ -1156,3 +1158,325 @@ class LedgerActorTests(LifecycleTestCase):
                 else:
                     self.assertEqual(row.actor_user, self.helper)
                     self.assertEqual(row.actor_role, ActorRole.STAFF)
+
+
+class ResolveTests(LifecycleTestCase):
+    REASON = "Two players messaged the host directly"
+
+    def _held(self, **event_fields: object) -> tuple[Event, list[EventSignup]]:
+        event, signups = self._setup(AUTO, 6, 10, HOLD, **event_fields)
+        self._close(event)
+        check = event.ready_checks.get()
+        self.assertEqual(check.phase, ReadyCheckPhase.HELD)
+        return event, signups
+
+    def _resolve(
+        self,
+        event: Event,
+        *,
+        apply_drops: bool = True,
+        keep: list[int] | None = None,
+        reason: str = REASON,
+    ) -> CloseResult:
+        with self.captureOnCommitCallbacks(execute=True):
+            return resolve_held_ready_check(
+                event,
+                actor=self.staff_actor,
+                apply_drops=apply_drops,
+                keep_signup_ids=keep or [],
+                reason=reason,
+            )
+
+    def test_reason_required(self) -> None:
+        event, _ = self._held()
+        for reason in ("", "   \n\t"):
+            with self.subTest(reason=reason):
+                with self.assertRaisesMessage(ValueError, "A reason is required."):
+                    self._resolve(event, reason=reason)
+        check = event.ready_checks.get()
+        self.assertEqual(check.phase, ReadyCheckPhase.HELD)
+        self.assertEqual(self._dropped(event), [])
+
+    def test_resolve_requires_actor_keyword(self) -> None:
+        param = inspect.signature(resolve_held_ready_check).parameters["actor"]
+        self.assertEqual(param.kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertIs(param.default, inspect.Parameter.empty)
+
+    def test_open_check_is_not_held(self) -> None:
+        event, _ = self._setup(AUTO, 6, 10, HOLD)
+        with self.assertRaisesMessage(NotHeldError, "The ready check is not held."):
+            self._resolve(event)
+        self.assertTrue(issubclass(NotHeldError, ValueError))
+
+    def test_closed_check_is_not_held(self) -> None:
+        event, _ = self._setup(AUTO, 7, 10, HOLD)
+        self._close(event)
+        with self.assertRaises(NotHeldError):
+            self._resolve(event)
+
+    def test_no_check_returns_none(self) -> None:
+        event = self.make_event()
+        result = self._resolve(event)
+        self.assertEqual(result, CloseResult(check=None, changed=False))
+
+    def test_apply_drops_with_keep(self) -> None:
+        event, signups = self._held()
+        kept = signups[6]
+        with (
+            self._listen(ready_check_signals.ready_check_closed) as closed,
+            self._listen(ready_check_signals.ready_check_member_dropped) as dropped,
+        ):
+            result = self._resolve(event, keep=[kept.pk])
+        assert result.check is not None
+        check = result.check
+        self.assertTrue(result.changed)
+        self.assertEqual(check.phase, ReadyCheckPhase.CLOSED)
+        self.assertEqual(check.outcome, ReadyCheckOutcome.STAFF_RESOLVED)
+        self.assertEqual(check.resolved_by, self.helper)
+        self.assertEqual(check.resolve_reason, self.REASON)
+        self.assertIsNotNone(check.closed_at)
+        self.assertEqual(self._entry(check, kept).state, ReadyCheckEntryState.EXCUSED)
+        kept.refresh_from_db()
+        self.assertEqual(kept.status, SignupStatus.APPROVED)
+        others = signups[7:]
+        self.assertEqual(
+            set(result.dropped_user_ids), {signup.user_id for signup in others}
+        )
+        for signup in others:
+            signup.refresh_from_db()
+            self.assertEqual(signup.status, SignupStatus.DROPPED)
+            self.assertEqual(
+                self._entry(check, signup).state, ReadyCheckEntryState.DROPPED
+            )
+        for signup in signups[:6]:
+            signup.refresh_from_db()
+            self.assertEqual(signup.status, SignupStatus.CONFIRMED)
+        rows = list(
+            SignupLedgerEntry.objects.filter(correlation_id=f"rc{check.pk}:resolve")
+        )
+        self.assertTrue(rows)
+        self.assertTrue(all(row.reason == self.REASON for row in rows))
+        kept_rows = [r for r in rows if r.action == SignupAction.READY_CHECK_KEPT]
+        self.assertEqual([r.signup_id for r in kept_rows], [kept.pk])
+        dropped_rows = [r for r in rows if r.action == SignupAction.DROPPED]
+        self.assertEqual(len(dropped_rows), 3)
+        transitions = [
+            r for r in rows if r.action == SignupAction.READY_CHECK_TRANSITION
+        ]
+        self.assertEqual(len(transitions), 1)
+        self.assertEqual(transitions[0].after["extra"]["step"], "resolve")
+        self.assertEqual(transitions[0].actor_user, self.helper)
+        closed.assert_called_once()
+        dropped.assert_called_once()
+        self.assertEqual(
+            set(dropped.call_args.kwargs["change"].user_ids),
+            set(result.dropped_user_ids),
+        )
+
+    def test_apply_drops_promotes_waitlist(self) -> None:
+        event, _ = self._held(max_players=10)
+        waiting = EventSignup.objects.create(
+            event=event,
+            user=self.make_user(),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
+        result = self._resolve(event)
+        self.assertEqual(len(result.dropped_user_ids), 4)
+        self.assertEqual(result.promoted_signup_ids, (waiting.pk,))
+        waiting.refresh_from_db()
+        self.assertEqual(waiting.status, SignupStatus.APPROVED)
+
+    def test_no_drops_excuses_every_pending(self) -> None:
+        event, signups = self._held()
+        result = self._resolve(event, apply_drops=False)
+        assert result.check is not None
+        self.assertEqual(result.check.outcome, ReadyCheckOutcome.STAFF_RESOLVED)
+        self.assertEqual(result.dropped_user_ids, ())
+        self.assertEqual(self._dropped(event), [])
+        for signup in signups[6:]:
+            self.assertEqual(
+                self._entry(result.check, signup).state, ReadyCheckEntryState.EXCUSED
+            )
+        kept_rows = self._rows(SignupAction.READY_CHECK_KEPT, event)
+        self.assertEqual(
+            {r.signup_id for r in kept_rows}, {signup.pk for signup in signups[6:]}
+        )
+        self.assertTrue(all(r.reason == self.REASON for r in kept_rows))
+
+    def test_keep_confirmed_member_is_ignored(self) -> None:
+        event, signups = self._held()
+        result = self._resolve(event, keep=[signups[0].pk])
+        self.assertEqual(len(result.dropped_user_ids), 4)
+        assert result.check is not None
+        self.assertEqual(
+            self._entry(result.check, signups[0]).state,
+            ReadyCheckEntryState.CONFIRMED,
+        )
+        signups[0].refresh_from_db()
+        self.assertEqual(signups[0].status, SignupStatus.CONFIRMED)
+
+    def test_keep_signup_from_another_event_raises(self) -> None:
+        event, _ = self._held()
+        stranger = self._signup(SignupStatus.APPROVED, event=self.make_event())
+        with self.assertRaisesMessage(ValueError, "Unknown signup in keep list."):
+            self._resolve(event, keep=[stranger.pk])
+        check = event.ready_checks.get()
+        self.assertEqual(check.phase, ReadyCheckPhase.HELD)
+        self.assertEqual(self._dropped(event), [])
+
+    def test_resolve_twice_raises_not_held(self) -> None:
+        event, _ = self._held()
+        self._resolve(event)
+        rows = SignupLedgerEntry.objects.filter(event=event).count()
+        with self.assertRaises(NotHeldError):
+            self._resolve(event)
+        self.assertEqual(SignupLedgerEntry.objects.filter(event=event).count(), rows)
+
+    def test_event_not_in_roll_call_is_noop(self) -> None:
+        event, _ = self._held()
+        Event.objects.filter(pk=event.pk).update(state=EventState.SIGNUPS_OPEN)
+        result = self._resolve(event)
+        self.assertFalse(result.changed)
+        assert result.check is not None
+        self.assertEqual(result.check.phase, ReadyCheckPhase.HELD)
+        self.assertEqual(self._dropped(event), [])
+
+
+class LockOrderTests(LifecycleTestCase):
+    def _assert_lock_order(
+        self,
+        call: Callable[[], object],
+        *,
+        module: str = "events.ready_check",
+    ) -> None:
+        manager = mock.Mock()
+        with (
+            mock.patch(f"{module}.lock_event", wraps=capacity.lock_event) as lock_mock,
+            mock.patch(
+                f"{module}.live_ready_check",
+                wraps=ready_check_core.live_ready_check,
+            ) as live_mock,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            manager.attach_mock(lock_mock, "lock_event")
+            manager.attach_mock(live_mock, "live_ready_check")
+            call()
+        names = [c[0] for c in manager.mock_calls]
+        self.assertIn("lock_event", names)
+        locked_lookups = [
+            i
+            for i, c in enumerate(manager.mock_calls)
+            if c[0] == "live_ready_check" and c[2].get("lock") is True
+        ]
+        self.assertTrue(locked_lookups)
+        self.assertLess(names.index("lock_event"), locked_lookups[0])
+
+    def test_every_mutator_locks_event_before_check(self) -> None:
+        event, signups = self._setup(AUTO, 5, 10, HOLD)
+        fresh = self.make_event(roll_call_enabled=True, roll_call_mode=AUTO)
+        fresh.helpers.add(self.helper)
+        self._signup(SignupStatus.APPROVED, event=fresh)
+        calls = [
+            ("open", lambda: open_ready_check(fresh, actor=self.staff_actor)),
+            (
+                "confirm",
+                lambda: confirm_ready(
+                    event,
+                    signups[6].user,
+                    via=ReadyCheckConfirmVia.WEB,
+                    actor=self._member_actor(signups[6].user),
+                ),
+            ),
+            ("escalate", lambda: escalate_ready_check(event, actor=self.staff_actor)),
+            ("chase", lambda: chase_unconfirmed(event, actor=self.staff_actor)),
+            ("close", lambda: close_ready_check(event, actor=self.staff_actor)),
+            (
+                "resolve",
+                lambda: resolve_held_ready_check(
+                    event,
+                    actor=self.staff_actor,
+                    apply_drops=True,
+                    keep_signup_ids=[],
+                    reason="staff call",
+                ),
+            ),
+        ]
+        for name, call in calls:
+            with self.subTest(fn=name):
+                self._assert_lock_order(call)
+        check = event.ready_checks.get()
+        self.assertEqual(check.outcome, ReadyCheckOutcome.STAFF_RESOLVED)
+
+    def test_cancel_locks_event_before_check(self) -> None:
+        event, _ = self._setup(MANUAL, 1, 2)
+        self._assert_lock_order(
+            lambda: cancel_ready_check(event, actor=self.staff_actor, reason="test"),
+            module="events.ready_check_core",
+        )
+        self.assertFalse(
+            event.ready_checks.exclude(phase=ReadyCheckPhase.CANCELLED).exists()
+        )
+
+
+class InterleavingTests(LifecycleTestCase):
+    def test_pending_confirm_after_binding_close_is_refused(self) -> None:
+        event, signups = self._setup(AUTO, 7, 10)
+        self._close(event)
+        late = signups[9]
+        late.refresh_from_db()
+        status_before = late.status
+        confirmed_rows = len(self._rows(SignupAction.CONFIRMED, event))
+        self.assertEqual(self._confirm_member(late), ConfirmResult.CLOSED)
+        late.refresh_from_db()
+        self.assertEqual(late.status, status_before)
+        check = event.ready_checks.get()
+        self.assertEqual(self._entry(check, late).state, ReadyCheckEntryState.DROPPED)
+        self.assertEqual(len(self._rows(SignupAction.CONFIRMED, event)), confirmed_rows)
+
+    def test_pending_confirm_after_staff_verified_close_is_refused(self) -> None:
+        event, signups = self._setup(MANUAL, 1, 3)
+        self._close(event)
+        late = signups[2]
+        self.assertEqual(self._confirm_member(late), ConfirmResult.CLOSED)
+        late.refresh_from_db()
+        self.assertEqual(late.status, SignupStatus.APPROVED)
+        check = event.ready_checks.get()
+        self.assertEqual(self._entry(check, late).state, ReadyCheckEntryState.PENDING)
+
+    def test_confirm_close_confirm_is_already_confirmed(self) -> None:
+        event, signups = self._setup(AUTO, 7, 10)
+        self._close(event)
+        rows = SignupLedgerEntry.objects.filter(event=event).count()
+        self.assertEqual(
+            self._confirm_member(signups[0]), ConfirmResult.ALREADY_CONFIRMED
+        )
+        self.assertEqual(SignupLedgerEntry.objects.filter(event=event).count(), rows)
+
+    def test_staff_confirm_on_held_survives_resolve_drops(self) -> None:
+        event, signups = self._setup(AUTO, 6, 10, HOLD)
+        held = self._close(event).check
+        assert held is not None
+        self.assertEqual(held.phase, ReadyCheckPhase.HELD)
+        rescued = signups[6]
+        self.assertEqual(
+            self._confirm_member(rescued, actor=self.staff_actor),
+            ConfirmResult.CONFIRMED,
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            result = resolve_held_ready_check(
+                event,
+                actor=self.staff_actor,
+                apply_drops=True,
+                keep_signup_ids=[],
+                reason="rescued one by phone",
+            )
+        self.assertNotIn(rescued.user_id, result.dropped_user_ids)
+        self.assertEqual(len(result.dropped_user_ids), 3)
+        for signup in signups[:7]:
+            signup.refresh_from_db()
+            self.assertEqual(signup.status, SignupStatus.CONFIRMED)
+        assert result.check is not None
+        self.assertEqual(
+            self._entry(result.check, rescued).state, ReadyCheckEntryState.CONFIRMED
+        )
