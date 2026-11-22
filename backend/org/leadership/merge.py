@@ -5,7 +5,7 @@ from django.db.models import Count, Q, QuerySet
 from django.utils import timezone
 
 from app.models import CustomUser
-from org.leadership.rating import upsert_captain_rating
+from org.leadership.reviews import upsert_captain_rating
 from org.models import OrgLog, OrgUser
 from org.models_leadership import (
     CaptainReview,

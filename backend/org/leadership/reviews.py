@@ -1,10 +1,14 @@
+from collections import defaultdict
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
+from fractions import Fraction
 
 from django.db import transaction
 from django.utils import timezone
 
 from app.models import CustomUser
+from events.models import Event
 from org.leadership.constants import (
     RATER_REVIVABLE,
     REASON_MAX_LENGTH,
@@ -13,10 +17,13 @@ from org.leadership.constants import (
     SCORE_MIN,
     VoidKind,
 )
-from org.leadership.rating import RatingUpsert, upsert_captain_rating
+from org.leadership.kinds import LeadershipKind
+from org.leadership.rating import captain_rating_points, review_mean
+from org.leadership.settings import get_leadership_settings
 from org.leadership.traits import materialize_traits
-from org.models import OrgLog, OrgUser
+from org.models import ContributionEntry, OrgLog, OrgUser
 from org.models_leadership import CaptainReview, CaptainTraitScore, EventCaptain
+from org.standing import ledger
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -32,6 +39,81 @@ class ReviewRefused(Exception):
 
 def _refuse(code: str, detail: str, status: int) -> ReviewRefused:
     return ReviewRefused(code, detail, status=status)
+
+
+@dataclass(frozen=True, slots=True)
+class RatingUpsert:
+    before: int
+    after: int
+    reviewers: int
+    outcome: ledger.UpsertOutcome
+
+
+def review_means(snapshot_id: int) -> list[Fraction]:
+    grouped: dict[int, list[int]] = defaultdict(list)
+    for review_id, score in (
+        CaptainTraitScore.objects.nocache()
+        .filter(review__event_captain_id=snapshot_id, review__voided_at__isnull=True)
+        .values_list("review_id", "score")
+    ):
+        grouped[review_id].append(score)
+    return [review_mean(values) for values in grouped.values()]
+
+
+def current_points(snapshot: EventCaptain) -> int:
+    return (
+        ContributionEntry.objects.nocache()
+        .filter(
+            event_id=snapshot.event_id,
+            org_user_id=snapshot.captain_id,
+            kind=LeadershipKind.CAPTAIN_RATING.value,
+        )
+        .values_list("points", flat=True)
+        .first()
+        or 0
+    )
+
+
+def upsert_captain_rating(
+    snapshot: EventCaptain, *, now: datetime, force: bool = False
+) -> RatingUpsert | None:
+    """Recompute captain_rating for one snapshot. Frozen once the window
+    closes unless force (staff moderation). Caller holds the snapshot lock."""
+    if not force and now >= snapshot.window_closes_at:
+        return None
+    event = Event.objects.nocache().get(pk=snapshot.event_id)
+    settings = get_leadership_settings(snapshot.organization_id)
+    means = review_means(snapshot.pk)
+    points = (
+        None
+        if snapshot.voided_at is not None
+        else captain_rating_points(
+            means,
+            max_points=settings.rating_max_points,
+            min_reviewers=settings.rating_min_reviewers,
+        )
+    )
+    before = current_points(snapshot)
+    outcome = ledger.upsert_event_entry(
+        event=event,
+        org_user=snapshot.captain,
+        kind=LeadershipKind.CAPTAIN_RATING.value,
+        points=points,
+    )
+    log.info(
+        "captain_rating_upserted",
+        system="org",
+        subsystem="leadership",
+        org_id=snapshot.organization_id,
+        event_id=snapshot.event_id,
+        captain_org_user_id=snapshot.captain_id,
+        points=points or 0,
+        reviewers=len(means),
+        outcome=outcome,
+    )
+    return RatingUpsert(
+        before=before, after=points or 0, reviewers=len(means), outcome=outcome
+    )
 
 
 def lock_snapshot(org_id: int, event_id: int, captain_id: int) -> EventCaptain:
