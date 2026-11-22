@@ -50,6 +50,11 @@ export const UserSchema = z.object({
   // The game `mmr` was resolved for.
   mmr_game_type: z.number().nullable().optional(),
   steam_account_id: z.number().min(0).nullable().optional(), // 32-bit Friend ID (Dotabuff)
+  steam_account_verified: z.boolean().optional(),
+  steam_account_verified_at: z.string().nullable().optional(),
+  steam_account_exists_checked: z.boolean().optional(),
+  // Org member payloads only (backend/org/serializers.py OrgUserSerializer).
+  steam_account_verified_org_name: z.string().nullable().optional(),
   avatar: z.string().url().nullable().optional(),
   orgUserPk: z.number().min(0).optional(), // OrgUser pk (for org-scoped PATCH)
   pk: z.number().min(0).optional(), // User pk (for display)
