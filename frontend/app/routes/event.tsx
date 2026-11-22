@@ -126,10 +126,9 @@ import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import {
   ConductBadge,
-  eventConductEnabled,
   EventConductSection,
-  useForecast,
-  type ForecastMember,
+  useEventConduct,
+  type ConductMemberLookup,
 } from '~/features/conduct';
 import {
   invalidateConductQueries,
@@ -190,14 +189,11 @@ export default function EventPage() {
   const isAdmin = event?.user_can_manage ?? false;
   const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
   const canComplete = canCompleteEvent(event, eventOrgAccess);
-  const conductEnabled = eventConductEnabled(event, eventOrg, eventOrgAccess);
-  const conductForecast = useForecast(
-    event?.organization ?? 0,
+  const { memberFor: conductMemberFor } = useEventConduct(
+    event,
+    eventOrg,
     eventOrgAccess,
-    event?.id ?? 0,
-    conductEnabled,
   );
-  const conductMembers = conductForecast.data?.members;
   const showCompletePointsNote =
     eventOrgAccess.canViewContributions ||
     eventOrgAccess.canManageContributions;
@@ -686,7 +682,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
-              conductMembers={conductMembers}
+              conductMemberFor={conductMemberFor}
               eventId={event.id}
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
@@ -700,7 +696,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
-              conductMembers={conductMembers}
+              conductMemberFor={conductMemberFor}
               state={event.state}
             />
           </TabsContent>
@@ -711,7 +707,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
-              conductMembers={conductMembers}
+              conductMemberFor={conductMemberFor}
               state={event.state}
             />
           </TabsContent>
@@ -722,7 +718,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
-              conductMembers={conductMembers}
+              conductMemberFor={conductMemberFor}
               state={event.state}
             />
           </TabsContent>
@@ -931,9 +927,9 @@ function SignupsTab({
   hasDiscordServer,
   state,
   autoApprove = true,
-  conductMembers,
+  conductMemberFor,
 }: {
-  conductMembers?: Record<string, ForecastMember>;
+  conductMemberFor?: ConductMemberLookup;
   signups: EventSignupType[];
   autoApprove?: boolean;
   isAdmin: boolean;
@@ -1204,7 +1200,7 @@ function SignupsTab({
                 #{position}
               </span>
               <EventStateBadge state={signup.status} />
-              <ConductBadge member={conductMembers?.[String(signup.user)]} />
+              <ConductBadge member={conductMemberFor?.(signup.user)} />
               {holdReason && (
                 <span
                   className="text-xs text-muted-foreground"

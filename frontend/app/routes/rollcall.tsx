@@ -68,8 +68,7 @@ import { UserStrip } from '~/components/user';
 import { DisplayName } from '~/components/user/avatar';
 import {
   ConductBadge,
-  eventConductEnabled,
-  useForecast,
+  useEventConduct,
   type ForecastMember,
 } from '~/features/conduct';
 import { useOrgFeatureAccess } from '~/features/org-features';
@@ -104,13 +103,11 @@ export default function RollCallPage() {
   );
   const isAdmin = event?.user_can_manage ?? false;
   const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
-  const conductEnabled = eventConductEnabled(event, eventOrg, eventOrgAccess);
-  const conductMembers = useForecast(
-    event?.organization ?? 0,
+  const { memberFor: conductMemberFor } = useEventConduct(
+    event,
+    eventOrg,
     eventOrgAccess,
-    event?.id ?? 0,
-    conductEnabled,
-  ).data?.members;
+  );
 
   const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
   useEffect(() => {
@@ -311,7 +308,7 @@ export default function RollCallPage() {
       signup={signup}
       userMap={userMap}
       isAdmin={isAdmin}
-      conductMember={conductMembers?.[String(signup.user)]}
+      conductMember={conductMemberFor(signup.user)}
       leaguePk={event.tournament_league ?? null}
       pending={pendingIds.has(signup.id)}
       focused={isAdmin && signup.id === activeId}
