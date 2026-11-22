@@ -1,27 +1,57 @@
 """Tests for telemetry logging configuration."""
 
 import logging
+import unittest
+from typing import Any
 from unittest import TestCase
 
 import structlog
 from structlog.testing import capture_logs
 
+from telemetry import logging as telem_logging
 from telemetry.logging import configure_logging, get_logger
+
+LoggingState = tuple[dict[str, Any], bool, list[logging.Handler], int, dict[str, int]]
+
+
+def _snapshot() -> LoggingState:
+    root = logging.getLogger()
+    levels = {
+        name: logger.level
+        for name, logger in logging.root.manager.loggerDict.items()
+        if isinstance(logger, logging.Logger)
+    }
+    return (
+        structlog.get_config(),
+        telem_logging._configured,
+        list(root.handlers),
+        root.level,
+        levels,
+    )
+
+
+def _restore(state: LoggingState) -> None:
+    config, configured, handlers, level, levels = state
+    structlog.reset_defaults()
+    structlog.configure(**config)
+    telem_logging._configured = configured
+    root = logging.getLogger()
+    root.handlers = handlers
+    root.setLevel(level)
+    for name, logger_level in levels.items():
+        logging.getLogger(name).setLevel(logger_level)
 
 
 class ConfigureLoggingTest(TestCase):
     """Tests for configure_logging function."""
 
     def setUp(self):
-        """Reset structlog state before each test."""
-        from telemetry import logging as telem_logging
-
+        self._saved = _snapshot()
         telem_logging._configured = False
         structlog.reset_defaults()
 
     def tearDown(self):
-        """Clean up structlog state after each test."""
-        structlog.reset_defaults()
+        _restore(self._saved)
         structlog.contextvars.clear_contextvars()
 
     def test_configure_logging_captures_event(self):
@@ -81,13 +111,12 @@ class GetLoggerTest(TestCase):
     """Tests for get_logger function."""
 
     def setUp(self):
-        from telemetry import logging as telem_logging
-
+        self._saved = _snapshot()
         telem_logging._configured = False
         structlog.reset_defaults()
 
     def tearDown(self):
-        structlog.reset_defaults()
+        _restore(self._saved)
         structlog.contextvars.clear_contextvars()
 
     def test_get_logger_returns_bound_logger(self):
@@ -95,7 +124,21 @@ class GetLoggerTest(TestCase):
         configure_logging(level="INFO", format="json")
         log = get_logger("mymodule")
 
-        # Should have standard logging methods
         self.assertTrue(hasattr(log, "info"))
         self.assertTrue(hasattr(log, "warning"))
         self.assertTrue(hasattr(log, "error"))
+
+
+class LoggingTestsRestoreStructlogTest(TestCase):
+    """Loggers cached on first use keep the processor list they were built with."""
+
+    def test_app_structlog_config_survives_the_logging_tests(self) -> None:
+        before = structlog.get_config()
+        root = logging.getLogger()
+        handlers, level = list(root.handlers), root.level
+        result = unittest.TestResult()
+        ConfigureLoggingTest("test_configure_logging_sets_debug_level").run(result)
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        self.assertIs(structlog.get_config()["processors"], before["processors"])
+        self.assertEqual(root.handlers, handlers)
+        self.assertEqual(root.level, level)

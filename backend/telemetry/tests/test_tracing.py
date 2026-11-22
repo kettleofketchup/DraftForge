@@ -1,11 +1,46 @@
 """Tests for OpenTelemetry tracing and log export configuration."""
 
 import os
+import sqlite3
+import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Any
 from unittest import TestCase, mock
 
+from opentelemetry import metrics, trace
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 
+from telemetry import tracing
 from telemetry.tracing import init_log_export, init_tracing
+
+
+def _otel_globals() -> dict[str, Any]:
+    return {
+        "tracer_provider": trace.get_tracer_provider(),
+        "meter_provider": metrics.get_meter_provider(),
+        "sqlite3.connect": sqlite3.connect,
+        "tracing._tracer_provider": tracing._tracer_provider,
+    }
+
+
+@contextmanager
+def _isolated_setup_provider() -> Iterator[None]:
+    """Stub what _setup_provider installs process-wide, so later tests keep theirs."""
+    saved = tracing._tracer_provider
+    with (
+        mock.patch("opentelemetry.trace.set_tracer_provider"),
+        mock.patch("opentelemetry.metrics.set_meter_provider"),
+        mock.patch("telemetry.tracing.PeriodicExportingMetricReader"),
+        mock.patch("telemetry.tracing.CeleryInstrumentor"),
+        mock.patch("telemetry.tracing.RequestsInstrumentor"),
+        mock.patch("telemetry.tracing.trace_integration"),
+        mock.patch("telemetry.tracing.atexit.register"),
+    ):
+        try:
+            yield
+        finally:
+            tracing._tracer_provider = saved
 
 
 class InitTracingTest(TestCase):
@@ -171,9 +206,9 @@ class ResourceAttributesTest(TestCase):
     def test_no_deprecated_deployment_environment_key(self, mock_setup):
         """`deployment.environment` (deprecated, no `.name`) is NOT set.
 
-        Setting both the deprecated and current keys causes downstream
-        confusion (Grafana Cloud's OTLP translator occasionally trips on
-        the duplicate). Resource builder must emit only the current key.
+        Emitting both the deprecated and current keys confuses downstream
+        consumers (Grafana Cloud's OTLP translator occasionally trips on the
+        duplicate).
         """
         env = {
             "OTEL_ENABLED": "true",
@@ -214,7 +249,10 @@ class DjangoInstrumentorHooksTest(TestCase):
 
             resource = _build_resource()
 
-        with mock.patch("telemetry.tracing.DjangoInstrumentor") as MockInstr:
+        with (
+            _isolated_setup_provider(),
+            mock.patch("telemetry.tracing.DjangoInstrumentor") as MockInstr,
+        ):
             from telemetry.tracing import _setup_provider
 
             mock_provider = mock.MagicMock()
@@ -236,6 +274,7 @@ class DiagnosticMetricExporterTest(TestCase):
 
         env = {"OTEL_ENABLED": "true", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://x"}
         with (
+            _isolated_setup_provider(),
             mock.patch.dict(os.environ, env, clear=False),
             mock.patch("telemetry.tracing.PeriodicExportingMetricReader") as MockReader,
             mock.patch("telemetry.tracing.MeterProvider"),
@@ -284,3 +323,21 @@ class DiagnosticMetricExporterTest(TestCase):
         kwargs = mock_get_logger.return_value.error.call_args[1]
         self.assertEqual(kwargs["status_code"], 400)
         self.assertEqual(kwargs["body"], "bad temporality")
+
+
+class SetupProviderTestsLeaveGlobalsAloneTest(TestCase):
+    """_setup_provider installs process-wide providers; its tests must not keep them."""
+
+    def test_process_globals_survive_the_setup_provider_tests(self) -> None:
+        before = _otel_globals()
+        for case in (
+            DjangoInstrumentorHooksTest(
+                "test_setup_provider_instruments_django_with_hooks"
+            ),
+            DiagnosticMetricExporterTest("test_sdk_1_20_signature_without_timeout"),
+        ):
+            result = unittest.TestResult()
+            case.run(result)
+            self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        for name, value in _otel_globals().items():
+            self.assertIs(value, before[name], name)
