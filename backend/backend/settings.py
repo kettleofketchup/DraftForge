@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/1.10/ref/settings/
 """
 
 import contextlib
+import importlib.util
 import os
 import secrets
 import sys
@@ -106,7 +107,13 @@ DEBUG = env_bool("DEBUG")
 
 # Concurrent test runs share one Redis and number their drafts from 1, so each
 # test process namespaces its channel groups, raw Redis keys and cache keys.
-RUNNING_TESTS: bool = sys.argv[1:2] == ["test"] or "pytest" in sys.modules
+# Subprocesses a test spawns inherit DF_RUNNING_TESTS: a `python -c` child would
+# otherwise run AppConfig.ready()'s FLUSHDB on the DB every parallel worker shares.
+RUNNING_TESTS: bool = (
+    sys.argv[1:2] == ["test"] or "pytest" in sys.modules or env_bool("DF_RUNNING_TESTS")
+)
+if RUNNING_TESTS:
+    os.environ["DF_RUNNING_TESTS"] = "true"
 
 
 def test_process_namespace() -> str:
@@ -157,6 +164,10 @@ INSTALLED_APPS = [
     "user.apps.UserConfig",
     "cacheops",
 ]
+
+# Dev-only (poetry dev group): the release image ships without it.
+if importlib.util.find_spec("django_linear_migrations") is not None:
+    INSTALLED_APPS.append("django_linear_migrations")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
@@ -299,17 +310,11 @@ DATABASES = {
         "OPTIONS": {
             "timeout": 30,  # seconds — busy_timeout for lock waiting
             "transaction_mode": "IMMEDIATE",  # acquire RESERVED lock upfront, prevents deadlocks
-            # Switch to WAL journaling so concurrent readers don't block on
-            # the celery worker's periodic UPDATEs. The default DELETE journal
-            # mode serializes readers and writers — we observed SELECT
-            # `app_league` requests stalling 70–260ms behind the per-minute
-            # `UPDATE steam_leaguesyncstate` writes. WAL lets the reader see
-            # the last committed snapshot while the writer commits in parallel.
-            # `synchronous=NORMAL` is the safe pairing with WAL: still
-            # crash-safe across process death, only loses durability across
-            # power loss between commit and disk flush — acceptable for our
-            # workload (we can resync from Steam on disaster). Requires
-            # Django 5.2+ (init_command for SQLite).
+            # WAL so reads don't queue behind the celery worker's per-minute
+            # `UPDATE steam_leaguesyncstate` (the DELETE journal stalled `app_league`
+            # SELECTs 70–260ms). synchronous=NORMAL is the safe WAL pairing:
+            # survives process death, can lose unflushed commits on power loss,
+            # which a Steam resync recovers. init_command needs Django 5.2+.
             "init_command": "PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;",
         },
     }

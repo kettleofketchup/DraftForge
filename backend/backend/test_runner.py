@@ -12,15 +12,19 @@ from typing import Any, Callable
 
 import django
 import django.test.runner as django_runner
+import redis
+from cacheops.conf import settings as cacheops_settings
 from django.conf import settings
 from django.core.signals import setting_changed
 from django.db import connections
 from django.db.backends.base.base import BaseDatabaseWrapper
+from django.test import TransactionTestCase
 from django.test.runner import DiscoverRunner, ParallelTestSuite
 from django.test.utils import override_settings, setup_test_environment
 
 from backend.settings import test_process_namespace
 from config.dota_lobby import DotaLobbyConfig
+from tests.cache import flush_run_cache
 
 BACKEND_DIR: str = str(Path(__file__).resolve().parent.parent)
 
@@ -167,6 +171,30 @@ def isolate_worker_redis_namespace() -> None:
         setting_changed.send(sender=None, setting=name, value=value, enter=True)
 
 
+def flush_run_cache_after_transaction_tests() -> None:
+    """Drop this run's cache keys whenever a TransactionTestCase flushes the DB.
+
+    The flush deletes rows behind cacheops' back. Primary keys come back
+    (reset_sequences, tables a migration test rebuilds), so a later test would
+    read the deleted rows from the cache.
+    """
+    teardown = TransactionTestCase._fixture_teardown
+    if getattr(teardown, "flushes_run_cache", False):
+        return
+
+    def _fixture_teardown(self: TransactionTestCase) -> None:
+        teardown(self)
+        if not (cacheops_settings.CACHEOPS_ENABLED and settings.REDIS_KEY_NAMESPACE):
+            return
+        try:
+            flush_run_cache()
+        except redis.exceptions.ConnectionError:
+            pass
+
+    _fixture_teardown.flushes_run_cache = True  # type: ignore[attr-defined]
+    TransactionTestCase._fixture_teardown = _fixture_teardown  # type: ignore[method-assign]
+
+
 def init_worker(
     counter: Synchronized,
     initial_settings: dict[str, dict[str, Any]] | None = None,
@@ -188,6 +216,7 @@ def init_worker(
             process_setup(*(process_setup_args or ()))
         django.setup()
         setup_test_environment(debug=debug_mode)
+        flush_run_cache_after_transaction_tests()
     isolate_worker_redis_namespace()
 
     for alias in used_aliases if used_aliases is not None else connections:
@@ -244,6 +273,7 @@ class BackendDiscoverRunner(DiscoverRunner):
 
     def setup_test_environment(self, **kwargs: Any) -> None:
         super().setup_test_environment(**kwargs)
+        flush_run_cache_after_transaction_tests()
         self._dota_lobby_env = {
             key: os.environ.pop(key)
             for key in list(os.environ)

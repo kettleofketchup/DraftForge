@@ -11,6 +11,7 @@ from app.models import (
     LeagueMatch,
     LeagueRating,
 )
+from league.services.match_finalization import LeagueMatchService
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
 
@@ -47,8 +48,6 @@ class MatchFinalizationServiceTest(TestCase):
 
     def test_finalize_creates_ratings_if_missing(self):
         """Finalize should create LeagueRating records for new players."""
-        from app.services.match_finalization import LeagueMatchService
-
         match = LeagueMatch.objects.create(league=self.league, played_at=timezone.now())
 
         LeagueMatchService.finalize(
@@ -60,8 +59,6 @@ class MatchFinalizationServiceTest(TestCase):
 
     def test_finalize_updates_ratings(self):
         """Finalize should update winner/loser ratings correctly."""
-        from app.services.match_finalization import LeagueMatchService
-
         match = LeagueMatch.objects.create(league=self.league, played_at=timezone.now())
 
         LeagueMatchService.finalize(
@@ -86,8 +83,6 @@ class MatchFinalizationServiceTest(TestCase):
 
     def test_finalize_creates_participants(self):
         """Finalize should create LeagueMatchParticipant records."""
-        from app.services.match_finalization import LeagueMatchService
-
         match = LeagueMatch.objects.create(league=self.league, played_at=timezone.now())
 
         LeagueMatchService.finalize(
@@ -111,8 +106,6 @@ class MatchFinalizationServiceTest(TestCase):
 
     def test_finalize_marks_match_finalized(self):
         """Finalize should set is_finalized and finalized_at."""
-        from app.services.match_finalization import LeagueMatchService
-
         match = LeagueMatch.objects.create(league=self.league, played_at=timezone.now())
 
         LeagueMatchService.finalize(
@@ -125,8 +118,6 @@ class MatchFinalizationServiceTest(TestCase):
 
     def test_finalize_already_finalized_raises(self):
         """Cannot finalize an already finalized match."""
-        from app.services.match_finalization import LeagueMatchService
-
         match = LeagueMatch.objects.create(
             league=self.league,
             played_at=timezone.now(),
@@ -146,8 +137,6 @@ class MatchFinalizationServiceTest(TestCase):
 
     def test_finalize_with_existing_rating(self):
         """Finalize should work when some players already have ratings."""
-        from app.services.match_finalization import LeagueMatchService
-
         # Create a rating for one player
         LeagueRating.objects.create(
             league=self.league, player=self.radiant[0], base_mmr=3000
@@ -184,31 +173,23 @@ class AgeDecayCalculationTest(TestCase):
 
     def test_no_decay_for_recent_match(self):
         """Match played today should have decay factor of 1.0."""
-        from app.services.match_finalization import LeagueMatchService
-
         decay = LeagueMatchService.calculate_age_decay(self.league, timezone.now())
         self.assertEqual(decay, 1.0)
 
     def test_half_decay_at_half_life(self):
         """Match at half-life age should have ~0.5 decay."""
-        from app.services.match_finalization import LeagueMatchService
-
         played_at = timezone.now() - timedelta(days=180)
         decay = LeagueMatchService.calculate_age_decay(self.league, played_at)
         self.assertAlmostEqual(decay, 0.5, places=2)
 
     def test_decay_respects_minimum(self):
         """Very old matches should not decay below minimum."""
-        from app.services.match_finalization import LeagueMatchService
-
         played_at = timezone.now() - timedelta(days=1000)  # Very old
         decay = LeagueMatchService.calculate_age_decay(self.league, played_at)
         self.assertEqual(decay, 0.1)  # Minimum
 
     def test_decay_disabled(self):
         """Decay factor should be 1.0 when decay is disabled."""
-        from app.services.match_finalization import LeagueMatchService
-
         self.league.age_decay_enabled = False
         self.league.save()
 

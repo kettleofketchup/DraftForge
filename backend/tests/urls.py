@@ -47,6 +47,7 @@ from .test_dota_lobby import (
     seed_dota_lobby_row,
 )
 from .test_events_discord import (
+    discord_status,
     send_test_notification,
     set_org_user_approved_mmr,
     simulate_discord_signup,
@@ -299,6 +300,7 @@ urlpatterns = [
         name="sync-discord-events",
     ),
     # Discord event lifecycle (simulate signup, verify messages, bot reactions)
+    path("discord/status/", discord_status, name="test-discord-status"),
     path(
         "events/<int:event_pk>/discord-signup/",
         simulate_discord_signup,

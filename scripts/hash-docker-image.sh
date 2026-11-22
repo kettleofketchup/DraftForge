@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Outputs SHA256 hash of files that determine a Docker image's installed dependencies.
-# Usage: ./scripts/hash-docker-image.sh <frontend|backend|nginx>
+# Usage: ./scripts/hash-docker-image.sh <frontend|backend|nginx> [repo-root]
+#   (default root: the checkout holding this script)
 set -euo pipefail
 
-cd "$(git rev-parse --show-toplevel)"
+cd "${2:-$(git -C "$(dirname "${BASH_SOURCE[0]}")/.." rev-parse --show-toplevel)}"
 
 case "${1:-}" in
   frontend)
@@ -16,7 +17,7 @@ case "${1:-}" in
     cat nginx/Dockerfile nginx/entrypoint.sh nginx/default.template.conf | sha256sum | cut -d' ' -f1
     ;;
   *)
-    echo "Usage: $0 <frontend|backend|nginx>" >&2
+    echo "Usage: $0 <frontend|backend|nginx> [repo-root]" >&2
     exit 1
     ;;
 esac

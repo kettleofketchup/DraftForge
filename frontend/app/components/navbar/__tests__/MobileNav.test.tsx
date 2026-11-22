@@ -13,9 +13,18 @@ vi.mock('~/data/CHANGELOG.md?raw', async () => ({
   default: (await import('~/lib/__tests__/changelog-fixture'))
     .CHANGELOG_FIXTURE,
 }));
+const userState = vi.hoisted(() => ({
+  currentUser: {} as { username?: string },
+}));
 vi.mock('~/store/userStore', () => ({
-  useUserStore: (selector: (state: { currentUser: object }) => unknown) =>
-    selector({ currentUser: {} }),
+  useUserStore: (selector: (state: typeof userState) => unknown) =>
+    selector(userState),
+}));
+vi.mock('~/components/user/UserAvatar', () => ({
+  UserAvatar: () => <span data-testid="drawer-avatar" />,
+}));
+vi.mock('~/components/user/avatar', () => ({
+  DisplayName: (user: { username?: string }) => user.username ?? '',
 }));
 
 class ResizeObserverStub {
@@ -37,9 +46,9 @@ window.matchMedia ??= ((query: string) => ({
   dispatchEvent: () => false,
 })) as unknown as typeof window.matchMedia;
 
-function openDrawer(): void {
+function openDrawer(path = '/'): void {
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <MobileNav />
       <LocationProbe />
     </MemoryRouter>,
@@ -49,6 +58,31 @@ function openDrawer(): void {
 
 afterEach(() => {
   cleanup();
+  userState.currentUser = {};
+});
+
+describe('MobileNav account row', () => {
+  it('tells a logged-out visitor so and links to Discord login', () => {
+    openDrawer('/leagues/3?tab=info');
+    const row = screen.getByTestId('mobile-nav-login');
+    expect(row.textContent).toContain('login');
+    expect(row.textContent).toContain('account.logged_out');
+    expect(row.getAttribute('href')).toBe(
+      `/login/discord/?next=${encodeURIComponent('/leagues/3?tab=info')}`,
+    );
+    expect(screen.queryByTestId('mobile-nav-account')).toBeNull();
+  });
+
+  it('shows the logged-in user with a profile link', () => {
+    userState.currentUser = { username: 'kettle' };
+    openDrawer();
+    const row = screen.getByTestId('mobile-nav-account');
+    expect(row.getAttribute('href')).toBe('/profile');
+    expect(row.textContent).toContain('kettle');
+    expect(row.textContent).toContain('account.logged_in');
+    expect(screen.getByTestId('drawer-avatar')).toBeTruthy();
+    expect(screen.queryByTestId('mobile-nav-login')).toBeNull();
+  });
 });
 
 describe('MobileNav Docs section', () => {
