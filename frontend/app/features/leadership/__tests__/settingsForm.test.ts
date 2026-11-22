@@ -4,10 +4,6 @@ import {
   leadershipSettingsFieldErrors,
   leadershipSettingsPatch,
   pickLeadershipFormValues,
-  slugifyTraitKey,
-  traitFieldErrors,
-  traitFormValues,
-  traitPutItems,
 } from '../settingsForm';
 import { leadershipSettings } from './fixtures';
 
@@ -120,33 +116,5 @@ describe('leadership settings form against the backend payload', () => {
         httpError({ detail: 'Max age must be at least the half-life.' }),
       ),
     ).toEqual([['max_age_days', 'Max age must be at least the half-life.']]);
-  });
-});
-
-describe('trait editor helpers', () => {
-  it('orders traits and writes contiguous orders back', () => {
-    const form = traitFormValues([
-      { key: 'b', label: 'B', order: 2, active: true },
-      { key: 'a', label: 'A', order: 0, active: false },
-    ]);
-    expect(form.traits.map((t) => t.key)).toEqual(['a', 'b']);
-    expect(traitPutItems(form)).toEqual([
-      { key: 'a', label: 'A', order: 0, active: false },
-      { key: 'b', label: 'B', order: 1, active: true },
-    ]);
-  });
-
-  it('maps per-row server errors', () => {
-    expect(
-      traitFieldErrors(httpError({ traits: [{}, { label: ['Required.'] }] })),
-    ).toEqual([['traits.1.label', 'Required.']]);
-  });
-
-  it('slugifies labels into unique keys', () => {
-    expect(slugifyTraitKey('Shot Calling!', new Set(), 32)).toBe(
-      'shot-calling',
-    );
-    expect(slugifyTraitKey('Calm', new Set(['calm']), 32)).toBe('calm-2');
-    expect(slugifyTraitKey('***', new Set(), 32)).toBe('trait');
   });
 });

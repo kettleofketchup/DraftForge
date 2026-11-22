@@ -1,12 +1,9 @@
-import type { TraitPutItem } from './api';
 import {
   LEADERSHIP_SETTINGS_FIELDS,
   type LeadershipSettings,
   type LeadershipSettingsField,
   type LeadershipSettingsForm,
   type LeadershipSettingsPatch,
-  type Trait,
-  type TraitForm,
 } from './schemas';
 
 export function isLeadershipSettingsField(
@@ -89,69 +86,4 @@ export function leadershipSettingsFieldErrors(
       return message ? [[key, message]] : [];
     },
   );
-}
-
-/** DRF `{traits: [{label: [msg]}, ...]}` mapped onto `traits.<i>.<field>`. */
-export function traitFieldErrors(
-  err: unknown,
-): [`traits.${number}.${'key' | 'label'}`, string][] {
-  const data = responseData(err);
-  if (typeof data !== 'object' || data === null || !('traits' in data)) {
-    return [];
-  }
-  const rows = (data as { traits: unknown }).traits;
-  if (!Array.isArray(rows)) return [];
-  return rows.flatMap(
-    (row, index): [`traits.${number}.${'key' | 'label'}`, string][] => {
-      if (typeof row !== 'object' || row === null) return [];
-      return (['key', 'label'] as const).flatMap(
-        (field): [`traits.${number}.${'key' | 'label'}`, string][] => {
-          const message = firstMessage((row as Record<string, unknown>)[field]);
-          return message ? [[`traits.${index}.${field}`, message]] : [];
-        },
-      );
-    },
-  );
-}
-
-export function traitFormValues(traits: readonly Trait[]): TraitForm {
-  return {
-    traits: [...traits]
-      .sort((a, b) => a.order - b.order)
-      .map((t) => ({
-        key: t.key,
-        label: t.label,
-        active: t.active,
-        saved: true,
-      })),
-  };
-}
-
-export function traitPutItems(form: TraitForm): TraitPutItem[] {
-  return form.traits.map((t, order) => ({
-    key: t.key,
-    label: t.label.trim(),
-    order,
-    active: t.active,
-  }));
-}
-
-export function slugifyTraitKey(
-  label: string,
-  taken: ReadonlySet<string>,
-  maxLength: number,
-): string {
-  const base =
-    label
-      .toLowerCase()
-      .normalize('NFKD')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, maxLength) || 'trait';
-  if (!taken.has(base)) return base;
-  for (let n = 2; ; n += 1) {
-    const suffix = `-${n}`;
-    const candidate = `${base.slice(0, maxLength - suffix.length)}${suffix}`;
-    if (!taken.has(candidate)) return candidate;
-  }
 }

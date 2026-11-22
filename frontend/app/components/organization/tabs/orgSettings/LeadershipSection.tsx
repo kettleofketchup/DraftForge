@@ -1,16 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState, type ReactNode, type RefObject } from 'react';
-import {
-  useFieldArray,
-  useForm,
-  useWatch,
-  type FieldErrors,
-  type UseFormReturn,
-} from 'react-hook-form';
+import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 
 import { useOrganization } from '~/components/organization/hooks/useOrganization';
+import { LeadershipTraitEditor } from '~/components/organization/tabs/orgSettings/LeadershipTraitEditor';
 import {
   NumberSetting,
   SettingsGroup,
@@ -21,26 +15,11 @@ import {
   submitForm,
   type SettingsFormUnit,
 } from '~/components/patterns/settingsSaveBar';
-import { SecondaryButton } from '~/components/ui/buttons';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '~/components/ui/form';
-import { Input } from '~/components/ui/input';
+import { Form } from '~/components/ui/form';
 import { Skeleton } from '~/components/ui/skeleton';
-import { Switch } from '~/components/ui/switch';
 import {
   LeadershipSettingsFormSchema,
-  MAX_ACTIVE_TRAITS,
-  TRAIT_KEY_MAX_LENGTH,
-  TRAIT_LABEL_MAX_LENGTH,
   TraitFormSchema,
-  refusalMessage,
-  useDeleteTrait,
   useLeadershipSettings,
   useLeadershipTraits,
   usePatchLeadershipSettings,
@@ -53,11 +32,12 @@ import {
   leadershipSettingsFieldErrors,
   leadershipSettingsPatch,
   pickLeadershipFormValues,
-  slugifyTraitKey,
-  traitFieldErrors,
-  traitFormValues,
-  traitPutItems,
 } from '~/features/leadership/settingsForm';
+import {
+  toTraitForm,
+  toTraitPut,
+  traitFieldErrors,
+} from '~/features/leadership/traitForm';
 import { useOrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
@@ -91,7 +71,7 @@ export function useLeadershipSection(
   });
   const traitForm = useForm<TraitForm>({
     resolver: zodResolver(TraitFormSchema),
-    defaultValues: traits ? traitFormValues(traits) : undefined,
+    defaultValues: traits ? toTraitForm(traits) : undefined,
   });
   const [hydrated, setHydrated] = useState(false);
 
@@ -102,7 +82,7 @@ export function useLeadershipSection(
   }, [settings, form]);
   useEffect(() => {
     if (traits && !traitForm.formState.isDirty) {
-      traitForm.reset(traitFormValues(traits));
+      traitForm.reset(toTraitForm(traits));
     }
   }, [traits, traitForm]);
   useEffect(() => {
@@ -152,8 +132,8 @@ export function useLeadershipSection(
     (sel: boolean) =>
     async (values: TraitForm): Promise<boolean> => {
       try {
-        const saved = await put.mutateAsync(traitPutItems(values));
-        traitForm.reset(traitFormValues(saved));
+        const saved = await put.mutateAsync(toTraitPut(values));
+        traitForm.reset(toTraitForm(saved));
         return true;
       } catch (err) {
         log.error('Failed to save captain traits', { organizationId, err });
@@ -184,6 +164,14 @@ export function useLeadershipSection(
     isDirty: enabled && (settingsDirty || traitsDirty),
     save: async (opts) => {
       const sel = opts?.select !== false;
+      const [settingsValid, traitsValid] = await Promise.all([
+        form.trigger(),
+        traitForm.trigger(),
+      ]);
+      if (!settingsValid || !traitsValid) {
+        onInvalid(sel)({});
+        return false;
+      }
       let ok = true;
       if (settingsDirty) {
         ok = (await submitForm(form, saveSettings(sel), onInvalid(sel))) && ok;
@@ -196,7 +184,7 @@ export function useLeadershipSection(
     },
     discard: () => {
       if (settings) form.reset(pickLeadershipFormValues(settings));
-      if (traits) traitForm.reset(traitFormValues(traits));
+      if (traits) traitForm.reset(toTraitForm(traits));
     },
   };
 
@@ -227,9 +215,9 @@ export function useLeadershipSection(
       {settings && traits && hydrated && (
         <div className="mt-4 flex flex-col gap-6">
           <LeadershipSettingsFields form={form} settings={settings} />
-          <TraitEditor
+          <LeadershipTraitEditor
             form={traitForm}
-            organizationId={organizationId}
+            orgId={organizationId}
             access={access}
           />
         </div>
@@ -356,192 +344,6 @@ function LeadershipSettingsFields({
           defaultValue={settings.defaults.leaderboard_public}
         />
       </SettingsGroup>
-    </Form>
-  );
-}
-
-function TraitEditor({
-  form,
-  organizationId,
-  access,
-}: {
-  form: UseFormReturn<TraitForm>;
-  organizationId: number;
-  access: ReturnType<typeof useOrgFeatureAccess>;
-}) {
-  const { fields, append, remove, swap } = useFieldArray({
-    control: form.control,
-    name: 'traits',
-  });
-  const rows = useWatch({ control: form.control, name: 'traits' }) ?? [];
-  const deleteTrait = useDeleteTrait(organizationId, access);
-  const activeCount = rows.filter((t) => t.active).length;
-  const rootError =
-    form.formState.errors.traits?.root?.message ??
-    form.formState.errors.traits?.message;
-
-  const addTrait = () => {
-    const taken = new Set(rows.map((t) => t.key));
-    append({
-      key: slugifyTraitKey('trait', taken, TRAIT_KEY_MAX_LENGTH),
-      label: '',
-      active: activeCount < MAX_ACTIVE_TRAITS,
-      saved: false,
-    });
-  };
-
-  const onDelete = async (index: number) => {
-    const row = rows[index];
-    if (!row) return;
-    if (!row.saved) {
-      remove(index);
-      return;
-    }
-    try {
-      await deleteTrait.mutateAsync(row.key);
-      remove(index);
-      toast.success(`Deleted ${row.label}`);
-    } catch (err) {
-      log.warn('Trait delete refused', { organizationId, key: row.key, err });
-      toast.error(refusalMessage(err));
-    }
-  };
-
-  return (
-    <Form {...form}>
-      <fieldset
-        className="flex flex-col gap-3"
-        data-testid="leadership-trait-editor"
-      >
-        <legend className="mb-2 text-sm font-semibold">Traits</legend>
-        <p className="text-sm text-muted-foreground">
-          Teammates score each active trait from 1 to 5. Up to{' '}
-          {MAX_ACTIVE_TRAITS} can be active. A trait that already has scores can
-          only be deactivated.
-        </p>
-        <ol className="flex flex-col gap-3">
-          {fields.map((item, index) => {
-            const row = rows[index];
-            return (
-              <li
-                key={item.id}
-                data-testid={`leadership-trait-${index}`}
-                className="flex flex-col gap-2 rounded-md border border-border p-3 sm:flex-row sm:items-start"
-              >
-                <FormField
-                  control={form.control}
-                  name={`traits.${index}.label`}
-                  render={({ field }) => (
-                    <FormItem className="min-w-0 flex-1">
-                      <FormLabel className="sr-only">
-                        Trait {index + 1} name
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          maxLength={TRAIT_LABEL_MAX_LENGTH}
-                          placeholder="Trait name"
-                          data-testid={`leadership-trait-${index}-label`}
-                          onChange={(e) => {
-                            field.onChange(e);
-                            if (row && !row.saved) {
-                              const taken = new Set(
-                                rows
-                                  .filter((_, i) => i !== index)
-                                  .map((t) => t.key),
-                              );
-                              form.setValue(
-                                `traits.${index}.key`,
-                                slugifyTraitKey(
-                                  e.target.value,
-                                  taken,
-                                  TRAIT_KEY_MAX_LENGTH,
-                                ),
-                                { shouldDirty: true },
-                              );
-                            }
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                      {form.formState.errors.traits?.[index]?.key && (
-                        <p className="text-sm text-destructive">
-                          {form.formState.errors.traits[index]?.key?.message}
-                        </p>
-                      )}
-                    </FormItem>
-                  )}
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <FormField
-                    control={form.control}
-                    name={`traits.${index}.active`}
-                    render={({ field }) => (
-                      <FormItem className="flex min-h-11 items-center gap-2">
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            data-testid={`leadership-trait-${index}-active`}
-                          />
-                        </FormControl>
-                        <FormLabel>Active</FormLabel>
-                      </FormItem>
-                    )}
-                  />
-                  <SecondaryButton
-                    type="button"
-                    size="icon"
-                    className="size-11"
-                    aria-label={`Move ${row?.label || 'trait'} up`}
-                    disabled={index === 0}
-                    onClick={() => swap(index, index - 1)}
-                  >
-                    <ArrowUp />
-                  </SecondaryButton>
-                  <SecondaryButton
-                    type="button"
-                    size="icon"
-                    className="size-11"
-                    aria-label={`Move ${row?.label || 'trait'} down`}
-                    disabled={index === fields.length - 1}
-                    onClick={() => swap(index, index + 1)}
-                  >
-                    <ArrowDown />
-                  </SecondaryButton>
-                  <SecondaryButton
-                    type="button"
-                    size="icon"
-                    className="size-11"
-                    aria-label={`Delete ${row?.label || 'trait'}`}
-                    data-testid={`leadership-trait-${index}-delete`}
-                    disabled={deleteTrait.isPending}
-                    onClick={() => void onDelete(index)}
-                  >
-                    <Trash2 />
-                  </SecondaryButton>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-        {rootError && (
-          <p className="text-sm text-destructive" role="alert">
-            {rootError}
-          </p>
-        )}
-        <div>
-          <SecondaryButton
-            type="button"
-            className="min-h-11"
-            data-testid="leadership-trait-add"
-            onClick={addTrait}
-          >
-            <Plus data-icon="inline-start" />
-            Add trait
-          </SecondaryButton>
-        </div>
-      </fieldset>
     </Form>
   );
 }
