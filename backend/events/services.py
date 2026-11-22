@@ -208,6 +208,20 @@ def _roster_remove_if_left(signup: EventSignup) -> None:
     remove_user_from_tournament(signup.event, signup.user)
 
 
+def _create_action(
+    existing: EventSignup | None, *, for_staff_placement: bool
+) -> SignupAction:
+    if for_staff_placement:
+        return SignupAction.STAFF_ADDED
+    if existing is None:
+        return SignupAction.SIGNED_UP
+    if existing.status == SignupStatus.TENTATIVE:
+        return SignupAction.SWITCHED_COMMITMENT
+    if existing.first_signed_up_at is not None:
+        return SignupAction.RESIGNED_UP
+    return SignupAction.SIGNED_UP
+
+
 @transaction.atomic
 def _create_signup(
     event: Event,
@@ -226,8 +240,14 @@ def _create_signup(
     notify hook. Notify handlers may re-query, and reading through a stale cache would
     re-warm it with stale data.
     """
-    existing = EventSignup.objects.filter(event=event, user=user).first()
+    existing = (
+        EventSignup.objects.nocache()
+        .select_related("user__base_profile")
+        .filter(event=event, user=user)
+        .first()
+    )
     carry = _first_fields_carry(existing)
+    before: SignupSnapshot | None = None
     if existing:
         logger.info(
             "signup_existing_found",
@@ -239,6 +259,7 @@ def _create_signup(
             signup_id=existing.id,
         )
         if existing.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+            before = snapshot(existing)
             existing.delete()
             logger.info(
                 "signup_cancelled_deleted",
@@ -248,6 +269,7 @@ def _create_signup(
                 event_id=event.pk,
             )
         elif existing.status == SignupStatus.TENTATIVE:
+            before = snapshot(existing)
             existing.delete()
             logger.info(
                 "signup_tentative_upgraded",
@@ -261,11 +283,13 @@ def _create_signup(
         else:
             raise ValueError("User has already signed up for this event.")
 
+    action = _create_action(existing, for_staff_placement=for_staff_placement)
     signup_type = SignupType.TEAM if event_team else SignupType.USER
     result = evaluate_signup(event, user, for_staff_placement=for_staff_placement)
     eligibility = eligibility_values(result)
 
-    if not has_free_seat(lock_event(event)):
+    locked = lock_event(event)
+    if not has_free_seat(locked):
         max_pos = (
             EventSignup.objects.filter(event=event, status=SignupStatus.WAITLISTED)
             .order_by("-waitlist_position")
@@ -282,6 +306,7 @@ def _create_signup(
             **eligibility,
             **carry,
         )
+        _record_leaf(signup, event=locked, actor=actor, action=action, before=before)
         invalidate_after_commit(event)
         log.info(
             "signup_post_commit_hooks_scheduled",
@@ -304,6 +329,7 @@ def _create_signup(
         **carry,
     )
     _roster_add_if_joins(signup)
+    _record_leaf(signup, event=locked, actor=actor, action=action, before=before)
     invalidate_after_commit(event)
     log.info(
         "signup_post_commit_hooks_scheduled",
@@ -609,7 +635,7 @@ def _record_leaf(
     event: Event,
     actor: SignupActor,
     action: SignupAction,
-    before: SignupSnapshot,
+    before: SignupSnapshot | None,
     extra: dict[str, Any] | None = None,
 ) -> SignupLedgerEntry:
     return record_signup_change(

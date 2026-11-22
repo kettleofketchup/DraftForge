@@ -8,6 +8,7 @@ from django.core.management import call_command
 from django.db import connection, transaction
 from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone as tz
 
 from app.models import CustomUser
 from events.constants import (
@@ -21,6 +22,7 @@ from events.constants import (
 from events.ledger import SignupActor
 from events.models import Event, EventSignup, SignupLedgerEntry
 from events.services import (
+    _create_action,
     _create_signup,
     _promote_from_waitlist,
     approve_signup,
@@ -495,6 +497,10 @@ class WithdrawRejectLedgerTests(LedgerContractMixin, EventTestCase):
                 "cancel_signup",
                 lambda _e, s: cancel_signup(s, actor=self.member_actor),
             ),
+            (
+                "process_rsvp",
+                lambda e, _s: process_rsvp(e, self.make_user(), actor=SYSTEM),
+            ),
         ]
         for name, call in rows:
             with self.subTest(fn=name):
@@ -529,6 +535,198 @@ class WithdrawRejectLedgerTests(LedgerContractMixin, EventTestCase):
             before,
         )
         self.assertEqual(SignupLedgerEntry.objects.filter(event=event).count(), 0)
+
+
+@patch("events.services.notify_signup_changed")
+class CreatePathLedgerTests(LedgerContractMixin, EventTestCase):
+    def _cancelled_after_signup(self, event: Event) -> EventSignup:
+        signup = EventSignup.objects.create(
+            event=event, user=self.subject, status=SignupStatus.APPROVED
+        )
+        EventSignup.objects.filter(pk=signup.pk).update(status=SignupStatus.CANCELLED)
+        signup.refresh_from_db()
+        self.assertIsNotNone(signup.first_signed_up_at)
+        return signup
+
+    def _new_entries(self, event: Event, after_pk: int) -> list[SignupLedgerEntry]:
+        return [e for e in self.ledger(event) if e.pk > after_pk]
+
+    def _last_pk(self) -> int:
+        last = SignupLedgerEntry.objects.order_by("-pk").first()
+        return last.pk if last is not None else 0
+
+    def test_process_rsvp_no_row_records_signed_up(self, _notify: Any) -> None:
+        event = self.make_event()
+        signup = process_rsvp(event, self.subject, actor=self.member_actor)
+        entry = self.assert_single_entry(
+            event,
+            action=SignupAction.SIGNED_UP,
+            actor=self.member_actor,
+            signup=signup,
+            before_status=None,
+            after_status=signup.status,
+        )
+        self.assertEqual(entry.after["status"], SignupStatus.APPROVED)
+
+    def test_process_rsvp_full_event_records_signed_up_waitlisted(
+        self, _notify: Any
+    ) -> None:
+        event = self.make_event(max_players=1)
+        EventSignup.objects.create(
+            event=event, user=self.make_user(), status=SignupStatus.APPROVED
+        )
+        signup = process_rsvp(event, self.subject, actor=self.member_actor)
+        entry = self.assert_single_entry(
+            event,
+            action=SignupAction.SIGNED_UP,
+            actor=self.member_actor,
+            signup=signup,
+            before_status=None,
+            after_status=SignupStatus.WAITLISTED,
+        )
+        self.assertEqual(entry.after["waitlist_position"], 1)
+
+    def test_process_rsvp_after_cancel_records_resigned_up(self, _notify: Any) -> None:
+        event = self.make_event()
+        old = self._cancelled_after_signup(event)
+        signup = process_rsvp(event, self.subject, actor=self.member_actor)
+        self.assertNotEqual(signup.pk, old.pk)
+        self.assert_single_entry(
+            event,
+            action=SignupAction.RESIGNED_UP,
+            actor=self.member_actor,
+            signup=signup,
+            before_status=SignupStatus.CANCELLED,
+            after_status=signup.status,
+        )
+
+    def test_process_rsvp_after_rejection_records_resigned_up(
+        self, _notify: Any
+    ) -> None:
+        event = self.make_event()
+        old = EventSignup.objects.create(
+            event=event, user=self.subject, status=SignupStatus.RSVP
+        )
+        EventSignup.objects.filter(pk=old.pk).update(status=SignupStatus.REJECTED)
+        signup = process_rsvp(event, self.subject, actor=self.member_actor)
+        self.assert_single_entry(
+            event,
+            action=SignupAction.RESIGNED_UP,
+            actor=self.member_actor,
+            signup=signup,
+            before_status=SignupStatus.REJECTED,
+            after_status=signup.status,
+        )
+
+    def test_process_rsvp_after_bare_decline_records_signed_up(
+        self, _notify: Any
+    ) -> None:
+        event = self.make_event()
+        declined = decline_signup(event, self.subject, actor=self.member_actor)
+        self.assertIsNone(declined.first_signed_up_at)
+        baseline = self._last_pk()
+        signup = process_rsvp(event, self.subject, actor=self.member_actor)
+        entries = self._new_entries(event, baseline)
+        self.assertEqual([e.action for e in entries], [SignupAction.SIGNED_UP])
+        self.assertEqual(entries[0].signup_id, signup.pk)
+        self.assertEqual(entries[0].before["status"], SignupStatus.CANCELLED)
+        self.assertEqual(entries[0].after["status"], signup.status)
+
+    def test_process_rsvp_from_tentative_records_switched_commitment(
+        self, _notify: Any
+    ) -> None:
+        event = self.make_event()
+        EventSignup.objects.create(
+            event=event,
+            user=self.subject,
+            status=SignupStatus.TENTATIVE,
+            commitment=Commitment.MAYBE,
+        )
+        signup = process_rsvp(event, self.subject, actor=self.member_actor)
+        entry = self.assert_single_entry(
+            event,
+            action=SignupAction.SWITCHED_COMMITMENT,
+            actor=self.member_actor,
+            signup=signup,
+            before_status=SignupStatus.TENTATIVE,
+            after_status=signup.status,
+        )
+        self.assertEqual(entry.before["commitment"], Commitment.MAYBE)
+        self.assertEqual(entry.after["commitment"], Commitment.MAIN)
+
+    def test_staff_add_records_staff_added(self, _notify: Any) -> None:
+        event = self.make_event()
+        signup = staff_add_signup(event, self.subject, actor=self.staff_actor)
+        self.assert_single_entry(
+            event,
+            action=SignupAction.STAFF_ADDED,
+            actor=self.staff_actor,
+            signup=signup,
+            before_status=None,
+            after_status=signup.status,
+            on_behalf=True,
+        )
+
+    def test_staff_add_over_cancelled_records_staff_added(self, _notify: Any) -> None:
+        event = self.make_event()
+        self._cancelled_after_signup(event)
+        signup = staff_add_signup(event, self.subject, actor=self.staff_actor)
+        self.assert_single_entry(
+            event,
+            action=SignupAction.STAFF_ADDED,
+            actor=self.staff_actor,
+            signup=signup,
+            before_status=SignupStatus.CANCELLED,
+            after_status=signup.status,
+            on_behalf=True,
+        )
+
+    def test_create_raising_paths_write_nothing(self, _notify: Any) -> None:
+        for status in (SignupStatus.DROPPED, SignupStatus.APPROVED):
+            with self.subTest(status=status):
+                event = self.make_event()
+                EventSignup.objects.create(
+                    event=event, user=self.subject, status=status
+                )
+                with self.assertRaises(ValueError):
+                    _create_signup(event, self.subject, actor=self.staff_actor)
+                self.assertEqual(self.ledger(event), [])
+
+    def test_process_rsvp_writes_exactly_one_entry(self, _notify: Any) -> None:
+        event = self.make_event()
+        process_rsvp(event, self.subject, actor=self.member_actor)
+        self.assertEqual(SignupLedgerEntry.objects.filter(event=event).count(), 1)
+
+    def test_create_action_mapping(self, _notify: Any) -> None:
+        event = self.make_event()
+        tentative = EventSignup(
+            event=event, user=self.subject, status=SignupStatus.TENTATIVE
+        )
+        resigned = EventSignup(
+            event=event,
+            user=self.subject,
+            status=SignupStatus.CANCELLED,
+            first_signed_up_at=tz.now(),
+        )
+        bare = EventSignup(
+            event=event,
+            user=self.subject,
+            status=SignupStatus.REJECTED,
+            first_signed_up_at=None,
+        )
+        rows: list[tuple[str, EventSignup | None, bool, SignupAction]] = [
+            ("none", None, False, SignupAction.SIGNED_UP),
+            ("tentative", tentative, False, SignupAction.SWITCHED_COMMITMENT),
+            ("resigned", resigned, False, SignupAction.RESIGNED_UP),
+            ("bare", bare, False, SignupAction.SIGNED_UP),
+            ("staff_none", None, True, SignupAction.STAFF_ADDED),
+            ("staff_resigned", resigned, True, SignupAction.STAFF_ADDED),
+        ]
+        for name, existing, staff, expected in rows:
+            with self.subTest(row=name):
+                self.assertEqual(
+                    _create_action(existing, for_staff_placement=staff), expected
+                )
 
 
 class PromotionQueryCostTests(EventTestCase):
