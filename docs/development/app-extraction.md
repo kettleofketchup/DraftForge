@@ -124,6 +124,8 @@ The order is:
 2. One migration per app with FKs to the moved models, holding state-only `AlterField`s. A real `AlterField` on SQLite rebuilds the referencing table for nothing.
 3. `<source_app>/<next>`: `RemoveField` for fields that close a cycle, then `DeleteModel`, then a `RunPython` that relabels the `django_content_type` rows from `<source_app>` to `<new_app>`. It depends on the other two and on `("contenttypes", "0002_remove_content_type_name")`.
 
+After adding or renumbering a migration, update that app's `migrations/max_migration.txt` (django-linear-migrations).
+
 Every new migration in an app other than the source app also lists its own app's previous leaf as a dependency, or that app ends up with two leaf nodes. Check that each touched app has exactly one leaf afterwards (`backend/league/tests/test_league_move_migration.py` pins this with `test_one_leaf_per_app`).
 
 The ContentType relabel is required. Without it, `post_migrate` creates new permission rows that nobody holds, and the existing user and group grants stay behind on stale rows. The relabel must be symmetric and defensive: for each model, skip it (and log once) when the destination row already exists, in both directions. Then neither direction can hit `UNIQUE(app_label, model)`. See `backend/app/migrations/0108_move_hero_draft_models_to_draft.py`.
