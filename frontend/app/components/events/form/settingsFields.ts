@@ -223,13 +223,15 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     ready_check_open_minutes: {
       label: 'Opens (minutes)',
-      description: 'Minutes before start',
+      description:
+        'Minutes before start. Each asked member gets a Ready button by DM.',
       keywords: ['ready check opens'],
     },
     ready_check_escalation_minutes: {
-      label: 'Escalation nudge (minutes)',
-      description: 'Minutes before start (0 = off)',
-      keywords: ['reminder'],
+      label: 'Nudge unconfirmed members by DM (minutes)',
+      description:
+        'Minutes before start (0 = off). Staff also get the unconfirmed count as an ops notice.',
+      keywords: ['reminder', 'escalation'],
     },
     ready_check_close_minutes: {
       label: 'Closes (minutes)',
@@ -237,9 +239,10 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       keywords: ['ready check closes'],
     },
     ready_check_chase_minutes: {
-      label: 'Ops chase (minutes)',
-      description: 'Minutes before close',
-      keywords: ['no ops chase'],
+      label: 'Ops notice per unconfirmed member (minutes)',
+      description:
+        'Minutes before close. Shown to org and league staff, the event host and helpers on the event page, and sent wherever the org routes ops notices.',
+      keywords: ['ops chase', 'alert staff'],
     },
     ready_check_min_completion_pct: {
       label: 'Minimum confirmed (%)',
@@ -247,13 +250,20 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     ready_check_low_completion_action: {
       label: 'If too few confirm',
+      description:
+        'Non-binding and held checks raise an urgent ops notice for staff.',
       keywords: ['non-binding', 'hold drops', 'drop unconfirmed'],
     },
     ready_check_notify_on_signup: {
-      label: 'Tell members when they sign up that confirmation is mandatory',
+      label: 'DM members on their first sign-up that confirmation is mandatory',
+      description:
+        'If their DMs are closed they get a reply only they can see, and staff get an ops notice.',
     },
     ready_check_drop_notice: {
-      label: 'Tell dropped members they were dropped',
+      label: 'DM members who are dropped',
+      description:
+        'Members can turn this off under roster changes in their notification settings.',
+      keywords: ['drop notice'],
     },
     event_voice_channel_id: {
       label: 'Event voice channel',
@@ -264,6 +274,8 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     start_cull_enabled: {
       label: 'Remove members absent from the voice channel after start',
+      description:
+        'Removed members get the drop notice DM. If the bot cannot see the voice channel, nobody is removed and staff get an ops notice.',
       keywords: ['start cull', 'no-show'],
     },
     start_cull_minutes_after: {
@@ -272,6 +284,7 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     post_cull_fill_mode: {
       label: 'After the cull, fill open seats by',
+      description: 'Members moved into a seat get a promotion DM.',
       keywords: ['line order', 'arrival'],
     },
   },
