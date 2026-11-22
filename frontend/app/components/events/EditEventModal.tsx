@@ -117,7 +117,6 @@ export function EditEventModal({
     },
   });
 
-  // Reset form when event changes
   useEffect(() => {
     if (event && open) {
       form.reset({
