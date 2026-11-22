@@ -114,14 +114,8 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
     ``keep``'s membership first. Every row deleted, with the rows its delete
     cascades to, is logged as ``discord_merge_row_discarded``.
 
-    LEAD'S CALL, carryover policy: ``keep`` wins every conflict. Only profile
-    data ``keep`` lacks (nickname, avatar, Discord names, positions, MMR
-    verification, Deadlock rank, Steam account) is copied from ``drop``; a
-    conflicting league membership keeps the higher MMR. Other conflicting rows
-    are logged and discarded, not merged: steam.LeaguePlayerStats, app.Joke,
-    RepeaterSubscription, EventVoicePresence, ReadyCheckEntry,
-    ProfileClaimRequest and org game profiles (PlayerDotaProfile,
-    PlayerDeadlockProfile).
+    ``keep`` wins every conflict; ``drop``'s profile data fills only fields
+    ``keep`` lacks.
     ``keep`` is expected to be the account that already owns ``discordId``.
     """
     if keep.pk == drop.pk:
