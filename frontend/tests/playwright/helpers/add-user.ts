@@ -48,7 +48,7 @@ export async function closeAddUserModal(page: Page): Promise<void> {
 export async function searchUser(page: Page, query: string): Promise<void> {
   const searchInput = page.locator('[data-testid="add-user-search"]');
   await searchInput.fill(query);
-  // Wait for search results to appear (heading "Site Users" appears on desktop)
+  // "Site Users" is the desktop column heading and the mobile tab label
   await expect(
     page.locator('text=/Site Users|Searching/i').first(),
   ).toBeVisible({ timeout: 5000 });
