@@ -19,7 +19,7 @@ needed. `./dev` installs just and creates the venv in a fresh clone.
 | `test::*` | Test stack, Playwright, backend tests |
 | `update::*` | Dependency updates |
 | `version::*` | Version management and releases |
-| `ci::*` | CI entry points (`ci::changelog-check`, `ci::shellcheck`) |
+| `ci::*` | CI entry points (`ci::changelog-check`, `ci::shellcheck`, `ci::timing`) |
 | `prod::*` | Production compose stack (`:latest` images) |
 | `demo::*` | Demo video recording |
 | `docs::*` | Documentation commands |

@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("discordbot", "0002_discordmessagelog"),
-        ("events", "0011_add_discord_role_ids"),
+        ("events", "0001_squashed_0034"),
         ("org", "0003_playerdeadlockprofile_playerdotaprofile"),
     ]
 

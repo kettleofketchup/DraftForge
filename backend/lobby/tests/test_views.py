@@ -7,8 +7,9 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import DotaLobbyMode, GameMode, League
+from app.models import DotaLobbyMode, GameMode
 from events.models import Event
+from league.models import League
 from lobby import services, states
 from lobby.client import DotaLobbyError, DotaLobbyUnavailable
 from lobby.models import GameLobby

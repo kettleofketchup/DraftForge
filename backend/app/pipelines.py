@@ -2,6 +2,7 @@ from typing import Any
 
 from django.contrib.auth import get_user_model
 
+from app.discord_accounts import merge_discord_accounts
 from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
 
@@ -20,8 +21,6 @@ def save_discord(
     *args: Any,
     **kwargs: Any,
 ) -> dict:
-    from app.discord_accounts import merge_discord_accounts
-
     # save_discord runs after create_user, so user is always present here;
     # guard makes the None-path explicit and narrows the type for the body.
     if user is None:

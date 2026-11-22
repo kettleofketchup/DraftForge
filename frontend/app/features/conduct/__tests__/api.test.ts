@@ -1,18 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { get, patch } = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn() }));
+const { get, patch, put } = vi.hoisted(() => ({
+  get: vi.fn(),
+  patch: vi.fn(),
+  put: vi.fn(),
+}));
 
-vi.mock('~/components/api/axios', () => ({ default: { get, patch } }));
+vi.mock('~/components/api/axios', () => ({ default: { get, patch, put } }));
 
 import {
+  getAttendance,
   getConductSettings,
+  getForecast,
   getMemberConduct,
   patchConductSettings,
+  putAttendance,
 } from '../api';
 import { HISTORY_PAGE_SIZE } from '../schemas';
 import {
+  attendance,
   conductSettings,
   conductSettingsValues,
+  forecast,
   memberConduct,
 } from './fixtures';
 
@@ -22,6 +31,7 @@ const VALUES = conductSettingsValues();
 beforeEach(() => {
   get.mockReset();
   patch.mockReset();
+  put.mockReset();
 });
 
 describe('conduct api', () => {
@@ -62,5 +72,42 @@ describe('conduct api', () => {
       block_below: 0.25,
     });
     expect(result.block_enabled).toBe(true);
+  });
+
+  it('gets an event attendance', async () => {
+    get.mockResolvedValue({ data: attendance() });
+    const result = await getAttendance(1, 5);
+    expect(get).toHaveBeenCalledWith(
+      '/organizations/1/conduct/events/5/attendance/',
+    );
+    expect(result.rows).toHaveLength(1);
+  });
+
+  it('puts attendance changes with the body passed through', async () => {
+    put.mockResolvedValue({ data: attendance({ editable: false }) });
+    const body = {
+      changes: [{ org_user_pk: 7, outcome: 'no_show' as const }],
+      reason: 'Did not show',
+    };
+    const result = await putAttendance(1, 5, body);
+    expect(put).toHaveBeenCalledWith(
+      '/organizations/1/conduct/events/5/attendance/',
+      body,
+    );
+    expect(result.editable).toBe(false);
+  });
+
+  it('gets an event forecast', async () => {
+    get.mockResolvedValue({ data: forecast() });
+    const result = await getForecast(1, 5);
+    expect(get).toHaveBeenCalledWith(
+      '/organizations/1/conduct/events/5/forecast/',
+    );
+    expect(result.seat_holders).toBe(30);
+  });
+
+  it('rejects a malformed forecast payload', async () => {
+    get.mockResolvedValue({ data: { ...forecast(), low: 'x' } });
+    await expect(getForecast(1, 5)).rejects.toThrow();
   });
 });

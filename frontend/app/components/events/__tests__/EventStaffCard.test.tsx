@@ -26,7 +26,10 @@ vi.mock('~/features/contributions/api', () => ({
 
 vi.mock('~/components/user/AddUserModal', async () => {
   const { useState } = await import('react');
+  const { findSearchedUser } =
+    await import('~/components/user/AddUserModal/findSearchedUser');
   return {
+    findSearchedUser,
     AddUserModal: ({
       open,
       onAdd,

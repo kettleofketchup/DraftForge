@@ -12,6 +12,7 @@ from events.models import Event, EventRepeater
 from events.serializers import EventSerializer
 from events.tests.base import EventTestCase
 from events.tests.test_discord_tasks import _DiscordTaskTestCase, _ok_response
+from league.models import League
 from org.models import Organization
 
 
@@ -138,7 +139,7 @@ class SyncFutureEventsShieldTest(EventTestCase):
         on_schedule.refresh_from_db()
         self.assertEqual(on_schedule.name, "Renamed Series")
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
     def test_realign_delete_tears_down_discord(self, _n, _c, mock_delete):
@@ -411,8 +412,6 @@ class CreateEventEndpointTest(EventTestCase):
         self.assertIs(event.discord_announcement, False)
 
     def test_foreign_org_league_rejected(self):
-        from app.models import League
-
         other_org = Organization.objects.create(name="Other Org", owner=self.admin)
         other = League.objects.create(name="Other", organization=other_org)
         self.client.force_authenticate(self.admin)
@@ -541,7 +540,7 @@ class CancelDeletesDiscordEventTest(EventTestCase):
             discord_create_event=True,
         )
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     def test_cancel_deletes_live_discord_scheduled_event(self, mock_delete):
         from discordbot.models import DiscordEvent
 
@@ -565,7 +564,7 @@ class CancelDeletesDiscordEventTest(EventTestCase):
         discord_event.refresh_from_db()
         self.assertIsNone(discord_event.scheduled_event_id)
 
-    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.delete_discord_scheduled_event")
     def test_cancel_without_discord_event_is_noop(self, mock_delete):
         self.client.force_authenticate(self.admin)
         with self.captureOnCommitCallbacks(execute=True):
@@ -650,8 +649,6 @@ class RepeaterLeagueOrgValidationTest(EventTestCase):
         )
 
     def test_foreign_org_league_rejected_on_repeater(self):
-        from app.models import League
-
         other_org = Organization.objects.create(name="Other Org 19", owner=self.admin)
         other = League.objects.create(name="Other League 19", organization=other_org)
 

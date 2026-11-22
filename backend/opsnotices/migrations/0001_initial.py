@@ -11,8 +11,8 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('app', '0106_draftoptions_hero_grace_time_ms_and_more'),
-        ('events', '0024_backfill_event_draft_options'),
+        ("app", "0096_squashed_0106"),
+        ("events", "0001_squashed_0034"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

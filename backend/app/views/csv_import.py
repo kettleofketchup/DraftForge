@@ -1,6 +1,8 @@
 """CSV import views for bulk-adding users to organizations and tournaments."""
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
@@ -10,9 +12,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.cache_utils import invalidate_obj
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.display_names import user_display_name
-from app.models import CustomUser, GameType, League, PositionsModel, Team, Tournament
+from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
 from league.permissions import has_league_staff_access
@@ -26,6 +28,9 @@ from org.mmr import (
 from org.models import Organization, OrgLog, OrgUser
 from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
+
+if TYPE_CHECKING:
+    from league.models import League
 
 log = get_logger(__name__)
 
@@ -359,7 +364,7 @@ def import_csv_org(request: Request, org_id: int) -> Response:
 
         if created:
             summary["created"] += 1
-        if base_mmr:
+        if base_mmr is not None:
             pending_mmrs[user.pk] = base_mmr
 
         result = {
@@ -430,6 +435,20 @@ def _update_mmr_for_target(
             )
     elif org:
         pending_mmrs[user.pk] = base_mmr
+
+
+def _resync_league_snapshots(league: League, values: dict[int, int]) -> None:
+    if not values:
+        return
+    rows = list(
+        LeagueUser.objects.nocache().filter(league=league, user_id__in=list(values))
+    )
+    stale = [row for row in rows if row.mmr != values[row.user_id]]
+    for row in stale:
+        row.mmr = values[row.user_id]
+    if stale:
+        LeagueUser.objects.bulk_update(stale, ["mmr"])
+        invalidate_after_commit(*stale)
 
 
 @api_view(["POST"])
@@ -503,6 +522,19 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
     # Cache for team_name -> Team (get_or_create within this import)
     team_cache = {}
     pending_mmrs: dict[int, int | None] = {}
+    # The tournament.users signal snapshots LeagueUser.mmr before the org
+    # MMRs are flushed; snapshots it creates are re-synced after the flush.
+    resync_snapshots = bool(league and org and game_type == LEAGUE_GAME)
+    snapshotted: set[int] = (
+        set(
+            LeagueUser.objects.nocache()
+            .filter(league=league)
+            .values_list("user_id", flat=True)
+        )
+        if resync_snapshots
+        else set()
+    )
+    new_snapshots: set[int] = set()
 
     for i, row in enumerate(rows):
         if not isinstance(row, dict):
@@ -570,21 +602,27 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
                 summary["skipped"] += 1
             continue
 
-        # Create OrgUser if tournament has an org (savepoint for SQLite)
+        # Create OrgUser if tournament has an org (savepoint for SQLite).
+        # Without update_mmr the CSV MMR only seeds members created here.
+        org_member_created = False
         if org:
             try:
                 with transaction.atomic():
                     created_ou = OrgUser.objects.create(user=user, organization=org)
             except IntegrityError:
-                # Already a member of the org -- update MMR if provided
-                if base_mmr is not None:
+                if update_mmr and base_mmr is not None:
                     pending_mmrs[user.pk] = base_mmr
             else:
-                if base_mmr:
+                org_member_created = True
+                if base_mmr is not None:
                     pending_mmrs[created_ou.user_id] = base_mmr
 
-        # For league-level MMR, also create/update LeagueUser
-        if league and mmr_target == "league" and base_mmr is not None:
+        if (
+            league
+            and mmr_target == "league"
+            and base_mmr is not None
+            and (update_mmr or org_member_created)
+        ):
             org_user = OrgUser.objects.filter(user=user, organization=org).first()
             if org_user:
                 LeagueUser.objects.update_or_create(
@@ -594,6 +632,8 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
                 )
 
         tournament.users.add(user)
+        if resync_snapshots and user.pk not in snapshotted:
+            new_snapshots.add(user.pk)
 
         # Handle team assignment
         team_name = (row.get("team_name") or "").strip()
@@ -636,6 +676,11 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
 
     if org:
         _flush_org_mmrs(org, game_type, pending_mmrs)
+    if league and resync_snapshots:
+        _resync_league_snapshots(
+            league,
+            {uid: pending_mmrs[uid] or 0 for uid in new_snapshots & set(pending_mmrs)},
+        )
 
     # Invalidate tournament cache so refreshed data reflects MMR changes
     invalidate_obj(tournament)

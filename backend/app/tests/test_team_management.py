@@ -13,7 +13,6 @@ from app.models import (
     CustomUser,
     Game,
     LeadershipProblem,
-    League,
     Team,
     TeamLog,
     TeamLogAction,
@@ -58,7 +57,7 @@ from events.overrides import (
     OverrideReasonRequired,
     OverrideRequired,
 )
-from league.models import LeagueUser
+from league.models import League, LeagueUser
 from org.models import Organization, OrgSettings, OrgUser
 from org.models_profiles import PlayerDotaProfile
 from org.settings_constants import StaffOverridePolicy

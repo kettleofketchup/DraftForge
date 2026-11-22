@@ -39,30 +39,58 @@ vi.mock('~/components/api/eventsAPI', () => ({
   getEvents: vi.fn(async () => []),
 }));
 
-vi.mock('~/hooks/useOrgUsers', () => ({
-  useOrgUsers: () => [
-    {
-      pk: 3,
-      username: 'alice',
-      nickname: null,
-      orgData: {},
-      leagueData: {},
-      _fetchedAt: 0,
+vi.mock('~/components/user/AddUserModal', async () => {
+  const { useQueryClient } = await import('@tanstack/react-query');
+  const { findSearchedUser } =
+    await import('~/components/user/AddUserModal/findSearchedUser');
+  return {
+    findSearchedUser,
+    AddUserModal: ({
+      open,
+      onAdd,
+      entityContext,
+    }: {
+      open: boolean;
+      onAdd: (payload: { user_id: number | null }) => Promise<unknown>;
+      entityContext: { orgId?: number };
+    }) => {
+      const queryClient = useQueryClient();
+      if (!open) return null;
+      const pickBob = (): void => {
+        queryClient.setQueryData(
+          ['userSearch', 'bob', entityContext.orgId],
+          [{ pk: 4, username: 'bob', nickname: 'Bobby' }],
+        );
+        void onAdd({ user_id: 4 });
+      };
+      return (
+        <div data-testid="stub-member-search">
+          <button type="button" data-testid="stub-pick-bob" onClick={pickBob}>
+            bob
+          </button>
+          <button
+            type="button"
+            data-testid="stub-pick-unlinked"
+            onClick={() => void onAdd({ user_id: null }).catch(() => {})}
+          >
+            unlinked
+          </button>
+        </div>
+      );
     },
-    {
-      pk: 4,
-      username: 'bob',
-      nickname: 'Bobby',
-      orgData: {},
-      leagueData: {},
-      _fetchedAt: 0,
-    },
-  ],
-}));
+  };
+});
 
 const getOrgUsers = vi.fn();
 vi.mock('~/store/orgStore', () => ({
-  useOrgStore: { getState: () => ({ getOrgUsers }) },
+  useOrgStore: Object.assign(
+    (
+      select: (s: {
+        currentOrg: { pk: number; discord_server_id: null };
+      }) => unknown,
+    ) => select({ currentOrg: { pk: 7, discord_server_id: null } }),
+    { getState: () => ({ getOrgUsers }) },
+  ),
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -166,7 +194,7 @@ describe('contributions admin section', () => {
     ).toBeInTheDocument();
     expect(screen.queryByTestId('point-value-reset-event_host')).toBeNull();
     expect(screen.getByTestId('point-value-event_helper')).toHaveValue(8);
-    expect(getOrgUsers).toHaveBeenCalledWith(7);
+    expect(getOrgUsers).not.toHaveBeenCalled();
   });
 
   it('applies a new value to past entries since a chosen date', async () => {
@@ -260,11 +288,26 @@ describe('contributions admin section', () => {
     expect(createManualAward).not.toHaveBeenCalled();
   });
 
+  it('keeps the member empty when a Discord member without an account is picked', async () => {
+    renderTab(admin);
+    fireEvent.click(await screen.findByTestId('manual-award-member'));
+    fireEvent.click(await screen.findByTestId('stub-pick-unlinked'));
+    expect(screen.getByTestId('stub-member-search')).toBeInTheDocument();
+    expect(screen.getByTestId('manual-award-member').textContent).toContain(
+      'Search for a member',
+    );
+  });
+
   it('submits a manual award for the picked member', async () => {
     renderTab(admin);
-    const trigger = await screen.findByTestId('manual-award-member');
-    fireEvent.keyDown(trigger, { key: 'Enter' });
-    fireEvent.click(await screen.findByTestId('manual-award-member-4'));
+    fireEvent.click(await screen.findByTestId('manual-award-member'));
+    fireEvent.click(await screen.findByTestId('stub-pick-bob'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('stub-member-search')).toBeNull(),
+    );
+    expect(screen.getByTestId('manual-award-member').textContent).toContain(
+      'Bobby',
+    );
     fireEvent.change(screen.getByTestId('manual-award-points'), {
       target: { value: '15' },
     });

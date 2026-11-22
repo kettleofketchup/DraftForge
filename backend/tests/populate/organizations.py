@@ -4,7 +4,8 @@ Organization and League population for test database.
 
 from typing import Any, Final
 
-from app.models import CustomUser, League
+from app.models import CustomUser
+from league.models import League
 from org.models import Organization, OrgUser
 
 from .constants import (
@@ -171,8 +172,6 @@ def populate_discord_name_sync_users(force: bool = False) -> None:
         if user.discordNickname != spec["global_name"]:
             user.discordNickname = spec["global_name"]
             user.save(update_fields=["discordNickname"])
-        org_user, _ = OrgUser.objects.get_or_create(
-            user=user, organization=dtx_org, defaults={"mmr": 0}
-        )
+        org_user, _ = OrgUser.objects.get_or_create(user=user, organization=dtx_org)
         org_user.guild_nickname = spec["guild_nickname"]
         org_user.save(update_fields=["guild_nickname"])

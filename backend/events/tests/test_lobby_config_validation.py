@@ -4,10 +4,11 @@ from django.utils import timezone as tz
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League
+from app.models import CustomUser
 from events.constants import RepeatFrequency
 from events.models import EventRepeater, OrgEventDefaults
 from events.tests.base import EventTestCase
+from league.models import League
 from org.models import Organization
 
 FOREIGN_ID_ERROR = (
