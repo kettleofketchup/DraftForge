@@ -223,3 +223,36 @@ describe('HeroGrid suggestion context menu', () => {
     ).toBe(true);
   });
 });
+
+describe('HeroGrid action tint', () => {
+  it.each([
+    ['ban', 'bg-ban-surface/80'],
+    ['pick', 'bg-pick-surface/80'],
+  ] as const)('tints the grid for the team on a %s turn', (action, tint) => {
+    render(
+      <HeroGrid
+        onHeroClick={() => {}}
+        disabled
+        showActionButton={false}
+        currentAction={action}
+        isMyTurn
+      />,
+    );
+    expect(screen.getByTestId('herodraft-hero-grid')).toHaveClass(tint);
+  });
+
+  it('has no tint when it is not your team’s turn', () => {
+    render(
+      <HeroGrid
+        onHeroClick={() => {}}
+        disabled
+        showActionButton={false}
+        currentAction="ban"
+        isMyTurn={false}
+      />,
+    );
+    expect(screen.getByTestId('herodraft-hero-grid')).not.toHaveClass(
+      'bg-ban-surface/80',
+    );
+  });
+});

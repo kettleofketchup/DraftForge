@@ -42,9 +42,13 @@ const PAUSED_STATES = new Set(['paused', 'resuming']);
 
 export interface HeroDraftChatProps {
   draftState: string;
+  onSuggestionClick?: (heroId: number) => void;
 }
 
-export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
+export function HeroDraftChat({
+  draftState,
+  onSuggestionClick,
+}: HeroDraftChatProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const chat = useHeroDraftStore((s) => s.chat);
   const connected = useHeroDraftStore(heroDraftSelectors.isConnected);
@@ -142,11 +146,16 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
   useEffect(() => {
     if (!isDesktop || !panelOpen) return;
     const onPointerDown = (e: PointerEvent) => {
-      // Right-clicks and the portaled suggest menu must not close chat.
+      // Right-clicks, the portaled suggest menu and dialogs opened from chat keep it open.
       if (e.button !== 0) return;
       const target = e.target as Element;
       if (rootRef.current?.contains(target)) return;
-      if (target.closest?.('[data-radix-popper-content-wrapper]')) return;
+      if (
+        target.closest?.(
+          '[data-radix-popper-content-wrapper], [role="alertdialog"]',
+        )
+      )
+        return;
       setChatPanelOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown);
@@ -254,11 +263,19 @@ export function HeroDraftChat({ draftState }: HeroDraftChatProps) {
     </SecondaryButton>
   );
 
+  const onHeroClick = useCallback(
+    (heroId: number) => {
+      setSelectedHeroId(heroId);
+      onSuggestionClick?.(heroId);
+    },
+    [setSelectedHeroId, onSuggestionClick],
+  );
+
   const log = (props: { className?: string; viewportClassName?: string }) => (
     <ChatLog
       messages={messages}
       emptyText={emptyText}
-      onHeroClick={setSelectedHeroId}
+      onHeroClick={onHeroClick}
       {...props}
     />
   );
