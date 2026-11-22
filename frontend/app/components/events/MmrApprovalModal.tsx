@@ -38,6 +38,7 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
+import { SteamVerificationBadge } from '~/components/user/SteamVerificationBadge';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserStrip } from '~/components/user/UserStrip';
 import { DisplayName } from '~/components/user/avatar';
@@ -247,6 +248,25 @@ export function MmrApprovalModal({
                 />
               )}
             </div>
+            {user?.steam_account_id ? (
+              <div
+                className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground"
+                data-testid="mmr-modal-friend-id"
+              >
+                <span>Friend ID {user.steam_account_id}</span>
+                <SteamVerificationBadge
+                  userPk={user.pk ?? signup.user}
+                  steamAccountId={user.steam_account_id}
+                  verified={user.steam_account_verified ?? false}
+                  verifiedOrgName={user.steam_account_verified_org_name}
+                  verifiedAt={user.steam_account_verified_at}
+                  existsChecked={user.steam_account_exists_checked ?? false}
+                  canVerify={signup.can_verify_steam_account ?? false}
+                  staffView
+                  showDotabuff={false}
+                />
+              </div>
+            ) : null}
           </DialogHeader>
 
           <RankSignalsCard signup={signup} />

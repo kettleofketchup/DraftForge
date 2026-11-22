@@ -12,7 +12,7 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
-import { UpdateProfile } from '~/components/api/api';
+import { UpdateProfile, profileFriendIdError } from '~/components/api/api';
 import { GAME_TYPE } from '~/components/game/constants';
 import { SubmitButton } from '~/components/ui/buttons';
 import {
@@ -69,6 +69,7 @@ export const ProfilePage: React.FC = () => {
     form.setValue('positions.offlane', positions?.offlane || 0);
     form.setValue('positions.soft_support', positions?.soft_support || 0);
     form.setValue('positions.hard_support', positions?.hard_support || 0);
+    form.setValue('username', currentUser.username ?? null);
     form.setValue('steam_account_id', currentUser?.steam_account_id || null);
     log.debug('Form initialized with values:', form.getValues());
     log.debug(currentUser);
@@ -87,14 +88,22 @@ export const ProfilePage: React.FC = () => {
   }
 
   function onSubmit(data: z.infer<typeof UserSchema>) {
-    toast.promise(UpdateProfile(data), {
+    const update = UpdateProfile(data);
+    update.catch((err: unknown) => {
+      const message = profileFriendIdError(err);
+      if (message) {
+        form.setError('steam_account_id', { type: 'server', message });
+      }
+    });
+    toast.promise(update, {
       loading: 'Updating...',
       success: (data: UserType) => {
         setUser(data);
         setCurrentUser(data);
         return 'You submitted the following values';
       },
-      error: 'Failed to update user',
+      error: (err: unknown) =>
+        profileFriendIdError(err) ?? 'Failed to update user',
       description: (
         <pre className="mt-2 w-[320px] rounded-md bg-base-950 p-4">
           <code className="text-white">{JSON.stringify(data, null, 2)}</code>
@@ -148,6 +157,15 @@ export const ProfilePage: React.FC = () => {
                         Friend ID cannot be removed once set
                       </FormDescription>
                     )}
+                    {currentUser?.steam_account_id &&
+                      !currentUser.steam_account_verified && (
+                        <FormDescription
+                          className="text-muted-foreground"
+                          data-testid="profile-friend-id-unverified"
+                        >
+                          Unverified: an organizer will confirm this ID.
+                        </FormDescription>
+                      )}
                     <FormMessage />
                   </FormItem>
                 )}

@@ -165,6 +165,8 @@ interface UserListProps {
   organizationId?: number;
   /** League ID for scoped MMR display */
   leagueId?: number;
+  /** Admin view: badge Friend IDs with their verification state */
+  showSteamVerification?: boolean;
 }
 
 /**
@@ -185,6 +187,7 @@ export function UserList({
   deleteButtonType,
   organizationId,
   leagueId,
+  showSteamVerification = false,
 }: UserListProps) {
   // Internal search state (used when showSearch is true)
   const [internalQuery, setInternalQuery] = useState('');
@@ -279,6 +282,7 @@ export function UserList({
         deleteButtonType={deleteButtonType}
         organizationId={organizationId}
         leagueId={leagueId}
+        showSteamVerification={showSteamVerification}
       />
     </>
   );

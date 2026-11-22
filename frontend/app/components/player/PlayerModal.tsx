@@ -19,6 +19,7 @@ import {
 } from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
 import { useSharedPopover } from '~/components/ui/shared-popover-context';
+import { SteamVerificationBadge } from '~/components/user/SteamVerificationBadge';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
@@ -26,7 +27,11 @@ import { hasAnyPosition } from '~/components/user/positions/hasAnyPosition';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
-import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
+import {
+  useScopedEditPermission,
+  type EditUserScope,
+} from '~/components/user/userCard/editUserSchema';
+import { useSteamVerification } from '~/features/steam-verification';
 import { useGameType } from '~/hooks/useGameType';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
@@ -37,6 +42,16 @@ import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('PlayerModal');
+
+function hasAnyStaffPlacement(user: UserType | null | undefined): boolean {
+  if (!user) return false;
+  return [
+    user.admin_organization_ids,
+    user.staff_organization_ids,
+    user.admin_league_ids,
+    user.staff_league_ids,
+  ].some((ids) => (ids?.length ?? 0) > 0);
+}
 
 interface PlayerModalProps {
   player: UserType;
@@ -103,6 +118,17 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const [fullUserData, setFullUserData] = useState<UserType | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
+
+  const scopedEdit = useScopedEditPermission(editScope);
+  const steamGate =
+    open &&
+    player.pk != null &&
+    !!(player.steam_account_id ?? fullUserData?.steam_account_id) &&
+    (!!canEdit || scopedEdit || hasAnyStaffPlacement(currentUser));
+  const steamVerification = useSteamVerification(player.pk ?? -1, {
+    enabled: steamGate,
+  });
+  const steamDetail = steamVerification.data;
 
   // The `player` prop (signup list, leaderboard row, draft seat) may lack
   // orgUserPk, which dispatchPatch() requires for org- and league-scoped
@@ -174,6 +200,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   }, [player.pk]);
 
   const displayPlayer = fullUserData || player;
+  const shownSteamId = steamDetail
+    ? steamDetail.steam_account_id
+    : displayPlayer.steam_account_id;
   const playerName = DisplayName(displayPlayer);
   // Same resolution RolePositions uses, so the wrapper hides exactly when it renders nothing.
   const positions =
@@ -300,12 +329,45 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
               <RolePositions user={displayPlayer} />
             </div>
           )}
-          {displayPlayer.steam_account_id && (
-            <div>
-              <span className="font-semibold">Friend ID:</span>{' '}
-              {displayPlayer.steam_account_id}
+          {shownSteamId ? (
+            <div
+              className="flex flex-wrap items-center gap-1.5"
+              data-testid="player-modal-friend-id"
+            >
+              <span>
+                <span className="font-semibold">Friend ID:</span> {shownSteamId}
+              </span>
+              {steamGate && displayPlayer.pk != null && (
+                <SteamVerificationBadge
+                  userPk={displayPlayer.pk}
+                  steamAccountId={shownSteamId}
+                  verified={
+                    steamDetail
+                      ? steamDetail.steam_account_verified
+                      : (displayPlayer.steam_account_verified ?? false)
+                  }
+                  verifiedOrgName={
+                    steamDetail
+                      ? steamDetail.steam_account_verified_org_name
+                      : displayPlayer.steam_account_verified_org_name
+                  }
+                  verifiedAt={
+                    steamDetail
+                      ? steamDetail.steam_account_verified_at
+                      : displayPlayer.steam_account_verified_at
+                  }
+                  existsChecked={
+                    steamDetail
+                      ? steamDetail.steam_account_exists_checked
+                      : (displayPlayer.steam_account_exists_checked ?? false)
+                  }
+                  canVerify={steamDetail?.can_verify ?? false}
+                  staffView
+                  showDotabuff={false}
+                />
+              )}
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* League Stats (if context provided) */}
