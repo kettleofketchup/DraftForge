@@ -24,7 +24,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
-from app.models import CustomUser, League, ProfileClaimRequest, Tournament
+from app.models import CustomUser, ProfileClaimRequest, Tournament
 from app.serializers import TournamentSerializer, UserSerializer
 from common.game import GameType
 from common.utils import isTestEnvironment
@@ -34,7 +34,7 @@ from events.constants import EventState
 from events.models import Event, EventRepeater, EventSignup, RepeaterSubscription
 from events.services import generate_events_for_repeater, process_rsvp
 from events.tasks import sync_discord_events
-from league.models import LeagueUser
+from league.models import League, LeagueUser
 from org.mmr import game_mmrs_prefetch, get_org_mmr, get_org_mmrs
 from org.models import Organization, OrgUser
 from org.serializers import ProfileClaimRequestSerializer
@@ -659,7 +659,6 @@ def login_league_admin(request):
     user, created = createLeagueAdminTestUser()
 
     # Make this user an admin of league 1 if not already
-
     league = League.objects.filter(pk=1).first()
     if league and user not in league.admins.all():
         league.admins.add(user)
@@ -681,7 +680,6 @@ def login_league_staff(request):
     user, created = createLeagueStaffTestUser()
 
     # Make this user staff of league 1 if not already
-
     league = League.objects.filter(pk=1).first()
     if league and user not in league.staff.all():
         league.staff.add(user)
@@ -801,7 +799,6 @@ def login_auth_matrix_league_admin(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixLeagueAdminTestUser()
-
     league = League.objects.filter(pk=AUTH_MATRIX_LEAGUE_ADMIN_USER.league_id).first()
     if league and user not in league.admins.all():
         league.admins.add(user)
@@ -819,7 +816,6 @@ def login_auth_matrix_league_staff(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixLeagueStaffTestUser()
-
     league = League.objects.filter(pk=AUTH_MATRIX_LEAGUE_STAFF_USER.league_id).first()
     if league and user not in league.staff.all():
         league.staff.add(user)

@@ -1,7 +1,7 @@
 from django.test import TestCase, override_settings
 
-from app.models import CustomUser, League, PositionsModel
-from league.models import LeagueUser
+from app.models import CustomUser, PositionsModel
+from league.models import League, LeagueUser
 from org.models import Organization
 from steam.functions.mmr_calculation import (
     calculate_mmr_adjustment,

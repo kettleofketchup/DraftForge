@@ -3,8 +3,9 @@ from datetime import UTC, date, datetime, timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League
+from app.models import CustomUser
 from events.models import Event
+from league.models import League
 from org.contributions.kinds import DEFAULT_POINTS, ContributionKind
 from org.contributions.services import (
     POINT_VALUE_MAX,

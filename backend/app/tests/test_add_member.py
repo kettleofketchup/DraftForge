@@ -15,8 +15,8 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, LeagueLog, Tournament
-from league.models import LeagueUser
+from app.models import CustomUser, Tournament
+from league.models import League, LeagueLog, LeagueUser
 from org.models import Organization, OrgUser
 
 
