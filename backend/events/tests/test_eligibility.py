@@ -1,6 +1,7 @@
 from itertools import product
 from unittest.mock import MagicMock, patch
 
+from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import override_settings
 from django.utils import timezone as tz
@@ -13,7 +14,9 @@ from events.eligibility import (
     REQUIREMENT_CHECKS,
     UNMET_LABELS,
     Unmet,
+    claim_friend_id,
     has_steam_id,
+    precheck_friend_id,
     refresh_unmet_requirements,
     unmet_requirements,
     validate_friend_id,
@@ -31,6 +34,7 @@ from events.services import (
 from events.tests.base import EventTestCase
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
+from steam.services.account_lookup import SteamLookupRateLimited, cached_exists_key
 
 SCREENSHOT_CODES = {Unmet.RANK_SCREENSHOT_MISSING, Unmet.BATTLECUP_SCREENSHOT_MISSING}
 
@@ -335,6 +339,214 @@ class ValidateFriendIdTests(EventTestCase):
             validate_friend_id("454545", self.make_user())
         self.assertIn("https://events.example.test", cm.exception.messages[0])
         self.assertNotIn("dota.kettle.sh", cm.exception.messages[0])
+
+
+LOOKUP_ON = override_settings(
+    STEAM_ACCOUNT_LOOKUP_ENABLED=True,
+    CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
+)
+ENSURE = "events.eligibility.steam.ensure_steam_account_exists"
+
+
+@LOOKUP_ON
+class PrecheckFriendIdTests(EventTestCase):
+    def setUp(self) -> None:
+        cache.clear()
+
+    def test_precheck_not_found_raises(self) -> None:
+        with patch(ENSURE, return_value=False):
+            with self.assertRaises(DjangoValidationError) as cm:
+                precheck_friend_id("424242", self.make_user())
+        self.assertEqual(cm.exception.code, "steam_account_not_found")
+        self.assertEqual(
+            cm.exception.messages[0],
+            "No Steam account has Friend ID 424242. Check the number on your "
+            "Dota 2 profile or Steam friends page.",
+        )
+
+    def test_precheck_lookup_none_accepts(self) -> None:
+        with patch(ENSURE, return_value=None):
+            self.assertEqual(precheck_friend_id("424242", self.make_user()), 424242)
+        with patch(ENSURE, return_value=True):
+            self.assertEqual(precheck_friend_id("424243", self.make_user()), 424243)
+
+    def test_precheck_rate_limited_code(self) -> None:
+        with patch(ENSURE, side_effect=SteamLookupRateLimited):
+            with self.assertRaises(DjangoValidationError) as cm:
+                precheck_friend_id("424242", self.make_user())
+        self.assertEqual(cm.exception.code, "steam_lookup_rate_limited")
+        self.assertEqual(
+            cm.exception.messages[0], "Too many Friend ID checks. Try again in an hour."
+        )
+
+    def test_precheck_budget_user_charged_not_target(self) -> None:
+        user = self.make_user()
+        with patch(ENSURE, return_value=True) as ensure:
+            precheck_friend_id("424242", user, budget_user=self.admin)
+        ensure.assert_called_once_with(424242, budget_user=self.admin)
+        with patch(ENSURE, return_value=True) as ensure:
+            precheck_friend_id("424242", user)
+        ensure.assert_called_once_with(424242, budget_user=user)
+
+    def test_precheck_same_id_no_lookup(self) -> None:
+        user = self.make_user()
+        user.steam_account_id = 777
+        user.save()
+        with patch(ENSURE) as ensure:
+            self.assertIsNone(precheck_friend_id(" 0777 ", user))
+            self.assertIsNone(precheck_friend_id("777", user, allow_change=True))
+        ensure.assert_not_called()
+
+    def test_precheck_malformed_no_lookup(self) -> None:
+        with patch(ENSURE) as ensure:
+            for fid in ("abc", "0", str(2**32)):
+                with self.subTest(fid=fid):
+                    with self.assertRaises(DjangoValidationError) as cm:
+                        precheck_friend_id(fid, self.make_user())
+                    self.assertEqual(cm.exception.code, "invalid_friend_id")
+        ensure.assert_not_called()
+
+    def test_precheck_duplicate_no_lookup(self) -> None:
+        other = self.make_user()
+        other.steam_account_id = 515151
+        other.save()
+        with patch(ENSURE) as ensure:
+            with self.assertRaises(DjangoValidationError) as cm:
+                precheck_friend_id("515151", self.make_user())
+        self.assertEqual(cm.exception.code, "duplicate_friend_id")
+        ensure.assert_not_called()
+
+    def test_precheck_already_set_no_lookup_unless_allow_change(self) -> None:
+        user = self.make_user()
+        user.steam_account_id = 777
+        user.save()
+        with patch(ENSURE, return_value=True) as ensure:
+            with self.assertRaises(DjangoValidationError) as cm:
+                precheck_friend_id("778", user)
+            self.assertEqual(cm.exception.code, "friend_id_already_set")
+            ensure.assert_not_called()
+            self.assertEqual(precheck_friend_id("778", user, allow_change=True), 778)
+        ensure.assert_called_once_with(778, budget_user=user)
+
+    def test_precheck_strips_and_normalises(self) -> None:
+        with patch(ENSURE, return_value=True) as ensure:
+            self.assertEqual(precheck_friend_id(" 0123 ", self.make_user()), 123)
+        self.assertEqual(ensure.call_args.args, (123,))
+
+    def test_precheck_blank_is_no_op(self) -> None:
+        with patch(ENSURE) as ensure:
+            self.assertIsNone(precheck_friend_id("  ", self.make_user()))
+            self.assertIsNone(precheck_friend_id(None, self.make_user()))
+        ensure.assert_not_called()
+
+
+@LOOKUP_ON
+class ValidateFriendIdExistsTests(EventTestCase):
+    def setUp(self) -> None:
+        cache.clear()
+
+    def test_validate_inside_atomic_is_cache_only(self) -> None:
+        user = self.make_user()
+        with patch("steam.services.account_lookup.SteamAPI") as api:
+            cache.set(cached_exists_key(606060), False)
+            with self.assertRaises(DjangoValidationError) as cm:
+                validate_friend_id("606060", user)
+            self.assertEqual(cm.exception.code, "steam_account_not_found")
+            self.assertIn("606060", cm.exception.messages[0])
+            self.assertEqual(validate_friend_id("606061", user), 606061)
+            cache.set(cached_exists_key(606062), True)
+            self.assertEqual(validate_friend_id("606062", user), 606062)
+        api.assert_not_called()
+
+    def test_validate_check_exists_false_ignores_cache(self) -> None:
+        cache.set(cached_exists_key(606060), False)
+        self.assertEqual(
+            validate_friend_id("606060", self.make_user(), check_exists=False), 606060
+        )
+
+    def test_validate_allow_change_permits_change(self) -> None:
+        u = self.make_user()
+        u.steam_account_id = 31337
+        u.save()
+        self.assertEqual(validate_friend_id("31338", u, allow_change=True), 31338)
+
+    def test_duplicate_message_mentions_organizer(self) -> None:
+        other = self.make_user()
+        other.steam_account_id = 454546
+        other.save()
+        with self.assertRaises(DjangoValidationError) as cm:
+            validate_friend_id("454546", self.make_user())
+        self.assertIn(
+            "If this is your account, contact an organizer.", cm.exception.messages[0]
+        )
+
+
+@LOOKUP_ON
+class ClaimFriendIdVerificationTests(EventTestCase):
+    def setUp(self) -> None:
+        cache.clear()
+
+    def _self_signed_up_user(self) -> CustomUser:
+        user = self.make_user()
+        signup = process_rsvp(self.event, user)
+        self.assertTrue(signup.self_made)
+        user.refresh_from_db()
+        return user
+
+    def test_claim_sets_exists_checked_when_cached_true(self) -> None:
+        user = self.make_user()
+        cache.set(cached_exists_key(707070), True)
+        self.assertEqual(claim_friend_id(user, "707070"), 707070)
+        user.refresh_from_db()
+        self.assertEqual(user.steam_account_id, 707070)
+        self.assertIsNotNone(user.steam_account_exists_checked_at)
+        self.assertFalse(user.steam_account_verified)
+
+    def test_claim_without_cache_leaves_exists_checked_empty(self) -> None:
+        user = self.make_user()
+        self.assertEqual(claim_friend_id(user, "707071"), 707071)
+        user.refresh_from_db()
+        self.assertIsNone(user.steam_account_exists_checked_at)
+
+    def test_claim_cached_false_refused(self) -> None:
+        user = self.make_user()
+        cache.set(cached_exists_key(707072), False)
+        with self.assertRaises(DjangoValidationError) as cm:
+            claim_friend_id(user, "707072")
+        self.assertEqual(cm.exception.code, "steam_account_not_found")
+        user.refresh_from_db()
+        self.assertIsNone(user.steam_account_id)
+
+    def test_claim_verified_by_trusted_staff_verifies(self) -> None:
+        user = self._self_signed_up_user()
+        cache.set(cached_exists_key(717171), False)
+        self.assertEqual(
+            claim_friend_id(user, "717171", verified_by=self.admin), 717171
+        )
+        user.refresh_from_db()
+        self.assertEqual(user.steam_account_id, 717171)
+        self.assertTrue(user.steam_account_verified)
+        self.assertEqual(user.steam_account_verified_by_id, self.admin.pk)
+        self.assertEqual(user.steam_account_verified_org_id, self.org.pk)
+
+    def test_claim_verified_by_self_does_not(self) -> None:
+        user = self._self_signed_up_user()
+        self.assertEqual(claim_friend_id(user, "727272", verified_by=user), 727272)
+        user.refresh_from_db()
+        self.assertEqual(user.steam_account_id, 727272)
+        self.assertFalse(user.steam_account_verified)
+
+    def test_claim_verified_by_untrusted_does_not(self) -> None:
+        user = self._self_signed_up_user()
+        cache.set(cached_exists_key(737373), False)
+        with self.assertRaises(DjangoValidationError) as cm:
+            claim_friend_id(user, "737373", verified_by=self.unrelated_user)
+        self.assertEqual(cm.exception.code, "steam_account_not_found")
+        self.assertEqual(
+            claim_friend_id(user, "737374", verified_by=self.unrelated_user), 737374
+        )
+        user.refresh_from_db()
+        self.assertFalse(user.steam_account_verified)
 
 
 @patch("events.services.notify_signup_changed")

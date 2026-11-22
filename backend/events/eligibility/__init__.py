@@ -35,6 +35,7 @@ from events.eligibility.steam import (
     FRIEND_ID_MAX_LENGTH,
     STEAM_ACCOUNT_ID_RANGE,
     claim_friend_id,
+    precheck_friend_id,
     validate_friend_id,
 )
 from events.eligibility.store import (
@@ -84,6 +85,7 @@ __all__ = [
     "has_registered_steam_id",
     "has_steam_id",
     "is_skill_gated",
+    "precheck_friend_id",
     "recheck_signup",
     "refresh_members_eligibility",
     "refresh_org_eligibility",
