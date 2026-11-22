@@ -390,35 +390,43 @@ def create_tentative_signup(
       - If existing TENTATIVE signup -> raise ValueError (already tentative).
       - If existing DROPPED signup -> raise ValueError; the row is kept.
       - If existing active signup (RSVP/APPROVED/CONFIRMED/PENDING/WAITLISTED)
-        -> cancel it, delete the row, then create a fresh TENTATIVE.
+        -> withdraw it, delete the row, then create a fresh TENTATIVE.
       - If existing CANCELLED/REJECTED row -> delete it, create fresh TENTATIVE.
-      - notify_signup_changed is dispatched once via on_commit
-        (cancel_signup also schedules one when invoked; we skip registering
-        a duplicate in that case).
+      - Records one ledger entry and dispatches notify_signup_changed once.
     """
     ensure_self_serve(event, user, intent=Commitment.MAYBE)
 
-    existing = EventSignup.objects.filter(event=event, user=user).first()
+    existing = (
+        EventSignup.objects.nocache()
+        .select_related("user__base_profile")
+        .filter(event=event, user=user)
+        .first()
+    )
     carry = _first_fields_carry(existing)
-    notify_scheduled_by_cancel = False
+    before: SignupSnapshot | None = None
+    prior_status: str | None = None
+    action = _create_action(existing, for_staff_placement=False)
     if existing:
         if existing.status == SignupStatus.TENTATIVE:
             raise ValueError("Already marked as tentative")
         if existing.status == SignupStatus.DROPPED:
             raise ValueError(DROPPED_SIGNUP_MESSAGE)
+        before = snapshot(existing)
         if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
-            cancel_signup(existing, actor=actor)
-            notify_scheduled_by_cancel = True
+            prior_status = _withdraw(existing, by_member=_by_member(actor))
+            action = SignupAction.SWITCHED_COMMITMENT
         EventSignup.objects.filter(pk=existing.pk).delete()
 
     signup = EventSignup.objects.create(
         event=event, user=user, status=SignupStatus.TENTATIVE, **carry
     )
+    entry = _record_leaf(signup, event=event, actor=actor, action=action, before=before)
+    if prior_status in seat_holding_statuses(event):
+        _promote_from_waitlist(event, cause=entry)
     # invalidate_after_commit is on_commit-aware internally; do NOT wrap.
     invalidate_after_commit(signup, event)
-    if not notify_scheduled_by_cancel:
-        # notify_signup_changed is NOT on_commit-aware; wrap explicitly.
-        transaction.on_commit(lambda: notify_signup_changed(event))
+    # notify_signup_changed is NOT on_commit-aware; wrap explicitly.
+    transaction.on_commit(lambda: notify_signup_changed(event))
     return signup
 
 
@@ -428,22 +436,43 @@ def decline_signup(
 ) -> EventSignup:
     """Record that a user declined an event.
 
-    Cancels an existing active/tentative signup, or creates a CANCELLED row so
+    Withdraws an existing active/tentative signup, or creates a CANCELLED row so
     a user who never signed up still appears in the Declined list.
     Raises ValueError if the user has already declined.
     """
-    existing = EventSignup.objects.filter(event=event, user=user).first()
-    if existing:
-        if existing.status in REMOVED_SIGNUP_STATUSES:
-            raise ValueError("Already declined")
-        return cancel_signup(existing, actor=actor)
-
-    signup = EventSignup.objects.create(
-        event=event, user=user, status=SignupStatus.CANCELLED
+    existing = (
+        EventSignup.objects.nocache()
+        .select_related("event", "user__base_profile")
+        .filter(event=event, user=user)
+        .first()
     )
-    invalidate_after_commit(signup, event)
-    transaction.on_commit(lambda: notify_signup_changed(event))
-    return signup
+    if existing is None:
+        signup = EventSignup.objects.create(
+            event=event, user=user, status=SignupStatus.CANCELLED
+        )
+        _record_leaf(
+            signup, event=event, actor=actor, action=SignupAction.DECLINED, before=None
+        )
+        invalidate_after_commit(signup, event)
+        transaction.on_commit(lambda: notify_signup_changed(event))
+        return signup
+
+    if existing.status in REMOVED_SIGNUP_STATUSES:
+        raise ValueError("Already declined")
+    before = snapshot(existing)
+    prior_status = _withdraw(existing, by_member=_by_member(actor))
+    entry = _record_leaf(
+        existing,
+        event=existing.event,
+        actor=actor,
+        action=SignupAction.DECLINED,
+        before=before,
+    )
+    if prior_status in seat_holding_statuses(existing.event):
+        _promote_from_waitlist(existing.event, cause=entry)
+    invalidate_after_commit(existing, existing.event)
+    transaction.on_commit(lambda: notify_signup_changed(existing.event))
+    return existing
 
 
 def apply_signup_input(

@@ -501,6 +501,20 @@ class WithdrawRejectLedgerTests(LedgerContractMixin, EventTestCase):
                 "process_rsvp",
                 lambda e, _s: process_rsvp(e, self.make_user(), actor=SYSTEM),
             ),
+            (
+                "create_tentative_signup",
+                lambda e, s: create_tentative_signup(
+                    e, s.user, actor=self.member_actor
+                ),
+            ),
+            (
+                "decline_signup",
+                lambda e, s: decline_signup(e, s.user, actor=self.member_actor),
+            ),
+            (
+                "decline_signup_no_row",
+                lambda e, _s: decline_signup(e, self.make_user(), actor=SYSTEM),
+            ),
         ]
         for name, call in rows:
             with self.subTest(fn=name):
@@ -726,6 +740,206 @@ class CreatePathLedgerTests(LedgerContractMixin, EventTestCase):
             with self.subTest(row=name):
                 self.assertEqual(
                     _create_action(existing, for_staff_placement=staff), expected
+                )
+
+
+@patch("events.services.notify_signup_changed")
+class TentativeDeclineLedgerTests(LedgerContractMixin, EventTestCase):
+    def _row(self, event: Event, status: str) -> EventSignup:
+        return EventSignup.objects.create(event=event, user=self.subject, status=status)
+
+    def _resigned_row(self, event: Event) -> EventSignup:
+        row = self._row(event, SignupStatus.APPROVED)
+        EventSignup.objects.filter(pk=row.pk).update(status=SignupStatus.CANCELLED)
+        row.refresh_from_db()
+        self.assertIsNotNone(row.first_signed_up_at)
+        return row
+
+    def _bare_decline_row(self, event: Event) -> EventSignup:
+        row = self._row(event, SignupStatus.CANCELLED)
+        self.assertIsNone(row.first_signed_up_at)
+        return row
+
+    def _full_event(self) -> tuple[Event, EventSignup, EventSignup]:
+        event = self.make_event(max_players=1)
+        seated = self._row(event, SignupStatus.APPROVED)
+        waiting = EventSignup.objects.create(
+            event=event,
+            user=self.make_user(),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
+        return event, seated, waiting
+
+    def test_tentative_table_records_one_entry(self, _notify: Any) -> None:
+        rows: list[tuple[str, Callable[[Event], Any], SignupAction, str | None]] = [
+            ("no_row", lambda _e: None, SignupAction.SIGNED_UP, None),
+            (
+                "after_cancel",
+                self._resigned_row,
+                SignupAction.RESIGNED_UP,
+                SignupStatus.CANCELLED,
+            ),
+            (
+                "after_bare_decline",
+                self._bare_decline_row,
+                SignupAction.SIGNED_UP,
+                SignupStatus.CANCELLED,
+            ),
+            (
+                "from_active",
+                lambda e: self._row(e, SignupStatus.RSVP),
+                SignupAction.SWITCHED_COMMITMENT,
+                SignupStatus.RSVP,
+            ),
+        ]
+        for name, setup, action, before_status in rows:
+            with self.subTest(row=name):
+                event = self.make_event()
+                setup(event)
+                signup = create_tentative_signup(
+                    event, self.subject, actor=self.member_actor
+                )
+                entry = self.assert_single_entry(
+                    event,
+                    action=action,
+                    actor=self.member_actor,
+                    signup=signup,
+                    before_status=before_status,
+                    after_status=SignupStatus.TENTATIVE,
+                )
+                self.assertEqual(entry.after["commitment"], Commitment.MAYBE)
+
+    def test_decline_without_row_records_declined(self, _notify: Any) -> None:
+        event = self.make_event()
+        signup = decline_signup(event, self.subject, actor=self.member_actor)
+        self.assert_single_entry(
+            event,
+            action=SignupAction.DECLINED,
+            actor=self.member_actor,
+            signup=signup,
+            before_status=None,
+            after_status=SignupStatus.CANCELLED,
+        )
+
+    def test_decline_from_active_records_declined_on_same_row(
+        self, _notify: Any
+    ) -> None:
+        for status in (SignupStatus.RSVP, SignupStatus.TENTATIVE):
+            with self.subTest(status=status):
+                event = self.make_event()
+                row = self._row(event, status)
+                signup = decline_signup(event, self.subject, actor=self.member_actor)
+                self.assertEqual(signup.pk, row.pk)
+                self.assert_single_entry(
+                    event,
+                    action=SignupAction.DECLINED,
+                    actor=self.member_actor,
+                    signup=row,
+                    before_status=status,
+                    after_status=SignupStatus.CANCELLED,
+                )
+
+    def test_decline_already_declined_writes_nothing(self, _notify: Any) -> None:
+        for status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+            with self.subTest(status=status):
+                event = self.make_event()
+                self._row(event, status)
+                with self.assertRaises(ValueError):
+                    decline_signup(event, self.subject, actor=self.member_actor)
+                self.assertEqual(self.ledger(event), [])
+
+    def test_tentative_raising_paths_write_nothing(self, _notify: Any) -> None:
+        for status in (SignupStatus.TENTATIVE, SignupStatus.DROPPED):
+            with self.subTest(status=status):
+                event = self.make_event()
+                self._row(event, status)
+                with self.assertRaises(ValueError):
+                    create_tentative_signup(
+                        event, self.subject, actor=self.member_actor
+                    )
+                self.assertEqual(self.ledger(event), [])
+
+    def _assert_promotion_chain(
+        self,
+        event: Event,
+        waiting: EventSignup,
+        *,
+        action: SignupAction,
+        correlation_id: str,
+    ) -> None:
+        entries = self.ledger(event)
+        self.assertEqual([e.action for e in entries], [action, SignupAction.PROMOTED])
+        primary, promoted = entries
+        self.assertIsNone(primary.caused_by_id)
+        self.assertEqual(primary.correlation_id, correlation_id)
+        self.assertEqual(promoted.caused_by_id, primary.pk)
+        self.assertEqual(promoted.correlation_id, correlation_id)
+        self.assertEqual(promoted.actor_role, ActorRole.SYSTEM)
+        self.assertEqual(promoted.signup_id, waiting.pk)
+        self.assertEqual(promoted.before["status"], SignupStatus.WAITLISTED)
+
+    def test_tentative_from_seated_row_notifies_once(self, notify: Any) -> None:
+        event, _seated, waiting = self._full_event()
+        actor = SignupActor(
+            user=self.subject,
+            role=ActorRole.MEMBER,
+            means=SignupMeans.WEB,
+            correlation_id="t-1",
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            signup = create_tentative_signup(event, self.subject, actor=actor)
+        self.assertEqual(notify.call_count, 1)
+        self.assertEqual(signup.status, SignupStatus.TENTATIVE)
+        self._assert_promotion_chain(
+            event,
+            waiting,
+            action=SignupAction.SWITCHED_COMMITMENT,
+            correlation_id="t-1",
+        )
+        primary = self.ledger(event)[0]
+        self.assertEqual(primary.signup_id, signup.pk)
+        self.assertEqual(primary.before["status"], SignupStatus.APPROVED)
+
+    def test_decline_from_seated_row_notifies_once(self, notify: Any) -> None:
+        event, seated, waiting = self._full_event()
+        actor = SignupActor(
+            user=self.subject,
+            role=ActorRole.MEMBER,
+            means=SignupMeans.WEB,
+            correlation_id="d-1",
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            signup = decline_signup(event, self.subject, actor=actor)
+        self.assertEqual(notify.call_count, 1)
+        self.assertEqual(signup.pk, seated.pk)
+        self._assert_promotion_chain(
+            event, waiting, action=SignupAction.DECLINED, correlation_id="d-1"
+        )
+
+    def test_withdraw_paths_pass_member_standing(self, _notify: Any) -> None:
+        rows: list[tuple[str, Callable[[Event], Any]]] = [
+            (
+                "tentative",
+                lambda e: create_tentative_signup(
+                    e, self.subject, actor=self.member_actor
+                ),
+            ),
+            (
+                "decline",
+                lambda e: decline_signup(e, self.subject, actor=self.member_actor),
+            ),
+        ]
+        for name, call in rows:
+            with self.subTest(fn=name):
+                event = self.make_event()
+                self._row(event, SignupStatus.APPROVED)
+                with patch("events.services.standing.on_signup_withdrawn") as withdrawn:
+                    call(event)
+                withdrawn.assert_called_once()
+                self.assertIs(withdrawn.call_args.kwargs["by_member"], True)
+                self.assertEqual(
+                    withdrawn.call_args.kwargs["prior_status"], SignupStatus.APPROVED
                 )
 
 
