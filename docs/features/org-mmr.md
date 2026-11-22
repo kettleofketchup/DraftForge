@@ -89,6 +89,10 @@ response, claim requests, and event signups for viewers who pass the org member 
 Tournament, team and draft payloads carry only `mmr` for their own game plus
 `mmr_game_type`. See [Roles](../dev/auth/roles.md).
 
+Members can ask staff to change their org or league MMR with a screenshot, and staff
+can mark a value Official. Profiles show each value with an Official or Unverified
+badge. See [MMR update requests](mmr-update-requests.md).
+
 ---
 
 ## Upgrading

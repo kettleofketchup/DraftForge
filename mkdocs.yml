@@ -100,6 +100,7 @@ nav:
       - Organization Conduct: features/organization-conduct.md
       - Organization Settings: features/organization-settings.md
       - Org MMR per Game: features/org-mmr.md
+      - MMR Update Requests: features/mmr-update-requests.md
       - Planned:
           - Overview: features/planned/index.md
           - Team Management & Seasons: features/planned/team-management.md
