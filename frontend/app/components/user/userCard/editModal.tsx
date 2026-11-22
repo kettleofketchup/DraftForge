@@ -3,16 +3,23 @@ import { useQueryClient } from '@tanstack/react-query';
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
+import {
+  GAME_MMR_HOTKEY,
+  mmrTestId,
+  type GameTypeValue,
+} from '~/components/game/constants';
 import { EditIconButton } from '~/components/ui/buttons';
 import { FormDialog } from '~/components/ui/dialogs';
 import { Form } from '~/components/ui/form';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserClassType } from '~/components/user/types';
+import { extractApiError } from '~/lib/apiError';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { UserEditForm } from './editForm';
 import {
   buildDefaults,
   dispatchPatch,
+  editableGames,
   EditUserSchema,
   pickDirty,
   scopeToContext,
@@ -50,7 +57,7 @@ export function UserEditModal({
   // render cost is to memoize FormDialog itself (stable props) or
   // to extract the dialog tree into its own React.lazy chunk;
   // tracked as a follow-up.
-  const showMmr = scope.kind !== 'global' && (fields?.mmr ?? true);
+  const mmrGames = fields?.game_mmrs === false ? [] : editableGames(scope);
 
   const form = useForm<EditUserInput>({
     // Cast: z.coerce produces input=unknown / output=EditUserInput, but we
@@ -81,6 +88,7 @@ export function UserEditModal({
           null)
         : null;
   const scopeLeaguePk = scope.kind === 'league' ? scope.league.pk : null;
+  const scopeGame = scope.kind === 'global' ? null : (scope.gameType ?? null);
   useEffect(() => {
     if (open) form.reset(buildDefaults(user, scope));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scope is read inline; deps cover its identity keys
@@ -91,6 +99,7 @@ export function UserEditModal({
     scope.kind,
     scopeOrgPk,
     scopeLeaguePk,
+    scopeGame,
     form,
   ]);
 
@@ -129,9 +138,10 @@ export function UserEditModal({
           return;
         }
         const message =
-          err instanceof Error
+          extractApiError(err) ??
+          (err instanceof Error
             ? err.message
-            : `Failed to update ${DisplayName(user)}`;
+            : `Failed to update ${DisplayName(user)}`);
         toast.error(message);
       }
     },
@@ -158,8 +168,12 @@ export function UserEditModal({
   useEffect(() => {
     if (!open) return;
     const KEY_TO_TESTID: Record<string, string> = {
+      ...Object.fromEntries(
+        (Object.entries(GAME_MMR_HOTKEY) as [string, string][]).map(
+          ([g, key]) => [key, mmrTestId(Number(g) as GameTypeValue)],
+        ),
+      ),
       n: 'edit-user-nickname',
-      r: 'edit-user-mmr',
       f: 'edit-user-steam_account_id',
       z: 'edit-user-carry',
       x: 'edit-user-mid',
@@ -230,11 +244,7 @@ export function UserEditModal({
         <Form {...form}>
           <UserEditForm
             form={form}
-            showMmr={showMmr}
-            // League scope PATCHes the parent OrgUser too (the backend's
-            // ORG_USER_FIELDS is just {'mmr'}), so this field is org MMR in
-            // both scopes that show it.
-            mmrLabel="Org MMR"
+            mmrGames={mmrGames}
             editingUserPk={user.pk}
           />
         </Form>

@@ -133,6 +133,7 @@ class EventRepeaterSlimSerializer(serializers.ModelSerializer):
         source="organization.name", read_only=True
     )
     subscriber_count = serializers.IntegerField(read_only=True, default=0)
+    is_subscribed = serializers.BooleanField(read_only=True, default=False)
     next_event_date = serializers.DateTimeField(read_only=True, default=None)
 
     class Meta:
@@ -147,7 +148,9 @@ class EventRepeaterSlimSerializer(serializers.ModelSerializer):
             "time_of_day",
             "timezone",
             "is_active",
+            "discord_notify_new_events",
             "subscriber_count",
+            "is_subscribed",
             "next_event_date",
         ]
 

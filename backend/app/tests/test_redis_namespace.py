@@ -7,6 +7,7 @@ so group names and raw keys collide unless each run gets its own namespace.
 import ast
 import importlib
 import os
+import subprocess
 import sys
 import types
 from collections.abc import Iterator
@@ -52,13 +53,18 @@ def _quiet_reload_env() -> Iterator[None]:
 
 
 @contextmanager
-def _patched_runtime(argv: list[str], with_pytest: bool) -> Iterator[None]:
+def _patched_runtime(
+    argv: list[str], with_pytest: bool, child_of_test_run: bool = False
+) -> Iterator[None]:
     saved = sys.modules.get("pytest", _MISSING)
     with (
         mock.patch.dict(os.environ, {"DISABLE_CACHE": "false"}),
         mock.patch.object(sys, "argv", argv),
         _quiet_reload_env(),
     ):
+        os.environ.pop("DF_RUNNING_TESTS", None)
+        if child_of_test_run:
+            os.environ["DF_RUNNING_TESTS"] = "true"
         if with_pytest:
             sys.modules.setdefault("pytest", types.ModuleType("pytest"))
         else:
@@ -72,8 +78,10 @@ def _patched_runtime(argv: list[str], with_pytest: bool) -> Iterator[None]:
                 sys.modules["pytest"] = saved
 
 
-def _reload(argv: list[str], *, with_pytest: bool = False) -> types.ModuleType:
-    with _patched_runtime(argv, with_pytest):
+def _reload(
+    argv: list[str], *, with_pytest: bool = False, child_of_test_run: bool = False
+) -> types.ModuleType:
+    with _patched_runtime(argv, with_pytest, child_of_test_run):
         backend.settings.is_docker.cache_clear()
         return importlib.reload(backend.settings)
 
@@ -115,6 +123,17 @@ class RunningTestsSettingsTests(SimpleTestCase):
         first = _reload(["manage.py", "test"]).REDIS_KEY_NAMESPACE
         second = _reload(["manage.py", "test"]).REDIS_KEY_NAMESPACE
         self.assertNotEqual(first, second)
+
+    def test_child_of_a_test_run_gets_its_own_namespace(self) -> None:
+        mod = _reload(["-c"], child_of_test_run=True)
+        self.assertTrue(mod.RUNNING_TESTS)
+        self.assertNotIn(mod.REDIS_KEY_NAMESPACE, ("", settings.REDIS_KEY_NAMESPACE))
+
+    def test_test_run_marks_its_children(self) -> None:
+        with _patched_runtime(["manage.py", "test"], with_pytest=False):
+            backend.settings.is_docker.cache_clear()
+            importlib.reload(backend.settings)
+            self.assertEqual(os.environ.get("DF_RUNNING_TESTS"), "true")
 
     def test_non_test_process_keeps_production_names(self) -> None:
         mod = _reload(["manage.py", "runserver"])
@@ -283,6 +302,40 @@ class CacheFlushOnBootTests(SimpleTestCase):
         flush.assert_called_once_with()
 
 
+class ChildProcessCacheTests(SimpleTestCase):
+    """Parallel workers share one Redis DB, so no child of a test may flush it."""
+
+    def test_django_child_process_keeps_the_runs_cache(self) -> None:
+        key = f"{settings.CACHEOPS_PREFIX(None)}q:child-flush-probe"
+        cacheops_redis.set(key, "1", ex=60)
+        self.addCleanup(cacheops_redis.delete, key)
+        env = {
+            **os.environ,
+            "DJANGO_SETTINGS_MODULE": "backend.settings",
+            "NODE_ENV": "test",
+            "TEST": "true",
+            "DISABLE_CACHE": "false",
+        }
+        code = (
+            "import django; django.setup(); from django.conf import settings; "
+            "print('CHILD', settings.RUNNING_TESTS, settings.REDIS_KEY_NAMESPACE)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=BACKEND_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(cacheops_redis.exists(key), 1, "child flushed the run's DB")
+        line = next(ln for ln in result.stdout.splitlines() if ln.startswith("CHILD "))
+        _, running, namespace = line.split()
+        self.assertEqual(running, "True")
+        self.assertNotEqual(namespace, settings.REDIS_KEY_NAMESPACE)
+
+
 class FlushRunCacheTests(SimpleTestCase):
     def setUp(self) -> None:
         own_cacheops = settings.CACHEOPS_PREFIX(None)
@@ -321,7 +374,7 @@ class NoGlobalCacheFlushTests(SimpleTestCase):
         offenders: list[str] = []
         for path in sorted(BACKEND_ROOT.rglob("*.py")):
             rel = path.relative_to(BACKEND_ROOT).as_posix()
-            if rel in self.ALLOWED or "/migrations/" in rel:
+            if rel in self.ALLOWED:
                 continue
             tree = ast.parse(path.read_text(), filename=rel)
             for node in ast.walk(tree):
@@ -332,6 +385,25 @@ class NoGlobalCacheFlushTests(SimpleTestCase):
                 elif isinstance(node, ast.Attribute) and node.attr == "invalidate_all":
                     offenders.append(f"{rel}:{node.lineno}")
         self.assertEqual(offenders, [], "use tests.cache.flush_run_cache() instead")
+
+    def test_no_redis_cache_clear_outside_tests(self) -> None:
+        """django-redis cache.clear() is FLUSHDB too; tests clear LocMem caches."""
+        offenders: list[str] = []
+        for path in sorted(BACKEND_ROOT.rglob("*.py")):
+            rel = path.relative_to(BACKEND_ROOT).as_posix()
+            if rel.startswith("tests/") or "/tests/" in rel:
+                continue
+            tree = ast.parse(path.read_text(), filename=rel)
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "clear"
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "cache"
+                ):
+                    offenders.append(f"{rel}:{node.lineno}")
+        self.assertEqual(offenders, [], "invalidate the models you wrote instead")
 
 
 class CeleryEagerUnderTestsTests(SimpleTestCase):

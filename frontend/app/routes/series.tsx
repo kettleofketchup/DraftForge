@@ -17,7 +17,6 @@ import {
   reactivateRepeater,
   subscribeToRepeater,
   unsubscribeFromRepeater,
-  type EventRepeaterType,
 } from '~/components/api/api';
 import api from '~/components/api/axios';
 import { EventStateBadge } from '~/components/events';
@@ -39,6 +38,7 @@ import {
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { ConfirmDialog, DeleteDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
+import { useEventRepeater } from '~/hooks/useEvent';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import { generateMeta } from '~/lib/seo';
 import { useUserStore } from '~/store/userStore';
@@ -60,14 +60,6 @@ export function meta({ data }: Route.MetaArgs) {
   return generateMeta({
     title: repeater?.name ? `${repeater.name} — Event Series` : 'Event Series',
     description: repeater?.description || 'Repeating event series details',
-  });
-}
-
-function useRepeater(id: number | null) {
-  return useQuery<EventRepeaterType>({
-    queryKey: ['repeater', id],
-    queryFn: () => api.get(`/events/repeaters/${id}/`).then((r) => r.data),
-    enabled: !!id,
   });
 }
 
@@ -138,7 +130,7 @@ export default function SeriesPage() {
   const id = repeaterId ? parseInt(repeaterId, 10) : null;
   const queryClient = useQueryClient();
 
-  const { data: repeater, isLoading } = useRepeater(id);
+  const { data: repeater, isLoading } = useEventRepeater(id);
   const { data: events } = useRepeaterEvents(id);
   const [editOpen, setEditOpen] = useState(false);
   const [showDeleteSeries, setShowDeleteSeries] = useState(false);

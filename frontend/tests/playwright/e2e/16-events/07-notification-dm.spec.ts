@@ -19,6 +19,7 @@ import {
 import { API_URL } from '../../fixtures/base-url';
 
 import {
+  discordBotConfigured,
   postWithCsrf,
   sendTestNotification,
   syncDiscordEvents,
@@ -43,6 +44,10 @@ test.describe('Event Notification DM (@cicd)', () => {
     page,
   }) => {
     test.setTimeout(90_000);
+    test.skip(
+      !(await discordBotConfigured(context)),
+      'No Discord bot token in this stack, so nothing posts to Discord',
+    );
 
     // 1. Create repeater with subscriber DM enabled
     const repeaterResp = await postWithCsrf(

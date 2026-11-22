@@ -1,6 +1,15 @@
 import { motion } from 'framer-motion';
 import { Check, Clock, X } from 'lucide-react';
+import { Fragment } from 'react';
 import type { ProfileClaimRequest } from '~/components/api/api';
+import {
+  GAME_LABEL,
+  GAME_SLUG,
+  GAME_TYPE,
+  GAME_TYPES,
+  type GameTypeValue,
+} from '~/components/game/constants';
+import { parseGameMmrs, type GameMmrs } from '~/components/game/gameMmrs';
 import { Badge } from '~/components/ui/badge';
 import { ConfirmButton, DestructiveButton } from '~/components/ui/buttons';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -50,12 +59,23 @@ const formatDate = (dateStr: string) => {
   });
 };
 
+function targetMmrs(claim: ProfileClaimRequest): [GameTypeValue, number][] {
+  const mmrs: GameMmrs = claim.target_game_mmrs
+    ? parseGameMmrs(claim.target_game_mmrs)
+    : { [GAME_TYPE.DOTA2]: claim.target_mmr ?? 0 };
+  return GAME_TYPES.flatMap((g) => {
+    const v = mmrs[g];
+    return v ? [[g, v] as [GameTypeValue, number]] : [];
+  });
+}
+
 export const ClaimCard: React.FC<ClaimCardProps> = ({
   claim,
   index,
   onApprove,
   onReject,
 }) => {
+  const mmrs = targetMmrs(claim);
   return (
     <motion.div
       key={claim.id}
@@ -100,7 +120,16 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
               {claim.target_nickname || `Steam ID: ${claim.target_steamid}`}
             </div>
             <div className="text-sm text-muted-foreground">
-              {claim.target_mmr ? `${claim.target_mmr} MMR` : 'No MMR'}
+              {mmrs.length === 0
+                ? 'No MMR'
+                : mmrs.map(([g, v], i) => (
+                    <Fragment key={g}>
+                      {i > 0 && ' \u00b7 '}
+                      <span data-testid={`claim-target-mmr-${GAME_SLUG[g]}`}>
+                        {`${GAME_LABEL[g]} ${v} MMR`}
+                      </span>
+                    </Fragment>
+                  ))}
               {claim.target_steamid && (
                 <span className="ml-2">Steam: {claim.target_steamid}</span>
               )}

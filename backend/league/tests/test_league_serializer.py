@@ -5,8 +5,8 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, PositionsModel
-from app.serializers import LeagueSerializer
 from league.models import LeagueUser
+from league.serializers import LeagueSerializer
 from org.models import Organization, OrgUser
 from tests.cache import flush_run_cache
 

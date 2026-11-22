@@ -26,11 +26,11 @@ on that module too.
 """
 
 from app.internal_client import transport
-from app.internal_client.transport import InternalAPIUnavailable
 from app.internal_client.discord import (
     check_message_log_exists,
     claim_discord_message_log,
     clear_event_signup_state,
+    create_activity_notification_invite,
     create_event_dm,
     create_event_log,
     create_message_log,
@@ -85,6 +85,7 @@ from app.internal_client.tournaments import (
     get_tournament_for_task,
     get_tournament_participants,
 )
+from app.internal_client.transport import InternalAPIUnavailable
 from app.internal_client.users import (
     bulk_update_member_names,
     bulk_update_user_avatars,
@@ -104,6 +105,7 @@ __all__ = [
     "bulk_update_user_avatars",
     "check_message_log_exists",
     "claim_discord_message_log",
+    "create_activity_notification_invite",
     "clear_event_signup_state",
     "create_event_dm",
     "create_event_log",

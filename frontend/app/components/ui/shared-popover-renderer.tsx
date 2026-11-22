@@ -6,6 +6,7 @@ import React, {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { GAME_SHORT_LABEL, toGameType } from '~/components/game/constants';
 import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
 import { PlayerModal } from '~/components/player/PlayerModal';
 import { TeamModal } from '~/components/team/TeamModal';
@@ -13,6 +14,7 @@ import { TeamPopoverContent } from '~/components/team/TeamPopoverContent';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useGameType } from '~/hooks/useGameType';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
@@ -23,7 +25,9 @@ const PlayerPopoverContent: React.FC<{
   player: UserType;
   statsLeagueId?: number | null;
 }> = ({ player, statsLeagueId }) => {
+  const gameType = useGameType();
   const playerName = player.nickname || player.username || 'Unknown';
+  const mmrGame = gameType ?? toGameType(player.mmr_game_type);
 
   return (
     <div className="flex flex-col gap-3 w-full overflow-hidden">
@@ -35,8 +39,11 @@ const PlayerPopoverContent: React.FC<{
             {playerName}
           </p>
           {player.mmr && (
-            <p className="text-sm text-foreground/70">
-              MMR: {player.mmr.toLocaleString()}
+            <p
+              className="text-sm text-foreground/70"
+              data-testid="player-popover-mmr"
+            >
+              {GAME_SHORT_LABEL[mmrGame]} {player.mmr.toLocaleString()}
             </p>
           )}
         </div>

@@ -22,7 +22,11 @@ import {
 } from '../../fixtures';
 import { API_URL } from '../../fixtures/base-url';
 
-import { postWithCsrf, syncDiscordEvents } from '../../fixtures/events';
+import {
+  discordBotConfigured,
+  postWithCsrf,
+  syncDiscordEvents,
+} from '../../fixtures/events';
 
 let eventInfo: EventInfo;
 
@@ -43,6 +47,10 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     page,
   }) => {
     test.setTimeout(90_000);
+    test.skip(
+      !(await discordBotConfigured(context)),
+      'No Discord bot token in this stack, so nothing posts to Discord',
+    );
     // 1. Create event via API with Discord config
     const createResp = await postWithCsrf(
       context,
@@ -128,6 +136,10 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     page,
   }) => {
     test.setTimeout(90_000);
+    test.skip(
+      !(await discordBotConfigured(context)),
+      'No Discord bot token in this stack, so nothing posts to Discord',
+    );
     // 1. Create event with Discord config as admin
     const createResp = await postWithCsrf(
       context,
