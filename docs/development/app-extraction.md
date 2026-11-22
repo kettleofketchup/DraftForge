@@ -128,6 +128,8 @@ The order is:
 
 The ContentType relabel is required. Without it, `post_migrate` creates new permission rows that nobody holds, and the existing user and group grants stay behind on stale rows. The relabel must be symmetric and defensive: for each model, skip it (and log once) when the destination row already exists, in both directions. Then neither direction can hit `UNIQUE(app_label, model)`. See `backend/app/migrations/0108_move_hero_draft_models_to_draft.py`.
 
+Move migrations log with `structlog.get_logger(__name__)`, never `telemetry.logging`: a historical migration must not import app code, and stdlib `extra=` fields are dropped from rendered logs.
+
 Check that no SQL runs and nothing is left over:
 
 ```bash
@@ -156,10 +158,11 @@ After each commit, run the touched-name sweep (every test module that mentions t
 grep -rlE 'HeroDraft|DraftTeam|herodraft|HERODRAFT' <worktree>/backend --include='test*.py'
 ```
 
-Convert the paths to dotted labels and pass them to `just test::run`. For commits that move code, also run both CI groups:
+Convert the paths to dotted labels and pass them to `just test::run`. For commits that move code, also run all three CI groups:
 
 ```bash
 cd <worktree> && just ci::backend-test-labels app # allow-cd
+cd <worktree> && just ci::backend-test-labels migrations # allow-cd
 cd <worktree> && just ci::backend-test-labels rest # allow-cd
 ```
 
@@ -235,7 +238,7 @@ Hard-coded path lists in code and config also name old modules and files. Grep f
 Run the full verification before opening the PR:
 
 - `manage.py check`, `makemigrations --check --dry-run`, and `sqlmigrate` for each new migration (no SQL).
-- Both CI test groups. Record the `app` and `rest` backend-test durations on the base branch and on the slice branch in the PR description. If the slower group grows by more than about 20%, rebalance `just ci::backend-test-labels` (for example with a third `draft` group) in that PR or a follow-up.
+- All CI test groups. Record the `app`, `migrations` and `rest` backend-test durations on the base branch and on the slice branch in the PR description. If the slower group grows by more than about 20%, rebalance `just ci::backend-test-labels` (for example with a third `draft` group) in that PR or a follow-up.
 - Migrate a copy of a populated pre-move database forward and back (`just docker::db::pull` gets one). Diff `sqlite_master` before and after; only `django_migrations` rows may change, and `django_content_type` must have one row per moved model.
 - The guard and the host-side script tests (`just test::slots-unit`).
 - An audit of every `mock.patch` target in the slice's tests.

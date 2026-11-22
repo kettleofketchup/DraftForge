@@ -10,6 +10,7 @@ from datetime import date
 from unittest.mock import patch
 
 from channels.db import database_sync_to_async
+from channels.layers import get_channel_layer
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
@@ -229,8 +230,6 @@ class StaleConnectionTestCase(TransactionTestCase):
         await read_until_type(communicator, "chat_history")
 
         # Simulate a tick message via channel layer (as the tick broadcaster would)
-        from channels.layers import get_channel_layer
-
         channel_layer = get_channel_layer()
         await channel_layer.group_send(
             f"herodraft_{self.draft.id}",
