@@ -15,21 +15,25 @@ from org.models_mmr_requests import TEXT_MAX_LENGTH
 def with_serializer_relations(
     qs: QuerySet[MmrChangeRequest],
 ) -> QuerySet[MmrChangeRequest]:
-    return qs.select_related(
-        "subject_user",
-        "subject_user__base_profile",
-        "requester",
-        "reviewed_by",
-        "organization",
-        "league",
-        "league__organization",
-        "league_user",
-        "org_user",
-    ).prefetch_related(
-        Prefetch(
-            "org_user__game_mmrs",
-            queryset=OrgUserGameMmr.objects.nocache(),
-            to_attr="mmr_request_rows",
+    return (
+        qs.nocache()
+        .select_related(
+            "subject_user",
+            "subject_user__base_profile",
+            "requester",
+            "reviewed_by",
+            "organization",
+            "league",
+            "league__organization",
+            "league_user",
+            "org_user",
+        )
+        .prefetch_related(
+            Prefetch(
+                "org_user__game_mmrs",
+                queryset=OrgUserGameMmr.objects.nocache(),
+                to_attr="mmr_request_rows",
+            )
         )
     )
 
