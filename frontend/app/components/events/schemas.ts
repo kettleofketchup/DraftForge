@@ -232,6 +232,9 @@ export const eventSchema = z
     hero_grace_time_ms: z.number().int().optional(),
     hero_reserve_time_ms: z.number().int().optional(),
     user_can_manage: z.boolean().default(false),
+    // Leadership viewer flags, absent while locked or anonymous.
+    can_review_captains: z.boolean().optional(),
+    pending_captain_reviews: z.number().int().optional(),
     ends_at: z.string().nullable().default(null),
     host: eventStaffUserSchema.nullable().default(null),
     helpers: z.array(eventStaffUserSchema).default([]),
