@@ -159,6 +159,72 @@ class MergeUserSignupsTests(TestCase):
             SignupLedgerEntry.objects.filter(actor_user=self.drop).exists()
         )
 
+    def test_discarded_seated_duplicate_promotes_from_waitlist(self) -> None:
+        event = self._event("Full")
+        event.max_players = 2
+        event.save(update_fields=["max_players"])
+        EventSignup.objects.create(
+            event=event, user=self.keep, status=SignupStatus.APPROVED
+        )
+        EventSignup.objects.create(
+            event=event, user=self.drop, status=SignupStatus.APPROVED
+        )
+        waiting = EventSignup.objects.create(
+            event=event,
+            user=CustomUser.objects.create(username="mus_waiting"),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
+
+        written = merge_user_signups(self.drop, self.keep, actor=self.actor)
+
+        self.assertEqual(written, 1)
+        entries = list(
+            SignupLedgerEntry.objects.filter(event=event)
+            .exclude(action=SignupAction.BACKFILLED)
+            .order_by("pk")
+        )
+        self.assertEqual(
+            [e.action for e in entries],
+            [SignupAction.ACCOUNT_MERGED, SignupAction.PROMOTED],
+        )
+        merged, promoted = entries
+        self.assertEqual(promoted.caused_by_id, merged.pk)
+        self.assertEqual(promoted.correlation_id, "claim-abc")
+        self.assertEqual(promoted.signup_id, waiting.pk)
+        waiting.refresh_from_db()
+        self.assertNotEqual(waiting.status, SignupStatus.WAITLISTED)
+
+    def test_discarded_unseated_duplicate_promotes_nobody(self) -> None:
+        event = self._event("Full")
+        event.max_players = 1
+        event.save(update_fields=["max_players"])
+        EventSignup.objects.create(
+            event=event, user=self.keep, status=SignupStatus.APPROVED
+        )
+        EventSignup.objects.create(
+            event=event,
+            user=self.drop,
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
+        waiting = EventSignup.objects.create(
+            event=event,
+            user=CustomUser.objects.create(username="mus_waiting"),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=2,
+        )
+
+        merge_user_signups(self.drop, self.keep, actor=self.actor)
+
+        waiting.refresh_from_db()
+        self.assertEqual(waiting.status, SignupStatus.WAITLISTED)
+        self.assertFalse(
+            SignupLedgerEntry.objects.filter(
+                event=event, action=SignupAction.PROMOTED
+            ).exists()
+        )
+
     def test_zero_signups_writes_nothing(self) -> None:
         count = SignupLedgerEntry.objects.count()
 

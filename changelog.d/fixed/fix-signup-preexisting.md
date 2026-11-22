@@ -1,0 +1,2 @@
+- Moving a player to the waitlist now promotes the next waitlisted player into the freed seat, instead of leaving it empty. The moved player does not take the seat straight back.
+- Merging two accounts that were both seated in the same event now promotes the next waitlisted player into the seat the duplicate signup held.

@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
+from events.capacity import seat_holding_statuses
 from events.constants import SignupAction
 from events.ledger import SignupActor, record_signup_change, snapshot
 from events.models import EventSignup, SignupLedgerEntry
+from events.services import _promote_from_waitlist
 
 if TYPE_CHECKING:
     from app.models import CustomUser
@@ -12,6 +16,7 @@ if TYPE_CHECKING:
 __all__ = ["merge_user_signups"]
 
 
+@transaction.atomic
 def merge_user_signups(
     drop: CustomUser, keep: CustomUser, *, actor: SignupActor
 ) -> int:
@@ -31,6 +36,7 @@ def merge_user_signups(
     for row in drop_rows:
         event = row.event
         kept = keep_rows.get(row.event_id)
+        freed_seat = False
         if kept is None:
             before = snapshot(row, extra=origin)
             row.user = keep
@@ -46,9 +52,10 @@ def merge_user_signups(
                     "discarded_duplicate": True,
                 },
             )
+            freed_seat = row.status in seat_holding_statuses(event)
             row.delete()
             signup, after = kept, snapshot(kept)
-        record_signup_change(
+        entry = record_signup_change(
             event=event,
             subject=keep,
             actor=actor,
@@ -57,6 +64,8 @@ def merge_user_signups(
             before=before,
             after=after,
         )
+        if freed_seat:
+            _promote_from_waitlist(event, cause=entry)
         written += 1
     SignupLedgerEntry.objects.filter(subject_user=drop).update(subject_user=keep)
     SignupLedgerEntry.objects.filter(actor_user=drop).update(actor_user=keep)
