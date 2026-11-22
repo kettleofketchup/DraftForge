@@ -5,7 +5,8 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Team, Tournament
+from app.models import CustomUser, Team, Tournament
+from league.models import League
 from org.models import Organization
 
 CREATE_URLS = ("/api/teams/", "/api/team/register")

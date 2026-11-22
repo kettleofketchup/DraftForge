@@ -4,7 +4,8 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Tournament
+from app.models import CustomUser, Tournament
+from league.models import League
 from org.models import Organization
 
 
