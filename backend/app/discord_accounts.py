@@ -23,8 +23,11 @@ from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
 from draft.services.hero_chat import repoint_chat_attribution
 from events.staff import dedupe_host_helpers
+from league.mmr import merge_user_league_memberships
+from league.models import LeagueUser
 from org.accounts import repoint_org_attribution
 from org.mmr import merge_org_mmrs
+from org.mmr_requests.services import repoint_mmr_requests
 from org.models import OrgUser
 from org.promotion.services import demote_colliding_earning_sends
 from org.standing import api as standing
@@ -112,8 +115,11 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
         standing.merge_users(drop, keep, member_pairs=pairs)
         repoint_org_attribution(drop, keep)
         repoint_chat_attribution(drop, keep)
+        league_pairs = merge_user_league_memberships(drop, keep, pairs)
+        repoint_mmr_requests(keep, drop, pairs, league_pairs)
         for drop_ou, _ in pairs:
             drop_ou.delete()
+        LeagueUser.objects.filter(pk__in=[lu.pk for lu, _ in league_pairs]).delete()
         demote_colliding_earning_sends(keep, drop)
 
         for rel in drop._meta.related_objects:

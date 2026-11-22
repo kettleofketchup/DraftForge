@@ -404,11 +404,13 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "api",
                     "demote_colliding_earning_sends",
                     "merge_org_mmrs",
+                    "repoint_mmr_requests",
                     "repoint_org_attribution",
                 }
             ),
             "user account merge pairs org memberships, merges per-game org MMR "
-            "and standing, and repoints org contribution and promo attribution",
+            "and standing, repoints org contribution and promo attribution and "
+            "MMR change requests",
         ),
         "app/functions/tournament.py": BackEdge(
             frozenset({"guild_nicknames", "org_nicknames_public"}),
@@ -516,6 +518,11 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         ),
     },
     "league": {
+        "app/discord_accounts.py": BackEdge(
+            frozenset({"LeagueUser", "merge_user_league_memberships"}),
+            "user account merge folds the dropped account's league memberships "
+            "into the kept account before its paired org memberships cascade",
+        ),
         "app/permissions_tournament.py": BackEdge(
             frozenset({"League", "has_league_admin_access", "has_league_staff_access"}),
             "event, tournament and game permissions fall back to league staff; "

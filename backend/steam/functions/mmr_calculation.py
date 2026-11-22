@@ -19,6 +19,18 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _skip_verified(league_user: LeagueUser) -> bool:
+    if league_user.mmr_verified_at is None:
+        return False
+    logger.info(
+        "league_mmr_recompute_skipped_verified",
+        system="steam",
+        subsystem="mmr",
+        league_user_id=league_user.pk,
+    )
+    return True
+
+
 def get_league_avg_kda(league_id: int) -> float:
     """Get the average KDA for all players in a league."""
 
@@ -102,6 +114,8 @@ def update_user_league_mmr(
         if league:
             try:
                 league_user = LeagueUser.objects.get(user=user, league=league)
+                if _skip_verified(league_user):
+                    return
                 league_user.mmr = 0
                 league_user.save(update_fields=["mmr"])
             except LeagueUser.DoesNotExist:
@@ -124,6 +138,8 @@ def update_user_league_mmr(
     if league:
         try:
             league_user = LeagueUser.objects.get(user=user, league=league)
+            if _skip_verified(league_user):
+                return
             league_user.mmr = calculated_league_mmr
             league_user.save(update_fields=["mmr"])
             logger.debug(
