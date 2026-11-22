@@ -153,26 +153,42 @@ Selecting a row opens that member's panel:
   reviews than the org's "Reviews to be ranked";
 - "No released ratings yet" until a review window closes with enough reviews;
 - **Points all time** and **Points this month**;
+- one bar per trait with a released rating; a trait with no released rating says
+  **Not released** and draws no bar;
 - **Rated events**: each event the captain was rated for, with the team, its
-  placement and the captain rating points. An event still inside its window, or
-  without the minimum number of reviews, is marked **Not released**. A released event
-  with fewer than 3 reviews shows the review count but no per-trait averages.
+  placement and the captain rating points. A released event with fewer than 3
+  reviews shows the review count but no per-trait averages.
 
-The rated events list does not add up to the points totals: the totals also count
-captaining, placement and draft points from events that are still in their review
-window or did not get enough reviews, and those events are not listed. The panel says
-so under the totals.
+Which events are listed depends on who is looking:
+
+- a captain viewing their own panel sees released events only;
+- an org admin viewing another captain also sees events still inside their window
+  or without the minimum number of reviews, marked **Not released**. For an admin
+  the headline rating, review count and trait bars include those unreleased
+  reviews; the panel labels the count "(includes unreleased)" and says the figures
+  are visible to admins only.
+
+The points totals count captaining, placement and draft points from every event,
+including events that are still in their review window or did not get enough
+reviews. A captain's own list leaves those events out, so it does not add up to the
+totals; the panel says so under the totals.
 
 Who can open which panel:
 
 - every member can open their own;
 - org admins can open anyone's;
-- other members can open other captains only when the leaderboard is public. Org
-  staff who are not admins cannot open other captains from the tab.
+- other members can open other captains only when the leaderboard is public.
+
+Any row on a visible board can be clicked; when the backend refuses the panel (for
+example, org staff who are not admins on a private board) it shows "Only org admins
+can see other captains' details."
 
 A captain's own panel shows aggregates only: their rating, per-trait averages for
 released events with at least 3 reviews, and their points. It never shows who rated
-them or any single review.
+them or any single review. A note at the top says who else can see it: only the
+captain and org admins on a private board, or, when the leaderboard is public, every
+member for the rating and points (the per-event detail stays with the captain and
+admins).
 
 ### Rate your captain
 
@@ -184,9 +200,10 @@ keyboard (arrow keys move between scores). Every trait must be scored.
 While the window is open, a countdown shows the time left and the rater can submit,
 edit (**Update**) or **Withdraw** the review. When the countdown reaches zero the
 dialog shows "The review window has closed." and its buttons are disabled. A review
-an organizer voided is read-only: the dialog says so and offers no buttons. Other
+an organizer voided is read-only: the dialog says so and offers only **Close**. Other
 refusals, such as a captain the rater can no longer rate, are shown as plain messages
-inside the dialog.
+inside the dialog. The dialog stays open with the message even when the refusal also
+removes the captain from the pending list.
 
 **Your reviews**, a collapsed list on the same card, shows the rater's own past
 reviews with their scores, and marks a review that was withdrawn, no longer counted
@@ -195,12 +212,15 @@ after a reopen, or removed by an organizer. It never shows anyone else's review.
 ### Moderation on the event page
 
 Org admins see a **Captain reviews** section on the event page's Details tab for
-events that are in progress, completed or cancelled. For each captain it shows whether the rating is
-released and a table of the reviews with the rater, the scores and the status.
+any event with captain snapshots, including an event reopened after its reviews were
+voided. For each captain it shows whether the rating is released and a table of the
+reviews with the rater, the scores and the status. If the reviews fail to load, the
+section says so instead of disappearing.
 **Void** asks for a reason (1 to 500 characters) and marks the review "Voided by
 staff" with the reason under the rater; **Restore** puts it back. On teams the admin
 captained, the section shows only the released aggregate and the note "Another admin
-has to moderate its reviews", with no reviews and no actions.
+has to moderate its reviews", with no reviews and no actions. A review the admin
+wrote as a teammate shows "Your review" in place of **Void** and **Restore**.
 
 ### Settings
 
@@ -212,13 +232,15 @@ Org admins edit Leadership under **Settings → Leadership**:
   completed). Each field shows a **Default** badge and a reset button that restores
   the default;
 - the trait list: add a trait, rename it, move it up or down, and switch it active or
-  inactive. At least one trait stays active, and at most 8 can be. **Delete** is
-  offered only for saved traits and asks for confirmation; a trait that already has
-  scores is refused ("This trait has scores. Deactivate it instead.") and switched to
-  inactive for the next save.
+  inactive. At least one trait stays active, and at most 8 can be. **Delete** asks
+  for confirmation on a saved trait; a trait added since the last save is simply
+  removed. A trait that already has scores is refused ("This trait has scores.
+  Deactivate it instead.") and switched to inactive for the next save; a trait
+  another admin already deleted is dropped from the list.
 
 The settings and the trait list are saved together with the section's save button.
-Server-side validation errors are shown under the field they belong to.
+Server-side validation errors are shown under the field they belong to; an error
+that names no field is shown as a toast.
 
 ## API
 
