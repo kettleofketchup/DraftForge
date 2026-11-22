@@ -113,7 +113,7 @@ prepare-images:
         [[ -f "$dir/$name.present" ]] || missing+=("$name")
     done
 
-    line() { printf '%-18s %s  %s\n' "$1" "${ref[$1]##*:}" "$2" | tee -a "$dir/summary"; }
+    line() { local h="${ref[$1]##*:}"; printf '%-18s %s  %s\n' "$1" "${h:0:12}" "$2" | tee -a "$dir/summary"; }
     readonly_reason=""
     if [[ "${DF_PREPARE_READONLY-}" == 1 ]]; then
         readonly_reason="no registry write access"
