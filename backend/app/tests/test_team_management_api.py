@@ -33,18 +33,7 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.serializers import (
-    ManagedTeamSerializer,
-    TeamActionRequestSerializer,
-    TeamDeputyRequestSerializer,
-    TeamLogSerializer,
-    TeamRenameRequestSerializer,
-    TeamSerializer,
-    TeamSerializerSlim,
-    TeamSubInRequestSerializer,
-    TeamUserActionRequestSerializer,
-    UserSerializer,
-)
+from app.serializers import UserSerializer
 from app.views_main import TeamView
 from draft.models import DraftTeam, HeroDraft
 from draft.serializers.hero import HeroDraftSerializer
@@ -55,6 +44,17 @@ from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
 from league.models import League
 from org.models import Organization
 from tournament.functions import serialize_tournament
+from tournament.serializers.team import (
+    ManagedTeamSerializer,
+    TeamActionRequestSerializer,
+    TeamDeputyRequestSerializer,
+    TeamLogSerializer,
+    TeamRenameRequestSerializer,
+    TeamSerializer,
+    TeamSerializerSlim,
+    TeamSubInRequestSerializer,
+    TeamUserActionRequestSerializer,
+)
 from tournament.services import team_management
 from tournament.services.team_audit import log_snapshot_fields
 from tournament.services.team_references import team_references, team_usage

@@ -2,10 +2,10 @@ from django.test import TestCase
 from django.utils import timezone
 
 from app.models import CustomUser, GameMode, GameType, Tournament
-from app.serializers import TournamentSerializer
 from events.models import Event, EventRepeater
 from league.models import League
 from org.models import Organization
+from tournament.serializers.tournament import TournamentSerializer
 
 
 class TournamentSourceEventSerializerTest(TestCase):

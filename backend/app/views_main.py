@@ -74,6 +74,28 @@ from tournament.permissions import (
     can_manage_game,
     check_tournament_league_change,
 )
+from tournament.serializers.game import GameSerializer
+from tournament.serializers.team import (
+    ManagedTeamSerializer,
+    TeamActionRequestSerializer,
+    TeamDeputyRequestSerializer,
+    TeamLogSerializer,
+    TeamRenameRequestSerializer,
+    TeamSerializer,
+    TeamSubInRequestSerializer,
+    TeamUserActionRequestSerializer,
+    build_team_mmr_maps,
+)
+from tournament.serializers.tournament import (
+    TournamentListSerializer,
+    TournamentSerializer,
+    TournamentsSerializer,
+)
+from tournament.serializers.users import (
+    TEAM_MMR_MAPS,
+    build_users_dict,
+    tournament_organization,
+)
 from tournament.services.team_audit import (
     log_snapshot_fields,
     roster_snapshot,
@@ -119,25 +141,7 @@ from .models import (
     Tournament,
 )
 from .permissions import IsStaff
-from .serializers import (
-    TEAM_MMR_MAPS,
-    GameSerializer,
-    ManagedTeamSerializer,
-    TeamActionRequestSerializer,
-    TeamDeputyRequestSerializer,
-    TeamLogSerializer,
-    TeamRenameRequestSerializer,
-    TeamSerializer,
-    TeamSubInRequestSerializer,
-    TeamUserActionRequestSerializer,
-    TournamentListSerializer,
-    TournamentSerializer,
-    TournamentsSerializer,
-    UserSerializer,
-    build_team_mmr_maps,
-    build_users_dict,
-    tournament_organization,
-)
+from .serializers import UserSerializer
 from .steam_accounts import steam_account_id_holder, steam_account_id_identity
 from .user_cache import serialize_user_core
 from .utils.avatar_utils import refresh_user_avatar

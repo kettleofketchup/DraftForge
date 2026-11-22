@@ -340,6 +340,59 @@ _TOURNAMENT_SCHEMA_NAMES = (
     "AutoHeroDraftGameSchema",
 )
 
+_TOURNAMENT_SERIALIZER_NAMES = (
+    "tournament_organization",
+    "_serialize_users_with_mmr",
+    "serialize_user_with_mmr",
+    "TEAM_USER_INDEX",
+    "TEAM_MMR_MAPS",
+    "TEAM_ROSTER_FIELDS",
+    "TeamUserIndex",
+    "build_team_user_index",
+    "collect_tournament_user_pks",
+    "_CONTEXT_MMR_KEYS",
+    "collect_org_mmr",
+    "build_users_dict",
+    "build_users_dict_with_org",
+    "TournamentSerializerBase",
+    "TeamSerializerForTournament",
+    "TeamSerializerSlim",
+    "TeamSerializer",
+    "team_mmr_user_ids",
+    "build_team_mmr_maps",
+    "_leadership_problem_rows",
+    "ManagedTeamSerializer",
+    "TournamentTeamSerializer",
+    "TeamLogSerializer",
+    "TeamActionRequestSerializer",
+    "TeamUserActionRequestSerializer",
+    "TeamDeputyRequestSerializer",
+    "TeamSubInRequestSerializer",
+    "TeamRenameRequestSerializer",
+    "users_remaining_pks",
+    "_shared_draft_options",
+    "_prefetched_draft_options",
+    "DraftRoundForDraftSerializer",
+    "DraftRoundSerializerSlim",
+    "TournamentSerializerForWebSocket",
+    "DraftOptionsSerializer",
+    "DraftSerializerForTournament",
+    "DraftSerializerSlim",
+    "GameSerializerForTournament",
+    "GameSerializer",
+    "BracketGameSerializer",
+    "BracketSaveSerializer",
+    "BracketGenerateSerializer",
+    "LeagueMatchSerializer",
+    "TournamentsSerializer",
+    "TournamentListSerializer",
+    "TournamentSerializer",
+    # org/league leftovers, embedded in tournament serializers until this slice
+    "OrganizationsSerializer",
+    "LeaguesSerializer",
+    "LeagueMinimalSerializer",
+)
+
 _TOURNAMENT_RETIRED_DEFS = {
     "app.services.team_management": (
         "TeamChange",
@@ -527,6 +580,25 @@ _TOURNAMENT_RETIRED_DEFS = {
     "app.tests.test_tournament_discovery_seed": ("TournamentDiscoverySeedTests",),
     "app.tests.test_tournament_list_cache": ("TournamentListCacheTests",),
     "app.tests.test_tournament_list_scope": ("TournamentListScopeTests",),
+    "app.tests.test_build_users_dict": (
+        "BuildUsersDictOrgTests",
+        "BuildUsersDictNonOrgTests",
+        "BuildUsersDictLeaguelessEventTests",
+        "ORG_ENTRY_KEYS",
+        "NONORG_ENTRY_KEYS",
+    ),
+    "app.tests.test_tournament_serializer": (
+        "TournamentSourceEventSerializerTest",
+        "TournamentLobbyConfigFieldsTest",
+    ),
+    "app.tests.test_team_serializer": (
+        "_user",
+        "TeamLeadershipApiTests",
+        "TeamLeadershipMessagesTests",
+        "TeamLeadershipAuditTests",
+        "TeamLegacyPatchTests",
+        "_discord_ids",
+    ),
 }
 
 TOURNAMENT = MovedSlice(
@@ -546,6 +618,7 @@ TOURNAMENT = MovedSlice(
             ),
             *(("app.internal_client", name) for name in _TOURNAMENT_CLIENT_NAMES),
             *(("app.schemas", name) for name in _TOURNAMENT_SCHEMA_NAMES),
+            *(("app.serializers", name) for name in _TOURNAMENT_SERIALIZER_NAMES),
         }
     ),
     retired_modules=frozenset(
@@ -587,10 +660,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"DraftOptions"}),
             "TYPE_CHECKING-only return annotation for Tournament.get_draft_options",
             type_only=frozenset({"DraftOptions"}),
-        ),
-        "app/serializers.py": BackEdge(
-            frozenset({"Draft", "DraftOptions", "DraftRound"}),
-            "draft serializers embedded in TournamentSerializer",
         ),
         "app/views_main.py": BackEdge(
             frozenset({"Draft", "DraftRound", "DraftTeam", "apply_draft_options"}),
@@ -639,21 +708,8 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "rows before reloading users, and keeps organization owners",
         ),
         "app/serializers.py": BackEdge(
-            frozenset(
-                {
-                    "LEAGUE_GAME",
-                    "Organization",
-                    "OrgUser",
-                    "OrgUserSerializer",
-                    "game_for_tournament",
-                    "game_mmrs_prefetch",
-                    "org_mmr_map",
-                }
-            ),
-            "tournament, team and draft user serializers auto-create OrgUser rows "
-            "and embed the context game's org MMR via org.mmr and "
-            "OrgUserSerializer; OrganizationsSerializer and "
-            "UserSerializer.default_organization read Organization at class "
+            frozenset({"Organization"}),
+            "UserSerializer.default_organization reads Organization at class "
             "definition",
         ),
         "app/views/admin_team.py": BackEdge(
@@ -713,15 +769,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         ),
     },
     "league": {
-        "app/serializers.py": BackEdge(
-            frozenset({"League", "LeagueUser", "check_lobby_steam_league_id"}),
-            "TournamentSerializer checks lobby Steam league IDs against league "
-            "admin; LeaguesSerializer and LeagueMinimalSerializer are embedded in "
-            "tournament serializers at class definition and TournamentSerializer "
-            "validates league_id against League; tournament, team and draft user "
-            "serializers prefetch the league membership behind league MMR; "
-            "TournamentSerializer.update creates LeagueUser rows for added users",
-        ),
         "app/views/admin_team.py": BackEdge(
             frozenset({"League", "LeagueUser", "has_league_staff_access"}),
             "user search resolves ?league_id= to a League and flags league "
@@ -755,13 +802,18 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "with tournament 5b",
         ),
         "app/views/bracket.py": BackEdge(
-            frozenset({"IsTournamentStaff"}),
-            "bracket views require tournament staff; leaves with tournament 5b",
-        ),
-        "app/serializers.py": BackEdge(
-            frozenset({"team_references"}),
-            "team serializer refuses to empty a team that games or hero drafts "
-            "reference; leaves with tournament 5b",
+            frozenset(
+                {
+                    "IsTournamentStaff",
+                    "BracketGameSerializer",
+                    "BracketGenerateSerializer",
+                    "BracketSaveSerializer",
+                    "TEAM_USER_INDEX",
+                    "build_team_user_index",
+                }
+            ),
+            "bracket views require tournament staff and serialize games with "
+            "the bulk team user index; leaves with tournament 5b",
         ),
         "app/views_main.py": BackEdge(
             frozenset(
@@ -807,12 +859,29 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "upcoming_q",
                     "upcoming_rank",
                     "utc_day_start",
+                    "GameSerializer",
+                    "ManagedTeamSerializer",
+                    "TEAM_MMR_MAPS",
+                    "TeamActionRequestSerializer",
+                    "TeamDeputyRequestSerializer",
+                    "TeamLogSerializer",
+                    "TeamRenameRequestSerializer",
+                    "TeamSerializer",
+                    "TeamSubInRequestSerializer",
+                    "TeamUserActionRequestSerializer",
+                    "TournamentListSerializer",
+                    "TournamentSerializer",
+                    "TournamentsSerializer",
+                    "build_team_mmr_maps",
+                    "build_users_dict",
+                    "tournament_organization",
                 }
             ),
-            "tournament, team and game views check tournament permissions and "
-            "drive the team roster, audit and reference services; the "
-            "tournament list parses its params, buckets and pages through "
-            "tournament.listing and tournament.buckets; leaves with tournament 5b",
+            "tournament, team and game views check tournament permissions, "
+            "drive the team roster, audit and reference services and serialize "
+            "through tournament.serializers; the tournament list parses its "
+            "params, buckets and pages through tournament.listing and "
+            "tournament.buckets; leaves with tournament 5b",
         ),
     },
 }
