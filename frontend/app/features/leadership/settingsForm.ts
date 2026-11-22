@@ -1,3 +1,4 @@
+import { drfErrorData, firstMessage } from './errors';
 import {
   LEADERSHIP_SETTINGS_FIELDS,
   type LeadershipSettings,
@@ -45,22 +46,11 @@ export function leadershipSettingsPatch(
   return patch;
 }
 
-function responseData(err: unknown): unknown {
-  return typeof err === 'object' && err !== null && 'response' in err
-    ? (err as { response?: { data?: unknown } }).response?.data
-    : undefined;
-}
-
-function firstMessage(value: unknown): string | null {
-  const message = Array.isArray(value) ? value[0] : value;
-  return typeof message === 'string' ? message : null;
-}
-
-/** DRF errors mapped onto form paths: `field`, `points.<kind>`, or the max-age `detail`. */
+/** DRF errors mapped onto form paths: `field` or `points.<kind>`; anything else is left to the caller. */
 export function leadershipSettingsFieldErrors(
   err: unknown,
 ): [`points.${string}` | LeadershipSettingsField, string][] {
-  const data = responseData(err);
+  const data = drfErrorData(err);
   if (typeof data !== 'object' || data === null) return [];
   return Object.entries(data).flatMap(
     ([key, value]): [
@@ -74,12 +64,6 @@ export function leadershipSettingsFieldErrors(
             return message ? [[`points.${kind}`, message]] : [];
           },
         );
-      }
-      if (key === 'detail') {
-        const message = firstMessage(value);
-        return message?.startsWith('Max age')
-          ? [['max_age_days', message]]
-          : [];
       }
       if (!isLeadershipSettingsField(key)) return [];
       const message = firstMessage(value);

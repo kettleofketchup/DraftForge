@@ -5,12 +5,13 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OrgFeatureAccess } from '~/features/org-features';
-import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
-import { getMemberLeadership } from '../api';
+import { getLeadershipSettings, getMemberLeadership } from '../api';
 import { MemberLeadershipPanel } from '../MemberLeadershipPanel';
 import {
   CAPTAIN,
   eventAggregate,
+  leadershipFeatureAccess,
+  leadershipSettings,
   memberLeadership,
   moderationReview,
 } from './fixtures';
@@ -20,13 +21,12 @@ const { logger } = vi.hoisted(() => ({
 }));
 
 vi.mock('~/lib/logger', () => ({ getLogger: () => logger }));
-vi.mock('../api', () => ({ getMemberLeadership: vi.fn() }));
+vi.mock('../api', () => ({
+  getMemberLeadership: vi.fn(),
+  getLeadershipSettings: vi.fn(),
+}));
 
-const member: OrgFeatureAccess = makeOrgFeatureAccess({
-  viewerPk: 11,
-  leadershipUnlocked: true,
-  leadershipMember: true,
-});
+const member: OrgFeatureAccess = leadershipFeatureAccess({ viewerPk: 11 });
 
 function renderPanel({
   access = member,
@@ -58,6 +58,7 @@ function renderPanel({
 
 afterEach(() => {
   vi.mocked(getMemberLeadership).mockReset();
+  vi.mocked(getLeadershipSettings).mockReset();
   logger.error.mockReset();
   logger.warn.mockReset();
 });
@@ -83,9 +84,9 @@ describe('MemberLeadershipPanel', () => {
     const trait = screen.getByTestId('leadership-member-trait-communication');
     expect(trait).toHaveTextContent('Communication');
     expect(trait).toHaveTextContent('4.0');
-    expect(screen.getByTestId('leadership-member-own-note')).toHaveTextContent(
-      'Who rated you is never shown.',
-    );
+    const note = screen.getByTestId('leadership-member-own-note');
+    expect(note).toHaveTextContent('Members can see your rating and points');
+    expect(note).toHaveTextContent('Who rated you is never shown.');
 
     const row = screen.getByTestId('leadership-member-event-5');
     expect(row).toHaveTextContent('Inhouse night');
@@ -136,11 +137,9 @@ describe('MemberLeadershipPanel', () => {
     );
     renderPanel({
       own: false,
-      access: makeOrgFeatureAccess({
+      access: leadershipFeatureAccess({
         viewerPk: 2,
-        leadershipUnlocked: true,
-        canManageLeadership: true,
-        leadershipCanOpenOthers: true,
+        track: { can_manage: true },
       }),
     });
     expect(
@@ -152,6 +151,47 @@ describe('MemberLeadershipPanel', () => {
     expect(
       screen.queryByTestId('leadership-member-own-note'),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId('leadership-member-staff-note'),
+    ).toHaveTextContent('Includes unreleased reviews');
+    expect(screen.getByTestId('leadership-member-reviews')).toHaveTextContent(
+      '6 reviews (includes unreleased)',
+    );
+  });
+
+  it('tells a captain on a private board that only admins see it', async () => {
+    vi.mocked(getMemberLeadership).mockResolvedValue(memberLeadership());
+    renderPanel({
+      access: leadershipFeatureAccess({
+        viewerPk: 11,
+        track: { board_open: false, can_view_rows: false },
+      }),
+    });
+    expect(
+      await screen.findByTestId('leadership-member-own-note'),
+    ).toHaveTextContent('Only you and org admins see this.');
+    expect(
+      screen.queryByTestId('leadership-member-staff-note'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('reads the board setting for an admin viewing their own panel', async () => {
+    vi.mocked(getMemberLeadership).mockResolvedValue(memberLeadership());
+    vi.mocked(getLeadershipSettings).mockResolvedValue(
+      leadershipSettings({ leaderboard_public: false }),
+    );
+    renderPanel({
+      access: leadershipFeatureAccess({
+        viewerPk: 11,
+        track: { can_manage: true },
+      }),
+    });
+    expect(
+      await screen.findByTestId('leadership-member-own-note'),
+    ).toHaveTextContent('Only you and org admins see this.');
+    expect(screen.getByTestId('leadership-member-reviews')).toHaveTextContent(
+      '6 released reviews',
+    );
   });
 
   it('shows the new badge and the unreleased empty state', async () => {
@@ -176,8 +216,22 @@ describe('MemberLeadershipPanel', () => {
       '—',
     );
     expect(
-      screen.getByTestId('leadership-member-trait-drafting'),
-    ).toHaveTextContent('—');
+      screen.queryByTestId('leadership-member-trait-drafting'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it('marks a single unrated trait as not released without a bar', async () => {
+    const [first, ...others] = memberLeadership().traits;
+    vi.mocked(getMemberLeadership).mockResolvedValue(
+      memberLeadership({ traits: [{ ...first, rating: null }, ...others] }),
+    );
+    renderPanel();
+    const trait = await screen.findByTestId(
+      `leadership-member-trait-${first.key}`,
+    );
+    expect(trait).toHaveTextContent('Not released');
+    expect(trait.querySelector('[role="progressbar"]')).toBeNull();
   });
 
   it('renders no events block for another member', async () => {

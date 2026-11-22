@@ -279,7 +279,8 @@ test.describe('Org features: leadership @cicd', () => {
     );
     await expect(page.getByTestId(`leadership-void-${pk}`)).toBeVisible();
 
-    // Org staff who is not an admin neither moderates nor opens other captains.
+    // Org staff who is not an admin cannot moderate, and the backend refuses
+    // other captains on a private board.
     const pageErrors: string[] = [];
     page.on('pageerror', (e) => pageErrors.push(e.message));
     const memberCalls: { url: string; status: number }[] = [];
@@ -301,18 +302,15 @@ test.describe('Org features: leadership @cicd', () => {
       `leadership-row-${released_captain_org_user_pk}`,
     );
     await expect(row).toBeVisible();
-    await expect(row).not.toHaveAttribute('role', 'button');
     await row.click();
-    await page.waitForLoadState('networkidle');
-    expect(
-      memberCalls.filter((c) =>
-        c.url.includes(`/members/${released_captain_org_user_pk}/`),
-      ),
-    ).toEqual([]);
-    expect(memberCalls.filter((c) => c.status === 403)).toEqual([]);
-    await expect(page.getByTestId('leadership-member-forbidden')).toHaveCount(
-      0,
+    await expect(page.getByTestId('leadership-member-forbidden')).toHaveText(
+      "Only org admins can see other captains' details.",
     );
+    const refused = memberCalls.filter((c) =>
+      c.url.includes(`/members/${released_captain_org_user_pk}/`),
+    );
+    expect(refused.length).toBeGreaterThan(0);
+    expect(refused.every((c) => c.status === 403)).toBe(true);
     await expect(page.getByTestId('leadership-tab')).toBeVisible();
     await expect(page.getByText('An unexpected error occurred')).toHaveCount(0);
     expect(pageErrors).toEqual([]);

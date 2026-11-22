@@ -11,8 +11,6 @@ import {
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { OrgFeatureAccess } from '~/features/org-features';
-import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { deleteReview, putReview } from '../api';
 import { CaptainReviewDialog } from '../CaptainReviewDialog';
 import type { PendingReview } from '../schemas';
@@ -34,12 +32,6 @@ class ResizeObserverStub {
 globalThis.ResizeObserver ??=
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
-const access: OrgFeatureAccess = makeOrgFeatureAccess({
-  viewerPk: 12,
-  leadershipUnlocked: true,
-  leadershipMember: true,
-});
-
 function openReview(overrides: Partial<PendingReview> = {}): PendingReview {
   return pendingReview({
     window_closes_at: new Date(Date.now() + 2 * 86_400_000).toISOString(),
@@ -58,7 +50,6 @@ function renderDialog(review: PendingReview) {
   render(
     <CaptainReviewDialog
       orgId={1}
-      access={access}
       review={review}
       open
       onOpenChange={onOpenChange}

@@ -16,13 +16,6 @@ export interface OrgFeatureAccess {
   canViewOwnConduct: boolean;
   canViewConductDetails: boolean;
   canManageConduct: boolean;
-  /** A leadership entry exists in `standing_tracks`. */
-  leadershipUnlocked: boolean;
-  canManageLeadership: boolean;
-  /** The viewer is an org member, so the rater endpoints answer. */
-  leadershipMember: boolean;
-  /** The member endpoint answers for other captains (admin, or non-staff on a public board). */
-  leadershipCanOpenOthers: boolean;
   standingTracks: TrackInfo[];
 }
 
@@ -36,12 +29,6 @@ export function useOrgFeatureAccess(
     org?.members_viewer_pk !== undefined && org.members_viewer_pk === viewerPk;
   const flag = (value: boolean | undefined): boolean =>
     settled && value === true;
-  const leadership = settled
-    ? org?.standing_tracks?.find((track) => track.key === 'leadership')
-    : undefined;
-  const canManageLeadership = leadership?.can_manage === true;
-  const viewerIsOrgStaff =
-    viewerPk != null && (org?.staff ?? []).some((user) => user.pk === viewerPk);
   return {
     settled,
     viewerPk,
@@ -55,12 +42,6 @@ export function useOrgFeatureAccess(
     canViewOwnConduct: flag(org?.can_view_own_conduct),
     canViewConductDetails: flag(org?.can_view_conduct_details),
     canManageConduct: flag(org?.can_manage_conduct),
-    leadershipUnlocked: leadership !== undefined,
-    canManageLeadership,
-    leadershipMember: leadership?.can_view_own === true,
-    leadershipCanOpenOthers:
-      canManageLeadership ||
-      (leadership?.can_view_rows === true && !viewerIsOrgStaff),
     standingTracks: (settled && org?.standing_tracks) || NO_TRACKS,
   };
 }

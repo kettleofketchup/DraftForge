@@ -5,7 +5,8 @@ export type RefusalContext =
   | 'withdraw'
   | 'moderate'
   | 'unvoid'
-  | 'member';
+  | 'member'
+  | 'trait';
 
 // backend/org/leadership/reviews.py ReviewRefused codes and
 // backend/org/feature_errors.py.
@@ -38,6 +39,7 @@ const NOT_FOUND: Record<RefusalContext, string> = {
   moderate: 'That review no longer exists.',
   unvoid: 'That review no longer exists.',
   member: 'That member is not in this organization.',
+  trait: 'That trait was already deleted.',
 };
 
 type ResponseLike = { response?: { status?: number; data?: unknown } };
@@ -47,12 +49,27 @@ function response(err: unknown): ResponseLike['response'] {
   return (err as ResponseLike).response;
 }
 
+/** The DRF response body of an axios error, if any. */
+export function drfErrorData(err: unknown): unknown {
+  return response(err)?.data;
+}
+
+/** A DRF error value (`"msg"` or `["msg", ...]`) as its first message. */
+export function firstMessage(value: unknown): string | null {
+  const message = Array.isArray(value) ? value[0] : value;
+  return typeof message === 'string' ? message : null;
+}
+
+export function refusalStatus(err: unknown): number | undefined {
+  return response(err)?.status;
+}
+
 export function refusalText(code: string): string {
   return REFUSALS[code] ?? 'Something went wrong.';
 }
 
 export function refusalCode(err: unknown): string | null {
-  const data = response(err)?.data;
+  const data = drfErrorData(err);
   if (!data || typeof data !== 'object') return null;
   const code = (data as Record<string, unknown>).code;
   return typeof code === 'string' && code.length > 0 ? code : null;
@@ -65,7 +82,7 @@ export function refusalMessage(err: unknown, context?: RefusalContext): string {
       (context && CONTEXT_REFUSALS[context]?.[code]) ?? REFUSALS[code];
     if (message) return message;
   }
-  const status = response(err)?.status;
+  const status = refusalStatus(err);
   if (status === 404) return NOT_FOUND[context ?? 'moderate'];
   if (status === 429) return 'Too many changes. Try again in a minute.';
   return extractApiError(err) ?? 'Something went wrong.';

@@ -7,7 +7,6 @@ import {
   type OrganizationType,
 } from '~/components/organization/schemas';
 import type { UserType } from '~/components/user/types';
-import type { TrackInfo } from '~/features/standing/schemas';
 import { useUserStore } from '~/store/userStore';
 import {
   conductKeys,
@@ -79,10 +78,6 @@ const allFalseFlags = {
   canViewOwnConduct: false,
   canViewConductDetails: false,
   canManageConduct: false,
-  leadershipUnlocked: false,
-  canManageLeadership: false,
-  leadershipMember: false,
-  leadershipCanOpenOthers: false,
   standingTracks: [],
 };
 
@@ -162,10 +157,6 @@ describe('useOrgFeatureAccess', () => {
       canViewOwnConduct: true,
       canViewConductDetails: true,
       canManageConduct: true,
-      leadershipUnlocked: false,
-      canManageLeadership: false,
-      leadershipMember: false,
-      leadershipCanOpenOthers: false,
       standingTracks: allTrue.standing_tracks,
     });
   });
@@ -193,126 +184,6 @@ describe('useOrgFeatureAccess', () => {
       settled: false,
       viewerPk: null,
       ...allFalseFlags,
-    });
-  });
-});
-
-function leadershipTrack(overrides: Partial<TrackInfo> = {}): TrackInfo {
-  return {
-    key: 'leadership',
-    label: 'Leadership',
-    metrics: [
-      {
-        key: 'rating',
-        label: 'Rating',
-        format: 'score5',
-        periodic: false,
-        default: true,
-      },
-    ],
-    can_view_rows: true,
-    can_view_own: true,
-    board_open: true,
-    can_manage: false,
-    ...overrides,
-  };
-}
-
-function leadershipOrg(
-  viewerPk: number,
-  track: TrackInfo | null,
-  staffPks: number[] = [],
-): OrganizationType {
-  return {
-    ...org(viewerPk),
-    standing_tracks: track ? [track] : [],
-    staff: staffPks.map((pk) => ({ pk, username: `u${pk}` }) as UserType),
-  } as OrganizationType;
-}
-
-function leadershipFlags(o: OrganizationType) {
-  const { result } = renderHook(() => useOrgFeatureAccess(o));
-  const {
-    leadershipUnlocked,
-    canManageLeadership,
-    leadershipMember,
-    leadershipCanOpenOthers,
-  } = result.current;
-  return {
-    leadershipUnlocked,
-    canManageLeadership,
-    leadershipMember,
-    leadershipCanOpenOthers,
-  };
-}
-
-describe('useOrgFeatureAccess leadership flags', () => {
-  beforeEach(() => setViewer(5));
-
-  it('gives an admin member every leadership flag', () => {
-    expect(
-      leadershipFlags(
-        leadershipOrg(5, leadershipTrack({ can_manage: true }), [5]),
-      ),
-    ).toEqual({
-      leadershipUnlocked: true,
-      canManageLeadership: true,
-      leadershipMember: true,
-      leadershipCanOpenOthers: true,
-    });
-  });
-
-  it('a non-member admin is not a leadership member', () => {
-    const flags = leadershipFlags(
-      leadershipOrg(
-        5,
-        leadershipTrack({ can_manage: true, can_view_own: false }),
-      ),
-    );
-    expect(flags.leadershipMember).toBe(false);
-    expect(flags.canManageLeadership).toBe(true);
-    expect(flags.leadershipCanOpenOthers).toBe(true);
-  });
-
-  it('non-admin org staff cannot open other captains', () => {
-    const flags = leadershipFlags(leadershipOrg(5, leadershipTrack(), [5]));
-    expect(flags.leadershipUnlocked).toBe(true);
-    expect(flags.leadershipCanOpenOthers).toBe(false);
-  });
-
-  it('a non-staff member on a public board can open other captains', () => {
-    const flags = leadershipFlags(leadershipOrg(5, leadershipTrack(), [8]));
-    expect(flags.leadershipCanOpenOthers).toBe(true);
-    expect(flags.canManageLeadership).toBe(false);
-  });
-
-  it('a member on a private board cannot open other captains', () => {
-    const flags = leadershipFlags(
-      leadershipOrg(5, leadershipTrack({ can_view_rows: false })),
-    );
-    expect(flags.leadershipMember).toBe(true);
-    expect(flags.leadershipCanOpenOthers).toBe(false);
-  });
-
-  it('is all false without the leadership track', () => {
-    expect(leadershipFlags(leadershipOrg(5, null))).toEqual({
-      leadershipUnlocked: false,
-      canManageLeadership: false,
-      leadershipMember: false,
-      leadershipCanOpenOthers: false,
-    });
-  });
-
-  it('is all false until settled for the viewer', () => {
-    expect(
-      leadershipFlags(
-        leadershipOrg(9, leadershipTrack({ can_manage: true }), [5]),
-      ),
-    ).toEqual({
-      leadershipUnlocked: false,
-      canManageLeadership: false,
-      leadershipMember: false,
-      leadershipCanOpenOthers: false,
     });
   });
 });

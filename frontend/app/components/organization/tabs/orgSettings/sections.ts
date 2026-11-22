@@ -3,6 +3,7 @@ import type { ReactNode, RefObject } from 'react';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
 import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
+import { leadershipAccess } from '~/features/leadership/access';
 import { useOrgFeatureAccess } from '~/features/org-features';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { useConductSection } from './ConductSection';
@@ -33,8 +34,7 @@ export function useCanManageConduct(
 export function useCanManageLeadership(
   org: OrganizationType | undefined,
 ): boolean {
-  const access = useOrgFeatureAccess(org);
-  return access.leadershipUnlocked && access.canManageLeadership;
+  return leadershipAccess(useOrgFeatureAccess(org)).canManage;
 }
 
 export const ORG_SETTINGS_SECTIONS: readonly OrgSettingsSection[] = [

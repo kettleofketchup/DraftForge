@@ -23,7 +23,8 @@ export interface TrackDetailProps {
   onClose: () => void;
 }
 
-export interface TrackAdminProps {
+/** Props for the track-level slots (Admin, Banner) that sit beside the leaderboard. */
+export interface TrackSlotProps {
   orgId: number;
   timeZone: string | undefined;
   access: OrgFeatureAccess;
@@ -42,8 +43,8 @@ export interface TrackPanelSet {
   }) => boolean;
   openOwnByDefault: boolean;
   Detail: ComponentType<TrackDetailProps>;
-  Admin?: ComponentType<TrackAdminProps>;
-  Banner?: ComponentType<TrackAdminProps>;
+  Admin?: ComponentType<TrackSlotProps>;
+  Banner?: ComponentType<TrackSlotProps>;
   HeaderExtra?: ComponentType;
 }
 
@@ -80,8 +81,7 @@ export const TRACK_PANELS: Partial<Record<TrackKey, TrackPanelSet>> = {
       periodic
         ? 'No leadership points in this period'
         : 'No ranked captains yet',
-    canOpen: ({ own, rowsVisible, access }) =>
-      own || (rowsVisible && access.leadershipCanOpenOthers),
+    canOpen: ({ own, rowsVisible }) => own || rowsVisible,
     openOwnByDefault: true,
     Detail: LeadershipDetail,
     Banner: LeadershipBanner,

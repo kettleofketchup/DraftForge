@@ -40,8 +40,6 @@ const LEADERSHIP: TrackInfo = {
 
 const access: OrgFeatureAccess = makeOrgFeatureAccess({
   viewerPk: 12,
-  leadershipUnlocked: true,
-  leadershipMember: true,
   standingTracks: [LEADERSHIP],
 });
 

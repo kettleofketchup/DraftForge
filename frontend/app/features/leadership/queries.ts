@@ -10,6 +10,7 @@ import {
   leadershipKeys,
   type OrgFeatureAccess,
 } from '~/features/org-features';
+import { leadershipAccess } from './access';
 import {
   deleteReview,
   deleteTrait,
@@ -40,15 +41,15 @@ import type {
 } from './schemas';
 
 function unlocked(access: OrgFeatureAccess): boolean {
-  return access.settled && access.leadershipUnlocked;
+  return leadershipAccess(access).unlocked;
 }
 
 function isMember(access: OrgFeatureAccess): boolean {
-  return unlocked(access) && access.leadershipMember;
+  return leadershipAccess(access).member;
 }
 
 function canManage(access: OrgFeatureAccess): boolean {
-  return unlocked(access) && access.canManageLeadership;
+  return leadershipAccess(access).canManage;
 }
 
 export function useMemberLeadership(
@@ -101,7 +102,6 @@ export type WithdrawReviewVars = {
 
 export function useSubmitReview(
   orgId: number,
-  _access: OrgFeatureAccess,
 ): UseMutationResult<ReviewResult, unknown, SubmitReviewVars> {
   const queryClient = useQueryClient();
   return useMutation({
@@ -114,7 +114,6 @@ export function useSubmitReview(
 
 export function useWithdrawReview(
   orgId: number,
-  _access: OrgFeatureAccess,
 ): UseMutationResult<void, unknown, WithdrawReviewVars> {
   const queryClient = useQueryClient();
   return useMutation({
@@ -140,7 +139,6 @@ export function useEventReviews(
 
 export function useVoidReview(
   orgId: number,
-  _access: OrgFeatureAccess,
   eventId: number,
 ): UseMutationResult<
   ModerationReview,
@@ -157,7 +155,6 @@ export function useVoidReview(
 
 export function useUnvoidReview(
   orgId: number,
-  _access: OrgFeatureAccess,
   eventId: number,
 ): UseMutationResult<ModerationReview, unknown, { reviewPk: number }> {
   const queryClient = useQueryClient();
@@ -232,7 +229,6 @@ export function usePutTraits(
 
 export function useDeleteTrait(
   orgId: number,
-  _access: OrgFeatureAccess,
 ): UseMutationResult<void, unknown, string> {
   const queryClient = useQueryClient();
   return useMutation({

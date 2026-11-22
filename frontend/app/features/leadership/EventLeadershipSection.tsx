@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { EventType } from '~/components/events/schemas';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { getLogger } from '~/lib/logger';
+import { leadershipAccess } from './access';
 import { refusalCode, refusalMessage } from './errors';
-import { LEADERSHIP_EVENT_STATES } from './moderationColumns';
 import {
   useEventReviews,
   useLeadershipTraits,
@@ -18,7 +18,7 @@ import { VoidReviewDialog } from './VoidReviewDialog';
 const log = getLogger('EventLeadershipSection');
 
 export interface EventLeadershipSectionProps {
-  event: Pick<EventType, 'id' | 'organization' | 'state'>;
+  event: Pick<EventType, 'id' | 'organization'>;
   access: OrgFeatureAccess;
 }
 
@@ -26,9 +26,7 @@ export function EventLeadershipSection({
   event,
   access,
 }: EventLeadershipSectionProps) {
-  const visible =
-    access.canManageLeadership && LEADERSHIP_EVENT_STATES.has(event.state);
-  if (!visible) return null;
+  if (!leadershipAccess(access).canManage) return null;
   return (
     <ModerationSection
       key={`${event.organization}:${event.id}`}
@@ -50,11 +48,20 @@ function ModerationSection({
 }) {
   const reviews = useEventReviews(orgId, access, eventId, true);
   const traitsQuery = useLeadershipTraits(orgId, access);
-  const voidMutation = useVoidReview(orgId, access, eventId);
-  const unvoidMutation = useUnvoidReview(orgId, access, eventId);
+  const voidMutation = useVoidReview(orgId, eventId);
+  const unvoidMutation = useUnvoidReview(orgId, eventId);
   const [target, setTarget] = useState<ModerationReview | null>(null);
   const [voidError, setVoidError] = useState<string | null>(null);
   const [unvoidPk, setUnvoidPk] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (reviews.isError)
+      log.warn('captain reviews failed to load', {
+        orgId,
+        eventId,
+        code: refusalCode(reviews.error),
+      });
+  }, [reviews.isError, reviews.error, orgId, eventId]);
 
   const traits = useMemo(
     () => (traitsQuery.data ?? []).map(({ key, label }) => ({ key, label })),
@@ -100,7 +107,7 @@ function ModerationSection({
   };
 
   const captains = reviews.data?.captains ?? [];
-  if (captains.length === 0) return null;
+  if (reviews.isSuccess && captains.length === 0) return null;
 
   return (
     <section
@@ -113,10 +120,24 @@ function ModerationSection({
           Admins only. Raters are never shown to captains.
         </p>
       </div>
+      {reviews.isLoading && (
+        <p className="text-sm text-muted-foreground">
+          Loading captain reviews...
+        </p>
+      )}
+      {reviews.isError && (
+        <p
+          className="text-sm text-destructive"
+          data-testid="leadership-moderation-error"
+        >
+          {refusalMessage(reviews.error, 'moderate')}
+        </p>
+      )}
       {captains.map((captain) => (
         <ReviewModerationTable
           key={captain.org_user_id}
           captain={captain}
+          viewerPk={access.viewerPk}
           traits={traits}
           onVoid={onVoid}
           onUnvoid={onUnvoid}

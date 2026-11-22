@@ -9,9 +9,10 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import type { TrackDetailProps } from '~/features/standing/panels';
 import { formatOrgDate } from '~/features/standing/periods';
 import { getLogger } from '~/lib/logger';
+import { leadershipAccess } from './access';
 import { refusalCode, refusalMessage } from './errors';
 import { formatRating, placementLabel } from './format';
-import { useMemberLeadership } from './queries';
+import { useLeadershipSettings, useMemberLeadership } from './queries';
 import { MIN_EVENT_AGGREGATE_REVIEWS, type EventAggregate } from './schemas';
 
 const log = getLogger('MemberLeadershipPanel');
@@ -108,6 +109,13 @@ export function MemberLeadershipPanel({
     orgUserPk,
   );
   const forbidden = isError && refusalCode(error) === 'not_permitted';
+  const { canManage, boardOpen } = leadershipAccess(access);
+  // Admins viewing another captain get figures that include unreleased reviews.
+  const staffView = canManage && !own;
+  // board_open is always true for org staff, so admins read the setting itself;
+  // other staff may see the public wording on a private board, never the reverse.
+  const settings = useLeadershipSettings(orgId, access, own && canManage);
+  const boardPublic = canManage ? settings.data?.leaderboard_public : boardOpen;
 
   useEffect(() => {
     if (!isError) return;
@@ -176,12 +184,23 @@ export function MemberLeadershipPanel({
 
       {data && (
         <>
-          {own && (
+          {own && boardPublic !== undefined && (
             <p
               className="text-sm text-muted-foreground"
               data-testid="leadership-member-own-note"
             >
-              Only you and org admins see this. Who rated you is never shown.
+              {boardPublic
+                ? 'Members can see your rating and points; only you and org admins see the per-event detail.'
+                : 'Only you and org admins see this.'}{' '}
+              Who rated you is never shown.
+            </p>
+          )}
+          {staffView && (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="leadership-member-staff-note"
+            >
+              Includes unreleased reviews, visible to admins only.
             </p>
           )}
 
@@ -203,11 +222,15 @@ export function MemberLeadershipPanel({
               className="text-sm text-muted-foreground"
               data-testid="leadership-member-reviews"
             >
-              {plural(data.reviews, 'released review')}
+              {staffView
+                ? `${plural(data.reviews, 'review')} (includes unreleased)`
+                : plural(data.reviews, 'released review')}
             </div>
             {data.status === 'new' && (
               <p className="text-sm text-muted-foreground">
-                Not enough released reviews to be ranked yet.
+                {staffView
+                  ? 'Not enough reviews to be ranked yet.'
+                  : 'Not enough released reviews to be ranked yet.'}
               </p>
             )}
             {data.reviews === 0 && data.rating === null && (
@@ -215,8 +238,9 @@ export function MemberLeadershipPanel({
                 className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground"
                 data-testid="leadership-member-unreleased"
               >
-                No released ratings yet. Ratings appear once a review window
-                closes with enough reviews.
+                {staffView
+                  ? 'No reviews yet.'
+                  : 'No released ratings yet. Ratings appear once a review window closes with enough reviews.'}
               </p>
             )}
           </div>
@@ -255,7 +279,7 @@ export function MemberLeadershipPanel({
             </p>
           </div>
 
-          {data.traits.length > 0 && (
+          {data.traits.some((trait) => trait.rating !== null) && (
             <ul className="flex flex-col gap-2">
               {data.traits.map((trait) => (
                 <li
@@ -266,15 +290,19 @@ export function MemberLeadershipPanel({
                   <div className="flex justify-between gap-2 text-sm">
                     <span className="min-w-0 break-words">{trait.label}</span>
                     <span className="shrink-0 tabular-nums">
-                      {formatRating(trait.rating)}
+                      {trait.rating !== null
+                        ? formatRating(trait.rating)
+                        : staffView
+                          ? 'No reviews'
+                          : 'Not released'}
                     </span>
                   </div>
-                  <Progress
-                    value={
-                      trait.rating === null ? 0 : ((trait.rating - 1) / 4) * 100
-                    }
-                    aria-label={trait.label}
-                  />
+                  {trait.rating !== null && (
+                    <Progress
+                      value={((trait.rating - 1) / 4) * 100}
+                      aria-label={trait.label}
+                    />
+                  )}
                 </li>
               ))}
             </ul>

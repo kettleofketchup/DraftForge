@@ -380,6 +380,37 @@ describe('LeadershipTraitEditor', () => {
     });
   });
 
+  it('clears the in-use note when the trait is toggled again', async () => {
+    vi.mocked(deleteTrait).mockRejectedValue({
+      response: { status: 409, data: { code: 'trait_in_use' } },
+    });
+    await loaded();
+    await confirmDelete('composure');
+    await screen.findByTestId('leadership-trait-composure-error');
+    fireEvent.click(toggle('composure'));
+    fireEvent.click(toggle('composure'));
+    expect(
+      screen.queryByTestId('leadership-trait-composure-error'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('drops a trait another admin already deleted', async () => {
+    vi.mocked(deleteTrait).mockRejectedValue({
+      response: { status: 404, data: { detail: 'Not found.' } },
+    });
+    await loaded();
+    await confirmDelete('composure');
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'That trait was already deleted.',
+      ),
+    );
+    expect(
+      screen.queryByTestId('leadership-trait-composure'),
+    ).not.toBeInTheDocument();
+    expect(unit.isDirty).toBe(false);
+  });
+
   it('maps a server label error onto its row', async () => {
     vi.mocked(putTraits).mockRejectedValue({
       response: {

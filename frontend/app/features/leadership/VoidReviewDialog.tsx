@@ -69,6 +69,8 @@ export function VoidReviewDialog({
             Cancel
           </CancelButton>
           <ConfirmButton
+            variant="destructive"
+            loadingText="Voiding..."
             className="min-h-11 sm:min-h-9"
             data-testid="leadership-void-confirm"
             disabled={!parsed.success}

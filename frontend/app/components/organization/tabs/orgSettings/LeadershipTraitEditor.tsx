@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useFieldArray, useWatch, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 
@@ -21,6 +21,7 @@ import {
   TRAIT_LABEL_MAX_LENGTH,
   refusalCode,
   refusalMessage,
+  refusalStatus,
   useDeleteTrait,
   type TraitForm,
 } from '~/features/leadership';
@@ -58,10 +59,22 @@ export function LeadershipTraitEditor({
     name: 'traits',
   });
   const rows = useWatch({ control: form.control, name: 'traits' }) ?? [];
-  const deleteTrait = useDeleteTrait(orgId, access);
+  const deleteTrait = useDeleteTrait(orgId);
   const [newLabel, setNewLabel] = useState('');
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+
+  const isDirty = form.formState.isDirty;
+  useEffect(() => {
+    if (!isDirty) setRowErrors({});
+  }, [isDirty]);
+
+  const clearRowError = (key: string) =>
+    setRowErrors((prev) => {
+      if (!(key in prev)) return prev;
+      const { [key]: _cleared, ...rest } = prev;
+      return rest;
+    });
 
   const activeCount = rows.filter((t) => t.active).length;
   const traitErrors = form.formState.errors.traits;
@@ -104,12 +117,17 @@ export function LeadershipTraitEditor({
       dropRow(row.key, true);
       toast.success(`Deleted ${row.label}`);
     } catch (err) {
-      const message = refusalMessage(err);
+      const message = refusalMessage(err, 'trait');
       log.warn('Trait delete refused', {
         orgId,
         key: row.key,
         code: refusalCode(err),
       });
+      if (refusalStatus(err) === 404) {
+        dropRow(row.key, true);
+        toast.error(message);
+        return;
+      }
       if (refusalCode(err) !== 'trait_in_use') {
         toast.error(message);
         return;
@@ -195,7 +213,10 @@ export function LeadershipTraitEditor({
                         <FormControl>
                           <Switch
                             checked={field.value}
-                            onCheckedChange={field.onChange}
+                            onCheckedChange={(checked) => {
+                              clearRowError(row.key);
+                              field.onChange(checked);
+                            }}
                             aria-label={`${name} active`}
                             data-testid={`${testId}-active`}
                           />

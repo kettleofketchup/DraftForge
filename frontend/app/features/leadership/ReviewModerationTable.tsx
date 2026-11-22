@@ -18,14 +18,16 @@ const OWN_SNAPSHOT_NOTE =
 
 export function ReviewModerationTable({
   captain,
+  viewerPk,
   traits,
   onVoid,
   onUnvoid,
   pendingPk,
 }: ReviewModerationTableProps) {
   const columns = useMemo(
-    () => makeModerationColumns({ traits, onVoid, onUnvoid, pendingPk }),
-    [traits, onVoid, onUnvoid, pendingPk],
+    () =>
+      makeModerationColumns({ viewerPk, traits, onVoid, onUnvoid, pendingPk }),
+    [viewerPk, traits, onVoid, onUnvoid, pendingPk],
   );
   const id = captain.org_user_id;
   const rating = captain.aggregate?.rating ?? null;

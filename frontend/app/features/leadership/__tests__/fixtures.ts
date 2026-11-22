@@ -1,3 +1,6 @@
+import type { OrgFeatureAccess } from '~/features/org-features';
+import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
+import type { TrackInfo } from '~/features/standing/schemas';
 import type {
   EventAggregate,
   EventReviews,
@@ -196,4 +199,41 @@ export function leadershipSettings(
     ].map((k) => ({ ...k, points: k.default, overridden: false })),
     ...overrides,
   };
+}
+
+export function leadershipTrackInfo(
+  overrides: Partial<TrackInfo> = {},
+): TrackInfo {
+  return {
+    key: 'leadership',
+    label: 'Leadership',
+    metrics: [
+      {
+        key: 'rating',
+        label: 'Rating',
+        format: 'score5',
+        periodic: false,
+        default: true,
+      },
+    ],
+    can_view_rows: true,
+    can_view_own: true,
+    board_open: true,
+    can_manage: false,
+    ...overrides,
+  };
+}
+
+/** Access for a viewer whose org lists the leadership track; `track: null` leaves it locked. */
+export function leadershipFeatureAccess({
+  viewerPk = 12,
+  track = {},
+}: {
+  viewerPk?: number;
+  track?: Partial<TrackInfo> | null;
+} = {}): OrgFeatureAccess {
+  return makeOrgFeatureAccess({
+    viewerPk,
+    standingTracks: track === null ? [] : [leadershipTrackInfo(track)],
+  });
 }

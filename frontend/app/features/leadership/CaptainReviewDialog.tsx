@@ -25,7 +25,6 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { DisplayName } from '~/components/user/avatar';
-import type { OrgFeatureAccess } from '~/features/org-features';
 import { getLogger } from '~/lib/logger';
 import { formatCountdown, useCountdown } from './countdown';
 import {
@@ -43,7 +42,6 @@ const log = getLogger('CaptainReviewDialog');
 
 export interface CaptainReviewDialogProps {
   orgId: number;
-  access: OrgFeatureAccess;
   review: PendingReview;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -51,7 +49,6 @@ export interface CaptainReviewDialogProps {
 
 export function CaptainReviewDialog({
   orgId,
-  access,
   review,
   open,
   onOpenChange,
@@ -61,7 +58,6 @@ export function CaptainReviewDialog({
       <DialogContent data-testid="leadership-review-dialog">
         <ReviewForm
           orgId={orgId}
-          access={access}
           review={review}
           onDone={() => onOpenChange(false)}
         />
@@ -80,12 +76,10 @@ function initialScores(
 
 function ReviewForm({
   orgId,
-  access,
   review,
   onDone,
 }: {
   orgId: number;
-  access: OrgFeatureAccess;
   review: PendingReview;
   onDone: () => void;
 }) {
@@ -96,8 +90,8 @@ function ReviewForm({
     defaultValues: initialScores(review),
   });
   const { msLeft, closed } = useCountdown(review.window_closes_at);
-  const submitReview = useSubmitReview(orgId, access);
-  const withdrawReview = useWithdrawReview(orgId, access);
+  const submitReview = useSubmitReview(orgId);
+  const withdrawReview = useWithdrawReview(orgId);
   const [error, setError] = useState<string | null>(null);
 
   const action = reviewAction(review);

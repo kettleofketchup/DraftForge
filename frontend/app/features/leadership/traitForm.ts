@@ -1,4 +1,5 @@
 import type { TraitPutItem } from './api';
+import { drfErrorData, firstMessage } from './errors';
 import { TRAIT_KEY_MAX_LENGTH, type Trait, type TraitForm } from './schemas';
 
 export type TraitFieldPath = 'traits' | `traits.${number}.${'key' | 'label'}`;
@@ -48,17 +49,9 @@ export function toTraitPut(values: TraitForm): TraitPutItem[] {
   }));
 }
 
-function firstMessage(value: unknown): string | null {
-  const message = Array.isArray(value) ? value[0] : value;
-  return typeof message === 'string' ? message : null;
-}
-
 /** DRF `{traits: [{label: [msg]}, ...]}` onto `traits.<i>.<field>`; `{detail}` onto the list root. */
 export function traitFieldErrors(err: unknown): [TraitFieldPath, string][] {
-  const data =
-    typeof err === 'object' && err !== null && 'response' in err
-      ? (err as { response?: { data?: unknown } }).response?.data
-      : undefined;
+  const data = drfErrorData(err);
   if (typeof data !== 'object' || data === null) return [];
   const { traits: rows, detail } = data as Record<string, unknown>;
   const errors: [TraitFieldPath, string][] = [];

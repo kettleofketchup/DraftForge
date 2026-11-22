@@ -270,7 +270,7 @@ describe('LeadershipSection', () => {
     );
   });
 
-  it('maps the max age refusal onto max age', async () => {
+  it('toasts a server max age refusal that names no field', async () => {
     vi.mocked(patchLeadershipSettings).mockRejectedValue({
       response: {
         status: 400,
@@ -280,10 +280,11 @@ describe('LeadershipSection', () => {
     await loaded();
     fireEvent.change(input('max_age_days'), { target: { value: '700' } });
     expect(await save()).toBe(false);
-    expect(
-      await screen.findByText('Max age must be at least the half-life.'),
-    ).toBeInTheDocument();
-    expect(toast.error).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'Max age must be at least the half-life.',
+      ),
+    );
   });
 
   it('toasts an error that names no field', async () => {

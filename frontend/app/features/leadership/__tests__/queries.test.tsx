@@ -34,6 +34,7 @@ import {
   useWithdrawReview,
 } from '../queries';
 import {
+  leadershipFeatureAccess,
   leadershipSettings,
   memberLeadership,
   moderationReview,
@@ -61,16 +62,10 @@ const ORG = 4;
 const EVENT = 5;
 const VIEWER = 9;
 
-const memberAccess = makeOrgFeatureAccess({
+const memberAccess = leadershipFeatureAccess({ viewerPk: VIEWER });
+const adminAccess = leadershipFeatureAccess({
   viewerPk: VIEWER,
-  leadershipUnlocked: true,
-  leadershipMember: true,
-});
-const adminAccess = makeOrgFeatureAccess({
-  viewerPk: VIEWER,
-  leadershipUnlocked: true,
-  leadershipMember: true,
-  canManageLeadership: true,
+  track: { can_manage: true },
 });
 
 function makeClient() {
@@ -127,7 +122,7 @@ describe('review mutations', () => {
       scores: { communication: 4 },
     } as never);
     const { wrapper, keys, invalid } = seeded();
-    const hook = renderHook(() => useSubmitReview(ORG, memberAccess), {
+    const hook = renderHook(() => useSubmitReview(ORG), {
       wrapper,
     });
     await act(() =>
@@ -151,7 +146,7 @@ describe('review mutations', () => {
   it('review submit does not refetch the org payload', async () => {
     vi.mocked(putReview).mockResolvedValue({} as never);
     const { wrapper, keys, invalid } = seeded();
-    const hook = renderHook(() => useSubmitReview(ORG, memberAccess), {
+    const hook = renderHook(() => useSubmitReview(ORG), {
       wrapper,
     });
     await act(() =>
@@ -167,7 +162,7 @@ describe('review mutations', () => {
   it('withdraw invalidates the same keys', async () => {
     vi.mocked(deleteReview).mockResolvedValue(undefined);
     const { wrapper, keys, invalid } = seeded();
-    const hook = renderHook(() => useWithdrawReview(ORG, memberAccess), {
+    const hook = renderHook(() => useWithdrawReview(ORG), {
       wrapper,
     });
     await act(() =>
@@ -186,7 +181,7 @@ describe('review mutations', () => {
       moderationReview({ void_kind: 'moderated' }),
     );
     const { wrapper, keys, invalid } = seeded();
-    const hook = renderHook(() => useVoidReview(ORG, adminAccess, EVENT), {
+    const hook = renderHook(() => useVoidReview(ORG, EVENT), {
       wrapper,
     });
     await act(() =>
@@ -279,7 +274,7 @@ describe('settings and traits', () => {
   it('delete trait refreshes the org payload', async () => {
     vi.mocked(deleteTrait).mockResolvedValue(undefined);
     const { wrapper, keys, invalid } = seeded();
-    const hook = renderHook(() => useDeleteTrait(ORG, adminAccess), {
+    const hook = renderHook(() => useDeleteTrait(ORG), {
       wrapper,
     });
     await act(() => hook.result.current.mutateAsync('drafting'));
@@ -292,7 +287,7 @@ describe('settings and traits', () => {
   it('a refused trait delete leaves the org payload alone', async () => {
     vi.mocked(deleteTrait).mockRejectedValue(new Error('409'));
     const { wrapper, keys, invalid } = seeded();
-    const hook = renderHook(() => useDeleteTrait(ORG, adminAccess), {
+    const hook = renderHook(() => useDeleteTrait(ORG), {
       wrapper,
     });
     await act(async () => {
@@ -311,11 +306,9 @@ describe('query gating', () => {
 
   it('does not fetch pending or mine for a non-member', async () => {
     const { wrapper } = makeClient();
-    const access = makeOrgFeatureAccess({
+    const access = leadershipFeatureAccess({
       viewerPk: VIEWER,
-      leadershipUnlocked: true,
-      canManageLeadership: true,
-      leadershipMember: false,
+      track: { can_manage: true, can_view_own: false },
     });
     renderHook(() => usePendingReviews(ORG, access, null), { wrapper });
     renderHook(() => useMyReviews(ORG, access), { wrapper });
@@ -384,12 +377,7 @@ describe('query gating', () => {
 
   it('does not fetch anything while leadership is locked', async () => {
     const { wrapper } = makeClient();
-    const locked = makeOrgFeatureAccess({
-      viewerPk: VIEWER,
-      leadershipUnlocked: false,
-      leadershipMember: true,
-      canManageLeadership: true,
-    });
+    const locked = leadershipFeatureAccess({ viewerPk: VIEWER, track: null });
     renderHook(() => useMemberLeadership(ORG, locked, 7), { wrapper });
     renderHook(() => usePendingReviews(ORG, locked, null), { wrapper });
     renderHook(() => useMyReviews(ORG, locked), { wrapper });

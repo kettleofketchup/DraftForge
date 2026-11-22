@@ -1,13 +1,14 @@
 import type {
-  TrackAdminProps,
   TrackDetailProps,
+  TrackSlotProps,
 } from '~/features/standing/panels';
+import { leadershipAccess } from './access';
 import { MemberLeadershipPanel } from './MemberLeadershipPanel';
 import { MyReviewsList } from './MyReviewsList';
 import { PendingReviewsCard } from './PendingReviewsCard';
 
-export function LeadershipBanner({ orgId, access }: TrackAdminProps) {
-  if (!access.leadershipUnlocked || !access.leadershipMember) return null;
+export function LeadershipBanner({ orgId, access }: TrackSlotProps) {
+  if (!leadershipAccess(access).member) return null;
   return (
     <div className="flex flex-col gap-3">
       <PendingReviewsCard orgId={orgId} access={access} />

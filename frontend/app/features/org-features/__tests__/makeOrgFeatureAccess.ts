@@ -16,10 +16,6 @@ export function makeOrgFeatureAccess(
     canViewOwnConduct: false,
     canViewConductDetails: false,
     canManageConduct: false,
-    leadershipUnlocked: false,
-    canManageLeadership: false,
-    leadershipMember: false,
-    leadershipCanOpenOthers: false,
     standingTracks: [],
     ...overrides,
   };

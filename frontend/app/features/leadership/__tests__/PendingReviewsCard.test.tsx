@@ -1,13 +1,23 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OrgFeatureAccess } from '~/features/org-features';
-import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
-import { getPendingReviews } from '../api';
+import { getPendingReviews, putReview } from '../api';
 import { PendingReviewsCard, pendingCount } from '../PendingReviewsCard';
-import { CAPTAIN, pendingReview } from './fixtures';
+import {
+  CAPTAIN,
+  DEFAULT_TRAITS,
+  leadershipFeatureAccess,
+  pendingReview,
+} from './fixtures';
 
 const { logger } = vi.hoisted(() => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -28,11 +38,7 @@ class ResizeObserverStub {
 globalThis.ResizeObserver ??=
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
-const access: OrgFeatureAccess = makeOrgFeatureAccess({
-  viewerPk: 12,
-  leadershipUnlocked: true,
-  leadershipMember: true,
-});
+const access: OrgFeatureAccess = leadershipFeatureAccess({ viewerPk: 12 });
 
 const LATER = () => new Date(Date.now() + 86_400_000).toISOString();
 const SCORES = { communication: 4, drafting: 3, composure: 5 };
@@ -72,6 +78,7 @@ function renderCard(props: { eventId?: number | null } = {}) {
 
 afterEach(() => {
   vi.mocked(getPendingReviews).mockReset();
+  vi.mocked(putReview).mockReset();
   logger.warn.mockReset();
 });
 
@@ -140,5 +147,29 @@ describe('PendingReviewsCard', () => {
     renderCard({ eventId: 5 });
     await screen.findByTestId('leadership-pending-item-5-7');
     expect(getPendingReviews).toHaveBeenCalledWith(3, 5);
+  });
+
+  it('keeps the refusal visible after the refetch drops the item', async () => {
+    vi.mocked(getPendingReviews)
+      .mockResolvedValueOnce([item(7, {})])
+      .mockResolvedValue([]);
+    vi.mocked(putReview).mockRejectedValue({
+      response: { status: 409, data: { code: 'review_window_closed' } },
+    });
+    renderCard();
+    fireEvent.click(await screen.findByTestId('leadership-pending-open-5-7'));
+    for (const trait of DEFAULT_TRAITS) {
+      const group = screen.getByRole('radiogroup', { name: trait.label });
+      fireEvent.click(within(group).getByRole('radio', { name: '4' }));
+    }
+    fireEvent.click(screen.getByTestId('leadership-review-submit'));
+    expect(
+      await screen.findByTestId('leadership-review-error'),
+    ).toHaveTextContent('The review window has closed.');
+    await waitFor(() => expect(getPendingReviews).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('leadership-review-dialog')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('leadership-pending-item-5-7'),
+    ).not.toBeInTheDocument();
   });
 });

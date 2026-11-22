@@ -1,4 +1,3 @@
-import { EventState } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
 import { DestructiveButton, SecondaryButton } from '~/components/ui/buttons';
 import type { AppColumnDef } from '~/components/ui/data-table';
@@ -7,18 +6,14 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { formatOrgDate } from '~/features/standing/periods';
 import type { ModerationReview, Scores } from './schemas';
 
-export const LEADERSHIP_EVENT_STATES: ReadonlySet<string> = new Set([
-  EventState.IN_PROGRESS,
-  EventState.COMPLETED,
-  EventState.CANCELLED,
-]);
-
 export interface ModerationTrait {
   key: string;
   label: string;
 }
 
 export interface MakeModerationColumnsOptions {
+  /** Reviews this viewer wrote get no Void or Restore. */
+  viewerPk: number | null;
   traits: ModerationTrait[];
   onVoid: (r: ModerationReview) => void;
   onUnvoid: (r: ModerationReview) => void;
@@ -57,6 +52,7 @@ function scoreChips(scores: Scores, traits: ModerationTrait[]) {
 }
 
 export function makeModerationColumns({
+  viewerPk,
   traits,
   onVoid,
   onUnvoid,
@@ -158,6 +154,16 @@ export function makeModerationColumns({
       cell: ({ row }) => {
         const r = row.original;
         const name = r.rater ? DisplayName(r.rater) : 'deleted account';
+        if (viewerPk !== null && r.rater?.user_pk === viewerPk) {
+          return (
+            <span
+              className="text-sm text-muted-foreground"
+              data-testid={`leadership-own-review-${r.pk}`}
+            >
+              Your review
+            </span>
+          );
+        }
         if (r.void_kind === 'moderated') {
           return (
             <SecondaryButton

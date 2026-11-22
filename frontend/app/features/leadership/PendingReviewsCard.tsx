@@ -27,6 +27,7 @@ export interface PendingReviewsCardProps {
   access: OrgFeatureAccess;
   eventId?: number | null;
   testIdPrefix?: string;
+  className?: string;
 }
 
 export function pendingCount(items: PendingReview[]): number {
@@ -108,9 +109,10 @@ export function PendingReviewsCard({
   access,
   eventId = null,
   testIdPrefix = 'leadership-pending',
+  className,
 }: PendingReviewsCardProps) {
   const { data, isError, error } = usePendingReviews(orgId, access, eventId);
-  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [openItem, setOpenItem] = useState<PendingReview | null>(null);
 
   useEffect(() => {
     if (isError)
@@ -121,54 +123,61 @@ export function PendingReviewsCard({
       });
   }, [isError, error, orgId, eventId]);
 
-  if (isError || !data || data.length === 0) return null;
-  const opened = data.find((item) => itemKey(item) === openKey) ?? null;
-  const count = pendingCount(data);
+  // The refetch after a refused submit can drop the item, so the dialog keeps
+  // the snapshot it opened with and outlives an empty list.
+  const opened = openItem
+    ? (data?.find((item) => itemKey(item) === itemKey(openItem)) ?? openItem)
+    : null;
+  const dialog = opened && (
+    <CaptainReviewDialog
+      orgId={orgId}
+      review={opened}
+      open
+      onOpenChange={(open) => {
+        if (!open) setOpenItem(null);
+      }}
+    />
+  );
 
+  const items = isError ? [] : (data ?? []);
   return (
-    <Card data-testid={testIdPrefix}>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CardTitle role="heading" aria-level={3}>
-            Rate your captain
-          </CardTitle>
-          <Badge
-            variant="secondary"
-            className="shrink-0"
-            data-testid={`${testIdPrefix}-count`}
-          >
-            {count}
-            <span className="sr-only"> to rate</span>
-          </Badge>
-        </div>
-        <CardDescription>
-          Score how your captain led the team. Captains never see who rated
-          them.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ul className="divide-y divide-border">
-          {data.map((item) => (
-            <PendingItem
-              key={itemKey(item)}
-              item={item}
-              prefix={testIdPrefix}
-              onOpen={() => setOpenKey(itemKey(item))}
-            />
-          ))}
-        </ul>
-      </CardContent>
-      {opened && (
-        <CaptainReviewDialog
-          orgId={orgId}
-          access={access}
-          review={opened}
-          open
-          onOpenChange={(open) => {
-            if (!open) setOpenKey(null);
-          }}
-        />
+    <>
+      {items.length > 0 && (
+        <Card className={className} data-testid={testIdPrefix}>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <CardTitle role="heading" aria-level={3}>
+                Rate your captain
+              </CardTitle>
+              <Badge
+                variant="secondary"
+                className="shrink-0"
+                data-testid={`${testIdPrefix}-count`}
+              >
+                {pendingCount(items)}
+                <span className="sr-only"> to rate</span>
+              </Badge>
+            </div>
+            <CardDescription>
+              Score how your captain led the team. Captains never see who rated
+              them.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border">
+              {items.map((item) => (
+                <PendingItem
+                  key={itemKey(item)}
+                  item={item}
+                  prefix={testIdPrefix}
+                  onOpen={() => setOpenItem(item)}
+                />
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       )}
-    </Card>
+      {dialog}
+    </>
   );
 }

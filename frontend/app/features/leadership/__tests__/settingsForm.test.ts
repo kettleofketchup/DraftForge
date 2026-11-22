@@ -110,11 +110,11 @@ describe('leadership settings form against the backend payload', () => {
     ).toEqual({ points: { placement_1: 12 } });
   });
 
-  it('maps the max age detail onto max_age_days', () => {
+  it('leaves a non-field detail to the caller', () => {
     expect(
       leadershipSettingsFieldErrors(
         httpError({ detail: 'Max age must be at least the half-life.' }),
       ),
-    ).toEqual([['max_age_days', 'Max age must be at least the half-life.']]);
+    ).toEqual([]);
   });
 });

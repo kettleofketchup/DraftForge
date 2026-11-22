@@ -22,10 +22,12 @@ function renderTable(
     onVoid?: (r: ModerationReview) => void;
     onUnvoid?: (r: ModerationReview) => void;
   } = {},
+  viewerPk: number | null = 1,
 ) {
   return render(
     <ReviewModerationTable
       captain={captain}
+      viewerPk={viewerPk}
       traits={DEFAULT_TRAITS}
       onVoid={handlers.onVoid ?? vi.fn()}
       onUnvoid={handlers.onUnvoid ?? vi.fn()}
@@ -65,6 +67,24 @@ describe('ReviewModerationTable', () => {
     expect(screen.queryByTestId('leadership-void-32')).toBeNull();
     fireEvent.click(screen.getByTestId('leadership-unvoid-32'));
     expect(onUnvoid).toHaveBeenCalledWith(expect.objectContaining({ pk: 32 }));
+  });
+
+  it('offers no void or restore on a review the viewer wrote', () => {
+    const moderated = moderationReview({
+      pk: 32,
+      voided_at: '2026-11-03T10:00:00Z',
+      void_kind: 'moderated',
+    });
+    renderTable(
+      captainWith({ reviews: [moderationReview(), moderated] }),
+      {},
+      12,
+    );
+    expect(screen.queryByTestId('leadership-void-31')).toBeNull();
+    expect(screen.queryByTestId('leadership-unvoid-32')).toBeNull();
+    expect(screen.getByTestId('leadership-own-review-32')).toHaveTextContent(
+      'Your review',
+    );
   });
 
   it('offers no action on a withdrawn review', () => {

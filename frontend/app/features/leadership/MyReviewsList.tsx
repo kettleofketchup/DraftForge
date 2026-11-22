@@ -10,6 +10,7 @@ import { DisplayName } from '~/components/user/avatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
+import { leadershipTrack } from './access';
 import { refusalCode, refusalMessage } from './errors';
 import { useMyReviews } from './queries';
 import type { MyReview } from './schemas';
@@ -37,14 +38,14 @@ function humanize(key: string): string {
 
 function useTraitLabels(access: OrgFeatureAccess): Map<string, string> {
   return useMemo(() => {
-    const track = access.standingTracks.find((t) => t.key === 'leadership');
+    const track = leadershipTrack(access);
     const labels = new Map<string, string>();
     for (const metric of track?.metrics ?? []) {
       if (metric.key.startsWith(TRAIT_METRIC_PREFIX))
         labels.set(metric.key.slice(TRAIT_METRIC_PREFIX.length), metric.label);
     }
     return labels;
-  }, [access.standingTracks]);
+  }, [access]);
 }
 
 function ReviewRow({

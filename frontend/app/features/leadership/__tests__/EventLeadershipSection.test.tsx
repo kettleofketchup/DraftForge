@@ -4,12 +4,15 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EventType } from '~/components/events/schemas';
 import type { OrgFeatureAccess } from '~/features/org-features';
-import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { getEventReviews, getTraits, unvoidReview, voidReview } from '../api';
 import { EventLeadershipSection } from '../EventLeadershipSection';
-import { eventReviews, moderationReview, traits } from './fixtures';
+import {
+  eventReviews,
+  leadershipFeatureAccess,
+  moderationReview,
+  traits,
+} from './fixtures';
 
 vi.mock('~/lib/logger', () => ({
   getLogger: () => ({
@@ -27,16 +30,12 @@ vi.mock('../api', () => ({
   unvoidReview: vi.fn(),
 }));
 
-const ADMIN: OrgFeatureAccess = makeOrgFeatureAccess({
+const ADMIN: OrgFeatureAccess = leadershipFeatureAccess({
   viewerPk: 1,
-  leadershipUnlocked: true,
-  canManageLeadership: true,
+  track: { can_manage: true },
 });
 
-function renderSection(
-  state: EventType['state'] = 'completed',
-  access: OrgFeatureAccess = ADMIN,
-) {
+function renderSection(access: OrgFeatureAccess = ADMIN) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -45,7 +44,7 @@ function renderSection(
   );
   return render(
     <EventLeadershipSection
-      event={{ id: 5, organization: 3, state }}
+      event={{ id: 5, organization: 3 }}
       access={access}
     />,
     { wrapper },
@@ -73,9 +72,11 @@ describe('EventLeadershipSection', () => {
   it('lists the captains with trait labels', async () => {
     renderSection();
     expect(
-      await screen.findByTestId('leadership-moderation'),
-    ).toHaveTextContent('Admins only. Raters are never shown to captains.');
-    expect(screen.getByTestId('leadership-moderation-7')).toBeInTheDocument();
+      await screen.findByTestId('leadership-moderation-7'),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('leadership-moderation')).toHaveTextContent(
+      'Admins only. Raters are never shown to captains.',
+    );
     expect((await screen.findAllByText('Composure: 5')).length).toBeGreaterThan(
       0,
     );
@@ -168,17 +169,28 @@ describe('EventLeadershipSection', () => {
 
   it('is hidden for non-admins', () => {
     const { container } = renderSection(
-      'completed',
-      makeOrgFeatureAccess({ viewerPk: 1, leadershipUnlocked: true }),
+      leadershipFeatureAccess({ viewerPk: 1 }),
     );
     expect(container).toBeEmptyDOMElement();
     expect(getEventReviews).not.toHaveBeenCalled();
   });
 
-  it('is hidden before the event runs', () => {
-    const { container } = renderSection('signups_open');
-    expect(container).toBeEmptyDOMElement();
-    expect(getEventReviews).not.toHaveBeenCalled();
+  it('shows a load failure instead of hiding the section', async () => {
+    vi.mocked(getEventReviews).mockRejectedValue(refusal(500));
+    renderSection();
+    expect(
+      await screen.findByTestId('leadership-moderation-error'),
+    ).toBeInTheDocument();
+  });
+
+  it('offers no void or restore on the viewer’s own review', async () => {
+    renderSection(
+      leadershipFeatureAccess({ viewerPk: 12, track: { can_manage: true } }),
+    );
+    expect(
+      await screen.findByTestId('leadership-own-review-31'),
+    ).toHaveTextContent('Your review');
+    expect(screen.queryByTestId('leadership-void-31')).toBeNull();
   });
 
   it('renders nothing when the event has no captains', async () => {

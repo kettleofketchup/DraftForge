@@ -97,24 +97,9 @@ function row(orgUserPk: number, value: number | null): StandingRow {
   };
 }
 
-const member: OrgFeatureAccess = makeOrgFeatureAccess({
-  viewerPk: 102,
-  leadershipUnlocked: true,
-  leadershipMember: true,
-  leadershipCanOpenOthers: true,
-});
-const privateStaff: OrgFeatureAccess = makeOrgFeatureAccess({
-  viewerPk: 102,
-  leadershipUnlocked: true,
-  leadershipMember: true,
-  leadershipCanOpenOthers: false,
-});
+const member: OrgFeatureAccess = makeOrgFeatureAccess({ viewerPk: 102 });
 const nonMemberAdmin: OrgFeatureAccess = makeOrgFeatureAccess({
   viewerPk: 900,
-  leadershipUnlocked: true,
-  canManageLeadership: true,
-  leadershipMember: false,
-  leadershipCanOpenOthers: true,
 });
 
 function respond(base: Partial<StandingLeaderboard> = {}) {
@@ -155,7 +140,7 @@ function renderTab(
       track={t}
       timeZone="UTC"
       membersPrivate={false}
-      access={viewer}
+      access={{ ...viewer, standingTracks: [t] }}
     />,
     { wrapper },
   );
@@ -248,19 +233,19 @@ describe('TrackTab leadership', () => {
     expect(getMyReviews).not.toHaveBeenCalled();
   });
 
-  it('non-admin org staff cannot open other captains on a private board', async () => {
+  it('shows the admins-only message when the backend refuses a captain', async () => {
     respond();
-    renderTab(leadershipTrack(), privateStaff);
+    vi.mocked(getMemberLeadership).mockImplementation(async (_o, pk) => {
+      if (pk === 1)
+        throw { response: { status: 403, data: { code: 'not_permitted' } } };
+      return memberLeadership({ member: { ...CAPTAIN, org_user_pk: pk } });
+    });
+    renderTab();
     await screen.findByTestId('leadership-member');
-    fireEvent.click(screen.getByTestId('leadership-member-close'));
-    expect(screen.queryByTestId('leadership-member')).toBeNull();
     fireEvent.click(screen.getByTestId('leadership-row-1'));
-    await waitFor(() =>
-      expect(getMemberLeadership).not.toHaveBeenCalledWith(7, 1),
-    );
-    expect(screen.queryByTestId('leadership-member')).toBeNull();
-    fireEvent.click(screen.getByTestId('leadership-row-2'));
-    expect(await screen.findByTestId('leadership-member')).toBeInTheDocument();
+    expect(
+      await screen.findByTestId('leadership-member-forbidden'),
+    ).toHaveTextContent("Only org admins can see other captains' details.");
   });
 
   it('admins open any captain', async () => {
