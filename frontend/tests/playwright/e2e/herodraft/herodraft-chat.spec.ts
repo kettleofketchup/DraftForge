@@ -824,8 +824,10 @@ test.describe('@cicd HeroDraft chat', () => {
     await firstCaptain.draftPage.assertHeroUnavailable(AVAILABLE_HERO);
     await firstCaptain.draftPage.assertRoundActive(2);
 
+    // Confirming in the dialog keeps the chat open.
+    await expect(page.getByTestId('herodraft-chat-panel')).toBeVisible();
+
     // Round 2 is still this captain's ban, so only the drafted hero is refused.
-    await openChatPanel(page);
     await suggestionChip(page, AVAILABLE_HERO, 'ban').click();
     await firstCaptain.draftPage.assertHeroSelected(AVAILABLE_HERO);
     await expect(dialog).toHaveCount(0);
@@ -836,6 +838,7 @@ test.describe('@cicd HeroDraft chat', () => {
     await expect(dialog).toBeHidden();
     await firstCaptain.draftPage.assertRoundActive(2);
     await firstCaptain.draftPage.assertHeroAvailable(OTHER_HERO);
+    await expect(page.getByTestId('herodraft-chat-panel')).toBeVisible();
   });
 
   test('chat suggestion only selects the hero for viewers not on turn', async ({

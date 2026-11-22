@@ -258,6 +258,24 @@ describe('HeroDraftChat log', () => {
     expect(screen.getByTestId('herodraft-chat-unread')).toHaveTextContent('3');
   });
 
+  it('stays open through clicks in a dialog and closes on other outside clicks', () => {
+    seed(member);
+    render(
+      <>
+        <HeroDraftChat draftState="drafting" />
+        <div role="alertdialog">
+          <button type="button">Confirm</button>
+        </div>
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    fireEvent.focus(input());
+    fireEvent.pointerDown(screen.getByText('Confirm'), { button: 0 });
+    expect(screen.getByTestId('herodraft-chat-panel')).toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByText('Elsewhere'), { button: 0 });
+    expect(screen.queryByTestId('herodraft-chat-panel')).toBeNull();
+  });
+
   it('opens the panel when the input is focused', () => {
     seed(member);
     render(<HeroDraftChat draftState="drafting" />);

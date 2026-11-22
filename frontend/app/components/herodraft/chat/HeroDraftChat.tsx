@@ -146,11 +146,16 @@ export function HeroDraftChat({
   useEffect(() => {
     if (!isDesktop || !panelOpen) return;
     const onPointerDown = (e: PointerEvent) => {
-      // Right-clicks and the portaled suggest menu must not close chat.
+      // Right-clicks, the portaled suggest menu and dialogs opened from chat keep it open.
       if (e.button !== 0) return;
       const target = e.target as Element;
       if (rootRef.current?.contains(target)) return;
-      if (target.closest?.('[data-radix-popper-content-wrapper]')) return;
+      if (
+        target.closest?.(
+          '[data-radix-popper-content-wrapper], [role="alertdialog"]',
+        )
+      )
+        return;
       setChatPanelOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown);
