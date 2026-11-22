@@ -158,7 +158,7 @@ export function EventSignupModal({
   );
 
   // Seed defaults from the user's main position priorities (CustomUser.positions
-  // — PositionsModel rated 0..5, same shape PositionForm uses on the edit-profile
+  // — PositionsModel rated 0..5, same shape PositionFormFields uses on the edit-profile
   // page). The per-org PlayerDotaProfile.pos_N booleans are derived server-side.
   const defaultPositions: PositionPriorities = {
     carry: currentUserPositions?.carry ?? 0,

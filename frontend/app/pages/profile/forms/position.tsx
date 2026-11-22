@@ -20,10 +20,6 @@ import {
   positionChoices,
 } from '~/components/user/positions/positionEdit';
 
-type PositionFormProps = {
-  form: UseFormReturn<any, any, any>;
-};
-
 type PositionFieldsProps = {
   form: UseFormReturn<any, any, any>;
   /** Tailwind grid classes for the field grid. Override when embedding in a
@@ -39,8 +35,7 @@ type PositionFieldsProps = {
 const DEFAULT_GRID_CLASS =
   'sm:grid sm:grid-flow-col grid-rows-1 sm:grid-rows-3 gap-4 w-full items-center justify-center h-auto';
 
-/** Inner-only variant of PositionForm — the 5 per-role priority selects without
- *  the page heading or card-shadow wrapper. Use this inside other modals. */
+/** The 5 per-role priority selects. */
 export const PositionFormFields = ({
   form,
   gridClassName,
@@ -183,19 +178,6 @@ export const PositionFormFields = ({
           </div>
         )}
       />
-    </div>
-  );
-};
-
-export const PositionForm = ({ form }: PositionFormProps) => {
-  return (
-    <div className="items-center content-center justify-center hover:shadow-lg hover:shadow-base-400/50 p-4 rounded-lg w-full">
-      <div className="flex w-full">
-        <h2 className="text-2xl font-bold mb-4 text-center justify-center w-full">
-          Edit Positions
-        </h2>
-      </div>
-      <PositionFormFields form={form} />
     </div>
   );
 };
