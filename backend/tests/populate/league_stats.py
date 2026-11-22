@@ -13,9 +13,9 @@ from datetime import date
 
 from django.db import transaction
 
-from app.models import CustomUser, League, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel, Team, Tournament
 from draft.models import Draft, DraftOptions, TeamDraftState
-from league.models import LeagueUser
+from league.models import League, LeagueUser
 from org.models import Organization
 from steam.functions.stats_update import update_all_league_stats_for_league
 from steam.models import LeaguePlayerStats, Match, PlayerMatchStats

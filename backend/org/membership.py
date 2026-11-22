@@ -3,7 +3,8 @@ from collections.abc import Iterable
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import Q
 
-from app.models import CustomUser, League
+from app.models import CustomUser
+from league.models import League
 from org.models import Organization, OrgUser
 
 

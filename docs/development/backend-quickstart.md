@@ -28,6 +28,53 @@ To create new migrations:
 just db::makemigrations app
 ```
 
+### Migration conflicts (`max_migration.txt`)
+
+Every app with migrations has `migrations/max_migration.txt` holding the name of its
+latest migration ([django-linear-migrations](https://github.com/adamchainz/django-linear-migrations)).
+`makemigrations` updates it for you; commit it with the migration. When your branch and
+`main` both add a migration to the same app, git conflicts on that file instead of Django
+raising "Conflicting migrations" after the merge:
+
+```text
+CONFLICT (content): Merge conflict in backend/events/migrations/max_migration.txt
+
+<<<<<<< HEAD
+0036_add_signup_note
+=======
+0036_event_capacity
+>>>>>>> origin/main
+```
+
+To fix it (example app `events`, last common migration `0035`):
+
+```bash
+# 1. Before merging, unapply your branch's migration from each local DB that has it
+just db::manage dev migrate events 0035
+just db::manage test migrate events 0035
+
+# 2. Merge (or rebase onto) main; git stops on max_migration.txt
+git merge origin/main
+
+# 3. Renumber your migration after main's: renames it to 0037_..., points its
+#    dependency at main's 0036 and rewrites max_migration.txt
+just db::rebase-migration events
+
+# 4. Stage the rename and the resolved file, finish the merge
+git add backend/events/migrations
+git merge --continue          # or: git rebase --continue
+
+# 5. Verify, then migrate
+just db::manage dev makemigrations --check --dry-run
+just db::migrate::dev
+```
+
+`rebase_migration` refuses to run while your migration is still applied (step 1), and it
+only moves one migration: if your branch adds several to the same app, squash them first or
+renumber by hand. The system check (`dlm.E00x`) fails `makemigrations --check`,
+`manage.py check` and `manage.py test` when a `max_migration.txt` is stale; after editing
+migrations by hand, `just db::manage dev create_max_migration_files --recreate` rewrites them.
+
 ### Test Data Population
 
 ```bash

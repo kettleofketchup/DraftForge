@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils import timezone
 
+from app.models import CustomUser, Game
+from league.models import League
+from league.models_rating import LeagueMatch, LeagueMatchParticipant, LeagueRating
+from league.services.rating import get_rating_system
 from org.mmr import LEAGUE_GAME, org_mmr_map
-
-if TYPE_CHECKING:
-    from app.models import CustomUser, Game, League, LeagueMatch
 
 
 class LeagueMatchService:
@@ -22,8 +22,6 @@ class LeagueMatchService:
         cls, league: League, game: Game, bracket_slot: str | None = None
     ) -> LeagueMatch:
         """Create a LeagueMatch from an existing Game object."""
-        from app.models import LeagueMatch
-
         match = LeagueMatch.objects.create(
             league=league,
             game=game,
@@ -51,9 +49,6 @@ class LeagueMatchService:
             losers: List of CustomUser objects who lost
             winning_side: 'radiant' or 'dire'
         """
-        from app.models import LeagueMatch, LeagueMatchParticipant, LeagueRating
-        from app.services.rating import get_rating_system
-
         # Lock match row to prevent race condition
         match = LeagueMatch.objects.select_for_update().get(pk=match.pk)
 
@@ -188,8 +183,6 @@ class LeagueMatchService:
 
         Reverses original deltas, then re-finalizes with current parameters.
         """
-        from app.models import LeagueMatch
-
         # Lock match
         match = LeagueMatch.objects.select_for_update().get(pk=match.pk)
         league = match.league

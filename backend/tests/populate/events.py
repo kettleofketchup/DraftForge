@@ -10,7 +10,7 @@ from datetime import time, timedelta
 from cacheops import invalidate_obj
 from django.utils import timezone as tz
 
-from app.models import CustomUser, GameType, League, PositionsModel
+from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
 from discordbot.models import DiscordEvent
 from events.constants import EventState, RepeatFrequency, SignupStatus
 from events.models import (
@@ -26,6 +26,7 @@ from events.ready_check_constants import (
     ReadyCheckLowCompletionAction,
     ReadyCheckScope,
 )
+from league.models import League
 from org.models import Organization
 from org.models_profiles import PlayerDotaProfile
 from tests.data import (
@@ -36,6 +37,7 @@ from tests.data import (
     EVENTS_ORG,
     EVENTS_USERS,
 )
+from tests.data.users import EVENT_LEAGUE_STAFF_USER
 from tests.populate.utils import ensure_league_user, ensure_org_user
 
 
@@ -206,7 +208,6 @@ def populate_events_data(force=False):
     # 4b. Add event_league_staff_tester as staff of league 7 ONLY (never of org 7)
     # This user is created in populate_test_auth_users (step 3); the league
     # assignment is deferred to here because league pk=7 is created above.
-    from tests.data.users import EVENT_LEAGUE_STAFF_USER
 
     event_league_staff = CustomUser.objects.filter(
         pk=EVENT_LEAGUE_STAFF_USER.pk
@@ -520,7 +521,6 @@ def populate_events_data(force=False):
     print("    Created Deadlock + Dota screenshot-required events")
 
     # 5c. Draft Test Tournament — ready for draft start, stable PK for browser testing
-    from app.models import Team, Tournament
 
     draft_tournament, _ = Tournament.objects.update_or_create(
         pk=100,

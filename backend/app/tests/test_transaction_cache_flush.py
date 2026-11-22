@@ -9,7 +9,7 @@ from django.test import TransactionTestCase
 from django.utils import timezone
 
 from app.models import CustomUser, Tournament
-from app.serializers import _tournament_organization
+from app.serializers import tournament_organization
 from events.models import Event
 from org.models import Organization
 from user.tests.test_cacheops_integration import _redis_reachable
@@ -35,11 +35,11 @@ class FlushDropsRunCacheTests(TransactionTestCase):
             created_by=owner,
             tournament=tournament,
         )
-        self.assertEqual(_tournament_organization(tournament), org)
+        self.assertEqual(tournament_organization(tournament), org)
 
     def test_b_reused_pk_reads_the_database(self) -> None:
         tournament = Tournament.objects.create(
             name="Reused Cup", date_played=timezone.now()
         )
         self.assertEqual(tournament.pk, 1)
-        self.assertIsNone(_tournament_organization(tournament))
+        self.assertIsNone(tournament_organization(tournament))

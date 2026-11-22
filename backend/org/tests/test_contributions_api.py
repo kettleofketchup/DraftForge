@@ -7,8 +7,9 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League
+from app.models import CustomUser
 from events.models import Event
+from league.models import League
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry, create_manual_award
 from org.features import FeatureKey, set_org_feature

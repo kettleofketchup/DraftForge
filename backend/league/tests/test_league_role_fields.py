@@ -9,7 +9,8 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League
+from app.models import CustomUser
+from league.models import League
 from org.models import Organization
 
 

@@ -6,7 +6,8 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
 from app.models import Game, Tournament
-from app.permissions_tournament import can_manage_game, has_league_staff_access
+from app.permissions_tournament import can_manage_game
+from league.permissions import has_league_staff_access
 from steam.constants import LEAGUE_ID
 from steam.functions.game_linking import (
     auto_assign_matches_by_time,

@@ -2,7 +2,8 @@ from django.test import TestCase, override_settings
 from django.urls import resolve, reverse
 from rest_framework.test import APIClient, APIRequestFactory
 
-from app.models import League, Team, Tournament
+from app.models import Team, Tournament
+from league.models import League
 from tests.helpers.team_management_fixture import (
     TEAM_MANAGEMENT_GHOST,
     TEAM_MANAGEMENT_SEARCH_TARGET,
