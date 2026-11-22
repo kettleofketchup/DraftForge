@@ -10,13 +10,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.functions.tournament import _serialize_tournament
-from app.models import (
-    CustomUser,
-    League,
-    LeagueLog,
-    Tournament,
-)
+from app.functions.tournament import serialize_tournament
+from app.models import CustomUser, League, LeagueLog, Tournament
 from app.permissions_tournament import (
     has_league_admin_access,
     has_league_staff_access,
@@ -423,13 +418,8 @@ def add_tournament_member(request: Request, tournament_id: int) -> Response:
 
     tournament.users.add(user)
 
-    # Invalidate immediately so _serialize_tournament gets fresh data,
-    # AND after commit so subsequent GET requests see the new state.
     invalidate_obj(tournament)
     invalidate_after_commit(tournament)
 
-    # Refresh to include the newly added user in serialization
     tournament.refresh_from_db()
-    return Response(
-        {"status": "added", "tournament": _serialize_tournament(tournament)}
-    )
+    return Response({"status": "added", "tournament": serialize_tournament(tournament)})

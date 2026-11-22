@@ -3,7 +3,7 @@ from typing import Any
 from rest_framework import serializers
 
 from app.models import CustomUser
-from app.serializers import TournamentUserSerializer, _tournament_organization
+from app.serializers import TournamentUserSerializer, tournament_organization
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftRound
 from org.models import OrgUser
 
@@ -138,7 +138,7 @@ class HeroDraftSerializer(serializers.ModelSerializer):
         return None
 
     def to_representation(self, instance: HeroDraft) -> dict[str, Any]:
-        org = _tournament_organization(
+        org = tournament_organization(
             instance.game.tournament if instance.game else None
         )
         nicknames: dict[int, str | None] = {}

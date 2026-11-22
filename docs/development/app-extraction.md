@@ -128,6 +128,8 @@ The order is:
 
 The ContentType relabel is required. Without it, `post_migrate` creates new permission rows that nobody holds, and the existing user and group grants stay behind on stale rows. The relabel must be symmetric and defensive: for each model, skip it (and log once) when the destination row already exists, in both directions. Then neither direction can hit `UNIQUE(app_label, model)`. See `backend/app/migrations/0108_move_hero_draft_models_to_draft.py`.
 
+Move migrations log with `structlog.get_logger(__name__)`, never `telemetry.logging`: a historical migration must not import app code, and stdlib `extra=` fields are dropped from rendered logs.
+
 Check that no SQL runs and nothing is left over:
 
 ```bash

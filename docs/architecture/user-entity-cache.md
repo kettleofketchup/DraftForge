@@ -73,9 +73,9 @@ Similarly for `DraftSerializerSlim`, `DraftRoundSerializerSlim`, and `Tournament
 Full user data is collected once and attached as `_users` on the response:
 
 ```python
-def _build_users_dict(tournament):
+def build_users_dict(tournament):
     """Build a deduplicated {pk: serialized_user} dict for a tournament."""
-    seen_pks = _collect_tournament_user_pks(tournament)
+    seen_pks = collect_tournament_user_pks(tournament)
     user_qs = CustomUser.objects.filter(pk__in=seen_pks).select_related("positions")
     return {u["pk"]: u for u in _serialize_users_with_mmr(user_qs, tournament)}
 ```
@@ -84,7 +84,7 @@ This is injected in views, consumers, and broadcast functions:
 
 ```python
 data = TournamentSerializerSlim(tournament).data
-data["_users"] = _build_users_dict(tournament)
+data["_users"] = build_users_dict(tournament)
 ```
 
 ### Resulting API Shape
@@ -390,7 +390,7 @@ sequenceDiagram
 
 | File | Purpose |
 |------|---------|
-| `backend/app/serializers.py` | `UserPkField`, slim serializers, `_build_users_dict()` |
+| `backend/app/serializers.py` | `UserPkField`, slim serializers, `build_users_dict()` |
 | `backend/org/serializers.py` | `OrgUserSerializer` (org-scoped MMR + `orgUserPk`) |
 | `backend/league/serializers.py` | `LeagueUserSerializer` (league-scoped MMR) |
 | `backend/app/views_main.py` | Injects `_users` dict on tournament/draft GET responses |

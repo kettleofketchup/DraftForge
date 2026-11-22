@@ -39,7 +39,7 @@ class TournamentDetailStaleWriteTests(TransactionTestCase):
         return team["draft_is_ready"]
 
     def test_ready_committed_mid_read_is_not_cached_stale(self) -> None:
-        original: Callable[..., dict] = views_main._build_users_dict
+        original: Callable[..., dict] = views_main.build_users_dict
         fired: list[bool] = []
 
         def commit_ready_mid_read(*args: object, **kwargs: object) -> dict:
@@ -53,7 +53,7 @@ class TournamentDetailStaleWriteTests(TransactionTestCase):
                 self.assertEqual(response.status_code, 200)
             return original(*args, **kwargs)
 
-        with patch.object(views_main, "_build_users_dict", commit_ready_mid_read):
+        with patch.object(views_main, "build_users_dict", commit_ready_mid_read):
             racing = self.detail()
         self.assertEqual(fired, [True])
         self.assertFalse(self.ready_flag(racing.data))
