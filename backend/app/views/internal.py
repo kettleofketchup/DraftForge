@@ -29,6 +29,7 @@ from events.completion import close_event
 from events.constants import EventState
 from events.models import Event
 from events.serializers import EventSerializer
+from org.models import OrgUser
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -406,7 +407,6 @@ def get_sync_discord_state(request: Request) -> Response:
 def get_repeater_subscribers(request: Request, repeater_id: int) -> Response:
     """Get subscribers for a repeater with Discord IDs and org membership."""
     from events.models import RepeaterSubscription
-    from org.models import OrgUser
 
     subs = RepeaterSubscription.objects.filter(
         event_repeater_id=repeater_id

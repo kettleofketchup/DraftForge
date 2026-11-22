@@ -36,6 +36,7 @@ def build_draft_link_embed(
     tournament_id: int,
     date_played: datetime | None = None,
     timezone: str | None = None,
+    one_click: bool = False,
 ) -> dict[str, Any]:
     """Rich embed for team draft start DM."""
     url = f"{_site_url()}/tournament/{tournament_id}/teams/draft"
@@ -52,7 +53,7 @@ def build_draft_link_embed(
         "title": "Team Draft Started",
         "description": (
             f"The team draft for **[{tournament_name}]({url})** has begun!\n\n"
-            f"{_draft_instructions()}"
+            f"{_draft_instructions(one_click)}"
         ),
         "color": COLOR_DRAFT,
         "fields": fields,
@@ -61,8 +62,8 @@ def build_draft_link_embed(
 
 
 def build_draft_link_components(
-    tournament_id: int, *, draft_id: int | None = None
-) -> list[dict]:
+    tournament_id: int, *, draft_id: int | None = None, invite_url: str | None = None
+) -> list[dict[str, Any]]:
     """Browser link and optional Activity launcher for the specific team draft."""
     btn = {
         "type": 2,
@@ -73,11 +74,15 @@ def build_draft_link_components(
     emoji = _dflogo_emoji()
     if emoji:
         btn["emoji"] = emoji
-    return _draft_buttons(btn, "team", draft_id)
+    return _draft_buttons(btn, "team", draft_id, invite_url)
 
 
 def build_herodraft_link_embed(
-    tournament_name: str, herodraft_pk: int, radiant_name: str, dire_name: str
+    tournament_name: str,
+    herodraft_pk: int,
+    radiant_name: str,
+    dire_name: str,
+    one_click: bool = False,
 ) -> dict[str, Any]:
     """Rich embed for hero draft creation DM."""
     url = f"{_site_url()}/herodraft/{herodraft_pk}"
@@ -88,14 +93,16 @@ def build_herodraft_link_embed(
         "description": (
             f"A hero draft has been created for **[{tournament_name}]({url})**!\n\n"
             f"**{radiant_name}** vs **{dire_name}**\n\n"
-            f"{_draft_instructions()}"
+            f"{_draft_instructions(one_click)}"
         ),
         "color": COLOR_HERODRAFT,
         "url": url,
     }
 
 
-def build_herodraft_link_components(herodraft_pk: int) -> list[dict]:
+def build_herodraft_link_components(
+    herodraft_pk: int, invite_url: str | None = None
+) -> list[dict[str, Any]]:
     """Link button to join hero draft."""
     btn = {
         "type": 2,
@@ -106,25 +113,46 @@ def build_herodraft_link_components(herodraft_pk: int) -> list[dict]:
     emoji = _dflogo_emoji()
     if emoji:
         btn["emoji"] = emoji
-    return _draft_buttons(btn, "hero", herodraft_pk)
+    return _draft_buttons(btn, "hero", herodraft_pk, invite_url)
 
 
-def _draft_buttons(browser_button: dict, kind: str, draft_id: int | None) -> list[dict]:
+def _draft_buttons(
+    browser_button: dict,
+    kind: str,
+    draft_id: int | None,
+    invite_url: str | None = None,
+) -> list[dict]:
     buttons = [browser_button]
     if getattr(settings, "DISCORD_ACTIVITY_ENABLED", False) and draft_id:
-        buttons.append(
-            {
-                "type": 2,
-                "style": 1,
-                "label": "Launch / Join Activity",
-                "custom_id": f"draft_activity:{kind}:{draft_id}",
-            }
-        )
+        if invite_url:
+            buttons.append(
+                {
+                    "type": 2,
+                    "style": 5,
+                    "label": "Launch / Join Activity",
+                    "url": invite_url,
+                }
+            )
+        else:
+            buttons.append(
+                {
+                    "type": 2,
+                    "style": 1,
+                    "label": "Launch / Join Activity",
+                    "custom_id": f"draft_activity:{kind}:{draft_id}",
+                }
+            )
     return [{"type": 1, "components": buttons}]
 
 
-def _draft_instructions() -> str:
-    if getattr(settings, "DISCORD_ACTIVITY_ENABLED", False):
+def _draft_instructions(one_click: bool = False) -> str:
+    enabled = getattr(settings, "DISCORD_ACTIVITY_ENABLED", False)
+    if enabled and one_click:
+        return (
+            "Click **Launch / Join Activity** to join the draft's voice channel "
+            "and open DraftForge. You can also use **Open in Browser**."
+        )
+    if enabled:
         return (
             "Join your team's voice channel, then click **Launch / Join Activity** "
             "to get an invite for this draft in that channel. "

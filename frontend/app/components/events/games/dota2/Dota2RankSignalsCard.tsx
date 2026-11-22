@@ -1,4 +1,5 @@
 import type { EventSignupType } from '~/components/events/schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 import { Badge } from '~/components/ui/badge';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
@@ -75,7 +76,11 @@ export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
   ) : null;
 
   return (
-    <BaseRankSignalsCard signup={signup} warning={warning}>
+    <BaseRankSignalsCard
+      signup={signup}
+      gameType={GAME_TYPE.DOTA2}
+      warning={warning}
+    >
       {/* Self-Reported MMR (Dota — pulled from PlayerDotaProfile.mmr) */}
       <div
         className="flex justify-between items-center"

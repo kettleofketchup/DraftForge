@@ -19,15 +19,7 @@ from app.views import (
     UserView,
     current_user,
 )
-from app.views.admin_team import (
-    add_league_admin,
-    add_league_member,
-    add_league_staff,
-    add_tournament_member,
-    remove_league_admin,
-    remove_league_staff,
-    search_users,
-)
+from app.views.admin_team import add_tournament_member, search_users
 from app.views.csv_import import import_csv_org, import_csv_tournament
 from app.views.internal import (
     auto_close_event,
@@ -62,16 +54,20 @@ from app.views.internal import (
     update_tournament_log,
     update_user_avatar,
 )
-from app.views.ssr import (
-    EventSSRView,
-    LeagueSSRView,
-    TournamentSSRView,
-    UserSSRView,
-)
+from app.views.ssr import EventSSRView, TournamentSSRView, UserSSRView
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from draft.views.team_api import DraftRoundView, DraftView
 from events.views import fire_event_task, get_event_task_schedule
+from league.ssr import LeagueSSRView
+from league.views import LeagueView
+from league.views_admin_team import (
+    add_league_admin,
+    add_league_member,
+    add_league_staff,
+    remove_league_admin,
+    remove_league_staff,
+)
 from org.ssr import OrganizationSSRView
 from org.views import ClaimRequestViewSet
 from org.views_admin_team import (
@@ -131,7 +127,7 @@ router.register(
 router.register(r"games", GameView, "games")
 
 router.register(r"organizations", OrganizationView, basename="organization")
-router.register(r"leagues", app_views.LeagueView, basename="league")
+router.register(r"leagues", LeagueView, basename="league")
 router.register(r"claim-requests", ClaimRequestViewSet, basename="claim-request")
 
 router.register(r"tournaments-basic", TournamentsBasicView, "tournaments-basic")

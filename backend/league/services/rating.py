@@ -1,7 +1,7 @@
 """Rating calculation systems for league matches."""
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from app.models import League, LeagueRating
@@ -10,16 +10,16 @@ if TYPE_CHECKING:
 class RatingSystem(ABC):
     """Base class for rating calculation systems."""
 
-    def __init__(self, league: "League"):
+    def __init__(self, league: "League") -> None:
         self.league = league
 
     @abstractmethod
     def calculate_team_deltas(
         self,
-        winners: List["LeagueRating"],
-        losers: List["LeagueRating"],
+        winners: list["LeagueRating"],
+        losers: list["LeagueRating"],
         age_decay_factor: float = 1.0,
-    ) -> Dict:
+    ) -> dict[str, Any]:
         """
         Calculate rating deltas for a team match.
 
@@ -49,10 +49,10 @@ class EloRatingSystem(RatingSystem):
 
     def calculate_team_deltas(
         self,
-        winners: List["LeagueRating"],
-        losers: List["LeagueRating"],
+        winners: list["LeagueRating"],
+        losers: list["LeagueRating"],
         age_decay_factor: float = 1.0,
-    ) -> Dict:
+    ) -> dict[str, Any]:
         """
         Calculate Elo rating changes for team match.
 
@@ -105,10 +105,10 @@ class FixedDeltaRatingSystem(RatingSystem):
 
     def calculate_team_deltas(
         self,
-        winners: List["LeagueRating"],
-        losers: List["LeagueRating"],
+        winners: list["LeagueRating"],
+        losers: list["LeagueRating"],
         age_decay_factor: float = 1.0,
-    ) -> Dict:
+    ) -> dict[str, Any]:
         """
         Calculate fixed rating changes.
 

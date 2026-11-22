@@ -3,8 +3,8 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { GAME_TYPE, type GameTypeValue } from '~/components/game/constants';
-import { useGameTypeStore } from '~/store/gameTypeStore';
 
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 import { MmrApprovalModal } from '../MmrApprovalModal';
 import type { EventSignupType } from '../schemas';
 
@@ -21,8 +21,8 @@ const signup = {
   user_data: { pk: 5, username: 'player-five', steam_account_id: 123456 },
 } as unknown as EventSignupType;
 
-function renderModal(gameType: GameTypeValue | null) {
-  useGameTypeStore.getState().setCurrentGameType(gameType);
+function renderModal(gameType: GameTypeValue) {
+  withGameType(gameType);
   render(
     <MmrApprovalModal
       signup={signup}
@@ -36,7 +36,7 @@ function renderModal(gameType: GameTypeValue | null) {
 describe('MmrApprovalModal external profile links', () => {
   afterEach(() => {
     cleanup();
-    useGameTypeStore.getState().setCurrentGameType(null);
+    resetGameType();
   });
 
   it('shows the Dotabuff link on a Dota 2 event', () => {
