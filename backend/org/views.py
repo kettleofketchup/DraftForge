@@ -50,11 +50,9 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         """Filter to requests for organizations the user is staff of."""
         user = self.request.user
 
-        # Site admins can see all
         if user.is_superuser:
             return ProfileClaimRequest.objects.all()
 
-        # Org admins + staff see requests for their organizations
         admin_org_ids = set(user.admin_organizations.values_list("pk", flat=True))
         staff_org_ids = set(user.staff_organizations.values_list("pk", flat=True))
         org_ids = admin_org_ids | staff_org_ids
@@ -64,12 +62,10 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         """List claim requests, optionally filtered by status."""
         queryset = self.get_queryset()
 
-        # Filter by status if provided
         status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
 
-        # Filter by organization if provided
         org_id = request.query_params.get("organization")
         if org_id:
             queryset = queryset.filter(organization_id=org_id)
@@ -226,13 +222,11 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         # Copy Friend ID from target to claimer
         claimer.steam_account_id = target_user.steam_account_id
 
-        # Copy other fields from target if claimer doesn't have them
         if target_user.nickname and not claimer.nickname:
             claimer.nickname = target_user.nickname
         if target_user.avatar and not claimer.avatar:
             claimer.avatar = target_user.avatar
 
-        # Copy positions if target has them and claimer doesn't
         if target_user.positions and not claimer.positions:
             positions_data = {
                 "carry": target_user.positions.carry,
@@ -318,8 +312,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         # Draft rounds captained
         DraftRound.objects.filter(captain=target_user).update(captain=claimer)
 
-        # HeroDraft events - HeroDraftEvent doesn't have actor, events are tied to draft_team
-        # Skip this - events are associated with teams, not users directly
+        # HeroDraftEvent is tied to draft_team, not a user; nothing to move
 
         # League ratings
         for rating in LeagueRating.objects.filter(player=target_user):
@@ -346,7 +339,6 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 user=claimer, league_id=stats.league_id
             ).first()
             if existing:
-                # Merge stats
                 existing.games_played += stats.games_played
                 existing.wins += stats.wins
                 existing.losses += stats.losses
@@ -377,11 +369,10 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
             org.promoters.remove(target_user)
             invalidate_after_commit(org)
 
-        # Clear steam_account_id from target before saving claimer (to avoid UNIQUE constraint)
+        # Free the unique steam_account_id before claimer.save() takes it
         target_user.steam_account_id = None
         target_user.steamid = None
         target_user.save(update_fields=["steam_account_id", "steamid"])
 
-        # Save claimer and delete target
         claimer.save()
         target_user.delete()
