@@ -39,6 +39,7 @@ export interface TrackPanelSet {
   openOwnByDefault: boolean;
   Detail: ComponentType<TrackDetailProps>;
   Admin?: ComponentType<TrackAdminProps>;
+  Banner?: ComponentType<TrackAdminProps>;
   HeaderExtra?: ComponentType;
 }
 
