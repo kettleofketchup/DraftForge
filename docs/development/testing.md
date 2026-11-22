@@ -191,9 +191,12 @@ just test::run 'python manage.py test app.tests.test_bracket -v 2'  # one module
 package (a directory with `__init__.py`) under `backend/`, including the top-level
 `backend/tests/` package.
 
-CI splits that run across two parallel `Backend tests (<group>)` jobs in
-`.github/workflows/playwright.yml`: `app` runs the `app` package, and `rest` runs every
-other top-level package. `just ci::backend-test-labels <group>` prints a group's labels,
+CI splits that run across three parallel `Backend tests (<group>)` jobs in
+`.github/workflows/playwright.yml`: `app` runs the `app` package, `migrations` runs every
+`test*migration*.py` module outside `app` (each migrates the schema back and forth, about
+30s a test), and `rest` runs every other module in the remaining top-level packages.
+Name a new data-migration test module `test_<name>_migration.py` so it lands in
+`migrations`. `just ci::backend-test-labels <group>` prints a group's labels,
 so a new app or test module is picked up without editing the workflow. A `test*.py`
 directly in `backend/` fails the recipe, because no group would run it.
 

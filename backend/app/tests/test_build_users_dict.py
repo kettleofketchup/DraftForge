@@ -4,8 +4,8 @@ from django.utils import timezone
 from app.models import CustomUser, GameType, League, Tournament
 from app.serializers import (
     TournamentSerializer,
-    _build_users_dict,
     _serialize_users_with_mmr,
+    build_users_dict,
 )
 from events.models import Event
 from events.services import create_tournament_for_event
@@ -71,7 +71,7 @@ class BuildUsersDictOrgTests(TransactionTestCase):
         )
 
     def test_org_entry_has_core_and_mmr(self) -> None:
-        entry = _build_users_dict(self.tournament)[self.member.pk]
+        entry = build_users_dict(self.tournament)[self.member.pk]
         # core half (cached per-user)
         assert entry["nickname"] == "Member"
         assert "positions" in entry
@@ -81,7 +81,7 @@ class BuildUsersDictOrgTests(TransactionTestCase):
         assert "orgUserPk" in entry
 
     def test_org_shape_parity(self) -> None:
-        entry = _build_users_dict(self.tournament)[self.member.pk]
+        entry = build_users_dict(self.tournament)[self.member.pk]
         ref = _serialize_users_with_mmr(
             CustomUser.objects.filter(pk=self.member.pk), self.tournament
         )[0]
@@ -99,21 +99,21 @@ class BuildUsersDictOrgTests(TransactionTestCase):
         CustomUser.objects.filter(pk=self.member.pk).update(
             discordNickname="GwaihirTheWindlord"
         )
-        entry = _build_users_dict(self.tournament, fresh=True)[self.member.pk]
+        entry = build_users_dict(self.tournament, fresh=True)[self.member.pk]
         assert entry["guildNickname"] == "DragonClaw"
         assert entry["discordNickname"] == "GwaihirTheWindlord"
 
     def test_nickname_edit_reflected(self) -> None:
-        _build_users_dict(self.tournament)  # warm core cache
+        build_users_dict(self.tournament)  # warm core cache
         self.member.nickname = "Renamed"
-        entry = _build_users_dict(self.tournament)[self.member.pk]
+        entry = build_users_dict(self.tournament)[self.member.pk]
         assert entry["nickname"] == "Renamed"
 
     def test_mmr_change_reflected(self) -> None:
-        _build_users_dict(self.tournament)  # warm
+        build_users_dict(self.tournament)  # warm
         ou = OrgUser.objects.get(user=self.member, organization=self.org)
         set_org_mmr(ou, GameType.DOTA2, 5555, mark_verified=False)
-        entry = _build_users_dict(self.tournament)[self.member.pk]
+        entry = build_users_dict(self.tournament)[self.member.pk]
         assert entry["mmr"] == 5555
 
 
@@ -128,7 +128,7 @@ class BuildUsersDictNonOrgTests(TransactionTestCase):
         self.tournament.users.add(self.member)
 
     def test_nonorg_no_mmr_shape_parity(self) -> None:
-        entry = _build_users_dict(self.tournament)[self.member.pk]
+        entry = build_users_dict(self.tournament)[self.member.pk]
         assert "mmr" not in entry and "league_mmr" not in entry
         ref = _serialize_users_with_mmr(
             CustomUser.objects.filter(pk=self.member.pk), self.tournament
@@ -158,7 +158,7 @@ class BuildUsersDictLeaguelessEventTests(TransactionTestCase):
         ensure_org_user(self.member, self.org, mmr=4200)
 
     def test_entry_carries_event_org_mmr(self) -> None:
-        entry = _build_users_dict(self.tournament)[self.member.pk]
+        entry = build_users_dict(self.tournament)[self.member.pk]
         assert entry["mmr"] == 4200
         assert entry["league_mmr"] is None
         assert "orgUserPk" in entry
