@@ -284,6 +284,30 @@ Docker Compose files reference `:latest` — the pull step handles tagging the c
 | `just docker::release::push` | `:version` + `:hash` + `:latest` | Production releases |
 | `just ci::prepare-images` | `:hash` only (no `:buildcache`) | PR prepare job (`--hash-only`) |
 
+### Build Modes and Cache Names
+
+Every `docker::<svc>::build*` recipe goes through `docker::buildx`, which has two modes:
+
+- **`--mode=trusted`** (default): the tags above, `--cache-from` GHCR
+  `draftforge/<img>:buildcache` and, with `--push`, `--cache-to` the same ref.
+  `--no-cache` (releases) neither reads nor writes `:buildcache`. Only hosted `main`
+  builds and release tags push in this mode.
+- **`--mode=pr --pr=<n>`**: used only by the home runner's PR `prepare` job. Pushes only
+  `ghcr.io/kettleofketchup/draftforge-ci/<img>:pr-<n>-<hash>`, reads Zot
+  `buildcache/pr/draftforge/<img>:pr-<n>` and GHCR `:buildcache`, writes only the Zot
+  per-PR cache. Never `:latest`, never a `draftforge/` tag, never a GHCR `cache-to`.
+  `docker::db::build --mode=pr --pr=<n>` does the same for
+  `draftforge-ci/test-db:pr-<n>-<hash>`.
+
+| Name | Written by |
+|------|------------|
+| `draftforge/<img>:latest`, `:<hash>`, `:<version>` | Hosted `main` builds and release tags |
+| `draftforge/<img>:buildcache` | Hosted `main` builds only |
+| `draftforge-ci/<img>:pr-<n>-<hash>` | PR `prepare` only; read by that PR's test jobs |
+| Zot `buildcache/pr/draftforge/<img>:pr-<n>` | PR `prepare` only (BuildKit inside the home cluster) |
+
+Where each job runs, the trust model and the switches: [CI Runners](../development/ci-runners.md).
+
 ### Commands
 
 ```bash
