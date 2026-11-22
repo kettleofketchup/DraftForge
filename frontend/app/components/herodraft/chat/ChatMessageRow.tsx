@@ -44,7 +44,7 @@ function SuggestionBody({
       onClick={() => onHeroClick?.(message.hero_id)}
       data-testid={`herodraft-chat-suggestion-${message.id}`}
     >
-      <span className="text-muted-foreground">suggests</span>
+      <span className="opacity-80">suggests</span>
       <Badge
         className={cn(
           'border-transparent px-1.5 text-[10px] font-semibold',
