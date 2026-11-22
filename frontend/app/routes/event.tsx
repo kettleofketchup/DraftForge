@@ -135,7 +135,10 @@ import {
   useEventConduct,
   type ConductMemberLookup,
 } from '~/features/conduct';
-import { EventLeadershipBanner } from '~/features/leadership';
+import {
+  EventLeadershipBanner,
+  EventLeadershipSection,
+} from '~/features/leadership';
 import {
   invalidateConductQueries,
   removeFeatureQueries,
@@ -654,6 +657,7 @@ export default function EventPage() {
               org={eventOrg ?? undefined}
               access={eventOrgAccess}
             />
+            <EventLeadershipSection event={event} access={eventOrgAccess} />
             <DetailsTab
               event={event}
               signedIn={!!currentUser?.pk}
