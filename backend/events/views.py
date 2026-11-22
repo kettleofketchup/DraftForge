@@ -1299,23 +1299,11 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                     )
 
         try:
-            result = approve_signup(signup, mmr_override=mmr_override)
+            result = approve_signup(
+                signup, mmr_override=mmr_override, actor=request.user
+            )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Audit log for MMR override
-        if mmr_override is not None:
-            OrgLog.objects.create(
-                organization=signup.event.organization,
-                actor=request.user,
-                action="set_mmr",
-                target_user=signup.user,
-                details={
-                    "mmr": mmr_override,
-                    "event_id": signup.event.pk,
-                    "game_type": int(game_type),
-                },
-            )
 
         return Response(
             EventSignupSerializer(result, context={"request": request}).data
