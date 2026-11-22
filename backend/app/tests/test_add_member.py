@@ -386,7 +386,7 @@ class AddMemberGuildNicknameTest(TestCase):
     def test_league_add_invalidates_user_after_commit(self) -> None:
         user = self._existing()
         self._warm(_member())
-        with mock.patch("app.views.admin_team.invalidate_after_commit") as spy:
+        with mock.patch("league.views_admin_team.invalidate_after_commit") as spy:
             self.client.post(
                 f"/api/leagues/{self.league.pk}/members/",
                 {"user_id": user.pk},
