@@ -10,6 +10,7 @@ from app.models import CustomUser
 from events.capacity import lock_event
 from events.constants import SignupStatus
 from events.models import Event, EventSignup, ReadyCheck
+from events.ready_check_constants import ReadyCheckEntryState
 from org.conduct.constants import Outcome, OutcomeSource, expected_statuses
 from org.conduct.gate import conduct_gate, get_conduct_settings
 from org.conduct.services import refresh_unmet_on_commit
@@ -46,10 +47,17 @@ class FinalizeResult:
 def roll_call_pending_user_ids(
     locked: Event, signups: Sequence[EventSignup], check: ReadyCheck | None
 ) -> set[int]:
-    if not locked.roll_call_enabled or check is not None:
+    if not locked.roll_call_enabled:
         return set()
     if not any(s.status == SignupStatus.CONFIRMED for s in signups):
         return set()
+    if check is not None:
+        return set(
+            check.entries.filter(
+                state=ReadyCheckEntryState.PENDING,
+                signup__status=SignupStatus.APPROVED,
+            ).values_list("user_id", flat=True)
+        )
     return {s.user_id for s in signups if s.status == SignupStatus.APPROVED}
 
 
