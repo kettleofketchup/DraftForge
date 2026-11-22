@@ -1,7 +1,7 @@
 import ast
 import tempfile
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from django.apps import apps
@@ -624,6 +624,16 @@ def _within(name: str, prefix: str) -> bool:
     return name == prefix or name.startswith(f"{prefix}.")
 
 
+def _is_label_reference(value: str, app_label: str, model_label: str) -> bool:
+    label = f"{app_label}.{model_label}"
+    folded = value.casefold()
+    return folded == label or folded.startswith((f"{label}.", f"{label}_"))
+
+
+def _is_command_module(module_name: str) -> bool:
+    return ".management.commands." in f".{module_name}"
+
+
 def _is_test_module(path: str) -> bool:
     p = Path(path)
     return "tests" in p.parts or p.name.startswith("test_")
@@ -735,7 +745,10 @@ def find_violations(
                 )
         if _within(module_name, s.source_app):
             moved_names = {name for _old, name in s.moved} - moved_here
+            command_module = _is_command_module(module_name)
             for name, line in _top_level_defs(tree):
+                if name == "Command" and command_module:
+                    continue
                 if name in moved_names and (path, name) not in collisions:
                     found.append(
                         f"{path}:{line}: [{s.name}] moved name {name} redefined "
@@ -752,7 +765,6 @@ def find_violations(
         if not _is_migration_code(path):
             for line, what in _references_moved_model(tree, s):
                 found.append(f"{path}:{line}: [{s.name}] {what}")
-        lazy_labels = {f"{s.source_app}.{label}" for label in s.model_labels}
         prefixes = [f"{old}.{name}" for old, name in s.moved] + sorted(
             s.retired_modules
         )
@@ -760,9 +772,11 @@ def find_violations(
             if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
                 continue
             value = node.value
-            if value.casefold() not in lazy_labels and any(
-                _within(value, p) for p in prefixes
-            ):
+            is_label = any(
+                _is_label_reference(value, s.source_app, label)
+                for label in s.model_labels
+            )
+            if not is_label and any(_within(value, p) for p in prefixes):
                 found.append(
                     f"{path}:{node.lineno}: [{s.name}] string back-door {value!r}"
                 )
@@ -810,10 +824,12 @@ def _migration_key(path: str) -> tuple[str, str]:
 def _references_moved_model(
     tree: ast.Module, s: MovedSlice
 ) -> Iterator[tuple[int, str]]:
-    lazy_labels = {f"{s.source_app}.{label}" for label in s.model_labels}
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if node.value.casefold() in lazy_labels:
+            if any(
+                _is_label_reference(node.value, s.source_app, label)
+                for label in s.model_labels
+            ):
                 yield node.lineno, f"lazy model label {node.value!r}"
         elif isinstance(node, ast.Call):
             func = node.func
@@ -1193,6 +1209,77 @@ class GuardSelfTests(SimpleTestCase):
         for (path, name), reason in ALLOWED_NAME_COLLISIONS.items():
             with self.subTest(path=path, name=name):
                 self.assertTrue(reason.strip())
+
+    def test_label_reference_matches_through_model_string(self) -> None:
+        self.assertFlagged(
+            'm2m_changed.connect(f, sender="src.Moved_members")\n', "x.py"
+        )
+        self.assertFlagged('SENDER = "SRC.moved_users"\n', "x.py")
+        self.assertClean('SENDER = "dst.Moved_members"\n', "x.py")
+        self.assertTrue(_is_label_reference("app.Team_members", "app", "team"))
+
+    def test_label_reference_matches_dotted_field_key(self) -> None:
+        self.assertFlagged('EXCLUDED = {"src.Moved.team"}\n', "x.py")
+        self.assertClean('EXCLUDED = {"dst.Moved.team"}\n', "x.py")
+        self.assertTrue(_is_label_reference("app.TeamLog.team", "app", "teamlog"))
+
+    def test_label_reference_rejects_near_miss(self) -> None:
+        self.assertClean('LABEL = "src.movedx"\n', "x.py")
+        self.assertClean('LABEL = "src.Movedx.team"\n', "x.py")
+        self.assertClean('LABEL = "src.mov"\n', "x.py")
+        self.assertFalse(_is_label_reference("app.teamlogx", "app", "teamlog"))
+
+    def command_violations(self, source: str, path: str) -> list[str]:
+        command_slice = replace(
+            FIXTURE_SLICE,
+            moved=FIXTURE_SLICE.moved | {("src.old", "Command")},
+        )
+        return find_violations(
+            source, path, slices=(command_slice,), back_edges={}, collisions={}
+        )
+
+    def test_command_in_source_app_command_module_not_flagged(self) -> None:
+        source = "class Command(BaseCommand):\n    pass\n"
+        self.assertEqual(
+            self.command_violations(source, "src/management/commands/x.py"), []
+        )
+
+    def test_command_outside_command_module_still_flagged(self) -> None:
+        source = "class Command(BaseCommand):\n    pass\n"
+        self.assertNotEqual(self.command_violations(source, "src/x.py"), [])
+        self.assertNotEqual(self.command_violations(source, "src/management/x.py"), [])
+
+    def test_split_retirement_cross_app_names_listed_same_app_names_not(
+        self,
+    ) -> None:
+        split = replace(
+            FIXTURE_SLICE,
+            moved=frozenset({("src.old", "to_new_app"), ("src.old", "to_third_app")}),
+        )
+
+        def violations(source: str, path: str) -> list[str]:
+            return find_violations(
+                source, path, slices=(split,), back_edges={}, collisions={}
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "dst").mkdir()
+            (Path(tmp) / "dst" / "old.py").write_text("def to_new_app() -> None: ...\n")
+            self.assertEqual(
+                find_unlisted_retired_defs((split,), Path(tmp), {}, frozenset()), []
+            )
+        self.assertEqual(violations("def stays() -> None: ...\n", "src/renamed.py"), [])
+        self.assertEqual(
+            violations("def to_third_app() -> None: ...\n", "other/thing.py"), []
+        )
+        self.assertEqual(violations("from src.renamed import stays\n", "x.py"), [])
+        self.assertEqual(
+            violations("from other.thing import to_third_app\n", "x.py"), []
+        )
+        self.assertNotEqual(violations("from src.old import stays\n", "x.py"), [])
+        self.assertNotEqual(
+            violations("def to_third_app() -> None: ...\n", "src/renamed.py"), []
+        )
 
 
 class AppBoundaryTests(SimpleTestCase):
