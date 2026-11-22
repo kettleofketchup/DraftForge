@@ -1,4 +1,3 @@
-import logging
 from argparse import ArgumentParser
 from typing import Any
 
@@ -8,8 +7,9 @@ from django.db import transaction
 
 from app.models import CustomUser, PositionsModel
 from org.models import AttendanceOutcome, ContributionEntry, PromoSend
+from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 PROD_API_URL = "https://dota.kettle.sh/api/users/"
 
@@ -55,7 +55,7 @@ class Command(BaseCommand):
                 elif user.get("is_staff"):
                     admin_status = " [staff]"
                 self.stdout.write(
-                    f"  Would sync: {user.get('username')} (steamid: {user.get('steamid')}){admin_status}"
+                    f"  Would sync: {user.get('username')} (steam_account_id: {user.get('steam_account_id')}){admin_status}"
                 )
             return
 
@@ -76,8 +76,12 @@ class Command(BaseCommand):
                     self._create_user(user_data)
                     created_count += 1
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to create user {user_data.get('username')}: {e}"
+                    log.warning(
+                        "prod_user_sync_skipped",
+                        system="app",
+                        subsystem="prod_import",
+                        username=user_data.get("username"),
+                        error=str(e),
                     )
                     self.stdout.write(
                         self.style.WARNING(
@@ -91,7 +95,7 @@ class Command(BaseCommand):
                 )
             )
 
-    def _create_user(self, user_data: dict) -> CustomUser:
+    def _create_user(self, user_data: dict[str, Any]) -> CustomUser:
         """Create a user from production API data."""
         # Create positions if provided
         positions_data = user_data.get("positions")
@@ -109,10 +113,10 @@ class Command(BaseCommand):
         user = CustomUser.objects.create(
             username=user_data.get("username", f"user_{user_data.get('pk')}"),
             nickname=user_data.get("nickname"),
+            steam_account_id=user_data.get("steam_account_id"),
             steamid=user_data.get("steamid"),
             discordId=user_data.get("discordId"),
             avatar=user_data.get("avatar"),
-            mmr=user_data.get("mmr"),
             positions=positions,
             is_staff=user_data.get("is_staff", False),
             is_superuser=user_data.get("is_superuser", False),
