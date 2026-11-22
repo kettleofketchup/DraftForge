@@ -20,7 +20,7 @@ inputs:
     default: ghcr.io/kettleofketchup/draftforge
   playwright:
     description: >
-      'true' runs `just test::pw::*` inside the frontend-dev image
+      'true' runs `just test::pw::*` inside the playwright-runner image
       (DF_PW_CONTAINER=1), so the runner needs no Node or browsers; 'false' for
       jobs that only exec into the stack (backend tests)
     required: false
@@ -29,15 +29,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/setup-toolchain
-      with:
-        registry-token: ${{ inputs.registry-token }}
-        github-actor: ${{ inputs.github-actor }}
-        buildx: 'false'
-        prefetch: 'true'
-        python: 'false'
-
-    - name: Run host helpers on the runner's python3, Playwright in frontend-dev
+    - name: Run host helpers on the runner's python3, Playwright in playwright-runner
       shell: bash
       env:
         PLAYWRIGHT: ${{ inputs.playwright }}
@@ -48,15 +40,21 @@ runs:
           ln -sfn /app/node_modules frontend/node_modules
         fi
 
-    - name: Pull or Build Docker images
+    - uses: ./.github/actions/setup-toolchain
+      with:
+        registry-token: ${{ inputs.registry-token }}
+        github-actor: ${{ inputs.github-actor }}
+        buildx: 'false'
+        prefetch: 'true'
+        python: 'false'
+
+    - name: Pull Docker images
       shell: bash
       run: |
         if just ci::prefetch-wait images; then
           echo "Images pulled successfully"
         else
-          echo "Pull failed, building with buildx + registry cache..."
-          just ci::buildx-builder
-          just docker::frontend::build-dev
+          echo "Pull incomplete; the steps below rebuild missing or stale images"
         fi
 
     - name: Rebuild frontend-dev image if pulled :latest is stale
@@ -72,6 +70,22 @@ runs:
           echo "frontend-dev image lacks current package-lock hash; rebuilding"
           just ci::buildx-builder
           just docker::frontend::build-dev
+        fi
+
+    - name: Rebuild playwright-runner image if pulled :latest is stale
+      if: inputs.playwright == 'true'
+      shell: bash
+      env:
+        IMAGE_PREFIX: ${{ inputs.image-prefix }}
+      run: |
+        PW_HASH=$(just docker::hash playwright)
+        PW_IMAGE="${IMAGE_PREFIX}/playwright-runner:${PW_HASH}"
+        if docker image inspect "$PW_IMAGE" >/dev/null 2>&1; then
+          echo "playwright-runner:${PW_HASH:0:12} present (deps in sync)"
+        else
+          echo "playwright-runner image lacks current hash; rebuilding"
+          just ci::buildx-builder
+          just docker::frontend::build-pw
         fi
 
     - name: Rebuild backend-dev image if pulled :latest is stale

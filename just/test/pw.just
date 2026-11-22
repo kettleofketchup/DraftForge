@@ -8,9 +8,9 @@ python := env("DF_JUST_PYTHON", root / ".venv/bin/python")
 just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
 pw := just + " test::pw::run"
 cicd := pw + " --grep @cicd"
-pw_image := env("DF_PW_IMAGE", "ghcr.io/kettleofketchup/draftforge/frontend-dev:latest")
+pw_image := env("DF_PW_IMAGE", "ghcr.io/kettleofketchup/draftforge/playwright-runner:latest")
 
-# npx playwright test <args> with DF_BASE_URL set for this slot, after flushing the test Redis (DF_PW_CONTAINER=1: inside the frontend-dev image, as CI does)
+# npx playwright test <args> with DF_BASE_URL set for this slot, after flushing the test Redis (DF_PW_CONTAINER=1: inside the playwright-runner image, as CI does)
 [group('test::pw')]
 run *args:
     #!/usr/bin/env bash

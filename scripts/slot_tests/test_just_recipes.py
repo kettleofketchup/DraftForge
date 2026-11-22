@@ -438,7 +438,7 @@ def test_playwright_runs_in_frontend_with_the_slot_url(run: Runner) -> None:
     ]
 
 
-PW_IMAGE = "ghcr.io/kettleofketchup/draftforge/frontend-dev:latest"
+PW_IMAGE = "ghcr.io/kettleofketchup/draftforge/playwright-runner:latest"
 
 
 def _docker_stub(tmp_path: Path) -> None:
@@ -447,7 +447,7 @@ def _docker_stub(tmp_path: Path) -> None:
     stub.chmod(0o755)
 
 
-def test_playwright_runs_in_the_frontend_dev_image(run: Runner, tmp_path: Path) -> None:
+def test_playwright_runs_in_the_runner_image(run: Runner, tmp_path: Path) -> None:
     _docker_stub(tmp_path)
     result = run("test::pw::cicd-chromium", "--shard=1/4", DF_PW_CONTAINER="1")
     assert result.returncode == 0, result.stderr
