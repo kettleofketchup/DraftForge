@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('app', '0101_tournament_dota_lobby_fields'),
+        ("app", "0096_squashed_0106"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

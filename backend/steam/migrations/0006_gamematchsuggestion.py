@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("app", "0039_alter_draft_tournament_alter_tournament_winning_team"),
+        ("app", "0001_squashed_0069"),
         ("steam", "0005_match_league_id"),
     ]
 

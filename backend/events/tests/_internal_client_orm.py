@@ -141,9 +141,8 @@ def _check_message_log_exists_orm(source, source_id):
 
 
 def _search_message_logs_orm(*args, **kwargs):
-    """ORM-backed replacement that accepts BOTH the old positional signature and
-    the new keyword-only signature (production has a duplicated def — last one
-    wins, breaking positional callers)."""
+    """ORM-backed replacement accepting positional args or the keyword-only
+    signature of search_message_logs."""
     from discordbot.models import DiscordMessageLog
     from discordbot.schemas import MessageLogSchema
 
@@ -456,6 +455,7 @@ _CALLSITE_MODULES = (
     "app.internal_client.discord",
     "app.internal_client.events",
     "events.discord.embeds",
+    "events.scheduling.fire",
     "events.tasks",
     "discordbot.utils",
 )

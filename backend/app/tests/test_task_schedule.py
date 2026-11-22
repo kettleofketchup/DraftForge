@@ -230,10 +230,7 @@ class FireSignupPostRepostTest(TestCase):
             embed_data={"title": "seed"},
         )
 
-        # Patch the celery current_app the view imports. The view does
-        # `from celery import current_app` inside the function so the import
-        # resolves at call time against the module-level proxy we replace.
-        with patch("celery.current_app") as mock_app:
+        with patch("events.views.current_app") as mock_app:
             resp = self.client.post(
                 f"/api/events/{self.event.pk}/task-schedule/signup_post/fire/"
             )
@@ -320,7 +317,7 @@ class ScheduledEventPastStartTest(TestCase):
         from unittest.mock import patch
 
         event = self._event(-timedelta(hours=2))
-        with patch("celery.current_app") as mock_app:
+        with patch("events.views.current_app") as mock_app:
             resp = self.client.post(
                 f"/api/events/{event.pk}/task-schedule/scheduled_event/fire/"
             )
@@ -361,7 +358,7 @@ class FireHeroDraftDmTest(TestCase):
         self.client.force_authenticate(user=admin)
 
     def test_resend_passes_game_id_to_task(self) -> None:
-        with patch("celery.current_app") as mock_app:
+        with patch("events.views.current_app") as mock_app:
             resp = self.client.post(
                 f"/api/events/{self.event.pk}/task-schedule/herodraft_dm/fire/"
             )
