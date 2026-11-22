@@ -606,6 +606,21 @@ class MemberApiTest(ApiCase):
         self.assertFalse(body["events"][0]["released"])
         self.assertEqual(set(body["points"]), {"all_time", "this_month"})
 
+    def test_staff_view_totals_include_unreleased_events(self) -> None:
+        for mate in self.mates_a[:2]:
+            self.review(mate, self.cap_a, 4)
+        rating_points = self.points(self.cap_a, "captain_rating")
+        self.assertTrue(rating_points)
+        staff = self.member_view(self.admin)
+        own = self.member_view(self.cap_a)
+        self.assertEqual(staff["reviews"], 2)
+        self.assertIsNotNone(staff["rating"])
+        self.assertEqual(own["reviews"], 0)
+        self.assertIsNone(own["rating"])
+        self.assertEqual(
+            staff["points"]["all_time"], own["points"]["all_time"] + rating_points
+        )
+
     def test_released_aggregate_needs_three_reviews(self) -> None:
         self.review(self.mates_a[0], self.cap_a, 4)
         self.review(self.mates_a[1], self.cap_a, 2)

@@ -7,7 +7,6 @@ MIN_EVENT_AGGREGATE_REVIEWS: Final[int] = 3
 MAX_ACTIVE_TRAITS: Final[int] = 8
 SCORE_MIN: Final[int] = 1
 SCORE_MAX: Final[int] = 5
-REASON_MIN_LENGTH: Final[int] = 3
 REASON_MAX_LENGTH: Final[int] = 500
 
 DEFAULT_TRAITS: Final[tuple[tuple[str, str], ...]] = (

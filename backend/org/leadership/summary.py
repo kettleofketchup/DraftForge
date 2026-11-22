@@ -53,9 +53,14 @@ def member_payload(
     settings = get_leadership_settings(org_id)
     traits = effective_traits(org_id)
     rating = rating_board(
-        org_id, now=now, settings=settings, traits=traits, captain_ids=[org_user.pk]
+        org_id,
+        now=now,
+        settings=settings,
+        traits=traits,
+        include_unreleased=staff,
+        captain_ids=[org_user.pk],
     ).get(org_user.pk)
-    points = member_points(org_user, now=now, include_unreleased=False)
+    points = member_points(org_user, now=now, include_unreleased=staff)
     payload: dict[str, Any] = {
         "member": member_summary(org_user),
         **rating_data(rating, traits),
