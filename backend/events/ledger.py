@@ -10,7 +10,7 @@ from django.http import HttpRequest
 from django.utils import timezone as tz
 
 from events.constants import ActorRole, SignupAction, SignupMeans
-from events.models import Event, EventSignup, SignupLedgerEntry
+from events.models import Event, EventSignup, ReadyCheck, SignupLedgerEntry
 from events.schemas import SignupSnapshot
 from telemetry.logging import get_logger
 
@@ -24,6 +24,7 @@ __all__ = [
     "SignupActor",
     "SignupMeans",
     "event_snapshot",
+    "record_ready_check_transition",
     "record_signup_change",
     "snapshot",
     "user_snapshot",
@@ -152,6 +153,65 @@ def record_signup_change(
         "event_id": entry.event_id,
         "signup_id": entry.signup_id,
         "subject_user_id": entry.subject_user_id,
+        "actor_user_id": entry.actor_user_id,
+        "actor_role": str(entry.actor_role),
+        "means": str(entry.means),
+        "action": str(entry.action),
+        "correlation_id": entry.correlation_id,
+    }
+    transaction.on_commit(
+        lambda: log.info(
+            "signup_ledger_entry_recorded",
+            system="events",
+            subsystem="ledger",
+            **fields,
+        )
+    )
+    return entry
+
+
+def record_ready_check_transition(
+    *,
+    event: Event,
+    actor: SignupActor,
+    check: ReadyCheck,
+    step: str,
+    reason: str = "",
+    extra: dict[str, Any] | None = None,
+) -> SignupLedgerEntry:
+    entry = SignupLedgerEntry.objects.create(
+        event=event,
+        organization_id=event.organization_id,
+        signup=None,
+        event_snapshot=event_snapshot(event),
+        subject_user=None,
+        subject_snapshot={},
+        actor_user=actor.user,
+        actor_snapshot=user_snapshot(actor.user),
+        actor_role=actor.role,
+        means=actor.means,
+        on_behalf=False,
+        action=SignupAction.READY_CHECK_TRANSITION,
+        before=None,
+        after={
+            "extra": {
+                "step": step,
+                "phase": check.phase,
+                "outcome": check.outcome,
+                **(extra or {}),
+            }
+        },
+        reason=reason or step,
+        correlation_id=f"rc{check.pk}:{step}",
+        occurred_at=tz.now(),
+    )
+    fields: dict[str, Any] = {
+        "entry_id": entry.pk,
+        "event_id": entry.event_id,
+        "ready_check_id": check.pk,
+        "step": step,
+        "phase": check.phase,
+        "outcome": check.outcome,
         "actor_user_id": entry.actor_user_id,
         "actor_role": str(entry.actor_role),
         "means": str(entry.means),
