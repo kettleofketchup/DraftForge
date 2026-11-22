@@ -4,17 +4,27 @@ These run in Django (same process), so they CAN access ORM.
 They check config flags and fire Celery tasks via .delay().
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from events.tournament_tasks import (
+    send_tournament_draft_links,
+    send_tournament_herodraft_links,
+)
 from telemetry.logging import get_logger
+
+if TYPE_CHECKING:
+    from app.models import Game, Tournament
+    from draft.models import Draft, HeroDraft
 
 logger = get_logger(__name__)
 
 
-def notify_draft_started(tournament, draft):
+def notify_draft_started(tournament: Tournament, draft: Draft) -> None:
     """Dispatch DM task if discord_send_draft_link is enabled."""
     if not tournament.discord_send_draft_link:
         return
-    from events.tournament_tasks import send_tournament_draft_links
-
     send_tournament_draft_links.delay(tournament.pk, draft.pk)
     logger.info(
         "draft_links_dispatched",
@@ -24,12 +34,12 @@ def notify_draft_started(tournament, draft):
     )
 
 
-def notify_herodraft_created(tournament, herodraft, game):
+def notify_herodraft_created(
+    tournament: Tournament, herodraft: HeroDraft, game: Game
+) -> None:
     """Dispatch DM task if discord_send_herodraft_link is enabled."""
     if not tournament.discord_send_herodraft_link:
         return
-    from events.tournament_tasks import send_tournament_herodraft_links
-
     send_tournament_herodraft_links.delay(
         tournament.pk,
         herodraft.pk,

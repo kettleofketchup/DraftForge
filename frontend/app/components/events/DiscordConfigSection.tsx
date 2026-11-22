@@ -317,13 +317,13 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
         )}
       </div>
 
-      {/* Confirm attendance */}
+      {/* Attendance reminder */}
       <div className="rounded-md border border-border p-3 space-y-3">
         <CheckboxField
           control={control}
           name="discord_confirm_attendance"
-          label="Confirm attendance via Discord"
-          description="Require players to reply to a Discord message on event day to confirm they'll attend"
+          label="Post attendance reminder in Discord"
+          description="Posts a reminder in the announcement channel before the event. It doesn't track replies; use the ready check to require confirmation."
         />
         {confirmAttendance && (
           <HoursSelect

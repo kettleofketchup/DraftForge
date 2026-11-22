@@ -212,3 +212,26 @@ def test_all_push_pushes_the_runner(tmp_path: Path) -> None:
     calls = _recorded_just(tmp_path, "docker::all-push")
     runner = [c for c in calls if f"{RUNNER}:latest" in c]
     assert len(runner) == 1 and "--push" in runner[0]
+
+
+def test_hash_only_push_drops_latest_and_cache_export(tmp_path: Path) -> None:
+    (argv,) = _recorded_just(
+        tmp_path, "docker::frontend::build-pw", "--push", "--hash-only"
+    )
+    tags = {argv[i + 1] for i, a in enumerate(argv) if a == "--tag"}
+    assert tags == {f"{RUNNER}:{_hash('playwright')}"}
+    assert "--cache-to" not in argv
+    assert "--cache-from" in argv
+    assert "--push" in argv
+
+
+def test_test_db_push_hash_only_skips_latest(tmp_path: Path) -> None:
+    db_hash = subprocess.run(
+        [str(ROOT / "scripts" / "hash-test-db-sources.sh")],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    registry = "ghcr.io/kettleofketchup/draftforge/test-db"
+    calls = _recorded_just(tmp_path, "docker::db::push", "--hash-only")
+    assert [c[1] for c in calls if c[0] == "push"] == [f"{registry}:{db_hash}"]

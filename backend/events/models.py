@@ -279,11 +279,14 @@ class DiscordEventConfigMixin(models.Model):
     )
     discord_confirm_attendance = models.BooleanField(
         default=False,
-        help_text="Require attendance confirmation via Discord message reply on event day",
+        help_text=(
+            "Post an attendance reminder in the announcement channel before the event. "
+            "Replies are not tracked; use the ready check to require confirmation."
+        ),
     )
     discord_confirm_attendance_hours = models.IntegerField(
         default=2,
-        help_text="Hours before event to send attendance confirmation request",
+        help_text="Hours before event to post the attendance reminder",
     )
     discord_profile_reminder = models.BooleanField(
         default=False,

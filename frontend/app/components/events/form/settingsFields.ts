@@ -331,12 +331,12 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     discord_profile_reminder_hours: { label: 'Profile reminder: when to send' },
     discord_confirm_attendance: {
-      label: 'Confirm attendance via Discord',
+      label: 'Post attendance reminder in Discord',
       description:
-        "Require players to reply to a Discord message on event day to confirm they'll attend",
+        "Posts a reminder in the announcement channel before the event. It doesn't track replies; use the ready check to require confirmation.",
     },
     discord_confirm_attendance_hours: {
-      label: 'Attendance check: when to send',
+      label: 'Attendance reminder: when to send',
     },
     discord_post_signups: {
       label: 'Post event signup embed',

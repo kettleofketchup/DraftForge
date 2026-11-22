@@ -5,18 +5,26 @@ are made directly from the worker since they're external HTTP calls.
 """
 
 import os
+from typing import Any
 
 import requests
 from celery import shared_task
 
-from app.internal_client import get_users_for_avatar_check, update_user_avatar
+from app.internal_client import (
+    bulk_update_user_avatars,
+    get_users_for_avatar_check,
+    list_discord_guild_ids,
+    list_discord_linked_users,
+    update_user_avatar,
+)
 from config.discord_api import DISCORD_API_BASE_URL
+from discordbot.services.discord_members import get_discord_members_data
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
 
-def _is_test_environment():
+def _is_test_environment() -> bool:
     """Check if running in test environment (skip Discord API calls)."""
     return (
         os.environ.get("TEST", "").lower() == "true"
@@ -24,7 +32,7 @@ def _is_test_environment():
     )
 
 
-def _is_avatar_url_valid(url):
+def _is_avatar_url_valid(url: str) -> bool:
     """Check if the avatar URL returns a valid response (not 404)."""
     try:
         response = requests.head(url, timeout=5)
@@ -33,7 +41,7 @@ def _is_avatar_url_valid(url):
         return False
 
 
-def _fetch_discord_avatar(discord_id):
+def _fetch_discord_avatar(discord_id: str) -> str | None:
     """Fetch latest avatar hash from Discord API. Returns hash or None."""
     token = os.environ.get("DISCORD_BOT_TOKEN", "")
     if not token:
@@ -58,7 +66,7 @@ def _fetch_discord_avatar(discord_id):
     return None
 
 
-def _check_and_update_user(user):
+def _check_and_update_user(user: dict[str, Any]) -> bool:
     """Check a single user's avatar and update via internal API if needed.
 
     Returns True if avatar was updated.
@@ -102,7 +110,7 @@ def _check_and_update_user(user):
 
 
 @shared_task
-def refresh_discord_avatars(batch_size: int = 100):
+def refresh_discord_avatars(batch_size: int = 100) -> dict[str, int | bool]:
     """Refresh Discord avatars for users with existing avatars.
 
     Checks avatar URLs and updates them if they've changed or become invalid.
@@ -156,7 +164,7 @@ def refresh_discord_avatars(batch_size: int = 100):
 
 
 @shared_task
-def refresh_single_user_avatar(user_id: int):
+def refresh_single_user_avatar(user_id: int) -> dict[str, bool | str]:
     """Refresh Discord avatar for a specific user."""
     if _is_test_environment():
         return {"updated": False, "skipped": True}
@@ -175,7 +183,7 @@ def refresh_single_user_avatar(user_id: int):
 
 
 @shared_task
-def refresh_avatars_batched():
+def refresh_avatars_batched() -> dict[str, int | bool]:
     """Bulk avatar refresh via Discord guild-members API.
 
     Replaces the per-user `/users/{id}` fan-out (one synchronous outbound
@@ -210,21 +218,6 @@ def refresh_avatars_batched():
             reason="test_environment",
         )
         return {"checked": 0, "updated": 0, "skipped": True}
-
-    # Lazy imports keep the module importable in worker startup paths that
-    # haven't fully bootstrapped Django.
-    #
-    # Import from `discord_members` directly (not the DRF views module
-    # `discordbot.services.users`) — that module pulls in `app.models`,
-    # `social_django.models`, and cacheops decorators at load time, which
-    # touch `connections['default']` and crash with `ImproperlyConfigured`
-    # under `settings_celery.DATABASES = {}`.
-    from app.internal_client import (
-        bulk_update_user_avatars,
-        list_discord_guild_ids,
-        list_discord_linked_users,
-    )
-    from discordbot.services.discord_members import get_discord_members_data
 
     # Discordful users only — non-Discord-linked accounts can't gain or lose
     # a Discord avatar. Empty list here means either no Discord-linked users
@@ -316,7 +309,7 @@ def refresh_avatars_batched():
 
 
 @shared_task
-def refresh_all_discord_data():
+def refresh_all_discord_data() -> dict[str, int | bool]:
     """Refresh all Discord data for users (avatars, usernames, etc.).
 
     Iterates through all users with Discord IDs in batches.

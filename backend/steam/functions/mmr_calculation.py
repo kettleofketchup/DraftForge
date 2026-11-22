@@ -21,7 +21,6 @@ logger = get_logger(__name__)
 
 def get_league_avg_kda(league_id: int) -> float:
     """Get the average KDA for all players in a league."""
-
     stats = LeaguePlayerStats.objects.filter(
         league_id=league_id,
         games_played__gte=settings.LEAGUE_MMR_MIN_GAMES,
@@ -40,7 +39,6 @@ def get_league_avg_kda(league_id: int) -> float:
 
 def get_league_avg_gpm(league_id: int) -> float:
     """Get the average GPM for all players in a league."""
-
     result = LeaguePlayerStats.objects.filter(
         league_id=league_id,
         games_played__gte=settings.LEAGUE_MMR_MIN_GAMES,

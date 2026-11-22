@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events', '0036_retarget_tournament_league_to_league'),
+        ('events', '0037_attendance_reminder_help_text'),
     ]
 
     operations = [

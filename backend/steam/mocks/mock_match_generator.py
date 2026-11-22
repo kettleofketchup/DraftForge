@@ -9,11 +9,11 @@ Reference: https://api.steampowered.com/IDOTA2Match_570/GetMatchHistoryBySequenc
 """
 
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from app.models import Team, Tournament
+    from app.models import CustomUser, Team, Tournament
 
 # Hero IDs (popular competitive heroes)
 HERO_IDS = [
@@ -215,7 +215,7 @@ POSITION_STATS = {
 
 
 def generate_player_stats(
-    user, position: int, is_winner: bool, player_slot: int, duration: int
+    user: "CustomUser", position: int, is_winner: bool, player_slot: int, duration: int
 ) -> dict:
     """
     Generate realistic player stats based on position and win/loss.
@@ -237,7 +237,7 @@ def generate_player_stats(
     # Winners get slightly better stats on average
     multiplier = 1.1 if is_winner else 0.9
 
-    def rand_stat(key):
+    def rand_stat(key: str) -> int:
         low, high = stats[key]
         base = random.randint(low, high)
         # Apply multiplier with some variance
@@ -580,8 +580,6 @@ def generate_mock_matches_for_tournament(
             base_time = int(tournament.date_played.timestamp())
         else:
             # date object - convert to datetime
-            from datetime import time
-
             dt = datetime.combine(tournament.date_played, time(12, 0, 0))
             base_time = int(dt.timestamp())
     else:
