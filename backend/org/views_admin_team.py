@@ -25,6 +25,7 @@ from events.eligibility import (
     STEAM_ACCOUNT_ID_RANGE,
     admin_precheck_steam_account_id,
     apply_admin_steam_account_id,
+    friend_id_error_status,
     refresh_unmet_requirements,
 )
 from league.models import LeagueUser
@@ -394,11 +395,7 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
             except ValidationError as exc:
                 return Response(
                     {"error": exc.messages[0], "code": exc.code},
-                    status=(
-                        status.HTTP_429_TOO_MANY_REQUESTS
-                        if exc.code == "steam_lookup_rate_limited"
-                        else status.HTTP_400_BAD_REQUEST
-                    ),
+                    status=friend_id_error_status(exc.code),
                 )
             verify_grant = apply_admin_steam_account_id(
                 user, new_id, actor=request.user

@@ -77,7 +77,10 @@ from app.tournament_list import (
 from discordbot.models import DiscordTournamentLog
 from draft.models import Draft, DraftRound, DraftTeam
 from draft.services.team import apply_draft_options
-from events.eligibility import admin_precheck_steam_account_id
+from events.eligibility import (
+    admin_precheck_steam_account_id,
+    friend_id_error_status,
+)
 from events.models import Event
 from events.signup_window import user_signups_open_tournament_ids
 from league.models import League
@@ -1159,11 +1162,7 @@ def _admin_friend_id_refusal(
     except ValidationError as exc:
         return Response(
             {"steam_account_id": [exc.messages[0]], "code": exc.code},
-            status=(
-                status.HTTP_429_TOO_MANY_REQUESTS
-                if exc.code == "steam_lookup_rate_limited"
-                else status.HTTP_400_BAD_REQUEST
-            ),
+            status=friend_id_error_status(exc.code),
         )
     return None
 

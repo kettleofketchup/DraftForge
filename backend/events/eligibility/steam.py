@@ -18,6 +18,7 @@ from app.steam_accounts import (
     steam_account_id_holder,
 )
 from events.models import Event
+from org.permissions import has_org_staff_access
 from steam.services.account_lookup import (
     SteamLookupRateLimited,
     ensure_steam_account_exists,
@@ -47,6 +48,38 @@ def _not_found_error(account_id: int) -> ValidationError:
         "Dota 2 profile or Steam friends page.",
         code="steam_account_not_found",
     )
+
+
+def _verified_elsewhere_error(user: CustomUser) -> ValidationError:
+    verifier = user.steam_account_verified_org_name or "site staff"
+    return ValidationError(
+        f"Friend ID {user.steam_account_id} was verified by {verifier}. Only "
+        f"{verifier} or site staff can change or clear it.",
+        code="steam_account_verified_elsewhere",
+    )
+
+
+def friend_id_error_status(code: str | None) -> int:
+    return {
+        "steam_lookup_rate_limited": 429,
+        "steam_account_verified_elsewhere": 403,
+    }.get(code or "", 400)
+
+
+def _may_replace_verified_id(user: CustomUser, actor: CustomUser | None) -> bool:
+    if not user.steam_account_verified:
+        return True
+    if actor is None or not actor.is_authenticated:
+        return False
+    if actor.is_staff or actor.is_superuser:
+        return True
+    org_id = user.steam_account_verified_org_id
+    if org_id is None:
+        return False
+    if has_org_staff_access(actor, user.steam_account_verified_org):
+        return True
+    grant = can_verify_steam_account(actor, user)
+    return grant is not None and grant.org_id == org_id
 
 
 def _normalise_friend_id(fid: str | None) -> int | None:
@@ -119,8 +152,14 @@ def admin_precheck_steam_account_id(
     """Steam lookup for an untrusted staff write, charged to the actor.
 
     Call outside any atomic block. Trusted writes and unchanged IDs skip it.
+    Changing or clearing an ID that another org or site staff verified needs
+    that org's staff or site staff.
     """
-    if new_id is None or new_id == user.steam_account_id:
+    if new_id == user.steam_account_id:
+        return
+    if not _may_replace_verified_id(user, actor):
+        raise _verified_elsewhere_error(user)
+    if new_id is None:
         return
     if can_verify_steam_account(actor, user) is not None:
         return

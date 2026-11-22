@@ -37,6 +37,7 @@ from events.eligibility.steam import (
     admin_precheck_steam_account_id,
     apply_admin_steam_account_id,
     claim_friend_id,
+    friend_id_error_status,
     precheck_friend_id,
     validate_friend_id,
 )
@@ -80,6 +81,7 @@ __all__ = [
     "Severity",
     "Unmet",
     "admin_precheck_steam_account_id",
+    "friend_id_error_status",
     "apply_admin_steam_account_id",
     "claim_friend_id",
     "clear_eligibility",

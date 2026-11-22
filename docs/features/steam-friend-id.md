@@ -138,6 +138,11 @@ Any change to the ID, including clearing it, removes the verification and the St
 result, on every path (self-service, staff edit, Django admin, management commands).
 Saving the same ID again keeps both.
 
+Once an ID is verified, only staff of the organization that verified it, or site staff,
+can change or clear it. Any other organizer gets `steam_account_verified_elsewhere`
+(403). An unverified ID stays editable by any organizer of an organization the member
+belongs to.
+
 Verify and Mark unverified send the ID that was on screen. If the ID changed in the
 meantime, the request fails with "The Friend ID changed; check the new one before
 verifying." and the new ID is shown.
@@ -149,7 +154,8 @@ verifying." and the new ID is shown.
 If a member's real ID is already held by another account, they get the duplicate error,
 which now ends with "If this is your account, contact an organizer." An organizer (or
 site staff) can then clear or correct the wrong account's ID from the organization Users
-tab or the user edit dialog, and the real owner can enter it.
+tab or the user edit dialog, and the real owner can enter it. If the wrong account's ID
+is verified, ask the organization named in its badge, or site staff, to clear it.
 
 ---
 
@@ -169,6 +175,7 @@ The upgrade does not backfill anything. Every Friend ID saved before this releas
 | `invalid_friend_id` | 400 | All writes | Not a whole number in 1 to 4294967295 |
 | `friend_id_already_set` | 400 | Signups | A different ID is already set; ask an admin |
 | `duplicate_friend_id` | 409 | Profile edit, signups | Another account holds this ID |
+| `steam_account_verified_elsewhere` | 403 | Staff edits | Another org or site staff verified this ID |
 | `no_steam_account_id` | 400 | Verify endpoint | The member has no Friend ID |
 | `id_changed` | 409 | Verify endpoint | The ID changed since it was loaded |
 
