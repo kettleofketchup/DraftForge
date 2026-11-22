@@ -1,4 +1,5 @@
 - Merging two accounts that were both seated in the same event now promotes the next waitlisted player into the seat the duplicate signup held.
+- Merging two accounts signed up for the same event no longer drops the seat one of them held when the other's signup was cancelled, rejected, tentative or waitlisted; the seated signup is kept.
 - Approving a signup with an MMR override now saves the approval and its audit log entry together, so one can no longer be kept without the other.
 - A staff add that fails no longer leaves the player added to the organization.
 - The organization log entry for an approved profile claim now records which profile was merged and its Steam ID, instead of leaving both empty.

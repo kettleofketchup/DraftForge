@@ -37,23 +37,30 @@ def merge_user_signups(
         event = row.event
         kept = keep_rows.get(row.event_id)
         freed_seat = False
+        seats = seat_holding_statuses(event)
         if kept is None:
             before = snapshot(row, extra=origin)
+        else:
+            # A seat beats a row that holds none, whichever account it is on.
+            seated_drop = row.status in seats and kept.status not in seats
+            discarded = kept if seated_drop else row
+            before = snapshot(
+                discarded,
+                extra={
+                    **origin,
+                    "discarded_signup_id": discarded.pk,
+                    "discarded_duplicate": True,
+                },
+            )
+            freed_seat = discarded.status in seats
+            discarded.delete()
+            if seated_drop:
+                kept = None
+        if kept is None:
             row.user = keep
             row.save(update_fields=["user", "updated_at"])
             signup, after = row, snapshot(row, extra=origin)
         else:
-            discarded_pk = row.pk
-            before = snapshot(
-                row,
-                extra={
-                    **origin,
-                    "discarded_signup_id": discarded_pk,
-                    "discarded_duplicate": True,
-                },
-            )
-            freed_seat = row.status in seat_holding_statuses(event)
-            row.delete()
             signup, after = kept, snapshot(kept)
         entry = record_signup_change(
             event=event,

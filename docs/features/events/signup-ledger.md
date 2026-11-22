@@ -107,7 +107,7 @@ When staff approve a signup and set an MMR, the `approved` entry's after snapsho
 
 ### Account merges
 
-Both account merges, a Discord account merge and an approved profile claim, move the merged account's signups to the kept account and write an `account_merged` entry for each one, with `extra.from_user_id` set to the merged account in the before snapshot (and in the after snapshot when the row moved). When both accounts had signed up for the same event, the merged account's signup is deleted, and the entry is written against the kept account's signup with `extra.discarded_duplicate: true` and `extra.discarded_signup_id` in its before snapshot. Earlier entries about the merged account, and entries it made as the actor, move to the kept account.
+Both account merges, a Discord account merge and an approved profile claim, move the merged account's signups to the kept account and write an `account_merged` entry for each one, with `extra.from_user_id` set to the merged account in the before snapshot (and in the after snapshot when the row moved). When both accounts had signed up for the same event, one signup is deleted: the kept account's, if only the merged account's signup holds a seat, otherwise the merged account's. The entry is written against the surviving signup, and its before snapshot is the deleted signup with `extra.discarded_duplicate: true` and `extra.discarded_signup_id`. Earlier entries about the merged account, and entries it made as the actor, move to the kept account.
 
 Approving a profile claim used to delete the claimed profile's signups; it now moves them to the claimer.
 
