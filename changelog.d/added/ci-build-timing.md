@@ -1,0 +1,2 @@
+- Image builds now print their slowest BuildKit steps and cached-step count, and add them to the job summary, so you can see which layer dominates a build.
+- `just ci::timing` pulls queue waits, step timings, per-command timings (including inside composite actions) and those layer reports for recent CI runs into `.ci-timing/summary.md`.

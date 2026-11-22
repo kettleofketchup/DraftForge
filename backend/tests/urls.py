@@ -53,6 +53,7 @@ from .test_events_discord import (
     simulate_discord_signup,
     verify_discord_messages,
 )
+from .test_game_org_mmr import game_org_mmr_approve_setup, game_org_mmr_data
 from .test_health import healthz
 from .test_herodraft import (
     force_herodraft_timeout,
@@ -359,6 +360,12 @@ urlpatterns = [
     # Org locked features E2E data (test_org_features.py)
     path("org-features/data/", org_features_data, name="test-org-features-data"),
     path("org-features/reset/", reset_org_features, name="test-org-features-reset"),
+    path("game-org-mmr/data/", game_org_mmr_data, name="test-game-org-mmr-data"),
+    path(
+        "game-org-mmr/approve-setup/",
+        game_org_mmr_approve_setup,
+        name="test-game-org-mmr-approve-setup",
+    ),
     path("healthz/", healthz, name="test-healthz"),
     # Bracket scenario helpers (gated on TEST=true)
     path(
