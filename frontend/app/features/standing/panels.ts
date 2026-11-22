@@ -1,4 +1,4 @@
-import { Award, CalendarCheck, type LucideIcon } from 'lucide-react';
+import { Award, CalendarCheck, Crown, type LucideIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { ConductDetail } from '~/features/conduct/ConductPanels';
 import { ConductRateExplainer } from '~/features/conduct/ConductRateExplainer';
@@ -6,6 +6,10 @@ import {
   ContributionsAdmin,
   ContributionsDetail,
 } from '~/features/contributions/ContributionsPanels';
+import {
+  LeadershipBanner,
+  LeadershipDetail,
+} from '~/features/leadership/LeadershipPanels';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import type { TrackKey } from './schemas';
 
@@ -65,6 +69,22 @@ export const TRACK_PANELS: Partial<Record<TrackKey, TrackPanelSet>> = {
     openOwnByDefault: true,
     Detail: ConductDetail,
     HeaderExtra: ConductRateExplainer,
+  },
+  leadership: {
+    tabValue: 'leadership',
+    icon: Crown,
+    sampleLabel: (metricKey) =>
+      metricKey === 'points' ? 'Entries' : 'Reviews',
+    totalUnit: 'points',
+    emptyLabel: (periodic) =>
+      periodic
+        ? 'No leadership points in this period'
+        : 'No ranked captains yet',
+    canOpen: ({ own, rowsVisible, access }) =>
+      own || (rowsVisible && access.leadershipCanOpenOthers),
+    openOwnByDefault: true,
+    Detail: LeadershipDetail,
+    Banner: LeadershipBanner,
   },
 };
 
