@@ -9,11 +9,11 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, LeagueMatch, LeagueRating, PositionsModel
 from app.serializers import TournamentSerializer
-from app.services.match_finalization import LeagueMatchService
 from app.tests.test_game_org_mmr_drafts import GameOrgMmrFixtures
 from common.game import GameType
 from events.models import Event, EventState, OrgEventDefaults
 from league.models import LeagueUser
+from league.services.match_finalization import LeagueMatchService
 from org.features import FeatureKey, set_org_feature
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from steam.functions.mmr_calculation import update_user_league_mmr
