@@ -73,6 +73,18 @@ buildx-builder:
     docker buildx create --name df-ci --driver docker-container --use --bootstrap >/dev/null
     echo "buildx builder df-ci ready"
 
+# Create .venv with Poetry for a job set up with python: 'false' that needs Django on the host (the test-DB populate fallback); prints its python
+[group('ci')]
+venv:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{quote(root)}}
+    if [[ ! -x .venv/bin/python ]]; then
+        command -v poetry >/dev/null || pipx install 'poetry==2.2.0' >&2
+        POETRY_VIRTUALENVS_IN_PROJECT=true poetry install --no-interaction --no-ansi >&2
+    fi
+    echo "$PWD/.venv/bin/python"
+
 # Every event: fragment rules (including [Unreleased] holding only the pointer and no
 # fragment a release already consumed) and the checker's tests. push to main: HEAD
 # must not hand-edit CHANGELOG.md. pull_request: CHANGELOG.md untouched unless

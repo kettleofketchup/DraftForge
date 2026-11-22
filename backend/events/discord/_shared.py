@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from discordbot.models import DiscordEventLog
 from events.admission import self_serve_refusal
 from events.constants import SignupStatus
-from events.eligibility import steam_friend_id_from_profiles, unmet_labels
+from events.eligibility import unmet_labels
 from events.models import Event, EventSignup
 from telemetry.logging import get_logger
 
@@ -30,7 +30,8 @@ log = get_logger(__name__)
 
 
 def _steam_friend_id_prefill(org_user: OrgUser) -> str:
-    return steam_friend_id_from_profiles(org_user)
+    account_id = org_user.user.steam_account_id
+    return "" if account_id is None else str(account_id)
 
 
 def _log_interaction(

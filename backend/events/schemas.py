@@ -27,7 +27,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     from app.schemas import TournamentUserSchema
@@ -257,8 +257,11 @@ class SignupInputPatch(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # Format and uniqueness are checked by eligibility.validate_friend_id.
-    unverified_friend_id: Optional[str] = None
+    # Format, uniqueness and the already-set rule are checked by
+    # eligibility.validate_friend_id.
+    steam_account_id: Optional[str] = None
+    # Deprecated alias of steam_account_id, kept for older web clients.
+    unverified_friend_id: Optional[str] = Field(default=None, exclude=True)
     positions: Optional[PositionPriorities | list[int]] = None
     rank_status: Optional[Literal["active", "previous", "never"]] = None
     rank_medal: Optional[str] = Field(default=None, max_length=64)
@@ -266,10 +269,20 @@ class SignupInputPatch(BaseModel):
     rank_screenshot: Optional[str] = Field(default=None, max_length=500)
     battlecup_screenshot: Optional[str] = Field(default=None, max_length=500)
 
-    @field_validator("unverified_friend_id", mode="before")
+    @field_validator("steam_account_id", "unverified_friend_id", mode="before")
     @classmethod
     def _strip_friend_id(cls, v: object) -> object:
+        if isinstance(v, int) and not isinstance(v, bool):
+            return str(v)
         return v.strip() if isinstance(v, str) else v
+
+    @model_validator(mode="after")
+    def _fold_friend_id_alias(self) -> SignupInputPatch:
+        if "unverified_friend_id" in self.model_fields_set:
+            if "steam_account_id" not in self.model_fields_set:
+                self.steam_account_id = self.unverified_friend_id
+            self.model_fields_set.discard("unverified_friend_id")
+        return self
 
     @field_validator("positions")
     @classmethod

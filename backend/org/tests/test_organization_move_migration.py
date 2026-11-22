@@ -41,6 +41,12 @@ RETARGETS = (
     ("events", "0035_retarget_organization_to_org"),
     ("opsnotices", "0003_retarget_organization_to_org"),
 )
+AFTER_MOVE = [
+    MOVE_MIGRATION,
+    ("org", "0014_move_organization_models_from_app"),
+    ("events", "0035_retarget_organization_to_org"),
+    ("opsnotices", "0003_retarget_organization_to_org"),
+]
 APP = "app"
 ORG = "org"
 
@@ -164,6 +170,7 @@ class OrganizationMoveMigrationTests(TransactionTestCase):
                 "app_orglog": 2,
             },
         )
+        self._migrate(AFTER_MOVE)
         sql_before = _table_sql()
         self.assertEqual(set(sql_before), set(MOVED_TABLES + REFERRING_TABLES))
 
@@ -177,12 +184,13 @@ class OrganizationMoveMigrationTests(TransactionTestCase):
             _without(_table_sql(), "org_orguser"), _without(sql_before, "org_orguser")
         )
 
-        self._forward()
+        self._migrate(AFTER_MOVE)
 
         self.assertEqual(self._labels(ids), {m: (ORG, m) for m in ORG_MODELS})
         self._assert_grant(perm, user, group, ids["organization"])
         self.assertEqual(_row_counts(), counts)
         self.assertEqual(_table_sql(), sql_before)
+        self._forward()
         self.assertEqual(
             League.objects.get(steam_league_id=99111).organization_id, org.pk
         )
