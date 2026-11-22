@@ -15,6 +15,7 @@ services:
     volumes:
       - ./backend/db.sqlite3:/app/backend/prod.db.sqlite3
       - ./backend/.env:/app/backend/.env
+      - ./backend/media:/app/backend/media
 
     depends_on:
       - redis

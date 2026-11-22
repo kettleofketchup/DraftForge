@@ -47,6 +47,7 @@ dependencies = [
     "opentelemetry-instrumentation-celery (>=0.62b0,<1.0.0)",
     "opentelemetry-instrumentation-dbapi (>=0.62b0,<1.0.0)",
     "whitenoise (>=6.8.0,<7.0.0)",
+    "pillow (>=11,<13)",
 ]
 
 

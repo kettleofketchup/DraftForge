@@ -5,3 +5,4 @@
 **/*.sqlite3
 backend/.redis_data*
 backend/celerybeat-schedule*
+backend/media/
