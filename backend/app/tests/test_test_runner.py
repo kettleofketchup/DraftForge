@@ -401,6 +401,22 @@ def _sigusr1_self() -> None:
     time.sleep(0.2)
 
 
+def _fork_worker_within_deadline() -> None:
+    pid = os.fork()
+    if pid == 0:
+        try:
+            _worker_init()
+        finally:
+            os._exit(0)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if os.waitpid(pid, os.WNOHANG)[0]:
+            return
+        time.sleep(0.05)
+    os.kill(pid, signal.SIGKILL)
+    raise AssertionError("worker hung installing hang diagnostics")
+
+
 def _worker_init() -> None:
     init_worker(multiprocessing.Value("i", 0), used_aliases=set())
 
@@ -422,10 +438,15 @@ class HangDiagnosticsTests(SimpleTestCase):
     @mock.patch.dict(os.environ, {HANG_DUMP_ENV: "0.2"})
     def test_watchdog_dumps_after_the_env_timeout(self) -> None:
         out = _forked_stderr(_worker_init, lambda: time.sleep(1))
-        self.assertIn("Timeout (0:00:00.2", out)
+        self.assertIn("hang watchdog: still running after 0.2s", out)
+        self.assertIn("most recent call first", out)
+
+    @mock.patch.dict(os.environ, {HANG_DUMP_ENV: "60"})
+    def test_worker_forked_from_an_armed_parent_starts(self) -> None:
+        _forked_stderr(_parent_setup, _fork_worker_within_deadline)
 
     def test_watchdog_is_off_by_default(self) -> None:
         env = {k: v for k, v in os.environ.items() if k != HANG_DUMP_ENV}
         with mock.patch.dict(os.environ, env, clear=True):
             out = _forked_stderr(_worker_init, lambda: time.sleep(0.5))
-        self.assertNotIn("Timeout", out)
+        self.assertNotIn("hang watchdog", out)

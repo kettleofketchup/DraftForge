@@ -5,7 +5,9 @@ import multiprocessing
 import os
 import secrets
 import signal
+import sys
 import tempfile
+import threading
 import time
 from multiprocessing.reduction import ForkingPickler
 from multiprocessing.sharedctypes import Synchronized
@@ -174,15 +176,25 @@ def isolate_worker_redis_namespace() -> None:
         setting_changed.send(sender=None, setting=name, value=value, enter=True)
 
 
+def _dump_hung_stacks(seconds: float) -> None:
+    sys.stderr.write(f"hang watchdog: still running after {seconds:g}s\n")
+    sys.stderr.flush()
+    faulthandler.dump_traceback(all_threads=True)
+
+
 def install_hang_diagnostics() -> None:
     """SIGUSR1 dumps every thread's stack; DF_TEST_HANG_DUMP_SECONDS adds a one-shot dump.
 
     Each process installs its own: fork drops the watchdog thread, spawn drops both.
+    Not faulthandler.dump_traceback_later: a worker forked while it is armed hangs
+    re-arming it.
     """
     faulthandler.register(signal.SIGUSR1, all_threads=True)
     seconds = float(os.environ.get(HANG_DUMP_ENV) or 0)
     if seconds > 0:
-        faulthandler.dump_traceback_later(seconds)
+        watchdog = threading.Timer(seconds, _dump_hung_stacks, args=(seconds,))
+        watchdog.daemon = True
+        watchdog.start()
 
 
 def flush_run_cache_after_transaction_tests() -> None:
