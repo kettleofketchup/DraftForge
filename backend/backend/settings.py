@@ -14,6 +14,7 @@ import contextlib
 import os
 import secrets
 import sys
+import tomllib
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -431,8 +432,6 @@ def _deploy_version() -> str:
     if env:
         return env
     try:
-        import tomllib
-
         pyproject = Path(__file__).resolve().parent.parent.parent / "pyproject.toml"
         with open(pyproject, "rb") as f:
             return tomllib.load(f).get("project", {}).get("version", "0")

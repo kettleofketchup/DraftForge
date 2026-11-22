@@ -3,8 +3,36 @@
 import atexit
 import logging
 import os
+import socket
+import sqlite3
+import tomllib
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from opentelemetry import metrics, trace
+from opentelemetry._logs import set_logger_provider
+from opentelemetry.exporter.otlp.proto.common._log_encoder import encode_logs
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.celery import CeleryInstrumentor
+from opentelemetry.instrumentation.dbapi import trace_integration
+from opentelemetry.instrumentation.django import DjangoInstrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from opentelemetry.sdk._logs import LoggerProvider, ReadableLogRecord
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor, LogExportResult
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.view import DropAggregation, View
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+
+from telemetry.config import env_bool, parse_otlp_headers
+from telemetry.logging import get_logger
+from telemetry.otel_django import OTEL_MIDDLEWARE_PATH
 
 if TYPE_CHECKING:
     import requests
@@ -16,14 +44,12 @@ _log = logging.getLogger("telemetry.tracing")
 
 _tracing_initialized = False
 _log_export_initialized = False
-_log_provider = None
-_tracer_provider = None
+_log_provider: LoggerProvider | None = None
+_tracer_provider: TracerProvider | None = None
 
 
 def _get_otel_config() -> tuple[str, dict[str, str]] | None:
     """Return (endpoint, headers) if OTel is enabled and configured, else None."""
-    from telemetry.config import env_bool, parse_otlp_headers
-
     if not env_bool("OTEL_ENABLED", False):
         return None
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
@@ -35,8 +61,6 @@ def _get_otel_config() -> tuple[str, dict[str, str]] | None:
 def _get_service_version() -> str:
     """Read service version from pyproject.toml."""
     try:
-        import tomllib
-
         pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
         with open(pyproject_path, "rb") as f:
             data = tomllib.load(f)
@@ -45,7 +69,7 @@ def _get_service_version() -> str:
         return "unknown"
 
 
-def _build_resource() -> "Resource":
+def _build_resource() -> Resource:
     """Build OTel Resource with deployment attributes.
 
     Single source of truth for resource attributes — do NOT also set
@@ -55,10 +79,6 @@ def _build_resource() -> "Resource":
     same Resource, which is confusing for downstream consumers and
     occasionally trips Grafana Cloud's OTLP translator.
     """
-    import socket
-
-    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-
     service_name = os.environ.get("OTEL_SERVICE_NAME", "dtx-backend")
     namespace = os.environ.get("OTEL_SERVICE_NAMESPACE", "draftforge")
     environment = os.environ.get("NODE_ENV", "dev")
@@ -76,11 +96,14 @@ def _build_resource() -> "Resource":
     )
 
 
-def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> None:
+def _setup_provider(
+    resource: Resource,
+    provider: TracerProvider,
+    endpoint: str,
+    header_dict: dict[str, str],
+    sample_rate: float,
+) -> None:
     """Configure TracerProvider with exporters and instrumentors."""
-    from opentelemetry import trace
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
     service_name = resource.attributes.get("service.name", "dtx-backend")
 
@@ -116,16 +139,6 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
     # Don't reintroduce that map. If a specific metric needs DELTA in the
     # future, override it with a per-instrument View, not globally.
     try:
-        from opentelemetry import metrics
-        from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
-            OTLPMetricExporter,
-        )
-        from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import (
-            PeriodicExportingMetricReader,
-        )
-        from opentelemetry.sdk.metrics.view import DropAggregation, View
-
         # Wrap the exporter so that when Grafana Cloud rejects a batch with a
         # 4xx the response body is captured to our logs. The stock SDK only
         # logs `code: 400, reason: Bad Request` which is useless — Grafana's
@@ -139,8 +152,6 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
                 resp = super()._export(*args, **kwargs)
                 if 400 <= resp.status_code < 500:
                     body = (resp.text or "")[:1000].replace("\x00", "?")
-                    from telemetry.logging import get_logger
-
                     get_logger(__name__).error(
                         "otlp_metric_export_rejected",
                         system="telemetry",
@@ -205,9 +216,6 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
 
     # Instrument Django with hooks for request/user correlation
     try:
-        from opentelemetry.instrumentation.django import DjangoInstrumentor
-
-        from telemetry.otel_django import OTEL_MIDDLEWARE_PATH
 
         def _request_hook(span: "Span", request: "HttpRequest") -> None:
             """Inject request ID into OTel span for correlation with structlog."""
@@ -236,16 +244,12 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
 
     # Instrument Celery task execution (creates root spans for every task)
     try:
-        from opentelemetry.instrumentation.celery import CeleryInstrumentor
-
         CeleryInstrumentor().instrument()
     except Exception as e:
         _log.warning(f"Failed to instrument Celery: {e}")
 
     # Instrument requests (for outbound HTTP)
     try:
-        from opentelemetry.instrumentation.requests import RequestsInstrumentor
-
         RequestsInstrumentor().instrument()
     except Exception as e:
         _log.warning(f"Failed to instrument requests: {e}")
@@ -256,10 +260,6 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
 
     # Instrument database (SQLite via dbapi)
     try:
-        import sqlite3
-
-        from opentelemetry.instrumentation.dbapi import trace_integration
-
         trace_integration(sqlite3, "connect", "sqlite", capture_parameters=False)
     except Exception as e:
         _log.warning(f"Failed to instrument database: {e}")
@@ -298,9 +298,6 @@ def init_tracing() -> None:
     endpoint, header_dict = config
 
     try:
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-
         resource = _build_resource()
         sample_rate = float(os.environ.get("OTEL_TRACES_SAMPLER_ARG", "0.1"))
         sampler = ParentBased(root=TraceIdRatioBased(sample_rate))
@@ -308,15 +305,13 @@ def init_tracing() -> None:
         provider = TracerProvider(resource=resource, sampler=sampler)
         _setup_provider(resource, provider, endpoint, header_dict, sample_rate)
 
-    except ImportError as e:
-        _log.warning(f"OpenTelemetry packages not available: {e}")
     except Exception as e:
         _log.error(f"Failed to initialize OpenTelemetry tracing: {e}")
 
     _tracing_initialized = True
 
 
-def init_log_export():
+def init_log_export() -> LoggerProvider | None:
     """
     Initialize OpenTelemetry log export to ship logs via OTLP.
 
@@ -337,24 +332,12 @@ def init_log_export():
     endpoint, header_dict = config
 
     try:
-        from opentelemetry._logs import set_logger_provider
-        from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
-        from opentelemetry.sdk._logs import LoggerProvider
-        from opentelemetry.sdk._logs.export import (
-            BatchLogRecordProcessor,
-            LogExportResult,
-        )
-
         # SDK 1.20.0 only accepts 200/202; Grafana Cloud returns 204.
         # Accept all 2xx until we upgrade to a version that handles this.
         class _PatchedLogExporter(OTLPLogExporter):
-            def export(self, batch):
+            def export(self, batch: Sequence[ReadableLogRecord]) -> LogExportResult:
                 if self._shutdown:
                     return LogExportResult.FAILURE
-                from opentelemetry.exporter.otlp.proto.common._log_encoder import (
-                    encode_logs,
-                )
-
                 serialized_data = encode_logs(batch).SerializeToString()
                 resp = self._export(serialized_data)
                 if 200 <= resp.status_code < 300:
@@ -376,8 +359,6 @@ def init_log_export():
 
         _log.info(f"OTel log export initialized: endpoint={endpoint}")
 
-    except ImportError as e:
-        _log.warning(f"OTel log export packages not available: {e}")
     except Exception as e:
         _log.error(f"Failed to initialize OTel log export: {e}")
 
@@ -385,13 +366,13 @@ def init_log_export():
     return _log_provider
 
 
-def _shutdown_tracer_provider():
+def _shutdown_tracer_provider() -> None:
     """Flush remaining spans on process exit."""
     if _tracer_provider is not None:
         _tracer_provider.shutdown()
 
 
-def _shutdown_log_provider():
+def _shutdown_log_provider() -> None:
     """Flush remaining logs on process exit."""
     if _log_provider is not None:
         _log_provider.shutdown()
