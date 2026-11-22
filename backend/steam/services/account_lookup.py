@@ -3,13 +3,12 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from typing import Any, Final
 
-import requests
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
 
 from app.models import CustomUser
-from steam.utils.steam_api_caller import SteamAPI
+from steam.utils.steam_api_caller import SteamAPI, SteamAPIKeyMissing
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -95,10 +94,9 @@ def _lookup_uncached(account_id: int) -> bool | None:
         try:
             payload = future.result(timeout=STEAM_ACCOUNT_LOOKUP_BUDGET_S)
         except FutureTimeout as exc:
+            future.cancel()
             raise _LookupFailed("timeout") from exc
-        except requests.exceptions.JSONDecodeError as exc:
-            raise _LookupFailed("invalid_json") from exc
-        except ValueError as exc:
+        except SteamAPIKeyMissing as exc:
             raise _LookupFailed("missing_api_key") from exc
         except Exception as exc:
             raise _LookupFailed(type(exc).__name__) from exc
@@ -162,6 +160,8 @@ def ensure_steam_account_exists(
         return cached
     if _in_atomic(account_id):
         return None
+    if budget_user.pk is None:
+        return _lookup_uncached(account_id)
     used = _charge(f"steam_lookup_budget:user:{budget_user.pk}", _USER_BUDGET_TTL)
     if used > USER_LOOKUP_LIMIT:
         log.warning(

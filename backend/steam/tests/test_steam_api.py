@@ -1,10 +1,11 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import requests
 from django.test import SimpleTestCase, TestCase
 
 from app.models import CustomUser
-from steam.utils.steam_api_caller import SteamAPI
+from steam.utils.steam_api_caller import SteamAPI, SteamAPIKeyMissing
 
 
 class SteamAPIMethodsTest(TestCase):
@@ -111,3 +112,31 @@ class SteamAPIPlayerSummariesTest(SimpleTestCase):
 
         lock.assert_called_once()
         self.assertEqual(mock_get.call_args.kwargs["timeout"], 10)
+
+
+class SteamAPIKeyRedactionTest(SimpleTestCase):
+    @patch("steam.utils.steam_api_caller.log")
+    @patch("steam.utils.steam_api_caller.requests.get")
+    def test_connection_error_log_omits_key(
+        self, mock_get: MagicMock, mock_log: MagicMock
+    ) -> None:
+        mock_get.side_effect = requests.exceptions.ConnectionError(
+            "Max retries exceeded with url: "
+            "/ISteamUser/GetPlayerSummaries/v2/?key=test_key&steamids=1"
+        )
+
+        result = SteamAPI(api_key="test_key").get_player_summaries(1)
+
+        self.assertIsNone(result)
+        mock_log.warning.assert_called_once()
+        for call in mock_log.mock_calls:
+            for value in [*call.args, *call.kwargs.values()]:
+                self.assertNotIn("test_key", str(value))
+        self.assertIn("key=***", mock_log.warning.call_args.kwargs["error"])
+
+    def test_missing_key_raises_dedicated_error(self) -> None:
+        with patch.dict("os.environ", {"STEAM_API_KEY": ""}):
+            with self.assertRaises(SteamAPIKeyMissing):
+                SteamAPI()
+            with self.assertRaises(ValueError):
+                SteamAPI()

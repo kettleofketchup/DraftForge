@@ -1,5 +1,6 @@
 import os
-from typing import Any
+import re
+from typing import Any, Final
 
 import requests
 
@@ -8,12 +9,18 @@ from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
+_KEY_PARAM: Final[re.Pattern[str]] = re.compile(r"key=[^&\s]+")
+
+
+class SteamAPIKeyMissing(ValueError):
+    pass
+
 
 class SteamAPI:
     def __init__(self, api_key: str | None = None) -> None:
         self.api_key = api_key or os.environ.get("STEAM_API_KEY")
         if not self.api_key:
-            raise ValueError(
+            raise SteamAPIKeyMissing(
                 "Steam API key not provided or found in environment variables."
             )
         self.base_url = "https://api.steampowered.com"
@@ -65,10 +72,15 @@ class SteamAPI:
                 subsystem="api",
                 interface=interface,
                 method=method,
-                error=str(e),
+                error=self._redact(str(e)),
                 error_type=type(e).__name__,
             )
             return None
+
+    def _redact(self, text: str) -> str:
+        if self.api_key:
+            text = text.replace(self.api_key, "***")
+        return _KEY_PARAM.sub("key=***", text)
 
     def get_player_summaries(
         self,

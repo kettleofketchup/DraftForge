@@ -17,6 +17,7 @@ from steam.services.account_lookup import (
     ensure_steam_account_exists,
     steam_account_exists,
 )
+from steam.utils.steam_api_caller import SteamAPIKeyMissing
 
 LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 ACCOUNT_ID = 123
@@ -83,8 +84,13 @@ class SteamAccountExistsTest(SimpleTestCase):
         self._assert_fail_open(_api(None))
 
     def test_missing_key_fails_open(self) -> None:
-        api_cls = MagicMock(side_effect=ValueError("no key"))
+        api_cls = MagicMock(side_effect=SteamAPIKeyMissing("no key"))
         self._assert_fail_open(api_cls)
+        self.assertEqual(_failure_reasons(self.log), ["missing_api_key"])
+
+    def test_other_value_error_not_labelled_missing_key(self) -> None:
+        self._assert_fail_open(_api(side_effect=ValueError("boom")))
+        self.assertEqual(_failure_reasons(self.log), ["ValueError"])
 
     def test_json_decode_error_fails_open(self) -> None:
         err = requests.exceptions.JSONDecodeError("bad", "doc", 0)
@@ -145,6 +151,16 @@ class SteamAccountExistsTest(SimpleTestCase):
                 True,
             )
         self.assertEqual(api_cls.return_value.get_player_summaries.call_count, 11)
+
+    def test_unsaved_budget_user_not_charged(self) -> None:
+        api_cls = _api({"response": {"players": [{}]}})
+        with patch.object(account_lookup, "SteamAPI", api_cls):
+            for i in range(12):
+                self.assertIs(
+                    ensure_steam_account_exists(5000 + i, budget_user=CustomUser()),
+                    True,
+                )
+        self.assertIsNone(cache.get("steam_lookup_budget:user:None"))
 
     def test_global_cap_fails_open(self) -> None:
         api_cls = _api({"response": {"players": [{}]}})
