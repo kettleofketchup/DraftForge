@@ -19,9 +19,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_model, invalidate_obj
-from app.models import CustomUser, League, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel, Team, Tournament
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
+from league.models import League
 from org.conduct.constants import Outcome, OutcomeSource
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry, sync_event_staff_entries

@@ -13,10 +13,11 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
-from app.models import CustomUser, League, Tournament
+from app.models import CustomUser, Tournament
 from draft.models import Draft, DraftRound
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
+from league.models import League
 from org.conduct.constants import Outcome
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry, set_point_value

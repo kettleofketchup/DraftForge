@@ -20,24 +20,29 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
-from app.models import CustomUser
+from app.models import CustomUser, Tournament
 from app.permissions_tournament import can_edit_tournament
 from discordbot.activity import discord_json
 from discordbot.activity_intent import record_intent
 from discordbot.activity_targets import draft_site_url, draft_tournament_id
 from discordbot.models import DraftActivityChannel
 from draft.models import Draft, HeroDraft
+from events.models import Event
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
 FINISHED_STATES = {"completed", "abandoned"}
+NOTIFICATION_INVITE_MAX_AGE = 24 * 60 * 60
 
 
-class LaunchInput(serializers.Serializer):
-    discord_user_id = serializers.RegexField(r"^[0-9]{1,20}$")
+class DraftRefInput(serializers.Serializer):
     kind = serializers.ChoiceField(choices=["hero", "team"])
     draft_id = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
+
+
+class LaunchInput(DraftRefInput):
+    discord_user_id = serializers.RegexField(r"^[0-9]{1,20}$")
 
 
 def _failure(content: str) -> dict[str, Any]:
@@ -95,6 +100,36 @@ def _tournament_name(draft: HeroDraft | Draft) -> str | None:
         draft.game.tournament if isinstance(draft, HeroDraft) else draft.tournament
     )
     return tournament.name if tournament else None
+
+
+def _guild_id(tournament: Tournament) -> str:
+    org = tournament.league.organization if tournament.league else None
+    if org and org.discord_server_id:
+        return str(org.discord_server_id)
+    return str(getattr(settings, "DISCORD_GUILD_ID", ""))
+
+
+def _application_id() -> str:
+    return str(getattr(settings, "SOCIAL_AUTH_DISCORD_KEY", "") or "")
+
+
+def _activity_configured(guild_id: str, application_id: str) -> bool:
+    return (
+        guild_id.isdigit()
+        and application_id.isdigit()
+        and bool(settings.DISCORD_BOT_TOKEN)
+    )
+
+
+def _invite_code(invite: dict[str, Any]) -> str:
+    code = invite["code"]
+    if (
+        not isinstance(code, str)
+        or not code
+        or not all(c.isascii() and (c.isalnum() or c in "-_") for c in code)
+    ):
+        raise ValueError("Invalid Discord invite")
+    return code
 
 
 def prepare_activity_launch(
@@ -173,20 +208,10 @@ def _prepare_activity_launch(
         return _failure(
             "This draft has finished. Open it in your browser to view the results."
         ), "draft_finished"
-    guild_id = str(
-        tournament.league.organization.discord_server_id
-        if tournament.league
-        and tournament.league.organization
-        and tournament.league.organization.discord_server_id
-        else getattr(settings, "DISCORD_GUILD_ID", "")
-    )
+    guild_id = _guild_id(tournament)
     details["guild_id"] = guild_id
-    application_id = str(getattr(settings, "SOCIAL_AUTH_DISCORD_KEY", "") or "")
-    if (
-        not guild_id.isdigit()
-        or not application_id.isdigit()
-        or not settings.DISCORD_BOT_TOKEN
-    ):
+    application_id = _application_id()
+    if not _activity_configured(guild_id, application_id):
         return _failure(
             "Discord Activities are not configured for this server yet."
         ), "not_configured"
@@ -237,13 +262,7 @@ def _prepare_activity_launch(
                 "unique": True,
             },
         )
-        code = invite["code"]
-        if (
-            not isinstance(code, str)
-            or not code
-            or not all(c.isascii() and (c.isalnum() or c in "-_") for c in code)
-        ):
-            raise ValueError("Invalid Discord invite")
+        code = _invite_code(invite)
         intent_id = record_intent(
             discord_user_id,
             kind=kind,
@@ -296,3 +315,117 @@ def activity_launch(request: Request) -> Response:
     payload = LaunchInput(data=request.data)
     payload.is_valid(raise_exception=True)
     return Response(prepare_activity_launch(**payload.validated_data))
+
+
+def _notification_channel(
+    kind: str, draft: HeroDraft | Draft, tournament: Tournament, guild_id: str
+) -> tuple[str | None, str]:
+    """The one voice channel every recipient can share, or None and why not."""
+    bound = list(
+        DraftActivityChannel.objects.nocache()
+        .filter(
+            guild_id=guild_id, **{"draft" if kind == "hero" else "team_draft": draft}
+        )
+        .values_list("channel_id", flat=True)[:2]
+    )
+    if len(bound) == 1:
+        return bound[0], "bound_channel"
+    if bound:
+        return None, "several_bound_channels"
+    # Concurrent hero drafts of one tournament would fight over the event channel.
+    if kind == "hero":
+        return None, "no_bound_channel"
+    channel_id = (
+        Event.objects.nocache()
+        .filter(tournament=tournament)
+        .exclude(event_voice_channel_id="")
+        .values_list("event_voice_channel_id", flat=True)
+        .first()
+    )
+    if not channel_id:
+        return None, "no_event_channel"
+    return channel_id, "event_channel"
+
+
+def prepare_notification_invite(kind: str, draft_id: int) -> dict[str, Any]:
+    details: dict[str, Any] = {"guild_id": None, "channel_id": None, "source": None}
+    url, outcome = _prepare_notification_invite(kind, draft_id, details)
+    log.info(
+        "activity_notification_invite_resolved",
+        system="discord",
+        subsystem="activity",
+        kind=kind,
+        draft_id=draft_id,
+        outcome=outcome,
+        **details,
+    )
+    return {"url": url, "channel_id": details["channel_id"] if url else None}
+
+
+def _prepare_notification_invite(
+    kind: str, draft_id: int, details: dict[str, Any]
+) -> tuple[str | None, str]:
+    if not getattr(settings, "DISCORD_ACTIVITY_ENABLED", False):
+        return None, "disabled"
+    try:
+        if kind == "hero":
+            draft: HeroDraft | Draft = HeroDraft.objects.select_related(
+                "game__tournament__league__organization"
+            ).get(pk=draft_id)
+            tournament = draft.game.tournament
+        else:
+            draft = Draft.objects.select_related(
+                "tournament__league__organization"
+            ).get(pk=draft_id)
+            tournament = draft.tournament
+    except (HeroDraft.DoesNotExist, Draft.DoesNotExist):
+        return None, "draft_missing"
+    if tournament is None:
+        return None, "no_tournament"
+    if draft.state in FINISHED_STATES:
+        return None, "draft_finished"
+    guild_id = _guild_id(tournament)
+    details["guild_id"] = guild_id
+    application_id = _application_id()
+    if not _activity_configured(guild_id, application_id):
+        return None, "not_configured"
+    channel_id, source = _notification_channel(kind, draft, tournament, guild_id)
+    details["source"] = source
+    if channel_id is None:
+        return None, source
+    details["channel_id"] = channel_id
+    try:
+        channel = discord_json("GET", f"/channels/{channel_id}", bot=True, timeout=2)
+        if channel.get("type") != 2 or str(channel.get("guild_id")) != guild_id:
+            return None, "wrong_channel"
+        bind = _bind_channel(guild_id, channel_id, kind, draft)
+        if bind.outcome in ("conflict", "channel_busy"):
+            return None, bind.outcome
+        invite = discord_json(
+            "POST",
+            f"/channels/{channel_id}/invites",
+            bot=True,
+            timeout=2,
+            json={
+                "target_type": 2,
+                "target_application_id": application_id,
+                "max_age": NOTIFICATION_INVITE_MAX_AGE,
+                "max_uses": 0,
+                "unique": False,
+            },
+        )
+        code = _invite_code(invite)
+    except requests.HTTPError:
+        return None, "discord_error"
+    except (requests.RequestException, KeyError, TypeError, ValueError, IntegrityError):
+        return None, "error"
+    return f"https://discord.gg/{code}", "invite_created"
+
+
+@api_view(["POST"])
+@authentication_classes([InternalServiceAuth])
+@permission_classes([IsInternalService])
+def activity_notification_invite(request: Request) -> Response:
+    payload = DraftRefInput(data=request.data)
+    payload.is_valid(raise_exception=True)
+    return Response(prepare_notification_invite(**payload.validated_data))

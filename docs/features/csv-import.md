@@ -12,7 +12,7 @@ Admins upload a CSV containing Steam Friend IDs, Discord IDs, MMR, positions, an
 - **Conflict detection** — warns when Steam and Discord IDs resolve to different users
 - **Team assignment** — optional `team_name` column auto-creates and assigns teams
 - **Position preferences** — ranked position format (e.g. `1:3:2` for carry, offlane, mid)
-- **MMR import** — set organization MMR during import
+- **MMR import** — set the org MMR of one game (Dota 2 or Deadlock) during import; see [Org MMR per game](org-mmr.md)
 - **Per-row error reporting** — partial success with detailed status for every row
 - **Three-step modal** — Upload, Preview with validation, Results summary
 
@@ -67,8 +67,8 @@ Conflicts appear in the import results with details for admin review.
 Adds users to an organization's member list (OrgUser):
 
 - Resolves or creates users from CSV identifiers
-- Creates OrgUser records with optional `mmr`
-- Skips users already in the organization (does not overwrite MMR)
+- Creates OrgUser records with the `mmr` column as the org MMR of the selected game
+- Skips users already in the organization (does not overwrite MMR unless **Update MMR for existing members** is on)
 - Logs each addition via OrgLog audit trail
 
 ### Tournament Import
@@ -80,6 +80,7 @@ Adds users to a tournament's player pool with optional team assignment:
 - Adds users to `tournament.users` M2M
 - Optional `team_name` column creates/assigns teams automatically
 - Multiple rows with the same `team_name` are grouped into the same team
+- The `mmr` column always sets the tournament's game; the **league** MMR target is offered only for Dota 2 tournaments
 
 ---
 
@@ -100,7 +101,7 @@ At least one identifier column must be present:
 | Column | Type | Description |
 |--------|------|-------------|
 | `name` | String | Display name for the user |
-| `mmr` | Integer | MMR to assign (defaults to 0) |
+| `mmr` | Integer | Org MMR to assign for the import's game, 0–20000 (empty leaves it unset). Out-of-range or non-numeric values make the row an error |
 | `positions` | String | Ranked position preferences (e.g. `1:3:2` for carry, offlane, mid) |
 | `team_name` | String | Team assignment (tournament import only) |
 | `team_captain` | Boolean | Whether this user is the team captain |
@@ -281,6 +282,7 @@ Three-step modal dialog:
 - Red X for error rows with error message
 - Column headers: #, Status, Steam ID, Discord ID, MMR, Team (tournament only)
 - Summary counts: "X valid, Y errors"
+- When the file has MMR values: in an organization import a **Game** select (default Dota 2) picks which game's org MMR the `mmr` column sets; in a tournament import the modal shows "MMR column applies to: {game}" for the tournament's game
 - "Choose different file" button to restart
 - "Import N rows" confirm button (disabled if 0 valid rows)
 
@@ -321,6 +323,8 @@ Both use the same `CSVImportModal` component with different `entityContext` prop
 | Non-numeric Steam/Discord ID | Row marked as error in preview |
 | Very long team names | Accepted (CharField limit applies) |
 | Tournament without parent org | OrgUser creation skipped; user added to tournament only |
+| MMR outside 0–20000 | Row marked as error; nothing written for that row's MMR |
+| Importing both games | Import the file twice, once per game; the CSV has one `mmr` column |
 | Concurrent imports | Each row uses savepoint transactions; race conditions handled via retry |
 
 **Status:** :material-check-circle: Complete | [GitHub #132](https://github.com/kettleofketchup/DraftForge/issues/132)

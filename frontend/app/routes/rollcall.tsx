@@ -29,6 +29,7 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -51,7 +52,7 @@ import {
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
 import { canRestoreSignup } from '~/components/events/signupPartitions';
-import type { GameTypeValue } from '~/components/game/constants';
+import { toGameType } from '~/components/game/constants';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -67,15 +68,25 @@ import { Kbd } from '~/components/ui/kbd';
 import { UserStrip } from '~/components/user';
 import { DisplayName } from '~/components/user/avatar';
 import {
+  ConductBadge,
+  useEventConduct,
+  type ForecastMember,
+} from '~/features/conduct';
+import {
+  removeFeatureQueries,
+  useOrgFeatureAccess,
+} from '~/features/org-features';
+import {
   useEvent,
   useEventActionMutation,
   useEventSignupUsers,
   useOptimisticEventSignups,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
+import { useProvideGameType } from '~/hooks/useGameType';
+import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { cn } from '~/lib/utils';
-import { useGameTypeStore } from '~/store/gameTypeStore';
 
 export default function RollCallPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -88,24 +99,34 @@ export default function RollCallPage() {
     signups,
     pendingIds,
   } = useOptimisticEventSignups(id, event?.state);
-  useEventSignupUsers(serverSignups, event?.organization ?? null);
+  useEventSignupUsers(
+    serverSignups,
+    event?.organization ?? null,
+    toGameType(event?.game_type),
+  );
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
 
-  const { organization: eventOrg } = useOrganization(
+  const { organization: eventOrg, refetch: refetchEventOrg } = useOrganization(
     event?.organization ?? undefined,
   );
+  const queryClient = useQueryClient();
+  const eventOrgPk = event?.organization ?? null;
+  const onMemberViewerChange = useCallback(() => {
+    if (!eventOrgPk) return;
+    removeFeatureQueries(queryClient, eventOrgPk);
+    refetchEventOrg();
+  }, [eventOrgPk, queryClient, refetchEventOrg]);
+  useMemberAccess(eventOrg, onMemberViewerChange);
   const isAdmin = event?.user_can_manage ?? false;
+  const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
+  const { memberFor: conductMemberFor } = useEventConduct(
+    event,
+    eventOrg,
+    eventOrgAccess,
+  );
 
-  const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
-  useEffect(() => {
-    if (event?.game_type) {
-      setCurrentGameType(event.game_type as GameTypeValue);
-    }
-    return () => {
-      setCurrentGameType(null);
-    };
-  }, [event?.game_type, setCurrentGameType]);
+  useProvideGameType(event ? toGameType(event.game_type) : null);
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -296,6 +317,7 @@ export default function RollCallPage() {
       signup={signup}
       userMap={userMap}
       isAdmin={isAdmin}
+      conductMember={conductMemberFor(signup.user)}
       leaguePk={event.tournament_league ?? null}
       pending={pendingIds.has(signup.id)}
       focused={isAdmin && signup.id === activeId}
@@ -452,7 +474,6 @@ export default function RollCallPage() {
         )}
       </div>
 
-      {/* MMR approval modal — shows the previously-approved MMR */}
       <MmrApprovalModal
         signup={approvalSignup}
         open={!!approvalSignup}
@@ -664,7 +685,9 @@ const SignupStrip = memo(function SignupStrip({
   onRequestReject,
   onRequestCancel,
   onRequestRestore,
+  conductMember,
 }: {
+  conductMember?: ForecastMember;
   signup: EventSignupType;
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
@@ -685,15 +708,21 @@ const SignupStrip = memo(function SignupStrip({
   const removeKey = focused ? '2' : undefined;
 
   const statusBadge = (
-    <span className="inline-flex items-center gap-1">
-      {pending && (
-        <Loader2
-          className="h-3.5 w-3.5 animate-spin text-muted-foreground"
-          data-testid="rollcall-row-pending"
-          aria-label="Saving"
-        />
-      )}
-      <EventStateBadge state={signup.status} />
+    <span
+      className="inline-flex flex-wrap items-center justify-end gap-1"
+      data-testid={`rollcall-row-status-${signup.id}`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {pending && (
+          <Loader2
+            className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+            data-testid="rollcall-row-pending"
+            aria-label="Saving"
+          />
+        )}
+        <EventStateBadge state={signup.status} />
+      </span>
+      <ConductBadge member={conductMember} />
     </span>
   );
 

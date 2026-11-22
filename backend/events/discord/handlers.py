@@ -252,31 +252,6 @@ def handle_rank_medal_select(
     return handler.rank_medal_select(event, discord_user_id, medal)
 
 
-def handle_previous_rank_submit(
-    event_id: int,
-    discord_user_id: str,
-    medal: str,
-    date_text: str,
-) -> dict[str, Any]:
-    """Handle previous rank modal submission. Saves rank info and signs up."""
-    log.info(
-        "handler_invoked",
-        system="discord",
-        subsystem="interaction",
-        handler="previous_rank_submit",
-    )
-    event = _load_event(event_id)
-    if event is None:
-        return {"action": "error", "message": "Not found."}
-    handler = _dota_handler(event, event_id, "previous_rank_submit")
-    if handler is None:
-        return {"action": "error", "message": "Not applicable."}
-    refusal = _discord_self_serve_refusal(event, discord_user_id)
-    if refusal is not None:
-        return {"action": "error", "message": refusal}
-    return handler.previous_rank_submit(event, discord_user_id, medal, date_text)
-
-
 def handle_battle_cup_submit(
     event_id: int,
     discord_user_id: str,

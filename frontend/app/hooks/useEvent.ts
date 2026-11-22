@@ -7,6 +7,7 @@ import {
 import { useEffect, useMemo } from 'react';
 
 import type {
+  EventRepeaterListItem,
   EventRepeaterType,
   EventStaffPayload,
   EventWritePayload,
@@ -23,6 +24,7 @@ import {
   deleteEvent as deleteEventAPI,
   demoteSignup as demoteSignupAPI,
   getEvent,
+  getEventRepeater,
   getEventRepeaters,
   getEvents,
   getEventSignups,
@@ -55,7 +57,10 @@ import {
 } from '~/components/events/signupOptimistic';
 import type { GameTypeValue } from '~/components/game/constants';
 import type { UserType } from '~/components/user/types';
-import { invalidateOrgContributionQueries } from '~/features/org-features/queryKeys';
+import {
+  invalidateConductQueries,
+  invalidateOrgContributionQueries,
+} from '~/features/org-features/queryKeys';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
@@ -113,6 +118,10 @@ export function useSignupMutation(eventId: number) {
         });
       }
       useOrgStore.getState().clearOrgUsers();
+      void invalidateConductQueries(
+        queryClient,
+        queryClient.getQueryData<EventType>(['event', eventId])?.organization,
+      );
     },
   });
 }
@@ -126,7 +135,10 @@ export function useEventActionMutation(eventId: number) {
     }),
     startRollCall: useMutation({
       mutationFn: () => startRollCallAPI(eventId),
-      onSuccess: (data) => queryClient.setQueryData(['event', eventId], data),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['event', eventId], data);
+        void invalidateConductQueries(queryClient, data.organization);
+      },
     }),
     reopenSignups: useMutation({
       // Corrective transition; no optimistic update intentionally.
@@ -136,17 +148,22 @@ export function useEventActionMutation(eventId: number) {
         // The events list filters by state — a regression from roll_call → signups_open
         // changes which lists this event appears in.
         queryClient.invalidateQueries({ queryKey: ['events'] });
+        void invalidateConductQueries(queryClient, data.organization);
       },
     }),
     startTournament: useMutation({
       mutationFn: () => startTournamentAPI(eventId),
-      onSuccess: (data) => queryClient.setQueryData(['event', eventId], data),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['event', eventId], data);
+        void invalidateConductQueries(queryClient, data.organization);
+      },
     }),
     cancelEvent: useMutation({
       mutationFn: () => cancelEventAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
+        void invalidateConductQueries(queryClient, data.organization);
       },
     }),
     deleteEvent: useMutation({
@@ -154,6 +171,7 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['events'] });
         queryClient.removeQueries({ queryKey: ['event', eventId] });
+        void invalidateConductQueries(queryClient);
       },
     }),
     restartTournament: useMutation({
@@ -161,6 +179,7 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
+        void invalidateConductQueries(queryClient, data.organization);
       },
     }),
     completeEvent: useMutation({
@@ -169,6 +188,7 @@ export function useEventActionMutation(eventId: number) {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
         void invalidateOrgContributionQueries(queryClient, data.organization);
+        void invalidateConductQueries(queryClient, data.organization);
       },
     }),
     setEventStaff: useMutation({
@@ -183,9 +203,17 @@ export function useEventActionMutation(eventId: number) {
 }
 
 export function useEventRepeaters(params?: { organization?: number }) {
-  return useQuery<EventRepeaterType[]>({
+  return useQuery<EventRepeaterListItem[]>({
     queryKey: ['event-repeaters', params],
     queryFn: () => getEventRepeaters(params),
+  });
+}
+
+export function useEventRepeater(id: number | null) {
+  return useQuery<EventRepeaterType>({
+    queryKey: ['repeater', id],
+    queryFn: () => getEventRepeater(id as number),
+    enabled: id !== null,
   });
 }
 
@@ -224,6 +252,7 @@ export function useUpdateEventRepeaterMutation(repeaterId: number) {
       updateEventRepeaterAPI(repeaterId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
+      queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       // The series cascade may have changed its events' passwords.
       queryClient.invalidateQueries({
@@ -252,6 +281,7 @@ export function useUpdateEventMutation(eventId: number) {
       queryClient.invalidateQueries({
         queryKey: ['event-lobby-password', eventId],
       });
+      void invalidateConductQueries(queryClient, data.organization);
     },
   });
 }
@@ -292,6 +322,10 @@ export function useSignupActionMutations(eventId: number) {
       queryClient.invalidateQueries({
         queryKey: ['event-lobby-password', eventId],
       });
+      void invalidateConductQueries(
+        queryClient,
+        queryClient.getQueryData<EventType>(['event', eventId])?.organization,
+      );
     },
   });
 
@@ -411,9 +445,9 @@ export function useEventSignupUsers(
    * `<UserStrip organizationId={...} />` can show the right MMR badge
    * without a second fetch.
    */
-  eventOrgId?: number | null,
-  /** The event's game: `org_user_mmr` is filed under it (Dota 2 if omitted). */
-  gameType?: GameTypeValue,
+  eventOrgId: number | null | undefined,
+  /** The event's game: `org_user_mmr` is filed under it. */
+  gameType: GameTypeValue,
 ) {
   useEffect(() => {
     if (!signups) return;
@@ -424,7 +458,7 @@ export function useEventSignupUsers(
       if (eventOrgId && s.org_user_pk != null && s.org_user_mmr != null) {
         base.orgUserPk = s.org_user_pk;
         base.mmr = s.org_user_mmr;
-        if (gameType != null) base.mmr_game_type = gameType;
+        base.mmr_game_type = gameType;
         if (s.org_user_game_mmrs) base.game_mmrs = s.org_user_game_mmrs;
       }
       users.push(base);

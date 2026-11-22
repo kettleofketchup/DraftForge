@@ -10,9 +10,10 @@ from a row there, the tests fail (or you have a documentation bug).
 > 1. The relevant hook in
 >    [`frontend/app/hooks/usePermissions.ts`][hooks]
 > 2. The matching backend helper in
->    [`backend/org/permissions.py`][permissions] (org roles) or
+>    [`backend/org/permissions.py`][permissions] (org roles),
+>    [`backend/league/permissions.py`][permissions-league] (league roles) or
 >    [`backend/app/permissions_tournament.py`][permissions-tournament]
->    (league, tournament, game and lobby checks)
+>    (tournament, game and lobby checks)
 > 3. The expectations in the matrix spec under
 >    [`frontend/tests/playwright/e2e/17-auth/`][matrix]
 > 4. The corresponding row in this document
@@ -143,8 +144,11 @@ The eight entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`
   (`GET /api/leagues/<pk>/users/`, gated by `can_view_league_members`) uses
   the linked org's rule (so staff of a sibling league count), or league staff
   for a league without an org. The league's own members always see its list,
-  even when the org list is private. Event signups blank `org_user_mmr` for viewers
-  outside the org rule.
+  even when the org list is private. Event signups blank `org_user_mmr`,
+  `org_user_game_mmrs`, `self_reported_rank`, `self_reported_rank_date` and
+  `user_data.mmr_game_type` for viewers outside the org rule. For those viewers
+  `suggested_mmr` / `suggested_mmr_range` are never derived from the org MMR
+  (they fall back to the self-reported value or the default).
 - **Edit User (org members tab)** uses `useIsOrganizationStaff(currentOrg)`
   via the UserCard's org-scoped editScope — staff-permissive.
 - **Edit User (tournament players tab)** is a **known divergence**.
@@ -324,7 +328,8 @@ feature suites.
 | -------------------------------- | ------------------------------------------------------------------------------------- |
 | Frontend permission hooks         | `frontend/app/hooks/usePermissions.ts`                                                |
 | Backend org permission helpers    | `backend/org/permissions.py`                                                          |
-| Backend league/tournament checks  | `backend/app/permissions_tournament.py`                                               |
+| Backend league permission helpers | `backend/league/permissions.py`                                                       |
+| Backend tournament/game checks    | `backend/app/permissions_tournament.py`                                               |
 | User serializer (role memberships)| `backend/app/serializers.py` (`UserSerializer`)                                       |
 | Playwright role fixture           | `frontend/tests/playwright/fixtures/role-contexts.ts`                                 |
 | Login endpoints                   | `backend/tests/test_auth.py`, `backend/tests/urls.py`                                 |
@@ -335,5 +340,6 @@ feature suites.
 
 [hooks]: https://github.com/kettleofketchup/DraftForge/blob/main/frontend/app/hooks/usePermissions.ts
 [permissions]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/org/permissions.py
+[permissions-league]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/league/permissions.py
 [permissions-tournament]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/app/permissions_tournament.py
 [matrix]: https://github.com/kettleofketchup/DraftForge/tree/main/frontend/tests/playwright/e2e/17-auth

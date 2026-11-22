@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, render } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { toGameType } from '~/components/game/constants';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType } from '~/components/user/types';
@@ -14,6 +15,7 @@ import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import type { UserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
+import { resetGameType, withGameType } from '~/test-utils/gameType';
 import { hasErrors } from './hasErrors';
 
 const captured = vi.hoisted(
@@ -51,7 +53,7 @@ const entry: UserEntry = {
   pk: 10,
   username: 'incomplete',
   steam_account_id: null,
-  orgData: { 8: { id: 77, mmrs: { 1: 0 }, mmr: 0, _fetchedAt: 0 } },
+  orgData: { 8: { id: 77, mmrs: { 1: 0 }, _fetchedAt: 0 } },
   leagueData: { 8: { id: 77, mmr: 0, _fetchedAt: 0 } },
   _fetchedAt: 0,
 };
@@ -220,7 +222,7 @@ describe('hasErrors edit user carries the scope-gating link (finding 4)', () => 
       name: 'orgData link',
       source: {
         ...entry,
-        orgData: { 8: { id: 171, mmrs: { 1: 0 }, mmr: 0, _fetchedAt: 0 } },
+        orgData: { 8: { id: 171, mmrs: { 1: 0 }, _fetchedAt: 0 } },
         leagueData: {},
       },
       store: 'org',
@@ -271,7 +273,59 @@ describe('hasErrors edit user carries the scope-gating link (finding 4)', () => 
       expect(user.orgUserPk).toBe(link);
       updateOrgUser.mockResolvedValue({ pk: 10, username: 'incomplete' });
       await dispatchPatch(user as UserClassType, scope, { nickname: 'x' });
-      expect(updateOrgUser).toHaveBeenCalledWith(8, link, { nickname: 'x' });
+      expect(updateOrgUser).toHaveBeenCalledWith(8, link, { nickname: 'x' }, 1);
     },
   );
+});
+
+describe('hasErrors per-game MMR issue', () => {
+  beforeEach(() => {
+    captured.length = 0;
+    useOrgStore.setState({ currentOrg: null });
+    useLeagueStore.setState({ currentLeague: null });
+  });
+
+  afterEach(resetGameType);
+
+  function seed(mmrs: Record<number, number>, game_type: number) {
+    useUserCacheStore.setState({
+      entities: {
+        10: { ...entry, orgData: { 8: { id: 77, mmrs, _fetchedAt: 0 } } },
+      },
+    } as never);
+    useUserStore.setState({
+      tournament: {
+        pk: 1,
+        organization_pk: 8,
+        league_pk: 8,
+        game_type,
+        users: [10],
+      },
+    } as never);
+    withGameType(toGameType(game_type));
+  }
+
+  it('Deadlock tournament flags a Dota-only member as No Deadlock MMR', () => {
+    seed({ 1: 4000 }, 2);
+    const { getByTestId } = render(<Harness />);
+    const list = getByTestId('incomplete-profiles-list');
+    expect(list.textContent).toContain('No Deadlock MMR');
+    expect(list.textContent).not.toContain('No Dota 2 MMR');
+  });
+
+  it('Deadlock tournament member with a Deadlock value has no MMR issue', () => {
+    seed({ 1: 0, 2: 2500 }, 2);
+    const { getByTestId } = render(<Harness />);
+    expect(getByTestId('incomplete-profiles-list').textContent).not.toMatch(
+      /No .*MMR/,
+    );
+  });
+
+  it('Dota tournament labels the issue with Dota 2', () => {
+    seed({ 2: 2500 }, 1);
+    const { getByTestId } = render(<Harness />);
+    expect(getByTestId('incomplete-profiles-list').textContent).toContain(
+      'No Dota 2 MMR',
+    );
+  });
 });

@@ -73,7 +73,7 @@ class Organization(models.Model):
         blank=True,
     )
     default_league = models.ForeignKey(
-        "app.League",
+        "league.League",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -119,7 +119,6 @@ class OrgUser(models.Model):
         related_name="members",
         db_index=True,
     )
-    mmr = models.IntegerField(default=0)
     guild_nickname = models.TextField(null=True, blank=True)
     joined_at = models.DateTimeField(auto_now_add=True)
 

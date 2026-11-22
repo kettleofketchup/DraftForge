@@ -164,17 +164,21 @@ export async function loginEventPlayer4(context: BrowserContext) {
   return resp.json();
 }
 
-/** TEST: Set OrgUser.mmr for a given (orgPk, userPk). Invalidates cacheops. */
+/**
+ * TEST: Set the org MMR of (orgPk, userPk) for one game (default Dota 2).
+ * 0 clears it. Invalidates cacheops.
+ */
 export async function setApprovedMmr(
   context: BrowserContext,
   orgPk: number,
   userPk: number,
   mmr: number,
+  gameType?: number,
 ) {
   const resp = await context.request.post(
     `${API_URL}/tests/org/${orgPk}/user/${userPk}/set-approved-mmr/`,
     {
-      data: { mmr },
+      data: gameType == null ? { mmr } : { mmr, game_type: gameType },
       headers: { 'Content-Type': 'application/json' },
     },
   );
@@ -195,6 +199,20 @@ export async function loginEventPlayerNoProfile(context: BrowserContext) {
   if (!resp.ok())
     throw new Error(`Login event_player_no_profile failed: ${resp.status()}`);
   return resp.json();
+}
+
+/** Whether the backend has a Discord bot token; without one nothing posts. */
+export async function discordBotConfigured(
+  context: BrowserContext,
+): Promise<boolean> {
+  const resp = await context.request.get(`${API_URL}/tests/discord/status/`);
+  if (!resp.ok()) {
+    throw new Error(
+      `Discord status check failed: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+  const data = await resp.json();
+  return data.bot_token_configured === true;
 }
 
 /** Trigger sync_discord_events synchronously. */

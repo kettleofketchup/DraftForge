@@ -8,7 +8,7 @@ from rest_framework import serializers
 
 from app.auth import InternalServiceUser
 from app.display_names import user_display_name
-from app.models import CustomUser, League
+from app.models import CustomUser
 from app.permissions_tournament import (
     check_lobby_steam_league_id,
     has_event_staff_access,
@@ -46,6 +46,7 @@ from events.signup_schedule import (
     apply_signup_open_policy,
     policy_from_explicit_open_at,
 )
+from league.models import League
 from lobby.passwords import MAX_LENGTH as LOBBY_PASSWORD_MAX_LENGTH
 from lobby.passwords import PasswordMode, validate_password
 from org.display_names import guild_nicknames, org_nicknames_public
@@ -133,6 +134,7 @@ class EventRepeaterSlimSerializer(serializers.ModelSerializer):
         source="organization.name", read_only=True
     )
     subscriber_count = serializers.IntegerField(read_only=True, default=0)
+    is_subscribed = serializers.BooleanField(read_only=True, default=False)
     next_event_date = serializers.DateTimeField(read_only=True, default=None)
 
     class Meta:
@@ -147,7 +149,9 @@ class EventRepeaterSlimSerializer(serializers.ModelSerializer):
             "time_of_day",
             "timezone",
             "is_active",
+            "discord_notify_new_events",
             "subscriber_count",
+            "is_subscribed",
             "next_event_date",
         ]
 

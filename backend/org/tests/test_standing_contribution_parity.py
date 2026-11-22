@@ -14,11 +14,12 @@ from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
 from app.discord_accounts import merge_discord_accounts
-from app.models import CustomUser, League, ProfileClaimRequest, Tournament
+from app.models import CustomUser, ProfileClaimRequest, Tournament
 from events.completion import close_event
 from events.constants import EventState
 from events.models import Event
 from events.reopen import reopen_event
+from league.models import League
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.models import (

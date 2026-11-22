@@ -91,12 +91,17 @@ import {
   isRemovedSignup,
   partitionSignups,
 } from '~/components/events/signupPartitions';
+import { signupRowMmr } from '~/components/events/signupRowMmr';
 import { rollCallSummary } from '~/components/events/signupRules';
 import {
   signupHoldReason,
   signupSuccessMessage,
 } from '~/components/events/unmetRequirements';
-import type { GameTypeValue } from '~/components/game/constants';
+import {
+  GAME_LABEL,
+  isGameType,
+  toGameType,
+} from '~/components/game/constants';
 import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
@@ -125,6 +130,13 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import {
+  ConductBadge,
+  EventConductSection,
+  useEventConduct,
+  type ConductMemberLookup,
+} from '~/features/conduct';
+import {
+  invalidateConductQueries,
   removeFeatureQueries,
   useOrgFeatureAccess,
 } from '~/features/org-features';
@@ -137,16 +149,15 @@ import {
   useSignupActionMutations,
   useSignupMutation,
 } from '~/hooks/useEvent';
+import { useContextGameType, useProvideGameType } from '~/hooks/useGameType';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useUserDotaProfile } from '~/hooks/useUserProfile';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
-import { useGameTypeStore } from '~/store/gameTypeStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
-import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('EventPage');
@@ -158,7 +169,7 @@ export default function EventPage() {
 
   const { data: event, isLoading, error } = useEvent(id);
   const { data: signups } = useEventSignups(id);
-  useEventSignupUsers(signups);
+  useEventSignupUsers(signups, undefined, toGameType(event?.game_type));
   const currentUser = useUserStore((state) => state.currentUser);
 
   const [activeTab, setActiveTab] = useState(tab || 'details');
@@ -182,27 +193,22 @@ export default function EventPage() {
   const isAdmin = event?.user_can_manage ?? false;
   const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
   const canComplete = canCompleteEvent(event, eventOrgAccess);
+  const { memberFor: conductMemberFor } = useEventConduct(
+    event,
+    eventOrg,
+    eventOrgAccess,
+  );
   const showCompletePointsNote =
     eventOrgAccess.canViewContributions ||
     eventOrgAccess.canManageContributions;
 
-  // Set the current game type in the game type store for context-aware components
-  const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
-  useEffect(() => {
-    if (event?.game_type) {
-      setCurrentGameType(event.game_type as GameTypeValue);
-    }
-    return () => {
-      setCurrentGameType(null);
-    };
-  }, [event?.game_type, setCurrentGameType]);
+  useProvideGameType(event ? toGameType(event.game_type) : null);
 
   // Mutations
   const queryClient = useQueryClient();
 
-  // Populate the org users cache so signup rows can read per-org MMR via the
-  // user entity adapter (UserEntry.orgData[orgId].mmr). Viewers without member
-  // access fall back to signup.org_user_mmr.
+  // Populate the org users cache so signup rows read per-org MMR via
+  // selectOrgMmr; viewers without member access fall back to signup.org_user_mmr.
   const eventOrgPk = event?.organization ?? null;
   const onMemberViewerChange = useCallback(() => {
     if (!eventOrgPk) return;
@@ -640,6 +646,11 @@ export default function EventPage() {
 
           <TabsContent value="details">
             {isAdmin && <OpsNoticesCard eventId={event.id} />}
+            <EventConductSection
+              event={event}
+              org={eventOrg ?? undefined}
+              access={eventOrgAccess}
+            />
             <DetailsTab
               event={event}
               signedIn={!!currentUser?.pk}
@@ -664,7 +675,7 @@ export default function EventPage() {
               autoApprove={event.auto_approve}
               isAdmin={isAdmin}
               signupActions={signupActions}
-              gameType={event.game_type}
+              conductMemberFor={conductMemberFor}
               eventId={event.id}
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
@@ -677,7 +688,7 @@ export default function EventPage() {
               signups={tentativeSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
-              gameType={event.game_type}
+              conductMemberFor={conductMemberFor}
               state={event.state}
             />
           </TabsContent>
@@ -687,7 +698,7 @@ export default function EventPage() {
               signups={waitlistedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
-              gameType={event.game_type}
+              conductMemberFor={conductMemberFor}
               state={event.state}
             />
           </TabsContent>
@@ -697,7 +708,7 @@ export default function EventPage() {
               signups={removedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
-              gameType={event.game_type}
+              conductMemberFor={conductMemberFor}
               state={event.state}
             />
           </TabsContent>
@@ -844,7 +855,11 @@ function DetailsTab({
           />
           <Stat
             label="Game"
-            value={event.game_type === 1 ? 'Dota 2' : 'Deadlock'}
+            value={
+              isGameType(event.game_type)
+                ? GAME_LABEL[event.game_type]
+                : 'Unknown'
+            }
           />
         </CardContent>
       </Card>
@@ -900,18 +915,18 @@ function SignupsTab({
   signups,
   isAdmin,
   signupActions,
-  gameType,
   eventId,
   orgId,
   hasDiscordServer,
   state,
   autoApprove = true,
+  conductMemberFor,
 }: {
+  conductMemberFor?: ConductMemberLookup;
   signups: EventSignupType[];
   autoApprove?: boolean;
   isAdmin: boolean;
   signupActions: ReturnType<typeof useSignupActionMutations>;
-  gameType: number;
   eventId?: number;
   orgId?: number;
   hasDiscordServer?: boolean;
@@ -926,6 +941,7 @@ function SignupsTab({
   } | null>(null);
   const [addUserOpen, setAddUserOpen] = useState(false);
   const queryClient = useQueryClient();
+  const gameType = useContextGameType();
 
   const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
   const resolvedUsers = useResolvedUsers(userPks);
@@ -952,6 +968,7 @@ function SignupsTab({
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
       // Backend adds the user as an OrgUser when an admin signs them up; reset
       // the org-users cache so the org page reflects the new membership.
+      void invalidateConductQueries(queryClient, orgId);
       if (orgId) useOrgStore.getState().clearOrgUsers();
       // AddUserModal reads `.pk` off this to track optimistic adds — the signup
       // itself has no pk, so hand back the user it embeds.
@@ -1171,11 +1188,17 @@ function SignupsTab({
             ? signupHoldReason(signup, autoApprove)
             : null;
           const statusSlot = (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono text-muted-foreground">
-                #{position}
+            <div
+              className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1"
+              data-testid={`event-signup-status-${signup.id}`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span className="text-xs font-mono text-muted-foreground">
+                  #{position}
+                </span>
+                <EventStateBadge state={signup.status} />
               </span>
-              <EventStateBadge state={signup.status} />
+              <ConductBadge member={conductMemberFor?.(signup.user)} />
               {holdReason && (
                 <span
                   className="text-xs text-muted-foreground"
@@ -1188,18 +1211,10 @@ function SignupsTab({
           );
 
           if (user) {
-            // Prefer the org-approved MMR via the user entity adapter
-            // (UserEntry.orgData[orgId].mmr) over self-reported dota_profile.mmr.
-            // Fall back to signup.org_user_mmr from the API if the cache is cold.
             const baseProfile = signup.dota_profile as DotaProfileData | null;
-            const orgMmr =
-              (orgId && isUserEntry(user)
-                ? user.orgData[orgId]?.mmr
-                : undefined) ??
-              signup.org_user_mmr ??
-              null;
+            const orgMmr = signupRowMmr(user, signup, orgId, gameType);
             const stripProfile = baseProfile
-              ? { ...baseProfile, mmr: orgMmr ?? baseProfile.mmr }
+              ? { ...baseProfile, mmr: orgMmr }
               : orgMmr != null
                 ? ({
                     unverified_friend_id: null,

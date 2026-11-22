@@ -6,7 +6,6 @@ from django.utils import timezone
 from app.models import (
     CustomUser,
     Game,
-    League,
     Team,
     TeamLog,
     TeamLogAction,
@@ -19,6 +18,7 @@ from app.services.team_references import (
     team_usage,
 )
 from bracket.models import BracketSlot, TournamentBracket
+from league.models import League
 from org.models import Organization
 
 
