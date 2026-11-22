@@ -156,6 +156,24 @@ Everything under the toggle is collapsed by default:
 - **Ready check settings**: mode, who is asked, the timings, the completion threshold and the two member notices.
 - **Start cull and voice**: the event voice channel and the cull. This block works whether or not the toggle is on.
 
+### Who gets each message
+
+Planned recipients, once the automatic ready check ships (#530, #543, #533). Nothing below is sent yet, and the tab says so.
+
+| Setting | Message | Recipients | Channel |
+|---------|---------|------------|---------|
+| Opens | Ready button request | Every member in scope | DM |
+| Nudge unconfirmed members | Escalation nudge | Members still unconfirmed | DM |
+| Nudge unconfirmed members | Unconfirmed count | Staff | Ops notice |
+| Ops notice per unconfirmed member | One chase task per member | Staff | Ops notice |
+| If too few confirm: non-binding or hold | Urgent alert | Staff | Ops notice |
+| DM members on their first sign-up | Confirmation is mandatory | The member signing up | DM, or a reply only they can see if DMs are closed |
+| DM members who are dropped | Drop notice | Each dropped member | DM (members can opt out under roster changes) |
+| Start cull | Drop notice | Each removed member | DM |
+| After the cull, fill open seats by | Promotion | Each member moved into a seat | DM |
+
+"Staff" for ops notices means the organization's owner, admins and staff, league staff when the event belongs to a league, and the event's host and helpers: they see the notices on the event page and can act on held checks. An organization can also route ops notices to Discord channels, roles or users. The organization's promoters are not told unless they hold one of those roles or a route names them.
+
 ### Timings
 
 All timings are minutes before the event's start, except the ops chase, which counts back from the close:
@@ -182,7 +200,7 @@ If fewer than `ready_check_min_completion_pct` percent of members have confirmed
 | Value | Label | Effect |
 |-------|-------|--------|
 | `non_binding` | Make the check non-binding (drop nobody) | Nobody is dropped |
-| `hold_for_staff` | Hold drops for staff | Staff decide who is dropped |
+| `hold_for_staff` | Hold drops for staff, the host or helpers to decide | Org or league staff, the event host or helpers decide who is dropped |
 | `drop_anyway` | Drop unconfirmed anyway | Unconfirmed members are dropped regardless |
 
 ### The ready check
@@ -250,13 +268,13 @@ Start cull, voice presence confirms and fill by voice arrival all need an event 
 | `roll_call_mode` | `manual` | `manual`, `automatic` | Staff-verified or Automatic |
 | `ready_check_scope` | `main_only` | `main_only`, `main_and_fill` | Who is asked: the main roster only, or the main roster and the fill list |
 | `ready_check_open_minutes` | 120 | 1–1440 | Minutes before start that the check opens |
-| `ready_check_escalation_minutes` | 30 | 0–1440 | Minutes before start for the escalation nudge; 0 turns it off |
+| `ready_check_escalation_minutes` | 30 | 0–1440 | Minutes before start to DM unconfirmed members a nudge; 0 turns it off |
 | `ready_check_close_minutes` | 10 | 0–1440 | Minutes before start that the check closes |
-| `ready_check_chase_minutes` | 30 | 1–1440 or null | Minutes before close that ops are told who has not confirmed; null turns it off |
+| `ready_check_chase_minutes` | 30 | 1–1440 or null | Minutes before close to raise one ops notice per unconfirmed member; null turns it off |
 | `ready_check_min_completion_pct` | 70 | 0–100 | Completion threshold, in percent |
 | `ready_check_low_completion_action` | `non_binding` | see above | What happens below the threshold |
-| `ready_check_notify_on_signup` | true | | Tell members when they sign up that confirmation is mandatory |
-| `ready_check_drop_notice` | true | | Tell dropped members they were dropped |
+| `ready_check_notify_on_signup` | true | | DM members on their first sign-up that confirmation is mandatory |
+| `ready_check_drop_notice` | true | | DM members who are dropped |
 | `start_cull_enabled` | false | | Remove members absent from the voice channel after start |
 | `start_cull_minutes_after` | 1 | 0–120 | Minutes after start that the cull runs |
 | `post_cull_fill_mode` | `line_order` | `none`, `line_order`, `voice_arrival` | How seats freed by the cull are filled: not at all, from the line, or by order of arrival in the event call |

@@ -27,6 +27,10 @@ class OrgFeatureServiceTest(TestCase):
         self.assertIs(org_has_feature(self.org.pk, FeatureKey.CONTRIBUTIONS), False)
         self.assertEqual(active_features(self.org), [])
 
+    def test_leadership_locked_by_default(self) -> None:
+        self.assertIs(org_has_feature(self.org, FeatureKey.LEADERSHIP), False)
+        self.assertNotIn(FeatureKey.LEADERSHIP, active_features(self.org.pk))
+
     def test_enable_reports_active(self) -> None:
         set_org_feature(self.org, FeatureKey.PROMOTION, enabled=True, actor=self.actor)
         set_org_feature(

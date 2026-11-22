@@ -35,7 +35,6 @@ SYNC_STATE_ALLOWED_FIELDS = {"is_syncing", "last_match_id", "failed_match_ids"}
 @permission_classes(_perm)
 def steam_sync_state(request: Request, league_id: int) -> Response:
     """GET: return (or create) sync state for a league. PATCH: update allowed fields."""
-
     if request.method == "GET":
         state, _created = LeagueSyncState.objects.get_or_create(league_id=league_id)
         return Response(
@@ -79,7 +78,6 @@ STEAM_ID_64_BASE = 76561197960265728
 @permission_classes(_perm)
 def store_match(request: Request) -> Response:
     """Store a match and its player stats from raw Steam API data."""
-
     data = request.data
     match_id = data.get("match_id")
     league_id = data.get("league_id")
@@ -231,7 +229,6 @@ def tracked_leagues(request: Request) -> Response:
 @permission_classes(_perm)
 def update_league_stats(request: Request, league_id: int) -> Response:
     """Recalculate LeaguePlayerStats for all users in a league."""
-
     updated_count = update_all_league_stats_for_league(league_id)
     return Response({"updated_count": updated_count})
 
@@ -241,7 +238,6 @@ def update_league_stats(request: Request, league_id: int) -> Response:
 @permission_classes(_perm)
 def recalculate_mmr(request: Request, user_id: int) -> Response:
     """Recalculate a single user's league MMR."""
-
     try:
         user = CustomUser.objects.get(pk=user_id)
     except CustomUser.DoesNotExist:

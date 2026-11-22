@@ -2,6 +2,8 @@ from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
+from app.cache_utils import invalidate_after_commit
+from app.models import Game, Tournament
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -16,7 +18,7 @@ class Match(models.Model):
     lobby_type = models.IntegerField()
     league_id = models.IntegerField(null=True, blank=True, db_index=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.match_id)
 
 
@@ -46,7 +48,7 @@ class PlayerMatchStats(models.Model):
     class Meta:
         unique_together = ("match", "steam_id")
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Match {self.match.match_id} - Player {self.steam_id}"
 
 
@@ -57,7 +59,7 @@ class LeagueSyncState(models.Model):
     failed_match_ids = models.JSONField(default=list)
     is_syncing = models.BooleanField(default=False)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"League {self.league_id} sync state"
 
 
@@ -99,10 +101,10 @@ class LeaguePlayerStats(models.Model):
     class Meta:
         unique_together = ("user", "league_id")
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.user.username} - League {self.league_id} ({self.games_played} games)"
 
-    def recalculate_averages(self):
+    def recalculate_averages(self) -> None:
         """Recalculate cached average fields from totals."""
         if self.games_played > 0:
             self.win_rate = self.wins / self.games_played
@@ -156,20 +158,19 @@ class GameMatchSuggestion(models.Model):
     class Meta:
         unique_together = ("game", "match")
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Game {self.game_id} -> Match {self.match_id} ({self.confidence_score:.0%})"
 
 
 @receiver(post_save, sender=Match)
-def invalidate_game_cache_on_match_save(sender, instance, **kwargs):
+def invalidate_game_cache_on_match_save(
+    sender: type[Match], instance: Match, **kwargs: object
+) -> None:
     """
     Invalidate Game cache when a Steam Match is created or updated.
     This ensures bracket data stays fresh when match details change.
     """
     try:
-        from app.cache_utils import invalidate_after_commit
-        from app.models import Game, Tournament
-
         # Find any Game objects linked to this match via gameid
         linked_games = list(Game.objects.filter(gameid=instance.match_id))
         if linked_games:
@@ -187,9 +188,6 @@ def invalidate_game_cache_on_match_save(sender, instance, **kwargs):
                 game_count=len(linked_games),
                 tournament_count=len(tournaments),
             )
-    except ImportError:
-        # cacheops not installed or not configured
-        pass
     except Exception as e:
         logger.warning(
             "match_cache_invalidation_failed",

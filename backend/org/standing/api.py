@@ -6,14 +6,14 @@ from typing import Any
 
 from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Exists, QuerySet
 from django.utils import timezone
 
 from app.models import CustomUser
 from events.models import Event, EventSignup
 from org.feature_keys import FeatureKey
 from org.features import org_has_feature
-from org.models import Organization, OrgUser
+from org.models import Organization, OrgFeature, OrgUser
 from org.permissions import (
     can_view_org_members,
     has_org_admin_access,
@@ -67,6 +67,7 @@ __all__ = [
     "on_user_deleted",
     "promotion_order",
     "reopen_reset_fields",
+    "event_viewer_flags",
     "track_metrics",
     "tracks_for",
     "tracks_payload",
@@ -250,9 +251,11 @@ def leaderboard(
     *,
     viewer: CustomUser | AnonymousUser | None,
     now: datetime | None = None,
+    metrics: Sequence[Metric] | None = None,
 ) -> Leaderboard:
     adapter = registry.track(track)
-    chosen = next((m for m in adapter.metrics if m.key == metric), None)
+    known = adapter.metrics_for(org.pk) if metrics is None else metrics
+    chosen = next((m for m in known if m.key == metric), None)
     if chosen is None:
         raise UnknownMetric(metric)
     if not org_has_feature(org, adapter.feature):
@@ -278,6 +281,44 @@ def leaderboard(
         own_row=board.own_row if access.can_view_own else None,
         rows_visible=access.can_view_rows,
     )
+
+
+def event_viewer_flags(
+    event_id: int,
+    org_id: int | None,
+    viewer: CustomUser | AnonymousUser | None,
+) -> dict[str, object]:
+    if org_id is None or viewer is None or not viewer.is_authenticated:
+        return {}
+    now = timezone.now()
+    hooked = [
+        (t, t.event_viewer_flags(event_id, now=now))
+        for t in registry.tracks()
+        if type(t).event_viewer_flags is not TrackBase.event_viewer_flags
+    ]
+    if not hooked:
+        return {}
+    annotations: dict[str, Any] = {}
+    for track, exprs in hooked:
+        annotations[f"_unlocked_{track.key}"] = Exists(
+            OrgFeature.objects.filter(
+                organization_id=org_id, feature=str(track.feature), enabled=True
+            )
+        )
+        annotations.update(exprs)
+    member = (
+        OrgUser.objects.nocache()
+        .filter(organization_id=org_id, user_id=viewer.pk)
+        .annotate(**annotations)
+        .first()
+    )
+    if member is None:
+        return {}
+    flags: dict[str, object] = {}
+    for track, exprs in hooked:
+        if getattr(member, f"_unlocked_{track.key}"):
+            flags.update({key: getattr(member, key) for key in exprs})
+    return flags
 
 
 def tracks_for(
@@ -325,5 +366,6 @@ def member_standing(
     return found
 
 
-def track_metrics(track: str) -> tuple[Metric, ...]:
-    return registry.track(track).metrics
+def track_metrics(track: str, org_id: int | None = None) -> tuple[Metric, ...]:
+    adapter = registry.track(track)
+    return adapter.metrics if org_id is None else adapter.metrics_for(org_id)

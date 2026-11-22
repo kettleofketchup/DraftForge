@@ -38,10 +38,10 @@ class AvatarRefreshBatchedTest(TestCase):
         self.assertEqual(result, {"checked": 0, "updated": 0, "skipped": True})
 
     @patch("app.tasks.avatar_refresh._is_test_environment", return_value=False)
-    @patch("app.internal_client.list_discord_linked_users", return_value=[])
-    @patch("app.internal_client.list_discord_guild_ids")
-    @patch("app.internal_client.bulk_update_user_avatars")
-    @patch("discordbot.services.discord_members.get_discord_members_data")
+    @patch("app.tasks.avatar_refresh.list_discord_linked_users", return_value=[])
+    @patch("app.tasks.avatar_refresh.list_discord_guild_ids")
+    @patch("app.tasks.avatar_refresh.bulk_update_user_avatars")
+    @patch("app.tasks.avatar_refresh.get_discord_members_data")
     def test_no_discordful_users_skips(
         self, mock_fetch, mock_bulk, mock_guilds, mock_users, _envcheck
     ):
@@ -55,12 +55,12 @@ class AvatarRefreshBatchedTest(TestCase):
 
     @patch("app.tasks.avatar_refresh._is_test_environment", return_value=False)
     @patch(
-        "app.internal_client.list_discord_linked_users",
+        "app.tasks.avatar_refresh.list_discord_linked_users",
         return_value=[_user_row(pk=1, discord_id="100", avatar="old_hash")],
     )
-    @patch("app.internal_client.list_discord_guild_ids", return_value=[])
-    @patch("app.internal_client.bulk_update_user_avatars")
-    @patch("discordbot.services.discord_members.get_discord_members_data")
+    @patch("app.tasks.avatar_refresh.list_discord_guild_ids", return_value=[])
+    @patch("app.tasks.avatar_refresh.bulk_update_user_avatars")
+    @patch("app.tasks.avatar_refresh.get_discord_members_data")
     def test_no_orgs_with_guild_skips(
         self, mock_fetch, mock_bulk, _mock_guilds, _mock_users, _envcheck
     ):
@@ -75,15 +75,15 @@ class AvatarRefreshBatchedTest(TestCase):
 
     @patch("app.tasks.avatar_refresh._is_test_environment", return_value=False)
     @patch(
-        "app.internal_client.list_discord_linked_users",
+        "app.tasks.avatar_refresh.list_discord_linked_users",
         return_value=[_user_row(pk=1, discord_id="100", avatar="old_hash")],
     )
     @patch(
-        "app.internal_client.list_discord_guild_ids",
+        "app.tasks.avatar_refresh.list_discord_guild_ids",
         return_value=["999000111"],
     )
-    @patch("app.internal_client.bulk_update_user_avatars", return_value=1)
-    @patch("discordbot.services.discord_members.get_discord_members_data")
+    @patch("app.tasks.avatar_refresh.bulk_update_user_avatars", return_value=1)
+    @patch("app.tasks.avatar_refresh.get_discord_members_data")
     def test_match_and_update_avatar(
         self, mock_fetch, mock_bulk, _mock_guilds, _mock_users, _envcheck
     ):
@@ -103,15 +103,15 @@ class AvatarRefreshBatchedTest(TestCase):
 
     @patch("app.tasks.avatar_refresh._is_test_environment", return_value=False)
     @patch(
-        "app.internal_client.list_discord_linked_users",
+        "app.tasks.avatar_refresh.list_discord_linked_users",
         return_value=[_user_row(pk=1, discord_id="100", avatar="same_hash")],
     )
     @patch(
-        "app.internal_client.list_discord_guild_ids",
+        "app.tasks.avatar_refresh.list_discord_guild_ids",
         return_value=["999000111"],
     )
-    @patch("app.internal_client.bulk_update_user_avatars")
-    @patch("discordbot.services.discord_members.get_discord_members_data")
+    @patch("app.tasks.avatar_refresh.bulk_update_user_avatars")
+    @patch("app.tasks.avatar_refresh.get_discord_members_data")
     def test_unchanged_hash_skips_update(
         self, mock_fetch, mock_bulk, _mock_guilds, _mock_users, _envcheck
     ):
@@ -127,15 +127,15 @@ class AvatarRefreshBatchedTest(TestCase):
 
     @patch("app.tasks.avatar_refresh._is_test_environment", return_value=False)
     @patch(
-        "app.internal_client.list_discord_linked_users",
+        "app.tasks.avatar_refresh.list_discord_linked_users",
         return_value=[_user_row(pk=1, discord_id="42", avatar="keep_me")],
     )
     @patch(
-        "app.internal_client.list_discord_guild_ids",
+        "app.tasks.avatar_refresh.list_discord_guild_ids",
         return_value=["999000111"],
     )
-    @patch("app.internal_client.bulk_update_user_avatars")
-    @patch("discordbot.services.discord_members.get_discord_members_data")
+    @patch("app.tasks.avatar_refresh.bulk_update_user_avatars")
+    @patch("app.tasks.avatar_refresh.get_discord_members_data")
     def test_user_not_in_any_guild_response_unchanged(
         self, mock_fetch, mock_bulk, _mock_guilds, _mock_users, _envcheck
     ):
@@ -152,15 +152,15 @@ class AvatarRefreshBatchedTest(TestCase):
 
     @patch("app.tasks.avatar_refresh._is_test_environment", return_value=False)
     @patch(
-        "app.internal_client.list_discord_linked_users",
+        "app.tasks.avatar_refresh.list_discord_linked_users",
         return_value=[_user_row(pk=1, discord_id="100", avatar="old")],
     )
     @patch(
-        "app.internal_client.list_discord_guild_ids",
+        "app.tasks.avatar_refresh.list_discord_guild_ids",
         return_value=["999000111", "222111000"],
     )
-    @patch("app.internal_client.bulk_update_user_avatars", return_value=1)
-    @patch("discordbot.services.discord_members.get_discord_members_data")
+    @patch("app.tasks.avatar_refresh.bulk_update_user_avatars", return_value=1)
+    @patch("app.tasks.avatar_refresh.get_discord_members_data")
     def test_helper_exception_per_guild_does_not_abort(
         self, mock_fetch, mock_bulk, _mock_guilds, _mock_users, _envcheck
     ):
@@ -182,18 +182,18 @@ class AvatarRefreshBatchedTest(TestCase):
 
     @patch("app.tasks.avatar_refresh._is_test_environment", return_value=False)
     @patch(
-        "app.internal_client.list_discord_linked_users",
+        "app.tasks.avatar_refresh.list_discord_linked_users",
         return_value=[
             _user_row(pk=1, discord_id="100", avatar="old_a"),
             _user_row(pk=2, discord_id="200", avatar="old_b"),
         ],
     )
     @patch(
-        "app.internal_client.list_discord_guild_ids",
+        "app.tasks.avatar_refresh.list_discord_guild_ids",
         return_value=["999000111", "222111000"],
     )
-    @patch("app.internal_client.bulk_update_user_avatars", return_value=2)
-    @patch("discordbot.services.discord_members.get_discord_members_data")
+    @patch("app.tasks.avatar_refresh.bulk_update_user_avatars", return_value=2)
+    @patch("app.tasks.avatar_refresh.get_discord_members_data")
     def test_multi_guild_aggregates_avatar_map(
         self, mock_fetch, mock_bulk, _mock_guilds, _mock_users, _envcheck
     ):

@@ -49,24 +49,32 @@ hash service="all":
         ./scripts/hash-docker-image.sh "$1"
     fi
 
-# docker buildx build one image: tags :latest and :<content-hash> (plus :<version> with --release); --push pushes, otherwise loads locally
+# docker buildx build one image: tags :latest and :<content-hash> (plus :<version> with --release); --push pushes, otherwise loads locally; --hash-only tags only :<content-hash> and leaves :buildcache alone (PR pushes)
 [private]
 buildx service image target dockerfile context *flags:
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{quote(root)}}
     service=$1 image="{{registry}}/$2" target=$3 dockerfile=$4 context=$5
-    push=false release=false
+    push=false release=false hash_only=false
     for flag in "${@:6}"; do
         case "$flag" in
             --push) push=true ;;
             --release) release=true ;;
-            *) echo "docker: unknown option $flag (use --push, --release)" >&2; exit 2 ;;
+            --hash-only) hash_only=true ;;
+            *) echo "docker: unknown option $flag (use --push, --release, --hash-only)" >&2; exit 2 ;;
         esac
     done
+    if [[ "$hash_only" == true && "$release" == true ]]; then
+        echo "docker: --hash-only and --release are exclusive" >&2
+        exit 2
+    fi
     version=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml | head -n 1)
     hash=$(./scripts/hash-docker-image.sh "$service")
-    args=(--file "$dockerfile" --target "$target" --tag "$image:latest")
+    args=(--file "$dockerfile" --target "$target")
+    if [[ "$hash_only" == false ]]; then
+        args+=(--tag "$image:latest")
+    fi
     if [[ "$release" == true ]]; then
         args+=(--tag "$image:$version")
     fi
@@ -80,7 +88,7 @@ buildx service image target dockerfile context *flags:
         args+=(--cache-from "type=registry,ref=$image:buildcache")
     fi
     if [[ "$push" == true ]]; then
-        if [[ "$registry_cache" == true ]]; then
+        if [[ "$registry_cache" == true && "$hash_only" == false ]]; then
             args+=(--cache-to "type=registry,ref=$image:buildcache,mode=max")
         fi
         args+=(--push)

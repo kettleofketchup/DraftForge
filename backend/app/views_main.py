@@ -55,6 +55,7 @@ from app.services.team_signals import (
     owning_team_audit,
     send_roster_changed_on_commit,
 )
+from app.tasks.avatar_refresh import refresh_avatars_batched
 from app.tournament_buckets import (
     tournament_bucket_cutoff,
     upcoming_q,
@@ -72,6 +73,7 @@ from app.tournament_list import (
     resolve_organizations,
     tournaments_list_cache_key,
 )
+from discordbot.models import DiscordTournamentLog
 from draft.models import Draft, DraftRound, DraftTeam
 from draft.services.team import apply_draft_options
 from events.models import Event
@@ -551,8 +553,6 @@ class TournamentView(viewsets.ModelViewSet):
         permission_classes=[CanEditTournament],
     )
     def discord_logs(self, request: Request, pk: str | None = None) -> Response:
-        from discordbot.models import DiscordTournamentLog
-
         tournament = self.get_object()
         logs = DiscordTournamentLog.objects.filter(tournament=tournament)
         data = [
@@ -1692,8 +1692,6 @@ def refresh_all_avatars(request: Request) -> Response:
             {"message": "Avatar refresh can only be run once per hour."},
             status=status.HTTP_200_OK,
         )
-
-    from app.tasks.avatar_refresh import refresh_avatars_batched
 
     refresh_avatars_batched.delay()
 

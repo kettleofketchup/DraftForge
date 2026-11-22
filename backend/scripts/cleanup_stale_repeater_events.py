@@ -41,43 +41,57 @@ import django
 
 django.setup()
 
-from django.db import transaction
+from django.db import transaction  # noqa: E402
 
-from events.constants import EventState
-from events.models import Event, EventRepeater, EventSignup
-from events.services import _python_weekday, generate_events_for_repeater
+from discordbot.models import DiscordEvent  # noqa: E402
+from events.constants import EventState  # noqa: E402
+from events.models import Event, EventRepeater, EventSignup  # noqa: E402
+from events.services import (  # noqa: E402
+    _python_weekday,
+    generate_events_for_repeater,
+)
 
 STALE_STATES = [EventState.UPCOMING, EventState.SIGNUPS_OPEN]
 TARGET_STATES = [EventState.UPCOMING, EventState.SIGNUPS_OPEN, EventState.ROLL_CALL]
 
 
-def _now_utc():
+def _now_utc() -> datetime.datetime:
     return datetime.datetime.now(tz=datetime.timezone.utc)
 
 
-def find_stale_events(repeater, target_weekday):
+def find_stale_events(repeater: EventRepeater, target_weekday: int) -> list[Event]:
     tz = ZoneInfo(repeater.timezone)
     qs = Event.objects.filter(
         event_repeater=repeater,
         state__in=STALE_STATES,
         scheduled_at__gte=_now_utc(),
     ).order_by("scheduled_at")
-    return [e for e in qs if e.scheduled_at.astimezone(tz).date().weekday() != target_weekday]
+    return [
+        e
+        for e in qs
+        if e.scheduled_at.astimezone(tz).date().weekday() != target_weekday
+    ]
 
 
-def find_correct_day_events(repeater, target_weekday):
+def find_correct_day_events(
+    repeater: EventRepeater, target_weekday: int
+) -> list[Event]:
     tz = ZoneInfo(repeater.timezone)
     qs = Event.objects.filter(
         event_repeater=repeater,
         state__in=TARGET_STATES,
         scheduled_at__gte=_now_utc(),
     ).order_by("scheduled_at")
-    return [e for e in qs if e.scheduled_at.astimezone(tz).date().weekday() == target_weekday]
+    return [
+        e
+        for e in qs
+        if e.scheduled_at.astimezone(tz).date().weekday() == target_weekday
+    ]
 
 
-def find_target_event(stale, candidates):
+def find_target_event(stale: Event, candidates: list[Event]) -> Event | None:
     """Closest candidate by scheduled_at within 7 days, else None."""
-    best = None
+    best: Event | None = None
     best_diff = datetime.timedelta(days=7, seconds=1)
     for c in candidates:
         diff = abs(c.scheduled_at - stale.scheduled_at)
@@ -86,8 +100,10 @@ def find_target_event(stale, candidates):
     return best
 
 
-def migrate_signups(stale, target):
-    existing = set(EventSignup.objects.filter(event=target).values_list("user_id", flat=True))
+def migrate_signups(stale: Event, target: Event) -> tuple[int, int]:
+    existing = set(
+        EventSignup.objects.filter(event=target).values_list("user_id", flat=True)
+    )
     moved = 0
     skipped = 0
     for s in EventSignup.objects.filter(event=stale).select_related("user"):
@@ -102,7 +118,7 @@ def migrate_signups(stale, target):
     return moved, skipped
 
 
-def migrate_tournament_users(stale, target):
+def migrate_tournament_users(stale: Event, target: Event) -> int:
     if not (stale.tournament and stale.tournament.state == "future"):
         return 0
     if not (target.tournament and target.tournament.state == "future"):
@@ -117,19 +133,17 @@ def migrate_tournament_users(stale, target):
     return moved
 
 
-def cancel_stale_event(stale):
+def cancel_stale_event(stale: Event) -> None:
     if stale.tournament and stale.tournament.state == "future":
         tournament = stale.tournament
         stale.tournament = None
         stale.save(update_fields=["tournament", "updated_at"])
         tournament.delete()
-    from discordbot.models import DiscordEvent
-
     DiscordEvent.objects.filter(event=stale).delete()
     stale.transition_state(EventState.CANCELLED)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Clean up stale repeater events.")
     parser.add_argument("repeater_id", type=int)
     parser.add_argument(

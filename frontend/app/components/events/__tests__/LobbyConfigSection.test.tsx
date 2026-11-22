@@ -160,6 +160,8 @@ describe('LobbyConfigSection', () => {
     expect(form.getValues('captains_draft_time')).toBe(25);
     type(draftTime(), '-5');
     expect(form.getValues('captains_draft_time')).toBe(1);
+    type(draftTime(), '0');
+    expect(form.getValues('captains_draft_time')).toBe(1);
   });
 
   it('falls back to 10 seconds when Draft Time is cleared or not a number', () => {

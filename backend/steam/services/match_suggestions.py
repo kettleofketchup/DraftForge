@@ -192,8 +192,6 @@ def _get_matched_players(
     dire_captain_id: int | None = None,
 ) -> list[dict]:
     """Get info for all matched players in the match."""
-    from app.models import CustomUser
-
     captain_ids = {radiant_captain_id, dire_captain_id} - {None}
 
     # Read from the prefetched players (prefetch_related("players__user")

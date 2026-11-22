@@ -885,6 +885,9 @@ class EventViewSet(viewsets.ModelViewSet):
 
         data = dict(get_data())  # shallow-copy
         _attach_user_can_manage(data, request.user)
+        data.update(
+            standing.event_viewer_flags(data["id"], data["organization"], request.user)
+        )
         return Response(data)
 
     def perform_create(self, serializer: EventSerializer) -> None:

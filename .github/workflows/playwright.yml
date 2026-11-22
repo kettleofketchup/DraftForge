@@ -20,7 +20,41 @@ env:
   IMAGE_PREFIX: ghcr.io/kettleofketchup/draftforge
 
 jobs:
+  # Builds and pushes (content-hash tag only) any stack image or test DB the registry
+  # lacks, once, so the test jobs below only pull. vars.PREPARE_RUNNER takes a JSON
+  # runner label or label array, e.g. "self-hosted" or ["self-hosted","linux"].
+  prepare:
+    name: Prepare images and test DB
+    runs-on: ${{ fromJSON(vars.PREPARE_RUNNER || '"ubuntu-latest"') }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Record start time
+        run: echo "PREPARE_START=$(date +%s)" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          github-actor: ${{ github.actor }}
+          buildx: 'false'
+          python: 'false'
+
+      - name: Build and push missing images and test DB
+        env:
+          DF_PREPARE_READONLY: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '1' || '' }}
+        run: just ci::prepare-images
+
+      - name: Report elapsed time
+        if: always()
+        run: echo "prepare job took $(( $(date +%s) - PREPARE_START ))s"
+
   chromium:
+    needs: prepare
+    if: ${{ !cancelled() }}
     name: Playwright chromium (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -76,6 +110,8 @@ jobs:
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   mobile:
+    needs: prepare
+    if: ${{ !cancelled() }}
     name: Playwright mobile (shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -123,6 +159,8 @@ jobs:
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   herodraft:
+    needs: prepare
+    if: ${{ !cancelled() }}
     name: Playwright herodraft (shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -171,6 +209,8 @@ jobs:
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   layout:
+    needs: prepare
+    if: ${{ !cancelled() }}
     name: Playwright layout (overlap and clip-escape sweep)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -213,6 +253,8 @@ jobs:
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   events:
+    needs: prepare
+    if: ${{ !cancelled() }}
     name: Playwright events (shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -276,6 +318,8 @@ jobs:
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   org-features:
+    needs: prepare
+    if: ${{ !cancelled() }}
     name: Playwright org features (sequential)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -318,6 +362,8 @@ jobs:
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   backend:
+    needs: prepare
+    if: ${{ !cancelled() }}
     name: Backend tests (${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 25

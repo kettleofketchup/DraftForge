@@ -6,9 +6,12 @@ announcement messages. These are synchronous functions — the bot calls
 them from async handlers via sync_to_async or database_sync_to_async.
 """
 
+from app.models import CustomUser
+from discordbot.models import DiscordEventMsgSignup, DiscordMessageLog
 from events.constants import SignupMeans
 from events.discord._shared import _discord_self_serve_refusal
 from events.ledger import SignupActor
+from events.models import Event, EventSignup
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -21,9 +24,7 @@ def handle_reaction_signup(
 
     Returns (success: bool, detail: str) tuple.
     """
-    from app.models import CustomUser
-    from discordbot.models import DiscordEventMsgSignup
-    from events.models import Event
+    # local: cycle: events.services -> events.discord -> reactions
     from events.services import process_rsvp
 
     # 1. Find the event from the announcement message
@@ -41,8 +42,6 @@ def handle_reaction_signup(
         event = signup_msg.event
     else:
         # Fall back to DiscordMessageLog for pre-migration messages
-        from discordbot.models import DiscordMessageLog
-
         log_entry = DiscordMessageLog.objects.filter(
             discord_message_id=str(discord_message_id),
             source="event_announcement",
@@ -97,9 +96,7 @@ def handle_reaction_cancel(
 
     Returns (success: bool, detail: str) tuple.
     """
-    from app.models import CustomUser
-    from discordbot.models import DiscordEventMsgSignup
-    from events.models import Event, EventSignup
+    # local: cycle: events.services -> events.discord -> reactions
     from events.services import cancel_signup
 
     # Try new model first
@@ -116,8 +113,6 @@ def handle_reaction_cancel(
         event = signup_msg.event
     else:
         # Fall back to DiscordMessageLog for pre-migration messages
-        from discordbot.models import DiscordMessageLog
-
         log_entry = DiscordMessageLog.objects.filter(
             discord_message_id=str(discord_message_id),
             source="event_announcement",
