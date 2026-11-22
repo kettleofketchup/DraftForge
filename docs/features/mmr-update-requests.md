@@ -34,7 +34,9 @@ The league MMR recompute from match history never overwrites an Official league 
 2. Click **Request update** on the row you want to change.
 3. Enter the new value (1 to 20000), attach a screenshot (PNG, JPEG or WebP, at most
    8 MB) and optionally add a note (at most 500 characters).
-4. Submit. The row now shows **Pending** with the requested value and date.
+4. Submit. The row now shows **Pending** with the requested value and date, and a
+   **View screenshot** link that opens the screenshot you sent. **Request update** is
+   hidden on that row until the request is decided or cancelled.
 
 You can only request for your own memberships, and you can have one pending request per
 target (one per org game, one per league). You can create at most 10 requests per hour.
@@ -47,18 +49,19 @@ deleted.
 | Status | Meaning |
 |--------|---------|
 | Pending | Waiting for staff |
-| Approved | The value is now Official. "Approved as X" means staff adjusted the value you asked for |
+| Approved | The value is now Official. The profile shows "Last decision: Approved 4800", or "approved as 4750, you asked 4800" when staff adjusted the value |
 | Rejected | Not applied. The reason staff gave is shown on your profile |
 | Superseded | Staff set an official value for that target before reviewing your request |
 | Cancelled | You withdrew it, or your membership was removed |
 
-The profile shows your pending request and the last decision for each target.
+The profile shows your pending request and the last approved, rejected or superseded
+decision for each target. Cancelled requests are not shown there.
 
 ### Who sees what
 
 | Viewer | Sees |
 |--------|------|
-| You | Every org and league MMR, pending requests, last decisions, your own screenshots |
+| You | Every org and league MMR, pending requests, last decisions, the screenshot of your pending request |
 | Org staff, and staff of that org's leagues | Your values for that org and its leagues, plus pending requests and screenshots for targets they can review |
 | Other members of the org | Your org values while the org's member list is public |
 | Other members of a league | Your league value, even when the org's member list is private |
@@ -90,7 +93,8 @@ enlarge) and the note. A change of 20% or more is highlighted.
 ### Approve, adjust, reject
 
 - **Approve** writes the value as Official. Change the number in the dialog to approve a
-  different value; the member sees "Approved as X". A large change asks you to confirm.
+  different value; the member's profile then says "approved as X, you asked Y". A large
+  change asks you to confirm.
 - **Reject** needs a reason (1 to 500 characters). The member sees it.
 - A request that someone else already handled returns "already reviewed".
 
