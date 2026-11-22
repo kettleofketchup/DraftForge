@@ -107,6 +107,7 @@ interface HeroDraftState {
   setSearchQuery: (query: string) => void;
   sendChat: (raw: string) => string | null;
   suggestHero: (kind: HeroSuggestionKind, heroId: number) => string | null;
+  unsuggestHero: (kind: HeroSuggestionKind, heroId: number) => string | null;
   setChatPanelOpen: (open: boolean) => void;
   setChatPanelInset: (px: number) => void;
   clearChatError: () => void;
@@ -536,6 +537,9 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
   suggestHero: (kind, heroId) =>
     sendChatFrame('', { type: 'chat_suggest', kind, hero_id: heroId }),
 
+  unsuggestHero: (kind, heroId) =>
+    sendChatFrame('', { type: 'chat_unsuggest', kind, hero_id: heroId }),
+
   setChatPanelOpen: (open) => {
     const { chat } = get();
     set({
@@ -589,7 +593,11 @@ function sendChatFrame(
   raw: string,
   frame:
     | { type: 'chat_send'; body: string }
-    | { type: 'chat_suggest'; kind: HeroSuggestionKind; hero_id: number },
+    | {
+        type: 'chat_suggest' | 'chat_unsuggest';
+        kind: HeroSuggestionKind;
+        hero_id: number;
+      },
 ): string | null {
   const { _connectionId, _currentDraftId, status, chat } =
     useHeroDraftStore.getState();

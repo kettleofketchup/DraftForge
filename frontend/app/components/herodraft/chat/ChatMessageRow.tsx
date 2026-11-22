@@ -6,6 +6,7 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { getHeroIcon, getHeroName } from '~/lib/dota/heroes';
 import { cn } from '~/lib/utils';
 import type { ChatMessage } from '../types';
+import { isWithdrawal } from './suggestions';
 
 export interface ChatMessageRowProps {
   message: ChatMessage;
@@ -62,6 +63,31 @@ function SuggestionBody({
   );
 }
 
+function WithdrawalBody({
+  message,
+}: {
+  message: ChatMessage & { hero_id: number };
+}) {
+  const isPick = message.kind === 'unsuggest_pick';
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+      data-testid={`herodraft-chat-withdrawal-${message.id}`}
+    >
+      removed
+      <Badge
+        className={cn(
+          'border-transparent px-1.5 text-[10px] font-semibold opacity-70',
+          isPick ? 'bg-pick-surface text-pick' : 'bg-ban-surface text-ban',
+        )}
+      >
+        {isPick ? 'PICK' : 'BAN'}
+      </Badge>
+      <span className="line-through">{getHeroName(message.hero_id)}</span>
+    </span>
+  );
+}
+
 export const ChatMessageRow = memo(function ChatMessageRow({
   message,
   onHeroClick,
@@ -79,7 +105,14 @@ export const ChatMessageRow = memo(function ChatMessageRow({
       <UserAvatar user={message.sender} size="xs" className="shrink-0" />
       <div className="min-w-0 flex-1 break-words">
         <span className="font-semibold">{name}</span>
-        {message.kind !== 'text' && message.hero_id !== null ? (
+        {isWithdrawal(message.kind) && message.hero_id !== null ? (
+          <>
+            {' '}
+            <WithdrawalBody
+              message={message as ChatMessage & { hero_id: number }}
+            />
+          </>
+        ) : message.kind !== 'text' && message.hero_id !== null ? (
           <>
             {' '}
             <SuggestionBody

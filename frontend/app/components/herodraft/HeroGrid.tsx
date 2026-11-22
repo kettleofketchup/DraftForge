@@ -5,11 +5,19 @@ import { brandBg } from '~/components/ui/buttons/styles';
 import { Input } from '~/components/ui/input';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { FastTooltip } from '~/components/ui/tooltip';
+import { DisplayName } from '~/components/user/avatar';
 import { heroMatchesSearch } from '~/lib/dota/heroes';
 import { cn } from '~/lib/utils';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
+import { useUserStore } from '~/store/userStore';
 import { HeroSuggestMenu } from './chat/HeroSuggestMenu';
+import {
+  activeSuggestions,
+  type HeroSuggestions,
+  NO_SUGGESTIONS,
+} from './chat/suggestions';
 import { isOverlaidByOtherLayer } from './keyboardLayers';
+import { SuggesterStack } from './SuggesterStack';
 
 // Memoized hero button to prevent re-renders
 // IMPORTANT: Don't pass searchQuery directly - pass pre-computed booleans instead
@@ -22,6 +30,18 @@ interface HeroButtonProps {
   isSelected: boolean;
   disabled: boolean;
   onClick: (heroId: number) => void;
+  suggestions: HeroSuggestions;
+  showBanSuggestions: boolean;
+  emphasis: 'pick' | 'ban' | null;
+}
+
+function suggestionLabel(name: string, s: HeroSuggestions, bans: boolean) {
+  const parts = [name];
+  const names = (users: HeroSuggestions['pick']) =>
+    users.map((u) => DisplayName(u)).join(', ');
+  if (s.pick.length) parts.push(`Pick: ${names(s.pick)}`);
+  if (bans && s.ban.length) parts.push(`Ban: ${names(s.ban)}`);
+  return parts.join(' · ');
 }
 
 const HeroButton = memo(function HeroButton({
@@ -32,9 +52,18 @@ const HeroButton = memo(function HeroButton({
   isSelected,
   disabled,
   onClick,
+  suggestions,
+  showBanSuggestions,
+  emphasis,
 }: HeroButtonProps) {
+  const pick = available ? suggestions.pick : NO_SUGGESTIONS.pick;
+  const ban =
+    available && showBanSuggestions ? suggestions.ban : NO_SUGGESTIONS.ban;
   return (
-    <FastTooltip content={hero.name} className="text-xs">
+    <FastTooltip
+      content={suggestionLabel(hero.name, { pick, ban }, showBanSuggestions)}
+      className="text-xs"
+    >
       <button
         type="button"
         style={{ padding: 0, margin: 0, lineHeight: 0 }}
@@ -45,13 +74,19 @@ const HeroButton = memo(function HeroButton({
         }}
         // Don't use HTML disabled - it prevents hover states for spectators
         className={cn(
-          'size-[24px] sm:size-[28px] md:size-[32px] lg:size-[40px] xl:size-[48px] 2xl:size-[56px] shrink-0 p-0.5',
+          'relative size-[24px] sm:size-[28px] md:size-[32px] lg:size-[40px] xl:size-[48px] 2xl:size-[56px] shrink-0 p-0.5',
           'rounded-full bg-gradient-to-b from-base-100 to-base-400',
           'border border-border shadow-md shadow-black/50',
           'hover:from-base-50 hover:to-base-200 hover:scale-110 hover:z-10 hover:shadow-lg hover:shadow-black/60',
           'transition-all duration-150',
           isSelected &&
             'ring-2 ring-turn scale-110 z-10 from-turn/40 to-base-400',
+          available &&
+            emphasis === 'pick' &&
+            'z-10 scale-105 ring-2 ring-pick brightness-125 shadow-lg shadow-pick/60 from-pick/50 to-base-400',
+          available &&
+            emphasis === 'ban' &&
+            'z-10 scale-105 ring-2 ring-ban brightness-125 shadow-lg shadow-ban/60 from-ban/50 to-base-400',
           isHighlighted &&
             'ring-2 ring-search-match from-search-match/30 to-base-400',
           isDimmed && 'opacity-30 grayscale',
@@ -63,7 +98,10 @@ const HeroButton = memo(function HeroButton({
         data-hero-available={available}
         data-hero-selected={isSelected}
         data-hero-disabled={disabled}
+        data-hero-emphasis={available && emphasis ? emphasis : undefined}
       >
+        <SuggesterStack users={pick} kind="pick" heroId={hero.id} />
+        <SuggesterStack users={ban} kind="ban" heroId={hero.id} />
         <img
           src={hero.icon}
           alt={hero.name}
@@ -125,6 +163,24 @@ export function HeroGrid({
   // Select draft rounds directly for memoization
   const draftRounds = useHeroDraftStore((state) => state.draft?.rounds);
   const suggestHero = useHeroDraftStore((state) => state.suggestHero);
+  const unsuggestHero = useHeroDraftStore((state) => state.unsuggestHero);
+  const chatMessages = useHeroDraftStore((state) => state.chat.messages);
+  const selfId = useUserStore((state) => state.currentUser?.pk);
+  const suggestions = useMemo(
+    () => activeSuggestions(chatMessages),
+    [chatMessages],
+  );
+  const showBanSuggestions = currentAction === 'ban';
+  const ownSuggestions = useCallback(
+    (heroId: number) => {
+      const s = suggestions.get(heroId) ?? NO_SUGGESTIONS;
+      return {
+        pick: s.pick.some((u) => u.pk === selfId),
+        ban: s.ban.some((u) => u.pk === selfId),
+      };
+    },
+    [suggestions, selfId],
+  );
   const chatInset = useHeroDraftStore((state) => state.chatPanelInset);
 
   // Auto-focus search when typing anywhere (unless in a dialog/input)
@@ -249,6 +305,14 @@ export function HeroGrid({
                 const available = isHeroAvailable(hero.id);
                 const matches = matchesSearch(hero.id);
                 const hasSearchQuery = !!searchQuery;
+                const heroSuggestions =
+                  suggestions.get(hero.id) ?? NO_SUGGESTIONS;
+                const emphasis =
+                  isMyTurn && currentAction
+                    ? heroSuggestions[currentAction].length > 0
+                      ? currentAction
+                      : null
+                    : null;
                 return (
                   <HeroButton
                     key={hero.id}
@@ -259,6 +323,9 @@ export function HeroGrid({
                     isSelected={selectedHeroId === hero.id}
                     disabled={disabled}
                     onClick={handleHeroClick}
+                    suggestions={heroSuggestions}
+                    showBanSuggestions={showBanSuggestions}
+                    emphasis={emphasis}
                   />
                 );
               })}
@@ -291,7 +358,12 @@ export function HeroGrid({
         />
       </div>
 
-      <HeroSuggestMenu enabled={canSuggest} onSuggest={suggestHero}>
+      <HeroSuggestMenu
+        enabled={canSuggest}
+        onSuggest={suggestHero}
+        onUnsuggest={unsuggestHero}
+        ownSuggestions={ownSuggestions}
+      >
         {heroListEl}
       </HeroSuggestMenu>
     </div>

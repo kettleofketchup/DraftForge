@@ -249,6 +249,19 @@ describe('HeroDraftChat log', () => {
     expect(useHeroDraftStore.getState().selectedHeroId).toBe(74);
   });
 
+  it('renders a withdrawn suggestion as a muted, unclickable line', () => {
+    const m = msg(4, { kind: 'unsuggest_pick', hero_id: 74, body: '' });
+    seed(member, [m]);
+    render(<HeroDraftChat draftState="drafting" />);
+    openPanel();
+    const row = screen.getByTestId(`herodraft-chat-withdrawal-${m.id}`);
+    expect(row).toHaveTextContent('removed');
+    expect(row).toHaveTextContent(getHeroName(74));
+    expect(
+      screen.queryByTestId(`herodraft-chat-suggestion-${m.id}`),
+    ).toBeNull();
+  });
+
   it('shows the unread count on the toggle', () => {
     seed(member);
     useHeroDraftStore.setState({

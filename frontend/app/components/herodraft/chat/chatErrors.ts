@@ -9,6 +9,7 @@ const CHAT_ERROR_TEXT: Record<ChatErrorCode, string> = {
   draft_closed: 'Draft finished — chat is read-only',
   draft_inactive: 'Suggestions are only available while drafting',
   hero_unavailable: 'That hero is no longer available',
+  not_suggested: 'That suggestion was already removed',
   bad_request: 'Message could not be sent',
   unavailable: 'Chat is unavailable — message not sent',
 };

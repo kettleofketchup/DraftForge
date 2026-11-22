@@ -919,6 +919,41 @@ class ChatSendTest(ChatSendFixture):
         finally:
             await self.close_all()
 
+    async def test_withdraw_suggestion_reaches_team_only(self) -> None:
+        try:
+            mem_a = await self.connect_as(self.mem_a)
+            cap_a = await self.connect_as(self.cap_a)
+            others = [await self.connect_as(u) for u in (self.cap_b, self.spectator)]
+            await self.set_state(HeroDraftState.DRAFTING)
+            await mem_a.send_json_to(
+                {"type": "chat_unsuggest", "kind": Kind.SUGGEST_PICK, "hero_id": 74}
+            )
+            reply = await read_until_types(mem_a, {"chat_ack", "chat_error"})
+            self.assertEqual(reply["code"], "not_suggested")
+
+            await self.suggest(mem_a, Kind.SUGGEST_PICK, 74)
+            for comm in (mem_a, cap_a):
+                await read_until_type(comm, "chat_message")
+            await mem_a.send_json_to(
+                {
+                    "type": "chat_unsuggest",
+                    "kind": Kind.SUGGEST_PICK,
+                    "hero_id": 74,
+                    "client_msg_id": "uns-1",
+                }
+            )
+            reply = await read_until_types(mem_a, {"chat_ack", "chat_error"})
+            self.assertEqual(reply["type"], "chat_ack")
+            self.assertEqual(reply["client_msg_id"], "uns-1")
+            for comm in (mem_a, cap_a):
+                message = (await read_until_type(comm, "chat_message"))["message"]
+                self.assertEqual(message["kind"], "unsuggest_pick")
+                self.assertEqual(message["hero_id"], 74)
+                self.assertEqual(message["channel"], "team")
+            await asyncio.gather(*(self.assert_no_chat_frame(c) for c in others))
+        finally:
+            await self.close_all()
+
     async def test_heartbeat_still_captain_only(self) -> None:
         with mock.patch.object(
             _RecordingConsumer, "handle_heartbeat", new_callable=mock.AsyncMock

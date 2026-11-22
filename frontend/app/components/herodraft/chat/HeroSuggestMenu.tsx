@@ -1,4 +1,4 @@
-import { Ban, ThumbsUp } from 'lucide-react';
+import { Ban, ThumbsUp, X } from 'lucide-react';
 import { type MouseEvent, type ReactElement, useState } from 'react';
 import {
   ContextMenu,
@@ -20,12 +20,19 @@ export interface HeroSuggestMenuProps {
   /** Off keeps the browser's own menu; the trigger stays mounted either way. */
   enabled: boolean;
   onSuggest: (kind: HeroSuggestionKind, heroId: number) => void;
+  onUnsuggest?: (kind: HeroSuggestionKind, heroId: number) => void;
+  /** Which of the viewer's own suggestions are live on a hero. */
+  ownSuggestions?: (heroId: number) => { pick: boolean; ban: boolean };
   children: ReactElement;
 }
+
+const NONE = { pick: false, ban: false };
 
 export function HeroSuggestMenu({
   enabled,
   onSuggest,
+  onUnsuggest,
+  ownSuggestions,
   children,
 }: HeroSuggestMenuProps) {
   const [target, setTarget] = useState<SuggestTarget | null>(null);
@@ -48,6 +55,10 @@ export function HeroSuggestMenu({
   };
 
   const disabled = !target?.available;
+  const mine =
+    target && onUnsuggest && ownSuggestions
+      ? ownSuggestions(target.heroId)
+      : NONE;
 
   return (
     <ContextMenu>
@@ -72,22 +83,44 @@ export function HeroSuggestMenu({
             <span className="truncate">{getHeroName(target.heroId)}</span>
           </ContextMenuLabel>
           <ContextMenuSeparator />
-          <ContextMenuItem
-            disabled={disabled}
-            onSelect={() => onSuggest('suggest_pick', target.heroId)}
-            data-testid="herodraft-hero-suggest-pick"
-          >
-            <ThumbsUp className="size-4 text-pick" />
-            Suggest pick
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={disabled}
-            onSelect={() => onSuggest('suggest_ban', target.heroId)}
-            data-testid="herodraft-hero-suggest-ban"
-          >
-            <Ban className="size-4 text-ban" />
-            Suggest ban
-          </ContextMenuItem>
+          {mine.pick ? (
+            <ContextMenuItem
+              disabled={disabled}
+              onSelect={() => onUnsuggest?.('suggest_pick', target.heroId)}
+              data-testid="herodraft-hero-unsuggest-pick"
+            >
+              <X className="size-4 text-pick" />
+              Remove pick suggestion
+            </ContextMenuItem>
+          ) : (
+            <ContextMenuItem
+              disabled={disabled}
+              onSelect={() => onSuggest('suggest_pick', target.heroId)}
+              data-testid="herodraft-hero-suggest-pick"
+            >
+              <ThumbsUp className="size-4 text-pick" />
+              Suggest pick
+            </ContextMenuItem>
+          )}
+          {mine.ban ? (
+            <ContextMenuItem
+              disabled={disabled}
+              onSelect={() => onUnsuggest?.('suggest_ban', target.heroId)}
+              data-testid="herodraft-hero-unsuggest-ban"
+            >
+              <X className="size-4 text-ban" />
+              Remove ban suggestion
+            </ContextMenuItem>
+          ) : (
+            <ContextMenuItem
+              disabled={disabled}
+              onSelect={() => onSuggest('suggest_ban', target.heroId)}
+              data-testid="herodraft-hero-suggest-ban"
+            >
+              <Ban className="size-4 text-ban" />
+              Suggest ban
+            </ContextMenuItem>
+          )}
         </ContextMenuContent>
       )}
     </ContextMenu>
