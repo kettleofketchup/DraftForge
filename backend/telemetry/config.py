@@ -50,7 +50,8 @@ def init_telemetry() -> None:
     Call once at Django startup (in settings.py or wsgi/asgi.py).
     Safe to call multiple times - subsequent calls are no-ops.
     """
-    from telemetry.tracing import (  # local: circular, telemetry.tracing imports this module
+    # local: cycle: telemetry.tracing -> telemetry.config
+    from telemetry.tracing import (
         init_log_export,
         init_tracing,
     )
