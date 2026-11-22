@@ -440,7 +440,7 @@ class InternalTransitionTests(WiringTestCase):
 
 
 class HelperStaffEndpointTests(WiringTestCase):
-    """T2: the operator role does not reach the other staff endpoints."""
+    """The operator role does not reach the other staff endpoints."""
 
     def test_helper_forbidden_on_staff_endpoints(self) -> None:
         create_tournament_for_event(self.rc_event)
@@ -470,7 +470,7 @@ class HelperStaffEndpointTests(WiringTestCase):
 
 
 class DroppedReinstateTests(WiringTestCase):
-    """T9: the owner cannot reinstate a DROPPED signup through the endpoint."""
+    """The owner cannot reinstate a DROPPED signup through the endpoint."""
 
     def test_owner_reinstate_dropped_returns_400(self) -> None:
         self._open()
