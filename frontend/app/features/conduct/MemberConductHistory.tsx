@@ -3,13 +3,13 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Badge } from '~/components/ui/badge';
 import { SecondaryButton } from '~/components/ui/buttons';
-import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
-import { formatMetricValue } from '~/features/standing/format';
 import { formatOrgDate } from '~/features/standing/periods';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
+import { formatShowRate } from './format';
 import { OutcomeChip } from './OutcomeChip';
 import { useMemberConduct } from './queries';
 import {
@@ -142,13 +142,7 @@ export function MemberConductHistory({
                 className="text-2xl font-bold tabular-nums"
                 data-testid="conduct-member-score"
               >
-                {formatMetricValue(
-                  {
-                    value: data.show_rate,
-                    status: data.status === 'new' ? 'new' : 'ranked',
-                  },
-                  'percent',
-                )}
+                {formatShowRate(data)}
               </div>
               <div
                 className="text-xs text-muted-foreground"
