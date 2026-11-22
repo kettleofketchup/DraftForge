@@ -25,7 +25,6 @@ from app.models import (
     Game,
     GameMode,
     GameType,
-    League,
     PositionsModel,
     Team,
     Tournament,
@@ -39,6 +38,7 @@ from events.services import (
     sync_future_events,
     sync_tournament_from_event,
 )
+from league.models import League
 from lobby import services, states
 from lobby.client import DotaLobbyClient, DotaLobbyError
 from lobby.models import GameLobby

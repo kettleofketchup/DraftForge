@@ -3,12 +3,12 @@ from typing import Any
 import nh3
 from rest_framework import serializers
 
-from app.models import League
 from app.serializers import (
     OrganizationsSerializer,
     PositionsSerializer,
     TournamentUserSerializer,
 )
+from league.models import League
 from org.mmr import get_org_mmrs
 from org.models import Organization
 

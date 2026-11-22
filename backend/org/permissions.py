@@ -8,7 +8,8 @@ from django.db.models import Exists, OuterRef, Q
 from rest_framework import permissions
 from rest_framework.request import Request
 
-from app.models import CustomUser, League
+from app.models import CustomUser
+from league.models import League
 from org.features import FeatureKey, org_has_feature
 from org.models import Organization, OrgUser
 

@@ -7,8 +7,8 @@ from django.contrib.auth.models import AnonymousUser
 from rest_framework import permissions
 from rest_framework.request import Request
 
-from app.models import CustomUser, League
-from league.models import LeagueUser
+from app.models import CustomUser
+from league.models import League, LeagueUser
 from org.permissions import (
     _payload_lists_user,
     can_view_org_members,

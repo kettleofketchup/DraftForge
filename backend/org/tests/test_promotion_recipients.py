@@ -3,10 +3,11 @@ from datetime import timedelta
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League, Tournament
+from app.models import CustomUser, Tournament
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import decline_signup
+from league.models import League
 from org.models import Organization, OrgUser, PromoSend
 from org.promotion.recipients import (
     DEFAULT_POOL_N,

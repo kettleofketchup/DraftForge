@@ -1,6 +1,8 @@
 """CSV import views for bulk-adding users to organizations and tournaments."""
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
@@ -12,7 +14,7 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
 from app.display_names import user_display_name
-from app.models import CustomUser, GameType, League, PositionsModel, Team, Tournament
+from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
 from league.permissions import has_league_staff_access
@@ -26,6 +28,9 @@ from org.mmr import (
 from org.models import Organization, OrgLog, OrgUser
 from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
+
+if TYPE_CHECKING:
+    from league.models import League
 
 log = get_logger(__name__)
 

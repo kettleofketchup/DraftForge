@@ -10,8 +10,9 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League, Tournament
+from app.models import CustomUser, Tournament
 from discordbot.services.member_names import MemberNames
+from league.models import League
 from org import discord_names
 from org.discord_names import (
     NameSyncResult,
