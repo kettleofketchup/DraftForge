@@ -1,4 +1,4 @@
-# Docker frontend commands (frontend and frontend-dev images)
+# Docker frontend commands (frontend, frontend-dev and playwright-runner images)
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 set positional-arguments
@@ -23,6 +23,11 @@ build-prod *flags:
 build-dev *flags:
     {{just}} docker::buildx frontend frontend-dev runtime-dev frontend/Dockerfile frontend "$@"
 
+# Build the CI Playwright runner image (frontend/Dockerfile.playwright: official Playwright image + node_modules); --push
+[group('docker::frontend')]
+build-pw *flags:
+    {{just}} docker::buildx playwright playwright-runner runner frontend/Dockerfile.playwright frontend "$@"
+
 # Build and push frontend images
 [group('docker::frontend')]
 push:
@@ -33,6 +38,11 @@ push:
 pull:
     {{just}} docker::pull-image frontend frontend
     {{just}} docker::pull-image frontend frontend-dev
+
+# Pull the CI Playwright runner image by content hash
+[group('docker::frontend')]
+pull-pw:
+    {{just}} docker::pull-image playwright playwright-runner
 
 # Run the frontend image interactively
 [group('docker::frontend')]
