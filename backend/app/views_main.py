@@ -530,6 +530,16 @@ class TournamentView(viewsets.ModelViewSet):
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
 
+    @action(detail=True, methods=["get"])
+    def viewer(self, request: Request, pk: str | None = None) -> Response:
+        """Per-viewer and uncached: the detail payload above is shared by everyone."""
+        tournament = get_object_or_404(
+            Tournament.objects.nocache().select_related("league"), pk=pk
+        )
+        return Response(
+            {"can_edit_tournament": can_edit_tournament(request.user, tournament)}
+        )
+
     def perform_update(self, serializer: TournamentSerializer) -> None:
         check_tournament_league_change(
             self.request.user,

@@ -31,6 +31,7 @@ import { createTeams } from './createTeams';
 import { ScrollArea } from '@radix-ui/react-scroll-area';
 import { TEAMS_BUTTONS_WIDTH } from '~/components/constants';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
+import { useCanEditTournamentFromServer } from '~/features/tournament-viewer/queries';
 import { CreateTeamsButton } from './createTeamsButton';
 interface Props {
   users: UserType[];
@@ -64,8 +65,8 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
   teamSize = 5,
 }) => {
   const tournament = useUserStore((state) => state.tournament);
-  const isStaff = useUserStore((state) => state.isStaff());
-  const TriggerButton = isStaff ? PrimaryButton : SecondaryButton;
+  const canEdit = useCanEditTournamentFromServer(tournament?.pk);
+  const TriggerButton = canEdit ? PrimaryButton : SecondaryButton;
 
   // Don't run createTeams until modal is opened - it's expensive (O(n²) with 100 iterations)
   const [teams, setTeams] = useState<TeamType[]>([]);

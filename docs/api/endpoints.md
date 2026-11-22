@@ -58,6 +58,7 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
 | GET | `/api/tournaments/` | List tournaments |
 | POST | `/api/tournaments/` | Create tournament |
 | GET | `/api/tournaments/{id}/` | Get tournament |
+| GET | `/api/tournaments/{id}/viewer/` | What the requesting user may do: `{"can_edit_tournament": bool}`. Uncached, unlike the detail payload |
 | PUT | `/api/tournaments/{id}/` | Update tournament |
 | DELETE | `/api/tournaments/{id}/` | Delete tournament |
 | GET | `/api/tournaments-list/` | Lightweight tournament list (the `/tournaments` page) |
