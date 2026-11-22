@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, ClassVar
 
 from django.contrib.auth.models import AnonymousUser
-from django.db.models import QuerySet
+from django.db.models import Expression, QuerySet
 
 from app.models import CustomUser
 from events.models import Event, EventSignup
@@ -89,6 +89,15 @@ class TrackBase(abc.ABC):
     ) -> list[T]:
         return list(candidates)
 
+    def metrics_for(self, org_id: int) -> tuple[Metric, ...]:
+        return self.metrics
+
+    def event_viewer_flags(
+        self, event_id: int, *, now: datetime
+    ) -> Mapping[str, Expression]:
+        """Flag expressions annotated on the viewer's OrgUser row (OuterRef("pk"))."""
+        return {}
+
     @abc.abstractmethod
     def access(
         self,
@@ -131,7 +140,7 @@ class TrackBase(abc.ABC):
         return TrackInfo(
             key=self.key,
             label=self.label,
-            metrics=self.metrics,
+            metrics=self.metrics_for(org_id),
             can_view_rows=access.can_view_rows,
             can_view_own=access.can_view_own,
             board_open=access.board_open,

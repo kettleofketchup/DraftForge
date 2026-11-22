@@ -130,11 +130,12 @@ export function LobbyConfigSection<T extends FieldValues & LobbyFields>({
                   min={1}
                   data-testid="lobby-config-draft-time"
                   {...field}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const seconds = parseInt(e.target.value, 10);
                     field.onChange(
-                      Math.max(1, parseInt(e.target.value, 10) || 10),
-                    )
-                  }
+                      Number.isNaN(seconds) ? 10 : Math.max(1, seconds),
+                    );
+                  }}
                 />
               </FormControl>
               <p className="text-xs text-muted-foreground">

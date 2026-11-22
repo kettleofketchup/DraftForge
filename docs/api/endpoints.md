@@ -58,6 +58,7 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
 | GET | `/api/tournaments/` | List tournaments |
 | POST | `/api/tournaments/` | Create tournament |
 | GET | `/api/tournaments/{id}/` | Get tournament |
+| GET | `/api/tournaments/{id}/viewer/` | What the requesting user may do: `{"can_edit_tournament": bool}`. Uncached, unlike the detail payload |
 | PUT | `/api/tournaments/{id}/` | Update tournament |
 | DELETE | `/api/tournaments/{id}/` | Delete tournament |
 | GET | `/api/tournaments-list/` | Lightweight tournament list (the `/tournaments` page) |
@@ -160,7 +161,7 @@ tournament's signups are open as defined above.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/teams/` | List teams |
-| POST | `/api/teams/` | Create team |
+| POST | `/api/teams/` | Create team (tournament staff; site staff for a team with no tournament) |
 | GET | `/api/teams/{id}/` | Get team |
 | PATCH / PUT | `/api/teams/{id}/` | Update team (tournament staff) |
 | DELETE | `/api/teams/{id}/` | Delete team (tournament staff) |
@@ -724,6 +725,19 @@ where `reasons` holds the `conduct_below_threshold` reason with `severity: "bloc
 `rule: "conduct-block"` and `params: {"tier": "block"}` (see
 [Signup requirements](#signup-requirements)). Staff placements of the same member are
 held as pending approval instead.
+
+### Leadership
+
+All under `/api/organizations/{id}/leadership/`, all gated on Leadership. Guide and the
+full endpoint table: [Organization Leadership](../features/organization-leadership.md#api).
+Every lookup is scoped to the URL's org (`404` otherwise). Refusals carry
+`{code, detail}`: `review_window_closed` (409), `snapshot_voided` (409), `not_in_pool` (403), `review_moderated`
+(403), `cannot_moderate_own_reviews` (403), `invalid_scores` (400), `reason_required`
+(400), `not_moderated` (409), `trait_in_use` (409), `not_found` (404). Raters read
+their own reviews, open and closed, from `reviews/mine/`. While the feature is unlocked, `GET /api/events/{id}/`
+adds `can_review_captains` and `pending_captain_reviews` (captains the signed-in member
+can still rate on that event); they are computed per viewer after the cached payload. Review `PUT`/`DELETE` are throttled per user. Leaderboards (`rating`, `points`,
+`rating.<trait>`) go through the [standing endpoints](#organization-standing).
 
 ### Internal
 
@@ -1631,7 +1645,7 @@ All responses follow this format:
 
 ## Organization standing
 
-Generic reads over every standing track (`contribution`, `conduct`). Guide:
+Generic reads over every standing track (`contribution`, `conduct`, `leadership`). Guide:
 [Org Standing](../development/org-standing.md#generic-endpoints).
 
 | Method | Endpoint | Description | Auth |
@@ -1643,6 +1657,7 @@ Generic reads over every standing track (`contribution`, `conduct`). Guide:
 |-------|---------|------|---------|
 | `contribution` | `points` (default), `entries`; periodic | Viewers who pass `can_view_org_members` | Signed-in members with entries in the period (`value` is points or entries by metric, `sample` the entry count); `null` otherwise |
 | `conduct` | `show_rate`; not periodic; `status` is `ranked` or `new` | Ranking public or org staff, and `can_view_org_members` | Org members |
+| `leadership` | `rating` (default, overall, 1-5), one `rating.<trait_key>` per active trait (not periodic), `points` (periodic); `sample` is the released review count for ratings and the entry count for points | Org staff, or `leaderboard_public` and `can_view_org_members`; rating boards list only `ranked` captains | Org members (an unrated member gets `value: null`, `status: "new"`) |
 
 Unknown track is `404`; unknown metric or period is `400`; a locked feature is
 `feature_locked`. With the conduct ranking private, an anonymous viewer gets `401`, a

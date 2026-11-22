@@ -46,6 +46,7 @@ from draft.services.hero_chat import (
     serialize_message,
     team_group_name,
     visible_messages,
+    withdraw_suggestion,
 )
 from league.models import League
 from org.models import Organization
@@ -808,6 +809,86 @@ class PostSuggestionTest(PostingFixture):
     def test_ambiguous_cannot_suggest(self) -> None:
         self.assert_code(
             "ambiguous_team", self.suggest, self.both, Kind.SUGGEST_PICK, 74
+        )
+
+
+class WithdrawSuggestionTest(PostingFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.set_state(HeroDraftState.DRAFTING)
+
+    def suggest(self, user: CustomUser, kind: str, hero_id: int) -> PostResult:
+        return post_suggestion(self.draft.pk, user, kind, hero_id, self.viewer(user))
+
+    def withdraw(self, user: CustomUser, kind: object, hero_id: object) -> PostResult:
+        return withdraw_suggestion(
+            self.draft.pk, user, kind, hero_id, self.viewer(user)
+        )
+
+    def assert_code(self, code: str, fn: Any, *args: Any) -> None:
+        before = HeroDraftChatMessage.objects.count()
+        with self.assertRaises(ChatError) as ctx:
+            fn(*args)
+        self.assertEqual(ctx.exception.code, code)
+        self.assertEqual(HeroDraftChatMessage.objects.count(), before)
+
+    def test_withdraw_persists_matching_kind(self) -> None:
+        pairs = (
+            (Kind.SUGGEST_PICK, Kind.UNSUGGEST_PICK),
+            (Kind.SUGGEST_BAN, Kind.UNSUGGEST_BAN),
+        )
+        for kind, withdrawn in pairs:
+            with self.subTest(kind=kind):
+                self.suggest(self.mem_a, kind, 74)
+                result = self.withdraw(self.mem_a, kind, 74)
+                row = HeroDraftChatMessage.objects.get(public_id=result.message["id"])
+                self.assertEqual(row.kind, withdrawn)
+                self.assertEqual(row.hero_id, 74)
+                self.assertEqual(row.channel, Channel.TEAM)
+                self.assertEqual(row.team_id, self.team_a.pk)
+
+    def test_requires_an_active_own_suggestion(self) -> None:
+        self.assert_code(
+            "not_suggested", self.withdraw, self.mem_a, Kind.SUGGEST_PICK, 74
+        )
+        self.suggest(self.mem_a, Kind.SUGGEST_BAN, 74)
+        self.assert_code(
+            "not_suggested", self.withdraw, self.mem_a, Kind.SUGGEST_PICK, 74
+        )
+        self.suggest(self.cap_a, Kind.SUGGEST_PICK, 74)
+        self.assert_code(
+            "not_suggested", self.withdraw, self.mem_a, Kind.SUGGEST_PICK, 74
+        )
+        self.suggest(self.mem_a, Kind.SUGGEST_PICK, 74)
+        self.withdraw(self.mem_a, Kind.SUGGEST_PICK, 74)
+        self.assert_code(
+            "not_suggested", self.withdraw, self.mem_a, Kind.SUGGEST_PICK, 74
+        )
+
+    def test_bad_kind_or_hero(self) -> None:
+        for kind in ("text", "unsuggest_pick", None, ["suggest_pick"]):
+            with self.subTest(kind=kind):
+                self.assert_code("bad_request", self.withdraw, self.mem_a, kind, 74)
+        for hero_id in ("74", None, True, 74.0):
+            with self.subTest(hero_id=hero_id):
+                self.assert_code(
+                    "bad_request",
+                    self.withdraw,
+                    self.mem_a,
+                    Kind.SUGGEST_PICK,
+                    hero_id,
+                )
+
+    def test_non_drafting_states_inactive(self) -> None:
+        self.suggest(self.mem_a, Kind.SUGGEST_PICK, 74)
+        self.set_state(HeroDraftState.PAUSED)
+        self.assert_code(
+            "draft_inactive", self.withdraw, self.mem_a, Kind.SUGGEST_PICK, 74
+        )
+
+    def test_spectator_cannot_withdraw(self) -> None:
+        self.assert_code(
+            "not_participant", self.withdraw, self.outsider, Kind.SUGGEST_PICK, 74
         )
 
 

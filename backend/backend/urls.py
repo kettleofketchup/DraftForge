@@ -247,6 +247,10 @@ urlpatterns = [
         include("org.conduct.urls"),
     ),
     path(
+        "api/organizations/<int:org_id>/leadership/",
+        include("org.leadership.urls"),
+    ),
+    path(
         "api/organizations/<int:org_id>/promotion/",
         include("org.promotion.urls"),
     ),

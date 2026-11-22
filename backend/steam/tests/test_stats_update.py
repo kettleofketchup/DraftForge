@@ -7,7 +7,7 @@ from steam.models import LeaguePlayerStats, Match, PlayerMatchStats
 
 class TestStatsUpdate(TestCase):
     def setUp(self) -> None:
-        # mmr/positions moved off CustomUser in the profile epic (mmr -> OrgUser,
+        # mmr/positions moved off CustomUser (mmr -> OrgUser,
         # positions -> DotaUserProfile). update_player_league_stats reads neither.
         self.user = CustomUser.objects.create_user(
             username="testplayer",

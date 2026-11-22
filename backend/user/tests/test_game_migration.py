@@ -1,7 +1,7 @@
 import importlib
 import unittest
 
-# django-test-migrations is a dev dep (lesson #22). The CI backend-dev image is
+# django-test-migrations is a dev dep. The CI backend-dev image is
 # pulled from GHCR and may pre-date this dep until the image-build workflow
 # republishes. Skip the whole module cleanly rather than failing with
 # ModuleNotFoundError when the image is stale.
@@ -28,7 +28,7 @@ class BackfillGameProfilesTest(MigratorTestCase):
             positions=pos,
             has_active_dota_mmr=True,
         )
-        # T1 historical save does NOT auto-create base_profile (historical model);
+        # A historical-model save does NOT auto-create base_profile;
         # create it explicitly so 0004 has a parent to attach to.
         BaseUserProfile.objects.get_or_create(user_id=u.pk)
 
@@ -93,9 +93,7 @@ class BackfillIdempotencyTest(MigratorTestCase):
 
         # Re-import the migration module and re-execute the forward function
         # using the new_state apps registry (where the game profiles live).
-        module = importlib.import_module(
-            "user.migrations.0004_backfill_game_profiles"
-        )
+        module = importlib.import_module("user.migrations.0004_backfill_game_profiles")
         module.backfill_game_profiles(self.new_state.apps, None)
 
         dota_after = DotaUserProfile.objects.count()
@@ -108,9 +106,7 @@ class BackfillIdempotencyTest(MigratorTestCase):
             f"Backfill rerun changed Deadlock row count: "
             f"before={deadlock_before}, after={deadlock_after}"
         )
-        dota_reloaded = DotaUserProfile.objects.get(
-            base_profile__user__username="idem"
-        )
+        dota_reloaded = DotaUserProfile.objects.get(base_profile__user__username="idem")
         assert dota_reloaded.has_active_dota_mmr is True, (
             "Backfill rerun overwrote a row that had been edited post-backfill — "
             "the data migration is destructive and must be made INSERT-only"
@@ -149,9 +145,7 @@ class BackfillReverseTest(MigratorTestCase):
         dota.has_active_dota_mmr = True
         dota.save()
 
-        module = importlib.import_module(
-            "user.migrations.0004_backfill_game_profiles"
-        )
+        module = importlib.import_module("user.migrations.0004_backfill_game_profiles")
         module.reverse_backfill(self.new_state.apps, None)
 
         rev_user = CustomUser.objects.get(username="rev")

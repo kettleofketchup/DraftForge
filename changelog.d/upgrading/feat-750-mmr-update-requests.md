@@ -11,5 +11,5 @@ MMR screenshots are stored in `backend/media`, bind-mounted into the backend con
 `sudo chown 1000:1000 backend/media`. Back up `backend/media` together with
 `backend/prod.db.sqlite3`.
 
-Migration `org.0020` marks existing Dota org MMRs that already had an active verification
+Migration `org.0021` marks existing Dota org MMRs that already had an active verification
 date as Official (with no verifier). Helm previews store media at `/data/media`.

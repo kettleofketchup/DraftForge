@@ -1,34 +1,42 @@
+from __future__ import annotations
+
+import threading
 import time
+from collections.abc import Callable
 from functools import wraps
+from typing import ParamSpec, TypeVar
 
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
+P = ParamSpec("P")
+T = TypeVar("T")
+
 # Module-level state for throttling
 _last_request_time = 0.0
-_request_lock = None
+_request_lock: threading.Lock | None = None
 
 
-def get_request_lock():
+def get_request_lock() -> threading.Lock:
     """Lazy initialization of threading lock."""
     global _request_lock
     if _request_lock is None:
-        import threading
-
         _request_lock = threading.Lock()
     return _request_lock
 
 
-def throttle_request(min_delay: float = 0.5):
+def throttle_request(
+    min_delay: float = 0.5,
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """
     Decorator that ensures minimum delay between Steam API requests.
     Steam API limit is 1 request per second; we use 0.5s for safety margin.
     """
 
-    def decorator(func):
+    def decorator(func: Callable[P, T]) -> Callable[P, T]:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             global _last_request_time
             lock = get_request_lock()
 
@@ -47,7 +55,9 @@ def throttle_request(min_delay: float = 0.5):
     return decorator
 
 
-def retry_with_backoff(func, max_retries=3, base_delay=1.0):
+def retry_with_backoff(
+    func: Callable[[], T], max_retries: int = 3, base_delay: float = 1.0
+) -> tuple[bool, T | Exception | None]:
     """
     Retry a function with exponential backoff.
 
@@ -59,7 +69,7 @@ def retry_with_backoff(func, max_retries=3, base_delay=1.0):
     Returns:
         tuple: (success: bool, result_or_error)
     """
-    last_exception = None
+    last_exception: Exception | None = None
 
     for attempt in range(max_retries):
         try:

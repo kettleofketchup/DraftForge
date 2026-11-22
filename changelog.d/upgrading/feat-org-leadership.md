@@ -1,0 +1,3 @@
+Migration `org.0020_leadership` adds a `track` column to the contribution ledger (`org_contributionentry`) and creates the leadership tables. On SQLite adding the column rebuilds the whole ledger table under a write lock; it is quick at current row counts, but deploy with `just dev::release` in a quiet window. Existing rows read `track="contribution"`, so no points change.
+
+The new Leadership feature is locked for every organization until a site admin unlocks it. While it is locked, completing an event records nothing for leadership. Each organization starts with the default settings, the default point values and the four default traits (Communication, Drafting, Composure, Sportsmanship); nothing needs to be configured before unlocking.

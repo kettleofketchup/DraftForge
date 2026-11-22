@@ -3,7 +3,9 @@
 # missed, duplicated or cancelled run loses nothing. `release-closed` is the
 # one edge-triggered step; the reconcile run's closed-PR search backs it up.
 # Label and status writes made with GITHUB_TOKEN trigger no workflows, so the
-# queue cannot loop. This workflow never checks out or runs PR code.
+# queue cannot loop. (`kick` dispatches this workflow with GITHUB_TOKEN, which
+# does start a run, but only from pull_request_target, which the queue's own
+# label writes never trigger.) This workflow never checks out or runs PR code.
 name: preview-queue
 
 on:
@@ -20,7 +22,13 @@ on:
   # Backstop for anything missed.
   schedule:
     - cron: "*/10 * * * *"
-  workflow_dispatch: {}
+  # Also started by `kick` for pull_request_target events.
+  workflow_dispatch:
+    inputs:
+      closed_pr:
+        description: "Number of a PR that was just closed (empty otherwise)"
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -45,9 +53,28 @@ jobs:
         run: |
           out=$(gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/preview-env" 2>&1) || { grep -q 'HTTP 404' <<<"$out" || { echo "$out"; exit 1; }; }
 
+  # A pull_request_target run's checks attach to the PR. A reconcile run there
+  # can be replaced while pending in the `preview-queue` group and show up on
+  # the PR as a cancelled (failing) check. So PR events only dispatch a run,
+  # which reconciles against the default branch instead.
+  kick:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      CLOSED_PR: ${{ github.event.action == 'closed' && github.event.pull_request.number || '' }}
+    steps:
+      - name: Dispatch a reconcile run
+        run: gh workflow run preview-queue.yml --ref "$DEFAULT_BRANCH" -f closed_pr="$CLOSED_PR"
+
   reconcile:
     needs: release-closed
-    if: always()
+    if: always() && github.event_name != 'pull_request_target'
     concurrency:
       group: preview-queue
       cancel-in-progress: false
@@ -66,7 +93,7 @@ jobs:
       PREVIEW_AUTHORS: ${{ vars.PREVIEW_AUTHORS || 'kettleofketchup' }}
       PREVIEW_IDLE_DAYS: ${{ vars.PREVIEW_IDLE_DAYS || '7' }}
       PREVIEW_REQUIRE_VERIFIED: ${{ vars.PREVIEW_REQUIRE_VERIFIED || 'false' }}
-      CLOSED_PR: ${{ github.event.action == 'closed' && github.event.pull_request.number || '' }}
+      CLOSED_PR: ${{ inputs.closed_pr || '' }}
     steps:
       # Always the default branch, never the PR: pull_request_target has a
       # write token. The 'main' fallback is required because the `schedule`

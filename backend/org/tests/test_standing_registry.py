@@ -29,7 +29,8 @@ class AdapterConformanceTest(SimpleTestCase):
     def test_registry_is_valid(self) -> None:
         registry.validate_tracks(registry.TRACKS)
         self.assertEqual(
-            [t.key for t in registry.tracks()], ["contribution", "conduct"]
+            [t.key for t in registry.tracks()],
+            ["contribution", "conduct", "leadership"],
         )
 
 

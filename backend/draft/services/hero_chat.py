@@ -42,6 +42,7 @@ ChatErrorCode = Literal[
     "draft_closed",
     "draft_inactive",
     "hero_unavailable",
+    "not_suggested",
     "bad_request",
     "unavailable",
 ]
@@ -59,6 +60,11 @@ _CLOSED_STATES = frozenset({HeroDraftState.COMPLETED, HeroDraftState.ABANDONED})
 _SUGGESTION_KINDS = frozenset(
     {HeroDraftChatMessage.Kind.SUGGEST_PICK, HeroDraftChatMessage.Kind.SUGGEST_BAN}
 )
+
+_WITHDRAW_KIND: dict[str, str] = {
+    HeroDraftChatMessage.Kind.SUGGEST_PICK: HeroDraftChatMessage.Kind.UNSUGGEST_PICK,
+    HeroDraftChatMessage.Kind.SUGGEST_BAN: HeroDraftChatMessage.Kind.UNSUGGEST_BAN,
+}
 
 _NEWLINES = re.compile(r"[\r\n\u2028\u2029]")
 _CONTROL = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f]")
@@ -649,3 +655,37 @@ def post_suggestion(
     ):
         raise ChatError("hero_unavailable")
     return _persist(draft_id, user, viewer, "team", kind, "", hero_id)
+
+
+def withdraw_suggestion(
+    draft_id: int,
+    user: CustomUser,
+    kind: object,
+    hero_id: object,
+    viewer: ChatViewer,
+) -> PostResult:
+    _authorize_sender(user, viewer)
+    draft = _open_draft(draft_id)
+    if draft.state != HeroDraftState.DRAFTING:
+        raise ChatError("draft_inactive")
+    if not isinstance(kind, str) or kind not in _WITHDRAW_KIND:
+        raise ChatError("bad_request")
+    if not isinstance(hero_id, int) or isinstance(hero_id, bool):
+        raise ChatError("bad_request")
+    withdraw_kind = _WITHDRAW_KIND[kind]
+    latest = (
+        HeroDraftChatMessage.objects.nocache()
+        .filter(
+            draft_id=draft_id,
+            team_id=viewer.team_id,
+            sender=user,
+            hero_id=hero_id,
+            kind__in=[kind, withdraw_kind],
+        )
+        .order_by("-id")
+        .values_list("kind", flat=True)
+        .first()
+    )
+    if latest != kind:
+        raise ChatError("not_suggested")
+    return _persist(draft_id, user, viewer, "team", withdraw_kind, "", hero_id)

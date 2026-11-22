@@ -99,8 +99,9 @@ badge. See [MMR update requests](mmr-update-requests.md).
 
 Migrations `org.0015` and `org.0016` create the table and copy every non-zero
 `OrgUser.mmr` into a Dota 2 row; values outside 0–20000 are copied as they are and the
-migration prints their OrgUser ids. `org.0018` then drops the old column. That release
-needs a stop-first deploy; the release notes carry the exact commands and the rollback
+migration prints their OrgUser ids. `org.0018` then drops the old column, so the old containers must be stopped before it
+runs. `just dev::release` stops the release stack before it migrates; the 0.18.0 release
+notes carry the manual stop-first commands for the older recipe, and the rollback
 steps. Rolling back `org.0018` refills the column from the Dota 2 rows and keeps every
 per-game row.
 

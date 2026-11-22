@@ -14,6 +14,233 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.18.0] - 2026-11-22
+
+### Upgrading
+
+The `app` and `events` migrations up to 0.17.0 are squashed and the replaced files are
+deleted. A database at 0.17.0 or later needs nothing: `migrate` records the squashed
+migrations as applied without running them. A database older than 0.17.0 cannot
+migrate on this release; upgrade it to 0.17.0 first, then to this release.
+
+Migration `org.0018` drops the `OrgUser.mmr` column. Org MMR has been stored one row
+per game since 0.17.0, whose `org.0015` and `org.0016` copied every non-zero
+`OrgUser.mmr` to the Dota 2 org MMR and kept the column in sync; nothing is copied
+in this release.
+
+This release must be deployed stop-first. `just dev::release` migrates before it pulls
+images and recreates containers, and the old containers fail on every org member query
+once the column is gone. From the repo root on the release host, after `git pull`:
+
+```bash
+just docker::release::pull
+scripts/in-env.sh release . .venv/bin/python -m scripts.slots --root . compose --stack release down
+just dev::release
+```
+
+The site is down from the second command until the third finishes (seconds of
+migration plus container start).
+
+During the deploy, a browser still running the old page gets a 400 "mmr requires
+mmr_game_type; reload the page" when it saves an org MMR. Reloading the page fixes it.
+
+Rollback (per-game org MMR rows, including Deadlock, are kept; `OrgUser.mmr` is
+refilled from the Dota 2 values):
+
+1. Stop the release stack:
+   `scripts/in-env.sh release . .venv/bin/python -m scripts.slots --root . compose --stack release down`
+2. From this release's checkout (migrations run from the host), run
+   `just db::manage release migrate org 0017_retarget_default_league_to_league`.
+3. Remove the old version's cached keys so the old image cannot serve pre-upgrade
+   member data. Start only Redis and delete the keys, replacing `0.17.0` with the
+   version you are going back to:
+   `scripts/in-env.sh release . .venv/bin/python -m scripts.slots --root . compose --stack release up -d redis`, then
+   `scripts/in-env.sh release . .venv/bin/python -m scripts.slots --root . compose --stack release exec -T redis sh -c "redis-cli --scan --pattern 'dtx-v0.17.0:*' | xargs -r redis-cli unlink"`.
+   Alternatively, start the old version with a new `DEPLOY_VERSION` in
+   `docker/.env.release` so it reads an empty cache prefix.
+4. Check out the old version and run `just dev::release`.
+
+Run migrations. `app.0113_widen_steam_account_id` widens the user Friend ID column to
+hold every Steam account ID. `app.0114_copy_profile_friend_ids` copies the Friend ID
+from each player's Dota 2 and Deadlock profiles onto their account when the account
+has none yet. A player whose profiles hold different IDs, or whose ID another account
+already holds, is skipped and logged as `steam_friend_id_backfill_skipped` with the
+user id and reason (`ambiguous` or `taken`); set those by hand in the admin.
+`org.0019_remove_unverified_friend_id` then drops the profile Friend ID column, so
+take a database backup first if you want to keep the skipped values. Reversing 0114
+is a no-op; reversing 0019 restores an empty column.
+
+### Security
+
+- Event signups no longer leak a member's org MMR to viewers outside the organization's
+  member rule through `suggested_mmr`; for those viewers the suggestion is never derived
+  from the org MMR.
+- Creating a team now needs edit access to its tournament. Any logged-in user could
+  create a team in any tournament through `POST /api/teams/`, while
+  `POST /api/team/register` refused org and league staff (#739).
+  The tournament Teams tab now offers team creation to the same people.
+
+### Added
+
+- Image builds now print their slowest BuildKit steps and cached-step count, and add them to the job summary, so you can see which layer dominates a build.
+- `just ci::timing` pulls queue waits, step timings, per-command timings (including inside composite actions) and those layer reports for recent CI runs into `.ci-timing/summary.md`.
+- Event staff see a turnout forecast on upcoming events of organizations with Conduct:
+  how many signed up, how many are expected to show, and how many await approval.
+- Event staff record attendance on the event page from roll call onwards: select
+  members and mark them attended, no-show, late cancel or excused with one audited
+  reason. Org staff can also add org members who played without signing up as
+  walk-ins.
+- Signup rows on the event page and on roll call show each member's show rate (or New)
+  to event staff, and whether Conduct would hold the member for approval or block them.
+- Org MMR per game: every organization member now has a separate Dota 2 and Deadlock
+  org MMR. Both can be viewed and edited on the organization Users tab, the user card and
+  the player modal (hotkeys R for Dota 2, K for Deadlock). Adding another game later
+  needs no new column or table.
+- Deadlock tournaments balance teams, order shuffle drafts, total team MMR and pick a new
+  captain by Deadlock org MMR. Dota 2 tournaments behave as before.
+- The organization CSV import has a Game select that picks which game's org MMR the
+  `mmr` column sets; the tournament import uses the tournament's game.
+- Approving a Deadlock signup shows the player's self-reported Deadlock rank and its
+  date, and writes the Deadlock org MMR.
+- New docs page: Org MMR per game.
+- Hero draft: heroes suggested by your team show the suggesters' avatars on the
+  grid (green, top-left for picks; red, bottom-right for bans, shown only during a
+  ban round), and on your turn the heroes suggested for the current action are
+  highlighted. Right-click a hero you suggested to remove your suggestion.
+
+### Changed
+
+- CI Playwright jobs run the tests inside a new `playwright-runner` image (`frontend/Dockerfile.playwright`: the official Playwright image for the pinned `@playwright/test` version plus `npm ci`), so they keep Playwright's bundled headless Chromium shell, and Playwright and backend test jobs no longer install Python, Poetry, Node or Playwright browsers on the runner. `just docker::all-push` builds and pushes the runner; `just docker::all-pull` pulls it when `DF_PW_CONTAINER=1`.
+- CI test jobs pull the stack images and test database in the background while Python, Node and Playwright are set up, and no longer boot a buildx builder unless an image has to be rebuilt.
+- Draft-started DMs now open the Discord Activity in one click when the draft has a known voice channel: the channel already assigned to the draft, or, for team drafts, the event's voice channel. The **Launch / Join Activity** button links straight to an invite for that channel. Drafts without a known channel keep the current two-step launch from your own voice channel.
+- API: member payloads carry `mmr_game_type`, the game their `mmr` was resolved for. In
+  Deadlock tournaments and events `mmr` is now the Deadlock org MMR. The org users
+  endpoint, the org user PATCH response and claim requests add the full per-game set
+  (`game_mmrs`, `target_game_mmrs`); gated event signups add `org_user_game_mmrs`,
+  `self_reported_rank` and `self_reported_rank_date`.
+- API: `PATCH /api/organizations/{id}/users/{org_user_id}/` takes
+  `{"game_mmrs": {"<game_type>": int | null}}`. Values must be integers in 0–20000 and
+  keys known game ids, or the request returns 400. `null` or 0 clears a game. A bare
+  `{"mmr": n}` without `mmr_game_type` returns 400. Each changed game logs an `OrgLog`
+  `set_mmr` entry.
+- Signup approval writes the org MMR of the event's game. The Dota verification flags
+  are set only for Dota events. `suggested_mmr` and `suggested_mmr_range` can be `null`
+  (source `"none"`) for games without a suggestion.
+- The MMR approval dialog now requires a value; Deadlock needs at least 1.
+- CSV import rejects `mmr` cells outside 0–20000 as row errors instead of storing them,
+  and the tournament import refuses the `league` MMR target for non-Dota tournaments.
+- The Django admin shows org MMRs read-only; edit them from the organization page.
+- Deadlock tournaments no longer show the league MMR on player cards and player strips;
+  league MMR is a Dota 2 value and still shows in Dota 2 tournaments.
+- The event signup form and the org Dota 2 profile card show your Friend ID
+  read-only once it is set, with a note to contact an admin to change it, and only
+  ask for it while it is empty (#717).
+- Each player now has one Steam Friend ID, kept on their account instead of on each
+  organization's Dota 2 and Deadlock profile. Web and Discord signups fill it in when
+  it is empty and never replace it: a signup with a different Friend ID is refused
+  with "Your Friend ID is already set to X; contact an admin to change it". Friend
+  IDs above 2147483647 are now accepted (#717).
+- Event, series and event-defaults dialogs respond faster: ticking a checkbox or
+  changing a setting now redraws only that field, not every tab of the dialog.
+- League backend code moved from `app` into the `league` Django app, ahead
+  of the model move. The league permission helpers and `IsLeagueAdmin` are
+  now in `league.permissions`; tournament, game and lobby checks stay in
+  `app.permissions_tournament`. `LeagueView` is now in `league.views`,
+  `LeagueSerializer` in `league.serializers`, the league SSR view in
+  `league.ssr`, the league admin/staff/member endpoints in
+  `league.views_admin_team`, and the rating and match finalization services
+  in `league.services`. The unused `IsLeagueStaff` permission class is
+  removed.
+- The `view` field of `drf_error_response` logs for these endpoints now
+  reads `league.views.LeagueView`, `league.views_admin_team.*` and
+  `league.ssr.*` instead of `app.views_main.*`, `app.views.admin_team.*` and
+  `app.views.ssr.*`. Log queries that filter on it need updating.
+- League HTTP paths, URL names, payloads and models are unchanged.
+- The `League`, `LeagueRating`, `LeagueMatch`, `LeagueMatchParticipant` and
+  `LeagueLog` models moved from `app` into the `league` Django app. The
+  migrations are state-only: the tables keep their `app_league*` names
+  (including `app_league_admins` and `app_league_staff`) and no schema
+  changes on deploy.
+- The five ContentType rows are relabelled from `app` to `league`, so the
+  permission labels change from `app.*_league*` to `league.*_league*`.
+  Existing user and group grants carry over.
+- The cacheops profile key `app.league` is renamed to `league.league`, with
+  the same profile.
+- No admin URL changes, since none of the five models is registered in
+  admin. No logger name, HTTP or WebSocket path, payload or
+  `_meta.label`-derived key changes either.
+
+### Removed
+
+- API: the event signup endpoint no longer accepts `profile.unverified_friend_id`, and
+  the org Dota 2 profile endpoints read and write `steam_account_id` (the player's
+  Friend ID, a number) instead of `unverified_friend_id` (#717).
+
+### Fixed
+
+- Adding a member to a league from the league page now seeds their league MMR from the
+  Dota 2 org MMR instead of 0.
+- The draft-style MMR comparison (snake vs normal vs shuffle) no longer shares one cache
+  entry across all drafts and no longer serves stale values after an org MMR change.
+- Approving a signup, importing a CSV and merging Discord accounts now refresh the
+  tournament and draft pages that show the changed org MMR.
+- The organization CSV import now clears cached member data after writing MMR.
+- Editing an org MMR with an empty value no longer returns a server error; it clears the
+  value. Invalid values return 400 instead of being stored.
+- The MMR approval dialog on the roll-call page now shows the Dota suggested range and
+  the Dota rank signals card; before, both were missing there.
+- Leaving the MMR approval input empty no longer approves the signup at 0.
+- Merging two Discord accounts in the same organization no longer discards the dropped
+  account's org MMR: for each game the higher of the two values is kept.
+- The Discord Activity no longer pulls keyboard focus out of Discord while you type in
+  Discord's message box during a draft.
+- The Add Member / Add Player search lists each user once; the hidden mobile layout no
+  longer renders a second copy of every result (#769).
+- Event approval settings no longer show a "Require rank screenshot" box under
+  Previously Ranked Players. It shared its setting with "Require MMR screenshot",
+  so ticking one ticked both (#714).
+- Previously ranked players are no longer asked for a rank screenshot. The rank
+  screenshot setting applies to active ranks only; the Discord rank picker and the
+  web signup check now follow that rule like the rest of signup (#714).
+- Hero draft: clicking a pick or ban suggestion in chat opens the confirm dialog
+  when it is your captain turn and the hero is still available.
+- Hero draft: the red ban / green pick tint on the hero grid now shows for every
+  member of the team whose turn it is, not only the captain.
+- The tournament CSV import no longer overwrites an existing org member's org MMR or
+  league MMR when **Update MMR for existing members** is off. The CSV MMR now only seeds
+  members the import adds to the organization (#686).
+- A player's league MMR created by a Dota 2 tournament CSV import now matches the org MMR
+  the import wrote, instead of 0 or the member's previous org MMR.
+- League users tab: org MMR and server nicknames now show when the display org
+  loads after the league's users, or changes while the same league stays open (#773).
+- League member cards on a league's Users tab now show each player's org MMR and
+  League MMR, including on a fresh page load. In a private org, plain members see
+  only their own org MMR there (#770).
+- Deleting an event or event series in the Django admin now runs the same cleanup as
+  the site: the Discord scheduled event and the event's tournament are removed, and a
+  deleted series no longer leaves its upcoming events behind (#740).
+- `DELETE /api/users/` without a user id now returns 405 instead of a server error.
+- The contributions **Manual award** form now picks the member with the same user search as everywhere else (type 3+ characters, with Discord members alongside), instead of a dropdown of every org member. It's usable in large servers, and the page no longer loads the whole member list.
+- On phones, the navbar login button now shows a "Log in" label under the Discord icon, and the menu drawer opens with a login row when you're logged out (or your name and profile link when you're logged in), so it's clear whether you're signed in.
+- `sync_prod_users` and `import_prod_tournament` create new users again instead of
+  failing on the removed user MMR field (#687). `import_prod_tournament` also reads the
+  current tournament API payload (user and team references by id, full datetimes), uses
+  its default API URL without `--url`, and takes `--league` / `--organization` to attach
+  the tournament to a local league and store new users' MMR as that organization's MMR
+  for the tournament's game.
+- `sync_prod_tournaments` reads the current tournament API payload: it fetches each
+  tournament's detail to resolve users, parses full datetimes, and matches game teams
+  by id before name.
+- `sync_prod_users` no longer aborts on a database with organization owners: owners are
+  kept and updated in place from production instead of deleted, and one user that fails
+  to sync no longer discards every other user.
+- Events: a series page no longer shows you as subscribed just because someone who
+  opened it before you is. The series' subscriber count, next event date and
+  organization name also update right away when they change.
+- Organizations: the repeating events list on an organization's page shows the
+  subscribe button again, with your current subscription state, and editing a series
+  from there loads all of its settings instead of a partial copy.
+
 ## [0.17.0] - 2026-11-21
 
 ### Added

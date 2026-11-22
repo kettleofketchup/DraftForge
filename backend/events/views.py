@@ -112,6 +112,7 @@ from events.services import (
     sync_future_events,
     sync_tournament_from_event,
     teardown_event,
+    teardown_event_repeater,
     unconfirm_signup,
 )
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS
@@ -300,19 +301,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
                 self.permission_denied(request)
 
     def perform_destroy(self, instance: EventRepeater) -> None:
-        """Tear down the series' still-active occurrences (and their live Discord
-        scheduled events) before deleting the series, so sync_discord_events can't
-        resurrect them as ghosts. Terminal (completed/cancelled) occurrences are
-        left as orphans via Event.event_repeater=SET_NULL for historical record.
-        """
-        active_states = [
-            EventState.UPCOMING,
-            EventState.SIGNUPS_OPEN,
-            EventState.ROLL_CALL,
-        ]
-        for event in list(instance.events.filter(state__in=active_states)):
-            teardown_event(event, actor=self.request.user)
-        instance.delete()
+        teardown_event_repeater(instance, actor=self.request.user)
 
     def get_queryset(self) -> QuerySet[EventRepeater]:
         # cacheops can't see the select_related org join; the views' cached_as
@@ -773,6 +762,9 @@ class EventViewSet(viewsets.ModelViewSet):
 
         data = dict(get_data())  # shallow-copy
         _attach_user_can_manage(data, request.user)
+        data.update(
+            standing.event_viewer_flags(data["id"], data["organization"], request.user)
+        )
         return Response(data)
 
     def perform_create(self, serializer: EventSerializer) -> None:

@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatViewer, DraftTeam } from '../types';
+import { isWithdrawal } from './suggestions';
 
 export const PREVIEW_MAX_LINES = 2;
 export const PREVIEW_TTL_MS = 4500;
@@ -33,6 +34,7 @@ export function teamRoster(
 }
 
 export function shouldPreview(m: ChatMessage, ctx: PreviewContext): boolean {
+  if (isWithdrawal(m.kind)) return false;
   if (ctx.selfId !== undefined && m.sender.pk === ctx.selfId) {
     return m.kind !== 'text';
   }

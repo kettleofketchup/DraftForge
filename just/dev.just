@@ -163,7 +163,7 @@ local-prod:
     {{just}} db::migrate::prod
     {{in_env}} prod . {{slots}} compose --stack prod up
 
-# Deploy: migrate, pull the release images, then recreate the release stack
+# Deploy: pull the release images, then stop the release stack, migrate and start it
 [group('dev')]
 release:
     #!/usr/bin/env bash
@@ -180,11 +180,19 @@ release:
     if [[ "$(stat -c %u "$media_dir")" != 1000 ]]; then
         echo "WARNING: run sudo chown 1000:1000 ${media_dir} (backend runs as uid 1000)" >&2
     fi
-    {{just}} db::migrate-env release
-    {{just}} docker::release::pull
     version=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' {{quote(root / "docker/.env.release")}} | head -n 1)
-    echo "launching release version ${version:-<unset>}"
+    echo "pulling release version ${version:-<unset>}"
+    {{in_env}} release . {{slots}} compose --stack release pull
+    if ! {{just}} db::manage release makemigrations --check --dry-run; then
+        echo "ERROR: models have changes with no migration; the site is still up. Commit the migration and release again." >&2
+        exit 1
+    fi
     {{in_env}} release . {{slots}} compose --stack release down
+    if ! {{just}} db::migrate-env release; then
+        echo "ERROR: migration failed; the release stack is down. Fix it, then rerun just dev::release." >&2
+        exit 1
+    fi
+    echo "launching release version ${version:-<unset>}"
     {{in_env}} release . {{slots}} compose --stack release up -d
 
 # Launch Chrome with remote debugging for Chrome DevTools MCP

@@ -86,7 +86,8 @@ class ConductAdapterTest(ConductReadApiBase):
 
     def test_registered_after_contribution(self) -> None:
         self.assertEqual(
-            [t.key for t in registry.tracks()], ["contribution", "conduct"]
+            [t.key for t in registry.tracks()],
+            ["contribution", "conduct", "leadership"],
         )
         self.assertIs(registry.track("conduct"), CONDUCT)
 

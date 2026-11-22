@@ -1,0 +1,1 @@
+- The "Confirm attendance via Discord" event setting is now "Post attendance reminder in Discord", and its description says what it does: post a reminder in the announcement channel before the event. It never tracked replies; use the ready check to require confirmation.

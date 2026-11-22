@@ -17,6 +17,8 @@ class HeroDraftChatMessage(models.Model):
         TEXT = "text", "Text"
         SUGGEST_PICK = "suggest_pick", "Suggest pick"
         SUGGEST_BAN = "suggest_ban", "Suggest ban"
+        UNSUGGEST_PICK = "unsuggest_pick", "Withdraw pick suggestion"
+        UNSUGGEST_BAN = "unsuggest_ban", "Withdraw ban suggestion"
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     draft = models.ForeignKey(
@@ -50,7 +52,12 @@ class HeroDraftChatMessage(models.Model):
                     models.Q(kind="text", hero_id__isnull=True) & ~models.Q(body="")
                 )
                 | models.Q(
-                    kind__in=["suggest_pick", "suggest_ban"],
+                    kind__in=[
+                        "suggest_pick",
+                        "suggest_ban",
+                        "unsuggest_pick",
+                        "unsuggest_ban",
+                    ],
                     hero_id__isnull=False,
                     channel="team",
                 ),
