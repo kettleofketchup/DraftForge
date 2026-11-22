@@ -6,5 +6,4 @@ class OrgConfig(AppConfig):
     name = "org"
 
     def ready(self) -> None:
-        import org.mmr_bridge  # noqa: F401
         import org.signals  # noqa: F401

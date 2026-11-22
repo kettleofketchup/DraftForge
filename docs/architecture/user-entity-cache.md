@@ -126,26 +126,31 @@ Each user appears exactly once in `_users`, regardless of how many teams/rounds 
 When a tournament belongs to a league (and therefore an org), users are serialized with org-scoped MMR via `OrgUserSerializer`:
 
 ```python
-def _serialize_users_with_mmr(users_qs, tournament):
-    league = tournament.league if tournament else None
-    org = league.organization if league else None
+def _serialize_users_with_mmr(users_qs, tournament, *, game_type=None, fresh=False):
+    org = _tournament_organization(tournament, fresh=fresh)
     if not org:
         return TournamentUserSerializer(users_qs, many=True).data
-
-    org_users = OrgUser.objects.filter(
-        user__in=users_qs, organization=org
-    ).select_related("user", "user__positions")
-
+    game = game_type or game_for_tournament(tournament)
+    org_users = with_user_profiles(
+        OrgUser.objects.filter(user__in=users_qs, organization=org), "user", dota=True
+    ).prefetch_related(..., game_mmrs_prefetch(fresh=fresh))
     return OrgUserSerializer(
-        org_users, many=True, context={"league_id": league.pk}
+        org_users, many=True, context={"league_id": ..., "game_type": game}
     ).data
 ```
+
+Org MMR is stored per game (`OrgUserGameMmr`, see [Org MMR per game](../features/org-mmr.md)).
+The serializer resolves `mmr` for the context game and must have the `game_mmrs` rows
+prefetched (`game_mmrs_prefetch()`); an unprefetched read logs `org_mmr_unprefetched`
+and raises in tests.
 
 The `OrgUserSerializer` includes:
 
 - `pk` — the `CustomUser.pk` (user identity)
 - `orgUserPk` — the `OrgUser.pk` (needed for org-scoped PATCH)
-- `mmr` — org-scoped MMR from `OrgUser.mmr`
+- `mmr` — org MMR for the context game (the tournament's game; Dota 2 when there is none)
+- `mmr_game_type` — the game `mmr` was resolved for
+- `game_mmrs` — `{"<game_type>": mmr}` for every game, only when the context sets `include_game_mmrs` (the gated org users endpoint and PATCH response). Tournament, team and draft payloads never carry it
 - `league_mmr` — league-scoped MMR snapshot from `LeagueUser.mmr`
 
 ---
@@ -245,8 +250,8 @@ interface UserEntry {
 }
 
 interface OrgUserData {
-  id: number;       // OrgUser.pk (for PATCH operations)
-  mmr: number;      // Org-scoped MMR
+  id: number;                                  // OrgUser.pk (for PATCH operations)
+  mmrs: Partial<Record<GameTypeValue, number>>; // Org MMR per game
   _fetchedAt: number;
 }
 
@@ -299,6 +304,27 @@ useUserCacheStore.getState().upsert(users, { orgId: 5 });
 useUserCacheStore.getState().upsert(users, { orgId: 5, leagueId: 3 });
 ```
 
+### Per-game org MMR
+
+`OrgUserData.mmrs` holds one value per game. On upsert with an `orgId`:
+
+- if the payload has `game_mmrs` (org users endpoint, PATCH response, gated signups),
+  every game is taken from it;
+- otherwise a flat `mmr` is filed under `mmr_game_type`, or Dota 2 when that is missing;
+- the result is **merged per game** into the existing entry when the `OrgUser` id is the
+  same, so a Deadlock tournament payload never erases the cached Dota value (and the
+  reverse).
+
+`hasScopedChanged()` compares each game. Components read a value for an explicit game:
+
+```typescript
+import { selectOrgMmr, useOrgMmr } from '~/store/selectOrgMmr';
+
+const mmr = useOrgMmr(user.pk, orgId, toGameType(tournament.game_type));
+```
+
+There is no game-less accessor: every reader chooses a game.
+
 ### Staleness Tracking
 
 Each entry tracks when its data was fetched. Both core and scoped data have independent timestamps:
@@ -341,7 +367,9 @@ Two schemas define the canonical user shape:
 const UserSchema = z.object({
   pk: z.number().min(0).optional(),
   username: z.string().min(2).max(100),
-  mmr: z.number().min(0).nullable().optional(),         // Org MMR
+  mmr: z.number().min(0).nullable().optional(),         // Org MMR for mmr_game_type
+  mmr_game_type: z.number().nullable().optional(),
+  game_mmrs: z.record(z.string(), z.number()).nullable().optional(), // gated payloads only
   league_mmr: z.number().min(0).nullable().optional(),  // League MMR
   orgUserPk: z.number().min(0).optional(),              // OrgUser.pk
   // ... other fields
@@ -351,11 +379,13 @@ const UserSchema = z.object({
 const CoreUserSchema = UserSchema.omit({
   orgUserPk: true,
   mmr: true,
+  game_mmrs: true,
+  mmr_game_type: true,
   league_mmr: true,
 }).extend({ pk: z.number() }); // pk required in cache
 ```
 
-The entity adapter uses `CoreUserSchema` to determine which fields to compare — context-scoped fields (`mmr`, `league_mmr`, `orgUserPk`) are handled separately in `orgData`/`leagueData`.
+The entity adapter uses `CoreUserSchema` to determine which fields to compare — context-scoped fields (`mmr`, `mmr_game_type`, `game_mmrs`, `league_mmr`, `orgUserPk`) are handled separately in `orgData`/`leagueData`.
 
 ---
 
@@ -377,7 +407,7 @@ sequenceDiagram
 
     Note over C,Cache: Later, on the org page...
     C->>Cache: getById(userPk)
-    Cache-->>C: UserEntry with orgData[orgId].mmr
+    Cache-->>C: UserEntry with orgData[orgId].mmrs[game]
     C->>Cache: isStale(userPk, {orgId: 5})
     Cache-->>C: false (within 5min window)
 ```
@@ -392,6 +422,7 @@ sequenceDiagram
 |------|---------|
 | `backend/app/serializers.py` | `UserPkField`, slim serializers, `build_users_dict()` |
 | `backend/org/serializers.py` | `OrgUserSerializer` (org-scoped MMR + `orgUserPk`) |
+| `backend/org/mmr.py` | Per-game org MMR reads, writes and prefetch |
 | `backend/league/serializers.py` | `LeagueUserSerializer` (league-scoped MMR) |
 | `backend/app/views_main.py` | Injects `_users` dict on tournament/draft GET responses |
 | `backend/draft/consumers/team.py` | Injects `_users` dict on team-draft WebSocket state (via `draft/services/team_state.py`) |
@@ -406,4 +437,5 @@ sequenceDiagram
 | `frontend/app/lib/hydrateTournament.ts` | Resolves PK references using `_users` dict |
 | `frontend/app/store/userCacheStore.ts` | Zustand store with scoped upsert and staleness |
 | `frontend/app/store/userCacheTypes.ts` | `UserEntry`, `OrgUserData`, `LeagueUserData`, `UpsertContext` |
+| `frontend/app/store/selectOrgMmr.ts` | `selectOrgMmr` / `useOrgMmr`: org MMR for one game |
 | `frontend/app/components/user/schemas.ts` | `UserSchema`, `CoreUserSchema` (Zod) |

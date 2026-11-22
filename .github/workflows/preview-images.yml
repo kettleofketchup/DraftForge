@@ -15,17 +15,19 @@ jobs:
   build:
     # jobs.<id>.if cannot read `env`, so the allowlist is read from `vars` here and in preview-queue.
     # Exact substring match: PREVIEW_AUTHORS must have no whitespace (preview-queue fails loudly if it does).
+    # A no-preview PR is never queued (preview_queue.OPT_OUT), so its images would go unused.
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
-      contains(format(',{0},', vars.PREVIEW_AUTHORS || 'kettleofketchup'), format(',{0},', github.event.pull_request.user.login))
+      contains(format(',{0},', vars.PREVIEW_AUTHORS || 'kettleofketchup'), format(',{0},', github.event.pull_request.user.login)) &&
+      !contains(github.event.pull_request.labels.*.name, 'no-preview')
     concurrency:
-      # matrix.name is part of the group: without it both legs share one group, run one at a time,
-      # and a second run for the same SHA cancels the first run's pending leg.
-      group: preview-images-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-${{ matrix.name }}
-      # Never cancel: a cancelled build leaves Argo pointing at a tag that never appears.
-      cancel-in-progress: false
+      # matrix.name is part of the group: without it both legs share one group and run one at a time.
+      # Per PR, not per SHA: a push cancels the build for the head it replaced. The queue only deploys
+      # tag_for(pr, head_sha), so an old head's images are never used; the new run builds the new head.
+      group: preview-images-${{ github.event.pull_request.number }}-${{ matrix.name }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
-    # A hung build would otherwise hold the per-SHA concurrency slot for 6h.
+    # A hung build would otherwise hold the per-PR concurrency slot for 6h.
     timeout-minutes: 45
     permissions:
       contents: read

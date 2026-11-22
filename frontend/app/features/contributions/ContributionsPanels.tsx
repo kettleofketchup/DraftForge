@@ -1,8 +1,6 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { useEvents } from '~/hooks/useEvent';
-import { useOrgUsers } from '~/hooks/useOrgUsers';
-import { useOrgStore } from '~/store/orgStore';
 import { LedgerTable } from './admin/LedgerTable';
 import { ManualAwardForm, type AwardEvent } from './admin/ManualAwardForm';
 import { PointValuesSettings } from './admin/PointValuesSettings';
@@ -54,16 +52,11 @@ function ContributionsAdminSection({
   timeZone,
   access,
 }: ContributionsAdminProps) {
-  const members = useOrgUsers(orgId);
   const { data: orgEvents } = useEvents({ organization: orgId });
   const events = useMemo<AwardEvent[]>(
     () => (orgEvents ?? []).map((e) => ({ id: e.id, name: e.name })),
     [orgEvents],
   );
-
-  useEffect(() => {
-    useOrgStore.getState().getOrgUsers(orgId);
-  }, [orgId]);
 
   return (
     <section
@@ -83,7 +76,6 @@ function ContributionsAdminSection({
           orgId={orgId}
           access={access}
           timeZone={timeZone}
-          members={members}
           events={events}
         />
       </section>
@@ -91,7 +83,6 @@ function ContributionsAdminSection({
         orgId={orgId}
         access={access}
         timeZone={timeZone}
-        members={members}
         events={events}
       />
     </section>

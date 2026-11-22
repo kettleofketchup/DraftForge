@@ -6,7 +6,11 @@ from django.conf import settings
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from kombu.exceptions import KombuError
 
+from discordbot.activity_ids import decode_draft_launch
+from discordbot.models import DraftActivityChannel
+from discordbot.tasks import complete_activity_launch
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -154,9 +158,6 @@ def handle_message_component(data: dict) -> JsonResponse:
     )
 
     if custom_id.startswith("draft_activity:") and custom_id != "draft_activity:launch":
-        from discordbot.activity_ids import decode_draft_launch
-        from discordbot.tasks import complete_activity_launch
-
         draft = decode_draft_launch(custom_id)
         if draft is None:
             return JsonResponse(
@@ -180,7 +181,6 @@ def handle_message_component(data: dict) -> JsonResponse:
             )
         # Defer immediately: REST voice lookup and invite creation can exceed
         # Discord's three-second deadline. Never log the interaction token.
-        from kombu.exceptions import KombuError
 
         try:
             # A disconnected broker must not consume Discord's three-second
@@ -221,8 +221,6 @@ def handle_message_component(data: dict) -> JsonResponse:
     if custom_id == "draft_activity:launch" and getattr(
         settings, "DISCORD_ACTIVITY_ENABLED", False
     ):
-        from discordbot.models import DraftActivityChannel
-
         if DraftActivityChannel.objects.filter(
             guild_id=data.get("guild_id", ""), channel_id=data.get("channel_id", "")
         ).exists():

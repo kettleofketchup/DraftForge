@@ -137,9 +137,13 @@ const Schema = z.object({
 ```typescript
 const Schema = z.object({
   nickname: z.string().nullable().optional(),
-  mmr: z.number().min(0).nullable().optional(),
+  mmr: z.number().min(0).nullable().optional(), // illustrative only
 });
 ```
+
+The real user edit form has no single `mmr` field: org MMR is per game
+(`game_mmrs`, one field per `GAME_TYPES` entry, built in
+`frontend/app/components/user/userCard/editUserSchema.ts`).
 
 ### Select Fields (Number Values)
 

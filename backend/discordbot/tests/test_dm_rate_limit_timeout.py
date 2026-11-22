@@ -68,9 +68,9 @@ class SyncSendDmRateLimitTimeoutTest(SimpleTestCase):
 @override_settings(TEST=False)
 @patch("discordbot.utils._log_discord_message", return_value=None)
 @patch("discordbot.utils.requests.request", side_effect=_discord_request)
-@patch("app.internal_client.update_tournament_log")
+@patch("events.tournament_tasks.update_tournament_log")
 @patch(
-    "app.internal_client.create_tournament_log",
+    "events.tournament_tasks.create_tournament_log",
     return_value=MagicMock(ok=True, json=lambda: {"id": 1}),
 )
 class TournamentDmLoopRateLimitTimeoutTest(SimpleTestCase):
@@ -88,9 +88,11 @@ class TournamentDmLoopRateLimitTimeoutTest(SimpleTestCase):
         self.assertTrue(update_log.call_args.kwargs["success"])
         self.assertIn("Failed: p1", update_log.call_args.kwargs["message"])
 
-    @patch("app.internal_client.get_tournament_participants", return_value=PARTICIPANTS)
     @patch(
-        "app.internal_client.get_tournament_for_task",
+        "events.tournament_tasks.get_tournament_participants", return_value=PARTICIPANTS
+    )
+    @patch(
+        "events.tournament_tasks.get_tournament_for_task",
         return_value=TournamentTaskSchema(
             id=1,
             name="Test",
@@ -115,9 +117,9 @@ class TournamentDmLoopRateLimitTimeoutTest(SimpleTestCase):
         self.assertIn("1/2", result)
         self._assert_finalized(update_log, request)
 
-    @patch("app.internal_client.get_match_participants", return_value=PARTICIPANTS)
+    @patch("events.tournament_tasks.get_match_participants", return_value=PARTICIPANTS)
     @patch(
-        "app.internal_client.get_tournament_for_task",
+        "events.tournament_tasks.get_tournament_for_task",
         return_value=TournamentTaskSchema(
             id=1,
             name="Test",

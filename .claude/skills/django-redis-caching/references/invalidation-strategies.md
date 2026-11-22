@@ -53,8 +53,8 @@ from app.cache_utils import invalidate_after_commit
 with transaction.atomic():
     user.nickname = "New"
     user.save()
-    org_user.mmr = 5000
-    org_user.save()
+    # set_org_mmr writes the per-game row and invalidates org_user + its tournaments after commit
+    set_org_mmr(org_user, GameType.DOTA2, 5000, mark_verified=False)
     invalidate_after_commit(
         *user.tournaments.all(),
         org_user,

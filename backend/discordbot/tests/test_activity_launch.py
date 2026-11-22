@@ -530,7 +530,7 @@ class ActivityLaunchGatewayTests(SimpleTestCase):
         )
 
     @patch("requests.patch")
-    @patch("discordbot.activity_launch_gateway.prepare_launch_payload")
+    @patch("discordbot.tasks.prepare_launch_payload")
     def test_deferred_http_followup_uses_same_launch_service(
         self, prepare, patch_response
     ):

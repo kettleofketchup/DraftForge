@@ -80,8 +80,18 @@ buildx service image target dockerfile context *flags:
     else
         args+=(--load)
     fi
+    if [[ "$registry_cache" == true ]]; then
+        meta=$(mktemp)
+        trap 'rm -f "$meta"' EXIT
+        args+=(--metadata-file "$meta")
+    fi
     echo "Running: docker buildx build ${args[*]} $context"
+    start=$SECONDS
     docker buildx build "${args[@]}" "$context"
+    if [[ "$registry_cache" == true ]]; then
+        python3 -I scripts/buildx_timing.py --metadata-file "$meta" \
+            --label "$2 ($target)" --seconds "$((SECONDS - start))" || true
+    fi
 
 # Pull <image>:<content-hash>, else :latest, and tag it :latest for compose
 [private]
