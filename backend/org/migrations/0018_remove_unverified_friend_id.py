@@ -3,8 +3,8 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("org", "0016_backfill_org_user_game_mmr"),
-        ("app", "0113_copy_profile_friend_ids"),
+        ("org", "0017_retarget_default_league_to_league"),
+        ("app", "0114_copy_profile_friend_ids"),
     ]
 
     operations = [

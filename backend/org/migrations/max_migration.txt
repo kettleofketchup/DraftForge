@@ -1,1 +1,1 @@
-0017_retarget_default_league_to_league
+0018_remove_unverified_friend_id
