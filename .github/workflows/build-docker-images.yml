@@ -19,6 +19,9 @@ env:
 
 jobs:
   build-images:
+    # Trusted builds only: a push to main or a dispatch from main. This job writes
+    # draftforge/* and GHCR :buildcache, which main and releases read.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read
