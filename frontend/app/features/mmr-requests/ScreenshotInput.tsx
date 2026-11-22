@@ -2,10 +2,10 @@ import { ImageUp, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
 import { SecondaryButton } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
+import { MAX_SCREENSHOT_MB, screenshotErrorMessage } from './reviewErrors';
 import { MAX_SCREENSHOT_BYTES, SCREENSHOT_TYPES } from './schemas';
 
 const ACCEPT = SCREENSHOT_TYPES.join(',');
-const MAX_MB = MAX_SCREENSHOT_BYTES / (1024 * 1024);
 
 export interface ScreenshotInputProps {
   value: File | null;
@@ -13,14 +13,15 @@ export interface ScreenshotInputProps {
   required?: boolean;
   error?: string;
   id?: string;
+  'aria-describedby'?: string;
 }
 
 function checkFile(file: File): string | null {
   if (!(SCREENSHOT_TYPES as readonly string[]).includes(file.type)) {
-    return 'Use a PNG, JPEG or WebP image.';
+    return screenshotErrorMessage('unsupported_type');
   }
   if (file.size > MAX_SCREENSHOT_BYTES) {
-    return `The image must be ${MAX_MB} MB or smaller.`;
+    return screenshotErrorMessage('too_large');
   }
   return null;
 }
@@ -37,9 +38,11 @@ export function ScreenshotInput({
   required = false,
   error,
   id,
+  'aria-describedby': describedBy,
 }: ScreenshotInputProps) {
   const fallbackId = useId();
   const inputId = id ?? fallbackId;
+  const messageId = `${inputId}-error`;
   const inputRef = useRef<HTMLInputElement>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -73,6 +76,9 @@ export function ScreenshotInput({
   };
 
   const message = localError ?? error;
+  const inputDescribedBy =
+    [describedBy, message ? messageId : null].filter(Boolean).join(' ') ||
+    undefined;
 
   return (
     <div className="flex flex-col gap-2">
@@ -81,10 +87,11 @@ export function ScreenshotInput({
         id={inputId}
         type="file"
         accept={ACCEPT}
-        className="sr-only"
+        className="peer sr-only"
         data-testid="mmr-screenshot-input"
         aria-required={required}
         aria-invalid={message ? true : undefined}
+        aria-describedby={inputDescribedBy}
         onChange={(event) => {
           accept(event.target.files?.[0]);
           event.target.value = '';
@@ -114,7 +121,7 @@ export function ScreenshotInput({
           htmlFor={inputId}
           data-testid="mmr-screenshot-dropzone"
           className={cn(
-            'cursor-pointer rounded-lg border-2 border-dashed border-muted-foreground/25 p-6 text-center transition-colors hover:border-muted-foreground/50',
+            'cursor-pointer rounded-lg border-2 border-dashed border-muted-foreground/25 p-6 text-center transition-colors hover:border-muted-foreground/50 peer-focus-visible:border-ring peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring/50',
             message && 'border-destructive/50',
           )}
           onDrop={handleDrop}
@@ -128,12 +135,12 @@ export function ScreenshotInput({
             Drop an image or click to choose
           </span>
           <span className="mt-1 block text-xs text-muted-foreground">
-            PNG, JPEG or WebP, up to {MAX_MB} MB
+            PNG, JPEG or WebP, up to {MAX_SCREENSHOT_MB} MB
           </span>
         </label>
       )}
       {message && (
-        <p role="alert" className="text-sm text-destructive">
+        <p id={messageId} role="alert" className="text-sm text-destructive">
           {message}
         </p>
       )}

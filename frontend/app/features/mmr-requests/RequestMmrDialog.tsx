@@ -19,12 +19,16 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
-import { extractApiError } from '~/lib/apiError';
 import { useUserStore } from '~/store/userStore';
 import { MmrStatusBadge } from './MmrStatusBadge';
 import { useCreateMmrRequest } from './queries';
 import {
-  MAX_SCREENSHOT_BYTES,
+  firstFieldError,
+  readReviewError,
+  requestErrorMessage,
+  screenshotErrorMessage,
+} from './reviewErrors';
+import {
   requestMmrFormSchema,
   TEXT_MAX_LENGTH,
   type CreateMmrRequestInput,
@@ -60,34 +64,8 @@ export interface RequestMmrDialogProps {
 type FormInput = z.input<RequestMmrFormSchema>;
 type Form = UseFormReturn<FormInput, unknown, RequestMmrFormValues>;
 
-const SCREENSHOT_MESSAGES: Record<string, string> = {
-  too_large: `The image must be ${MAX_SCREENSHOT_BYTES / (1024 * 1024)} MB or smaller.`,
-  unsupported_type: 'Use a PNG, JPEG or WebP image.',
-  invalid_image: "That file isn't a readable image.",
-};
-
-const TOAST_MESSAGES: Record<number, string> = {
-  429: "You've sent too many requests. Try again later.",
-  503: 'The server is busy processing images. Try again in a moment.',
-  507: 'Uploads are unavailable right now. Try again later.',
-};
-
-interface HttpErrorShape {
-  response?: { status?: number; data?: unknown };
-}
-
-function firstMessage(value: unknown): string | null {
-  if (Array.isArray(value) && typeof value[0] === 'string') return value[0];
-  return typeof value === 'string' ? value : null;
-}
-
 function applyServerError(error: unknown, form: Form): void {
-  const response = (error as HttpErrorShape)?.response;
-  const status = response?.status;
-  const data =
-    response?.data && typeof response.data === 'object'
-      ? (response.data as Record<string, unknown>)
-      : {};
+  const { status, data } = readReviewError(error);
 
   if (status === 409 && data.error === 'pending_exists') {
     form.setError('root.server', {
@@ -96,27 +74,25 @@ function applyServerError(error: unknown, form: Form): void {
     return;
   }
   if (status === 413) {
-    form.setError('screenshot', { message: SCREENSHOT_MESSAGES.too_large });
+    form.setError('screenshot', {
+      message: screenshotErrorMessage('too_large'),
+    });
     return;
   }
   if (status === 400) {
-    const screenshot = firstMessage(data.screenshot);
-    const mmr = firstMessage(data.requested_mmr);
-    const note = firstMessage(data.note);
+    const screenshot = firstFieldError(data.screenshot);
+    const mmr = firstFieldError(data.requested_mmr);
+    const note = firstFieldError(data.note);
     if (screenshot) {
       form.setError('screenshot', {
-        message: SCREENSHOT_MESSAGES[screenshot] ?? screenshot,
+        message: screenshotErrorMessage(screenshot),
       });
     }
     if (mmr) form.setError('requested_mmr', { message: mmr });
     if (note) form.setError('note', { message: note });
     if (screenshot || mmr || note) return;
   }
-  toast.error(
-    (status != null && TOAST_MESSAGES[status]) ||
-      extractApiError(error) ||
-      'Could not send the request',
-  );
+  toast.error(requestErrorMessage(error, 'Could not send the request'));
 }
 
 function targetTitle(target: RequestTarget): string {
@@ -251,15 +227,17 @@ export function RequestMmrDialog({
           render={({ field, fieldState }) => (
             <FormItem>
               <FormLabel>Screenshot *</FormLabel>
-              <ScreenshotInput
-                value={field.value ?? null}
-                onChange={(file) => {
-                  field.onChange(file ?? undefined);
-                  if (file) form.clearErrors('screenshot');
-                }}
-                required
-                error={fieldState.error?.message}
-              />
+              <FormControl>
+                <ScreenshotInput
+                  value={field.value ?? null}
+                  onChange={(file) => {
+                    field.onChange(file ?? undefined);
+                    if (file) form.clearErrors('screenshot');
+                  }}
+                  required
+                  error={fieldState.error?.message}
+                />
+              </FormControl>
             </FormItem>
           )}
         />

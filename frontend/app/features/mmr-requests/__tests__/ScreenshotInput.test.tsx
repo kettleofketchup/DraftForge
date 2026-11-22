@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+} from '~/components/ui/form';
 import { MAX_SCREENSHOT_BYTES } from '../schemas';
 import { ScreenshotInput } from '../ScreenshotInput';
 
@@ -37,6 +45,32 @@ function Harness({ onChange }: { onChange?: (f: File | null) => void }) {
       }}
       required
     />
+  );
+}
+
+function FormHarness() {
+  const form = useForm<{ screenshot: File | null }>({
+    defaultValues: { screenshot: null },
+  });
+  return (
+    <Form {...form}>
+      <FormField
+        control={form.control}
+        name="screenshot"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Screenshot *</FormLabel>
+            <FormControl>
+              <ScreenshotInput
+                value={field.value}
+                onChange={field.onChange}
+                required
+              />
+            </FormControl>
+          </FormItem>
+        )}
+      />
+    </Form>
   );
 }
 
@@ -111,6 +145,35 @@ describe('ScreenshotInput', () => {
       dataTransfer: { files: [file] },
     });
     expect(onChange).toHaveBeenCalledWith(file);
+  });
+
+  it('is labelled by the form label before and after a file is chosen', () => {
+    render(<FormHarness />);
+    const input = screen.getByTestId('mmr-screenshot-input');
+    expect(screen.getByLabelText(/Screenshot \*/)).toBe(input);
+    pick(new File(['x'], 'shot.png', { type: 'image/png' }));
+    expect(screen.getByTestId('mmr-screenshot-preview')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Screenshot \*/)).toBe(input);
+  });
+
+  it('links the error to the input', () => {
+    render(<FormHarness />);
+    pick(new File(['x'], 'a.gif', { type: 'image/gif' }));
+    const alert = screen.getByRole('alert');
+    const input = screen.getByTestId('mmr-screenshot-input');
+    expect(alert.id).not.toBe('');
+    expect(input.getAttribute('aria-describedby')?.split(' ')).toContain(
+      alert.id,
+    );
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('shows keyboard focus on the dropzone', () => {
+    render(<Harness />);
+    expect(screen.getByTestId('mmr-screenshot-input')).toHaveClass('peer');
+    expect(screen.getByTestId('mmr-screenshot-dropzone').className).toMatch(
+      /peer-focus-visible:ring-/,
+    );
   });
 
   it('shows an external error', () => {

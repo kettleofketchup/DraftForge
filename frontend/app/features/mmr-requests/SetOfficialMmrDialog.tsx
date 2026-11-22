@@ -424,14 +424,16 @@ export function SetOfficialMmrDialog({
           render={({ field, fieldState }) => (
             <FormItem>
               <FormLabel>Screenshot (optional)</FormLabel>
-              <ScreenshotInput
-                value={field.value ?? null}
-                onChange={(file) => {
-                  field.onChange(file);
-                  if (file) form.clearErrors('screenshot');
-                }}
-                error={fieldState.error?.message}
-              />
+              <FormControl>
+                <ScreenshotInput
+                  value={field.value ?? null}
+                  onChange={(file) => {
+                    field.onChange(file);
+                    if (file) form.clearErrors('screenshot');
+                  }}
+                  error={fieldState.error?.message}
+                />
+              </FormControl>
             </FormItem>
           )}
         />

@@ -1,4 +1,7 @@
 import { extractApiError } from '~/lib/apiError';
+import { MAX_SCREENSHOT_BYTES } from './schemas';
+
+export const MAX_SCREENSHOT_MB = MAX_SCREENSHOT_BYTES / (1024 * 1024);
 
 interface HttpErrorShape {
   response?: { status?: number; data?: unknown };
@@ -24,13 +27,29 @@ export function firstFieldError(value: unknown): string | null {
 }
 
 const SCREENSHOT_MESSAGES: Record<string, string> = {
-  too_large: 'The image must be 8 MB or smaller.',
+  too_large: `The image must be ${MAX_SCREENSHOT_MB} MB or smaller.`,
   unsupported_type: 'Use a PNG, JPEG or WebP image.',
   invalid_image: "That file isn't a readable image.",
 };
 
 export function screenshotErrorMessage(code: string): string {
   return SCREENSHOT_MESSAGES[code] ?? code;
+}
+
+const STATUS_MESSAGES: Record<number, string> = {
+  413: SCREENSHOT_MESSAGES.too_large,
+  429: "You've sent too many requests. Try again later.",
+  503: 'The server is busy processing images. Try again in a moment.',
+  507: 'Uploads are unavailable right now. Try again later.',
+};
+
+export function requestErrorMessage(error: unknown, fallback: string): string {
+  const { status } = readReviewError(error);
+  return (
+    (status != null && STATUS_MESSAGES[status]) ||
+    extractApiError(error) ||
+    fallback
+  );
 }
 
 export function reviewErrorMessage(error: unknown, fallback: string): string {
@@ -44,10 +63,5 @@ export function reviewErrorMessage(error: unknown, fallback: string): string {
   if (status === 403) {
     return 'You need admin access to review this request.';
   }
-  if (status === 413) return SCREENSHOT_MESSAGES.too_large;
-  if (status === 503) {
-    return 'The server is busy processing images. Try again in a moment.';
-  }
-  if (status === 507) return 'Uploads are unavailable right now.';
-  return extractApiError(error) || fallback;
+  return requestErrorMessage(error, fallback);
 }
