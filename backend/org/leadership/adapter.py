@@ -1,9 +1,19 @@
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from datetime import datetime
-from typing import override
+from typing import Any, override
 
 from django.contrib.auth.models import AnonymousUser
-from django.db.models import Exists, OuterRef
+from django.db.models import (
+    Count,
+    Exists,
+    Expression,
+    IntegerField,
+    OuterRef,
+    Q,
+    QuerySet,
+    Subquery,
+)
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from app.models import CustomUser
@@ -11,6 +21,7 @@ from events.models import Event
 from org.contributions.serializers import member_summary
 from org.feature_keys import FeatureKey
 from org.leadership import lifecycle, maintenance
+from org.leadership.constants import VoidKind
 from org.leadership.queries import CaptainRating, points_board, rating_board
 from org.leadership.rating import display
 from org.leadership.settings import get_leadership_settings
@@ -18,6 +29,7 @@ from org.leadership.summary import member_payload
 from org.leadership.traits import effective_traits
 from org.models import Organization, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain
+from org.standing import ledger
 from org.standing.base import TrackBase
 from org.standing.periods import Period
 from org.standing.types import (
@@ -133,29 +145,32 @@ class LeadershipTrack(TrackBase):
 
     @override
     def event_viewer_flags(
-        self, event_id: int, viewer: OrgUser, *, now: datetime
-    ) -> Mapping[str, object]:
+        self, event_id: int, *, now: datetime
+    ) -> Mapping[str, Expression]:
+        handled = CaptainReview.objects.filter(
+            event_captain=OuterRef("pk"), rater=OuterRef(OuterRef("pk"))
+        ).filter(Q(voided_at__isnull=True) | Q(void_kind=VoidKind.MODERATED))
         pending = (
-            EventCaptain.objects.nocache()
-            .filter(
+            EventCaptain.objects.filter(
                 event_id=event_id,
                 voided_at__isnull=True,
                 window_closes_at__gt=now,
-                teammates=viewer,
+                teammates=OuterRef("pk"),
             )
-            .exclude(captain=viewer)
-            .exclude(
-                Exists(
-                    CaptainReview.objects.filter(
-                        event_captain=OuterRef("pk"),
-                        rater=viewer,
-                        voided_at__isnull=True,
-                    )
-                )
-            )
-            .count()
+            .exclude(captain=OuterRef("pk"))
+            .exclude(Exists(handled))
         )
-        return {"can_review_captains": pending > 0, "pending_captain_reviews": pending}
+        count = pending.order_by().values("event_id").annotate(n=Count("pk"))
+        return {
+            "can_review_captains": Exists(pending),
+            "pending_captain_reviews": Coalesce(
+                Subquery(count.values("n")[:1], output_field=IntegerField()), 0
+            ),
+        }
+
+    @override
+    def deletion_blockers(self, user_pks: Collection[int]) -> list[QuerySet[Any]]:
+        return [ledger.user_rows(self.key, user_pks)]
 
     @override
     def metrics_for(self, org_id: int) -> tuple[Metric, ...]:

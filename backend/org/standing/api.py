@@ -251,9 +251,11 @@ def leaderboard(
     *,
     viewer: CustomUser | AnonymousUser | None,
     now: datetime | None = None,
+    metrics: Sequence[Metric] | None = None,
 ) -> Leaderboard:
     adapter = registry.track(track)
-    chosen = next((m for m in adapter.metrics_for(org.pk) if m.key == metric), None)
+    known = adapter.metrics_for(org.pk) if metrics is None else metrics
+    chosen = next((m for m in known if m.key == metric), None)
     if chosen is None:
         raise UnknownMetric(metric)
     if not org_has_feature(org, adapter.feature):
@@ -288,35 +290,34 @@ def event_viewer_flags(
 ) -> dict[str, object]:
     if org_id is None or viewer is None or not viewer.is_authenticated:
         return {}
+    now = timezone.now()
     hooked = [
-        t
+        (t, t.event_viewer_flags(event_id, now=now))
         for t in registry.tracks()
         if type(t).event_viewer_flags is not TrackBase.event_viewer_flags
     ]
     if not hooked:
         return {}
+    annotations: dict[str, Any] = {}
+    for track, exprs in hooked:
+        annotations[f"_unlocked_{track.key}"] = Exists(
+            OrgFeature.objects.filter(
+                organization_id=org_id, feature=str(track.feature), enabled=True
+            )
+        )
+        annotations.update(exprs)
     member = (
         OrgUser.objects.nocache()
         .filter(organization_id=org_id, user_id=viewer.pk)
-        .annotate(
-            **{
-                f"_unlocked_{t.key}": Exists(
-                    OrgFeature.objects.filter(
-                        organization_id=org_id, feature=str(t.feature), enabled=True
-                    )
-                )
-                for t in hooked
-            }
-        )
+        .annotate(**annotations)
         .first()
     )
     if member is None:
         return {}
-    now = timezone.now()
     flags: dict[str, object] = {}
-    for track in hooked:
+    for track, exprs in hooked:
         if getattr(member, f"_unlocked_{track.key}"):
-            flags.update(track.event_viewer_flags(event_id, member, now=now))
+            flags.update({key: getattr(member, key) for key in exprs})
     return flags
 
 

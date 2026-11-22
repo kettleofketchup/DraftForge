@@ -15,9 +15,11 @@ from events.models import Event
 from events.reopen import reopen_event
 from events.services import teardown_event
 from org.conduct.constants import Outcome, OutcomeSource
+from org.contributions.adapter import CONTRIBUTION
 from org.contributions.services import award_entry
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
+from org.leadership.adapter import LEADERSHIP
 from org.models import (
     AttendanceOutcome,
     CaptainReview,
@@ -245,6 +247,19 @@ class UserDeleteTest(LeadershipTestCase):
             counts[str(ContributionEntry._meta.verbose_name_plural)],
             self.contribution + self.leadership,
         )
+
+    def test_each_track_reports_only_its_own_blockers(self) -> None:
+        for track, expected in (
+            (CONTRIBUTION, self.contribution),
+            (LEADERSHIP, self.leadership),
+        ):
+            with self.subTest(track=track.key):
+                rows = track.deletion_blockers([self.cap_a.pk])
+                self.assertEqual(sum(qs.count() for qs in rows), expected)
+                self.assertEqual(
+                    {t for qs in rows for t in qs.values_list("track", flat=True)},
+                    {track.key},
+                )
 
 
 class EndpointTest(LeadershipTestCase):

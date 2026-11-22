@@ -22,6 +22,7 @@ from org.contributions.services import (
     repoint_ledger_attribution,
     should_sync_staff,
     sync_event_staff_entries,
+    user_entries,
 )
 from org.feature_keys import FeatureKey
 from org.models import Organization, OrgUser
@@ -130,7 +131,7 @@ class ContributionTrack(TrackBase):
 
     @override
     def deletion_blockers(self, user_pks: Collection[int]) -> list[QuerySet[Any]]:
-        return [ledger.user_rows(user_pks)]
+        return [user_entries(user_pks)]
 
     @override
     def access(

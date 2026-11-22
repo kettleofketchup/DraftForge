@@ -1,9 +1,12 @@
 from django.db import connection
 from django.test.utils import CaptureQueriesContext, override_settings
+from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
+from org.leadership.reviews import void_review, withdraw_review
+from org.standing import api as standing
 from org.tests.leadership_base import LeadershipTestCase
 
 FLAGS = ("can_review_captains", "pending_captain_reviews")
@@ -44,11 +47,46 @@ class EventViewerFlagsTest(LeadershipTestCase):
         for key in FLAGS:
             self.assertNotIn(key, body)
 
-    def test_locked_feature_omits_flags_and_skips_the_pool_count(self) -> None:
+    def test_locked_feature_omits_flags_at_the_same_cost(self) -> None:
         client = self.client_for(self.mates_a[0])
         _, unlocked = self.detail(client)
         set_org_feature(self.org, FeatureKey.LEADERSHIP, enabled=False, actor=None)
         body, locked = self.detail(client)
         for key in FLAGS:
             self.assertNotIn(key, body)
-        self.assertEqual(unlocked - locked, 1)
+        self.assertEqual(unlocked, locked)
+
+    def test_moderated_review_is_not_pending(self) -> None:
+        review = self.review(self.mates_a[0], self.cap_a)
+        void_review(
+            self.org, review_id=review.pk, actor=self.admin, reason="x", now=tz.now()
+        )
+        body, _ = self.detail(self.client_for(self.mates_a[0]))
+        self.assertEqual(body["pending_captain_reviews"], 0)
+        self.assertFalse(body["can_review_captains"])
+
+    def test_withdrawn_review_is_pending_again(self) -> None:
+        self.review(self.mates_a[0], self.cap_a)
+        withdraw_review(
+            self.org,
+            event_id=self.event.pk,
+            captain_org_user_id=self.ou(self.cap_a).pk,
+            rater=self.ou(self.mates_a[0]),
+            now=tz.now(),
+        )
+        body, _ = self.detail(self.client_for(self.mates_a[0]))
+        self.assertEqual(body["pending_captain_reviews"], 1)
+
+    def test_flags_cost_one_query_locked_or_unlocked(self) -> None:
+        def flags() -> dict[str, object]:
+            return standing.event_viewer_flags(
+                self.event.pk, self.org.pk, self.mates_a[0]
+            )
+
+        with self.assertNumQueries(1):
+            self.assertEqual(
+                flags(), {"can_review_captains": True, "pending_captain_reviews": 1}
+            )
+        set_org_feature(self.org, FeatureKey.LEADERSHIP, enabled=False, actor=None)
+        with self.assertNumQueries(1):
+            self.assertEqual(flags(), {})

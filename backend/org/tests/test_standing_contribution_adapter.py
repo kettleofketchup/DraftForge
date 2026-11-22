@@ -214,7 +214,7 @@ class ContributionAdapterTest(TestCase):
     def test_deletion_blockers_lazy(self) -> None:
         with self.assertNumQueries(0):
             blockers = standing.deletion_blockers([self.host.pk])
-        self.assertEqual(len(blockers), 1)
+        self.assertEqual(len(blockers), 2)
 
     def test_user_deleted_logs_per_org(self) -> None:
         self._close(cancelled=False, source="admin")

@@ -353,11 +353,10 @@ class LedgerTest(TestCase):
             9,
         )
 
-    def test_user_rows_all_tracks(self) -> None:
+    def test_user_rows_filters_track(self) -> None:
         manual = self._award(self.alice, 3)
         lead = self._award(self.alice, 5, kind="captained", event=self.event)
         self._award(self.bob, 4)
-        self.assertEqual(
-            set(ledger.user_rows([self.alice.pk]).values_list("pk", flat=True)),
-            {manual.pk, lead.pk},
-        )
+        for track, expected in (("contribution", manual), ("leadership", lead)):
+            rows = ledger.user_rows(track, [self.alice.pk])
+            self.assertEqual(set(rows.values_list("pk", flat=True)), {expected.pk})

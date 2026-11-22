@@ -77,8 +77,10 @@ def track_rows(track: TrackKey) -> QuerySet[ContributionEntry]:
     return ContributionEntry.objects.nocache().filter(track=track)
 
 
-def user_rows(user_pks: Collection[int]) -> QuerySet[ContributionEntry]:
-    return ContributionEntry.objects.nocache().filter(org_user__user__in=list(user_pks))
+def user_rows(
+    track: TrackKey, user_pks: Collection[int]
+) -> QuerySet[ContributionEntry]:
+    return track_rows(track).filter(org_user__user__in=list(user_pks))
 
 
 def _scoped(

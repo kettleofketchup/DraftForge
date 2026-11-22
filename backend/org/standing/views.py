@@ -51,7 +51,9 @@ def standing_leaderboard(request: Request, org_id: int, track: str) -> Response:
         raise ValidationError({"metric": f"Unknown metric {key!r}."})
     period = _period(request, org, chosen.periodic)
     try:
-        board = standing.leaderboard(org, track, key, period, viewer=request.user)
+        board = standing.leaderboard(
+            org, track, key, period, viewer=request.user, metrics=metrics
+        )
     except standing.FeatureLocked as exc:
         raise feature_locked() from exc
     except standing.AccessDenied as exc:
