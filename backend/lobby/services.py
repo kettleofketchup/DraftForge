@@ -32,6 +32,7 @@ from app.models import DotaLobbyMode, Game, GameMode, GameType, Team, Tournament
 from lobby import broadcast, refs, states
 from lobby.models import GameLobby
 from lobby.passwords import generate_password
+from lobby.tasks import close_dota_lobby, create_dota_lobby
 
 if TYPE_CHECKING:
     from app.models import CustomUser
@@ -453,7 +454,6 @@ def queue_create(
         return claim.eligibility
     if not claim.created:
         return _fail("active_lobby_exists", state=claim.game_lobby.state)
-    from lobby.tasks import create_dota_lobby
 
     game_pk, pk = game.pk, claim.game_lobby.pk
     broadcast.lobby_changed_on_commit(claim.game_lobby, bracket_changed=False)
@@ -480,8 +480,6 @@ def close_lobby(game_lobby: GameLobby, reason: str) -> bool:
         return False
     end_locally(game_lobby, reason)
     if game_lobby.close_pending:
-        from lobby.tasks import close_dota_lobby
-
         pk, lobby_id = game_lobby.pk, game_lobby.lobby_id or ""
         transaction.on_commit(lambda: close_dota_lobby.delay(pk, lobby_id))
     return True

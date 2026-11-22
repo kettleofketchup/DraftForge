@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("app", "0029_remove_tournamentmatch_tournament_and_more"),
+        ("app", "0001_squashed_0069"),
     ]
 
     operations = [

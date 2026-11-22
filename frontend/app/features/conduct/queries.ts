@@ -7,17 +7,23 @@ import {
 } from '@tanstack/react-query';
 import {
   conductKeys,
-  standingKeys,
+  invalidateConductQueries,
   type OrgFeatureAccess,
 } from '~/features/org-features';
 import {
+  getAttendance,
   getConductSettings,
+  getForecast,
   getMemberConduct,
   patchConductSettings,
+  putAttendance,
 } from './api';
 import type {
+  Attendance,
+  AttendancePut,
   ConductSettings,
   ConductSettingsForm,
+  Forecast,
   HistoryPage,
   MemberConduct,
 } from './schemas';
@@ -76,18 +82,59 @@ export function usePatchConductSettings(
       );
     },
     onSettled: (_saved, error) =>
-      Promise.all([
-        error
-          ? queryClient.invalidateQueries({
-              queryKey: conductKeys.settings(orgId, access.viewerPk),
-            })
+      invalidateConductQueries(
+        queryClient,
+        orgId,
+        error == null
+          ? { except: conductKeys.settings(orgId, access.viewerPk) }
           : undefined,
-        queryClient.invalidateQueries({
-          queryKey: conductKeys.members(orgId, access.viewerPk),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: standingKeys.track(orgId, access.viewerPk, 'conduct'),
-        }),
-      ]),
+      ),
+  });
+}
+
+export function useAttendance(
+  orgId: number,
+  access: OrgFeatureAccess,
+  eventId: number,
+  enabled: boolean,
+): UseQueryResult<Attendance> {
+  return useQuery({
+    queryKey: conductKeys.attendance(orgId, access.viewerPk, eventId),
+    queryFn: () => getAttendance(orgId, eventId),
+    enabled: enabled && access.settled,
+  });
+}
+
+export function useForecast(
+  orgId: number,
+  access: OrgFeatureAccess,
+  eventId: number,
+  enabled: boolean,
+): UseQueryResult<Forecast> {
+  return useQuery({
+    queryKey: conductKeys.forecast(orgId, access.viewerPk, eventId),
+    queryFn: () => getForecast(orgId, eventId),
+    enabled: enabled && access.settled,
+  });
+}
+
+export function usePutAttendance(
+  orgId: number,
+  access: OrgFeatureAccess,
+  eventId: number,
+): UseMutationResult<Attendance, unknown, AttendancePut> {
+  const queryClient = useQueryClient();
+  const key = conductKeys.attendance(orgId, access.viewerPk, eventId);
+  return useMutation({
+    mutationFn: (body) => putAttendance(orgId, eventId, body),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(key, saved);
+    },
+    onSettled: (_saved, error) =>
+      invalidateConductQueries(
+        queryClient,
+        orgId,
+        error == null ? { except: key } : undefined,
+      ),
   });
 }
