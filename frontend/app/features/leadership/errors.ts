@@ -47,6 +47,10 @@ function response(err: unknown): ResponseLike['response'] {
   return (err as ResponseLike).response;
 }
 
+export function refusalText(code: string): string {
+  return REFUSALS[code] ?? 'Something went wrong.';
+}
+
 export function refusalCode(err: unknown): string | null {
   const data = response(err)?.data;
   if (!data || typeof data !== 'object') return null;
