@@ -53,6 +53,11 @@ if [[ " $* " == *" compose ps --status running --quiet dota-lobby "* ]]; then
     [[ -n "${{DF_FAKE_SIM_RUNNING-}}" ]] && echo 0123abcd
     exit 0
 fi
+if [[ " $* " == *" compose ps --services --status running backend celery-worker "* ]]; then
+    [[ -n "${{DF_FAKE_DB_USERS_FAIL-}}" ]] && {{ echo "slot 3 belongs to another worktree" >&2; exit 1; }}
+    printf '%s\n' ${{DF_FAKE_DB_USERS-}}
+    exit 0
+fi
 if [[ "${{1-}} ${{2-}}" == "-m scripts.slots" && " $* " == *" ensure "* && -n "${{DF_FAKE_ENSURE_FAIL-}}" ]]; then
     echo "all 10 slots are held" >&2
     exit 1
@@ -140,6 +145,7 @@ def run(tmp_path: Path) -> Runner:
         "DF_JUST_PYTHON": str(bin_dir / "python"),
         "DF_TEST_DB_FILE": str(test_db),
         "DF_DB_DIR": str(db_dir),
+        "DF_SLOT_FILE": str(tmp_path / "env.slot"),
         "DF_BACKEND_ENV_FILE": str(tmp_path / "backend.env"),
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
     }
@@ -385,6 +391,101 @@ def test_populate_shell_helpers_pass_force(
 def test_populate_rejects_unknown_flags(run: Runner) -> None:
     result = run("db::populate::steam-mock", "--forse")
     assert result.returncode == 2 and run.calls() == []
+
+
+DB_USERS_PS = [
+    *SLOTS,
+    "ps",
+    "--services",
+    "--status",
+    "running",
+    "backend",
+    "celery-worker",
+]
+
+
+def _sidecars(run: Runner) -> list[Path]:
+    db = Path(run.env["DF_TEST_DB_FILE"])
+    return [db.with_name(db.name + suffix) for suffix in ("-wal", "-shm")]
+
+
+def _seed_sidecars(run: Runner) -> None:
+    for sidecar in _sidecars(run):
+        sidecar.write_bytes(b"stale")
+
+
+def _claim_slot(run: Runner) -> None:
+    Path(run.env["DF_SLOT_FILE"]).write_text("DF_SLOT=3\n")
+
+
+def test_populate_fresh_replaces_the_db_and_its_wal_sidecars(run: Runner) -> None:
+    _seed_sidecars(run)
+    result = run("db::populate::fresh")
+    assert result.returncode == 0, result.stderr
+    db = Path(run.env["DF_TEST_DB_FILE"])
+    assert db.exists() and db.read_bytes() == b""
+    assert not any(p.exists() for p in _sidecars(run))
+    calls = run.calls()
+    assert not any(c.argv[: len(SLOTS)] == SLOTS for c in calls)
+    assert calls[-1].argv == ["manage.py", "populate_all", "--force"]
+
+
+def test_populate_fresh_stops_and_restarts_this_slots_db_users(run: Runner) -> None:
+    _claim_slot(run)
+    _seed_sidecars(run)
+    result = run("db::populate::fresh", DF_FAKE_DB_USERS="backend celery-worker")
+    assert result.returncode == 0, result.stderr
+    argvs = [c.argv for c in run.calls()]
+    order = [
+        argvs.index(DB_USERS_PS),
+        argvs.index([*SLOTS, "stop", "backend", "celery-worker"]),
+        argvs.index(["manage.py", "migrate"]),
+        argvs.index(["manage.py", "populate_all", "--force"]),
+        argvs.index([*SLOTS, "start", "backend", "celery-worker"]),
+    ]
+    assert order == sorted(order)
+    assert not any(p.exists() for p in _sidecars(run))
+
+
+def test_populate_fresh_leaves_a_stopped_slot_alone(run: Runner) -> None:
+    _claim_slot(run)
+    assert run("db::populate::fresh").returncode == 0
+    slot_calls = [c.argv for c in run.calls() if c.argv[: len(SLOTS)] == SLOTS]
+    assert slot_calls == [DB_USERS_PS]
+
+
+def test_populate_fresh_refuses_when_the_slot_check_fails(run: Runner) -> None:
+    _claim_slot(run)
+    _seed_sidecars(run)
+    result = run("db::populate::fresh", DF_FAKE_DB_USERS_FAIL="1")
+    assert result.returncode != 0
+    assert "another worktree" in result.stderr
+    assert Path(run.env["DF_TEST_DB_FILE"]).read_bytes() == b"x"
+    assert all(p.exists() for p in _sidecars(run))
+    assert [c.argv for c in run.calls()] == [DB_USERS_PS]
+
+
+def test_reset_test_stops_db_users_and_drops_wal_sidecars(
+    run: Runner, tmp_path: Path
+) -> None:
+    _docker_stub(tmp_path)
+    _claim_slot(run)
+    _seed_sidecars(run)
+    result = run("db::reset-test", DF_FAKE_DB_USERS="backend")
+    assert result.returncode == 0, result.stderr
+    calls = run.calls()
+    argvs = [c.argv for c in calls]
+    cp = next(
+        i for i, c in enumerate(calls) if c.tool == "docker" and c.argv[:1] == ["cp"]
+    )
+    assert calls[cp].argv[-1] == run.env["DF_TEST_DB_FILE"]
+    order = [
+        argvs.index([*SLOTS, "stop", "backend"]),
+        cp,
+        argvs.index([*SLOTS, "start", "backend"]),
+    ]
+    assert order == sorted(order)
+    assert not any(p.exists() for p in _sidecars(run))
 
 
 def test_test_populate_all_is_a_fresh_populate(run: Runner) -> None:
