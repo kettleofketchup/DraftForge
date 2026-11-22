@@ -161,7 +161,7 @@ buildx service image target dockerfile context *flags:
             --label "$2 ($target)" --seconds "$((SECONDS - start))" || true
     fi
 
-# Pull <image>:<content-hash>, else :latest, and tag it :latest for compose
+# Pull <image>:<content-hash>, else :latest, and tag it :latest for compose. With DF_CI_PR=<n> (test jobs after prepare ran on the home runner) first try that PR's draftforge-ci/<image>:pr-<n>-<hash> and tag it as the draftforge/ hash too
 [private]
 pull-image service image:
     #!/usr/bin/env bash
@@ -169,6 +169,21 @@ pull-image service image:
     cd {{quote(root)}}
     image="{{registry}}/$2"
     hash=$(./scripts/hash-docker-image.sh "$1")
+    pr="${DF_CI_PR-}"
+    if [[ -n "$pr" && ! "$pr" =~ ^[0-9]+$ ]]; then
+        echo "  ✗ DF_CI_PR must be a PR number, got '$pr'" >&2
+        exit 2
+    fi
+    if [[ -n "$pr" ]]; then
+        ci="{{ci_registry}}/$2:pr-$pr-$hash"
+        if docker pull -q "$ci" >/dev/null 2>&1; then
+            echo "  ✓ Found PR $pr image $ci"
+            docker tag "$ci" "$image:$hash"
+            docker tag "$ci" "$image:latest"
+            exit 0
+        fi
+        echo "  No PR $pr image for $2, trying $image..."
+    fi
     echo "Pulling $image by hash (${hash:0:12}...)..."
     if docker pull -q "$image:$hash" >/dev/null 2>&1; then
         echo "  ✓ Found exact match for $image (hash: ${hash:0:12}...)"

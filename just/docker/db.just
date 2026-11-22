@@ -92,7 +92,7 @@ build *flags:
     docker build "${args[@]}" "$CTX"
     echo "Built {{image}} (hash: ${HASH:0:12}...)"
 
-# Pull test-db image from GHCR (tries hash first, then latest)
+# Pull test-db image from GHCR (tries hash first, then latest; with DF_CI_PR=<n>, this PR's draftforge-ci/test-db:pr-<n>-<hash> before both)
 [group('docker::db')]
 pull:
     #!/usr/bin/env bash
@@ -101,6 +101,19 @@ pull:
 
     HASH=$(./scripts/hash-test-db-sources.sh)
     echo "Content hash: ${HASH:0:12}..."
+
+    # Strategy 0: the image prepare built for this PR on the home runner (DF_CI_PR=<n>)
+    pr="${DF_CI_PR-}"
+    if [[ -n "$pr" && ! "$pr" =~ ^[0-9]+$ ]]; then
+        echo "✗ DF_CI_PR must be a PR number, got '$pr'" >&2
+        exit 2
+    fi
+    if [[ -n "$pr" ]] && docker pull "{{ci_image}}:pr-$pr-$HASH" 2>/dev/null; then
+        echo "✓ Found PR $pr test DB for hash ${HASH:0:12}..."
+        docker tag "{{ci_image}}:pr-$pr-$HASH" "{{image}}:latest"
+        docker tag "{{ci_image}}:pr-$pr-$HASH" "{{image}}:$HASH"
+        exit 0
+    fi
 
     # Strategy 1: Try exact hash-tagged image (no migrations needed)
     if docker pull "{{registry}}:$HASH" 2>/dev/null; then
