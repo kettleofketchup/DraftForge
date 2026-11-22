@@ -38,7 +38,7 @@ export function ReasonDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="conduct-reason-dialog">
-        <DialogHeader>
+        <DialogHeader className="px-8 sm:pl-0">
           <DialogTitle>Why are you changing attendance?</DialogTitle>
           <DialogDescription>
             {changeCount} {changeCount === 1 ? 'change' : 'changes'} will be

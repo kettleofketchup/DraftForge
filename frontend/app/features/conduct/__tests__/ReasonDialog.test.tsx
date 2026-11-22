@@ -49,6 +49,12 @@ describe('ReasonDialog', () => {
     expect(onConfirm).toHaveBeenCalledWith('no show');
   });
 
+  it('pads the header clear of the close button', () => {
+    renderDialog();
+    const title = screen.getByText('Why are you changing attendance?');
+    expect(title.parentElement).toHaveClass('px-8', 'sm:pl-0');
+  });
+
   it('the input is capped at 500', () => {
     renderDialog();
     expect(screen.getByTestId('conduct-reason-input')).toHaveAttribute(
