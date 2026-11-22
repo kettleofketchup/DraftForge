@@ -1,6 +1,6 @@
 from collections.abc import Collection
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Final
 
 from django.db import transaction
 from django.db.models import Prefetch, QuerySet
@@ -1523,7 +1523,33 @@ class UserSerializer(serializers.ModelSerializer):
     def get_staff_league_ids(self, obj: CustomUser) -> list[int]:
         return list(obj.staff_leagues.values_list("pk", flat=True))
 
+    PRIVILEGE_FIELDS: Final[frozenset[str]] = frozenset(
+        {"is_staff", "is_superuser", "is_active"}
+    )
+
+    def _strip_privilege_fields(
+        self, validated_data: dict[str, Any], target_id: int | None
+    ) -> None:
+        request = self.context.get("request")
+        actor = getattr(request, "user", None)
+        if actor is not None and actor.is_superuser:
+            return
+        dropped = sorted(f for f in self.PRIVILEGE_FIELDS if f in validated_data)
+        if not dropped:
+            return
+        for field in dropped:
+            validated_data.pop(field)
+        log.warning(
+            "user_privilege_fields_ignored",
+            system="user",
+            subsystem="serializer",
+            actor_id=getattr(actor, "pk", None),
+            target_id=target_id,
+            fields=dropped,
+        )
+
     def update(self, instance: CustomUser, validated_data: dict) -> CustomUser:
+        self._strip_privilege_fields(validated_data, instance.pk)
         validated_data.pop("discordNickname", None)
         with transaction.atomic():
             try:
@@ -1577,6 +1603,7 @@ class UserSerializer(serializers.ModelSerializer):
         return instance
 
     def create(self, validated_data: dict) -> CustomUser:
+        self._strip_privilege_fields(validated_data, None)
         fields = self.Meta.fields
 
         with transaction.atomic():
