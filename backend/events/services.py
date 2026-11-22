@@ -1302,8 +1302,10 @@ def ensure_tournament_with_signups(
     event: Event, phase: RosterPhase | None = None
 ) -> Tournament:
     """Self-heal before a tournament starts: create it if missing and sync its
-    roster. Defaults to the start rule: confirmed only from roll call (#378),
-    approved and confirmed when starting straight from signups."""
+    roster. Defaults to the start rule: starting from roll call rosters only
+    confirmed players, because an approved player who never confirmed did not
+    answer roll call; starting straight from signups rosters approved and
+    confirmed players."""
     return sync_event_roster(event, phase or start_phase(event)).tournament
 
 
