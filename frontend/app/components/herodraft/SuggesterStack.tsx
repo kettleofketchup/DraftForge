@@ -5,8 +5,7 @@ import type { Suggester } from './chat/suggestions';
 
 export const MAX_SUGGESTER_AVATARS = 3;
 
-const AVATAR_SIZE =
-  'h-2.5 w-2.5 sm:h-3 sm:w-3 lg:h-3.5 lg:w-3.5 2xl:h-4 2xl:w-4';
+const AVATAR_SIZE = 'h-3 w-3 sm:h-3.5 sm:w-3.5 lg:h-4 lg:w-4 2xl:h-5 2xl:w-5';
 
 export interface SuggesterStackProps {
   users: readonly Suggester[];

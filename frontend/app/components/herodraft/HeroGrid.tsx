@@ -291,7 +291,8 @@ export function HeroGrid({
               {ATTRIBUTE_LABELS[attr]}
             </h3>
             <div
-              className="flex flex-wrap content-start gap-2"
+              // p-1 leaves room for suggester stacks that overhang the edge heroes.
+              className="flex flex-wrap content-start gap-2 p-1"
               data-testid={`herodraft-attr-grid-${attr}`}
             >
               {heroesForAttr.map((hero) => {
