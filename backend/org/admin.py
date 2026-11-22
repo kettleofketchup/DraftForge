@@ -19,7 +19,13 @@ from org.settings_service import (
 )
 from org.standing import api as standing
 
-from .models import OrgFeature, OrgSettings, OrgUser, OrgUserGameMmr
+from .models import (
+    MmrChangeRequest,
+    OrgFeature,
+    OrgSettings,
+    OrgUser,
+    OrgUserGameMmr,
+)
 
 GAME_SHORT_LABELS: dict[int, str] = {GameType.DOTA2: "D2", GameType.DEADLOCK: "DL"}
 
@@ -89,6 +95,61 @@ class OrgUserGameMmrAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
         "verified_at",
         "verified_by",
     ]
+
+
+@admin.register(MmrChangeRequest)
+class MmrChangeRequestAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
+    list_display = [
+        "id",
+        "subject_user",
+        "organization",
+        "target",
+        "game_type",
+        "requested_mmr",
+        "status",
+        "source",
+        "created_at",
+    ]
+    list_filter = ["status", "target", "source"]
+    search_fields = ["subject_user__username", "requester__username"]
+    raw_id_fields = [
+        "requester",
+        "subject_user",
+        "organization",
+        "org_user",
+        "league",
+        "league_user",
+        "reviewed_by",
+    ]
+    exclude = ["screenshot"]
+    readonly_fields = [
+        "requester",
+        "subject_user",
+        "organization",
+        "org_user",
+        "league",
+        "league_user",
+        "target",
+        "game_type",
+        "requested_mmr",
+        "approved_mmr",
+        "previous_mmr",
+        "previous_verified",
+        "has_screenshot",
+        "screenshot_content_type",
+        "note",
+        "status",
+        "source",
+        "reviewed_by",
+        "reviewed_at",
+        "rejection_reason",
+        "created_at",
+        "updated_at",
+    ]
+
+    @admin.display(boolean=True, description="Screenshot")
+    def has_screenshot(self, obj: MmrChangeRequest) -> bool:
+        return bool(obj.screenshot.name)
 
 
 @admin.register(OrgFeature)

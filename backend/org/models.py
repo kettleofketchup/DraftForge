@@ -13,6 +13,7 @@ from org.models_contributions import (
     ContributionPointValue,  # noqa: F401
 )
 from org.models_features import OrgFeature  # noqa: F401
+from org.models_mmr_requests import MmrChangeRequest  # noqa: F401
 from org.models_profiles import (
     PlayerDeadlockProfile,  # noqa: F401
     PlayerDotaProfile,  # noqa: F401
