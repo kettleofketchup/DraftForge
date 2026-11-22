@@ -175,6 +175,7 @@ urlpatterns = [
     path("api/bracket/", include("bracket.urls")),
     path("api/discord/", include("discordbot.urls")),
     path("api/events/", include("events.urls")),
+    path("api/mmr-requests/", include("org.mmr_requests.urls")),
     # Hero and team draft endpoints
     path("", include("draft.urls")),
     # dota_lobby in-game lobby for a game (lobby app)
