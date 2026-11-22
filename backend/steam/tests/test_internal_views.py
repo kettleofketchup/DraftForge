@@ -2,6 +2,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
+from league.models import League
 from steam.models import Match, PlayerMatchStats
 
 TOKEN = "test-internal-token"
@@ -82,9 +83,7 @@ class SteamSyncStateEndpointTest(TestCase):
         self.assertEqual(resp.status_code, 403)
 
     def test_rejects_wrong_token(self):
-        resp = self.client.get(
-            self.url, HTTP_X_INTERNAL_TOKEN="wrong-token"
-        )
+        resp = self.client.get(self.url, HTTP_X_INTERNAL_TOKEN="wrong-token")
         self.assertEqual(resp.status_code, 403)
 
 
@@ -307,8 +306,6 @@ class TrackedLeaguesEndpointTest(TestCase):
         self.assertEqual(resp.json(), {"steam_league_ids": []})
 
     def test_returns_steam_ids_sorted(self):
-        from app.models import League
-
         League.objects.create(name="DTX", steam_league_id=19571)
         League.objects.create(name="Other", steam_league_id=12345)
         League.objects.create(name="NoSteamId", steam_league_id=None)
@@ -318,8 +315,6 @@ class TrackedLeaguesEndpointTest(TestCase):
         self.assertEqual(resp.json(), {"steam_league_ids": [12345, 19571]})
 
     def test_excludes_leagues_without_steam_league_id(self):
-        from app.models import League
-
         League.objects.create(name="Unconfigured", steam_league_id=None)
 
         resp = self.client.get(self.url, **HEADERS)

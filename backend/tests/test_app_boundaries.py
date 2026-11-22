@@ -275,6 +275,11 @@ LEAGUE = MovedSlice(
             ("app.services.rating", "FixedDeltaRatingSystem"),
             ("app.services.rating", "get_rating_system"),
             ("app.services.match_finalization", "LeagueMatchService"),
+            ("app.models", "League"),
+            ("app.models", "LeagueRating"),
+            ("app.models", "LeagueMatch"),
+            ("app.models", "LeagueMatchParticipant"),
+            ("app.models", "LeagueLog"),
             *(("app.views.admin_team", name) for name in _LEAGUE_ADMIN_TEAM_VIEWS),
             *(
                 ("app.permissions_tournament", name)
@@ -298,9 +303,11 @@ LEAGUE = MovedSlice(
             "app.tests.test_league_rating",
         }
     ),
-    model_labels=frozenset(),
+    model_labels=frozenset(
+        {"league", "leaguerating", "leaguematch", "leaguematchparticipant", "leaguelog"}
+    ),
     move_migration=("app", "0112_move_league_models_to_league"),
-    cached_labels=frozenset(),
+    cached_labels=frozenset({"league"}),
 )
 
 MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG, LEAGUE)
@@ -510,16 +517,19 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
     },
     "league": {
         "app/permissions_tournament.py": BackEdge(
-            frozenset({"has_league_admin_access", "has_league_staff_access"}),
+            frozenset({"League", "has_league_admin_access", "has_league_staff_access"}),
             "event, tournament and game permissions fall back to league staff; "
             "tournament league changes and lobby Steam league IDs need league "
-            "admin; leaves with the tournament slice",
+            "admin, and the Steam league ID check looks up the owning League; "
+            "leaves with the tournament slice",
         ),
         "app/serializers.py": BackEdge(
-            frozenset({"LeagueUser"}),
-            "tournament, team and draft user serializers prefetch the league "
-            "membership behind league MMR; TournamentSerializer.update creates "
-            "LeagueUser rows for added users",
+            frozenset({"League", "LeagueUser"}),
+            "LeaguesSerializer and LeagueMinimalSerializer are embedded in "
+            "tournament serializers at class definition and TournamentSerializer "
+            "validates league_id against League; tournament, team and draft user "
+            "serializers prefetch the league membership behind league MMR; "
+            "TournamentSerializer.update creates LeagueUser rows for added users",
         ),
         "app/services/team_management.py": BackEdge(
             frozenset({"LeagueUser"}),
@@ -529,20 +539,30 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"LeagueUser"}),
             "tournament user auto-add creates the tournament league's LeagueUser",
         ),
+        "app/tournament_state.py": BackEdge(
+            frozenset({"League"}),
+            "tournament prefetch plan prefetches the tournament's League",
+        ),
         "app/views/admin_team.py": BackEdge(
-            frozenset({"LeagueUser", "has_league_staff_access"}),
-            "user search flags league membership for ?league_id=; tournament "
-            "member adds check league staff; leaves with the tournament slice",
+            frozenset({"League", "LeagueUser", "has_league_staff_access"}),
+            "user search resolves ?league_id= to a League and flags league "
+            "membership; tournament member adds check league staff; leaves with "
+            "the tournament slice",
         ),
         "app/views/csv_import.py": BackEdge(
-            frozenset({"LeagueUser", "has_league_staff_access"}),
+            frozenset({"League", "LeagueUser", "has_league_staff_access"}),
             "shared CSV import pipeline checks league staff on the tournament "
-            "door and writes LeagueUser MMR; moves whole with the tournament slice",
+            "door and writes LeagueUser MMR; League annotates the MMR target "
+            "helper; moves whole with the tournament slice",
+            type_only=frozenset({"League"}),
         ),
         "app/views_main.py": BackEdge(
-            frozenset({"has_league_staff_access"}),
-            "GameCreateView and GameView.perform_create check league staff before "
-            "creating a game; leave with the game slice",
+            frozenset({"League", "has_league_staff_access"}),
+            "GameCreateView and GameView.perform_create resolve league_id to a "
+            "League and check league staff (leave with the game slice); the "
+            "tournament list caches on League (leaves with the tournament slice); "
+            "home_stats caches on and counts League as a cross-domain home-page "
+            "aggregate",
         ),
     },
 }
@@ -1185,6 +1205,8 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("org/permissions.py", rels)
         self.assertIn("org/models.py", rels)
         self.assertIn("league/permissions.py", rels)
+        self.assertIn("league/models.py", rels)
+        self.assertIn("league/models_rating.py", rels)
         self.assertNotIn(GUARD_FILE, rels)
         self.assertFalse(any("/migrations/" in rel for rel in rels))
 

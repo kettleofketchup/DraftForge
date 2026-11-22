@@ -4,8 +4,8 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League
-from league.models import LeagueUser
+from app.models import CustomUser
+from league.models import League, LeagueUser
 from org.models import Organization, OrgUser
 
 LOCMEM = {

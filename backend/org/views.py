@@ -16,20 +16,13 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
-from app.models import (
-    CustomUser,
-    LeagueLog,
-    LeagueMatchParticipant,
-    LeagueRating,
-    PositionsModel,
-    ProfileClaimRequest,
-    Team,
-)
+from app.models import CustomUser, PositionsModel, ProfileClaimRequest, Team
 from draft.models import DraftRound
 from draft.services.hero_chat import repoint_chat_attribution
 from events.models import Event
 from events.staff import dedupe_host_helpers
-from league.models import LeagueUser
+from league.models import LeagueLog, LeagueUser
+from league.models_rating import LeagueMatchParticipant, LeagueRating
 from org.accounts import repoint_org_attribution
 from org.mmr import merge_org_mmrs
 from org.models import OrgLog, OrgUser, PromoSend
