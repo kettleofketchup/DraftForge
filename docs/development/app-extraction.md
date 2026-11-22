@@ -96,7 +96,7 @@ For a new app:
 
 Not every source app is `app`:
 
-- `bracket` is its own app (label `bracket`, `bracket.apps.TournamentConfig`, tables `bracket_*`). The bracket/tournament slice uses `source_app="bracket"`, and its tables keep the `bracket_` prefix.
+- `bracket` is its own app (label `bracket`, `bracket.apps.BracketConfig`, tables `bracket_*`). The bracket/tournament slice uses `source_app="bracket"`, and its tables keep the `bracket_` prefix.
 - `backend/tournament/` holds only a stray 0-byte `models.py` and no `__init__.py`. The tournament slice must create the app properly or delete that file first.
 
 To extend an existing app (as the organization slice did with `org`):

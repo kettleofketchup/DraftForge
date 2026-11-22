@@ -160,7 +160,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "django_jinja",
     "corsheaders",
-    "bracket.apps.TournamentConfig",
+    "bracket.apps.BracketConfig",
     "user.apps.UserConfig",
     "cacheops",
 ]
