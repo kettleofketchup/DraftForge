@@ -71,7 +71,9 @@ def _reload(env=None, remove=()):
         for key in (*OVERRIDE_KEYS, *remove):
             os.environ.pop(key, None)
         os.environ.update(env or {})
-        backend.settings.is_docker.cache_clear()
+        # reload() runs in the old namespace: names set only conditionally would linger.
+        for name in [n for n in vars(backend.settings) if not n.startswith("__")]:
+            delattr(backend.settings, name)
         return importlib.reload(backend.settings)
 
 
@@ -126,6 +128,10 @@ class SettingsEnvOverrideTests(SimpleTestCase):
             mod.DATABASES["default"]["NAME"],
             mod.BASE_DIR_PATH / _expected_db_name(),
         )
+
+    def test_reload_drops_names_an_earlier_reload_set(self) -> None:
+        _reload({"TRUST_X_FORWARDED_PROTO": "true"})
+        self.assertFalse(hasattr(_reload(), "SECURE_PROXY_SSL_HEADER"))
 
     def test_overrides_take_effect(self):
         mod = _reload(
@@ -187,7 +193,5 @@ class TestRunnerPasswordHasherTests(SimpleTestCase):
         with mock.patch.object(sys, "argv", ["daphne", "backend.asgi:application"]):
             with mock.patch.dict(sys.modules):
                 sys.modules.pop("pytest", None)
-                # reload() re-executes into the old namespace; drop the stale value.
-                del backend.settings.PASSWORD_HASHERS
                 mod = _reload(remove=("DF_RUNNING_TESTS",))
         self.assertFalse(hasattr(mod, "PASSWORD_HASHERS"))

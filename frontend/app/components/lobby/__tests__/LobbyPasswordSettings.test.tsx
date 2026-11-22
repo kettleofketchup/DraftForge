@@ -52,7 +52,6 @@ function Harness({
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <LobbyPasswordSettings
             control={form.control}
-            watch={form.watch}
             scope={scope}
             saved={saved}
             followsSeries={followsSeries}

@@ -1,4 +1,4 @@
-import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
+import { useWatch, type Control, type FieldValues } from 'react-hook-form';
 import { GAME_TYPE } from '~/components/game/constants';
 import {
   FormControl,
@@ -31,7 +31,6 @@ interface LobbyFields {
 
 interface LobbyConfigSectionProps<T extends FieldValues & LobbyFields> {
   control: Control<T>;
-  watch: UseFormWatch<T>;
 }
 
 const GAME_MODE_LABELS: Record<string, string> = {
@@ -48,15 +47,13 @@ const DOTA_ONLY_MODES: Set<string> = new Set([
 
 export function LobbyConfigSection<T extends FieldValues & LobbyFields>({
   control: parentControl,
-  watch: parentWatch,
 }: LobbyConfigSectionProps<T>) {
   // Narrow once: T extends LobbyFields, so all this section's field references
   // are sound. Catches typo'd `name=`s in the JSX below.
   const control = parentControl as unknown as Control<LobbyFields>;
-  const watch = parentWatch as unknown as UseFormWatch<LobbyFields>;
 
-  const gameType = watch('game_type');
-  const gameMode = watch('game_mode');
+  const gameType = useWatch({ control, name: 'game_type' });
+  const gameMode = useWatch({ control, name: 'game_mode' });
   const isDota = gameType === GAME_TYPE.DOTA2;
 
   return (

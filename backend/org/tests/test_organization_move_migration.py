@@ -158,10 +158,12 @@ class OrganizationMoveMigrationTests(TransactionTestCase):
             for model in ORG_MODELS
         }
         perm, user, group = self._grant(ids["organization"], "move")
+        # app/0055 seeds an organization that stays until a TransactionTestCase flush.
+        baseline = _row_counts()
         org = self._seed(user)
         counts = _row_counts()
         self.assertEqual(
-            counts,
+            {table: counts[table] - baseline[table] for table in counts},
             {
                 "app_organization": 1,
                 "app_organization_admins": 1,

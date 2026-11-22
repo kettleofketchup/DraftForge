@@ -1217,7 +1217,6 @@ function SignupsTab({
               ? { ...baseProfile, mmr: orgMmr }
               : orgMmr != null
                 ? ({
-                    unverified_friend_id: null,
                     positions: {
                       pos_1: false,
                       pos_2: false,

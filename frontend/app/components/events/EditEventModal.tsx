@@ -117,7 +117,6 @@ export function EditEventModal({
     },
   });
 
-  // Reset form when event changes
   useEffect(() => {
     if (event && open) {
       form.reset({
@@ -302,7 +301,6 @@ export function EditEventModal({
           content: (
             <EventLobbyFields
               control={form.control}
-              watch={form.watch}
               scope="event"
               saved={savedPassword}
               followsSeries={followsSeries}
@@ -315,10 +313,7 @@ export function EditEventModal({
           value: 'approval',
           content: (
             <div className="space-y-6">
-              <ApprovalConfigSection
-                control={form.control}
-                watch={form.watch}
-              />
+              <ApprovalConfigSection control={form.control} />
               <SignupRulesSection control={form.control} />
             </div>
           ),
@@ -329,7 +324,6 @@ export function EditEventModal({
           content: (
             <DiscordConfigSection
               control={form.control}
-              watch={form.watch}
               isRepeater={event?.event_repeater != null}
               organizationId={event?.organization ?? 0}
             />

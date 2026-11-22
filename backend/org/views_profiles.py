@@ -9,7 +9,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
-from app.models import CustomUser
 from events.eligibility import (
     claim_friend_id,
     refresh_unmet_requirements,
@@ -33,8 +32,7 @@ DOTA_PROFILE_FIELDS = {
     "pos_4",
     "pos_5",
 }
-# Deprecated alias: the Friend ID lives on CustomUser.steam_account_id.
-FRIEND_ID_ALIAS = "unverified_friend_id"
+FRIEND_ID_FIELD = "steam_account_id"
 
 
 def _serialize_dota_profile(
@@ -50,7 +48,7 @@ def _serialize_dota_profile(
         "mmr": profile.mmr,
         "rank_screenshot": profile.rank_screenshot or None,
         "battlecup_screenshot": profile.battlecup_screenshot or None,
-        FRIEND_ID_ALIAS: _friend_id_alias(org_user.user),
+        FRIEND_ID_FIELD: org_user.user.steam_account_id,
         "pos_1": profile.pos_1,
         "pos_2": profile.pos_2,
         "pos_3": profile.pos_3,
@@ -74,17 +72,13 @@ def _invalid_rank_status(data: dict[str, Any]) -> Response | None:
     return None
 
 
-def _friend_id_alias(user: CustomUser) -> str:
-    return "" if user.steam_account_id is None else str(user.steam_account_id)
-
-
 def _apply_dota_profile_patch(
     org_user: OrgUser, data: dict[str, Any]
 ) -> PlayerDotaProfile:
     """Raises ValidationError for a bad friend ID before writing anything."""
     fields = {f: data[f] for f in DOTA_PROFILE_FIELDS if f in data}
     user = org_user.user
-    friend_id = str(data.get(FRIEND_ID_ALIAS) or "")
+    friend_id = str(data.get(FRIEND_ID_FIELD) or "")
     validate_friend_id(friend_id, user)
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     previous_status = profile.rank_status
@@ -137,7 +131,7 @@ def update_my_dota_profile(request: Request, org_id: int) -> Response:
         profile = _apply_dota_profile_patch(org_user, request.data)
     except ValidationError as e:
         return Response(
-            {FRIEND_ID_ALIAS: e.messages[0]},
+            {FRIEND_ID_FIELD: e.messages[0]},
             status=status.HTTP_400_BAD_REQUEST,
         )
     return Response(_serialize_dota_profile(profile, org_user))
@@ -197,7 +191,7 @@ def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
         profile = _apply_dota_profile_patch(org_user, request.data)
     except ValidationError as e:
         return Response(
-            {FRIEND_ID_ALIAS: e.messages[0]},
+            {FRIEND_ID_FIELD: e.messages[0]},
             status=status.HTTP_400_BAD_REQUEST,
         )
     return Response(_serialize_dota_profile(profile, org_user))

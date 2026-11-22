@@ -90,7 +90,7 @@ describe('ReadyCheckConfigSection', () => {
     expect(form.getValues('roll_call_enabled')).toBe(true);
     expect(form.getValues('roll_call_mode')).toBe('automatic');
     expect(form.getValues('auto_confirm')).toBe(false);
-    expect(form.formState.dirtyFields.roll_call_enabled).toBe(true);
+    expect(form.getFieldState('roll_call_enabled').isDirty).toBe(true);
   });
 
   it('toggle off only clears roll_call_enabled', () => {
