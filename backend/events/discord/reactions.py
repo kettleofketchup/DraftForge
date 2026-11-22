@@ -70,7 +70,11 @@ def handle_reaction_signup(
         signup = process_rsvp(
             event,
             user,
-            actor=SignupActor.discord(user, means=SignupMeans.DISCORD_REACTION),
+            actor=SignupActor.discord(
+                user,
+                means=SignupMeans.DISCORD_REACTION,
+                correlation_id=f"reaction:{discord_message_id}:{discord_user_id}",
+            ),
         )
         logger.info(
             "reaction_signup_created",
@@ -139,7 +143,11 @@ def handle_reaction_cancel(
         signup = EventSignup.objects.get(event=event, user=user)
         cancel_signup(
             signup,
-            actor=SignupActor.discord(user, means=SignupMeans.DISCORD_REACTION),
+            actor=SignupActor.discord(
+                user,
+                means=SignupMeans.DISCORD_REACTION,
+                correlation_id=f"reaction:{discord_message_id}:{discord_user_id}",
+            ),
         )
         logger.info(
             "reaction_signup_cancelled",
