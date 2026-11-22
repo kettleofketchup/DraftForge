@@ -344,9 +344,11 @@ jobs:
         run: |
           labels="$(just ci::backend-test-labels ${{ matrix.group }})"
           echo "Labels: $labels"
+          # Dump every test process's stacks well before the 25-minute job timeout.
           # shellcheck disable=SC2086 # one label per word
-          docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T backend \
-            python manage.py test -v 2 $labels
+          docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T \
+            -e DF_TEST_HANG_DUMP_SECONDS=1140 backend \
+            python manage.py test -v 2 --parallel auto $labels
 
       - name: Check migrations are committed
         if: matrix.group == 'app'
@@ -377,6 +379,7 @@ jobs:
         with:
           registry-token: ${{ secrets.GITHUB_TOKEN }}
           github-actor: ${{ github.actor }}
+          buildx: 'false'
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

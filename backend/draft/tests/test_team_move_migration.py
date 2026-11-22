@@ -23,7 +23,7 @@ BEFORE_MOVE = [
     ("draft", "0003_backfill_herodraft_chat_memberships"),
 ]
 MOVE_MIGRATION = ("app", "0109_move_team_draft_models_to_draft")
-EVENTS_BACKFILL = ("events", "0024_backfill_event_draft_options")
+EVENTS_BACKFILL = ("events", "0001_squashed_0034")
 APP = "app"
 DRAFT = "draft"
 
@@ -171,6 +171,6 @@ class TeamMoveMigrationTests(TransactionTestCase):
         self._forward()
         self.assertEqual(self._labels({"d": draft_ct.pk, "a": app_ct.pk}), expected)
 
-    def test_events_0024_precedes_app_0109(self) -> None:
+    def test_events_backfill_precedes_app_0109(self) -> None:
         graph = MigrationLoader(connection).graph
         self.assertIn(EVENTS_BACKFILL, graph.forwards_plan(MOVE_MIGRATION))
