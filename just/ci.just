@@ -193,6 +193,44 @@ venv:
     fi
     echo "$PWD/.venv/bin/python"
 
+# Write the Zot cache registry's auth entry (user ci, password from env ZOT_PASSWORD) into
+# $DOCKER_CONFIG/config.json (default ~/.docker), keeping every other key. Zot is plain
+# HTTP on a ClusterIP and client-side `docker login` assumes HTTPS, so the entry is
+# written directly; BuildKit reads it from the client config through the buildx session.
+# Prints only the ::add-mask:: line for the encoded value.
+[group('ci')]
+zot-auth:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -z "${ZOT_PASSWORD:-}" ]]; then
+        echo "::error::ZOT_PASSWORD is empty; not writing a Zot credential" >&2
+        exit 1
+    fi
+    python3 -I - <<'PY'
+    import base64, json, os, tempfile
+    registry = "zot.zot.svc.cluster.local:5000"
+    auth = base64.b64encode(("ci:" + os.environ["ZOT_PASSWORD"]).encode()).decode()
+    print("::add-mask::" + auth, flush=True)
+    config_dir = os.environ.get("DOCKER_CONFIG") or os.path.expanduser("~/.docker")
+    os.makedirs(config_dir, mode=0o700, exist_ok=True)
+    path = os.path.join(config_dir, "config.json")
+    try:
+        with open(path) as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        config = {}
+    config.setdefault("auths", {})[registry] = {"auth": auth}
+    fd, tmp = tempfile.mkstemp(dir=config_dir, prefix=".config.json.")
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(config, f, indent="\t")
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+    PY
+
 # Every event: fragment rules (including [Unreleased] holding only the pointer and no
 # fragment a release already consumed) and the checker's tests. push to main: HEAD
 # must not hand-edit CHANGELOG.md. pull_request: CHANGELOG.md untouched unless

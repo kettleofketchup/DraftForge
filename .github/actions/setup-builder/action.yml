@@ -1,0 +1,53 @@
+name: Setup Builder
+description: >
+  Registry auth and the home cluster's remote BuildKit builder, for jobs on the
+  self-hosted draftforge-home runner (no Docker daemon). GHCR is HTTPS, so the
+  docker CLI logs in client-side; Zot is plain HTTP on a ClusterIP, so its entry
+  is written straight into the client config (`just ci::zot-auth`). BuildKit
+  reads both through the buildx session. Needs `just` on PATH.
+
+inputs:
+  ghcr-user:
+    description: GitHub actor for GHCR login
+    required: true
+  ghcr-token:
+    description: GHCR token (pass secrets.GITHUB_TOKEN)
+    required: true
+  zot-password:
+    description: >
+      Password of the Zot `ci` user (pass secrets.ZOT_CI_PASSWORD); empty writes
+      no Zot credential, and builds still run because the Zot cache export is
+      ignore-error
+    required: false
+    default: ''
+  bootstrap:
+    description: "'true' creates and bootstraps the remote `home` builder"
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ inputs.ghcr-user }}
+        password: ${{ inputs.ghcr-token }}
+
+    - name: Write Zot auth
+      if: inputs.zot-password != ''
+      shell: bash
+      env:
+        ZOT_PASSWORD: ${{ inputs.zot-password }}
+      run: just ci::zot-auth
+
+    - name: Create and bootstrap the home builder
+      if: inputs.bootstrap == 'true'
+      shell: bash
+      run: |
+        docker buildx create --name home --driver remote tcp://buildkit-0.buildkit.buildkit.svc.cluster.local:1234 --use || docker buildx use home
+        if ! timeout 20 docker buildx inspect --bootstrap home; then
+          echo "::error::home BuildKit unreachable; set the SELF_HOSTED_RUNNERS repo variable to false to stop prepare jobs"
+          exit 1
+        fi
