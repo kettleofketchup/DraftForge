@@ -45,6 +45,8 @@ interface LeagueState {
 
   /** League Users Actions */
   getLeagueUsers: (leagueId: number, orgId?: number) => Promise<void>;
+  addLeagueUser: (leagueId: number, user: UserType) => void;
+  removeLeagueUser: (leagueId: number, pk: number) => void;
   clearLeagueUsers: () => void;
 }
 
@@ -144,6 +146,36 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
         leagueUserPks: [],
       });
     }
+  },
+
+  addLeagueUser: (leagueId: number, user: UserType) => {
+    const cache = useUserCacheStore.getState();
+    const loaded = get().leagueUsersLeagueId === leagueId;
+    if (!loaded || leagueUsersOrgIds.size === 0) {
+      cache.upsert(user, { leagueId });
+    }
+    if (!loaded || user.pk == null) return;
+    for (const orgId of leagueUsersOrgIds) {
+      cache.upsert(user, { leagueId, orgId });
+    }
+    if (leagueUsersResponse) {
+      leagueUsersResponse = [
+        ...leagueUsersResponse.filter((u) => u.pk !== user.pk),
+        user,
+      ];
+    }
+    const { leagueUserPks } = get();
+    if (!leagueUserPks.includes(user.pk)) {
+      set({ leagueUserPks: [...leagueUserPks, user.pk] });
+    }
+  },
+
+  removeLeagueUser: (leagueId: number, pk: number) => {
+    if (get().leagueUsersLeagueId !== leagueId) return;
+    if (leagueUsersResponse) {
+      leagueUsersResponse = leagueUsersResponse.filter((u) => u.pk !== pk);
+    }
+    set({ leagueUserPks: get().leagueUserPks.filter((p) => p !== pk) });
   },
 
   clearLeagueUsers: () => {

@@ -62,6 +62,48 @@ describe('getLeagueUsers org scoping', () => {
     expect(getLeagueUsers).toHaveBeenCalledTimes(1);
   });
 
+  it('applies a later org id to a member added after the load', async () => {
+    await useLeagueStore.getState().getLeagueUsers(10);
+    useLeagueStore.getState().addLeagueUser(10, { ...leagueUser, pk: 3 });
+    await useLeagueStore.getState().getLeagueUsers(10, 7);
+
+    expect(useLeagueStore.getState().leagueUserPks).toEqual([1, 3]);
+    expect(useUserCacheStore.getState().getById(3)?.orgNicknames).toEqual({
+      7: 'ServerNick',
+    });
+    expect(getLeagueUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies the current org id to a newly added member', async () => {
+    await useLeagueStore.getState().getLeagueUsers(10, 7);
+    useLeagueStore.getState().addLeagueUser(10, { ...leagueUser, pk: 3 });
+
+    expect(useUserCacheStore.getState().getById(3)?.orgNicknames).toEqual({
+      7: 'ServerNick',
+    });
+  });
+
+  it('does not re-apply org data to a removed member', async () => {
+    await useLeagueStore.getState().getLeagueUsers(10);
+    useLeagueStore.getState().addLeagueUser(10, { ...leagueUser, pk: 3 });
+    useLeagueStore.getState().removeLeagueUser(10, 3);
+    await useLeagueStore.getState().getLeagueUsers(10, 7);
+
+    expect(useLeagueStore.getState().leagueUserPks).toEqual([1]);
+    expect(useUserCacheStore.getState().getById(3)?.orgNicknames).toEqual({});
+    expect(useUserCacheStore.getState().getById(1)?.orgNicknames).toEqual({
+      7: 'ServerNick',
+    });
+  });
+
+  it('ignores member changes for a league that is not loaded', async () => {
+    await useLeagueStore.getState().getLeagueUsers(10);
+    useLeagueStore.getState().addLeagueUser(11, { ...leagueUser, pk: 3 });
+    useLeagueStore.getState().removeLeagueUser(11, 1);
+
+    expect(useLeagueStore.getState().leagueUserPks).toEqual([1]);
+  });
+
   it('does not apply a previous league response to a new league', async () => {
     await useLeagueStore.getState().getLeagueUsers(10);
     getLeagueUsers.mockResolvedValue([{ ...leagueUser, pk: 2 }]);
