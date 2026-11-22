@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Final
 
 from django.db import transaction
 from django.dispatch import Signal
@@ -33,6 +33,7 @@ from events.ready_check_core import (
     check_mode,
     check_scope,
     effective_mode,
+    end_ready_check_on_completion,
     live_ready_check,
     ready_check_population,
     scope_statuses,
@@ -55,6 +56,7 @@ from events.services import (
     _promote_from_waitlist,
     _roster_remove_if_left,
     add_user_to_tournament,
+    confirm_signup,
     sync_event_roster,
 )
 from telemetry.logging import get_logger
@@ -64,16 +66,21 @@ __all__ = [
     "ConfirmResult",
     "NotHeldError",
     "OpenResult",
+    "READY_CHECK_HELD_MESSAGE",
     "cancel_ready_check",
     "chase_unconfirmed",
+    "close_for_start",
     "close_ready_check",
     "confirm_ready",
+    "enter_roll_call",
     "escalate_ready_check",
     "live_ready_check",
     "lock_event",
     "open_ready_check",
     "refused_confirm_message",
     "resolve_held_ready_check",
+    "staff_confirm_signup",
+    "transition_with_ready_check",
 ]
 
 log = get_logger(__name__)
@@ -83,6 +90,9 @@ TEAMS_MADE_MESSAGE = "Teams are already made for this event."
 REASON_REQUIRED_MESSAGE = "A reason is required."
 NOT_HELD_MESSAGE = "The ready check is not held."
 UNKNOWN_KEEP_MESSAGE = "Unknown signup in keep list."
+READY_CHECK_HELD_MESSAGE: Final = (
+    "The ready check is held for staff; resolve it before starting."
+)
 
 
 class NotHeldError(ValueError):
@@ -100,7 +110,7 @@ class ConfirmResult(StrEnum):
 class OpenResult:
     check: ReadyCheck
     created: bool
-    roster: RosterSyncResult | None
+    roster: RosterSyncResult
 
 
 @dataclass(frozen=True)
@@ -907,3 +917,126 @@ def resolve_held_ready_check(
         dropped_user_ids=tuple(dropped_user_ids),
         promoted_signup_ids=tuple(promoted_signup_ids),
     )
+
+
+@transaction.atomic
+def close_for_start(event: Event, *, actor: SignupActor) -> bool:
+    """False when a held ready check blocks the start."""
+    locked = lock_event(event)
+    check = live_ready_check(locked, lock=True)
+    if check is None or check.phase == ReadyCheckPhase.CLOSED:
+        return True
+    if check.phase == ReadyCheckPhase.HELD:
+        _log_on_commit(
+            "ready_check_start_blocked",
+            {
+                "event_id": locked.pk,
+                "ready_check_id": check.pk,
+                "phase": check.phase,
+                "actor_user_id": _actor_user_id(actor),
+            },
+        )
+        return False
+    result = close_ready_check(locked, actor=actor)
+    return result.check is None or result.check.phase != ReadyCheckPhase.HELD
+
+
+@transaction.atomic
+def staff_confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+    locked = lock_event(signup.event)
+    check = live_ready_check(locked, lock=True)
+    if (
+        check is not None
+        and check.phase != ReadyCheckPhase.CLOSED
+        and check.entries.filter(signup_id=signup.pk).exists()
+    ):
+        result = confirm_ready(
+            locked, signup.user, via=ReadyCheckConfirmVia.STAFF, actor=actor
+        )
+        if result in (ConfirmResult.CONFIRMED, ConfirmResult.ALREADY_CONFIRMED):
+            return (
+                EventSignup.objects.nocache()
+                .select_related("user", "event")
+                .get(pk=signup.pk)
+            )
+
+    closed = check is not None and check.phase == ReadyCheckPhase.CLOSED
+    before = snapshot(signup)
+    confirm_signup(signup)
+    record_signup_change(
+        event=locked,
+        subject=signup.user,
+        actor=actor,
+        action=SignupAction.CONFIRMED,
+        signup=signup,
+        before=before,
+        after=snapshot(signup),
+        reason="staff_confirmed",
+        rules_overridden=["ready_check_closed"] if closed else [],
+        correlation_id=f"rc{check.pk}:confirm" if check is not None else "",
+    )
+    if closed:
+        assert check is not None
+        _log_on_commit(
+            "ready_check_staff_confirm_after_close",
+            {
+                "event_id": locked.pk,
+                "ready_check_id": check.pk,
+                "phase": check.phase,
+                "outcome": check.outcome,
+                "signup_id": signup.pk,
+                "actor_user_id": _actor_user_id(actor),
+            },
+        )
+    return signup
+
+
+@transaction.atomic
+def enter_roll_call(event: Event, *, actor: SignupActor) -> RosterSyncResult:
+    """Open the ready check; with teams already made, enter roll call without one."""
+    locked = lock_event(event)
+    if (
+        locked.state == EventState.SIGNUPS_OPEN
+        and _teams_made(locked)
+        and live_ready_check(locked) is None
+    ):
+        locked.transition_state(EventState.ROLL_CALL)
+        event.state = locked.state
+        synced = sync_event_roster(locked)
+        _log_on_commit(
+            "ready_check_skipped_teams_made",
+            {"event_id": locked.pk, "actor_user_id": _actor_user_id(actor)},
+        )
+        return synced
+    return open_ready_check(event, actor=actor).roster
+
+
+_TRANSITION_CANCEL_REASONS: Final[dict[str, str]] = {
+    EventState.SIGNUPS_OPEN: "reopened",
+    EventState.CANCELLED: "event_cancelled",
+}
+
+
+@transaction.atomic
+def transition_with_ready_check(
+    event: Event, new_state: str, *, actor: SignupActor
+) -> bool:
+    """Move the event to new_state, keeping its ready check in step.
+
+    False when a held ready check blocks the start; the hold is kept.
+    """
+    if new_state == EventState.ROLL_CALL and event.state != EventState.ROLL_CALL:
+        enter_roll_call(event, actor=actor)
+        return True
+    if event.state == EventState.ROLL_CALL:
+        if new_state == EventState.IN_PROGRESS:
+            if not close_for_start(event, actor=actor):
+                return False
+        elif new_state == EventState.COMPLETED:
+            end_ready_check_on_completion(event, actor=actor)
+        elif new_state in _TRANSITION_CANCEL_REASONS:
+            cancel_ready_check(
+                event, actor=actor, reason=_TRANSITION_CANCEL_REASONS[new_state]
+            )
+    event.transition_state(new_state)
+    return True

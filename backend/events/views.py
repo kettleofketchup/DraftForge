@@ -38,7 +38,10 @@ from rest_framework.views import APIView
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser, Game
-from app.permissions_tournament import has_event_staff_access
+from app.permissions_tournament import (
+    has_event_operator_access,
+    has_event_staff_access,
+)
 from discordbot.models import (
     DiscordEvent,
     DiscordEventDM,
@@ -70,6 +73,13 @@ from events.models import (
     OrgEventDefaults,
     RepeaterSubscription,
 )
+from events.ready_check import (
+    READY_CHECK_HELD_MESSAGE,
+    cancel_ready_check,
+    close_for_start,
+    enter_roll_call,
+    staff_confirm_signup,
+)
 from events.reopen import ReopenNotPermitted
 from events.roster import RosterSyncResult
 from events.schemas import SignupInputPatch
@@ -92,7 +102,6 @@ from events.services import (
     cancel_signup,
     changed_draft_option_fields,
     clear_signup_dedup_state,
-    confirm_signup,
     create_off_schedule_event,
     create_tentative_signup,
     create_tournament_for_event,
@@ -1054,12 +1063,12 @@ class EventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def start_roll_call(self, request: Request, pk: str | None = None) -> Response:
         event = self.get_object()
-        if not has_event_staff_access(request.user, event):
+        if not has_event_operator_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            with transaction.atomic():
-                event.transition_state(EventState.ROLL_CALL)
-                synced = sync_event_roster(event)
+            synced = enter_roll_call(
+                event, actor=SignupActor.from_request(request, role=ActorRole.STAFF)
+            )
             return Response(_roster_sync_payload(event, synced, request.user))
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -1077,6 +1086,11 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             with transaction.atomic():
+                cancel_ready_check(
+                    event,
+                    actor=SignupActor.from_request(request, role=ActorRole.STAFF),
+                    reason="reopened",
+                )
                 event.transition_state(EventState.SIGNUPS_OPEN)
                 synced = sync_event_roster(event)
             return Response(_roster_sync_payload(event, synced, request.user))
@@ -1099,9 +1113,19 @@ class EventViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             with transaction.atomic():
-                ensure_tournament_with_signups(event)
-                event.transition_state(EventState.IN_PROGRESS)
-                finalize_event_tournament(event)
+                held = event.state == EventState.ROLL_CALL and not close_for_start(
+                    event,
+                    actor=SignupActor.from_request(request, role=ActorRole.STAFF),
+                )
+                if not held:
+                    ensure_tournament_with_signups(event)
+                    event.transition_state(EventState.IN_PROGRESS)
+                    finalize_event_tournament(event)
+            if held:
+                return Response(
+                    {"code": "ready_check_held", "error": READY_CHECK_HELD_MESSAGE},
+                    status=status.HTTP_409_CONFLICT,
+                )
             qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
@@ -1364,10 +1388,11 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
+            confirmed = staff_confirm_signup(
+                signup, actor=SignupActor.from_request(request, role=ActorRole.STAFF)
+            )
             return Response(
-                EventSignupSerializer(
-                    confirm_signup(signup), context={"request": request}
-                ).data
+                EventSignupSerializer(confirmed, context={"request": request}).data
             )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
