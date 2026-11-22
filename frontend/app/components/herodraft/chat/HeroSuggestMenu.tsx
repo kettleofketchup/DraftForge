@@ -71,7 +71,7 @@ export function HeroSuggestMenu({
       </ContextMenuTrigger>
       {enabled && target && (
         <ContextMenuContent
-          className="w-48"
+          className="w-56"
           data-testid="herodraft-hero-suggest-menu"
         >
           <ContextMenuLabel className="flex items-center gap-2">
