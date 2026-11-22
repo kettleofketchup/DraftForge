@@ -255,7 +255,7 @@ The event page shows the forecast, badges and Attendance panel when the event pa
 | Action | Who | Switch |
 | ------ | --- | ------ |
 | Edit leadership settings, point values and traits; delete an unscored trait | org owner, admin | Leadership |
-| List traits, see own pending reviews | org members | Leadership |
+| List traits, see own pending and past reviews (`reviews/mine/`) | org members | Leadership |
 | Submit, edit or withdraw a captain review | teammates in the captain's rater pool, while the window is open | Leadership |
 | Leadership leaderboard rows | org staff and above, or members who pass `can_view_org_members` when the board is public; members always get their own row | Leadership |
 | A captain's rating summary | the captain, org admins, or members when the board is public | Leadership |

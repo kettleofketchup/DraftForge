@@ -30,7 +30,13 @@ pick up a correction, reopen the event and complete it again.
 | Captain rating | up to 10 | From teammates' reviews, see below |
 
 Org admins can change the fixed point values and the captain rating maximum in the
-Leadership settings. New values apply to events completed after the change.
+Leadership settings. New values apply to events completed after the change; points
+already awarded keep their value.
+
+While Leadership is locked, completing an event records no captains, opens no review
+window and awards nothing. Cleanup still runs whatever the switch says: reopening,
+cancelling or deleting an event, merging accounts and deleting a user always update
+existing leadership data.
 
 A captain must have an approved or confirmed signup for the event. Raters are the
 captain's team members who also had an approved or confirmed signup, minus the
@@ -59,8 +65,12 @@ the window closes they are frozen.
 
 !!! info "Formula"
     `points = round(max_points × (event_average − 1) / 4)`, where `event_average` is
-    the mean of each review's mean trait score. Fewer than the minimum reviews, or an
-    average of 1, gives no row.
+    the mean of each review's mean trait score and halves round up. It is computed
+    with exact fractions, so a 2.5 never rounds down through float error. Fewer than
+    the minimum reviews, or a result of 0, gives no row.
+
+    Example: three reviews scoring every trait 5, 4 and 4 give per-review values of
+    1.0, 0.75 and 0.75 on the 0–1 scale, a mean of 0.833, and 8 points at maximum 10.
 
 The leaderboard rating per trait uses the shared standing scorer: recent events weigh
 more (half-life 180 days, events older than 730 days are ignored), and a captain with
@@ -83,9 +93,12 @@ events with at least 3 reviews.
   their points. They never see who rated them or any single review.
 - **Other members** see a captain's overall rating and points when the leaderboard is
   public, but no per-event detail.
-- **Raters** see their own scores.
-- **Org admins** see every review with its rater, for abuse handling. Reviews of
-  themselves are left out entirely, the same as for any other captain.
+- **Raters** see their own scores, before and after the window closes, and whether a
+  review was withdrawn, voided by a reopen or voided by staff. Never anyone else's.
+- **Org admins** see every review with its rater and live, unreleased values, for
+  abuse handling. Reviews of themselves are left out entirely: on their own captain
+  entries the moderation list returns no reviews (no scores, times, ids or raters) and
+  only the released aggregate, the same as any other captain sees.
 
 !!! warning "Two-review events"
     With exactly two released reviews, a rater who tells the captain their own scores
@@ -93,9 +106,12 @@ events with at least 3 reviews.
 
 ## Moderation
 
-Org admins can void a review with a reason. A voided review stops counting, and if the
-window has already closed the captain rating points are recalculated anyway. The rater
-cannot undo a staff void by submitting again; an admin can restore it. An admin cannot
+Org admins can void a review with a reason (1–500 characters). A voided review stops
+counting, and if the window has already closed the captain rating points are
+recalculated anyway. The rater cannot undo a staff void by submitting again; an admin
+can restore it. A review carries one `void_kind`: `withdrawn` (the rater withdrew it),
+`lifecycle` (the event was reopened or cancelled) or `moderated` (staff). Raters can
+resubmit over the first two, never over `moderated`. An admin cannot
 moderate reviews of themselves: another admin has to act. Every void and restore is
 written to the organization log with the points before and after.
 
@@ -113,6 +129,9 @@ written to the organization log with the points before and after.
 | Max age (days) | 730 | 30–1825 |
 | Public leaderboard | off | |
 
+The max age must stay at least the half-life. The minimum reviews for points can never
+go below 2.
+
 ## API
 
 All endpoints live under `api/organizations/<org_id>/leadership/` and answer
@@ -120,21 +139,31 @@ All endpoints live under `api/organizations/<org_id>/leadership/` and answer
 
 | Method / path | Who | Purpose |
 |---|---|---|
-| `GET reviews/pending/` | member | Open windows where you can rate |
+| `GET reviews/pending/` | member | Open windows where you can rate, optional `?event_id=`; your current scores or `null` |
+| `GET reviews/mine/` | member | Your own reviews in this org, open and closed windows, with `void_kind`; no aggregates |
 | `PUT events/<event_id>/captains/<org_user_id>/review/` | rater | Submit or replace your review: `{"scores": {"<trait>": 1-5}}` |
 | `DELETE events/<event_id>/captains/<org_user_id>/review/` | rater | Withdraw your review |
 | `GET members/<org_user_id>/` | self, admin; members when public | Rating summary; history for self and admins |
 | `GET events/<event_id>/reviews/` | admin | Every review with its rater, except reviews of yourself |
-| `POST reviews/<pk>/void/`, `POST reviews/<pk>/unvoid/` | admin | `{"reason": "..."}` |
+| `POST reviews/<pk>/void/` | admin | Void a review: `{"reason": "..."}` |
+| `POST reviews/<pk>/unvoid/` | admin | Restore a staff-voided review (no body) |
 | `GET traits/`, `PUT traits/` | member / admin | List or upsert traits |
 | `DELETE traits/<key>/` | admin | `409 trait_in_use` once scored |
-| `GET/PATCH settings/` | admin | Settings and per-kind point values (`kind_points`) |
+| `GET/PATCH settings/` | admin | Every setting plus `defaults`, `ranges` and `points` (one entry per fixed kind). PATCH takes any subset of the settings and `points: {"<kind>": int or null}` (`null` restores the default); unknown keys and out-of-range values are `400` |
 
 Refusals carry a `code`: `review_window_closed` (409), `snapshot_voided` (409, the event
 was reopened or cancelled), `not_in_pool` (403), `review_moderated` (403),
-`cannot_moderate_own_reviews` (403), `invalid_scores` (400). Review submits and
-withdrawals are limited to 30 a minute per user.
+`cannot_moderate_own_reviews` (403), `invalid_scores` (400), `reason_required` (400),
+`not_moderated` (409, restoring a review staff did not void), `trait_in_use` (409) and
+`not_found` (404). Any id from another organization is `404`, for admins too. Review
+submits and withdrawals are limited to 30 a minute per user.
 
 While the feature is unlocked, the event detail response (`GET /api/events/<id>/`) also
 carries `can_review_captains` and `pending_captain_reviews` for the signed-in member: the
 number of captains on that event they can still rate.
+
+## Logging
+
+Leadership logs with `system="org", subsystem="leadership"`. Rater ids appear only at
+debug level (`captain_review_rater`); info lines carry the review, snapshot and event
+ids.

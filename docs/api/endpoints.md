@@ -731,8 +731,11 @@ All under `/api/organizations/{id}/leadership/`, all gated on Leadership. Guide 
 full endpoint table: [Organization Leadership](../features/organization-leadership.md#api).
 Every lookup is scoped to the URL's org (`404` otherwise). Refusals carry
 `{code, detail}`: `review_window_closed` (409), `snapshot_voided` (409), `not_in_pool` (403), `review_moderated`
-(403), `cannot_moderate_own_reviews` (403), `invalid_scores` (400), `trait_in_use`
-(409). Review `PUT`/`DELETE` are throttled per user. Leaderboards (`rating`, `points`,
+(403), `cannot_moderate_own_reviews` (403), `invalid_scores` (400), `reason_required`
+(400), `not_moderated` (409), `trait_in_use` (409), `not_found` (404). Raters read
+their own reviews, open and closed, from `reviews/mine/`. While the feature is unlocked, `GET /api/events/{id}/`
+adds `can_review_captains` and `pending_captain_reviews` (captains the signed-in member
+can still rate on that event); they are computed per viewer after the cached payload. Review `PUT`/`DELETE` are throttled per user. Leaderboards (`rating`, `points`,
 `rating.<trait>`) go through the [standing endpoints](#organization-standing).
 
 ### Internal
@@ -1641,7 +1644,7 @@ All responses follow this format:
 
 ## Organization standing
 
-Generic reads over every standing track (`contribution`, `conduct`). Guide:
+Generic reads over every standing track (`contribution`, `conduct`, `leadership`). Guide:
 [Org Standing](../development/org-standing.md#generic-endpoints).
 
 | Method | Endpoint | Description | Auth |
@@ -1653,6 +1656,7 @@ Generic reads over every standing track (`contribution`, `conduct`). Guide:
 |-------|---------|------|---------|
 | `contribution` | `points` (default), `entries`; periodic | Viewers who pass `can_view_org_members` | Signed-in members with entries in the period (`value` is points or entries by metric, `sample` the entry count); `null` otherwise |
 | `conduct` | `show_rate`; not periodic; `status` is `ranked` or `new` | Ranking public or org staff, and `can_view_org_members` | Org members |
+| `leadership` | `rating` (default, overall, 1-5), one `rating.<trait_key>` per active trait (not periodic), `points` (periodic); `sample` is the released review count for ratings and the entry count for points | Org staff, or `leaderboard_public` and `can_view_org_members`; rating boards list only `ranked` captains | Org members (an unrated member gets `value: null`, `status: "new"`) |
 
 Unknown track is `404`; unknown metric or period is `400`; a locked feature is
 `feature_locked`. With the conduct ranking private, an anonymous viewer gets `401`, a
