@@ -276,6 +276,7 @@ def _create_signup(
             signup_type=signup_type,
             status=SignupStatus.WAITLISTED,
             waitlist_position=max_pos + 1,
+            self_made=not for_staff_placement,
             **eligibility,
             **carry,
         )
@@ -297,6 +298,7 @@ def _create_signup(
         event_team=event_team,
         signup_type=signup_type,
         status=status,
+        self_made=not for_staff_placement,
         **eligibility,
         **carry,
     )
@@ -379,7 +381,11 @@ def create_tentative_signup(
         EventSignup.objects.filter(pk=existing.pk).delete()
 
     signup = EventSignup.objects.create(
-        event=event, user=user, status=SignupStatus.TENTATIVE, **carry
+        event=event,
+        user=user,
+        status=SignupStatus.TENTATIVE,
+        self_made=True,
+        **carry,
     )
     # invalidate_after_commit is on_commit-aware internally; do NOT wrap.
     invalidate_after_commit(signup, event)
