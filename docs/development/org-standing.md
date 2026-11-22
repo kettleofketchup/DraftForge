@@ -50,7 +50,7 @@ them.
 | `on_feature_toggled(org_id, feature, *, enabled)` | Feature switch API (`org/views_features.py`), `OrgFeatureAdmin.save_model`, both inside `transaction.atomic()` | Nothing | Re-stamps the org's stored eligibility reasons on commit |
 | `merge_users(drop, keep, *, member_pairs)` | Profile claim merge (`org/views.py`), Discord account merge (`app/discord_accounts.py`) | Moves ledger rows to the kept member, repoints `awarded_by`/`updated_by` | Moves outcomes (a staff edit wins a same-event clash), repoints `set_by`/`updated_by` |
 | `on_user_deleted(user, *, actor)` | User delete (admin and API) | Deletes the user's rows, one `delete_user_contributions` OrgLog per org | Nothing (outcomes cascade with the `OrgUser`) |
-| `deletion_blockers(user_pks)` | `CustomUserAdmin.get_deleted_objects` | The user's ledger rows (`RESTRICT`) | Nothing |
+| `deletion_blockers(user_pks)` | `CustomUserAdmin.get_deleted_objects` | The user's ledger rows of this track (`RESTRICT`, `ledger.user_rows(track, user_pks)`) | Nothing |
 | `promotion_order(event, candidates, *, cache)` | `events.services` waitlist promotion | No reordering | With back of the line on, moves deferred members after everyone else, keeping their order |
 | `leaderboard(org, track, metric, period, *, viewer, now=None)` | `/contributions/leaderboard/`, `/standing/<track>/leaderboard/` (`/conduct/leaderboard/` reads `org/conduct/board.py` directly) | Points (or `entries`) per member for the period | Show rate per member, ranked then new; `total` is `null` |
 
@@ -84,7 +84,7 @@ Two more reads exist for tracks that need them:
 | Call | Returns |
 |---|---|
 | `TrackBase.metrics_for(org_id)` | The org's metrics; defaults to the static `metrics`. Leadership adds one `rating.<trait_key>` metric per active trait. `api.leaderboard`, `api.track_metrics` and `track_info` use it; registry validation still checks the static `metrics` |
-| `api.event_viewer_flags(event_id, org_id, viewer)` | Per-viewer fields merged into event detail after the cache. One `OrgUser` query (with an `Exists` per hooked track's feature) when a track overrides `TrackBase.event_viewer_flags`, nothing for anonymous viewers; each unlocked track adds its own fields (leadership: `can_review_captains`, `pending_captain_reviews`) |
+| `api.event_viewer_flags(event_id, org_id, viewer)` | Per-viewer fields merged into event detail after the cache. A track overriding `TrackBase.event_viewer_flags(event_id, now=)` returns expressions over the viewer's `OrgUser` row (`OuterRef("pk")`); `api` annotates them, plus an `Exists` per hooked track's feature, on one `OrgUser` query, locked or unlocked, and nothing for anonymous viewers. Only unlocked tracks' fields are returned (leadership: `can_review_captains`, `pending_captain_reviews`) |
 
 ## Invariants
 
@@ -239,12 +239,18 @@ entry point in a fresh interpreter).
 | `on_event_closed` | Completed: snapshots each team captain, the rater pool and placement, awards `captained`, `placement_N`, `draft_completed`, opens the review window. Cancelled: voids like a reopen. Nothing new while Leadership is locked | OrgLog `captains_snapshotted`, `leadership_awarded`; log `captain_reviews_voided`, `leadership_revoked` (always all four) |
 | `on_event_reopened` | Voids the event's snapshots and reviews (`void_kind="lifecycle"`) and revokes its leadership rows | OrgLog `captain_reviews_voided`, `leadership_revoked` |
 | `on_event_deleted` | Deletes the event's snapshots, reviews and leadership rows | Nothing |
-| `merge_members`, `repoint_user` | Moves snapshots, rater pools, reviews and leadership ledger rows to the kept member; same-event snapshots and reviews fold into one, and a review the merge would turn into a self-review is dropped. Repoints `voided_by`, settings `updated_by`, `awarded_by` and leadership point-value editors | Nothing |
-| `on_user_deleted` | Deletes the user's reviews and snapshots, recomputes open captain ratings they fed, deletes their leadership ledger rows with one `delete_user_leadership` OrgLog per org | Nothing |
+| `merge_members`, `repoint_user` | Moves snapshots, rater pools, reviews and leadership ledger rows to the kept member; same-event snapshots and reviews fold into one, and a review the merge would turn into a self-review is dropped. When one person ends up with two reviews of a captain, a `moderated` one wins, otherwise the newer; the loser is deleted, or loses its rater (`rater=NULL`) when it is live and the window has closed. Repoints `voided_by`, settings `updated_by`, `awarded_by` and leadership point-value editors | Nothing |
+| `on_user_deleted` | Deletes the user's snapshots and reviews, except live reviews in closed windows, which lose their rater so released aggregates do not move; recomputes open captain ratings they fed, deletes their leadership ledger rows with one `delete_user_leadership` OrgLog per org | Nothing |
 
 `captain_rating` is upserted through `ledger.upsert_event_entry` on every review submit,
 edit, withdrawal and staff void or restore. Reopen, cancel and delete cost one extra
 query (an `EventCaptain` id read) when the event has no snapshots.
+
+With Leadership unlocked, its `track_info` in org detail and `standing/tracks/` costs
+three reads: the cached settings row, the viewer's membership and the trait list behind
+the `rating.<trait>` metrics (`test_org_detail_flags` pins it). The leaderboard view
+passes the metrics it resolved to `api.leaderboard`, so a request reads the traits once
+for metric lookup and once more for the rating board.
 
 ## Generic endpoints
 

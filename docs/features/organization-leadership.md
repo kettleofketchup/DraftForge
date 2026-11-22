@@ -89,6 +89,11 @@ an event's reviews then count at once, so a captain cannot work out a single rev
 watching the numbers move. Per-event trait averages are shown to the captain only for
 events with at least 3 reviews.
 
+Released numbers also stay put when a rater leaves. If a rater deletes their account, or
+a merge makes one of two reviews by the same person redundant, after the window has
+closed, the review stays and only loses its rater. Inside the window it is deleted and
+the captain rating recalculated as usual.
+
 - **Captains** see their overall and per-trait rating, their released review count and
   their points. They never see who rated them or any single review.
 - **Other members** see a captain's overall rating and points when the leaderboard is
@@ -111,7 +116,13 @@ counting, and if the window has already closed the captain rating points are
 recalculated anyway. The rater cannot undo a staff void by submitting again; an admin
 can restore it. A review carries one `void_kind`: `withdrawn` (the rater withdrew it),
 `lifecycle` (the event was reopened or cancelled) or `moderated` (staff). Raters can
-resubmit over the first two, never over `moderated`. An admin cannot
+resubmit over the first two, never over `moderated`. Restoring puts a review back the
+way it was before staff voided it: a review the rater had withdrawn, or one a reopen
+voided (including a review voided by staff and then by a reopen), goes back to
+`withdrawn` or `lifecycle` and does not count again until its rater resubmits. A live
+review is restored only while its rater is still in the captain's rater pool
+(`409 not_in_pool` otherwise). When a merge leaves two reviews by the same person, a
+staff-voided one always wins. An admin cannot
 moderate reviews of themselves: another admin has to act. Every void and restore is
 written to the organization log with the points before and after.
 
@@ -160,7 +171,9 @@ submits and withdrawals are limited to 30 a minute per user.
 
 While the feature is unlocked, the event detail response (`GET /api/events/<id>/`) also
 carries `can_review_captains` and `pending_captain_reviews` for the signed-in member: the
-number of captains on that event they can still rate.
+number of captains on that event they can still rate. A review staff voided is not
+pending; a withdrawn one is. Both fields come from the one query that resolves the
+viewer's membership.
 
 ## Logging
 
