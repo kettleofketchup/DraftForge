@@ -282,7 +282,8 @@ Docker Compose files reference `:latest` — the pull step handles tagging the c
 | `just docker::all-build` | `:hash` + `:latest` | Development builds |
 | `just docker::all-push` | `:hash` + `:latest` | Push to registry (CI) |
 | `just docker::release::push` | `:version` + `:hash` + `:latest` | Production releases |
-| `just ci::prepare-images` | `:hash` only (no `:buildcache`) | PR prepare job (`--hash-only`) |
+| `just ci::prepare-images` (hosted) | `:hash` only (no `:buildcache`) | Playwright `prepare` job on `ubuntu-latest` (`--hash-only`) |
+| `just ci::prepare-images` (home runner, `DF_PREPARE_PR=<n>`) | `draftforge-ci/<img>:pr-<n>-<hash>` only | Playwright `prepare` job on `draftforge-home` (`--mode=pr`) |
 
 ### Build Modes and Cache Names
 
@@ -290,9 +291,10 @@ Every `docker::<svc>::build*` recipe goes through `docker::buildx`, which has tw
 
 - **`--mode=trusted`** (default): the tags above, `--cache-from` GHCR
   `draftforge/<img>:buildcache` and, with `--push`, `--cache-to` the same ref.
-  `--no-cache` (releases) neither reads nor writes `:buildcache`. Only hosted `main`
-  builds and release tags push in this mode.
-- **`--mode=pr --pr=<n>`**: used only by the home runner's PR `prepare` job. Pushes only
+  `--no-cache` (releases) neither reads nor writes `:buildcache`. `--hash-only` tags
+  only `:<hash>` and writes no `:buildcache`. Hosted `main` builds, release tags and the
+  hosted `prepare` job (`--hash-only`) push in this mode.
+- **`--mode=pr --pr=<n>`**: used only by the `prepare` job on the home runner. Pushes only
   `ghcr.io/kettleofketchup/draftforge-ci/<img>:pr-<n>-<hash>`, reads Zot
   `buildcache/pr/draftforge/<img>:pr-<n>` and GHCR `:buildcache`, writes only the Zot
   per-PR cache. Never `:latest`, never a `draftforge/` tag, never a GHCR `cache-to`.
@@ -301,10 +303,11 @@ Every `docker::<svc>::build*` recipe goes through `docker::buildx`, which has tw
 
 | Name | Written by |
 |------|------------|
-| `draftforge/<img>:latest`, `:<hash>`, `:<version>` | Hosted `main` builds and release tags |
+| `draftforge/<img>:latest`, `:<version>` | Hosted `main` builds and release tags |
+| `draftforge/<img>:<hash>` | Hosted `main` builds, release tags, and the hosted `prepare` job (any same-repo PR) |
 | `draftforge/<img>:buildcache` | Hosted `main` builds only |
-| `draftforge-ci/<img>:pr-<n>-<hash>` | PR `prepare` only; read by that PR's test jobs |
-| Zot `buildcache/pr/draftforge/<img>:pr-<n>` | PR `prepare` only (BuildKit inside the home cluster) |
+| `draftforge-ci/<img>:pr-<n>-<hash>` | Home `prepare` only; read by that PR's test jobs |
+| Zot `buildcache/pr/draftforge/<img>:pr-<n>` | Home `prepare` only (BuildKit inside the home cluster) |
 
 Where each job runs, the trust model and the switches: [CI Runners](../development/ci-runners.md).
 
@@ -333,8 +336,10 @@ just docker::release::push
 Three workflows use hash tagging:
 
 - **`build-docker-images.yml`** — Triggers on push to `main` when Dockerfiles or lock files change. Builds and pushes hash-tagged images (`just docker::all-push`, which also pushes `playwright-runner`). It and `build-test-db.yml` are the only writers of `:latest` and of the `:buildcache` registry cache.
-- **`playwright.yml` `prepare` job** — Runs before every test job (`needs: prepare`). `just ci::prepare-images` checks the registry with `docker buildx imagetools inspect` (no pull) for `frontend-dev`, `backend-dev`, `playwright-runner` and `nginx` at their content hashes and for `test-db:<hash>`, builds whatever is missing once, in parallel, and pushes it under the hash tag only (`docker::buildx --hash-only`, `docker::db::push --hash-only`): a PR never moves `:latest` or overwrites `:buildcache`. It prints one line per image (`present`, `built+pushed in Ns`) and its elapsed time. When everything is present it only logs in and probes (no Poetry, Node or buildx builder). On a fork PR (read-only token) it only reports; a failed push is a `::warning::` and the job still succeeds, and the test jobs fall back to building in-job. `vars.PREPARE_RUNNER` (repository variable, JSON) picks its runner, e.g. `"self-hosted"` or `["self-hosted","linux"]`; unset means `ubuntu-latest`.
-- **`playwright.yml` test jobs** — Pull images by hash before running tests, and only the images the test stack runs (`just docker::test-pull`: `backend-dev`, `frontend-dev` and `nginx`, plus `playwright-runner` when `DF_PW_CONTAINER=1`; never the production `backend` and `frontend`). A missing or stale `frontend-dev`, `backend-dev` or `playwright-runner` image (no tag for the current hash, e.g. when the `prepare` job could not push) is rebuilt in the job. Test jobs start the image and test-DB pulls (`just ci::prefetch-start`) right after the registry login and join them with `just ci::prefetch-wait images|db`. They skip the buildx builder; a fallback rebuild boots one with `just ci::buildx-builder`.
+- **`playwright.yml` `prepare` job** — Runs before every test job (`needs: prepare`; test jobs use `if: !cancelled()`, so they run even when it fails). `just ci::prepare-images` checks the registry with `docker buildx imagetools inspect` (no pull) for `frontend-dev`, `backend-dev`, `playwright-runner` and `nginx` at their content hashes and for `test-db:<hash>`, builds whatever is missing once, in parallel, and prints one line per image (`present`, `built+pushed in Ns`) and its elapsed time. When everything is present it only logs in and probes (no Poetry, Node or buildx builder). A failed push is a `::warning::` and the job still succeeds; the test jobs then build in-job. It runs on `ubuntu-latest` unless the home-runner guard holds:
+    - **Hosted (default)** — pushes under the hash tag only (`docker::buildx --hash-only`, `docker::db::push --hash-only`): a PR never moves `:latest` or overwrites `:buildcache`. On a fork PR (read-only token) it only reports.
+    - **Home runner (`draftforge-home`)** — only when the repository variable `SELF_HOSTED_RUNNERS` is `true` and the run is a same-repo `pull_request` whose author and triggering actor are both in `HOME_RUNNER_AUTHORS`. It builds through the home cluster's remote BuildKit (`ci::home-builder`) and pushes only `draftforge-ci/<img>:pr-<n>-<hash>` (`--mode=pr`), never a `draftforge/` tag or a GHCR cache. `scripts/check-runs-on.sh` rejects any other `runs-on` that is not a literal hosted label. If the home pool is down while the variable is `true`, `prepare` stays queued and the test jobs wait on it; unset the variable to send new runs to `ubuntu-latest`. Details, failure modes and the trust split: [CI Runners](../development/ci-runners.md).
+- **`playwright.yml` test jobs** — Pull images by hash before running tests, and only the images the test stack runs (`just docker::test-pull`: `backend-dev`, `frontend-dev` and `nginx`, plus `playwright-runner` when `DF_PW_CONTAINER=1`; never the production `backend` and `frontend`). When `prepare` ran on the home runner, `setup-playwright-stack` sets `DF_CI_PR=<n>` and each pull (images and test DB) first tries that PR's `draftforge-ci/<img>:pr-<n>-<hash>` and retags it as the `draftforge/` name, then falls back to `draftforge/<img>:<hash>`. A missing or stale `frontend-dev`, `backend-dev` or `playwright-runner` image (no tag for the current hash, e.g. when the `prepare` job could not push) is rebuilt in the job. Test jobs start the image and test-DB pulls (`just ci::prefetch-start`) right after the registry login and join them with `just ci::prefetch-wait images|db`. They skip the buildx builder; a fallback rebuild boots one with `just ci::buildx-builder`.
 - Playwright and backend test jobs set up no Python, Poetry, Node or browsers on the runner. The host helpers (`scripts/slots.py`, `scripts/compose.py`) are stdlib-only and run on the runner's `python3` (`DF_JUST_PYTHON=python3`). With `DF_PW_CONTAINER=1`, `just docker::test-pull` and `just docker::all-pull` also pull `playwright-runner` and `just test::pw::run` runs Playwright inside it (`docker run --network host`, the checkout's `frontend/` mounted at the same path, `frontend/node_modules` linked to the image's `/app/node_modules`). `frontend/Dockerfile.playwright` is the official Playwright image pinned to the `@playwright/test` version in `frontend/package.json` plus `npm ci`, so tests use Playwright's bundled `chromium-headless-shell` (glibc; the Alpine `frontend-dev` image can only run the full system Chromium, which made the suite 1.1-2.9x slower). Bump its `FROM` tag together with `@playwright/test`. Local runs are unchanged. If the cached test DB is missing, `just ci::venv` installs Poetry and the venv for the host-side `db::populate::fresh`.
 
 ### Build Timing
