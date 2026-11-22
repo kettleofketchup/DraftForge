@@ -88,7 +88,7 @@ def _apply_verification(user: CustomUser, values: dict[str, Any]) -> None:
         user._state.fields_cache.pop(cached, None)
 
 
-def _log_change(
+def log_steam_verification_change(
     user: CustomUser, actor: CustomUser | None, org_id: int | None, verified: bool
 ) -> None:
     log.info(
@@ -113,7 +113,8 @@ def mark_steam_account_verified(
     """Record that actor vouches for the user's current Friend ID.
 
     Returns False when the ID no longer matches expected_id. An already
-    verified ID keeps its original verifier, time and org.
+    verified ID keeps its original verifier, time and org. With save=False the
+    caller saves and logs.
     """
     current_id = _require_id(user)
     expected = current_id if expected_id is None else expected_id
@@ -129,7 +130,6 @@ def mark_steam_account_verified(
         user.steam_account_verified_at = timezone.now()
         user.steam_account_verified_by = actor
         user.steam_account_verified_org_id = org_id
-        _log_change(user, actor, org_id, True)
         return True
 
     values: dict[str, Any] = {
@@ -155,7 +155,7 @@ def mark_steam_account_verified(
         return True
     _apply_verification(user, values)
     invalidate_after_commit(user)
-    _log_change(user, actor, org_id, True)
+    log_steam_verification_change(user, actor, org_id, True)
     return True
 
 
@@ -166,7 +166,10 @@ def clear_steam_account_verification(
     save: bool = True,
     actor: CustomUser | None = None,
 ) -> bool:
-    """Drop any vouching for the user's current Friend ID (compare-and-set)."""
+    """Drop any vouching for the user's current Friend ID (compare-and-set).
+
+    With save=False the caller saves and logs.
+    """
     current_id = _require_id(user)
     expected = current_id if expected_id is None else expected_id
     values: dict[str, Any] = dict.fromkeys(_VERIFICATION_ATTNAMES)
@@ -174,12 +177,9 @@ def clear_steam_account_verification(
     if not save:
         if current_id != expected:
             return False
-        was_verified = user.steam_account_verified
         user.steam_account_verified_at = None
         user.steam_account_verified_by = None
         user.steam_account_verified_org = None
-        if was_verified:
-            _log_change(user, actor, None, False)
         return True
 
     updated = CustomUser.objects.filter(pk=user.pk, steam_account_id=expected).update(
@@ -189,7 +189,7 @@ def clear_steam_account_verification(
         return False
     _apply_verification(user, values)
     invalidate_after_commit(user)
-    _log_change(user, actor, None, False)
+    log_steam_verification_change(user, actor, None, False)
     return True
 
 

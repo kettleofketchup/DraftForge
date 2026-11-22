@@ -12,7 +12,11 @@ from django.utils import timezone
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
 from app.permissions_steam import can_verify_steam_account
-from app.steam_accounts import mark_steam_account_verified, steam_account_id_holder
+from app.steam_accounts import (
+    log_steam_verification_change,
+    mark_steam_account_verified,
+    steam_account_id_holder,
+)
 from events.models import Event
 from steam.services.account_lookup import (
     SteamLookupRateLimited,
@@ -143,15 +147,12 @@ def claim_friend_id(
     A ``verified_by`` actor allowed to vouch for ``user`` verifies the ID in
     the same save. Returns the stored ID, or None when nothing was written.
     """
-    grant = None
-    if verified_by is not None and _normalise_friend_id(fid) not in (
-        None,
-        user.steam_account_id,
-    ):
-        grant = can_verify_steam_account(verified_by, user)
-    account_id = validate_friend_id(fid, user, check_exists=grant is None)
+    account_id = validate_friend_id(fid, user, check_exists=False)
     if account_id is None:
         return None
+    grant = can_verify_steam_account(verified_by, user)
+    if grant is None and steam_account_exists(account_id, cache_only=True) is False:
+        raise _not_found_error(account_id)
     update_fields = ["steam_account_id", "steamid"]
     try:
         with transaction.atomic():
@@ -159,7 +160,7 @@ def claim_friend_id(
             if steam_account_exists(account_id, cache_only=True) is True:
                 user.steam_account_exists_checked_at = timezone.now()
                 update_fields.append("steam_account_exists_checked_at")
-            if grant is not None and verified_by is not None:
+            if grant is not None:
                 mark_steam_account_verified(
                     user, verified_by, org_id=grant.org_id, save=False
                 )
@@ -173,6 +174,8 @@ def claim_friend_id(
             ]
         )
         raise _duplicate_error(account_id) from exc
+    if grant is not None:
+        log_steam_verification_change(user, verified_by, grant.org_id, True)
     invalidate_after_commit(user)
     if event is not None and event.tournament_id is not None:
         invalidate_after_commit(event.tournament)
