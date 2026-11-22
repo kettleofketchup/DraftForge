@@ -15,16 +15,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import IntegrityError, transaction
+
+from app.models import CustomUser, PositionsModel
 from discordbot.models import DiscordEventLog
 from events.admission import self_serve_refusal
 from events.constants import SignupStatus
 from events.eligibility import unmet_labels
 from events.ledger import SignupActor
 from events.models import Event, EventSignup
+from org.membership import resolve_or_create_org_user
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
-    from app.models import CustomUser
     from org.models import OrgUser
 
 log = get_logger(__name__)
@@ -135,11 +138,6 @@ def _get_org_user(
 
     Returns (org_user, user) or (None, None).
     """
-    from django.db import IntegrityError, transaction
-
-    from app.models import CustomUser, PositionsModel
-    from events.services import resolve_or_create_org_user
-
     discord_id_str = str(discord_user_id)
 
     # 1) Primary: an account already linked to this Discord ID.
@@ -223,6 +221,7 @@ def _direct_signup(event: Event, user: CustomUser) -> dict[str, object]:
     failure logging. notify_signup_changed is dispatched by _create_signup's
     on_commit hook — do NOT call it directly or the embed updates twice.
     """
+    # local: cycle: events.services -> events.discord -> _shared
     from events.services import process_rsvp
 
     signup = process_rsvp(event, user, actor=SignupActor.discord(user))
