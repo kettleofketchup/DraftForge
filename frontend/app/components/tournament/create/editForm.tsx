@@ -235,7 +235,7 @@ export const TournamentEditForm: React.FC<Props> = ({
   });
 
   // The dialog stays mounted between openings; start each one from the
-  // tournament's current values, as the old remounting dialog did.
+  // tournament's current values.
   useEffect(() => {
     if (open) form.reset(defaultValues());
     // Reset only on opening; defaultValues reads the latest tourn.
