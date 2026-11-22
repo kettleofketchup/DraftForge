@@ -3,19 +3,10 @@ from django.utils import timezone
 
 
 class PlayerProfileMixin(models.Model):
-    """Abstract mixin for game-specific player profiles.
+    """Abstract base for game-specific player profiles.
 
-    Provides friend_id — the Dota 2 Friend ID (32-bit Steam account ID)
-    entered via Discord modal. This is self-reported and unverified.
-    Verification happens separately (Steam OAuth or admin approval).
+    The player's Steam Friend ID lives on ``CustomUser.steam_account_id``.
     """
-
-    unverified_friend_id = models.CharField(
-        max_length=20,
-        blank=True,
-        default="",
-        help_text="Dota 2 Friend ID (self-reported, unverified)",
-    )
 
     class Meta:
         abstract = True
