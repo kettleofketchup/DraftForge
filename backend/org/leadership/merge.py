@@ -5,7 +5,8 @@ from django.db.models import Count, Q, QuerySet
 from django.utils import timezone
 
 from app.models import CustomUser
-from org.leadership.reviews import upsert_captain_rating
+from org.leadership.reviews import refresh_captain_rating
+from org.leadership.settings import get_leadership_settings
 from org.models import OrgLog, OrgUser
 from org.models_leadership import (
     CaptainReview,
@@ -25,11 +26,13 @@ def _recompute_open(snapshot_ids: set[int], *, now: datetime) -> int:
     for snapshot in (
         EventCaptain.objects.nocache()
         .select_for_update()
-        .select_related("captain")
+        .select_related("event", "captain")
         .filter(pk__in=snapshot_ids, window_closes_at__gt=now)
     ):
-        if upsert_captain_rating(snapshot, now=now) is not None:
-            recomputed += 1
+        refresh_captain_rating(
+            snapshot, settings=get_leadership_settings(snapshot.organization_id)
+        )
+        recomputed += 1
     return recomputed
 
 

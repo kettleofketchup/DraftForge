@@ -145,9 +145,7 @@ def leadership_trait(request: Request, org_id: int, key: str) -> Response:
     except TraitInUse as exc:
         raise Refused(
             ReviewRefused(
-                "trait_in_use",
-                "This trait has scores. Deactivate it instead.",
-                status=409,
+                "trait_in_use", 409, "This trait has scores. Deactivate it instead."
             )
         ) from exc
     except ValueError as exc:
@@ -226,9 +224,9 @@ def leadership_review(
     try:
         if request.method == "DELETE":
             withdraw_review(
-                org_id=org.pk,
+                org,
                 event_id=event_id,
-                captain_id=org_user_id,
+                captain_org_user_id=org_user_id,
                 rater=rater,
                 now=now,
             )
@@ -236,9 +234,9 @@ def leadership_review(
         body = ReviewPutSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         review = submit_review(
-            org_id=org.pk,
+            org,
             event_id=event_id,
-            captain_id=org_user_id,
+            captain_org_user_id=org_user_id,
             rater=rater,
             scores=body.validated_data["scores"],
             now=now,
@@ -327,17 +325,21 @@ def _moderate(
     request: Request, org_id: int, review_pk: int, *, unvoid: bool
 ) -> Response:
     org = _admin_org(request, org_id)
-    body = ReasonSerializer(data=request.data)
-    body.is_valid(raise_exception=True)
-    action = unvoid_review if unvoid else void_review
     try:
-        review = action(
-            org_id=org.pk,
-            review_pk=review_pk,
-            actor=request.user,
-            reason=body.validated_data["reason"],
-            now=timezone.now(),
-        )
+        if unvoid:
+            review = unvoid_review(
+                org, review_id=review_pk, actor=request.user, now=timezone.now()
+            )
+        else:
+            body = ReasonSerializer(data=request.data)
+            body.is_valid(raise_exception=True)
+            review = void_review(
+                org,
+                review_id=review_pk,
+                actor=request.user,
+                reason=body.validated_data["reason"],
+                now=timezone.now(),
+            )
     except ReviewRefused as exc:
         if exc.status == 404:
             raise NotFound() from exc

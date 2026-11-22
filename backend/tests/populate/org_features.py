@@ -395,9 +395,9 @@ def _seed_leadership(
     keys = [t.key for t in effective_traits(org) if t.active]
     for rater, captain, score in ORG_FEATURES_LEADERSHIP_REVIEWS:
         submit_review(
-            org_id=org.pk,
+            org,
             event_id=event.pk,
-            captain_id=org_users[captain.pk].pk,
+            captain_org_user_id=org_users[captain.pk].pk,
             rater=org_users[rater.pk],
             scores=dict.fromkeys(keys, score),
             now=now,

@@ -1,6 +1,5 @@
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
 
@@ -8,11 +7,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.models import CustomUser
-from events.models import Event
 from org.leadership.constants import (
     RATER_REVIVABLE,
     REASON_MAX_LENGTH,
-    REASON_MIN_LENGTH,
     SCORE_MAX,
     SCORE_MIN,
     VoidKind,
@@ -21,8 +18,14 @@ from org.leadership.kinds import LeadershipKind
 from org.leadership.rating import captain_rating_points, review_mean
 from org.leadership.settings import get_leadership_settings
 from org.leadership.traits import materialize_traits
-from org.models import ContributionEntry, OrgLog, OrgUser
-from org.models_leadership import CaptainReview, CaptainTraitScore, EventCaptain
+from org.models import ContributionEntry, Organization, OrgLog, OrgUser
+from org.models_leadership import (
+    CaptainReview,
+    CaptainTraitScore,
+    EventCaptain,
+    OrgLeadershipSettings,
+)
+from org.permissions import has_org_admin_access
 from org.standing import ledger
 from telemetry.logging import get_logger
 
@@ -30,26 +33,14 @@ log = get_logger(__name__)
 
 
 class ReviewRefused(Exception):
-    def __init__(self, code: str, detail: str, *, status: int) -> None:
+    def __init__(self, code: str, status: int, detail: str) -> None:
         super().__init__(detail)
         self.code = code
-        self.detail = detail
         self.status = status
+        self.detail = detail
 
 
-def _refuse(code: str, detail: str, status: int) -> ReviewRefused:
-    return ReviewRefused(code, detail, status=status)
-
-
-@dataclass(frozen=True, slots=True)
-class RatingUpsert:
-    before: int
-    after: int
-    reviewers: int
-    outcome: ledger.UpsertOutcome
-
-
-def review_means(snapshot_id: int) -> list[Fraction]:
+def _review_means(snapshot_id: int) -> list[Fraction]:
     grouped: dict[int, list[int]] = defaultdict(list)
     for review_id, score in (
         CaptainTraitScore.objects.nocache()
@@ -60,12 +51,12 @@ def review_means(snapshot_id: int) -> list[Fraction]:
     return [review_mean(values) for values in grouped.values()]
 
 
-def current_points(snapshot: EventCaptain) -> int:
+def _current_points(ec: EventCaptain) -> int:
     return (
         ContributionEntry.objects.nocache()
         .filter(
-            event_id=snapshot.event_id,
-            org_user_id=snapshot.captain_id,
+            event_id=ec.event_id,
+            org_user_id=ec.captain_id,
             kind=LeadershipKind.CAPTAIN_RATING.value,
         )
         .values_list("points", flat=True)
@@ -74,29 +65,22 @@ def current_points(snapshot: EventCaptain) -> int:
     )
 
 
-def upsert_captain_rating(
-    snapshot: EventCaptain, *, now: datetime, force: bool = False
-) -> RatingUpsert | None:
-    """Recompute captain_rating for one snapshot. Frozen once the window
-    closes unless force (staff moderation). Caller holds the snapshot lock."""
-    if not force and now >= snapshot.window_closes_at:
-        return None
-    event = Event.objects.nocache().get(pk=snapshot.event_id)
-    settings = get_leadership_settings(snapshot.organization_id)
-    means = review_means(snapshot.pk)
+def _refresh(
+    ec: EventCaptain, settings: OrgLeadershipSettings
+) -> tuple[int, ledger.UpsertOutcome]:
+    means = _review_means(ec.pk)
     points = (
         None
-        if snapshot.voided_at is not None
+        if ec.voided_at is not None
         else captain_rating_points(
             means,
             max_points=settings.rating_max_points,
             min_reviewers=settings.rating_min_reviewers,
         )
     )
-    before = current_points(snapshot)
     outcome = ledger.upsert_event_entry(
-        event=event,
-        org_user=snapshot.captain,
+        event=ec.event,
+        org_user=ec.captain,
         kind=LeadershipKind.CAPTAIN_RATING.value,
         points=points,
     )
@@ -104,66 +88,71 @@ def upsert_captain_rating(
         "captain_rating_upserted",
         system="org",
         subsystem="leadership",
-        org_id=snapshot.organization_id,
-        event_id=snapshot.event_id,
-        captain_org_user_id=snapshot.captain_id,
+        org_id=ec.organization_id,
+        event_id=ec.event_id,
+        captain_org_user_id=ec.captain_id,
         points=points or 0,
         reviewers=len(means),
         outcome=outcome,
     )
-    return RatingUpsert(
-        before=before, after=points or 0, reviewers=len(means), outcome=outcome
-    )
+    return points or 0, outcome
 
 
-def lock_snapshot(org_id: int, event_id: int, captain_id: int) -> EventCaptain:
-    snapshot = (
+def refresh_captain_rating(
+    ec: EventCaptain, *, settings: OrgLeadershipSettings
+) -> ledger.UpsertOutcome:
+    return _refresh(ec, settings)[1]
+
+
+def _lock_snapshot(org: Organization, event_id: int, captain_id: int) -> EventCaptain:
+    ec = (
         EventCaptain.objects.nocache()
         .select_for_update()
-        .select_related("captain")
-        .filter(organization_id=org_id, event_id=event_id, captain_id=captain_id)
+        .select_related("event", "captain")
+        .filter(organization=org, event_id=event_id, captain_id=captain_id)
         .first()
     )
-    if snapshot is None:
-        raise _refuse("not_found", "No captain review for this event.", 404)
-    return snapshot
+    if ec is None:
+        raise ReviewRefused("not_found", 404, "No captain review for this event.")
+    return ec
 
 
-def _check_writable(snapshot: EventCaptain, rater: OrgUser, *, now: datetime) -> None:
-    if snapshot.voided_at is not None:
-        raise _refuse("snapshot_voided", "Reviews for this event are closed.", 409)
-    if now >= snapshot.window_closes_at:
-        raise _refuse("review_window_closed", "The review window has closed.", 409)
-    if (
-        snapshot.captain_id == rater.pk
-        or not snapshot.teammates.filter(pk=rater.pk).exists()
-    ):
-        raise _refuse("not_in_pool", "You cannot review this captain.", 403)
+def _check_writable(ec: EventCaptain, rater: OrgUser, *, now: datetime) -> None:
+    if ec.voided_at is not None:
+        raise ReviewRefused(
+            "snapshot_voided", 409, "Reviews for this event are closed."
+        )
+    if now >= ec.window_closes_at:
+        raise ReviewRefused(
+            "review_window_closed", 409, "The review window has closed."
+        )
+    in_pool = EventCaptain.teammates.through.objects.filter(
+        eventcaptain_id=ec.pk, orguser_id=rater.pk
+    ).exists()
+    if ec.captain_id == rater.pk or not in_pool:
+        raise ReviewRefused("not_in_pool", 403, "You cannot review this captain.")
 
 
-def _existing(snapshot: EventCaptain, rater: OrgUser) -> CaptainReview | None:
+def _existing(ec: EventCaptain, rater: OrgUser) -> CaptainReview | None:
     review = (
-        CaptainReview.objects.nocache()
-        .filter(event_captain=snapshot, rater=rater)
-        .first()
+        CaptainReview.objects.nocache().filter(event_captain=ec, rater=rater).first()
     )
     if review is not None and review.void_kind == VoidKind.MODERATED:
-        raise _refuse(
-            "review_moderated", "This review was removed by an organizer.", 403
+        raise ReviewRefused(
+            "review_moderated", 403, "This review was removed by an organizer."
         )
     return review
 
 
 def _validated_scores(org_id: int, scores: Mapping[str, int]) -> dict[int, int]:
-    traits = [t for t in materialize_traits(org_id) if t.active]
-    by_key = {t.key: t for t in traits}
+    by_key = {t.key: t for t in materialize_traits(org_id) if t.active}
     missing = sorted(set(by_key) - set(scores))
     extra = sorted(set(scores) - set(by_key))
     if missing or extra:
-        raise _refuse(
+        raise ReviewRefused(
             "invalid_scores",
-            f"Score every active trait. Missing: {missing}; unknown: {extra}.",
             400,
+            f"Score every active trait. Missing: {missing}; unknown: {extra}.",
         )
     out: dict[int, int] = {}
     for key, value in scores.items():
@@ -172,52 +161,57 @@ def _validated_scores(org_id: int, scores: Mapping[str, int]) -> dict[int, int]:
             or isinstance(value, bool)
             or not SCORE_MIN <= value <= SCORE_MAX
         ):
-            raise _refuse(
-                "invalid_scores", f"{key} must be {SCORE_MIN} to {SCORE_MAX}.", 400
+            raise ReviewRefused(
+                "invalid_scores", 400, f"{key} must be {SCORE_MIN} to {SCORE_MAX}."
             )
         out[by_key[key].pk] = value
     return out
 
 
+def _clear_void(review: CaptainReview) -> None:
+    review.voided_at = None
+    review.void_kind = ""
+    review.voided_by = None
+    review.void_reason = ""
+
+
 @transaction.atomic
 def submit_review(
+    org: Organization,
     *,
-    org_id: int,
     event_id: int,
-    captain_id: int,
+    captain_org_user_id: int,
     rater: OrgUser,
     scores: Mapping[str, int],
     now: datetime,
 ) -> CaptainReview:
-    snapshot = lock_snapshot(org_id, event_id, captain_id)
+    ec = _lock_snapshot(org, event_id, captain_org_user_id)
     now = max(now, timezone.now())
-    _check_writable(snapshot, rater, now=now)
-    review = _existing(snapshot, rater)
-    by_trait = _validated_scores(org_id, scores)
+    _check_writable(ec, rater, now=now)
+    review = _existing(ec, rater)
+    by_trait = _validated_scores(org.pk, scores)
     if review is None:
         review = CaptainReview.objects.create(
-            event_captain=snapshot, rater=rater, submitted_at=now
+            event_captain=ec, rater=rater, submitted_at=now
         )
     else:
-        review.voided_at = None
-        review.void_kind = ""
-        review.voided_by = None
-        review.void_reason = ""
+        if review.void_kind in RATER_REVIVABLE:
+            _clear_void(review)
         review.submitted_at = now
         review.save()
-        review.scores.all().delete()
+        CaptainTraitScore.objects.nocache().filter(review=review).delete()
     CaptainTraitScore.objects.bulk_create(
         CaptainTraitScore(review=review, trait_id=trait_id, score=score)
         for trait_id, score in by_trait.items()
     )
-    upsert_captain_rating(snapshot, now=now)
+    refresh_captain_rating(ec, settings=get_leadership_settings(org.pk))
     log.info(
         "captain_review_submitted",
         system="org",
         subsystem="leadership",
-        org_id=org_id,
+        org_id=org.pk,
         event_id=event_id,
-        captain_org_user_id=captain_id,
+        captain_org_user_id=captain_org_user_id,
     )
     log.debug(
         "captain_review_rater",
@@ -231,117 +225,140 @@ def submit_review(
 
 @transaction.atomic
 def withdraw_review(
-    *, org_id: int, event_id: int, captain_id: int, rater: OrgUser, now: datetime
+    org: Organization,
+    *,
+    event_id: int,
+    captain_org_user_id: int,
+    rater: OrgUser,
+    now: datetime,
 ) -> None:
-    snapshot = lock_snapshot(org_id, event_id, captain_id)
+    ec = _lock_snapshot(org, event_id, captain_org_user_id)
     now = max(now, timezone.now())
-    _check_writable(snapshot, rater, now=now)
-    review = _existing(snapshot, rater)
+    _check_writable(ec, rater, now=now)
+    review = _existing(ec, rater)
     if review is None or review.voided_at is not None:
-        raise _refuse("not_found", "You have no review to withdraw.", 404)
+        raise ReviewRefused("not_found", 404, "You have no review to withdraw.")
     review.voided_at = now
     review.void_kind = VoidKind.WITHDRAWN
     review.save(update_fields=["voided_at", "void_kind", "updated_at"])
-    upsert_captain_rating(snapshot, now=now)
+    refresh_captain_rating(ec, settings=get_leadership_settings(org.pk))
     log.info(
         "captain_review_withdrawn",
         system="org",
         subsystem="leadership",
-        org_id=org_id,
+        org_id=org.pk,
         event_id=event_id,
-        captain_org_user_id=captain_id,
+        captain_org_user_id=captain_org_user_id,
     )
 
 
-def check_reason(reason: str) -> str:
+def _check_reason(reason: str) -> str:
     cleaned = (reason or "").strip()
-    if not REASON_MIN_LENGTH <= len(cleaned) <= REASON_MAX_LENGTH:
-        raise _refuse(
-            "invalid_reason",
-            f"Reason must be {REASON_MIN_LENGTH} to {REASON_MAX_LENGTH} characters.",
+    if not 1 <= len(cleaned) <= REASON_MAX_LENGTH:
+        raise ReviewRefused(
+            "reason_required",
             400,
+            f"A reason of 1 to {REASON_MAX_LENGTH} characters is required.",
         )
     return cleaned
 
 
-def _lock_review(org_id: int, review_pk: int) -> tuple[CaptainReview, EventCaptain]:
+def _lock_review(
+    org: Organization, review_id: int, actor: CustomUser
+) -> tuple[CaptainReview, EventCaptain]:
+    if not has_org_admin_access(actor, org):
+        raise ReviewRefused(
+            "not_permitted", 403, "You do not have permission to moderate reviews."
+        )
     snapshot_id = (
         CaptainReview.objects.nocache()
-        .filter(pk=review_pk, event_captain__organization_id=org_id)
+        .filter(pk=review_id, event_captain__organization=org)
         .values_list("event_captain_id", flat=True)
         .first()
     )
     if snapshot_id is None:
-        raise _refuse("not_found", "Review not found.", 404)
-    snapshot = (
+        raise ReviewRefused("not_found", 404, "Review not found.")
+    ec = (
         EventCaptain.objects.nocache()
         .select_for_update()
-        .select_related("captain")
+        .select_related("event", "captain")
         .get(pk=snapshot_id)
     )
-    review = CaptainReview.objects.nocache().select_related("rater").get(pk=review_pk)
-    return review, snapshot
-
-
-def _check_moderator(snapshot: EventCaptain, actor: CustomUser) -> None:
-    if snapshot.captain.user_id == actor.pk:
-        raise _refuse(
+    if ec.captain.user_id == actor.pk:
+        raise ReviewRefused(
             "cannot_moderate_own_reviews",
-            "Another organizer has to moderate reviews of you.",
             403,
+            "Another organizer has to moderate reviews of you.",
         )
+    review = CaptainReview.objects.nocache().get(pk=review_id)
+    return review, ec
 
 
 def _moderation_log(
     action: str,
     review: CaptainReview,
-    snapshot: EventCaptain,
+    ec: EventCaptain,
     actor: CustomUser,
-    result: RatingUpsert | None,
-    reason: str,
+    *,
+    before: int,
+    after: int,
+    reason: str | None,
 ) -> None:
+    details: dict[str, object] = {
+        "event_id": ec.event_id,
+        "captain_org_user_id": ec.captain_id,
+        "rater_org_user_id": review.rater_id,
+        "points_before": before,
+        "points_after": after,
+    }
+    if reason is not None:
+        details["reason"] = reason
     OrgLog.objects.create(
-        organization_id=snapshot.organization_id,
+        organization_id=ec.organization_id,
         actor=actor,
         action=action,
-        details={
-            "reason": reason,
-            "event_id": snapshot.event_id,
-            "captain_org_user_id": snapshot.captain_id,
-            "rater_org_user_id": review.rater_id,
-            "points_before": result.before if result is not None else None,
-            "points_after": result.after if result is not None else None,
-        },
+        details=details,
     )
 
 
 @transaction.atomic
 def void_review(
-    *, org_id: int, review_pk: int, actor: CustomUser, reason: str, now: datetime
+    org: Organization,
+    *,
+    review_id: int,
+    actor: CustomUser,
+    reason: str,
+    now: datetime,
 ) -> CaptainReview:
-    cleaned = check_reason(reason)
-    review, snapshot = _lock_review(org_id, review_pk)
+    cleaned = _check_reason(reason)
+    review, ec = _lock_review(org, review_id, actor)
     now = max(now, timezone.now())
-    _check_moderator(snapshot, actor)
     if review.void_kind == VoidKind.MODERATED:
         return review
-    if review.voided_at is not None and review.void_kind in RATER_REVIVABLE:
-        review.void_kind = VoidKind.MODERATED
-    else:
+    if review.voided_at is None:
         review.voided_at = now
-        review.void_kind = VoidKind.MODERATED
+    review.void_kind = VoidKind.MODERATED
     review.voided_by = actor
     review.void_reason = cleaned
     review.save()
-    result = upsert_captain_rating(snapshot, now=now, force=True)
-    _moderation_log("void_captain_review", review, snapshot, actor, result, cleaned)
+    before = _current_points(ec)
+    after, _ = _refresh(ec, get_leadership_settings(org.pk))
+    _moderation_log(
+        "void_captain_review",
+        review,
+        ec,
+        actor,
+        before=before,
+        after=after,
+        reason=cleaned,
+    )
     log.info(
         "captain_review_voided",
         system="org",
         subsystem="leadership",
-        org_id=org_id,
-        event_id=snapshot.event_id,
-        captain_org_user_id=snapshot.captain_id,
+        org_id=org.pk,
+        event_id=ec.event_id,
+        captain_org_user_id=ec.captain_id,
         actor_id=actor.pk,
     )
     return review
@@ -349,30 +366,37 @@ def void_review(
 
 @transaction.atomic
 def unvoid_review(
-    *, org_id: int, review_pk: int, actor: CustomUser, reason: str, now: datetime
+    org: Organization, *, review_id: int, actor: CustomUser, now: datetime
 ) -> CaptainReview:
-    cleaned = check_reason(reason)
-    review, snapshot = _lock_review(org_id, review_pk)
-    now = max(now, timezone.now())
-    _check_moderator(snapshot, actor)
+    review, ec = _lock_review(org, review_id, actor)
     if review.void_kind != VoidKind.MODERATED:
-        raise _refuse("not_moderated", "Only a moderated review can be restored.", 409)
-    if snapshot.voided_at is not None:
-        raise _refuse("snapshot_voided", "Reviews for this event are closed.", 409)
-    review.voided_at = None
-    review.void_kind = ""
-    review.voided_by = None
-    review.void_reason = ""
+        raise ReviewRefused(
+            "not_moderated", 409, "Only a moderated review can be restored."
+        )
+    if ec.voided_at is not None:
+        raise ReviewRefused(
+            "snapshot_voided", 409, "Reviews for this event are closed."
+        )
+    _clear_void(review)
     review.save()
-    result = upsert_captain_rating(snapshot, now=now, force=True)
-    _moderation_log("unvoid_captain_review", review, snapshot, actor, result, cleaned)
+    before = _current_points(ec)
+    after, _ = _refresh(ec, get_leadership_settings(org.pk))
+    _moderation_log(
+        "unvoid_captain_review",
+        review,
+        ec,
+        actor,
+        before=before,
+        after=after,
+        reason=None,
+    )
     log.info(
         "captain_review_unvoided",
         system="org",
         subsystem="leadership",
-        org_id=org_id,
-        event_id=snapshot.event_id,
-        captain_org_user_id=snapshot.captain_id,
+        org_id=org.pk,
+        event_id=ec.event_id,
+        captain_org_user_id=ec.captain_id,
         actor_id=actor.pk,
     )
     return review

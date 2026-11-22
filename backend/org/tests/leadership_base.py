@@ -13,7 +13,6 @@ from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.leadership.lifecycle import SnapshotResult, snapshot_event
 from org.leadership.reviews import submit_review
-from org.leadership.traits import materialize_traits
 from org.models import ContributionEntry, Organization, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain
 from org.tests.conduct_base import ConductTestCase
@@ -127,11 +126,10 @@ class LeadershipTestCase(ConductTestCase):
         now: datetime | None = None,
         event: Event | None = None,
     ) -> CaptainReview:
-        materialize_traits(self.org)
         return submit_review(
-            org_id=self.org.pk,
+            self.org,
             event_id=(event or self.event).pk,
-            captain_id=self.ou(captain).pk,
+            captain_org_user_id=self.ou(captain).pk,
             rater=self.ou(rater),
             scores=scores(value) if isinstance(value, int) else value,
             now=now or tz.now(),
