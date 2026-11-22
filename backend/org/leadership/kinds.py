@@ -19,7 +19,6 @@ RATED_KINDS: Final[tuple[LeadershipKind, ...]] = (
     LeadershipKind.PLACEMENT_3,
     LeadershipKind.DRAFT_COMPLETED,
 )
-FORMULA_KINDS: Final[tuple[LeadershipKind, ...]] = (LeadershipKind.CAPTAIN_RATING,)
 DEFAULT_POINTS: Final[dict[str, int]] = {
     LeadershipKind.CAPTAINED.value: 5,
     LeadershipKind.PLACEMENT_1.value: 10,

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from org.contributions.kinds import DEFAULT_POINTS, EVENT_STAFF_KINDS, ContributionKind
 from org.leadership.kinds import DEFAULT_POINTS as LEADERSHIP_POINTS
-from org.leadership.kinds import FORMULA_KINDS, LeadershipKind
+from org.leadership.kinds import LeadershipKind
 from org.standing.types import TrackKey
 
 
@@ -35,7 +35,7 @@ LEADERSHIP_KINDS: tuple[tuple[str, LedgerKind], ...] = tuple(
             track="leadership",
             default_points=LEADERSHIP_POINTS.get(kind.value),
             once_per_event=True,
-            formula=kind in FORMULA_KINDS,
+            formula=kind == LeadershipKind.CAPTAIN_RATING,
         ),
     )
     for kind in LeadershipKind
@@ -62,6 +62,6 @@ def kinds_for(track: TrackKey) -> frozenset[str]:
 ONCE_PER_EVENT_KINDS: frozenset[str] = frozenset(
     name for name, kind in KINDS.items() if kind.once_per_event
 )
-FORMULA_KIND_NAMES: frozenset[str] = frozenset(
+FORMULA_KINDS: frozenset[str] = frozenset(
     name for name, kind in KINDS.items() if kind.formula
 )
