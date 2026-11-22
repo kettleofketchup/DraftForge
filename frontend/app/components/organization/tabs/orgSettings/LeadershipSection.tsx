@@ -11,6 +11,10 @@ import {
 import { toast } from 'sonner';
 
 import { useOrganization } from '~/components/organization/hooks/useOrganization';
+import {
+  SettingNumberInput,
+  SettingsGroup,
+} from '~/components/organization/tabs/orgSettings/settingFields';
 import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
 import {
   submitForm,
@@ -293,28 +297,6 @@ const NUMBER_FIELDS: {
   },
 ];
 
-function NumberInput({
-  value,
-  onChange,
-  ...props
-}: Omit<React.ComponentProps<typeof Input>, 'value' | 'onChange'> & {
-  value: number | undefined;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <Input
-      type="number"
-      inputMode="decimal"
-      className="w-full sm:w-40"
-      value={value === undefined || Number.isNaN(value) ? '' : value}
-      onChange={(e) =>
-        onChange(e.target.value === '' ? Number.NaN : Number(e.target.value))
-      }
-      {...props}
-    />
-  );
-}
-
 function LeadershipSettingsFields({
   form,
   settings,
@@ -324,10 +306,7 @@ function LeadershipSettingsFields({
 }) {
   return (
     <Form {...form}>
-      <fieldset className="flex flex-col gap-4">
-        <legend className="mb-4 text-sm font-semibold">
-          Reviews and rating
-        </legend>
+      <SettingsGroup title="Reviews and rating">
         {NUMBER_FIELDS.map(({ name, label, help, step }) => (
           <FormField
             key={name}
@@ -337,7 +316,7 @@ function LeadershipSettingsFields({
               <FormItem>
                 <FormLabel>{label}</FormLabel>
                 <FormControl>
-                  <NumberInput
+                  <SettingNumberInput
                     step={step}
                     data-testid={`leadership-setting-${name}`}
                     name={field.name}
@@ -378,9 +357,8 @@ function LeadershipSettingsFields({
             </FormItem>
           )}
         />
-      </fieldset>
-      <fieldset className="flex flex-col gap-4">
-        <legend className="mb-4 text-sm font-semibold">Captain points</legend>
+      </SettingsGroup>
+      <SettingsGroup title="Captain points">
         {settings.points.map((kind) => (
           <FormField
             key={kind.kind}
@@ -397,7 +375,7 @@ function LeadershipSettingsFields({
                   />
                 </div>
                 <FormControl>
-                  <NumberInput
+                  <SettingNumberInput
                     step={1}
                     data-testid={`leadership-points-${kind.kind}`}
                     name={field.name}
@@ -413,7 +391,7 @@ function LeadershipSettingsFields({
             )}
           />
         ))}
-      </fieldset>
+      </SettingsGroup>
     </Form>
   );
 }
