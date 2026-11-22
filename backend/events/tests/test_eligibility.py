@@ -18,6 +18,7 @@ from events.eligibility import (
     unmet_requirements,
     validate_friend_id,
 )
+from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from events.schemas import DotaModalConfig, SignupInputPatch, dota_require_screenshot
 from events.serializers import EventSignupSerializer
@@ -462,7 +463,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         u = self.make_user()
         self._declared(u, "active", mmr=4000)
         s = process_rsvp(ev, u)
-        approve_signup(s)
+        approve_signup(s, actor=SignupActor.system())
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.APPROVED)
         self.assertEqual(s.unmet_requirements, [])
@@ -471,7 +472,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         ev = self.make_event(min_mmr=3000)
         u = self.make_user()
         s = EventSignup.objects.create(event=ev, user=u, status=SignupStatus.CANCELLED)
-        reinstate_signup(s)
+        reinstate_signup(s, actor=SignupActor.system())
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.PENDING_APPROVAL)
         self.assertEqual(s.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
@@ -483,7 +484,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         s = EventSignup.objects.create(
             event=ev, user=self.make_user(), status=SignupStatus.CANCELLED
         )
-        reinstate_signup(s)
+        reinstate_signup(s, actor=SignupActor.system())
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.APPROVED)
         self.assertEqual(s.unmet_requirements, [])
@@ -495,7 +496,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         ev = self.make_event(auto_confirm=True, tournament=tournament)
         u = self.make_user()
         s = EventSignup.objects.create(event=ev, user=u, status=SignupStatus.CANCELLED)
-        reinstate_signup(s)
+        reinstate_signup(s, actor=SignupActor.system())
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.CONFIRMED)
         self.assertTrue(tournament.users.filter(pk=u.pk).exists())
@@ -507,7 +508,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         u = self.make_user()
         self._declared(u, "active", mmr=4000)
         s = EventSignup.objects.create(event=ev, user=u, status=SignupStatus.CANCELLED)
-        reinstate_signup(s)
+        reinstate_signup(s, actor=SignupActor.system())
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.RSVP)
         self.assertEqual(s.unmet_requirements, [Unmet.RANK_SCREENSHOT_MISSING.value])
@@ -520,7 +521,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
             status=SignupStatus.REJECTED,
             unmet_requirements=[Unmet.DOTA_RANK_UNDECLARED.value],
         )
-        reinstate_signup(s)
+        reinstate_signup(s, actor=SignupActor.system())
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.APPROVED)
         self.assertEqual(s.unmet_requirements, [])
@@ -533,7 +534,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         other = process_rsvp(self.make_event(require_mmr_verified=True), u)
         other.refresh_from_db()
         self.assertEqual(other.unmet_requirements, [Unmet.MMR_UNVERIFIED.value])
-        approve_signup(first, mmr_override=5000)
+        approve_signup(first, mmr_override=5000, actor=SignupActor.system())
         other.refresh_from_db()
         self.assertEqual(other.unmet_requirements, [])
 

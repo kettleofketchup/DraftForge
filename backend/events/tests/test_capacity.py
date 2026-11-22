@@ -17,6 +17,7 @@ from events.capacity import (
     with_signup_counts,
 )
 from events.constants import EventState, SignupStatus
+from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from events.schemas import EventTaskSchema
 from events.serializers import EventSignupSerializer
@@ -234,7 +235,7 @@ class PromoteRequiresAtomicTests(TransactionTestCase):
 
     def test_promote_requires_atomic(self) -> None:
         with self.assertRaises(AssertionError):
-            _promote_from_waitlist(self.event)
+            _promote_from_waitlist(self.event, actor=SignupActor.system())
 
 
 NOTIFY_PATH = (

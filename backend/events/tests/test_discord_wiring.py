@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from events.constants import EventState
+from events.ledger import SignupActor
 from events.services import approve_signup, cancel_signup, confirm_signup, process_rsvp
 from events.tests.base import EventTestCase
 
@@ -31,7 +32,7 @@ class ServiceDispatchTest(EventTestCase):
             signup = process_rsvp(self.event, self.user)
         mock_notify.reset_mock()
         with self.captureOnCommitCallbacks(execute=True):
-            approve_signup(signup)
+            approve_signup(signup, actor=SignupActor.system())
         mock_notify.assert_called_once()
 
     @patch("events.services.notify_signup_changed")

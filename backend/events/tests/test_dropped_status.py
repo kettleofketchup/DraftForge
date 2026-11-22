@@ -13,6 +13,7 @@ from events.constants import EventState, SignupStatus
 from events.discord._shared import _existing_active_signup
 from events.discord.embeds import build_announcement_embeds, build_announcement_v2
 from events.discord.handlers import handle_signup_button
+from events.ledger import SignupActor
 from events.models import Event, EventSignup, ReadyCheck, ReadyCheckEntry
 from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE, ReadyCheckEntryState
 from events.services import (
@@ -81,7 +82,7 @@ class DroppedStatusTests(EventTestCase):
         signup = self._dropped()
         calls: dict[str, Callable[[], Any]] = {
             "cancel": lambda: cancel_signup(signup),
-            "reject": lambda: reject_signup(signup),
+            "reject": lambda: reject_signup(signup, actor=SignupActor.system()),
             "demote": lambda: demote_to_waitlist(signup),
             "decline": lambda: decline_signup(self.dropped_event, self.player),
             "tentative": lambda: create_tentative_signup(

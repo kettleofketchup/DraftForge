@@ -19,6 +19,7 @@ from events.constants import EventState, SignupStatus
 from events.discord.handlers import handle_signup_button
 from events.discord.reactions import handle_reaction_signup
 from events.eligibility import Unmet, evaluate_signup, refresh_unmet_requirements
+from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from events.services import (
     _promote_from_waitlist,
@@ -306,7 +307,7 @@ class EnforcementHooksTest(ConductTestCase):
         user = self.blocked_member()
         event = self.make_event()
 
-        signup = staff_add_signup(event, user)
+        signup = staff_add_signup(event, user, actor=SignupActor.system())
 
         self.assertEqual(signup.unmet_requirements, [CODE])
         self.assertEqual(signup.status, SignupStatus.PENDING_APPROVAL)
@@ -660,7 +661,7 @@ class QueryBudgetTest(ConductTestCase):
             )
 
         self.assert_budget(
-            lambda: _promote_from_waitlist(event),
+            lambda: _promote_from_waitlist(event, actor=SignupActor.system()),
             lambda: self._signups(event),
             gates_built=1,
         )
@@ -682,7 +683,7 @@ class QueryBudgetTest(ConductTestCase):
             )
 
         with CaptureQueriesContext(connection) as ctx:
-            promoted = _promote_from_waitlist(event)
+            promoted = _promote_from_waitlist(event, actor=SignupActor.system())
 
         self.assertEqual(len(promoted), 2)
         score_queries = [

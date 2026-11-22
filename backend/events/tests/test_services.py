@@ -4,6 +4,7 @@ from django.utils import timezone as tz
 
 from common.game import GameType
 from events.constants import EventState, SignupStatus, SignupType
+from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from events.tests.base import EventTestCase
 
@@ -89,7 +90,7 @@ class SignupProcessingTests(EventTestCase):
         from events.services import approve_signup, process_rsvp
 
         signup = process_rsvp(self.event, self.user)
-        approved = approve_signup(signup)
+        approved = approve_signup(signup, actor=SignupActor.system())
         self.assertEqual(approved.status, SignupStatus.APPROVED)
 
     def test_approve_only_from_valid_states(self):
@@ -101,20 +102,20 @@ class SignupProcessingTests(EventTestCase):
             status=SignupStatus.CONFIRMED,
         )
         with self.assertRaises(ValueError):
-            approve_signup(signup)
+            approve_signup(signup, actor=SignupActor.system())
 
     def test_reject_signup(self):
         from events.services import process_rsvp, reject_signup
 
         signup = process_rsvp(self.event, self.user)
-        rejected = reject_signup(signup)
+        rejected = reject_signup(signup, actor=SignupActor.system())
         self.assertEqual(rejected.status, SignupStatus.REJECTED)
 
     def test_confirm_signup(self):
         from events.services import approve_signup, confirm_signup, process_rsvp
 
         signup = process_rsvp(self.event, self.user)
-        signup = approve_signup(signup)
+        signup = approve_signup(signup, actor=SignupActor.system())
         confirmed = confirm_signup(signup)
         self.assertEqual(confirmed.status, SignupStatus.CONFIRMED)
 
@@ -143,7 +144,7 @@ class SignupProcessingTests(EventTestCase):
         org_user, _ = OrgUser.objects.get_or_create(
             user=self.user, organization=self.event.organization
         )
-        approve_signup(signup, mmr_override=3500)
+        approve_signup(signup, mmr_override=3500, actor=SignupActor.system())
         org_user.refresh_from_db()
         self.assertEqual(
             org_user.game_mmrs.nocache().get(game_type=GameType.DOTA2).mmr, 3500
@@ -162,7 +163,7 @@ class SignupProcessingTests(EventTestCase):
         org_user, _ = OrgUser.objects.get_or_create(
             user=self.user, organization=self.event.organization
         )
-        approve_signup(signup)
+        approve_signup(signup, actor=SignupActor.system())
         org_user.refresh_from_db()
         self.assertFalse(org_user.game_mmrs.nocache().exists())
         self.assertFalse(org_user.has_active_dota_mmr)
@@ -289,7 +290,7 @@ class WaitlistPromotionTests(EventTestCase):
 
         signup1 = process_rsvp(self.event, self.user)
         signup2 = process_rsvp(self.event, self.user_incomplete)
-        reject_signup(signup1)
+        reject_signup(signup1, actor=SignupActor.system())
         signup2.refresh_from_db()
         self.assertNotEqual(signup2.status, SignupStatus.WAITLISTED)
 

@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 from app.models import CustomUser
 from events.constants import Commitment, EventState, SignupStatus
 from events.exceptions import ImmutableFieldError
+from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from events.services import (
     cancel_signup,
@@ -152,7 +153,7 @@ class SignupLineStampingTests(TestCase):
         event = self._event()
         declined = decline_signup(event, self.users[0])
         before = tz.now()
-        reinstate_signup(declined)
+        reinstate_signup(declined, actor=SignupActor.system())
         declined.refresh_from_db()
         self.assertEqual(declined.status, SignupStatus.RSVP)
         self.assertGreaterEqual(declined.first_signed_up_at, before)
@@ -167,7 +168,7 @@ class SignupLineStampingTests(TestCase):
         signup = create_tentative_signup(event, self.users[0])
         cancel_signup(signup)
         signup.refresh_from_db()
-        reinstate_signup(signup)
+        reinstate_signup(signup, actor=SignupActor.system())
         signup.refresh_from_db()
         self.assertEqual(signup.status, SignupStatus.RSVP)
         self.assertEqual(signup.commitment, Commitment.MAIN)
@@ -179,7 +180,7 @@ class SignupLineStampingTests(TestCase):
         cancel_signup(signup)
         Event.objects.filter(pk=event.pk).update(state=EventState.ROLL_CALL)
         signup = EventSignup.objects.nocache().get(pk=signup.pk)
-        reinstate_signup(signup)
+        reinstate_signup(signup, actor=SignupActor.system())
         signup.refresh_from_db()
         self.assertEqual(signup.status, SignupStatus.APPROVED)
         self.assertEqual(signup.commitment, Commitment.MAIN)
@@ -189,7 +190,7 @@ class SignupLineStampingTests(TestCase):
         old = process_rsvp(event, self.users[0])
         later = process_rsvp(event, self.users[1])
         past = self._age_first(old)
-        reject_signup(old)
+        reject_signup(old, actor=SignupActor.system())
         new = process_rsvp(event, self.users[0])
         self._assert_carried(new, old.pk, past, later, Commitment.MAIN)
 
@@ -230,7 +231,7 @@ class SignupLineStampingTests(TestCase):
         e = process_rsvp(event, self.users[4])
         self.assertEqual(e.status, SignupStatus.WAITLISTED)
         a.refresh_from_db()
-        reinstate_signup(a)
+        reinstate_signup(a, actor=SignupActor.system())
         a.refresh_from_db()
         self.assertEqual(a.status, SignupStatus.WAITLISTED)
         self.assertEqual(a.line_seq, 1)

@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 from app.models import Tournament
 from events.admission import NOT_ACCEPTING_MESSAGE, SELF_SERVE_DISABLED_MESSAGE
 from events.constants import EventState, RepeatFrequency, SignupStatus
+from events.ledger import SignupActor
 from events.models import Event, EventRepeater, EventSignup
 from events.services import (
     create_tentative_signup,
@@ -90,7 +91,7 @@ class SelfServeAdmissionTests(EventTestCase):
         self.assertNotEqual(signup.status, SignupStatus.CANCELLED)
 
     def test_staff_add_allowed(self) -> None:
-        signup = staff_add_signup(self.closed, self.player)
+        signup = staff_add_signup(self.closed, self.player, actor=SignupActor.system())
         self.assertEqual(signup.event_id, self.closed.pk)
         self.assertNotEqual(signup.status, SignupStatus.CANCELLED)
 

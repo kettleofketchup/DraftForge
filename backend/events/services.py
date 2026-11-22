@@ -25,6 +25,7 @@ from events.constants import (
     Commitment,
     EventState,
     RepeatFrequency,
+    SignupMeans,
     SignupOpenMode,
     SignupStatus,
     SignupType,
@@ -563,7 +564,11 @@ def apply_signup_input(
 
 
 def staff_add_signup(
-    event: Event, user: CustomUser, event_team: EventTeam | None = None
+    event: Event,
+    user: CustomUser,
+    event_team: EventTeam | None = None,
+    *,
+    actor: SignupActor,
 ) -> EventSignup:
     """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
     if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
@@ -583,7 +588,9 @@ APPROVABLE_STATUSES = [
 
 
 @transaction.atomic
-def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> EventSignup:
+def approve_signup(
+    signup: EventSignup, mmr_override: int | None = None, *, actor: SignupActor
+) -> EventSignup:
     """Approve a signup, optionally setting the user's MMR."""
     if signup.status not in APPROVABLE_STATUSES:
         raise ValueError(f"Cannot approve signup in '{signup.status}' status.")
@@ -609,7 +616,7 @@ def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> Even
 
 
 @transaction.atomic
-def reject_signup(signup: EventSignup) -> EventSignup:
+def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Reject a signup."""
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
@@ -618,7 +625,7 @@ def reject_signup(signup: EventSignup) -> EventSignup:
     signup.save(update_fields=["status", "updated_at"])
     _roster_remove_if_left(signup)
     if prior_status in seat_holding_statuses(signup.event):
-        _promote_from_waitlist(signup.event)
+        _promote_from_waitlist(signup.event, actor=actor)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -652,7 +659,7 @@ def cancel_signup(
     )
     _roster_remove_if_left(signup)
     if prior_status in seat_holding_statuses(signup.event):
-        _promote_from_waitlist(signup.event)
+        _promote_from_waitlist(signup.event, actor=actor or SignupActor.system())
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     # Log on commit, not on entry — same reason as signup_created in process_rsvp:
@@ -676,8 +683,14 @@ def _by_member(actor: SignupActor | None) -> bool:
     return actor is not None and actor.role == ActorRole.MEMBER
 
 
+def _staff_or_system_actor(user: CustomUser | None) -> SignupActor:
+    if user is None:
+        return SignupActor.system()
+    return SignupActor(user=user, role=ActorRole.STAFF, means=SignupMeans.WEB)
+
+
 def _promote_one(
-    locked: Event, signup: EventSignup, *, cache: StandingCache
+    locked: Event, signup: EventSignup, *, cache: StandingCache, actor: SignupActor
 ) -> EventSignup:
     signup.waitlist_position = None
     result = evaluate_signup(
@@ -691,7 +704,7 @@ def _promote_one(
     return signup
 
 
-def _promote_from_waitlist(event: Event) -> list[EventSignup]:
+def _promote_from_waitlist(event: Event, *, actor: SignupActor) -> list[EventSignup]:
     """Promote waitlisted signups into every free seat, in waitlist order as
     reordered by the org's standing tracks."""
     locked = lock_event(event)
@@ -707,14 +720,14 @@ def _promote_from_waitlist(event: Event) -> list[EventSignup]:
         for candidate in standing.promotion_order(locked, candidates, cache=cache):
             if not has_free_seat(locked):
                 break
-            promoted.append(_promote_one(locked, candidate, cache=cache))
+            promoted.append(_promote_one(locked, candidate, cache=cache, actor=actor))
     if promoted:
         invalidate_after_commit(locked)
     return promoted
 
 
 @transaction.atomic
-def unconfirm_signup(signup: EventSignup) -> EventSignup:
+def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Revert a confirmed signup back to approved (e.g., during roll call adjustments)."""
     if signup.status != SignupStatus.CONFIRMED:
         raise ValueError("Only confirmed signups can be unconfirmed.")
@@ -748,7 +761,7 @@ def demote_to_waitlist(signup: EventSignup) -> EventSignup:
 
 @transaction.atomic
 def reinstate_signup(
-    signup: EventSignup, *, for_staff_placement: bool = True
+    signup: EventSignup, *, for_staff_placement: bool = True, actor: SignupActor
 ) -> EventSignup:
     """Bring a removed signup back into the active list.
 

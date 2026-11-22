@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser, PositionsModel
 from events.constants import EventState, SignupStatus
+from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from events.services import (
     approve_signup,
@@ -42,13 +43,13 @@ class StaffAddSignupTest(TestCase):
 
     def test_staff_add_succeeds_in_signups_open(self):
         event = self._make_event(EventState.SIGNUPS_OPEN)
-        signup = staff_add_signup(event, self.user)
+        signup = staff_add_signup(event, self.user, actor=SignupActor.system())
         assert signup.pk is not None
         assert signup.event_id == event.pk
 
     def test_staff_add_succeeds_in_roll_call(self):
         event = self._make_event(EventState.ROLL_CALL)
-        signup = staff_add_signup(event, self.user)
+        signup = staff_add_signup(event, self.user, actor=SignupActor.system())
         assert signup.pk is not None
 
     def test_staff_add_rejects_other_states(self):
@@ -60,7 +61,7 @@ class StaffAddSignupTest(TestCase):
         ):
             event = self._make_event(state)
             with self.assertRaises(ValueError):
-                staff_add_signup(event, self.user)
+                staff_add_signup(event, self.user, actor=SignupActor.system())
 
     def test_process_rsvp_still_rejects_roll_call(self):
         """Regression: public path stays locked during roll call."""
@@ -82,7 +83,7 @@ class StaffAddSignupTest(TestCase):
     @patch("events.services.invalidate_after_commit")
     def test_staff_add_invalidates_cache(self, mock_invalidate):
         event = self._make_event(EventState.ROLL_CALL)
-        staff_add_signup(event, self.user)
+        staff_add_signup(event, self.user, actor=SignupActor.system())
         mock_invalidate.assert_called_with(event)
 
     def test_staff_add_waitlists_when_at_capacity(self):
@@ -98,7 +99,7 @@ class StaffAddSignupTest(TestCase):
             user=other,
             status=SignupStatus.APPROVED,
         )
-        signup = staff_add_signup(event, self.user)
+        signup = staff_add_signup(event, self.user, actor=SignupActor.system())
         assert signup.status == SignupStatus.WAITLISTED
         assert signup.waitlist_position == 1
 
@@ -110,7 +111,7 @@ class StaffAddSignupTest(TestCase):
             status=SignupStatus.APPROVED,
         )
         with self.assertRaises(ValueError):
-            staff_add_signup(event, self.user)
+            staff_add_signup(event, self.user, actor=SignupActor.system())
 
     def test_staff_add_re_rsvps_after_cancellation(self):
         """Cancelled signups can be staff-added again (covers _create_signup re-RSVP branch)."""
@@ -120,7 +121,7 @@ class StaffAddSignupTest(TestCase):
             user=self.user,
             status=SignupStatus.CANCELLED,
         )
-        signup = staff_add_signup(event, self.user)
+        signup = staff_add_signup(event, self.user, actor=SignupActor.system())
         # The original cancelled row was deleted; the new one should NOT be cancelled.
         assert signup.status != SignupStatus.CANCELLED
 
@@ -135,7 +136,7 @@ class StaffAddSignupTest(TestCase):
         event.require_mmr_verified = False
         event.require_profile_complete = False
         event.save()
-        signup = staff_add_signup(event, self.user)
+        signup = staff_add_signup(event, self.user, actor=SignupActor.system())
         assert signup.status == SignupStatus.CONFIRMED
 
     @patch("events.services.invalidate_after_commit")
@@ -161,7 +162,7 @@ class PendingEligibilityReasonsTests(EventTestCase):
         self.assertEqual(signup.eligibility_reasons[0]["rule"], "require-steam-id")
         self.assertIsNotNone(signup.eligibility_checked_at)
 
-        approve_signup(signup)
+        approve_signup(signup, actor=SignupActor.system())
         signup.refresh_from_db()
         self.assertEqual(signup.status, SignupStatus.APPROVED)
         self.assertEqual(signup.eligibility_reasons, [])
