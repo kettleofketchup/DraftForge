@@ -6,7 +6,8 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, League
+from app.models import CustomUser
+from league.models import League
 from org.features import FeatureKey, org_has_feature, set_org_feature
 from org.models import Organization, OrgUser
 from org.models_conduct import OrgConductSettings

@@ -6,7 +6,8 @@ Not covered by the test-db hash: the tournament is built on demand through
 
 from datetime import date
 
-from app.models import CustomUser, League, Team, Tournament
+from app.models import CustomUser, Team, Tournament
+from league.models import League
 from tests.populate.constants import DTX_STEAM_LEAGUE_ID
 
 TEAM_MANAGEMENT_TOURNAMENT_NAME: str = "Team Management Tournament"

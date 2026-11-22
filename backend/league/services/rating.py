@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from app.models import League, LeagueRating
+    from league.models import League
+    from league.models_rating import LeagueRating
 
 
 class RatingSystem(ABC):
