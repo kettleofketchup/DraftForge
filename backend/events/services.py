@@ -344,6 +344,7 @@ def _create_signup(
     return signup
 
 
+@transaction.atomic
 def process_rsvp(
     event: Event,
     user: CustomUser,
@@ -359,6 +360,7 @@ def process_rsvp(
         event_id=event.pk,
         user_id=user.pk,
     )
+    event = _reread_event(event)
     ensure_self_serve(event, user, intent=Commitment.MAIN)
     signup = _create_signup(event, user, event_team=event_team, actor=actor)
     # Defer signup_created log until the outermost atomic commits — otherwise

@@ -80,6 +80,15 @@ class StaffAddSignupTest(TestCase):
             with self.assertRaises(ValueError):
                 process_rsvp(event, self.user, actor=SYSTEM)
 
+    def test_process_rsvp_stale_open_instance_does_not_admit_a_closed_event(
+        self,
+    ) -> None:
+        event = self._make_event(EventState.SIGNUPS_OPEN)
+        Event.objects.filter(pk=event.pk).update(state=EventState.CANCELLED)
+        with self.assertRaises(ValueError):
+            process_rsvp(event, self.user, actor=SYSTEM)
+        self.assertFalse(EventSignup.objects.filter(user=self.user).exists())
+
     @patch("events.services.invalidate_after_commit")
     def test_staff_add_invalidates_cache(self, mock_invalidate):
         event = self._make_event(EventState.ROLL_CALL)
