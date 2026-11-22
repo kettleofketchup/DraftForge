@@ -308,6 +308,31 @@ Two workflows use hash tagging:
 - **`build-docker-images.yml`** — Triggers on push to `main` when Dockerfiles or lock files change. Builds and pushes hash-tagged images.
 - **`playwright.yml`** — Pulls images by hash before running tests. Falls back to building if no image matches.
 
+### Build Timing
+
+Every `docker::buildx` build with BuildKit (not podman) ends with a report of its slowest
+steps, from `docker buildx history logs` via `scripts/buildx_timing.py`:
+
+```text
+── slowest build steps (buildx frontend-dev (runtime-dev): 2m03s) ──
+     63.0s  [runtime-dev 3/3] RUN npx playwright install --with-deps chromium
+     41.3s  [deps 2/4] RUN npm ci
+  … plus 4 cached step(s)
+```
+
+In GitHub Actions the total is also a `::notice` annotation and the table goes to the
+job summary. `just ci::timing` collects these reports across runs, along with queue
+waits, step durations and per-command timings parsed from the job logs (composite
+actions such as `setup-playwright-stack` only show their inner steps there):
+
+```bash
+just ci::timing                                   # last 12 runs of the main workflows
+just ci::timing --runs 30 --workflows playwright.yml
+```
+
+It writes CSVs and `summary.md` to `.ci-timing/` (gitignored). It needs only `python3`
+and an authenticated `gh`.
+
 ## Common Docker Operations
 
 ```bash

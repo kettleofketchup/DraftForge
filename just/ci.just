@@ -143,3 +143,9 @@ backend-test-labels group:
             ;;
         *) echo "unknown group: $group (app, migrations or rest)" >&2; exit 2 ;;
     esac
+
+# Pull queue waits, step and per-command timings, and buildx layer reports for recent runs into .ci-timing/summary.md; e.g. ci::timing --runs 20 --workflows playwright.yml
+[group('ci')]
+[positional-arguments]
+timing *args:
+    cd {{quote(root)}} && python3 -I scripts/ci_timing.py "$@"
