@@ -1,4 +1,5 @@
 import ast
+import tempfile
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -240,6 +241,21 @@ _LEAGUE_ADMIN_TEAM_VIEWS = (
     "add_league_member",
 )
 
+_LEAGUE_RETIRED_TEST_DEFS = {
+    "app.tests.test_league": ("LeagueAPITest",),
+    "app.tests.test_league_role_fields": ("LeagueRoleFieldsTest",),
+    "app.tests.test_league_serializer": (
+        "LeaguePatchSteamLeagueIdCacheTest",
+        "LeaguePatchSteamLeagueIdTest",
+        "LeagueUsersNameFieldsTest",
+        "ValidateSteamLeagueIdTest",
+    ),
+    "app.tests.test_match_finalization": (
+        "AgeDecayCalculationTest",
+        "MatchFinalizationServiceTest",
+    ),
+}
+
 LEAGUE = MovedSlice(
     name="league",
     source_app="app",
@@ -264,6 +280,11 @@ LEAGUE = MovedSlice(
                 ("app.permissions_tournament", name)
                 for name in _LEAGUE_PERMISSION_NAMES
             ),
+            *(
+                (module, name)
+                for module, names in _LEAGUE_RETIRED_TEST_DEFS.items()
+                for name in names
+            ),
         }
     ),
     retired_modules=frozenset(
@@ -283,6 +304,18 @@ LEAGUE = MovedSlice(
 )
 
 MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG, LEAGUE)
+
+# Slices cut before the rule that a retired module's defs go into `moved`;
+# their modules were renamed or split on the way out.
+RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
+    {HERO_DRAFT.name, TEAM_DRAFT.name, ORG.name}
+)
+
+# retired module -> where its defs live now, when that is not the same path
+# under the new app; None means renamed within the source app.
+RETIRED_MODULE_HOMES: dict[str, str | None] = {
+    "app.tests.test_league_rating": None,
+}
 
 # target app -> production file (relative to backend/) -> what it may import from that app
 ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
@@ -805,6 +838,39 @@ def _migration_files(base: Path) -> Iterator[tuple[str, str]]:
             yield file.relative_to(base).as_posix(), file.read_text()
 
 
+def find_unlisted_retired_defs(
+    slices: tuple[MovedSlice, ...],
+    base: Path,
+    homes: dict[str, str | None] = RETIRED_MODULE_HOMES,
+    grandfathered: frozenset[str] = RETIRED_DEFS_GRANDFATHERED,
+) -> list[str]:
+    """Retired modules whose new home defines a top-level name not in `moved`."""
+    found: list[str] = []
+    for s in slices:
+        if s.name in grandfathered:
+            continue
+        for module in sorted(s.retired_modules):
+            if module in homes:
+                home = homes[module]
+            else:
+                home = s.new_app + module.removeprefix(s.source_app)
+            if home is None:
+                continue
+            path = base / Path(*home.split(".")).with_suffix(".py")
+            if not path.exists():
+                found.append(
+                    f"[{s.name}] {module}: new home {home} not found; "
+                    "map it in RETIRED_MODULE_HOMES"
+                )
+                continue
+            listed = {name for old, name in s.moved if old == module}
+            tree = ast.parse(path.read_text(), filename=str(path))
+            for name, _line in _top_level_defs(tree):
+                if name not in listed:
+                    found.append(f"[{s.name}] {module}.{name} missing from moved")
+    return found
+
+
 FIXTURE_SLICE = MovedSlice(
     name="fixture",
     source_app="src",
@@ -1024,6 +1090,31 @@ class GuardSelfTests(SimpleTestCase):
         self.assertIn(path, violations[0])
         self.assertEqual(self.ancestry(source, {("dst", "0003_x")}, path), [])
 
+    def unlisted_retired_defs(
+        self, source: str, homes: dict[str, str | None] | None = None
+    ) -> list[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "dst").mkdir()
+            (Path(tmp) / "dst" / "old.py").write_text(source)
+            return find_unlisted_retired_defs(
+                (FIXTURE_SLICE,), Path(tmp), homes or {}, frozenset()
+            )
+
+    def test_retired_module_def_missing_from_moved(self) -> None:
+        found = self.unlisted_retired_defs("class Moved:\n    pass\n")
+        self.assertEqual(found, ["[fixture] src.old.Moved missing from moved"])
+
+    def test_retired_module_home_not_found(self) -> None:
+        found = self.unlisted_retired_defs("", {"src.old": "dst.renamed"})
+        self.assertEqual(len(found), 1)
+        self.assertIn("RETIRED_MODULE_HOMES", found[0])
+
+    def test_retired_module_renamed_in_source_app_skipped(self) -> None:
+        found = self.unlisted_retired_defs(
+            "def gone() -> None: ...\n", {"src.old": None}
+        )
+        self.assertEqual(found, [])
+
     def test_two_argument_get_model(self) -> None:
         self.assertFlagged('apps.get_model("src", "Moved")\n', "x.py")
         self.assertFlagged('apps.get_model("src", "moved")\n', "src/signals.py")
@@ -1104,6 +1195,9 @@ class AppBoundaryTests(SimpleTestCase):
                 with self.subTest(module=module):
                     self.assertFalse((self.base / rel.with_suffix(".py")).exists())
                     self.assertFalse((self.base / rel / "__init__.py").exists())
+
+    def test_retired_module_defs_listed_in_moved(self) -> None:
+        self.assertEqual(find_unlisted_retired_defs(MOVED_SLICES, self.base), [])
 
     def test_new_apps_registered(self) -> None:
         labels = {entry.split(".")[0] for entry in MODEL_APPS}
