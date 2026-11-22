@@ -84,6 +84,7 @@ import {
   useIsOrganizationOwner,
   useIsOrganizationStaff,
 } from '~/hooks/usePermissions';
+import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { generateMeta } from '~/lib/seo';
 import type { OrganizationSSR } from '~/lib/ssr-types';
 import { queryClient } from '~/root';
@@ -341,8 +342,13 @@ export default function OrganizationDetailPage() {
   const hasBotAccess = botStatus?.has_bot ?? null;
 
   // Page nav options for mobile navbar dropdown
-  const userCountDisplay =
-    orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length;
+  const userCountDisplay = memberCountDisplay({
+    entityId: pk,
+    loadedForId: orgUsersOrgId,
+    loading: orgUsersLoading,
+    loadedCount: orgUserPks.length,
+    fallbackCount: organization?.users_count,
+  });
   const pageNavOptions = useMemo(
     () =>
       buildOrgPageNavOptions({
