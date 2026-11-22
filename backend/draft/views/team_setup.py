@@ -9,7 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
-from app.functions.tournament import _serialize_tournament
+from app.functions.tournament import serialize_tournament
 from app.models import CustomUser, Team, TeamLog, TeamLogVia, Tournament
 from app.permissions_tournament import can_edit_tournament
 from draft.models import Draft
@@ -132,7 +132,7 @@ def generate_draft_rounds(request: Request) -> Response:
         kept_count=len(report.kept_teams),
         forced=force,
     )
-    data = _serialize_tournament(tournament)
+    data = serialize_tournament(tournament)
     data["draft_reset"] = report.as_dict()
     return Response(data, status=201)
 
@@ -228,7 +228,7 @@ def rebuild_team(request: Request) -> Response:
         subsystem="draft",
         tournament_id=tournament.pk,
     )
-    return Response(_serialize_tournament(tournament), status=201)
+    return Response(serialize_tournament(tournament), status=201)
 
 
 @api_view(["POST"])

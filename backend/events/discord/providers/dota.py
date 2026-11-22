@@ -1,6 +1,6 @@
 """Dota 2 signup handler: profile gating, modal config, modal submit, rank flow.
 
-``DotaHandler`` carries the four common operations plus the eight Dota-only
+``DotaHandler`` carries the four common operations plus the seven Dota-only
 rank-flow operations the thin dispatcher in ``handlers.py`` delegates to.
 
 CACHE GUARDRAIL (#268): ``set_position`` writes ``PlayerDotaProfile`` (a
@@ -41,6 +41,15 @@ if TYPE_CHECKING:
 # events.services -> events.discord(__init__) -> handlers import cycle.
 
 log = get_logger(__name__)
+
+
+def _awaiting_rank_screenshot(event: Event, profile: PlayerDotaProfile) -> bool:
+    """A medal pick is an active or previous rank; an unset status counts as active."""
+    status = "previous" if profile.rank_status == "previous" else "active"
+    return (
+        dota_require_screenshot(status, DotaModalConfig.from_event(event))
+        and not profile.rank_screenshot
+    )
 
 
 def _check_dota_profile_complete(org_user: OrgUser, event: Event | None = None) -> bool:
@@ -95,7 +104,7 @@ class DotaHandler:
         # NOTE: positions are collected in the follow-up PositionConfirmButton
         # flow, not in this modal.
         rank_status = values.get("rank_status") or None
-        # Coerce legacy non-canonical values to "never" (matches prior behavior).
+        # Coerce legacy non-canonical values to "never".
         if rank_status and rank_status not in ("active", "previous", "never"):
             rank_status = "never"
 
@@ -149,11 +158,14 @@ class DotaHandler:
                 patch=SignupInputPatch(rank_status=rank_status),
             )
         except DjangoValidationError:
-            # Fail silently per existing behavior (function returns None either way).
+            # Swallowed: the caller gets None on success and failure alike.
             pass
 
     def rank_medal_select(self, event: Event, discord_user_id: str, medal: str) -> dict:
-        """Handle active rank medal selection. Saves medal and signs up."""
+        """Save an active or previous rank medal pick and sign up.
+
+        Signup is deferred when a rank screenshot is still required.
+        """
         from events.services import apply_signup_input
 
         org_user, user = _get_org_user(event, discord_user_id)
@@ -174,8 +186,7 @@ class DotaHandler:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
             return {"action": "error", "message": msg}
 
-        # Check if screenshot required before completing signup
-        if event.discord_require_rank_screenshot and not profile.rank_screenshot:
+        if _awaiting_rank_screenshot(event, profile):
             _log_interaction(event.pk, "awaiting_rank_screenshot", discord_user_id)
             return {
                 "action": "needs_screenshot",
@@ -199,49 +210,6 @@ class DotaHandler:
                 discord_user_id,
                 success=False,
                 error_message=str(e),
-            )
-            return {"action": "error", "message": str(e)}
-
-    def previous_rank_submit(
-        self, event: Event, discord_user_id: str, medal: str, date_text: str
-    ) -> dict:
-        """Handle previous rank modal submission. Saves rank info and signs up."""
-        from events.services import apply_signup_input
-
-        org_user, user = _get_org_user(event, discord_user_id)
-        if org_user is not None:
-            bind_contextvars(org_user_id=org_user.pk)
-        if user is not None:
-            bind_contextvars(user_id=user.pk)
-        if not org_user:
-            return {"action": "error", "message": "Not found."}
-
-        try:
-            profile = apply_signup_input(
-                org_user=org_user,
-                event=event,
-                patch=SignupInputPatch(rank_medal=medal),
-            )
-        except DjangoValidationError as exc:
-            msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-            return {"action": "error", "message": msg}
-
-        # Check if screenshot required before completing signup
-        if event.discord_require_rank_screenshot and not profile.rank_screenshot:
-            _log_interaction(event.pk, "awaiting_rank_screenshot", discord_user_id)
-            return {
-                "action": "needs_screenshot",
-                "screenshot_type": "rank",
-            }
-
-        try:
-            return _direct_signup(event, user)
-        except ValueError as e:
-            log.warning(
-                "signup_rejected",
-                system="discord",
-                subsystem="interaction",
-                reason=str(e),
             )
             return {"action": "error", "message": str(e)}
 
@@ -273,7 +241,6 @@ class DotaHandler:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
             return {"action": "error", "message": msg}
 
-        # Check if screenshot required before completing signup
         if (
             event.discord_require_battlecup_screenshot
             and not profile.battlecup_screenshot
@@ -314,7 +281,6 @@ class DotaHandler:
         """Validate and save screenshot URL to PlayerDotaProfile, then sign up."""
         from events.services import apply_signup_input
 
-        # Validate URL
         if not attachment_url:
             return {"success": False, "message": "No file provided."}
 

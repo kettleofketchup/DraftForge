@@ -20,7 +20,7 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.serializers import _users_remaining_pks
+from app.serializers import users_remaining_pks
 from app.services import team_management
 from app.services.team_management import (
     DEFAULT_MAX_STANDINS,
@@ -862,7 +862,7 @@ class CaptainDraftFollowUpTests(TeamManagementFixture, TestCase):
         self.assertNotIn(self.c.pk, remaining)
         self.assertEqual(remaining, {self.p1.pk, self.p2.pk})
         state = tournament_state_queryset(fresh=True).get(pk=self.tournament.pk)
-        pool = _users_remaining_pks(state.draft)
+        pool = users_remaining_pks(state.draft)
         self.assertNotIn(self.c.pk, pool)
         self.assertEqual(set(pool), {self.p1.pk, self.p2.pk})
 
@@ -876,7 +876,7 @@ class CaptainDraftFollowUpTests(TeamManagementFixture, TestCase):
         remaining = set(fresh.users_remaining.values_list("pk", flat=True))
         self.assertEqual(remaining, {self.p2.pk})
         state = tournament_state_queryset(fresh=True).get(pk=self.tournament.pk)
-        self.assertEqual(set(_users_remaining_pks(state.draft)), {self.p2.pk})
+        self.assertEqual(set(users_remaining_pks(state.draft)), {self.p2.pk})
 
     def test_presence_reset_and_pending_emits(self) -> None:
         draft = self.make_draft(TeamDraftState.PENDING)
@@ -1499,7 +1499,7 @@ class DraftBookkeepingTests(TeamManagementFixture, TestCase):
         fresh = Draft.objects.nocache().get(pk=self.draft.pk)
         remaining = set(fresh.users_remaining.values_list("pk", flat=True))
         state = tournament_state_queryset(fresh=True).get(pk=self.tournament.pk)
-        self.assertEqual(set(_users_remaining_pks(state.draft)), remaining)
+        self.assertEqual(set(users_remaining_pks(state.draft)), remaining)
         return remaining
 
     def test_dropout_not_in_pool(self) -> None:

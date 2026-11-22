@@ -15,6 +15,20 @@ import type {
   MMRTarget,
 } from '~/components/api/api';
 import { importCSVToOrg, importCSVToTournament } from '~/components/api/api';
+import {
+  DEFAULT_GAME_TYPE,
+  GAME_LABEL,
+  GAME_TYPE,
+  GAME_TYPES,
+  toGameType,
+  type GameTypeValue,
+} from '~/components/game/constants';
+import {
+  BrandSelect,
+  BrandSelectContent,
+  BrandSelectItem,
+  BrandSelectTrigger,
+} from '~/components/ui/brand-select';
 import { Button } from '~/components/ui/button';
 import {
   CancelButton,
@@ -39,6 +53,7 @@ import {
 } from '~/components/ui/select';
 import type { UserType } from '~/components/user/types';
 import { UserStrip } from '~/components/user/UserStrip';
+import { useContextGameType } from '~/hooks/useGameType';
 
 import { parseCSV, validateRows } from './csvParser';
 import type {
@@ -64,6 +79,7 @@ export function CSVImportModal({
   const [error, setError] = useState<string | null>(null);
   const [updateMmr, setUpdateMmr] = useState(false);
   const [mmrTarget, setMmrTarget] = useState<MMRTarget>('organization');
+  const [orgGame, setOrgGame] = useState<GameTypeValue>(DEFAULT_GAME_TYPE);
   const [resolvingRows, setResolvingRows] = useState<Set<number>>(new Set());
 
   // Maps backend row number → raw CSV data (for conflict resolution)
@@ -78,6 +94,7 @@ export function CSVImportModal({
     setError(null);
     setUpdateMmr(false);
     setMmrTarget('organization');
+    setOrgGame(DEFAULT_GAME_TYPE);
     setResolvingRows(new Set());
     sentRowMapRef.current = new Map();
   }, []);
@@ -125,6 +142,21 @@ export function CSVImportModal({
     [handleFileSelect],
   );
 
+  const isTournament = Boolean(entityContext.tournamentId);
+  const tournamentGame = useContextGameType();
+  // Tournament imports always use the tournament's game (the backend ignores
+  // game_type there); org imports send the selected game.
+  const mmrGame: GameTypeValue = isTournament ? tournamentGame : orgGame;
+  const leagueTargetAllowed = isTournament && mmrGame === GAME_TYPE.DOTA2;
+  const importOptions = useCallback(
+    () => ({
+      update_mmr: updateMmr,
+      mmr_target: leagueTargetAllowed ? mmrTarget : 'organization',
+      ...(isTournament ? {} : { game_type: orgGame }),
+    }),
+    [updateMmr, mmrTarget, leagueTargetAllowed, isTournament, orgGame],
+  );
+
   const handleImport = useCallback(async () => {
     setIsImporting(true);
     setError(null);
@@ -148,10 +180,7 @@ export function CSVImportModal({
         });
       sentRowMapRef.current = rowMap;
 
-      const options = {
-        update_mmr: updateMmr,
-        mmr_target: mmrTarget,
-      };
+      const options = importOptions();
 
       let result: CSVImportResponse;
       if (entityContext.tournamentId) {
@@ -176,7 +205,7 @@ export function CSVImportModal({
     } finally {
       setIsImporting(false);
     }
-  }, [validatedRows, entityContext, onComplete, updateMmr, mmrTarget]);
+  }, [validatedRows, entityContext, onComplete, importOptions]);
 
   const handleResolveConflict = useCallback(
     async (rowNumber: number, selectedUser: UserType) => {
@@ -190,7 +219,6 @@ export function CSVImportModal({
         } else if (selectedUser.discordId) {
           row.discord_id = selectedUser.discordId;
         }
-        // Include mmr from the original CSV row
         if (originalRaw?.mmr?.trim()) {
           row.mmr = Number(originalRaw.mmr.trim());
         }
@@ -207,10 +235,7 @@ export function CSVImportModal({
           row.positions = originalRaw.positions.trim();
         }
 
-        const options = {
-          update_mmr: updateMmr,
-          mmr_target: mmrTarget,
-        };
+        const options = importOptions();
 
         let result: CSVImportResponse;
         if (entityContext.tournamentId) {
@@ -228,7 +253,6 @@ export function CSVImportModal({
         const resolved = result.results[0];
         if (!resolved) return;
 
-        // Merge the resolved result back into the existing import result
         setImportResult((prev) => {
           if (!prev) return prev;
           const newResults = prev.results.map((r) =>
@@ -237,7 +261,6 @@ export function CSVImportModal({
           const newSummary = { ...prev.summary };
           // Decrement errors since this row was an error
           newSummary.errors = Math.max(0, newSummary.errors - 1);
-          // Increment the appropriate counter based on the resolved status
           if (resolved.status === 'added') newSummary.added++;
           else if (resolved.status === 'updated') newSummary.updated++;
           else if (resolved.status === 'skipped') newSummary.skipped++;
@@ -257,11 +280,12 @@ export function CSVImportModal({
         });
       }
     },
-    [entityContext, updateMmr, mmrTarget, onComplete],
+    [entityContext, importOptions, onComplete],
   );
 
   const downloadExampleCSV = useCallback(() => {
     const isTournament = Boolean(entityContext.tournamentId);
+    const tournamentGame = useContextGameType();
     const comment =
       '# A steam_friend_id, discord_id, or discord_username is required. name, mmr, positions, team_name, team_captain are optional.';
     const headers = [
@@ -467,6 +491,43 @@ export function CSVImportModal({
             {/* MMR Update Options */}
             {hasMMRValues && (
               <div className="rounded-md border border-border/50 bg-muted/30 p-3 space-y-3">
+                {isTournament ? (
+                  <p
+                    className="text-sm text-muted-foreground"
+                    data-testid="csv-mmr-game-note"
+                  >
+                    MMR column applies to: {GAME_LABEL[mmrGame]}
+                  </p>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <Label
+                      htmlFor="csv-mmr-game"
+                      className="text-sm text-muted-foreground whitespace-nowrap"
+                    >
+                      Game:
+                    </Label>
+                    <BrandSelect
+                      value={String(orgGame)}
+                      onValueChange={(v) => setOrgGame(toGameType(Number(v)))}
+                    >
+                      <BrandSelectTrigger
+                        id="csv-mmr-game"
+                        size="sm"
+                        className="w-[180px]"
+                        data-testid="csv-game-select"
+                      >
+                        <SelectValue />
+                      </BrandSelectTrigger>
+                      <BrandSelectContent>
+                        {GAME_TYPES.map((g) => (
+                          <BrandSelectItem key={g} value={String(g)}>
+                            {GAME_LABEL[g]}
+                          </BrandSelectItem>
+                        ))}
+                      </BrandSelectContent>
+                    </BrandSelect>
+                  </div>
+                )}
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -498,7 +559,7 @@ export function CSVImportModal({
                         <SelectItem value="organization">
                           Organization
                         </SelectItem>
-                        {entityContext.tournamentId && (
+                        {leagueTargetAllowed && (
                           <SelectItem value="league">League</SelectItem>
                         )}
                       </SelectContent>
@@ -509,8 +570,9 @@ export function CSVImportModal({
                 {updateMmr && (
                   <p className="text-xs text-muted-foreground pl-6 flex items-center gap-1">
                     <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
-                    Existing members will have their {mmrTarget} MMR overwritten
-                    with CSV values
+                    Existing members will have their {GAME_LABEL[mmrGame]}{' '}
+                    {leagueTargetAllowed ? mmrTarget : 'organization'} MMR
+                    overwritten with CSV values
                   </p>
                 )}
               </div>
@@ -623,6 +685,7 @@ export function CSVImportModal({
                                     <UserStrip
                                       key={u.pk}
                                       user={u}
+                                      gameType={mmrGame}
                                       compact
                                       showPositions={false}
                                       actionSlot={

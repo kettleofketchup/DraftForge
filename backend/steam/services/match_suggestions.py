@@ -1,5 +1,5 @@
 from app.models import CustomUser, Game, Team
-from app.serializers import _tournament_organization
+from app.serializers import tournament_organization
 from org.user_search import user_name_q
 from steam.models import Match, PlayerMatchStats, SuggestionTier
 
@@ -77,7 +77,7 @@ def get_match_suggestions_for_game(game: Game, search: str | None = None) -> lis
             match_id = int(search)
             matches_query = matches_query.filter(match_id__icontains=str(match_id))
         except ValueError:
-            org = _tournament_organization(tournament)
+            org = tournament_organization(tournament)
             matching_users = (
                 CustomUser.objects.filter(
                     user_name_q(search, org_id=org.pk if org else None)

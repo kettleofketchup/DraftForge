@@ -1,4 +1,5 @@
 import type { EventSignupType } from '~/components/events/schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 import { Badge } from '~/components/ui/badge';
 
 import { BaseRankSignalsCard } from './BaseRankSignalsCard';
@@ -15,7 +16,7 @@ export function DeadlockRankSignalsCard({
   const rankDate = signup.self_reported_rank_date ?? null;
 
   return (
-    <BaseRankSignalsCard signup={signup}>
+    <BaseRankSignalsCard signup={signup} gameType={GAME_TYPE.DEADLOCK}>
       <div
         className="flex justify-between items-center"
         data-testid="rank-signals-deadlock-rank"
