@@ -204,10 +204,15 @@ export function makeAttendanceColumns({
         const r = row.original;
         return (
           <div className="flex min-w-0 items-center gap-2">
-            <UserAvatar
-              user={{ ...r.member, pk: r.member.user_pk }}
-              size="sm"
-            />
+            <span
+              className="hidden shrink-0 sm:inline-flex"
+              data-testid={`${testIdPrefix}-avatar-${r.key}`}
+            >
+              <UserAvatar
+                user={{ ...r.member, pk: r.member.user_pk }}
+                size="sm"
+              />
+            </span>
             <div className="flex min-w-0 flex-col">
               <span className="font-medium break-words">
                 {DisplayName(r.member)}
@@ -267,9 +272,20 @@ export function makeAttendanceColumns({
             </span>
           );
         }
-        const label = defaulted
-          ? VIRTUAL_OUTCOME_LABEL
-          : OUTCOME_LABELS[outcome];
+        const label = defaulted ? (
+          <span className="flex flex-col items-start leading-tight sm:flex-row sm:items-baseline sm:gap-1">
+            <span>{OUTCOME_LABELS.attended}</span>
+            <span
+              className="text-xs text-muted-foreground sm:text-sm"
+              data-testid={`${testIdPrefix}-outcome-default-${r.key}`}
+            >
+              {' '}
+              (default)
+            </span>
+          </span>
+        ) : (
+          OUTCOME_LABELS[outcome]
+        );
         return (
           <BrandSelect
             value={isSettable(outcome) && !defaulted ? outcome : ''}
@@ -279,7 +295,7 @@ export function makeAttendanceColumns({
           >
             <BrandSelectTrigger
               size="sm"
-              className="min-h-11 w-full sm:min-h-9"
+              className="min-h-11 w-full px-2 sm:min-h-9 sm:px-3"
               data-testid={testId}
               aria-label={`Outcome for ${DisplayName(r.member)}`}
             >
@@ -301,7 +317,7 @@ export function makeAttendanceColumns({
           </BrandSelect>
         );
       },
-      meta: { headClassName: 'w-40 sm:w-44', cellClassName: 'w-40 sm:w-44' },
+      meta: { headClassName: 'w-36 sm:w-48', cellClassName: 'w-36 sm:w-48' },
     },
     source: {
       id: 'source',

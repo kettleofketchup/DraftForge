@@ -107,6 +107,17 @@ describe('AttendanceTable', () => {
     );
   });
 
+  it('sizes the outcome column to fit Attended (default) from sm', () => {
+    const row = toAttendanceTableRow(attendanceRow());
+    render(<AttendanceTable {...props({ rows: [row] })} />);
+    const head = screen.getByText('Outcome').closest('th');
+    expect(head).toHaveClass('w-36', 'sm:w-48');
+    const note = screen.getByTestId('attendance-outcome-default-7');
+    expect(note).toHaveTextContent('(default)');
+    expect(note).toHaveClass('text-xs', 'sm:text-sm');
+    expect(note.parentElement).toHaveClass('flex-col', 'sm:flex-row');
+  });
+
   it('a virtual unflagged row reads Attended (default) when read-only', () => {
     const row = toAttendanceTableRow(attendanceRow());
     render(<AttendanceTable {...props({ rows: [row], editable: false })} />);
@@ -251,6 +262,15 @@ describe('AttendanceTable', () => {
     const stackedFlag = within(tr).getByTestId('attendance-stacked-flag-5');
     expect(stackedFlag.className).toContain('md:hidden');
     expect(stackedFlag).toHaveTextContent('Dropped, needs review');
+  });
+
+  it('drops the member avatar below sm to give the name room', () => {
+    const row = toAttendanceTableRow(savedRow(5));
+    render(<AttendanceTable {...props({ rows: [row] })} />);
+    expect(screen.getByTestId('attendance-avatar-5')).toHaveClass(
+      'hidden',
+      'sm:inline-flex',
+    );
   });
 
   it('shows the empty message with no rows', () => {
