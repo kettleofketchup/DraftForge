@@ -8,10 +8,12 @@ from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from app.models import CustomUser
 from league.models import League, LeagueUser
 from league.permissions import has_league_staff_access
 from org.mmr_requests.permissions import can_review_mmr_request, org_queue_filter
@@ -40,6 +42,7 @@ from org.mmr_requests.services import (
     reject_request,
     staff_set_mmr,
 )
+from org.mmr_requests.summary import build_user_mmr_summary
 from org.mmr_requests.upload_guard import upload_tripped
 from org.models import MmrChangeRequest, Organization, OrgUser
 from org.permissions import has_org_staff_access
@@ -377,3 +380,15 @@ class LeagueMmrRequestViewSet(viewsets.GenericViewSet):
     def staff_set(self, request: Request, league_id: int) -> Response:
         self._league(league_id)
         return _staff_set(request, league_id=league_id)
+
+
+class UserMmrSummaryView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request, pk: int) -> Response:
+        subject = get_object_or_404(CustomUser.objects.nocache(), pk=pk)
+        summary = build_user_mmr_summary(subject, request.user)
+        return Response(
+            summary.model_dump(mode="json"),
+            headers={"Cache-Control": "private, no-store"},
+        )

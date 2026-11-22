@@ -70,6 +70,7 @@ from league.views_admin_team import (
 )
 from org.mmr_requests.urls import league_urlpatterns as mmr_league_urlpatterns
 from org.mmr_requests.urls import org_urlpatterns as mmr_org_urlpatterns
+from org.mmr_requests.views import UserMmrSummaryView
 from org.ssr import OrganizationSSRView
 from org.views import ClaimRequestViewSet
 from org.views_admin_team import (
@@ -153,6 +154,11 @@ urlpatterns = [
         "api/users/steam-account-id/<int:steam_account_id>/",
         app_views.steam_account_id_lookup,
         name="steam_account_id_lookup",
+    ),
+    path(
+        "api/users/<int:pk>/mmrs/",
+        UserMmrSummaryView.as_view(),
+        name="user-mmr-summary",
     ),
     # User profile (see backend/user/urls.py)
     path("api/users/", include("user.urls")),
