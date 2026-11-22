@@ -45,8 +45,8 @@ class ReadOnlyAdminMixin:
 
 class OrgUserGameMmrInline(ReadOnlyAdminMixin, admin.TabularInline):
     model = OrgUserGameMmr
-    fields = ["game_type", "mmr", "updated_at"]
-    readonly_fields = ["game_type", "mmr", "updated_at"]
+    fields = ["game_type", "mmr", "updated_at", "verified_at", "verified_by"]
+    readonly_fields = fields
     extra = 0
     can_delete = False
 
@@ -78,10 +78,17 @@ class OrgUserAdmin(admin.ModelAdmin):
 
 @admin.register(OrgUserGameMmr)
 class OrgUserGameMmrAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
-    list_display = ["org_user", "game_type", "mmr", "updated_at"]
+    list_display = ["org_user", "game_type", "mmr", "verified_at", "updated_at"]
     list_filter = ["game_type"]
     raw_id_fields = ["org_user"]
-    readonly_fields = ["org_user", "game_type", "mmr", "updated_at"]
+    readonly_fields = [
+        "org_user",
+        "game_type",
+        "mmr",
+        "updated_at",
+        "verified_at",
+        "verified_by",
+    ]
 
 
 @admin.register(OrgFeature)

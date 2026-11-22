@@ -217,6 +217,14 @@ class OrgUserGameMmr(models.Model):
     game_type = models.PositiveSmallIntegerField()
     mmr = models.IntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    verified_by = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
 
     class Meta:
         constraints = [

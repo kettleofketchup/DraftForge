@@ -45,6 +45,7 @@ BEFORE_MOVE = [
     ("events", "0035_retarget_organization_to_org"),
 ]
 MOVE_MIGRATION = ("app", "0112_move_league_models_to_league")
+MOVE_LEAGUE_STATE = ("league", "0003_move_league_models_from_app")
 RETARGETS = (
     ("league", "0003_move_league_models_from_app"),
     ("org", "0017_retarget_default_league_to_league"),
@@ -217,6 +218,7 @@ class LeagueMoveMigrationTests(TransactionTestCase):
                 "league_leagueuser": 1,
             },
         )
+        self._migrate([MOVE_LEAGUE_STATE])
         schema_before = _schema_rows()
         self.assertEqual(
             {row[2] for row in schema_before}, set(MOVED_TABLES + REFERRING_TABLES)
@@ -239,6 +241,7 @@ class LeagueMoveMigrationTests(TransactionTestCase):
         self._assert_grant(perm, user, group, ids["league"])
         self._assert_grant(member_perm, member_user, member_group, member_ct)
         self.assertEqual(_row_counts(), counts)
+        self._migrate([MOVE_LEAGUE_STATE])
         self.assertEqual(_schema_rows(), schema_before)
         self._assert_links(league)
 
