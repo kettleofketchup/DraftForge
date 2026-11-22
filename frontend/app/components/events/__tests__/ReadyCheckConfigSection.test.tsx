@@ -164,7 +164,9 @@ describe('ReadyCheckConfigSection', () => {
     expect(section).toHaveTextContent(
       'Ops notice per unconfirmed member (minutes)',
     );
-    expect(section).toHaveTextContent('Shown to org and league staff');
+    expect(section).toHaveTextContent(
+      'Shown to org and league staff, the event host and helpers',
+    );
     expect(section).toHaveTextContent(
       'DM members on their first sign-up that confirmation is mandatory',
     );

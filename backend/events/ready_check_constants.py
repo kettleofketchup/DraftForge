@@ -18,7 +18,10 @@ class ReadyCheckScope(models.TextChoices):
 
 class ReadyCheckLowCompletionAction(models.TextChoices):
     NON_BINDING = "non_binding", "Make the check non-binding (drop nobody)"
-    HOLD_FOR_STAFF = "hold_for_staff", "Hold drops for org or league staff to decide"
+    HOLD_FOR_STAFF = (
+        "hold_for_staff",
+        "Hold drops for staff, the host or helpers to decide",
+    )
     DROP_ANYWAY = "drop_anyway", "Drop unconfirmed anyway"
 
 

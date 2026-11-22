@@ -241,7 +241,7 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     ready_check_chase_minutes: {
       label: 'Ops notice per unconfirmed member (minutes)',
       description:
-        'Minutes before close. Shown to org and league staff on the event page, and sent wherever the org routes ops notices.',
+        'Minutes before close. Shown to org and league staff, the event host and helpers on the event page, and sent wherever the org routes ops notices.',
       keywords: ['ops chase', 'alert staff'],
     },
     ready_check_min_completion_pct: {

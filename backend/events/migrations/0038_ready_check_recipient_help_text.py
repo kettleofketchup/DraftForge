@@ -29,7 +29,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='event',
             name='ready_check_low_completion_action',
-            field=models.CharField(choices=[('non_binding', 'Make the check non-binding (drop nobody)'), ('hold_for_staff', 'Hold drops for org or league staff to decide'), ('drop_anyway', 'Drop unconfirmed anyway')], default='non_binding', help_text='What happens when completion is below the minimum', max_length=20),
+            field=models.CharField(choices=[('non_binding', 'Make the check non-binding (drop nobody)'), ('hold_for_staff', 'Hold drops for staff, the host or helpers to decide'), ('drop_anyway', 'Drop unconfirmed anyway')], default='non_binding', help_text='What happens when completion is below the minimum', max_length=20),
         ),
         migrations.AlterField(
             model_name='event',
@@ -59,7 +59,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='eventrepeater',
             name='ready_check_low_completion_action',
-            field=models.CharField(choices=[('non_binding', 'Make the check non-binding (drop nobody)'), ('hold_for_staff', 'Hold drops for org or league staff to decide'), ('drop_anyway', 'Drop unconfirmed anyway')], default='non_binding', help_text='What happens when completion is below the minimum', max_length=20),
+            field=models.CharField(choices=[('non_binding', 'Make the check non-binding (drop nobody)'), ('hold_for_staff', 'Hold drops for staff, the host or helpers to decide'), ('drop_anyway', 'Drop unconfirmed anyway')], default='non_binding', help_text='What happens when completion is below the minimum', max_length=20),
         ),
         migrations.AlterField(
             model_name='eventrepeater',
@@ -89,7 +89,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='orgeventdefaults',
             name='ready_check_low_completion_action',
-            field=models.CharField(choices=[('non_binding', 'Make the check non-binding (drop nobody)'), ('hold_for_staff', 'Hold drops for org or league staff to decide'), ('drop_anyway', 'Drop unconfirmed anyway')], default='non_binding', help_text='What happens when completion is below the minimum', max_length=20),
+            field=models.CharField(choices=[('non_binding', 'Make the check non-binding (drop nobody)'), ('hold_for_staff', 'Hold drops for staff, the host or helpers to decide'), ('drop_anyway', 'Drop unconfirmed anyway')], default='non_binding', help_text='What happens when completion is below the minimum', max_length=20),
         ),
         migrations.AlterField(
             model_name='orgeventdefaults',

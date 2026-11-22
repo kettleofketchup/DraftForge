@@ -60,7 +60,7 @@ export type LowCompletionAction = (typeof LOW_COMPLETION_ACTIONS)[number];
 export const LOW_COMPLETION_ACTION_LABELS: Record<LowCompletionAction, string> =
   {
     non_binding: 'Make the check non-binding (drop nobody)',
-    hold_for_staff: 'Hold drops for org or league staff to decide',
+    hold_for_staff: 'Hold drops for staff, the host or helpers to decide',
     drop_anyway: 'Drop unconfirmed anyway',
   };
 

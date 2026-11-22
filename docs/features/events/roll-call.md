@@ -172,7 +172,7 @@ Planned recipients, once the automatic ready check ships (#530, #543, #533). Not
 | Start cull | Drop notice | Each removed member | DM |
 | After the cull, fill open seats by | Promotion | Each member moved into a seat | DM |
 
-"Staff" for ops notices means the organization's owner, admins and staff, plus league staff when the event belongs to a league: they see the notices on the event page. An organization can also route ops notices to Discord channels, roles or users. The event host and the organization's promoters are not told unless they hold one of those roles or a route names them.
+"Staff" for ops notices means the organization's owner, admins and staff, league staff when the event belongs to a league, and the event's host and helpers: they see the notices on the event page and can act on held checks. An organization can also route ops notices to Discord channels, roles or users. The organization's promoters are not told unless they hold one of those roles or a route names them.
 
 ### Timings
 
@@ -200,7 +200,7 @@ If fewer than `ready_check_min_completion_pct` percent of members have confirmed
 | Value | Label | Effect |
 |-------|-------|--------|
 | `non_binding` | Make the check non-binding (drop nobody) | Nobody is dropped |
-| `hold_for_staff` | Hold drops for org or league staff to decide | Org or league staff decide who is dropped |
+| `hold_for_staff` | Hold drops for staff, the host or helpers to decide | Org or league staff, the event host or helpers decide who is dropped |
 | `drop_anyway` | Drop unconfirmed anyway | Unconfirmed members are dropped regardless |
 
 ### Start cull and voice

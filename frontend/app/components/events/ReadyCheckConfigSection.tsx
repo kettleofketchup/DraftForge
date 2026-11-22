@@ -412,7 +412,7 @@ export function ReadyCheckConfigSection<
               {numberInput(
                 'ready_check_chase_minutes',
                 'Ops notice per unconfirmed member (minutes)',
-                'Minutes before close. Shown to org and league staff on the event page, and sent wherever the org routes ops notices.',
+                'Minutes before close. Shown to org and league staff, the event host and helpers on the event page, and sent wherever the org routes ops notices.',
                 IDS.chase,
                 chase === null,
               )}
