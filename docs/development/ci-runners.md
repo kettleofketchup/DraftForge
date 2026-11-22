@@ -96,6 +96,7 @@ it in `needs`.
 | Pool down, Pending, saturated, or `prepare` failed | At most 180 s, and only on PRs where the trusted image for the current hash does not exist yet (lockfile or Dockerfile changes); then today's local build |
 | Prepared image exists but does not pull (for example a package-permission error, see H-R5) | A `::warning::`, then today's local build |
 | Prepared test DB missing | Nothing; local populate as today |
+| Kill switch on but no runner has the `draftforge-home` label (scale set not registered, controller down) | GitHub does not fail the job: `prepare` stays queued for up to 24 h, then fails. Test jobs cost what the row above says (at most 180 s), then continue. The Playwright run shows as in progress and `prepare` as a pending check until the next push cancels it; neither blocks merging, because `prepare` is not required. Unset the kill switch to stop new queued jobs |
 | Kill switch flipped while `prepare` jobs are queued | The next push cancels them (the playwright concurrency group cancels in progress); cancel the rest by hand |
 
 On lockfile PRs `prepare` uploads roughly 600 MB per dev image from the home uplink. If
