@@ -126,10 +126,11 @@ export function useConductSection(
   const onSubmit =
     (select: boolean) =>
     async (values: ConductSettingsForm): Promise<boolean> => {
-      const dirty = form.formState.dirtyFields;
       const changes: Partial<ConductSettingsForm> = {};
       for (const field of CONDUCT_SETTINGS_FIELDS) {
-        if (dirty[field]) Object.assign(changes, { [field]: values[field] });
+        if (form.getFieldState(field).isDirty) {
+          Object.assign(changes, { [field]: values[field] });
+        }
       }
       try {
         const saved = await mutation.mutateAsync(changes);

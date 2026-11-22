@@ -1,6 +1,6 @@
 import { Eye, EyeOff, Loader2, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
-import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
+import { useWatch, type Control, type FieldValues } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { SecondaryButton } from '~/components/ui/buttons';
 import {
@@ -37,7 +37,6 @@ interface LobbyPasswordSettingsProps<
   T extends FieldValues & LobbyPasswordFields,
 > {
   control: Control<T>;
-  watch: UseFormWatch<T>;
   /** A series hands its setting to its events; an event has one password. */
   scope: 'series' | 'event';
   /** The saved settings (edit forms), from the lobby-password endpoint. */
@@ -60,7 +59,6 @@ export function LobbyPasswordSettings<
   T extends FieldValues & LobbyPasswordFields,
 >({
   control: parentControl,
-  watch: parentWatch,
   scope,
   saved,
   followsSeries = false,
@@ -70,9 +68,8 @@ export function LobbyPasswordSettings<
   const { t } = useTranslation('lobby');
   const [shown, setShown] = useState(false);
   const control = parentControl as unknown as Control<LobbyPasswordFields>;
-  const watch = parentWatch as unknown as UseFormWatch<LobbyPasswordFields>;
-  const mode = watch('dota_lobby_password_mode');
-  const keepsSaved = !!watch('dota_lobby_password_saved');
+  const mode = useWatch({ control, name: 'dota_lobby_password_mode' });
+  const keepsSaved = !!useWatch({ control, name: 'dota_lobby_password_saved' });
   const savedRandom =
     saved?.mode === 'random' && saved.password ? saved.password : null;
   const canRegenerate =

@@ -390,7 +390,6 @@ export function useOrgEventDefaultsSections(
     discord: wrap(
       <DiscordConfigSection
         control={form.control}
-        watch={form.watch}
         isRepeater={false}
         organizationId={organizationId}
       />,
