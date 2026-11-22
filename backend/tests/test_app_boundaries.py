@@ -430,10 +430,16 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         ),
         "app/management/commands/sync_prod_users.py": BackEdge(
             frozenset(
-                {"AttendanceOutcome", "ContributionEntry", "Organization", "PromoSend"}
+                {
+                    "AttendanceOutcome",
+                    "ContributionEntry",
+                    "EventCaptain",
+                    "Organization",
+                    "PromoSend",
+                }
             ),
-            "prod user sync clears org conduct, contribution and promo rows before "
-            "reloading users, and keeps organization owners",
+            "prod user sync clears org conduct, contribution, leadership and promo "
+            "rows before reloading users, and keeps organization owners",
         ),
         "app/permissions_tournament.py": BackEdge(
             frozenset({"has_org_staff_access"}),

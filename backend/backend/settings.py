@@ -393,6 +393,7 @@ CACHEOPS = {
     "org.playerdeadlockprofile": {"ops": "all", "timeout": 60 * 60},
     "org.orgsettings": {"ops": "all", "timeout": 60 * 60},
     "org.orgconductsettings": {"ops": "all", "timeout": 60 * 60},
+    "org.orgleadershipsettings": {"ops": "all", "timeout": 60 * 60},
     "league.leagueuser": {"ops": "all", "timeout": 60 * 60},
     # Steam match data - cached with shorter timeout for freshness
     "steam.match": {"ops": "all", "timeout": 30 * 60},

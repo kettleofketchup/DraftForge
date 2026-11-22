@@ -322,6 +322,21 @@ class OrgDetailConductFlagsTest(FlagsTestBase):
         self._unlock(FeatureKey.CONDUCT)
         self.assertEqual(self._warm_query_count(self.staff), baseline + 2)
 
+    def test_unlocked_leadership_adds_settings_member_and_traits_reads(self) -> None:
+        self._unlock(FeatureKey.PROMOTION)
+        self._unlock(FeatureKey.CONTRIBUTIONS)
+        for user in (self.member, self.staff):
+            with self.subTest(user=user.username):
+                set_org_feature(
+                    self.org,
+                    FeatureKey.LEADERSHIP,
+                    enabled=False,
+                    actor=self.site_admin,
+                )
+                baseline = self._warm_query_count(user)
+                self._unlock(FeatureKey.LEADERSHIP)
+                self.assertEqual(self._warm_query_count(user), baseline + 3)
+
     def test_public_board_private_member_list_flags(self) -> None:
         self._unlock(FeatureKey.CONDUCT)
         self.org.members_private = True
