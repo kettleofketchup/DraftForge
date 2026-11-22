@@ -262,9 +262,8 @@ def _ready_check_data(check_pk: int | None) -> dict[str, Any] | None:
     if check_pk is None:
         return None
     check = (
-        ReadyCheck.objects.select_related(
-            "opened_by__base_profile", "resolved_by__base_profile"
-        )
+        ReadyCheck.objects.nocache()
+        .select_related("opened_by__base_profile", "resolved_by__base_profile")
         .prefetch_related(
             Prefetch(
                 "entries",
