@@ -255,13 +255,14 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
 
         def discard(obj: Model) -> None:
             pk = obj.pk
+            deleted = delete_counts(obj)
             log.info(
                 "profile_claim_row_discarded",
                 system="org",
                 subsystem="claim",
                 model=obj._meta.label,
                 pk=pk,
-                deleted=delete_counts(obj),
+                deleted=deleted,
                 claimer_id=claimer.pk,
                 target_user_id=target_user.pk,
             )
