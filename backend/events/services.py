@@ -25,6 +25,7 @@ from events.constants import (
     Commitment,
     EventState,
     RepeatFrequency,
+    SignupAction,
     SignupOpenMode,
     SignupStatus,
     SignupType,
@@ -45,7 +46,7 @@ from events.eligibility import (
     stamp_eligibility,
     validate_friend_id,
 )
-from events.ledger import SignupActor
+from events.ledger import SignupActor, record_signup_change, snapshot
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -73,7 +74,7 @@ from events.roster import (
     start_phase,
     team_bound_user_pks,
 )
-from events.schemas import DotaModalConfig
+from events.schemas import DotaModalConfig, SignupSnapshot
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
 from events.tasks import delete_discord_scheduled_event
 from lobby.passwords import PasswordMode, generate_password
@@ -594,29 +595,68 @@ APPROVABLE_STATUSES = [
 ]
 
 
+def _reread_signup(signup: EventSignup) -> None:
+    signup.refresh_from_db(
+        from_queryset=EventSignup.objects.nocache().select_related(
+            "event", "user__base_profile"
+        )
+    )
+
+
+def _record_leaf(
+    signup: EventSignup,
+    *,
+    event: Event,
+    actor: SignupActor,
+    action: SignupAction,
+    before: SignupSnapshot,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    record_signup_change(
+        event=event,
+        subject=signup.user,
+        actor=actor,
+        action=action,
+        signup=signup,
+        before=before,
+        after=snapshot(signup, extra=extra),
+    )
+
+
 @transaction.atomic
 def approve_signup(
     signup: EventSignup, mmr_override: int | None = None, *, actor: SignupActor
 ) -> EventSignup:
     """Approve a signup, optionally setting the user's MMR."""
+    _reread_signup(signup)
     if signup.status not in APPROVABLE_STATUSES:
         raise ValueError(f"Cannot approve signup in '{signup.status}' status.")
+    before = snapshot(signup)
+    extra: dict[str, Any] | None = None
 
     # Apply MMR override when provided by an admin
     if mmr_override is not None:
         if signup.event.organization_id is None:
             raise ValueError("Cannot set MMR for an event without an organization.")
         org_user = resolve_or_create_org_user(signup.user, signup.event.organization)
-        set_org_mmr(
-            org_user, game_for_event(signup.event), mmr_override, mark_verified=True
-        )
+        game_type = game_for_event(signup.event)
+        set_org_mmr(org_user, game_type, mmr_override, mark_verified=True)
         refresh_unmet_requirements(org_user)
+        extra = {"mmr_override": mmr_override, "game_type": int(game_type)}
 
     signup.status = SignupStatus.APPROVED
     signup.waitlist_position = None
     cleared = clear_eligibility(signup)
     signup.save(update_fields=["status", "waitlist_position", *cleared, "updated_at"])
     _roster_add_if_joins(signup)
+    _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.APPROVED,
+        before=before,
+        extra=extra,
+    )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -641,11 +681,20 @@ def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
 @transaction.atomic
 def confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Confirm a signup (e.g., during roll call)."""
+    _reread_signup(signup)
     if signup.status != SignupStatus.APPROVED:
         raise ValueError("Only approved signups can be confirmed.")
+    before = snapshot(signup)
     signup.status = SignupStatus.CONFIRMED
     signup.save(update_fields=["status", "updated_at"])
     _roster_add_if_joins(signup)
+    _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.CONFIRMED,
+        before=before,
+    )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -730,11 +779,20 @@ def _promote_from_waitlist(
 @transaction.atomic
 def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Revert a confirmed signup back to approved (e.g., during roll call adjustments)."""
+    _reread_signup(signup)
     if signup.status != SignupStatus.CONFIRMED:
         raise ValueError("Only confirmed signups can be unconfirmed.")
+    before = snapshot(signup)
     signup.status = SignupStatus.APPROVED
     signup.save(update_fields=["status", "updated_at"])
     _roster_remove_if_left(signup)
+    _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.UNCONFIRMED,
+        before=before,
+    )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -743,8 +801,10 @@ def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
 @transaction.atomic
 def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Move an active signup to the end of the waitlist."""
+    _reread_signup(signup)
     if signup.status in (*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED):
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
+    before = snapshot(signup)
     max_pos = (
         EventSignup.objects.filter(
             event=signup.event, status=SignupStatus.WAITLISTED
@@ -755,6 +815,13 @@ def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignu
     signup.waitlist_position = max_pos + 1
     signup.save(update_fields=["status", "waitlist_position", "updated_at"])
     _roster_remove_if_left(signup)
+    _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.DEMOTED,
+        before=before,
+    )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -773,12 +840,14 @@ def reinstate_signup(
                       reappears in the Awaiting Confirmation list and admins
                       can re-confirm without leaving the rollcall screen.
     """
+    _reread_signup(signup)
     event = signup.event
     if event.state == "roll_call":
         if signup.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
             raise ValueError(
                 "Only removed or rejected signups can be reinstated during roll call."
             )
+        before = snapshot(signup)
         signup.status = SignupStatus.APPROVED
         signup.waitlist_position = None
         signup.commitment = Commitment.MAIN
@@ -792,6 +861,13 @@ def reinstate_signup(
                 "updated_at",
             ]
         )
+        _record_leaf(
+            signup,
+            event=event,
+            actor=actor,
+            action=SignupAction.REINSTATED,
+            before=before,
+        )
         invalidate_after_commit(signup, event)
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
@@ -800,6 +876,7 @@ def reinstate_signup(
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
         raise ValueError(NOT_ACCEPTING_MESSAGE)
+    before = snapshot(signup)
     locked = lock_event(event)
     result = evaluate_signup(
         locked, signup.user, for_staff_placement=for_staff_placement
@@ -827,6 +904,13 @@ def reinstate_signup(
             *stamped,
             "updated_at",
         ]
+    )
+    _record_leaf(
+        signup,
+        event=locked,
+        actor=actor,
+        action=SignupAction.REINSTATED,
+        before=before,
     )
     invalidate_after_commit(signup, event)
     transaction.on_commit(lambda: notify_signup_changed(event))
