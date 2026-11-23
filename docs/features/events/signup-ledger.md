@@ -121,12 +121,71 @@ When the stale repeater cleanup script moves a signup to another event, it write
 - The Django admin cannot add a signup or change its status, user, event, team, type or waitlist place. Staff change signup state through the event pages, which record it.
 - Signups created by test data population or fixtures have no starting entry.
 
+## Staff history
+
+Event staff can read an event's signup record on the event page. Event staff are the staff of the event's organization, or of its league for a league event. Members and visitors never see it: the tab and the row buttons are hidden for them, and the API refuses them.
+
+- **History tab:** the last tab on the event page lists every entry for the event, newest first. **Load more** fetches older entries.
+- **Row button:** each signup row on the Signups, Tentative, Waitlist and Removed tabs has a history button. It opens a side sheet with the same list, filtered to that member.
+
+Each row shows:
+
+- the member, the action (for example "Withdrew", "Signed up again", "Added by staff" or "Promoted from waitlist") and the time in the event's timezone;
+- who made the change and a badge for how it was made: **Web**, **Discord button**, **Discord reaction**, **Staff** or **System**. **Staff** means a staff member changed someone else's signup on the website; a staff member changing their own signup shows **Web**;
+- what changed: status, main or maybe, and place on the waitlist or in line. A promotion also says which change freed the seat, when that entry is in the list; otherwise it reads "automatic";
+- the reason staff gave, and a chip listing any sign-up rules the change overrode, when the entry has them;
+- notes from the snapshot's `extra`, such as a staff-only action, an MMR override, an account merge or a move from another event.
+
+When the list is filtered to one member, with no action filter, and every page has loaded, their first sign-up is marked **Original sign-up**.
+
+The tab has two filters, **member** and **action**. **Clear filters** resets both. The list wraps long names and reasons, so it fits a phone screen without sideways scrolling.
+
+!!! note "Signups without history"
+    Signups created by test data population or fixtures have no entries, and signups from before the ledger start at their `backfilled` entry ("Starting record"). A member with no entries shows "No changes recorded for this member".
+
+!!! info "Reasons and overridden rules"
+    Staff cannot give a reason for most changes yet, so `reason` is usually empty, and nothing fills `rules_overridden` yet. The page shows both as soon as later work records them.
+
 ## For developers
 
 - Every signup service in `events/services.py` takes a required keyword `actor: SignupActor`. Calling one without it raises `TypeError`.
 - Build the actor with `SignupActor.for_request_on(request, subject, event)` on the website (pass `staff_only=True` on staff-only endpoints), `SignupActor.discord(user)` in Discord flows (it picks up the bound interaction id), or `SignupActor.system()` where no person acts.
 - A new signup mutation must record exactly one entry with `record_signup_change`, inside its own `transaction.atomic` block, after its guards. Take `before = snapshot(signup)` from a row read with `.nocache()` inside the transaction.
 - A mutation that frees a seat passes its entry to `_promote_from_waitlist(event, cause=entry)`.
+
+### History API
+
+`GET /api/events/<id>/signup-history/` returns the event's ledger entries, newest first. It is read-only and not cached.
+
+| Param | Meaning |
+|---|---|
+| `user` | Only entries about this user (pk) |
+| `action` | Only entries with this action |
+| `cursor` | The opaque token from the previous page's `next` |
+| `page_size` | 1 to 100, default 50 |
+
+Empty values count as absent. The response is the cursor envelope `{count, next, previous, results}`: `count` is the number of matching entries at request time, `next` is the URL of the next page or `null`, and `previous` is always `null`. Paging is keyset on (`occurred_at`, `id`), so entries written between page loads never shift or repeat rows on later pages.
+
+Each item has:
+
+| Field | Content |
+|---|---|
+| `id`, `occurred_at`, `action`, `means`, `on_behalf`, `reason` | As stored on the entry |
+| `subject` | `user_id`, `username`, `nickname`, `discordNickname`, `guildNickname`, `avatarUrl`, `discord_id` of the member. A deleted user falls back to the snapshot's name and Discord ID |
+| `actor` | The same user fields without `discord_id`, plus `role` (`member`, `staff` or `system`). All user fields are `null` for the system |
+| `before`, `after` | The signup snapshot (`status`, `commitment`, `rsvp_class`, `signed_up_at`, `line_seq`, `waitlist_position`, `event_team_id`, `extra`), or `null` when there is none or the stored snapshot cannot be read |
+| `rules_overridden` | A list of rule names, empty today |
+| `caused_by` | The id of the causing entry, or `null` |
+
+Left out on purpose: `correlation_id`, the event and member snapshots, and any `extra` key other than `staff_power`, `mmr_override`, `game_type`, `from_user_id`, `discarded_duplicate`, `discarded_signup_id` and `event_id`.
+
+Errors:
+
+- **404** when the event does not exist.
+- **403** with an empty body for anyone who is not event staff, including anonymous callers. This check runs before the params are read, so non-staff learn nothing from them.
+- **400** for a bad param: `{"user": ["Invalid user."]}`, `{"action": ["Invalid action."]}`, `{"cursor": ["Invalid cursor."]}` or `{"page_size": ["Invalid page size."]}`.
+
+The frontend reads it with `getEventSignupHistory` and the `useSignupHistory` hook (query key `['event-signup-history', eventId, filters]`). Every staff signup mutation invalidates that key for the event.
 
 ## After deploying
 
@@ -142,4 +201,4 @@ Use `docker exec` rather than `just dev::run`, which starts a container on the d
 
 ## Coming later
 
-Views that show a signup's history and a member's signup records, and the reasons staff give for their changes, will build on this ledger. This page will describe them when they land.
+A member's own view of their signup records, and the reasons staff give for their changes, will build on this ledger. This page will describe them when they land.
