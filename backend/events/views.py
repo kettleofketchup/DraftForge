@@ -435,6 +435,8 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     def subscribers(self, request: Request, pk: str | None = None) -> Response:
         """List all subscribers for this repeater."""
         repeater = self.get_object()
+        if not has_event_staff_access(request.user, repeater):
+            return Response(status=status.HTTP_403_FORBIDDEN)
         # RepeaterSubscriptionSerializer reads user.nickname + user.avatar,
         # which go through the @property on CustomUser → base_profile. Without
         # this prefetch the list view is N+1 cold-cache.
@@ -1198,6 +1200,8 @@ class EventViewSet(viewsets.ModelViewSet):
         GET /api/events/<pk>/discord/
         """
         event = self.get_object()
+        if not has_event_staff_access(request.user, event):
+            return Response(status=status.HTTP_403_FORBIDDEN)
 
         try:
             discord_event = event.discord_event
@@ -1551,10 +1555,12 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
 
     try:
         event = Event.objects.select_related(
-            "organization", "event_repeater", "tournament"
+            "organization", "event_repeater", "tournament", "tournament_league"
         ).get(pk=event_id)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
+    if not has_event_staff_access(request.user, event):
+        return Response(status=status.HTTP_403_FORBIDDEN)
 
     now = tz.now()
 
