@@ -1,4 +1,4 @@
-# Rendering people: names and avatars
+# People in the frontend: names, avatars and search
 
 Every person on screen goes through two helpers. They resolve the user, fill in
 what the payload lacks from the user cache, and pick the org from the page.
@@ -118,11 +118,62 @@ needs a URL string (`AvatarUrl(user)`). Keep the field and say why, on the line:
 `frontend/eslint.config.js` registers the `draftforge` plugin with no rules on, so
 these comments also resolve under `npm run lint`.
 
-## Searching and matching
+## Searching for people
 
-Client-side filters should match what people see: compare against
-`DisplayName(person)` (plus the username for handles) rather than only
-`username`/`nickname`.
+A search box should find someone by any name they're shown or known by. Never
+hand-roll `u.username.toLowerCase().includes(q)`: it misses Discord names, server
+nicknames and names only the cache knows (`draftforge/use-user-search`).
+
+| Need | Use |
+| --- | --- |
+| Filter users already loaded (a grid, a roster, a draft pool) | `useFilteredUsers(users, query, { excludePks })` from `~/hooks/useUserSearch`; plain `filterUsers` from `~/lib/userSearch` inside an existing `useMemo` |
+| Test one user | `userMatchesQuery(user, query)` |
+| Resolve typed text to one user (Enter on a free-text field) | `findUserByName(users, text)` |
+| Search every site user on the server | `useUserSearch(query, { orgId, leagueId, enabled })` |
+| Search an org's Discord server members | `useDiscordMemberSearch(query, orgId)` |
+| Filter box above a grid | `<UserSearchInput value onChange placeholder />` |
+| Pick a person from a list | `<UserPicker>` from `~/components/user/search` |
+
+What matches: username, site nickname, Discord global name and the display name,
+which includes the org server nickname on an org page (the org comes from the
+page, as for `DisplayName`). Discord guild members match on `nick`,
+`global_name` and `username`. The backend uses the same set (`user_name_q`, see
+[backend.md](backend.md)) plus Discord username and Steam ID.
+
+The server rejects queries under `USER_SEARCH_MIN_LENGTH` (2); the hooks debounce
+by `USER_SEARCH_DEBOUNCE_MS` and stay idle below the minimum. Their `status` is
+`too-short`, `searching`, `error` or `done`.
+
+```tsx
+const [query, setQuery] = useState('');
+const search = useUserSearch(query, { orgId, enabled: open });
+const candidates = search.results.filter((u) => u.membership === 'org');
+
+<UserPicker
+  query={query}
+  onQueryChange={setQuery}
+  results={candidates}            // or groups={[{ heading, users }]}
+  status={search.status}          // omit for client-side lists
+  onSelect={pick}
+  isDisabled={(u) => onOtherTeam(u)}
+  renderBadge={(u) => <Badge>{u.membership_label}</Badge>}
+  testIds={{ input: 'x-search', option: (u) => `x-option-${u.pk}` }}
+/>
+```
+
+`UserPicker` is a cmdk `Command` (keyboard navigation included) with no frame of
+its own: put it in a `Popover` (`AddStandinPicker`), a `Dialog` (`WalkInPicker`) or
+inline. Each row is `UserSearchOption`: avatar, display name, and the `@handle`
+when it differs, so two people with the same name can be told apart. It renders at
+most `limit` (50) rows and says how many more matched.
+
+Results come back as the server's `SearchUserResult` (with `membership` and
+`membership_label` when an org is passed). Query keys live in `userSearchKeys`;
+`findSearchedUser` reads cached results by the `userSearch` prefix.
+
+`AddUserModal` (site users and Discord members side by side, used to add members
+to orgs, leagues, tournaments, events and admin teams) is built on the same hooks.
+Use it for "add a member" flows rather than a new picker.
 
 ## Lint rules
 
@@ -136,6 +187,7 @@ baselined in `frontend/shadcn-lint-suppressions.json`, so only new ones fail.
 | <a id="no-avatar-fallback"></a>`draftforge/no-avatar-fallback` | Use one `<UserAvatar user={x} fallbackName={…} />` instead of a raw `<Avatar>` branch or person initials in `<AvatarFallback>`. See [Avatars](#avatars). |
 | <a id="no-display-org-arg"></a>`draftforge/no-display-org-arg` | Drop the org argument; it's derived from the page. See [The org comes from the page](#the-org-comes-from-the-page). |
 | <a id="no-user-reshape"></a>`draftforge/no-user-reshape` | Pass the payload itself (`user={x}`), not a copy of its fields. See [Pass the payload as-is](#pass-the-payload-as-is). |
+| <a id="use-user-search"></a>`draftforge/use-user-search` | Replace the hand-rolled `.toLowerCase().includes()` / `===` on a name field with `filterUsers`, `useFilteredUsers`, `userMatchesQuery` or `findUserByName`. See [Searching for people](#searching-for-people). |
 | <a id="no-direct-name-resolver"></a>`draftforge/no-direct-name-resolver` | Use `DisplayName` / `<UserAvatar>` instead of `resolveDisplayName` / `AvatarUrl`. A URL string for a meta tag is a [deliberate exception](#deliberate-single-field-displays). |
 
 ## Testing
@@ -146,5 +198,7 @@ baselined in `frontend/shadcn-lint-suppressions.json`, so only new ones fail.
   reset it in `beforeEach`;
 - set the page with `window.history.pushState({}, '', '/organizations/2')` to get
   an org context (and back to `/` after);
+- `UserPicker` is cmdk: `vitest.setup.ts` stubs the `ResizeObserver` and
+  `scrollIntoView` it needs; options are `role="option"` and select on click;
 - with no user and no image URL, `UserAvatar` renders only the initials (no
   `<img>`), so assert on the text.
