@@ -20,6 +20,7 @@ vi.mock('~/components/api/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/components/api/api')>()),
   updateTournament: vi.fn(),
   createTournament: vi.fn(),
+  getLeagues: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
@@ -29,9 +30,6 @@ vi.mock('~/store/userStore', async () => {
   return {
     useUserStore: create(() => ({
       currentUser: { pk: 1, is_staff: true, is_superuser: false },
-      leagues: [],
-      leaguesOrgId: 'all',
-      getLeagues: () => Promise.resolve(),
       getTournaments: () => Promise.resolve(),
     })),
   };
