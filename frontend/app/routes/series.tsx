@@ -21,6 +21,7 @@ import {
 import api from '~/components/api/axios';
 import { EventStateBadge } from '~/components/events';
 import { CreateSeriesEventModal } from '~/components/events/CreateSeriesEventModal';
+import { DeleteSeriesDialog } from '~/components/events/DeleteSeriesDialog';
 import { EditRepeaterModal } from '~/components/events/EditRepeaterModal';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import {
@@ -36,7 +37,7 @@ import {
   SecondaryButton,
 } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
-import { ConfirmDialog, DeleteDialog } from '~/components/ui/dialogs';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
 import { useEventRepeater } from '~/hooks/useEvent';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
@@ -493,17 +494,10 @@ export default function SeriesPage() {
         cancelTestId="reactivate-series-cancel"
       />
 
-      <DeleteDialog
+      <DeleteSeriesDialog
         open={showDeleteSeries}
         onOpenChange={setShowDeleteSeries}
-        entityKind="Event Series"
-        entityName={repeater.name}
-        description={
-          <>
-            This will delete the series <strong>{repeater.name}</strong>.
-            Existing events that have already been generated are preserved.
-          </>
-        }
+        seriesName={repeater.name}
         isLoading={deleteMutation.isPending}
         onConfirm={async () => {
           try {
@@ -512,10 +506,6 @@ export default function SeriesPage() {
             // toast handled by mutation onError
           }
         }}
-        contentTestId="delete-series-dialog"
-        inputTestId="delete-series-confirm-input"
-        confirmTestId="delete-series-confirm"
-        cancelTestId="delete-series-cancel"
       />
     </div>
   );
