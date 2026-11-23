@@ -36,7 +36,7 @@ const report: DraftResetReport = {
       captain: null,
       usage: [
         {
-          model: 'app.Game',
+          model: 'tournament.Game',
           label: 'game',
           label_plural: 'games',
           count: 2,

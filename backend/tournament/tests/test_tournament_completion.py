@@ -8,9 +8,10 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from steam.functions.game_linking import _link_game_to_match
 from steam.models import Match
+from tournament.models import Game, Team, Tournament
 
 
 class TournamentCompletionTestBase(TestCase):

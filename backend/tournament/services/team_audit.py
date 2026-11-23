@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from app.models import CustomUser, Team, TeamLog, Tournament
+from app.models import CustomUser
+from tournament.models import Team, TeamLog, Tournament
 
 if TYPE_CHECKING:
     from events.models import Event

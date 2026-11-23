@@ -1,7 +1,7 @@
 from django.db import transaction
 from rest_framework import serializers
 
-from app.models import CustomUser, GameMode, GameType, Team, TeamLog, Tournament
+from app.models import CustomUser, GameType
 from app.permissions import request_user
 from app.serializers import TournamentUserSerializer, UserPkField
 from draft.models import DraftOptions
@@ -11,6 +11,8 @@ from league.serializers import LeagueMinimalSerializer, LeaguesSerializer
 from org.mmr import LEAGUE_GAME, org_mmr_map
 from org.models import OrgUser
 from telemetry.logging import get_logger
+from tournament.choices import GameMode
+from tournament.models import Team, TeamLog, Tournament
 from tournament.serializers.draft import (
     DraftOptionsSerializer,
     DraftSerializerSlim,

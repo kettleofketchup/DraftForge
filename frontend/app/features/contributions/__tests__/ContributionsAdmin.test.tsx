@@ -83,7 +83,6 @@ vi.mock('~/components/user/AddUserModal', async () => {
   };
 });
 
-const getOrgUsers = vi.fn();
 vi.mock('~/store/orgStore', () => ({
   useOrgStore: Object.assign(
     (
@@ -91,7 +90,7 @@ vi.mock('~/store/orgStore', () => ({
         currentOrg: { pk: number; discord_server_id: null };
       }) => unknown,
     ) => select({ currentOrg: { pk: 7, discord_server_id: null } }),
-    { getState: () => ({ getOrgUsers }) },
+    { getState: () => ({}) },
   ),
 }));
 
@@ -182,7 +181,6 @@ describe('contributions admin section', () => {
     expect(screen.queryByTestId('contributions-admin')).toBeNull();
     expect(getPointValues).not.toHaveBeenCalled();
     expect(getEntries).not.toHaveBeenCalled();
-    expect(getOrgUsers).not.toHaveBeenCalled();
   });
 
   it('shows default and changed badges with reset only for changed kinds', async () => {
@@ -198,7 +196,6 @@ describe('contributions admin section', () => {
     ).toBeInTheDocument();
     expect(screen.queryByTestId('point-value-reset-event_host')).toBeNull();
     expect(screen.getByTestId('point-value-event_helper')).toHaveValue(8);
-    expect(getOrgUsers).not.toHaveBeenCalled();
   });
 
   it('applies a new value to past entries since a chosen date', async () => {

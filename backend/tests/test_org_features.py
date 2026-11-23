@@ -7,6 +7,8 @@ Routes under /api/tests/ (tests/urls.py):
 - GET org-features/data/: the seeded orgs, users, events and templates.
 - POST org-features/reset/: rebuild the ledger, promo sends, point values,
   events, templates, switches and roles; returns the same body as data/.
+  An optional JSON body {"release_gate": true} turns the leadership staff
+  release gate on with the closed snapshots left pending.
 """
 
 from django.contrib.auth import login
@@ -75,4 +77,10 @@ def org_features_data(request: Request) -> Response:
 def reset_org_features(request: Request) -> Response:
     if not isTestEnvironment(request):
         return _not_found()
-    return Response(reset_org_features_data())
+    release_gate = request.data.get("release_gate", False)
+    if not isinstance(release_gate, bool):
+        return Response(
+            {"detail": "release_gate must be true or false."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return Response(reset_org_features_data(release_gate=release_gate))

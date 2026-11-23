@@ -41,7 +41,9 @@ from discordbot.models import (
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import EventState
+from events.ledger import SignupActor
 from events.models import Event, EventRepeater, RepeaterSubscription
+from events.ready_check import READY_CHECK_HELD_MESSAGE, transition_with_ready_check
 from events.serializers import EventSerializer
 from events.services import clear_signup_dedup_state, generate_events_for_repeater
 from org.models import OrgUser
@@ -800,9 +802,16 @@ def transition_event_state(request: Request, pk: int) -> Response:
     if not new_state:
         return Response({"error": "state required"}, status=status.HTTP_400_BAD_REQUEST)
     try:
-        event.transition_state(new_state)
+        started = transition_with_ready_check(
+            event, new_state, actor=SignupActor.system()
+        )
     except ValueError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    if not started:
+        return Response(
+            {"code": "ready_check_held", "error": READY_CHECK_HELD_MESSAGE},
+            status=status.HTTP_409_CONFLICT,
+        )
     return Response({"id": event.pk, "state": event.state})
 
 

@@ -3,10 +3,10 @@ from typing import Any
 
 from django.db.models import QuerySet
 
-from app.models import Team
 from steam.models import Match
 from steam.utils.steam_api_caller import SteamAPI
 from telemetry.logging import get_logger
+from tournament.models import Team
 
 log = get_logger(__name__)
 

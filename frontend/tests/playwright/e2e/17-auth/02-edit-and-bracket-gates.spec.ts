@@ -12,20 +12,19 @@
  *                                       siteAdmin siteStaff orgOwner orgAdmin orgStaff orgMember promoter leagueAdmin leagueStaff anonymous
  *   orgUsersTab  (members_private off)  ✓         ✓         ✓        ✓        ✓        ✓         ✓        ✓           ✓           ✗
  *   editUser     (org members tab)      ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✗           ✗           ✗
- *   editUser     (tournament players)   ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✗           ✗           ✗
+ *   editUser     (tournament players)   ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓ (MMR)     ✓ (MMR)     ✗
  *   addPlayer    (tournament players)   ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
  *   generateBracket                     ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
  *   setMatchWinner (radiant)            ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
- *   linkSteamMatch                      ✓         ✓         ✗        ✗        ✗        ✗         ✗        ✗           ✗           ✗
+ *   startHeroDraft                      ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
+ *   linkSteamMatch                      ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
  *   editTournament (detail page)        ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
  *   deleteTournament (detail page)      ✓         ✓         ✗        ✗        ✗        ✗         ✗        ✗           ✗           ✗
  *
- * One known divergence:
- *
- * - **Link Steam Match** gates on ``useUserStore.isStaff()`` (site
- *   staff only) while the rest of the MatchStatsModal uses
- *   ``useIsLeagueStaff``. Site staff get the button, org/league
- *   admins don't.
+ * Every tournament-management control follows backend
+ * ``can_edit_tournament``. Tournament player edits are MMR-only for
+ * league admins/staff (the org endpoint accepts org MMR from them for
+ * players of their tournament).
  *
  * Documented in ``docs/dev/auth/roles.md``.
  */
@@ -88,9 +87,9 @@ const EDIT_USER_ORG_EXPECTATIONS: Expectations = {
   anonymous: false,
 };
 
-// Edit User on the tournament players tab resolves to league scope. The
-// save goes through the parent org's OrgUser endpoint (org staff gate), so
-// the button follows parent-org staff, not league roles.
+// Edit User on the tournament players tab resolves to league scope. Org
+// staff get every field; league admins/staff get the button for org MMR
+// only, for players of their tournament.
 const EDIT_USER_TOURNAMENT_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
@@ -99,8 +98,8 @@ const EDIT_USER_TOURNAMENT_EXPECTATIONS: Expectations = {
   orgStaff: true,
   orgMember: false,
   promoter: false,
-  leagueAdmin: false,
-  leagueStaff: false,
+  leagueAdmin: true,
+  leagueStaff: true,
   anonymous: false,
 };
 
@@ -135,22 +134,10 @@ const SET_WINNER_EXPECTATIONS: Expectations = {
   anonymous: false,
 };
 
-// Link Steam Match button gates on the ``isStaff`` selector from
-// useUserStore, which only honours Django ``is_staff || is_superuser``
-// — it does NOT cascade through org/league admins like the rest of the
-// modal. Tracked as a known divergence in roles.md.
-const LINK_STEAM_MATCH_EXPECTATIONS: Expectations = {
-  siteAdmin: true,
-  siteStaff: true,
-  orgOwner: false, // gate is site-only; owner doesn't cascade here
-  orgAdmin: false,
-  orgStaff: false,
-  orgMember: false,
-  promoter: false,
-  leagueAdmin: false,
-  leagueStaff: false,
-  anonymous: false,
-};
+// Link Steam Match and Start Draft (hero draft) follow the same
+// tournament-manager rule as Set Winner.
+const LINK_STEAM_MATCH_EXPECTATIONS: Expectations = SET_WINNER_EXPECTATIONS;
+const START_HERO_DRAFT_EXPECTATIONS: Expectations = SET_WINNER_EXPECTATIONS;
 
 // Edit Tournament → ``canEditTournament`` mirrors backend ``can_edit_tournament``:
 // league admins/staff, or admins/staff of the league's own org.
@@ -348,6 +335,15 @@ test.describe('Edit + Bracket permission matrix (all roles in parallel)', () => 
       `/tournament/${TOURNAMENT_PENDING_BRACKET_PK}/bracket`,
       'radiantWinsButton',
       SET_WINNER_EXPECTATIONS,
+    );
+  });
+
+  test('Start hero draft button visibility', async ({ roleContexts }) => {
+    await assertModalGateAcrossRoles(
+      roleContexts,
+      `/tournament/${TOURNAMENT_PENDING_BRACKET_PK}/bracket`,
+      'view-draft-btn',
+      START_HERO_DRAFT_EXPECTATIONS,
     );
   });
 

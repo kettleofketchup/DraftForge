@@ -24,7 +24,6 @@ vi.mock('~/store/userStore', async () => {
   const store = create(() => ({
     currentUser: { pk: 1 },
     tournament: { pk: 7 },
-    isStaff: () => true,
   }));
   return { useUserStore: store };
 });
@@ -39,10 +38,9 @@ vi.mock('~/store/bracketStore', async () => {
   }));
   return { useBracketStore: store };
 });
-vi.mock('~/components/organization', () => ({
-  useOrganization: () => ({ organization: undefined }),
+vi.mock('~/hooks/useCanManageTournament', () => ({
+  useCanManageCurrentTournament: () => true,
 }));
-vi.mock('~/hooks/usePermissions', () => ({ useIsLeagueStaff: () => true }));
 vi.mock('~/hooks/useHeroDraft', () => ({
   useCreateHeroDraft: () => ({ isPending: false, mutateAsync: vi.fn() }),
   useResetHeroDraft: () => ({ isPending: false, mutateAsync: vi.fn() }),

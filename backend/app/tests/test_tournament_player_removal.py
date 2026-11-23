@@ -6,17 +6,11 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import (
-    CustomUser,
-    Game,
-    Team,
-    TeamLog,
-    TeamLogAction,
-    TeamLogVia,
-    Tournament,
-)
+from app.models import CustomUser
 from league.models import League
 from org.models import Organization, OrgUser
+from tournament.models import Game, Team, TeamLog, Tournament
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.services.team_audit import log_snapshot_fields, write_team_log
 
 

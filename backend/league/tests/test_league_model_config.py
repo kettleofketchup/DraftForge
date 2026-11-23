@@ -1,7 +1,7 @@
 from django.test import SimpleTestCase
 
-from app.models import Tournament
 from league.models import League, LeagueLog, LeagueUser
+from tournament.models import Tournament
 
 
 class LeagueModelConfigTests(SimpleTestCase):

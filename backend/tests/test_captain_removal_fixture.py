@@ -1,6 +1,5 @@
 from django.test import TestCase
 
-from app.models import Game, Team, Tournament
 from tests.helpers.captain_removal_fixture import (
     CAPTAIN_REMOVAL_FRESH_TEAM,
     CAPTAIN_REMOVAL_PLAYED_TEAM,
@@ -8,6 +7,7 @@ from tests.helpers.captain_removal_fixture import (
     populate_captain_removal_tournament,
 )
 from tests.populate.organizations import populate_organizations_and_leagues
+from tournament.models import Game, Team, Tournament
 
 
 class CaptainRemovalFixtureTests(TestCase):

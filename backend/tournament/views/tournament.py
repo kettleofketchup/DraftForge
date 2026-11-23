@@ -13,7 +13,7 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from app.permissions import IsStaff
 from discordbot.models import DiscordTournamentLog
 from draft.models import Draft, DraftRound
@@ -42,6 +42,7 @@ from tournament.listing import (
     resolve_organizations,
     tournaments_list_cache_key,
 )
+from tournament.models import Game, Team, Tournament
 from tournament.permissions import (
     CanEditTournament,
     can_edit_tournament,

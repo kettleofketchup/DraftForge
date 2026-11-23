@@ -9,12 +9,13 @@ from django.test import TestCase, override_settings
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Game, Tournament
+from app.models import CustomUser
 from discordbot.activity_launch import prepare_notification_invite
 from discordbot.models import DraftActivityChannel
 from draft.models import Draft, HeroDraft
 from events.models import Event
 from org.models import Organization
+from tournament.models import Game, Tournament
 
 DiscordCall = Callable[..., dict[str, Any]]
 
