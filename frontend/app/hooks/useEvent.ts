@@ -68,7 +68,7 @@ import {
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 
-/** Every events list, whatever its filters; state and signup counts drive them. */
+/** Lists filter and sort on state and signup counts, so refresh them all. */
 export function invalidateEventLists(queryClient: QueryClient): Promise<void> {
   return queryClient.invalidateQueries({ queryKey: ['events'] });
 }
