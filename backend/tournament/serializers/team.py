@@ -4,7 +4,7 @@ from typing import Any, ClassVar
 from rest_framework import serializers
 from rest_framework.utils.serializer_helpers import ReturnList
 
-from app.models import CustomUser, Team, TeamLog, Tournament
+from app.models import CustomUser
 from app.serializers import TournamentUserSerializer, UserPkField
 from events.overrides import (
     REASON_MAX_LENGTH,
@@ -12,6 +12,7 @@ from events.overrides import (
     OverrideRequestSerializer,
 )
 from org.mmr import game_for_tournament, org_mmr_map
+from tournament.models import Team, TeamLog, Tournament
 from tournament.serializers.users import (
     TEAM_MMR_MAPS,
     TEAM_USER_INDEX,

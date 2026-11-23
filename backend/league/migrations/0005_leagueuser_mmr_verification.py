@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('league', '0003_move_league_models_from_app'),
+        ('league', '0004_retarget_leaguematch_game'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

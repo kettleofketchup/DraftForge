@@ -9,7 +9,7 @@ from django.utils import timezone as tz
 from events.models import Event
 from events.tests.base import EventTestCase
 from org.leadership.constants import RATER_REVIVABLE, VoidKind
-from org.models import Organization, OrgUser
+from org.models import Organization, OrgLog, OrgUser
 from org.models_leadership import (
     CaptainReview,
     CaptainTrait,
@@ -59,6 +59,20 @@ class LeadershipModelsTest(EventTestCase):
             OrgLeadershipSettings.objects.create(
                 organization=self.org, rating_min_reviewers=1
             )
+
+    def test_auto_release_range_constraint(self) -> None:
+        row = OrgLeadershipSettings.objects.create(organization=self.org)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            OrgLeadershipSettings.objects.filter(pk=row.pk).update(
+                auto_release_after_hours=0
+            )
+
+    def test_orglog_release_action(self) -> None:
+        self.assertIn("release_captain_reviews", {a for a, _ in OrgLog.ACTION_CHOICES})
+
+    def test_release_stamp_defaults(self) -> None:
+        self.assertIsNone(self.snapshot.released_at)
+        self.assertIsNone(self.snapshot.released_by)
 
     def test_settings_defaults(self) -> None:
         row = OrgLeadershipSettings.objects.create(organization=self.org)
@@ -175,7 +189,8 @@ class LeadershipModelsTest(EventTestCase):
             return {c.name for c in meta.constraints} | {i.name for i in meta.indexes}
 
         self.assertEqual(
-            names(OrgLeadershipSettings), {"leadership_min_reviewers_floor"}
+            names(OrgLeadershipSettings),
+            {"leadership_min_reviewers_floor", "leadership_auto_release_range"},
         )
         self.assertEqual(names(CaptainTrait), {"uniq_captain_trait_key"})
         self.assertEqual(

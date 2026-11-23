@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from league.models import League
@@ -30,6 +30,7 @@ from org.promotion.services import (
     undo_promo_send,
     will_earn,
 )
+from tournament.models import Tournament
 
 
 class _SendFixture(TestCase):

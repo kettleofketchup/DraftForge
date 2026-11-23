@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from django.apps import apps
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Model, Prefetch
@@ -13,9 +12,10 @@ from app.cache_utils import invalidate_after_commit, invalidate_model, invalidat
 from common.game import GameType
 from org.models import OrgUser, OrgUserGameMmr
 from telemetry.logging import get_logger
+from tournament.models import Tournament
 
 if TYPE_CHECKING:
-    from app.models import CustomUser, Tournament
+    from app.models import CustomUser
     from events.models import Event
 
 log = get_logger(__name__)
@@ -381,9 +381,8 @@ def bulk_set_org_mmrs(
         def _do() -> None:
             invalidate_model(OrgUserGameMmr)
             _invalidate_each(org_users)
-            tournament_model: type[Tournament] = apps.get_model("app", "Tournament")
             _invalidate_each(
-                tournament_model.objects.filter(users__id__in=user_ids).distinct()
+                Tournament.objects.filter(users__id__in=user_ids).distinct()
             )
 
         transaction.on_commit(_do)

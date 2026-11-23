@@ -7,8 +7,8 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("league", "0004_leagueuser_mmr_verification"),
-        ("org", "0022_mmrchangerequest"),
+        ("league", "0005_leagueuser_mmr_verification"),
+        ("org", "0024_mmrchangerequest"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

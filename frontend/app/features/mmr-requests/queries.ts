@@ -8,9 +8,9 @@ import {
 } from '@tanstack/react-query';
 import { getLeagueUsers } from '~/components/api/leagueAPI';
 import { getOrganizationUsers } from '~/components/api/orgAPI';
+import { orgUsersQueryKey } from '~/components/organization/hooks/useOrgUsersQuery';
 import { getLogger } from '~/lib/logger';
 import { useLeagueStore } from '~/store/leagueStore';
-import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 import {
@@ -68,11 +68,15 @@ function invalidateFor(
 }
 
 async function refreshMemberCaches(
+  queryClient: QueryClient,
   subjectPk: number,
   { orgId, leagueId }: MemberScope,
 ): Promise<void> {
   const cache = useUserCacheStore.getState();
-  if (orgId != null && useOrgStore.getState().orgUsersOrgId === orgId) {
+  if (
+    orgId != null &&
+    queryClient.getQueryData(orgUsersQueryKey(orgId)) !== undefined
+  ) {
     const users = await getOrganizationUsers(orgId);
     const mine = users.filter((u) => u.pk === subjectPk);
     if (mine.length > 0) cache.upsert(mine, { orgId });
@@ -93,7 +97,7 @@ function settleStaffWrite(
   scope: MemberScope,
 ): void {
   invalidateFor(queryClient, subjectPk);
-  refreshMemberCaches(subjectPk, scope).catch((error: unknown) =>
+  refreshMemberCaches(queryClient, subjectPk, scope).catch((error: unknown) =>
     log.error('Failed to refresh member MMR caches', error),
   );
 }

@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from draft.models import (
     HeroDraft,
     HeroDraftChatMembership,
@@ -29,6 +29,7 @@ from tests.test_herodraft import (
     get_herodraft_by_key,
     reset_herodraft,
 )
+from tournament.models import Game, Team, Tournament
 from tournament.services.team_management import follow_captain
 
 Channel = HeroDraftChatMessage.Channel

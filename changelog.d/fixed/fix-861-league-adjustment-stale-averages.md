@@ -1,0 +1,1 @@
+- League MMR adjustments from Steam league stats now compare each player with the whole league's current averages, so a player alone in a league is no longer pushed to +500 and a league-wide refresh gives the same result in any order (#861).

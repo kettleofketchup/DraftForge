@@ -28,6 +28,7 @@ APPS = [
     "opsnotices",
     "league",
     "draft",
+    "tournament",
 ]
 
 pytestmark = pytest.mark.skipif(JUST is None, reason="just is not on PATH")
@@ -337,14 +338,27 @@ def test_dev_debug_migrates_with_dev_env_then_starts_dev(run: Runner) -> None:
     assert up.test == "false"
 
 
-DB_FILES = {"test.db.sqlite3", "dev.db.sqlite3", "prod.db.sqlite3"}
+DB_FILES = {"test.db.sqlite3", "dev.db.sqlite3", "data"}
 
 
 def test_touch_dbs_creates_the_dbs_in_df_db_dir(run: Runner) -> None:
     before = {p.name for p in (ROOT / "backend").iterdir()}
     assert run("db::touch-dbs").returncode == 0
-    assert {p.name for p in Path(run.env["DF_DB_DIR"]).iterdir()} == DB_FILES
+    db_dir = Path(run.env["DF_DB_DIR"])
+    assert {p.name for p in db_dir.iterdir()} == DB_FILES
+    assert [p.name for p in (db_dir / "data").iterdir()] == ["prod.db.sqlite3"]
     assert {p.name for p in (ROOT / "backend").iterdir()} == before
+
+
+def test_release_refuses_while_the_db_is_outside_the_data_dir(run: Runner) -> None:
+    db_dir = Path(run.env["DF_DB_DIR"])
+    (db_dir / "prod.db.sqlite3").write_bytes(b"x")
+    (db_dir / "data").mkdir()
+    (db_dir / "data" / "prod.db.sqlite3").write_bytes(b"")
+    result = run("dev::release")
+    assert result.returncode == 1
+    assert "data/prod.db.sqlite3" in result.stderr
+    assert run.calls() == []
 
 
 def test_migrate_all_uses_each_env(run: Runner) -> None:

@@ -56,6 +56,9 @@ P = TypeVar("P", bound=BaseModel)
 
 @dataclass(frozen=True, slots=True)
 class NoticeType(Generic[P]):
+    """Event-scoped notices, payload included, are visible to the event's host
+    and helpers as well as staff; never put org-only data on them."""
+
     key: str
     label: str
     description: str
@@ -85,6 +88,8 @@ _REGISTRY: dict[str, NoticeType[Any]] = {}
 
 
 def register_notice_type(notice_type: NoticeType[Any]) -> NoticeType[Any]:
+    """Register a notice type. Event-scoped notices reach the event's host and
+    helpers, so emitters must keep org-only data off their payload."""
     if not KEY_RE.match(notice_type.key):
         raise NoticeRegistryError(f"invalid notice type key: {notice_type.key!r}")
     if notice_type.key in _REGISTRY:

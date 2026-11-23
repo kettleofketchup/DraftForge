@@ -207,7 +207,7 @@ those rows with it:
   "detail": "Radiant Five is still used by 2 games and cannot be deleted.",
   "usage": [
     {
-      "model": "app.Game",
+      "model": "tournament.Game",
       "label": "game",
       "label_plural": "games",
       "count": 2,
@@ -759,12 +759,25 @@ All under `/api/organizations/{id}/leadership/`, all gated on Leadership. Guide 
 full endpoint table: [Organization Leadership](../features/organization-leadership.md#api).
 Every lookup is scoped to the URL's org (`404` otherwise). Refusals carry
 `{code, detail}`: `review_window_closed` (409), `snapshot_voided` (409), `not_in_pool` (403), `review_moderated`
-(403), `cannot_moderate_own_reviews` (403), `invalid_scores` (400), `reason_required`
-(400), `not_moderated` (409), `trait_in_use` (409), `not_found` (404). Raters read
-their own reviews, open and closed, from `reviews/mine/`. While the feature is unlocked, `GET /api/events/{id}/`
-adds `can_review_captains` and `pending_captain_reviews` (captains the signed-in member
-can still rate on that event); they are computed per viewer after the cached payload. Review `PUT`/`DELETE` are throttled per user. Leaderboards (`rating`, `points`,
-`rating.<trait>`) go through the [standing endpoints](#organization-standing).
+(403), `invalid_scores` (400), `reason_required`
+(400), `not_moderated` (409), `trait_in_use` (409), `not_permitted` (403),
+`cannot_release_own_reviews` (403), `release_not_required` (409), `already_released`
+(409), `window_open` (409), `not_enough_reviews` (409), `nothing_to_release` (409),
+`would_release_own_results` (409, settings PATCH), `not_found` (404). Event reviews, void, restore and
+release are open to org staff and above (`has_org_staff_access`); settings and trait
+writes stay with org admins. Nobody moderates or releases their own captain entry:
+void and restore on a review of yourself return the same `404` as a missing review.
+
+Raters read their own reviews, open and closed, from `reviews/mine/`. While the feature
+is unlocked, `GET /api/events/{id}/` adds `can_review_captains` and
+`pending_captain_reviews` (captains the signed-in member can still rate on that event);
+they are computed per viewer after the cached payload. Review `PUT`/`DELETE` are
+throttled per user. Leaderboards (`rating`, `points`, `rating.<trait>`) go through the
+[standing endpoints](#organization-standing).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/organizations/{id}/leadership/events/{event_id}/release/` | Release an event's captain review results when the org requires staff release. Body `{"captains": [org_user_id, ...]}` (1–64 ids, all or nothing) or `{}` (every pending captain except your own). `200 {"released": [ids], "skipped": [{"org_user_id", "code"}]}` (skip codes: `own_snapshot`, `voided`, `window_open`, `not_enough_reviews`, `already_released`); `400` malformed body, `403 not_permitted` / `cannot_release_own_reviews`, `404` event or captain not in the org, `409 release_not_required` / `already_released` / `window_open` / `not_enough_reviews` / `snapshot_voided` / `nothing_to_release` |
 
 ### Internal
 
@@ -1347,7 +1360,7 @@ teams whose captain is in the pool count as draft teams.
       "kept_teams": [
         {
           "pk": 8, "name": "Seeded", "reason": "no_captain", "captain": null,
-          "usage": [{"model": "app.Game", "label": "game", "label_plural": "games", "count": 1, "teams": [{"pk": 8, "name": "Seeded"}]}]
+          "usage": [{"model": "tournament.Game", "label": "game", "label_plural": "games", "count": 1, "teams": [{"pk": 8, "name": "Seeded"}]}]
         }
       ],
       "cleared_deputies": [{"team": 4, "user": 31}]
@@ -1365,10 +1378,10 @@ teams whose captain is in the pool count as draft teams.
   {
     "error": "Teams are used by games or other records.",
     "code": "draft_reset_has_references",
-    "references": {"app.Game.radiant_team": 2, "app.Game.dire_team": 2, "bracket.BracketSlot.participant": 4},
+    "references": {"tournament.Game.radiant_team": 2, "tournament.Game.dire_team": 2, "bracket.BracketSlot.participant": 4},
     "usage": [
-      {"model": "app.Game", "label": "game", "label_plural": "games", "count": 2, "teams": [{"pk": 4, "name": "Team A"}, {"pk": 5, "name": "Team B"}]},
-      {"model": "bracket.BracketSlot", "label": "bracket slot", "label_plural": "bracket slots", "count": 4, "teams": [{"pk": 4, "name": "Team A"}, {"pk": 5, "name": "Team B"}]}
+      {"model": "bracket.BracketSlot", "label": "bracket slot", "label_plural": "bracket slots", "count": 4, "teams": [{"pk": 4, "name": "Team A"}, {"pk": 5, "name": "Team B"}]},
+      {"model": "tournament.Game", "label": "game", "label_plural": "games", "count": 2, "teams": [{"pk": 4, "name": "Team A"}, {"pk": 5, "name": "Team B"}]}
     ]
   }
   ```
@@ -1677,7 +1690,7 @@ Generic reads over every standing track (`contribution`, `conduct`, `leadership`
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| GET | `/api/organizations/{id}/standing/tracks/` | `{tracks: [{key, label, metrics: [{key, label, format, periodic, default}], can_view_rows, can_view_own, board_open, can_manage}]}`, one entry per unlocked track in registry order | Anyone |
+| GET | `/api/organizations/{id}/standing/tracks/` | `{tracks: [{key, label, metrics: [{key, label, format, periodic, default}], can_view_rows, can_view_own, board_open, can_manage, can_moderate}]}`, one entry per unlocked track in registry order | Anyone |
 | GET | `/api/organizations/{id}/standing/{track}/leaderboard/?metric=&period=` | `{track, metric, period, total, rows: [{member, value, sample, status}], rows_visible, own_row}`. `metric` defaults to the track's default; `period` is `all` or `YYYY-MM` for periodic metrics, and non-periodic metrics return `period: "current"`. `rows` holds at most 100 rows. `own_row` is the viewer's own row for every track, shown even when `rows` is hidden; `rows` and `own_row` are blanked by the track's access rule; `total` is `null` for conduct, and conduct rows with `status: "new"` have `value: null` (the viewer's own row keeps its value) | Per track (below) |
 
 | Track | Metrics | Rows | Own row |

@@ -5,7 +5,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, GameType, Tournament
+from app.models import CustomUser, GameType
 from events.models import Event
 from league.models import League, LeagueUser
 from org.mmr import (
@@ -26,6 +26,7 @@ from org.mmr import (
 )
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_league_user, ensure_org_user
+from tournament.models import Tournament
 
 DOTA = GameType.DOTA2
 DL = GameType.DEADLOCK

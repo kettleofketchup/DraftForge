@@ -21,13 +21,13 @@ function Harness() {
 
 const references = {
   references: {
-    'app.Game.radiant_team': 2,
-    'app.Game.dire_team': 2,
-    'app.Game.winning_team': 2,
+    'tournament.Game.radiant_team': 2,
+    'tournament.Game.dire_team': 2,
+    'tournament.Game.winning_team': 2,
   },
   usage: [
     {
-      model: 'app.Game',
+      model: 'tournament.Game',
       label: 'game',
       label_plural: 'games',
       count: 2,
@@ -37,7 +37,7 @@ const references = {
       ],
     },
     {
-      model: 'app.HeroDraft',
+      model: 'draft.HeroDraft',
       label: 'HeroDraft',
       label_plural: 'HeroDrafts',
       count: 1,

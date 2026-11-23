@@ -3,8 +3,8 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from app.cache_utils import invalidate_after_commit
-from app.models import Game, Tournament
 from telemetry.logging import get_logger
+from tournament.models import Game, Tournament
 
 logger = get_logger(__name__)
 
@@ -131,7 +131,7 @@ class SuggestionTier(models.TextChoices):
 
 class GameMatchSuggestion(models.Model):
     game = models.ForeignKey(
-        "app.Game",
+        "tournament.Game",
         on_delete=models.CASCADE,
         related_name="match_suggestions",
     )
@@ -141,7 +141,7 @@ class GameMatchSuggestion(models.Model):
         related_name="game_suggestions",
     )
     tournament = models.ForeignKey(
-        "app.Tournament",
+        "tournament.Tournament",
         on_delete=models.CASCADE,
         related_name="match_suggestions",
     )

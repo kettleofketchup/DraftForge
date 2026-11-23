@@ -20,6 +20,7 @@ from app.steam_accounts import (
 from common.game import GameType
 from events.eligibility import refresh_unmet_requirements
 from league.models import LeagueUser
+from league.permissions import has_league_staff_access
 from org.member_resolution import member_nick, resolve_member_user
 from org.mmr import (
     OrgMmrError,
@@ -35,6 +36,7 @@ from org.permissions import (
     is_org_owner,
 )
 from org.serializers import OrgUserSerializer
+from tournament.models import Tournament
 from user.querysets import with_user_profiles
 
 
@@ -330,6 +332,29 @@ def add_org_member(request: Request, org_id: int) -> Response:
     return Response({"status": "added", "user": TournamentUserSerializer(user).data})
 
 
+LEAGUE_STAFF_FIELDS = frozenset({"game_mmrs", "mmr", "mmr_game_type"})
+
+
+def _league_staff_tournament(request: Request, org: Organization) -> Tournament | None:
+    """The ?tournament_id= tournament when the user staffs its league in this org.
+
+    League staff edit only org MMR, and only for players of that tournament.
+    """
+    tournament_id = _query_int(request.query_params.get("tournament_id"))
+    if tournament_id is None:
+        return None
+    tournament = (
+        Tournament.objects.select_related("league")
+        .filter(pk=tournament_id, league__organization=org)
+        .first()
+    )
+    if tournament is None or not has_league_staff_access(
+        request.user, tournament.league
+    ):
+        return None
+    return tournament
+
+
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response:
@@ -341,17 +366,28 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
     """
     org = get_object_or_404(Organization, pk=org_id)
 
+    league_tournament: Tournament | None = None
     if not has_org_staff_access(request.user, org):
-        return Response(
-            {"error": "You do not have permission"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
+        league_tournament = _league_staff_tournament(request, org)
+        if league_tournament is None or set(request.data) - LEAGUE_STAFF_FIELDS:
+            return Response(
+                {"error": "You do not have permission"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
     org_user = get_object_or_404(
         with_user_profiles(OrgUser.objects.all(), "user", dota=True),
         pk=org_user_id,
         organization=org,
     )
+    if (
+        league_tournament is not None
+        and not league_tournament.users.filter(pk=org_user.user_id).exists()
+    ):
+        return Response(
+            {"error": "You do not have permission"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     mmr_changes = _parse_mmr_patch(request.data)
     if isinstance(mmr_changes, str):

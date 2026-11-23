@@ -4,8 +4,8 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getOrganizationUsers } from '~/components/api/orgAPI';
+import { orgUsersQueryKey } from '~/components/organization/hooks/useOrgUsersQuery';
 import type { UserType } from '~/components/user/types';
-import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 import {
@@ -64,7 +64,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
-  useOrgStore.getState().clearOrgUsers();
 });
 
 describe('useUserMmrSummary', () => {
@@ -163,9 +162,9 @@ describe('useApproveMmrRequest', () => {
       { pk: 42, username: 'member', game_mmrs: { '1': 4750 } } as UserType,
       { pk: 8, username: 'other' } as UserType,
     ]);
-    useOrgStore.setState({ orgUsersOrgId: 3, orgUserPks: [42, 8] });
     const upsert = vi.spyOn(useUserCacheStore.getState(), 'upsert');
     const { client, wrapper, invalid } = setup();
+    client.setQueryData(orgUsersQueryKey(3), [42, 8]);
     client.setQueryData(['user', 42], {});
     const { result } = renderHook(() => useApproveMmrRequest(), { wrapper });
     await act(() => result.current.mutateAsync({ request: row, mmr: 4750 }));
@@ -182,8 +181,8 @@ describe('useApproveMmrRequest', () => {
 
   it('leaves the member list alone when another org is loaded', async () => {
     vi.mocked(approveMmrRequest).mockResolvedValue(mmrRequest());
-    useOrgStore.setState({ orgUsersOrgId: 99, orgUserPks: [1] });
-    const { wrapper } = setup();
+    const { client, wrapper } = setup();
+    client.setQueryData(orgUsersQueryKey(99), [1]);
     const { result } = renderHook(() => useApproveMmrRequest(), { wrapper });
     await act(() => result.current.mutateAsync({ request: mmrRequest() }));
     expect(approveMmrRequest).toHaveBeenCalledWith(77, undefined);

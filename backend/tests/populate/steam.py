@@ -3,16 +3,20 @@ Steam matches population module for test database.
 Creates mock Steam matches and bracket games for tournaments.
 """
 
-from django.db import models
+from typing import Any
 
-from app.models import CustomUser, Game
+from app.models import CustomUser
+from steam.mocks.mock_match_generator import generate_mock_matches_for_tournament
+from steam.models import Match, PlayerMatchStats
+from tests.data.models import DynamicTournamentConfig
 from tests.data.tournaments import BRACKET_TEST_CONFIGS
+from tournament.models import Game, Tournament
 
 from .constants import DTX_STEAM_LEAGUE_ID
 from .utils import flush_redis_cache
 
 
-def populate_steam_matches(force=False):
+def populate_steam_matches(force: bool = False) -> None:
     """
     Generate and save mock Steam matches for test tournaments.
     Creates bracket Game objects with different completion states:
@@ -23,10 +27,6 @@ def populate_steam_matches(force=False):
     Args:
         force: If True, delete existing mock matches and games first
     """
-    from app.models import Tournament
-    from steam.mocks.mock_match_generator import generate_mock_matches_for_tournament
-    from steam.models import Match, PlayerMatchStats
-
     print("Populating Steam matches and bracket games...")
 
     # Find tournaments by name from Pydantic configs
@@ -53,7 +53,7 @@ def populate_steam_matches(force=False):
             existing_matches.delete()
             existing_games.delete()
         else:
-            print(f"Mock data already exists. Use force=True to regenerate.")
+            print("Mock data already exists. Use force=True to regenerate.")
             return
 
     # Define bracket structure for 4-team double elimination
@@ -97,11 +97,11 @@ def populate_steam_matches(force=False):
 
 
 def populate_bracket_games_for_tournament(
-    tournament,
-    tournament_config,
-    bracket_structure,
-    steam_league_id,
-):
+    tournament: Tournament,
+    tournament_config: DynamicTournamentConfig,
+    bracket_structure: list[dict[str, Any]],
+    steam_league_id: int | None,
+) -> None:
     """Create bracket Game rows + Match/PlayerMatchStats for one tournament.
 
     Extracted from the BRACKET_TEST_CONFIGS loop so it can be reused for
@@ -109,9 +109,6 @@ def populate_bracket_games_for_tournament(
     pulling them into the shared BRACKET_TEST_CONFIGS list — which would
     make populate_steam_matches require them to exist at its own step.
     """
-    from steam.mocks.mock_match_generator import generate_mock_matches_for_tournament
-    from steam.models import Match, PlayerMatchStats
-
     completed_count = tournament_config.completed_game_count or 0
     match_id_base = tournament_config.match_id_base or 9000000001
 
