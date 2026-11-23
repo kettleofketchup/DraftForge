@@ -402,7 +402,7 @@ class RouteResolutionTests(TestCase):
             ("draft.consumers.team", "DraftConsumer"),
         )
         tournament = _websocket_route("api/tournament/1/")
-        self.assertEqual(tournament.consumer_class.__module__, "app.consumers")
+        self.assertEqual(tournament.consumer_class.__module__, "tournament.consumers")
 
     def test_api_root_lists_draft_routers(self) -> None:
         response = APIClient().get("/api/", HTTP_ACCEPT="application/json")

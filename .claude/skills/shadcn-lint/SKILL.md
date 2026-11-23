@@ -26,16 +26,17 @@ just frontend::lint-shadcn-prune   # after fixing baselined violations
 | `draftforge/no-user-reshape` | `<UserAvatar user={{ pk: x.pk, username: x.username, … }} />` copying same-named fields from one object (or `pk` from `user_id`/`user`/`id`). Pass `user={x}`; `UserAvatar` resolves the user by id and fills the rest from the user cache. Translations such as `{ username: payload.captain_name }` are not flagged. |
 | `draftforge/no-direct-name-resolver` | Calling `resolveDisplayName` or `AvatarUrl` outside the helpers. Use `DisplayName(user)` / `<UserAvatar user={…} />`. Off in tests. |
 | `draftforge/no-avatar-fallback` | A raw `<Avatar>` branch beside a `<UserAvatar>` (`captain ? <UserAvatar …/> : <Avatar>…</Avatar>`), and `<AvatarFallback>` built from a person's name (`…username`, `…nickname`, a `displayName`/`username`/`nickname` variable, or `DisplayName(…)`). `UserAvatar` renders the no-user fallback itself: pass `fallbackName` for the initials when there is no user. Team initials (`team.name`) are not flagged. |
+| `draftforge/use-user-search` | Hand-rolled name matching: `.toLowerCase()` of a person-name field (`username`, `nickname`, `nick`, `discordNickname`, `discordUsername`, `guildNickname`, `global_name`) or of `DisplayName(…)` fed to `.includes`/`.startsWith`/`.endsWith`/`.indexOf`/`.match`/`.search` or `===`/`!==`, and a case-sensitive `user.username.includes(q)`. Use `filterUsers`, `useFilteredUsers`, `userMatchesQuery` or `findUserByName` (`~/lib/userSearch`). Exact `a.username === b.username` and `localeCompare` sorts are not flagged. |
 | `draftforge/no-raw-color-strings` | Raw palette classes in **any** string, for the ones `no-raw-colors` cannot trace to a `className`: lookup maps (`{ str: 'bg-red-900/40' }`), arrays, function returns, unused constants, `ui/buttons/styles.ts`. The `dedupe-raw-colors` processor drops its report when `no-raw-colors` already reported the same class on the same lines, so each class counts once. Off in tests. |
 | `draftforge/no-arbitrary-color-literals` | A colour literal (`#hex`, `rgb()`/`rgba()`, `hsl()`, `oklch()`, ...) inside a Tailwind arbitrary value or property, in any string: `shadow-[inset_0_0_120px_rgba(239,68,68,0.45)]`, `text-[#5865F2]`, a `var(--x, rgba(...))` fallback. Neither palette rule reads arbitrary values. Use `var(--color-<token>)`, or `color-mix(in_oklab,var(--color-<token>)_N%,transparent)` for alpha. Pure black and white (`rgba(0,0,0,a)`, `#fff`) stay allowed for neutral shadows, like `text-white`. Off in tests. |
 
-How to render people correctly, and the fix for each person `draftforge/*` error, is in
-[`frontend-development/resources/users.md`](../frontend-development/resources/users.md);
+How to render and search for people, and the fix for each person `draftforge/*` error, is in
+the `users` skill's [`references/frontend.md`](../users/references/frontend.md);
 every error message links to its section there.
 
 The `draftforge/*` rules are local (`frontend/eslint-rules/`, combined in `index.js`; tests in
 `frontend/tests/unit/eslint-*.test.ts`). The person rules are off in the helpers that implement
-them (`UserAvatar.tsx`, `avatar.tsx`, `lib/userDisplayName.ts`, `lib/displayOrg.ts`, `ui/**`). When a screen deliberately shows one specific
+them (`UserAvatar.tsx`, `avatar.tsx`, `lib/userDisplayName.ts`, `lib/userSearch.ts`, `lib/displayOrg.ts`, `ui/**`). When a screen deliberately shows one specific
 field (an `@handle`, a labelled "Username:" row, a Discord member picker), opt out on that
 line with a reason: `// eslint-disable-next-line draftforge/use-display-name -- shows the handle`.
 

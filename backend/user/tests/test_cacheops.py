@@ -96,6 +96,9 @@ class CacheopsSettingsTests(TestCase):
 SCAN_TARGETS = [
     REPO_ROOT / "backend" / "app" / "views_main.py",
     REPO_ROOT / "backend" / "app" / "user_cache.py",
+    REPO_ROOT / "backend" / "tournament" / "views" / "tournament.py",
+    REPO_ROOT / "backend" / "tournament" / "views" / "team.py",
+    REPO_ROOT / "backend" / "tournament" / "views" / "game.py",
     REPO_ROOT / "backend" / "draft" / "views" / "team_setup.py",
     REPO_ROOT / "backend" / "draft" / "views" / "team_api.py",
     REPO_ROOT / "backend" / "events" / "views.py",

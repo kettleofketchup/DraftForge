@@ -5,7 +5,6 @@ import { useUserCacheStore } from '~/store/userCacheStore';
 import {
   mergeCachedUser,
   resolveDisplayName,
-  userMatchesQuery,
   userRefPk,
 } from './userDisplayName';
 
@@ -178,36 +177,5 @@ describe('mergeCachedUser', () => {
       avatar: 'new',
       username: 'u',
     });
-  });
-});
-
-describe('userMatchesQuery', () => {
-  beforeEach(() => useUserCacheStore.getState().reset());
-
-  it('matches the Discord name shown instead of the username', () => {
-    const user = {
-      pk: 9,
-      username: '5c0obysn4cks',
-      discordNickname: 'Wanna see nirvana',
-    };
-    expect(userMatchesQuery(user, 'NIR')).toBe(true);
-    expect(userMatchesQuery(user, '5c0')).toBe(true);
-    expect(userMatchesQuery(user, 'zzz')).toBe(false);
-  });
-
-  it('matches the org server nickname in an org', () => {
-    const user = { pk: 9, username: 'u', guildNickname: 'ServerName' };
-    expect(userMatchesQuery(user, 'server', { orgId: 3 })).toBe(true);
-  });
-
-  it('matches names known only to the user cache', () => {
-    useUserCacheStore
-      .getState()
-      .upsert({ pk: 5, username: 'c', discordNickname: 'CachedGlobal' });
-    expect(userMatchesQuery({ pk: 5 }, 'cachedglo')).toBe(true);
-  });
-
-  it('treats a blank query as a match', () => {
-    expect(userMatchesQuery({ username: 'u' }, '  ')).toBe(true);
   });
 });

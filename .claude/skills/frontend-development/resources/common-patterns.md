@@ -315,9 +315,9 @@ export const useAppState = create<AppState>((set) => ({
 
 ## Names and avatars
 
-`DisplayName(x)` and `<UserAvatar user={x} />` for every person; pass the payload as-is.
+`DisplayName(x)` and `<UserAvatar user={x} />` for every person; pass the payload as-is. Search with `useFilteredUsers` / `useUserSearch` and `<UserPicker>`.
 
-**[📖 See dedicated guide: users.md](users.md)**
+**[📖 See the `users` skill](../../users/SKILL.md)**
 
 ---
 

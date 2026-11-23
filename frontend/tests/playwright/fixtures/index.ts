@@ -214,3 +214,13 @@ export {
   type OrgFeaturesRole,
   type OrgFeaturesTestData,
 } from './org-features';
+
+// Discord Activity harness (27-activity specs)
+export {
+  ACTIVITY_HARNESS_PATH,
+  harnessCommands,
+  openActivityHarness,
+  setupDiscordActivity,
+  type DiscordActivitySetup,
+  type HarnessCommand,
+} from './discord-activity';

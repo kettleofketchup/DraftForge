@@ -55,13 +55,7 @@ import {
   Users,
   UserX,
 } from 'lucide-react';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -76,12 +70,12 @@ import { EventStateBadge } from '~/components/events';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
 import { EventAdminActions } from '~/components/events/EventAdminActions';
+import { EventOpsNoticesSlot } from '~/components/events/EventOpsNoticesSlot';
 import { EventSignupModal } from '~/components/events/EventSignupModal';
 import { evaluateSignupGap } from '~/components/events/EventSignupModal/evaluateSignupGap';
 import { EventStaffSection } from '~/components/events/EventStaffCard';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { MySignupActions } from '~/components/events/MySignupActions';
-import { OpsNoticesCard } from '~/components/events/OpsNoticesCard';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
@@ -104,6 +98,10 @@ import {
 } from '~/components/game/constants';
 import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
 import { useOrganization } from '~/components/organization';
+import {
+  orgUsersQueryKey,
+  useOrgUsersQuery,
+} from '~/components/organization/hooks/useOrgUsersQuery';
 import { Badge } from '~/components/ui/badge';
 import {
   DestructiveButton,
@@ -160,7 +158,6 @@ import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useUserDotaProfile } from '~/hooks/useUserProfile';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
-import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 
@@ -216,9 +213,9 @@ export default function EventPage() {
   const eventOrgPk = event?.organization ?? null;
   const onMemberViewerChange = useCallback(() => {
     if (!eventOrgPk) return;
-    if (useOrgStore.getState().orgUsersOrgId === eventOrgPk) {
-      useOrgStore.getState().clearOrgUsers();
-    }
+    // Remove, not reset: this runs before useQuery applies enabled=false, so a
+    // reset would refetch the members list as the new (possibly anonymous) viewer.
+    queryClient.removeQueries({ queryKey: orgUsersQueryKey(eventOrgPk) });
     useUserCacheStore.getState().dropScoped({ orgId: eventOrgPk });
     removeFeatureQueries(queryClient, eventOrgPk);
     queryClient.invalidateQueries({ queryKey: ['event', id] });
@@ -227,12 +224,9 @@ export default function EventPage() {
   }, [eventOrgPk, id, queryClient, refetchEventOrg]);
   const { canView: canViewOrgMembers, settled: orgMemberAccessSettled } =
     useMemberAccess(eventOrg, onMemberViewerChange);
-  const orgUsersOrgId = useOrgStore((s) => s.orgUsersOrgId);
-  useEffect(() => {
-    if (eventOrgPk && orgMemberAccessSettled && canViewOrgMembers) {
-      useOrgStore.getState().getOrgUsers(eventOrgPk);
-    }
-  }, [eventOrgPk, orgMemberAccessSettled, canViewOrgMembers, orgUsersOrgId]);
+  useOrgUsersQuery(eventOrgPk, {
+    enabled: orgMemberAccessSettled && !!canViewOrgMembers,
+  });
   const signupMutation = useSignupMutation(id ?? 0);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
@@ -349,7 +343,6 @@ export default function EventPage() {
     return segments;
   }, [event]);
 
-  // Check if current user already has an active signup
   const mySignup = useMemo(() => {
     if (!signups || !currentUser?.pk) return undefined;
     return signups.find(
@@ -651,7 +644,7 @@ export default function EventPage() {
           </TabsList>
 
           <TabsContent value="details">
-            {isAdmin && <OpsNoticesCard eventId={event.id} />}
+            <EventOpsNoticesSlot event={event} />
             <EventConductSection
               event={event}
               org={eventOrg ?? undefined}
@@ -973,10 +966,14 @@ function SignupsTab({
       }
       const resp = await adminAddSignup(eventId!, payload.user_id);
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-      // Backend adds the user as an OrgUser when an admin signs them up; reset
-      // the org-users cache so the org page reflects the new membership.
       void invalidateConductQueries(queryClient, orgId);
-      if (orgId) useOrgStore.getState().clearOrgUsers();
+      // Backend adds the user as an OrgUser when an admin signs them up;
+      // refetch the org members so the org page shows the new membership.
+      if (orgId) {
+        void queryClient.invalidateQueries({
+          queryKey: orgUsersQueryKey(orgId),
+        });
+      }
       // AddUserModal reads `.pk` off this to track optimistic adds — the signup
       // itself has no pk, so hand back the user it embeds.
       const added = resp.user_data;
@@ -1288,7 +1285,11 @@ function SignupsTab({
             {
               onSuccess: () => {
                 setApprovalSignup(null);
-                if (orgId) useOrgStore.getState().clearOrgUsers();
+                if (orgId) {
+                  void queryClient.invalidateQueries({
+                    queryKey: orgUsersQueryKey(orgId),
+                  });
+                }
                 if (previousMmr != null && previousMmr !== mmr) {
                   const delta = mmr - previousMmr;
                   toast.success(

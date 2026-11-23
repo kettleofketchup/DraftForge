@@ -1,18 +1,21 @@
-import { useOrgStore } from '~/store/orgStore';
+import { useOrgUsersQuery } from '~/components/organization/hooks/useOrgUsersQuery';
 import type { UserEntry } from '~/store/userCacheTypes';
 
 import { useResolvedUsers } from './useResolvedUsers';
 
-/**
- * Get org users as UserEntry[] resolved from the cache.
- * Hooks are called unconditionally to respect Rules of Hooks.
- * Guard is applied after to prevent wrong-org flash during navigation.
- */
-export function useOrgUsers(orgId: number): UserEntry[] {
-  const pks = useOrgStore((state) => state.orgUserPks);
-  const loadedOrgId = useOrgStore((state) => state.orgUsersOrgId);
-  const users = useResolvedUsers(pks); // always call unconditionally
+const NO_PKS: number[] = [];
 
-  if (loadedOrgId !== orgId) return [];
-  return users;
+export function useOrgUsers(
+  orgId: number,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const query = useOrgUsersQuery(orgId, { enabled });
+  const pks = query.data ?? NO_PKS;
+  const users: UserEntry[] = useResolvedUsers(pks);
+  return {
+    users,
+    pks,
+    isLoading: query.isLoading,
+    isLoaded: query.isSuccess,
+  };
 }

@@ -1,4 +1,3 @@
-import { currentDisplayOrgId } from '~/lib/displayOrg';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import type { UserEntry } from '~/store/userCacheTypes';
 
@@ -133,25 +132,4 @@ export function resolveDisplayName(
     name = chain.find(present) ?? fallbackName(pk);
   }
   return opts?.maxLength ? truncateName(name, opts.maxLength) : name;
-}
-
-/** Case-insensitive match on every name a user can be shown or known by; `orgId` defaults to the current page's org, like `DisplayName`. */
-export function userMatchesQuery(
-  user: UserRef | null | undefined,
-  query: string,
-  opts?: Pick<ResolveOptions, 'orgId'>,
-): boolean {
-  const q = query.trim().toLowerCase();
-  if (q === '') return true;
-  if (!user || typeof user !== 'object') return false;
-  const merged = mergeCachedUser(user, cachedUserFor(user));
-  const names = [
-    merged.username,
-    merged.nickname,
-    merged.discordNickname,
-    resolveDisplayName(user, {
-      orgId: opts?.orgId === undefined ? currentDisplayOrgId() : opts.orgId,
-    }),
-  ];
-  return names.some((n) => present(n) && n.toLowerCase().includes(q));
 }

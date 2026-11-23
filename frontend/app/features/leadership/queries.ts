@@ -23,6 +23,7 @@ import {
   patchLeadershipSettings,
   putReview,
   putTraits,
+  releaseResults,
   unvoidReview,
   voidReview,
   type TraitPutItem,
@@ -35,6 +36,7 @@ import type {
   ModerationReview,
   MyReview,
   PendingReview,
+  ReleaseResult,
   ReviewResult,
   Scores,
   Trait,
@@ -50,6 +52,15 @@ function isMember(access: OrgFeatureAccess): boolean {
 
 function canManage(access: OrgFeatureAccess): boolean {
   return leadershipAccess(access).canManage;
+}
+
+function canModerate(access: OrgFeatureAccess): boolean {
+  return leadershipAccess(access).canModerate;
+}
+
+function canReadTraits(access: OrgFeatureAccess): boolean {
+  const flags = leadershipAccess(access);
+  return flags.member || flags.canModerate || flags.canManage;
 }
 
 export function useMemberLeadership(
@@ -133,7 +144,7 @@ export function useEventReviews(
   return useQuery({
     queryKey: leadershipKeys.eventReviews(orgId, access.viewerPk, eventId),
     queryFn: () => getEventReviews(orgId, eventId),
-    enabled: enabled && canManage(access),
+    enabled: enabled && canModerate(access),
   });
 }
 
@@ -160,6 +171,20 @@ export function useUnvoidReview(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ reviewPk }) => unvoidReview(orgId, reviewPk),
+    onSettled: () =>
+      invalidateLeadershipQueries(queryClient, orgId, { eventId }),
+  });
+}
+
+export type ReleaseResultsVars = { captains?: number[] };
+
+export function useReleaseResults(
+  orgId: number,
+  eventId: number,
+): UseMutationResult<ReleaseResult, unknown, ReleaseResultsVars> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ captains }) => releaseResults(orgId, eventId, captains),
     onSettled: () =>
       invalidateLeadershipQueries(queryClient, orgId, { eventId }),
   });
@@ -204,7 +229,7 @@ export function useLeadershipTraits(
   return useQuery({
     queryKey: leadershipKeys.traits(orgId, access.viewerPk),
     queryFn: () => getTraits(orgId),
-    enabled: enabled && canManage(access),
+    enabled: enabled && canReadTraits(access),
   });
 }
 

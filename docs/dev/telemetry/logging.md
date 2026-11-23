@@ -149,7 +149,7 @@ log.info("feature_enabled", feature="bulk_import")
 In development (`NODE_ENV=dev`), logs use colored console output:
 
 ```
-2024-01-15 10:23:45 [info     ] tournament_created [app.views.tournament] tournament_id=5 request.id=abc-123
+2024-01-15 10:23:45 [info     ] tournament_created [tournament.views.tournament] tournament_id=5 request.id=abc-123
 ```
 
 ### Production (JSON)
@@ -160,7 +160,7 @@ In production, logs are JSON for easy parsing:
 {
   "timestamp": "2024-01-15T10:23:45.123456Z",
   "level": "info",
-  "logger": "app.views.tournament",
+  "logger": "tournament.views.tournament",
   "event": "tournament_created",
   "tournament_id": 5,
   "request.id": "abc-123"

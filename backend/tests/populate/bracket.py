@@ -4,6 +4,7 @@ Bracket scenario population for test database.
 Contains functions for creating bracket-related test scenarios:
 - populate_bracket_linking_scenario: Creates data for bracket match linking tests
 - populate_bracket_unset_winner_tournament: Creates data for unset winner E2E tests
+- populate_bracket_placement_single/_double: Pending 4-team brackets for placement E2E tests
 """
 
 import random
@@ -14,8 +15,13 @@ from datetime import timezone as dt_tz
 from app.models import CustomUser, Game, PositionsModel, Team, Tournament
 from league.models import League
 from steam.models import Match, PlayerMatchStats
+from tests.data.models import TestTournament
 from tests.data.teams import BRACKET_UNSET_WINNER_TEAMS
-from tests.data.tournaments import BRACKET_UNSET_WINNER_TOURNAMENT
+from tests.data.tournaments import (
+    BRACKET_PLACEMENT_DOUBLE_TOURNAMENT,
+    BRACKET_PLACEMENT_SINGLE_TOURNAMENT,
+    BRACKET_UNSET_WINNER_TOURNAMENT,
+)
 
 from .constants import BRACKET_STEAM_ID_BASE, BRACKET_USER_COUNT, DTX_STEAM_LEAGUE_ID
 from .utils import _ensure_league_user, _ensure_org_user, _flush_redis_cache
@@ -519,4 +525,142 @@ def populate_bracket_unset_winner_tournament(force=False):
 
     _flush_redis_cache()
 
+    return tournament
+
+
+def _create_placement_tournament(
+    config: TestTournament, force: bool
+) -> tuple[Tournament, list[Team]] | None:
+    league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
+    if not league:
+        print("DTX League not found. Run populate_organizations_and_leagues first.")
+        return None
+    existing = Tournament.objects.filter(name=config.name).first()
+    if existing and not force:
+        return None
+    if existing:
+        existing.delete()
+
+    tournament = Tournament.objects.create(
+        name=config.name,
+        date_played=date.today(),
+        state=config.state,
+        tournament_type=config.tournament_type,
+        league=league,
+        steam_league_id=DTX_STEAM_LEAGUE_ID,
+    )
+    teams: list[Team] = []
+    all_users: list[CustomUser] = []
+    for order, team_config in enumerate(config.teams, start=1):
+        members = list(
+            CustomUser.objects.filter(
+                username__in=[m.username for m in team_config.members]
+            )
+        )
+        captain = CustomUser.objects.filter(
+            username=team_config.captain.username
+        ).first() or (members[0] if members else None)
+        team = Team.objects.create(
+            tournament=tournament,
+            name=team_config.name,
+            captain=captain,
+            draft_order=order,
+        )
+        team.members.set(members)
+        teams.append(team)
+        all_users.extend(members)
+    tournament.users.set(all_users)
+    return tournament, teams
+
+
+def populate_bracket_placement_single(force: bool = False) -> Tournament | None:
+    """4-team single elimination: two pending semis (round 1) feed the final."""
+    created = _create_placement_tournament(BRACKET_PLACEMENT_SINGLE_TOURNAMENT, force)
+    if created is None:
+        return Tournament.objects.filter(
+            name=BRACKET_PLACEMENT_SINGLE_TOURNAMENT.name
+        ).first()
+    tournament, teams = created
+
+    def game(round_: int, position: int, **kwargs: object) -> Game:
+        return Game.objects.create(
+            tournament=tournament,
+            bracket_type="winners",
+            elimination_type="single",
+            round=round_,
+            position=position,
+            status="pending",
+            **kwargs,
+        )
+
+    final = game(2, 0)
+    game(
+        1,
+        0,
+        radiant_team=teams[0],
+        dire_team=teams[1],
+        next_game=final,
+        next_game_slot="radiant",
+    )
+    game(
+        1,
+        1,
+        radiant_team=teams[2],
+        dire_team=teams[3],
+        next_game=final,
+        next_game_slot="dire",
+    )
+
+    _flush_redis_cache()
+    return tournament
+
+
+def populate_bracket_placement_double(force: bool = False) -> Tournament | None:
+    """4-team double elimination, all pending, linked like the frontend preset."""
+    created = _create_placement_tournament(BRACKET_PLACEMENT_DOUBLE_TOURNAMENT, force)
+    if created is None:
+        return Tournament.objects.filter(
+            name=BRACKET_PLACEMENT_DOUBLE_TOURNAMENT.name
+        ).first()
+    tournament, teams = created
+
+    def game(bracket_type: str, round_: int, position: int, **kwargs: object) -> Game:
+        return Game.objects.create(
+            tournament=tournament,
+            bracket_type=bracket_type,
+            elimination_type="double",
+            round=round_,
+            position=position,
+            status="pending",
+            **kwargs,
+        )
+
+    grand_finals = game("grand_finals", 1, 0)
+    losers_final = game("losers", 2, 0, next_game=grand_finals, next_game_slot="dire")
+    losers_r1 = game("losers", 1, 0, next_game=losers_final, next_game_slot="dire")
+    winners_final = game(
+        "winners",
+        2,
+        0,
+        next_game=grand_finals,
+        next_game_slot="radiant",
+        loser_next_game=losers_final,
+        loser_next_game_slot="radiant",
+    )
+    for position, (radiant, dire) in enumerate(
+        ((teams[0], teams[3]), (teams[1], teams[2]))
+    ):
+        game(
+            "winners",
+            1,
+            position,
+            radiant_team=radiant,
+            dire_team=dire,
+            next_game=winners_final,
+            next_game_slot="radiant" if position == 0 else "dire",
+            loser_next_game=losers_r1,
+            loser_next_game_slot="radiant" if position == 0 else "dire",
+        )
+
+    _flush_redis_cache()
     return tournament

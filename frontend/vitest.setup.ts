@@ -16,6 +16,16 @@ vi.mock('~/components/api/userAPI', async (importOriginal) => ({
   fetchCurrentUser: vi.fn(async () => ({}) as UserType),
 }));
 
+// jsdom lacks these; cmdk (UserPicker, Command) and Radix call them.
+if (typeof Element !== 'undefined') {
+  Element.prototype.scrollIntoView ??= () => undefined;
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // Unit tests must not reach the network. Any request that gets past a test's mocks is
 // rejected here, logged, and fails the test in afterEach (app code often swallows the rejection).
 const unmockedRequests: string[] = [];

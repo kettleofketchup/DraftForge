@@ -279,8 +279,8 @@ test.describe('Org features: leadership @cicd', () => {
     );
     await expect(page.getByTestId(`leadership-void-${pk}`)).toBeVisible();
 
-    // Org staff who is not an admin cannot moderate, and the backend refuses
-    // other captains on a private board.
+    // Org staff moderate other captains, but never see their own reviews.
+    const { staff_captain_org_user_pk } = data.leadership;
     const pageErrors: string[] = [];
     page.on('pageerror', (e) => pageErrors.push(e.message));
     const memberCalls: { url: string; status: number }[] = [];
@@ -291,8 +291,24 @@ test.describe('Org features: leadership @cicd', () => {
 
     await loginOrgFeatures(context, 'staff');
     await visitAndWaitForHydration(page, `/events/${event_pk}`);
-    await expect(page.locator('h1').first()).toBeVisible();
-    await expect(page.getByTestId('leadership-moderation')).toHaveCount(0);
+    await expect(page.getByTestId('leadership-moderation')).toBeVisible();
+    await expect(
+      captain.locator('[data-testid^="leadership-review-row-"]'),
+    ).toHaveCount(3);
+    await expect(page.getByTestId(`leadership-void-${pk}`)).toBeVisible();
+    const own = page.getByTestId(
+      `leadership-moderation-${staff_captain_org_user_pk}`,
+    );
+    await expect(own).toBeVisible();
+    await expect(
+      page.getByTestId(
+        `leadership-moderation-own-${staff_captain_org_user_pk}`,
+      ),
+    ).toBeVisible();
+    await expect(
+      own.locator('[data-testid^="leadership-review-row-"]'),
+    ).toHaveCount(0);
+    await expect(own).not.toContainText(/of_player_|Features Player/);
 
     await visitAndWaitForHydration(
       page,
@@ -303,17 +319,96 @@ test.describe('Org features: leadership @cicd', () => {
     );
     await expect(row).toBeVisible();
     await row.click();
-    await expect(page.getByTestId('leadership-member-forbidden')).toHaveText(
-      "Only org admins can see other captains' details.",
+    await expect(page.getByTestId('leadership-member')).toBeVisible();
+    await expect(
+      page.getByTestId('leadership-member-staff-note'),
+    ).toBeVisible();
+    await expect(page.getByTestId('leadership-member-forbidden')).toHaveCount(
+      0,
     );
-    const refused = memberCalls.filter((c) =>
+    const fetched = memberCalls.filter((c) =>
       c.url.includes(`/members/${released_captain_org_user_pk}/`),
     );
-    expect(refused.length).toBeGreaterThan(0);
-    expect(refused.every((c) => c.status === 403)).toBe(true);
-    await expect(page.getByTestId('leadership-tab')).toBeVisible();
+    expect(fetched.length).toBeGreaterThan(0);
+    expect(fetched.every((c) => c.status === 200)).toBe(true);
     await expect(page.getByText('An unexpected error occurred')).toHaveCount(0);
     expect(pageErrors).toEqual([]);
+  });
+
+  test('staff release gated results @cicd', async ({
+    page,
+    context,
+    request,
+  }) => {
+    data = await resetOrgFeatures(request, { releaseGate: true });
+    const {
+      event_pk,
+      released_captain_org_user_pk: released,
+      staff_captain_org_user_pk: ownPk,
+    } = data.leadership;
+    const tabUrl = `/organizations/${data.orgs.features.pk}?tab=leadership`;
+    const memberEvent = `leadership-member-event-${event_pk}`;
+
+    await loginOrgFeatures(context, 'member');
+    await visitAndWaitForHydration(page, tabUrl);
+    await expect(page.getByTestId('leadership-member')).toBeVisible();
+    await expect(page.getByTestId('leadership-member-rating')).toHaveText('—');
+    await expect(
+      page.getByTestId('leadership-member-unreleased'),
+    ).toBeVisible();
+    await expect(page.getByTestId(memberEvent)).toHaveCount(0);
+
+    await loginOrgFeatures(context, 'staff');
+    await visitAndWaitForHydration(page, `/events/${event_pk}`);
+    await expect(page.getByTestId('leadership-moderation')).toBeVisible();
+    const state = page.getByTestId(`leadership-release-state-${released}`);
+    await expect(state).toHaveText('Pending release');
+    await expect(page.getByTestId(`leadership-release-${ownPk}`)).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByTestId(`leadership-moderation-own-${ownPk}`),
+    ).toBeVisible();
+
+    await expect(page.getByTestId('leadership-release-all')).toHaveText(
+      'Release all pending (1)',
+    );
+
+    await page.getByTestId(`leadership-release-${released}`).click();
+    const dialog = page.getByTestId('leadership-release-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(
+      page.getByTestId(`leadership-release-dialog-${released}`),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId(`leadership-release-dialog-${ownPk}`),
+    ).toHaveCount(0);
+    const releasedCall = page.waitForResponse(
+      (r) =>
+        r.request().method() === 'POST' &&
+        r.url().includes(`/leadership/events/${event_pk}/release/`),
+    );
+    await page.getByTestId('leadership-release-confirm').click();
+    const response = await releasedCall;
+    expect(response.status()).toBe(200);
+    expect(response.request().postDataJSON()).toEqual({
+      captains: [released],
+    });
+    await expect(dialog).toHaveCount(0);
+    await expect(state).toHaveText('Released');
+    await expect(
+      page.getByTestId(`leadership-released-by-${released}`),
+    ).toHaveText(/^by \S.* · /);
+    await expect(
+      page.getByTestId(`leadership-release-${released}`),
+    ).toHaveCount(0);
+    await expect(page.getByTestId('leadership-release-all')).toHaveCount(0);
+
+    await loginOrgFeatures(context, 'member');
+    await visitAndWaitForHydration(page, tabUrl);
+    await expect(page.getByTestId('leadership-member-rating')).toHaveText(/\d/);
+    await expect(page.getByTestId(memberEvent)).toContainText('3 reviews');
+    await expect(page.getByTestId(`${memberEvent}-unreleased`)).toHaveCount(0);
   });
 
   test('admin edits leadership settings and traits @cicd', async ({

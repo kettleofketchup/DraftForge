@@ -51,6 +51,7 @@ class AutomaticOutcomesTest(ConductTestCase):
             phase=phase,
             outcome=outcome,
             closed_at=tz.now() + timedelta(minutes=closed_at_offset),
+            settings_snapshot={"roll_call_enabled": True},
         )
 
     def _entry(
@@ -279,6 +280,7 @@ class SourcesAtFinalizeTest(ConductTestCase):
             phase=ReadyCheckPhase.CLOSED,
             outcome=ReadyCheckOutcome.BINDING,
             closed_at=tz.now(),
+            settings_snapshot={"roll_call_enabled": True},
         )
         ReadyCheckEntry.objects.create(
             ready_check=check,
@@ -302,6 +304,7 @@ class SourcesAtFinalizeTest(ConductTestCase):
             phase=ReadyCheckPhase.CLOSED,
             outcome=ReadyCheckOutcome.BINDING,
             closed_at=tz.now(),
+            settings_snapshot={"roll_call_enabled": True},
         )
         ReadyCheckEntry.objects.create(
             ready_check=check,
