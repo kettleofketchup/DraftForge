@@ -1,4 +1,5 @@
 import {
+  type QueryClient,
   useMutation,
   useMutationState,
   useQuery,
@@ -67,6 +68,11 @@ import {
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 
+/** Every events list, whatever its filters; state and signup counts drive them. */
+export function invalidateEventLists(queryClient: QueryClient): Promise<void> {
+  return queryClient.invalidateQueries({ queryKey: ['events'] });
+}
+
 export function useEvents(params?: {
   organization?: number;
   state?: string;
@@ -119,6 +125,7 @@ export function useSignupMutation(eventId: number) {
       syncCurrentUserFriendId(body);
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+      void invalidateEventLists(queryClient);
       queryClient.invalidateQueries({
         queryKey: ['event-lobby-password', eventId],
       });
@@ -149,12 +156,16 @@ export function useEventActionMutation(eventId: number) {
   return {
     openSignups: useMutation({
       mutationFn: () => openSignupsAPI(eventId),
-      onSuccess: (data) => queryClient.setQueryData(['event', eventId], data),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['event', eventId], data);
+        void invalidateEventLists(queryClient);
+      },
     }),
     startRollCall: useMutation({
       mutationFn: () => startRollCallAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
+        void invalidateEventLists(queryClient);
         void invalidateConductQueries(queryClient, data.organization);
       },
     }),
@@ -163,9 +174,7 @@ export function useEventActionMutation(eventId: number) {
       mutationFn: () => reopenSignupsAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
-        // The events list filters by state — a regression from roll_call → signups_open
-        // changes which lists this event appears in.
-        queryClient.invalidateQueries({ queryKey: ['events'] });
+        void invalidateEventLists(queryClient);
         void invalidateConductQueries(queryClient, data.organization);
       },
     }),
@@ -173,6 +182,7 @@ export function useEventActionMutation(eventId: number) {
       mutationFn: () => startTournamentAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
+        void invalidateEventLists(queryClient);
         void invalidateConductQueries(queryClient, data.organization);
       },
     }),
@@ -180,14 +190,14 @@ export function useEventActionMutation(eventId: number) {
       mutationFn: () => cancelEventAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
-        queryClient.invalidateQueries({ queryKey: ['events'] });
+        void invalidateEventLists(queryClient);
         void invalidateConductQueries(queryClient, data.organization);
       },
     }),
     deleteEvent: useMutation({
       mutationFn: () => deleteEventAPI(eventId),
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['events'] });
+        void invalidateEventLists(queryClient);
         queryClient.removeQueries({ queryKey: ['event', eventId] });
         void invalidateConductQueries(queryClient);
       },
@@ -196,7 +206,7 @@ export function useEventActionMutation(eventId: number) {
       mutationFn: () => restartTournamentAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
-        queryClient.invalidateQueries({ queryKey: ['events'] });
+        void invalidateEventLists(queryClient);
         void invalidateConductQueries(queryClient, data.organization);
       },
     }),
@@ -204,7 +214,7 @@ export function useEventActionMutation(eventId: number) {
       mutationFn: () => completeEventAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
-        queryClient.invalidateQueries({ queryKey: ['events'] });
+        void invalidateEventLists(queryClient);
         void invalidateOrgContributionQueries(queryClient, data.organization);
         void invalidateConductQueries(queryClient, data.organization);
       },
@@ -367,6 +377,7 @@ export function useSignupActionMutations(eventId: number) {
         return;
       queryClient.invalidateQueries({ queryKey: signupsKey });
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+      void invalidateEventLists(queryClient);
       queryClient.invalidateQueries({
         queryKey: ['event-lobby-password', eventId],
       });

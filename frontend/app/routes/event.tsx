@@ -139,6 +139,7 @@ import {
 } from '~/features/org-features';
 import { canPromoteEvent, PromoteEventButton } from '~/features/promotion';
 import {
+  invalidateEventLists,
   useEvent,
   useEventActionMutation,
   useEventRepeater,
@@ -956,6 +957,8 @@ function SignupsTab({
       }
       const resp = await adminAddSignup(eventId!, payload.user_id);
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+      void invalidateEventLists(queryClient);
       void invalidateConductQueries(queryClient, orgId);
       // Backend adds the user as an OrgUser when an admin signs them up;
       // refetch the org members so the org page shows the new membership.
