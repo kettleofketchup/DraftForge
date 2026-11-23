@@ -12,7 +12,7 @@ Planned slices, in order:
 | Team draft (done: `Draft`, `DraftRound`, `DraftEvent`, `DraftOptions`, teamdraft/shuffle/draft_picks, `draft_tick`, `teamdraft_tick`) | `app` | `draft` |
 | Organization (done: `Organization`, `OrgLog`, org permissions) | `app` | `org` |
 | League (done: `League`, `LeagueRating`, `LeagueMatch`, `LeagueMatchParticipant`, `LeagueLog`, league permissions, rating and match services) | `app` | `league` |
-| Tournament (in progress, three PRs: domain layer, HTTP/WebSocket surface, then `Tournament`, `Team`, `Game`, `TeamLog`) | `app` | `tournament` |
+| Tournament (in progress, three PRs: domain layer and HTTP/WebSocket surface done; `Tournament`, `Team`, `Game`, `TeamLog` next) | `app` | `tournament` |
 | Bracket models (later: `TournamentBracket`, `BracketSlot`; bracket views and URL wiring already live in `tournament`) | `bracket` | `tournament` |
 | Users, profile claims, jokes (later) | `app` | to be decided |
 

@@ -31,6 +31,7 @@ import {
 import { VisuallyHidden } from '~/components/ui/visually-hidden';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useCanManageTournament } from '~/hooks/useCanManageTournament';
 import {
   getHeroIcon,
   getHeroName as getHeroNameFromLib,
@@ -183,6 +184,7 @@ export function HeroDraftModal({
 
   // WebSocket store - unified state and connection management
   const draft = useHeroDraftStore((state) => state.draft);
+  const canManage = useCanManageTournament(draft);
   const tick = useHeroDraftStore((state) => state.tick);
   const lastEvent = useHeroDraftStore((state) => state.lastEvent);
   const setSelectedHeroId = useHeroDraftStore(
@@ -1025,7 +1027,7 @@ export function HeroDraftModal({
                   {/* Pause button - shown during drafting for captains/staff */}
                   {draft.state === 'drafting' &&
                     !pauseOverlayShown &&
-                    (isCaptain || currentUser?.is_staff) && (
+                    (isCaptain || canManage) && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <PrimaryButton
@@ -1088,7 +1090,7 @@ export function HeroDraftModal({
                   (t) => t.is_connected,
                 );
                 // Check if user can resume (captain or staff)
-                const canResume = isCaptain || currentUser?.is_staff;
+                const canResume = isCaptain || canManage;
                 // Get pause reason message
                 const isManualPause = draft.is_manual_pause;
 

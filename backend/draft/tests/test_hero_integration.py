@@ -7,6 +7,8 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Game, Team, Tournament
+from league.models import League
+from org.models import Organization
 
 
 def patch_tick_start(test: TestCase) -> MagicMock:
@@ -59,16 +61,80 @@ class HeroDraftAPITest(TestCase):
         self.assertEqual(response.data["state"], "waiting_for_captains")
         self.assertEqual(len(response.data["draft_teams"]), 2)
 
-    def test_non_captain_cannot_create(self):
-        """Non-captain can still create a draft (API doesn't restrict this)."""
+    def test_non_captain_cannot_create(self) -> None:
+        """A user who is neither a captain nor tournament staff gets 403."""
         other_user = CustomUser.objects.create_user(username="other", password="test")
         self.client.force_authenticate(user=other_user)
 
         response = self.client.post(f"/api/games/{self.game.id}/create-herodraft/")
 
-        # Note: The create endpoint doesn't check if user is a captain
-        # It only requires authentication
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            Game.objects.filter(pk=self.game.pk, herodraft__isnull=False).exists()
+        )
+
+    def _put_in_league(self) -> tuple[Organization, League]:
+        org = Organization.objects.create(name="HD Org")
+        league = League.objects.create(
+            organization=org, name="HD League", steam_league_id=None
+        )
+        self.tournament.league = league
+        self.tournament.save()
+        return org, league
+
+    def test_org_staff_can_create(self) -> None:
+        org, _ = self._put_in_league()
+        staff = CustomUser.objects.create_user(username="orgstaff", password="x")
+        org.staff.add(staff)
+        self.client.force_authenticate(user=staff)
+
+        response = self.client.post(f"/api/games/{self.game.id}/create-herodraft/")
+
         self.assertEqual(response.status_code, 201)
+
+    def test_league_staff_can_create(self) -> None:
+        _, league = self._put_in_league()
+        staff = CustomUser.objects.create_user(username="lgstaff", password="x")
+        league.staff.add(staff)
+        self.client.force_authenticate(user=staff)
+
+        response = self.client.post(f"/api/games/{self.game.id}/create-herodraft/")
+
+        self.assertEqual(response.status_code, 201)
+
+    def test_captain_cannot_assign_teams(self) -> None:
+        """Only tournament staff may set a game's teams through this endpoint."""
+        game = Game.objects.create(tournament=self.tournament)
+        self.client.force_authenticate(user=self.captain1)
+
+        response = self.client.post(
+            f"/api/games/{game.id}/create-herodraft/",
+            {"radiant_team_id": self.team1.pk, "dire_team_id": self.team2.pk},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        game.refresh_from_db()
+        self.assertIsNone(game.radiant_team_id)
+
+    def test_staff_cannot_assign_team_from_another_tournament(self) -> None:
+        site_staff = CustomUser.objects.create_user(
+            username="sitestaff", password="x", is_staff=True
+        )
+        other = Tournament.objects.create(name="Other", date_played=date.today())
+        foreign = Team.objects.create(name="Foreign", tournament=other)
+        game = Game.objects.create(tournament=self.tournament, dire_team=self.team2)
+        self.client.force_authenticate(user=site_staff)
+
+        response = self.client.post(
+            f"/api/games/{game.id}/create-herodraft/",
+            {"radiant_team_id": foreign.pk},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        game.refresh_from_db()
+        self.assertIsNone(game.radiant_team_id)
 
     def test_unauthenticated_cannot_create(self):
         """Unauthenticated user cannot create a draft."""

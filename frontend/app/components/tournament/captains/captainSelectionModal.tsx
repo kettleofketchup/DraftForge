@@ -20,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { useLatestSearchParams } from '~/hooks/useLatestSearchParams';
 import { useUserStore } from '~/store/userStore';
 import { CaptainTable } from './captainTable';
@@ -30,8 +31,8 @@ const MODAL_VALUE = 'captains';
 
 export const CaptainSelectionModal: React.FC = () => {
   const tournament = useUserStore((state) => state.tournament);
-  const isStaff = useUserStore((state) => state.isStaff());
-  const TriggerButton = isStaff ? PrimaryButton : SecondaryButton;
+  const canManage = useCanManageCurrentTournament();
+  const TriggerButton = canManage ? PrimaryButton : SecondaryButton;
   const [searchParams, setSearchParams] = useLatestSearchParams();
   const open = searchParams.get(MODAL_PARAM) === MODAL_VALUE;
   const setOpen = useCallback(
