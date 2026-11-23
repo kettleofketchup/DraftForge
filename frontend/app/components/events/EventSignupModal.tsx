@@ -292,20 +292,7 @@ export function EventSignupModal({
     : null;
 
   const scrollableBody = (
-    // shadcn ScrollArea wraps a Radix Viewport (which IS the scroll
-    // container) with a brand-styled scrollbar. Playwright tests that target
-    // fields below the fold MUST focus() the target before click() — the
-    // Radix Viewport's overflow contract doesn't always respond to
-    // Playwright's auto-scrollIntoView. focus() triggers the browser's
-    // native scrollIntoView({block:'nearest'}) which DOES scroll the
-    // Viewport correctly. See 12-event-signup-form.spec.ts for the
-    // focus-before-click pattern.
     <ScrollArea
-      // flex-1 min-h-0 takes remaining space inside the form column;
-      // combined with overflow-hidden on the DialogContent (see below),
-      // this gives the Radix Viewport a definite parent height so its
-      // size-full resolves correctly, content actually clips inside the
-      // Viewport, and the brand-styled scrollbar appears as expected.
       className="flex-1 min-h-0 -mx-6 px-6"
       data-testid="event-signup-modal-body"
     >
@@ -467,12 +454,6 @@ export function EventSignupModal({
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        {/* overflow-hidden: shadcn's default DialogContent doesn't clip its
-            content, so without it long forms render past the dialog edge
-            even when max-h-[90vh] is set. Clipping here lets the inner
-            ScrollArea (Radix Viewport) get a definite height so size-full
-            resolves, content overflow is contained, and the brand scrollbar
-            appears. */}
         <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>

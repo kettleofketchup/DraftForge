@@ -162,6 +162,44 @@ test.describe('Event Signup Form (@cicd)', () => {
     await expect(modal.getByTestId('signup-screenshot-url')).toBeVisible();
   });
 
+  test('long modal body scrolls with the mouse wheel above the footer (#799)', async ({
+    page,
+    context,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 600 });
+    await loginEventPlayerNoProfile(context);
+    const eventId = await getEventByName(
+      context,
+      'Test Dota Event With Screenshot',
+    );
+    await page.goto(`/events/${eventId}`);
+    await page.getByTestId('event-signup-btn').click();
+    const modal = page.getByTestId('event-signup-modal');
+    await expect(modal).toBeVisible();
+    await modal.getByTestId('signup-rank-status-active').click();
+
+    const viewport = modal.locator(
+      '[data-testid="event-signup-modal-body"] [data-slot="scroll-area-viewport"]',
+    );
+    const footerTop = await modal
+      .getByTestId('event-signup-submit-btn')
+      .evaluate((btn) => btn.parentElement!.getBoundingClientRect().top);
+    const metrics = await viewport.evaluate((el) => ({
+      clientHeight: el.clientHeight,
+      scrollHeight: el.scrollHeight,
+      bottom: el.getBoundingClientRect().bottom,
+    }));
+    expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+    expect(metrics.bottom).toBeLessThanOrEqual(footerTop + 1);
+
+    await viewport.hover();
+    await page.mouse.wheel(0, 2000);
+    await expect
+      .poll(() => viewport.evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(0);
+    await expect(modal.getByTestId('signup-rank-medal')).toBeInViewport();
+  });
+
   test('tentative path uses same modal with different submit label', async ({
     page,
     context,

@@ -1,6 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type ReactNode, type RefObject } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 
@@ -146,34 +152,40 @@ export function useStaffPlacementSection(
     },
   };
 
-  const content = (
-    <section
-      data-testid="org-settings-staff-placement"
-      className="rounded-lg border border-border p-6"
-    >
-      <h2 className="text-lg font-semibold">Staff placement</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        How seating rules apply when staff place members on a roster.
-        Eligibility and team rules, such as a missing Steam ID, MMR below the
-        minimum or the stand-in cap, always ask staff to confirm with a reason,
-        whatever this policy says.
-      </p>
-      {isLoading && (
-        <div className="mt-4 flex flex-col gap-3">
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-32 w-full" />
-        </div>
-      )}
-      {isError && (
-        <p
-          className="mt-4 text-sm text-destructive"
-          data-testid="org-settings-error"
-        >
-          {extractApiError(error) ?? 'Failed to load settings'}
+  // Memoized: dirty and error changes re-render the dialog, not these fields.
+  const content = useMemo(
+    () => (
+      <section
+        data-testid="org-settings-staff-placement"
+        className="rounded-lg border border-border p-6"
+      >
+        <h2 className="text-lg font-semibold">Staff placement</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          How seating rules apply when staff place members on a roster.
+          Eligibility and team rules, such as a missing Steam ID, MMR below the
+          minimum or the stand-in cap, always ask staff to confirm with a
+          reason, whatever this policy says.
         </p>
-      )}
-      {data && hydrated && <StaffPlacementFields form={form} settings={data} />}
-    </section>
+        {isLoading && (
+          <div className="mt-4 flex flex-col gap-3">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+        )}
+        {isError && (
+          <p
+            className="mt-4 text-sm text-destructive"
+            data-testid="org-settings-error"
+          >
+            {extractApiError(error) ?? 'Failed to load settings'}
+          </p>
+        )}
+        {data && hydrated && (
+          <StaffPlacementFields form={form} settings={data} />
+        )}
+      </section>
+    ),
+    [isLoading, isError, error, data, hydrated, form],
   );
 
   return { content, unit };
