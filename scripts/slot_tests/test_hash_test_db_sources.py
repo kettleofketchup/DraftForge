@@ -15,6 +15,7 @@ def _other_repo(tmp_path: Path) -> Path:
     (repo / "backend" / "app").mkdir(parents=True)
     (repo / "backend" / "app" / "models.py").write_text("other\n")
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     return repo
 
 
@@ -31,6 +32,26 @@ def test_hashes_its_own_checkout_from_another_repo(tmp_path: Path) -> None:
 def test_hashes_an_explicit_root(tmp_path: Path) -> None:
     repo = _other_repo(tmp_path)
     assert _hash(ROOT, str(repo)) == hashlib.sha256(b"other\n").hexdigest()
+
+
+def test_ignores_gitignored_runtime_dirs(tmp_path: Path) -> None:
+    repo = _other_repo(tmp_path)
+    (repo / ".gitignore").write_text("backend/media/\n")
+    before = _hash(ROOT, str(repo))
+    media = repo / "backend" / "media"
+    (media / "app").mkdir(parents=True)
+    (media / "app" / "models.py").write_text("junk\n")
+    locked = media / "mmr_requests" / "2026" / "11"
+    locked.mkdir(parents=True)
+    locked.chmod(0)
+    try:
+        result = subprocess.run(
+            [str(SCRIPT), str(repo)], capture_output=True, text=True, check=True
+        )
+        assert result.stderr == ""
+        assert result.stdout.strip() == before
+    finally:
+        locked.chmod(0o755)
 
 
 BACKEND = ROOT / "backend"

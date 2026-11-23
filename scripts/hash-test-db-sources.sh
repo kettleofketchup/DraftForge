@@ -48,18 +48,25 @@ populate_imports=(
     backend/tournament/choices.py
 )
 
+# Tracked and untracked-but-not-ignored files only: git never descends into
+# ignored runtime dirs (backend/media, __pycache__), which can hold unreadable
+# container-owned trees.
 files=$({
-    find backend -type f \( \
-        -path "backend/tests/populate.py" -o \
-        -path "backend/tests/populate/*.py" -o \
-        -path "backend/tests/data/*.py" -o \
-        -path "backend/tests/helpers/tournament_config.py" -o \
-        -path "backend/app/management/commands/populate_*.py" -o \
-        -path "backend/*/migrations/*.py" -o \
-        -path "backend/*/models/*.py" -o \
-        -path "backend/*/models_*.py" -o \
-        -name "models.py" \
-    \)
+    git ls-files --cached --others --exclude-standard -- backend |
+        while IFS= read -r f; do
+            [[ -f "$f" ]] || continue
+            case "$f" in
+                backend/tests/populate.py | \
+                backend/tests/populate/*.py | \
+                backend/tests/data/*.py | \
+                backend/tests/helpers/tournament_config.py | \
+                backend/app/management/commands/populate_*.py | \
+                backend/*/migrations/*.py | \
+                backend/*/models/*.py | \
+                backend/*/models_*.py | \
+                */models.py) echo "$f" ;;
+            esac
+        done
     for f in "${populate_imports[@]}"; do
         if [[ -f "$f" ]]; then echo "$f"; fi
     done

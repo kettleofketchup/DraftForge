@@ -4,3 +4,4 @@
 celerybeat-schedule-*
 .env
 staticfiles/
+media/
