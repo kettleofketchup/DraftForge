@@ -293,7 +293,7 @@ test.describe('Staff sign-up history (@cicd)', () => {
       }
 
       // The withdrawal that caused it belongs to another member, so it is
-      // not loaded here (spec §7.3).
+      // not loaded here.
       const promoted = rowsWithAction(page, sheet, 'Promoted from waitlist');
       await expect(promoted).toHaveCount(1);
       await expect(promoted.getByTestId('signup-history-cause')).toHaveText(
