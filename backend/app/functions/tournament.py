@@ -6,7 +6,7 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
 from app.display_names import user_display_name
-from app.models import CustomUser, Team, Tournament
+from app.models import LIVE_TEAM_FIRST, CustomUser, Team, Tournament
 from app.permissions_tournament import can_edit_tournament
 from app.serializers import (
     TournamentSerializer,
@@ -73,7 +73,12 @@ def create_team_from_captain(request: Request) -> Response:
             status=403,
         )
 
-    if Team.objects.filter(tournament=tournament, captain=user).exists():
+    existing = (
+        Team.objects.filter(tournament=tournament, captain=user)
+        .order_by(*LIVE_TEAM_FIRST)
+        .first()
+    )
+    if existing is not None:
         if draft_order == 0:
             log.debug(
                 "captain_already_registered",
@@ -87,9 +92,8 @@ def create_team_from_captain(request: Request) -> Response:
                 status=201,
             )
 
-        team = Team.objects.get(tournament=tournament, captain=user)
-        team.draft_order = draft_order
-        team.save()
+        existing.draft_order = draft_order
+        existing.save()
         return Response(
             {
                 "error": "User is already a captain in this tournament with a draft order"
