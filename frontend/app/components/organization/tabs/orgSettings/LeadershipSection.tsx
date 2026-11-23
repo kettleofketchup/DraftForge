@@ -1,6 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { TriangleAlert } from 'lucide-react';
 import { useEffect, useState, type ReactNode, type RefObject } from 'react';
-import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
+import {
+  useForm,
+  useWatch,
+  type FieldErrors,
+  type UseFormReturn,
+} from 'react-hook-form';
 import { toast } from 'sonner';
 
 import { useOrganization } from '~/components/organization/hooks/useOrganization';
@@ -15,6 +21,7 @@ import {
   submitForm,
   type SettingsFormUnit,
 } from '~/components/patterns/settingsSaveBar';
+import { Alert, AlertDescription } from '~/components/ui/alert';
 import { Form } from '~/components/ui/form';
 import { Skeleton } from '~/components/ui/skeleton';
 import {
@@ -29,6 +36,7 @@ import {
   type LeadershipSettingsForm,
   type TraitForm,
 } from '~/features/leadership';
+import { refusalCode, refusalMessage } from '~/features/leadership/errors';
 import {
   leadershipSettingsFieldErrors,
   leadershipSettingsPatch,
@@ -49,8 +57,13 @@ const SECTION_ID = 'leadership';
 
 type NumberField = Exclude<
   keyof LeadershipSettingsForm,
-  'leaderboard_public' | 'points'
+  | 'leaderboard_public'
+  | 'require_staff_release'
+  | 'auto_release_after_hours'
+  | 'points'
 >;
+
+const SELF_RELEASE_CODE = 'would_release_own_results';
 
 export function useLeadershipSection(
   organizationId: number,
@@ -79,6 +92,7 @@ export function useLeadershipSection(
     defaultValues: traits ? toTraitForm(traits) : undefined,
   });
   const [hydrated, setHydrated] = useState(false);
+  const [releaseRefusal, setReleaseRefusal] = useState<string | null>(null);
 
   useEffect(() => {
     if (settings && !form.formState.isDirty) {
@@ -105,6 +119,7 @@ export function useLeadershipSection(
     (sel: boolean) =>
     async (values: LeadershipSettingsForm): Promise<boolean> => {
       if (!settings) return false;
+      setReleaseRefusal(null);
       const body = leadershipSettingsPatch(values, settings);
       if (Object.keys(body).length === 0) {
         form.reset(values);
@@ -119,6 +134,11 @@ export function useLeadershipSection(
           organizationId,
           err,
         });
+        if (refusalCode(err) === SELF_RELEASE_CODE) {
+          setReleaseRefusal(refusalMessage(err, 'settings'));
+          select(sel);
+          return false;
+        }
         const fieldErrors = leadershipSettingsFieldErrors(err);
         for (const [field, message] of fieldErrors) {
           form.setError(field, { message });
@@ -188,6 +208,7 @@ export function useLeadershipSection(
       return ok;
     },
     discard: () => {
+      setReleaseRefusal(null);
       if (settings) form.reset(pickLeadershipFormValues(settings));
       if (traits) traitForm.reset(toTraitForm(traits));
     },
@@ -219,7 +240,11 @@ export function useLeadershipSection(
       )}
       {settings && traits && hydrated && (
         <div className="mt-4 flex flex-col gap-6">
-          <LeadershipSettingsFields form={form} settings={settings} />
+          <LeadershipSettingsFields
+            form={form}
+            settings={settings}
+            releaseRefusal={releaseRefusal}
+          />
           <LeadershipTraitEditor
             form={traitForm}
             orgId={organizationId}
@@ -290,12 +315,93 @@ const RATING_FIELDS: NumberFieldSpec[] = [
 
 const TEST_ID_PREFIX = 'leadership-setting';
 
-function LeadershipSettingsFields({
+function ReleaseWarning({
+  testId,
+  children,
+}: {
+  testId: string;
+  children: ReactNode;
+}) {
+  return (
+    <Alert className="border-warning/40 text-warning" data-testid={testId}>
+      <TriangleAlert />
+      <AlertDescription>{children}</AlertDescription>
+    </Alert>
+  );
+}
+
+function ReleaseSettings({
   form,
   settings,
+  releaseRefusal,
+  shared,
 }: {
   form: UseFormReturn<LeadershipSettingsForm>;
   settings: LeadershipSettings;
+  releaseRefusal: string | null;
+  shared: {
+    control: UseFormReturn<LeadershipSettingsForm>['control'];
+    setValue: UseFormReturn<LeadershipSettingsForm>['setValue'];
+    testIdPrefix: string;
+  };
+}) {
+  const gateOn = useWatch({
+    control: form.control,
+    name: 'require_staff_release',
+  });
+  const hours = useWatch({
+    control: form.control,
+    name: 'auto_release_after_hours',
+  });
+  return (
+    <SettingsGroup title="Release">
+      <ToggleSetting
+        {...shared}
+        name="require_staff_release"
+        label="Require staff release"
+        help="Results stay hidden after the window closes until a moderator releases them."
+        defaultValue={settings.defaults.require_staff_release}
+      />
+      <NumberSetting
+        {...shared}
+        name="auto_release_after_hours"
+        label="Auto-release after (hours)"
+        help="Leave empty to wait for a moderator (a fallback is recommended). Shortening this releases waiting results now."
+        step={1}
+        nullable
+        disabled={!gateOn}
+        defaultValue={settings.defaults.auto_release_after_hours}
+      />
+      {settings.require_staff_release && !gateOn && (
+        <ReleaseWarning testId="leadership-release-off-warning">
+          Turning this off releases every result that is waiting.
+        </ReleaseWarning>
+      )}
+      {gateOn && hours == null && (
+        <ReleaseWarning testId="leadership-release-fallback-warning">
+          {settings.moderator_count === 1
+            ? 'You are the only moderator. Set a fallback, or your own results are never released.'
+            : "Moderators cannot release their own results. With no fallback, a moderator's results wait for another moderator or site staff."}
+        </ReleaseWarning>
+      )}
+      {releaseRefusal && (
+        <Alert variant="destructive" data-testid="leadership-release-refusal">
+          <TriangleAlert />
+          <AlertDescription>{releaseRefusal}</AlertDescription>
+        </Alert>
+      )}
+    </SettingsGroup>
+  );
+}
+
+function LeadershipSettingsFields({
+  form,
+  settings,
+  releaseRefusal,
+}: {
+  form: UseFormReturn<LeadershipSettingsForm>;
+  settings: LeadershipSettings;
+  releaseRefusal: string | null;
 }) {
   const shared = {
     control: form.control,
@@ -340,6 +446,12 @@ function LeadershipSettingsFields({
       <SettingsGroup title="Rating">
         {numberSettings(RATING_FIELDS)}
       </SettingsGroup>
+      <ReleaseSettings
+        form={form}
+        settings={settings}
+        releaseRefusal={releaseRefusal}
+        shared={shared}
+      />
       <SettingsGroup title="Visibility">
         <ToggleSetting
           {...shared}

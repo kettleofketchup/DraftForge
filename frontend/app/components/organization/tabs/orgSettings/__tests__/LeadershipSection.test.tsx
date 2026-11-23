@@ -176,7 +176,13 @@ describe('LeadershipSection', () => {
     });
     await loaded();
     expect(getLeadershipSettings).toHaveBeenCalledWith(7);
-    for (const title of ['Reviews', 'Points', 'Rating', 'Visibility']) {
+    for (const title of [
+      'Reviews',
+      'Points',
+      'Rating',
+      'Release',
+      'Visibility',
+    ]) {
       expect(screen.getByText(title, { selector: 'legend' })).toBeVisible();
     }
     expect(input('review_window_hours').value).toBe('48');
@@ -320,5 +326,142 @@ describe('LeadershipSection', () => {
     act(() => unit.discard());
     expect(input('review_window_hours').value).toBe('72');
     await waitFor(() => expect(unit.isDirty).toBe(false));
+  });
+  it('places Release between Rating and Visibility', async () => {
+    await loaded();
+    const legends = screen
+      .getAllByText(/./, { selector: 'legend' })
+      .map((el) => el.textContent);
+    const rating = legends.indexOf('Rating');
+    expect(legends.slice(rating, rating + 3)).toEqual([
+      'Rating',
+      'Release',
+      'Visibility',
+    ]);
+  });
+
+  it('disables the fallback hours while the gate is off', async () => {
+    await loaded();
+    expect(input('auto_release_after_hours')).toBeDisabled();
+    fireEvent.click(input('require_staff_release'));
+    expect(input('auto_release_after_hours')).not.toBeDisabled();
+  });
+
+  it('warns when a saved gate is toggled off', async () => {
+    vi.mocked(getLeadershipSettings).mockResolvedValue(
+      leadershipSettings({
+        require_staff_release: true,
+        auto_release_after_hours: 48,
+        moderator_count: 3,
+      }),
+    );
+    await loaded();
+    expect(
+      screen.queryByTestId('leadership-release-off-warning'),
+    ).not.toBeInTheDocument();
+    fireEvent.click(input('require_staff_release'));
+    expect(
+      screen.getByTestId('leadership-release-off-warning'),
+    ).toHaveTextContent(
+      'Turning this off releases every result that is waiting.',
+    );
+  });
+
+  it('does not warn about turning off a gate that was never saved on', async () => {
+    await loaded();
+    fireEvent.click(input('require_staff_release'));
+    fireEvent.click(input('require_staff_release'));
+    expect(
+      screen.queryByTestId('leadership-release-off-warning'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('warns about no fallback when the gate is on and hours are empty', async () => {
+    vi.mocked(getLeadershipSettings).mockResolvedValue(
+      leadershipSettings({ moderator_count: 3 }),
+    );
+    await loaded();
+    expect(
+      screen.queryByTestId('leadership-release-fallback-warning'),
+    ).not.toBeInTheDocument();
+    fireEvent.click(input('require_staff_release'));
+    expect(
+      screen.getByTestId('leadership-release-fallback-warning'),
+    ).toHaveTextContent(
+      "Moderators cannot release their own results. With no fallback, a moderator's results wait for another moderator or site staff.",
+    );
+    fireEvent.change(input('auto_release_after_hours'), {
+      target: { value: '48' },
+    });
+    expect(
+      screen.queryByTestId('leadership-release-fallback-warning'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('names the sole moderator in the no-fallback warning', async () => {
+    vi.mocked(getLeadershipSettings).mockResolvedValue(
+      leadershipSettings({ require_staff_release: true, moderator_count: 1 }),
+    );
+    await loaded();
+    expect(
+      screen.getByTestId('leadership-release-fallback-warning'),
+    ).toHaveTextContent(
+      'You are the only moderator. Set a fallback, or your own results are never released.',
+    );
+  });
+
+  it('saves the gate with cleared hours as null', async () => {
+    vi.mocked(getLeadershipSettings).mockResolvedValue(
+      leadershipSettings({ auto_release_after_hours: 48 }),
+    );
+    vi.mocked(patchLeadershipSettings).mockResolvedValue(
+      leadershipSettings({ require_staff_release: true }),
+    );
+    await loaded();
+    fireEvent.click(input('require_staff_release'));
+    fireEvent.change(input('auto_release_after_hours'), {
+      target: { value: '' },
+    });
+    expect(await save()).toBe(true);
+    expect(patchLeadershipSettings).toHaveBeenCalledWith(7, {
+      require_staff_release: true,
+      auto_release_after_hours: null,
+    });
+  });
+
+  it('shows a self-release refusal inline instead of a toast', async () => {
+    vi.mocked(getLeadershipSettings).mockResolvedValue(
+      leadershipSettings({
+        require_staff_release: true,
+        auto_release_after_hours: 720,
+        moderator_count: 2,
+      }),
+    );
+    vi.mocked(patchLeadershipSettings).mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          code: 'would_release_own_results',
+          detail: 'server text',
+        },
+      },
+    });
+    await loaded();
+    fireEvent.change(input('auto_release_after_hours'), {
+      target: { value: '24' },
+    });
+    expect(await save()).toBe(false);
+    expect(
+      await screen.findByTestId('leadership-release-refusal'),
+    ).toHaveTextContent(
+      'This change would release your own results. Ask another moderator to release them first.',
+    );
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(selectSection).toHaveBeenCalledWith('leadership');
+    expect(unit.isDirty).toBe(true);
+    act(() => unit.discard());
+    expect(
+      screen.queryByTestId('leadership-release-refusal'),
+    ).not.toBeInTheDocument();
   });
 });
