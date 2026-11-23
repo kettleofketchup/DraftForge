@@ -22,12 +22,12 @@ from django.db import transaction
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 
-from app.models import Game
 from draft.models import HeroDraft
 from lobby import broadcast, services
 from lobby.models import GameLobby
 from lobby.tasks import close_dota_lobby, create_dota_lobby, flip_lobby_sides
 from telemetry.logging import get_logger
+from tournament.models import Game
 
 log = get_logger(__name__)
 
@@ -58,7 +58,7 @@ def _close_for_game_completed(game_lobby: GameLobby) -> None:
     broadcast.lobby_changed_on_commit(game_lobby, bracket_changed=False)
 
 
-@receiver(post_save, sender="app.Game", dispatch_uid="lobby_game_saved")
+@receiver(post_save, sender="tournament.Game", dispatch_uid="lobby_game_saved")
 def lobby_on_game_saved(
     sender: type, instance: Game, raw: bool = False, **kwargs: object
 ) -> None:
@@ -127,7 +127,7 @@ def lobby_on_herodraft_saved(
     transaction.on_commit(lambda: flip_lobby_sides.delay(pk, lobby_id, radiant_ref))
 
 
-@receiver(pre_delete, sender="app.Game", dispatch_uid="lobby_game_deleted")
+@receiver(pre_delete, sender="tournament.Game", dispatch_uid="lobby_game_deleted")
 def lobby_on_game_deleted(sender: type, instance: Game, **kwargs: object) -> None:
     """Close the deleted game's lobby, which would otherwise hold a bot."""
     if not services.is_enabled():

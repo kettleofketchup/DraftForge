@@ -14,11 +14,12 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, Game, PositionsModel, Team, TeamLog, Tournament
+from app.models import CustomUser, PositionsModel
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
 from league.models import League
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
+from tournament.models import Game, Team, TeamLog, Tournament
 from tournament.services.team_leadership import successor_after_removal
 from tournament.services.team_signals import (
     TeamRosterChange,

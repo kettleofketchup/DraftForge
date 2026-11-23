@@ -6,8 +6,8 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import ResolverMatch, resolve
 from rest_framework.test import APIClient
 
-from app.models import TeamLog
 from backend import asgi
+from tournament.models import TeamLog
 
 TOURNAMENT_HTTP_ROUTES: tuple[tuple[str, str, str | None, str], ...] = (
     (

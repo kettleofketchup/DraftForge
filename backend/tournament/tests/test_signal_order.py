@@ -8,7 +8,7 @@ from django.db.models.signals import (
 )
 from django.test import TestCase
 
-from app.models import Game, Team, Tournament
+from tournament.models import Game, Team, Tournament
 
 
 def _receiver_qualnames(signal: ModelSignal, sender: type) -> list[str]:

@@ -1,9 +1,9 @@
 """Discord Activity bracket fixture: "Activity Bracket Test" with bracket games."""
 
-from app.models import Game
 from tests.data.tournaments import ACTIVITY_BRACKET_CONFIG
 from tests.populate.steam import populate_bracket_games_for_tournament
 from tests.populate.tournaments import create_dynamic_tournament
+from tournament.models import Game
 
 from .constants import DTX_STEAM_LEAGUE_ID
 from .utils import flush_redis_cache

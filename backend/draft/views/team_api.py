@@ -11,11 +11,12 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser
 from app.permissions import IsStaff
 from draft.models import Draft, DraftRound
 from draft.permissions import CanEditDraft, CanEditDraftRound
 from draft.serializers.team import DraftRoundSerializer, DraftSerializer
+from tournament.models import Team, Tournament
 from tournament.permissions import CanEditTournament
 from tournament.serializers.users import build_users_dict
 from user.models import BaseUserProfile, DotaUserProfile
