@@ -19,7 +19,7 @@ export interface OrgFeatureAccess {
   canManageConduct: boolean;
   /** The mmr_sync feature is unlocked for this org. */
   mmrSyncEnabled: boolean;
-  /** Org staff while mmr_sync is unlocked, or a site admin. */
+  /** Org admins while mmr_sync is unlocked, or a site admin. */
   canUseMmrSync: boolean;
   standingTracks: TrackInfo[];
 }
