@@ -68,6 +68,7 @@ const detail = {
   ...listItem,
   user_can_manage: false,
   user_can_manage_event_staff: false,
+  user_is_event_operator: true,
   event_repeater_name: 'Weekly Inhouse',
   description: '<p>Bring snacks</p>',
   signups_open_at: '2026-11-24T01:00:00Z',
