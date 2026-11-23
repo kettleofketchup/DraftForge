@@ -12,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from league.models import League
 from org.features import FeatureKey, active_features
 from org.membership import member_access
@@ -32,6 +32,7 @@ from org.serializers import (
     OrgUserSerializer,
 )
 from org.standing import api as standing
+from tournament.models import Tournament
 
 # BaseUserProfile owns nickname/avatar; DotaUserProfile owns
 # positions/dota-mmr. Every @cached_as site below that ships

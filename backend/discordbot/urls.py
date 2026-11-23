@@ -4,9 +4,13 @@ from .activity import activity_session
 from .activity_config import activity_config
 from .activity_views import activity_drafts, activity_views
 from .services.channels import get_discord_channels
+from .services.install import (
+    check_discord_bot_status,
+    discord_install_callback,
+    discord_install_link,
+)
 from .services.roles import get_discord_roles
 from .services.users import (
-    check_discord_bot_status,
     get_discord_members,
     get_discord_voice_channel_activity,
     get_organization_discord_members,
@@ -50,6 +54,16 @@ urlpatterns = [
         "organizations/<int:pk>/bot-status/",
         check_discord_bot_status,
         name="discord-bot-status",
+    ),
+    path(
+        "organizations/<int:pk>/install-link/",
+        discord_install_link,
+        name="discord-install-link",
+    ),
+    path(
+        "install/callback/",
+        discord_install_callback,
+        name="discord-install-callback",
     ),
     path(
         "organizations/<int:pk>/channels/",

@@ -4,7 +4,7 @@ from django.db import transaction
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser
 from draft.models import Draft, TeamDraftState
 from events.completion import close_event
 from events.constants import EventState, SignupStatus
@@ -16,6 +16,7 @@ from org.leadership.reviews import submit_review
 from org.models import ContributionEntry, Organization, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain
 from org.tests.conduct_base import ConductTestCase
+from tournament.models import Team, Tournament
 
 ALL_FIVES = {"communication": 5, "drafting": 5, "composure": 5, "sportsmanship": 5}
 

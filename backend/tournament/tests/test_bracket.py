@@ -6,15 +6,9 @@ from django.test import TestCase
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import (
-    CustomUser,
-    Game,
-    Team,
-    TeamLog,
-    TeamLogAction,
-    TeamLogVia,
-    Tournament,
-)
+from app.models import CustomUser
+from tournament.models import Game, Team, TeamLog, Tournament
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.services.team_management import live_conflicts, replace_captain
 from tournament.tests.test_team_management import TeamManagementFixture, eliminate
 from tournament.views.bracket import calculate_placement

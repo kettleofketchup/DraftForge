@@ -28,11 +28,13 @@ from django.conf import settings
 from django.db import transaction
 
 from app.cache_utils import invalidate_after_commit
-from app.models import DotaLobbyMode, Game, GameMode, GameType, Team, Tournament
+from app.models import GameType
 from lobby import broadcast, refs, states
 from lobby.models import GameLobby
 from lobby.passwords import generate_password
 from lobby.tasks import close_dota_lobby, create_dota_lobby
+from tournament.choices import DotaLobbyMode, GameMode
+from tournament.models import Game, Team, Tournament
 
 if TYPE_CHECKING:
     from app.models import CustomUser

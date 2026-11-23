@@ -63,7 +63,7 @@ function EventRow({
       </div>
       {!event.released ? (
         <div className="text-sm text-muted-foreground">
-          Only admins see this until the window closes with enough reviews.
+          Only moderators see this until the results are released.
         </div>
       ) : event.reviews === null || event.traits === null ? (
         <div className="text-sm text-muted-foreground">
@@ -109,9 +109,9 @@ export function MemberLeadershipPanel({
     orgUserPk,
   );
   const forbidden = isError && refusalCode(error) === 'not_permitted';
-  const { canManage, boardOpen } = leadershipAccess(access);
-  // Admins viewing another captain get figures that include unreleased reviews.
-  const staffView = canManage && !own;
+  const { canManage, canModerate, boardOpen } = leadershipAccess(access);
+  // Moderators viewing another captain get figures that include unreleased reviews.
+  const staffView = canModerate && !own;
   // board_open is always true for org staff, so admins read the setting itself;
   // other staff may see the public wording on a private board, never the reverse.
   const settings = useLeadershipSettings(orgId, access, own && canManage);
@@ -190,8 +190,8 @@ export function MemberLeadershipPanel({
               data-testid="leadership-member-own-note"
             >
               {boardPublic
-                ? 'Members can see your rating and points; only you and org admins see the per-event detail.'
-                : 'Only you and org admins see this.'}{' '}
+                ? 'Members can see your rating and points; only you and moderators see the per-event detail.'
+                : 'Only you and moderators see this.'}{' '}
               Who rated you is never shown.
             </p>
           )}
@@ -200,7 +200,7 @@ export function MemberLeadershipPanel({
               className="text-sm text-muted-foreground"
               data-testid="leadership-member-staff-note"
             >
-              Includes unreleased reviews, visible to admins only.
+              Includes unreleased reviews, visible to moderators only.
             </p>
           )}
 
@@ -240,7 +240,7 @@ export function MemberLeadershipPanel({
               >
                 {staffView
                   ? 'No reviews yet.'
-                  : 'No released ratings yet. Ratings appear once a review window closes with enough reviews.'}
+                  : 'No released ratings yet. Ratings appear once a review window closes with enough reviews and the results are released.'}
               </p>
             )}
           </div>
@@ -274,8 +274,8 @@ export function MemberLeadershipPanel({
               className="text-xs text-muted-foreground"
               data-testid="leadership-member-points-note"
             >
-              Totals include events still in their review window or without
-              enough reviews.
+              Totals include events still in their review window, without enough
+              reviews, or waiting for release.
             </p>
           </div>
 

@@ -7,7 +7,6 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import DotaLobbyMode, GameMode
 from events.models import Event
 from league.models import League
 from lobby import services, states
@@ -23,6 +22,7 @@ from lobby.tests.helpers import (
 )
 from lobby.views import LobbyActionThrottle
 from org.models import Organization
+from tournament.choices import DotaLobbyMode, GameMode
 
 PRIVATE_KEYS = {"password", "players", "last_error_detail", "name", "bot"}
 

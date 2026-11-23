@@ -473,6 +473,7 @@ _TOURNAMENT_RETIRED_DEFS = {
         "_key",
         "_reference_relations",
         "_team_rows",
+        "_usage_sort_key",
         "all_reference_keys",
         "team_references",
         "team_usage",
@@ -782,6 +783,7 @@ _TOURNAMENT_RETIRED_DEFS = {
         "AddMemberGuildNicknameTest",
     ),
     "app.tests.test_team_log": ("TeamLogModelTests",),
+    "app.tests.test_tournament_migration": ("TournamentFieldsTests",),
 }
 
 _TOURNAMENT_VIEW_NAMES = (
@@ -800,6 +802,22 @@ _TOURNAMENT_VIEW_NAMES = (
     "TeamCreateView",
     "GameCreateView",
     "GameView",
+)
+
+_TOURNAMENT_MODEL_NAMES = (
+    "Tournament",
+    "Team",
+    "Game",
+    "TeamLog",
+    "LeadershipProblem",
+    "_LEADERSHIP_MESSAGES",
+    "TeamLogVia",
+    "TeamLogAction",
+    "DraftStyles",
+    "GameMode",
+    "DotaLobbyMode",
+    "DotaLobbyLaunch",
+    "TOURNAMNET_TYPE_CHOICES",
 )
 
 TOURNAMENT = MovedSlice(
@@ -827,6 +845,7 @@ TOURNAMENT = MovedSlice(
             ("app.views.ssr", "TournamentSSRView"),
             ("app.serializers_ssr", "TournamentSerializerSSR"),
             ("app.admin", "TeamLogAdmin"),
+            *(("app.models", name) for name in _TOURNAMENT_MODEL_NAMES),
             # patched on views_main before the views moved
             ("app.views_main", "build_users_dict"),
             ("app.views_main", "tournament_bucket_cutoff"),
@@ -847,9 +866,9 @@ TOURNAMENT = MovedSlice(
     retired_modules=frozenset(
         {"app.permissions_tournament", *_TOURNAMENT_RETIRED_DEFS}
     ),
-    model_labels=frozenset(),
+    model_labels=frozenset({"tournament", "team", "game", "teamlog"}),
     move_migration=("app", "0115_move_tournament_models_to_tournament"),
-    cached_labels=frozenset(),
+    cached_labels=frozenset({"tournament", "team", "game"}),
 )
 
 MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG, LEAGUE, TOURNAMENT)
@@ -871,6 +890,7 @@ RETIRED_MODULE_HOMES: dict[str, str | None] = {
     "app.functions.tournament": "tournament.functions",
     "app.internal_client.tournaments": "tournament.internal_client",
     "app.views.admin_team": "tournament.views.members",
+    "app.tests.test_tournament_migration": "tournament.tests.test_tournament_fields",
 }
 
 # target app -> production file (relative to backend/) -> what it may import from that app
@@ -879,11 +899,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         "app/discord_accounts.py": BackEdge(
             frozenset({"repoint_chat_attribution"}),
             "Discord account merge repoints hero draft chat authorship",
-        ),
-        "app/models.py": BackEdge(
-            frozenset({"DraftOptions"}),
-            "TYPE_CHECKING-only return annotation for Tournament.get_draft_options",
-            type_only=frozenset({"DraftOptions"}),
         ),
         "app/views_main.py": BackEdge(
             frozenset({"DraftRound", "DraftTeam"}),
@@ -970,6 +985,10 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         "app/exception_handler.py": BackEdge(
             frozenset({"TeamManagementError"}),
             "global DRF handler maps TeamManagementError",
+        ),
+        "app/views_main.py": BackEdge(
+            frozenset({"Game", "Tournament"}),
+            "home_stats cross-domain aggregate",
         ),
     },
 }
@@ -1699,6 +1718,7 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("tournament/permissions.py", rels)
         self.assertIn("tournament/views/team.py", rels)
         self.assertIn("tournament/consumers.py", rels)
+        self.assertIn("tournament/models/team.py", rels)
         self.assertNotIn(GUARD_FILE, rels)
         self.assertFalse(any("/migrations/" in rel for rel in rels))
 

@@ -24,7 +24,7 @@ can log in and manage the draft.
 
 from datetime import date
 
-from app.models import CustomUser, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel
 from draft.models import Draft, DraftOptions
 from league.models import League
 from org.models import Organization
@@ -32,6 +32,7 @@ from tests.data.leagues import SHUFFLE_TIE_LEAGUE
 from tests.data.organizations import SHUFFLE_TIE_ORG
 from tests.data.tournaments import SHUFFLE_TIE_TOURNAMENT
 from tests.data.users import ADMIN_USER, SHUFFLE_TIE_CAPTAINS, SHUFFLE_TIE_PLAYERS
+from tournament.models import Team, Tournament
 
 from .utils import (
     delete_ledger_for_users,

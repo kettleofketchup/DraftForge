@@ -2,7 +2,6 @@ from django.test import TestCase, override_settings
 from django.urls import resolve, reverse
 from rest_framework.test import APIClient, APIRequestFactory
 
-from app.models import Team, Tournament
 from league.models import League
 from tests.helpers.team_management_fixture import (
     CAPTAIN_TAKEOVER_TOURNAMENT_NAME,
@@ -16,6 +15,7 @@ from tests.helpers.team_management_fixture import (
 from tests.populate.constants import DTX_STEAM_LEAGUE_ID
 from tests.populate.organizations import populate_organizations_and_leagues
 from tests.test_auth import reset_tournament_by_key
+from tournament.models import Team, Tournament
 
 
 class TeamManagementFixtureTests(TestCase):

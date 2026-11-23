@@ -5,14 +5,9 @@ from django.contrib import admin
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
-from app.models import (
-    CustomUser,
-    Team,
-    TeamLog,
-    TeamLogAction,
-    TeamLogVia,
-    Tournament,
-)
+from app.models import CustomUser
+from tournament.models import Team, TeamLog, Tournament
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 
 
 class TeamLogModelTests(TestCase):
@@ -52,13 +47,13 @@ class TeamLogModelTests(TestCase):
         self.assertIn(log, self.team.logs.all())
 
     def test_not_cached(self) -> None:
-        self.assertNotIn("app.teamlog", settings.CACHEOPS)
+        self.assertNotIn("tournament.teamlog", settings.CACHEOPS)
 
     def test_admin_read_only(self) -> None:
         superuser = CustomUser.objects.create_user(
             username="log_admin", password="test", is_staff=True, is_superuser=True
         )
-        request = RequestFactory().get("/admin/app/teamlog/")
+        request = RequestFactory().get("/admin/tournament/teamlog/")
         request.user = superuser
         model_admin = admin.site._registry[TeamLog]
         log = self.make_log()

@@ -2,6 +2,7 @@
 """
 Test endpoints for creating Steam match data for Cypress tests.
 """
+
 import logging
 import random
 
@@ -12,9 +13,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from app.models import Game, Tournament
 from common.utils import isTestEnvironment
 from steam.models import Match, PlayerMatchStats
+from tournament.models import Game, Tournament
 
 log = logging.getLogger(__name__)
 

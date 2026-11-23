@@ -177,6 +177,7 @@ const event: EventType = {
   helpers: [],
   contributions_awarded_at: null,
   user_can_manage_event_staff: false,
+  user_is_event_operator: true,
 };
 
 const fixedEvent: EventType = { ...event, dota_lobby_password_mode: 'fixed' };

@@ -3,9 +3,10 @@
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser
 from app.serializers import TournamentUserSerializer
 from draft.services.hero_chat import delete_team_chat
+from tournament.models import Team, Tournament
 from tournament.services.team_references import TeamUsage, team_references, team_usage
 
 

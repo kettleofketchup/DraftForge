@@ -5,10 +5,11 @@ from datetime import datetime, timedelta
 from django.db import transaction
 
 from app.cache_utils import invalidate_after_commit
-from app.models import LIVE_TEAM_FIRST, CustomUser, Team, Tournament
+from app.models import CustomUser
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound, TeamDraftState
 from draft.services.team_broadcast import broadcast_event_after_commit
 from telemetry.logging import get_logger
+from tournament.models import LIVE_TEAM_FIRST, Team, Tournament
 
 log = get_logger(__name__)
 

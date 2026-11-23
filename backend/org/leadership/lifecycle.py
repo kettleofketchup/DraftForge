@@ -3,12 +3,7 @@ from datetime import datetime, timedelta
 
 from django.db.models import Prefetch
 
-from app.models import (
-    ORIGINAL_CAPTAINCY_FIRST,
-    CustomUser,
-    Team,
-    with_captain_acquired_at,
-)
+from app.models import CustomUser
 from draft.models.team import Draft, TeamDraftState
 from events.capacity import lock_event
 from events.constants import REGISTERED_SIGNUP_STATUSES
@@ -25,6 +20,7 @@ from org.models_leadership import CaptainReview, EventCaptain
 from org.standing import ledger
 from org.standing.kinds import kinds_for
 from telemetry.logging import get_logger
+from tournament.models import ORIGINAL_CAPTAINCY_FIRST, Team, with_captain_acquired_at
 
 log = get_logger(__name__)
 
@@ -146,10 +142,20 @@ def _write_snapshots(
         snap.placement = plan.team.placement
         snap.window_closes_at = closes
         snap.voided_at = None
+        snap.released_at = None
+        snap.released_by = None
     if update:
         EventCaptain.objects.bulk_update(
             update,
-            ["team", "team_name", "placement", "window_closes_at", "voided_at"],
+            [
+                "team",
+                "team_name",
+                "placement",
+                "window_closes_at",
+                "voided_at",
+                "released_at",
+                "released_by",
+            ],
         )
     if create:
         EventCaptain.objects.bulk_create(create)

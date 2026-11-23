@@ -7,21 +7,15 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import (
-    CustomUser,
-    Game,
-    Team,
-    TeamLog,
-    TeamLogAction,
-    TeamLogVia,
-    Tournament,
-)
+from app.models import CustomUser
 from bracket.models import BracketSlot, TournamentBracket
 from draft.models import Draft, DraftEvent, DraftOptions, DraftTeam, HeroDraft
 from draft.services.team_reset import reset_draft_teams
 from league.models import League, LeagueUser
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
+from tournament.models import Game, Team, TeamLog, Tournament
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.serializers.draft import users_remaining_pks
 from tournament.services.team_management import replace_captain
 from tournament.state import tournament_state_queryset
@@ -297,7 +291,7 @@ class InitDraftEndpointTests(TestCase):
         self.assertEqual(resp.data["code"], "draft_reset_has_references")
         self.assertEqual(
             resp.data["references"],
-            {"app.Game.radiant_team": 1, "app.Game.dire_team": 1},
+            {"tournament.Game.radiant_team": 1, "tournament.Game.dire_team": 1},
         )
         self.assertEqual(self.team_snapshot(), before)
         self.assertFalse(Draft.objects.filter(tournament=self.tournament).exists())
@@ -618,7 +612,7 @@ class InitDraftEndpointTests(TestCase):
             resp.data["usage"],
             [
                 {
-                    "model": "app.Game",
+                    "model": "tournament.Game",
                     "label": "game",
                     "label_plural": "games",
                     "count": 2,
@@ -629,7 +623,7 @@ class InitDraftEndpointTests(TestCase):
                 }
             ],
         )
-        self.assertEqual(resp.data["references"]["app.Game.radiant_team"], 2)
+        self.assertEqual(resp.data["references"]["tournament.Game.radiant_team"], 2)
 
     def test_409_usage_counts_herodraft_not_draft_teams(self) -> None:
         game = Game.objects.create(tournament=self.tournament)
@@ -664,7 +658,7 @@ class InitDraftEndpointTests(TestCase):
         self.assertEqual(kept_entry["captain"]["username"], "init_named_outsider")
         self.assertEqual(
             [(u["model"], u["count"]) for u in kept_entry["usage"]],
-            [("app.Game", 1)],
+            [("tournament.Game", 1)],
         )
         [dropped_entry] = report["dropped_teams"]
         self.assertEqual(dropped_entry["pk"], dropped.pk)

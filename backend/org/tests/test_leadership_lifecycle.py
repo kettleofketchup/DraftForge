@@ -5,7 +5,6 @@ from django.test.utils import CaptureQueriesContext, override_settings
 from django.utils import timezone as tz
 from structlog.testing import capture_logs
 
-from app.models import Team, TeamLogVia
 from events.constants import EventState
 from events.models import Event
 from events.reopen import reopen_event
@@ -18,6 +17,8 @@ from org.models import ContributionEntry, ContributionPointValue, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
 from org.standing import api as standing
 from org.tests.leadership_base import LeadershipTestCase
+from tournament.models import Team
+from tournament.models.team_log import TeamLogVia
 from tournament.services.team_management import replace_captain
 
 SNAPSHOT_QUERIES = 18
@@ -278,6 +279,22 @@ class ReopenTest(LeadershipTestCase):
         review = CaptainReview.objects.get()
         self.assertEqual(review.void_kind, "")
         self.assertEqual(set(review.scores.values_list("score", flat=True)), {4})
+
+    def test_resnapshot_clears_release(self) -> None:
+        self.close()
+        EventCaptain.objects.filter(event=self.event).update(
+            released_at=tz.now(), released_by=self.admin
+        )
+        self.event.refresh_from_db()
+        reopen_event(self.event, actor=self.admin)
+        Event.objects.filter(pk=self.event.pk).update(state=EventState.IN_PROGRESS)
+        self.event.refresh_from_db()
+        self.close()
+        snaps = EventCaptain.objects.nocache().filter(event=self.event)
+        self.assertTrue(snaps.exists())
+        for snap in snaps:
+            self.assertIsNone(snap.released_at)
+            self.assertIsNone(snap.released_by_id)
 
     def test_reclose_with_new_captain(self) -> None:
         self.close()

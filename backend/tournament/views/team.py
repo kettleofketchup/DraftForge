@@ -18,21 +18,15 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from app.cache_utils import invalidate_after_commit
-from app.models import (
-    CustomUser,
-    Game,
-    Team,
-    TeamLog,
-    TeamLogAction,
-    TeamLogVia,
-    Tournament,
-)
+from app.models import CustomUser
 from app.permissions import IsStaff
 from draft.models import Draft, DraftRound
 from org.feature_errors import not_permitted
 from org.models import Organization, OrgUserGameMmr
 from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
+from tournament.models import Game, Team, TeamLog, Tournament
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.permissions import CanEditTeam, can_create_team, can_edit_tournament
 from tournament.serializers.team import (
     ManagedTeamSerializer,

@@ -9,11 +9,12 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import Game, Team, TeamLogAction, TeamLogVia, Tournament
 from draft.models import HeroDraft
 from events.overrides import REASON_MAX_LENGTH
 from lobby.models import GameLobby
 from telemetry.logging import get_logger
+from tournament.models import Game, Team, Tournament
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.permissions import IsTournamentStaff
 from tournament.serializers.game import (
     BracketGameSerializer,

@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Team, TeamLogVia, Tournament
+from app.models import CustomUser
 from draft.models import Draft, DraftRound, TeamDraftState
 from draft.serializers.team import DraftRoundSerializer
 from draft.services.team import team_for_round
@@ -20,6 +20,8 @@ from org.leadership.lifecycle import snapshot_event
 from org.models import Organization
 from org.models_leadership import EventCaptain
 from tests.populate.utils import ensure_org_user
+from tournament.models import Team, Tournament
+from tournament.models.team_log import TeamLogVia
 from tournament.services.team_management import add_standin, replace_captain, sub_in
 
 

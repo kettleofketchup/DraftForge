@@ -5,7 +5,7 @@ from django.db.models.signals import m2m_changed, pre_save
 from django.dispatch import receiver
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Game, Team
+from app.models import CustomUser
 from draft.models import DraftTeam, HeroDraft, HeroDraftRound, HeroDraftState
 from draft.services.hero_chat import (
     chat_roster_field,
@@ -14,13 +14,14 @@ from draft.services.hero_chat import (
     schedule_roster_tenure,
 )
 from telemetry.logging import get_logger
+from tournament.models import Game, Team
 
 log = get_logger(__name__)
 
 
 @receiver(
     m2m_changed,
-    sender="app.Team_members",
+    sender="tournament.Team_members",
     dispatch_uid="draft_herodraft_chat_roster_tenure",
 )
 def herodraft_chat_roster_tenure(
@@ -62,7 +63,7 @@ def herodraft_chat_roster_tenure(
 
 @receiver(
     pre_save,
-    sender="app.Game",
+    sender="tournament.Game",
     dispatch_uid="draft_reset_herodraft_on_team_change",
 )
 def reset_herodraft_on_team_change(

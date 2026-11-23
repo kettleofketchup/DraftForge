@@ -5,17 +5,12 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.discord_accounts import merge_discord_accounts
-from app.models import (
-    CustomUser,
-    Game,
-    ProfileClaimRequest,
-    Team,
-    Tournament,
-)
+from app.models import CustomUser, ProfileClaimRequest
 from draft.models import HeroDraft, HeroDraftChatMembership, HeroDraftChatMessage
 from draft.services.hero import new_herodraft_for_game
 from draft.services.hero_chat import repoint_chat_attribution
 from org.models import Organization
+from tournament.models import Game, Team, Tournament
 
 Channel = HeroDraftChatMessage.Channel
 

@@ -4,17 +4,16 @@ from typing import Any
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import (
+from app.models import CustomUser
+from tournament.models import (
     LIVE_TEAM_FIRST,
     ORIGINAL_CAPTAINCY_FIRST,
-    CustomUser,
     Team,
     TeamLog,
-    TeamLogAction,
-    TeamLogVia,
     Tournament,
     with_captain_acquired_at,
 )
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 
 
 class TeamOrderingTests(TestCase):
