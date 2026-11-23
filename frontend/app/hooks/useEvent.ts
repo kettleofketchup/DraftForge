@@ -278,10 +278,14 @@ export const repeaterKeys = {
   subscribers: (id: number) => ['repeater-subscribers', id] as const,
 };
 
-export function useEventRepeaters(params?: { organization?: number }) {
+export function useEventRepeaters(
+  params?: { organization?: number },
+  options?: { enabled?: boolean },
+) {
   return useQuery<EventRepeaterListItem[]>({
     queryKey: repeaterKeys.list(params),
     queryFn: () => getEventRepeaters(params),
+    enabled: options?.enabled,
   });
 }
 

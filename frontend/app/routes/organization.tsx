@@ -228,12 +228,13 @@ export default function OrganizationDetailPage() {
   const activeTab = urlTab === 'settings' ? 'leagues' : urlTab;
 
   const { data: events = [], isLoading: eventsLoading } = useEvents(
-    pk ? { organization: pk } : undefined,
+    { organization: pk },
+    { enabled: !!pk },
   );
   // The list rows are slim; the edit form needs every event field.
   const { data: fullEditingEvent } = useEvent(editingEvent?.id ?? null);
   const { data: repeaters = [], isLoading: repeatersLoading } =
-    useEventRepeaters(pk ? { organization: pk } : undefined);
+    useEventRepeaters({ organization: pk }, { enabled: !!pk });
 
   const currentOrg = useOrgStore((s) => s.currentOrg);
 
