@@ -8,11 +8,13 @@ import type {
   EventType,
   ReadyCheckFields,
   RollCallMode,
-  SignupHistoryPage,
   SignupOpenMode,
   StartMentionScope,
 } from '~/components/events/schemas';
-import { signupHistoryPageSchema } from '~/components/events/schemas';
+import {
+  signupHistoryPageSchema,
+  type SignupHistoryPage,
+} from '~/components/events/signupHistorySchemas';
 
 import axios from './axios';
 
