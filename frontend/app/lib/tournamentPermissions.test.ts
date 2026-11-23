@@ -56,10 +56,17 @@ describe('canEditTournament', () => {
     expect(
       canEditTournament(staff, { leaguePk: null, leagueOrgPk: null }),
     ).toBe(true));
-  it('org admin cannot edit a leagueless tournament', () =>
+  it('event-org admin can edit a leagueless tournament', () =>
     expect(
       canEditTournament(
         { ...plain, admin_organization_ids: [8] },
+        { leaguePk: null, leagueOrgPk: 8 },
+      ),
+    ).toBe(true));
+  it('admin of another org cannot edit a leagueless tournament', () =>
+    expect(
+      canEditTournament(
+        { ...plain, admin_organization_ids: [9] },
         { leaguePk: null, leagueOrgPk: 8 },
       ),
     ).toBe(false));

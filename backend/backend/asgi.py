@@ -27,8 +27,8 @@ init_telemetry()
 install_thread_dump_handler()
 
 # Import routing after Django and telemetry are initialized
-import app.routing  # noqa: E402
 import draft.routing  # noqa: E402
+import tournament.routing  # noqa: E402
 
 application = ProtocolTypeRouter(
     {
@@ -37,7 +37,7 @@ application = ProtocolTypeRouter(
             AuthMiddlewareStack(
                 URLRouter(
                     [
-                        *app.routing.websocket_urlpatterns,
+                        *tournament.routing.websocket_urlpatterns,
                         *draft.routing.websocket_urlpatterns,
                     ]
                 )

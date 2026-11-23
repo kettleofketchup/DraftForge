@@ -141,10 +141,20 @@ def _write_snapshots(
         snap.placement = plan.team.placement
         snap.window_closes_at = closes
         snap.voided_at = None
+        snap.released_at = None
+        snap.released_by = None
     if update:
         EventCaptain.objects.bulk_update(
             update,
-            ["team", "team_name", "placement", "window_closes_at", "voided_at"],
+            [
+                "team",
+                "team_name",
+                "placement",
+                "window_closes_at",
+                "voided_at",
+                "released_at",
+                "released_by",
+            ],
         )
     if create:
         EventCaptain.objects.bulk_create(create)

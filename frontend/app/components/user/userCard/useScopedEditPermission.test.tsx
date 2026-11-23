@@ -4,7 +4,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { LeagueType } from '~/components/league/schemas';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
-import { type EditUserScope, useScopedEditPermission } from './editUserSchema';
+import {
+  type EditUserScope,
+  useScopedEditMode,
+  useScopedEditPermission,
+  useTournamentEditScope,
+} from './editUserSchema';
 
 const ORG_PK = 3;
 const league = {
@@ -24,7 +29,9 @@ function canEdit(scope: EditUserScope) {
   return renderHook(() => useScopedEditPermission(scope)).result.current;
 }
 
-afterEach(() => useUserStore.setState({ currentUser: null } as never));
+afterEach(() =>
+  useUserStore.setState({ currentUser: null, tournament: null } as never),
+);
 
 describe('useScopedEditPermission league scope', () => {
   it('grants staff of the parent org (backend update_org_user gate)', () => {
@@ -61,5 +68,57 @@ describe('useScopedEditPermission league scope', () => {
   it('grants site staff', () => {
     asUser({ is_staff: true });
     expect(canEdit(leagueScope)).toBe(true);
+  });
+});
+
+describe('useScopedEditMode league staff in their tournament', () => {
+  const mode = (scope: EditUserScope) =>
+    renderHook(() => useScopedEditMode(scope)).result.current;
+
+  it('gives league staff MMR-only edits with a tournament', () => {
+    asUser({ staff_league_ids: [10] });
+    expect(mode({ ...leagueScope, tournamentId: 5 })).toBe('mmr');
+  });
+
+  it('gives league admins MMR-only edits with a tournament', () => {
+    asUser({ admin_league_ids: [10] });
+    expect(mode({ ...leagueScope, tournamentId: 5 })).toBe('mmr');
+  });
+
+  it('gives league staff nothing without a tournament', () => {
+    asUser({ staff_league_ids: [10] });
+    expect(mode(leagueScope)).toBeNull();
+  });
+
+  it('keeps full edits for org staff', () => {
+    asUser({ staff_organization_ids: [ORG_PK] });
+    expect(mode({ ...leagueScope, tournamentId: 5 })).toBe('full');
+  });
+});
+
+describe('useTournamentEditScope', () => {
+  const scoped = (userPk: number) =>
+    renderHook(() => useTournamentEditScope(leagueScope, userPk)).result
+      .current;
+
+  it('adds the store tournament for one of its players', () => {
+    useUserStore.setState({
+      tournament: { pk: 5, league_pk: 10, users: [{ pk: 42 }] },
+    } as never);
+    expect(scoped(42)).toMatchObject({ kind: 'league', tournamentId: 5 });
+  });
+
+  it('leaves the scope alone for a player outside the tournament', () => {
+    useUserStore.setState({
+      tournament: { pk: 5, league_pk: 10, users: [{ pk: 42 }] },
+    } as never);
+    expect(scoped(7)).not.toHaveProperty('tournamentId');
+  });
+
+  it('leaves the scope alone when the tournament is in another league', () => {
+    useUserStore.setState({
+      tournament: { pk: 5, league_pk: 11, users: [{ pk: 42 }] },
+    } as never);
+    expect(scoped(42)).not.toHaveProperty('tournamentId');
   });
 });
