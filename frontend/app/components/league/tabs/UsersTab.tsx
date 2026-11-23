@@ -1,7 +1,9 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AddMemberPayload } from '~/components/api/api';
 import { addLeagueMember } from '~/components/api/api';
+import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
@@ -30,6 +32,9 @@ export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const displayOrgId = useDisplayOrgId();
   const [showAddUser, setShowAddUser] = useState(false);
+  const queryClient = useQueryClient();
+  const leagueOrgPk =
+    currentLeague?.organization?.pk ?? currentLeague?.organization_id;
 
   const canEdit = useIsLeagueAdmin(currentLeague);
 
@@ -45,9 +50,14 @@ export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
       if (!leaguePk) throw new Error('No league');
       const user = await addLeagueMember(leaguePk, payload);
       useLeagueStore.getState().addLeagueUser(leaguePk, user);
+      if (leagueOrgPk) {
+        queryClient.invalidateQueries({
+          queryKey: organizationQueryKey(leagueOrgPk),
+        });
+      }
       return user;
     },
-    [leaguePk],
+    [leaguePk, leagueOrgPk, queryClient],
   );
 
   const addedPkSet = useMemo(() => new Set(leagueUserPks), [leagueUserPks]);
