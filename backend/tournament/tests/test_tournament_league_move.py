@@ -5,11 +5,12 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from league.models import League
 from org.models import Organization
+from tournament.models import Tournament
 
 
 class TournamentLeagueMoveTests(TestCase):

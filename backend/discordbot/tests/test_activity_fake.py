@@ -8,12 +8,13 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from discordbot import activity_fake
 from discordbot.activity import discord_json
 from discordbot.models import DraftActivityChannel
 from discordbot.tests.activity_helpers import ClearIntentsMixin
 from draft.models import DraftTeam, HeroDraft
+from tournament.models import Game, Team, Tournament
 
 DISCORD_ID = "424242424242"
 INSTANCE_ID = "fake-instance-test"

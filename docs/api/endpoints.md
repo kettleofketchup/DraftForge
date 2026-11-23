@@ -207,7 +207,7 @@ those rows with it:
   "detail": "Radiant Five is still used by 2 games and cannot be deleted.",
   "usage": [
     {
-      "model": "app.Game",
+      "model": "tournament.Game",
       "label": "game",
       "label_plural": "games",
       "count": 2,
@@ -1333,7 +1333,7 @@ teams whose captain is in the pool count as draft teams.
       "kept_teams": [
         {
           "pk": 8, "name": "Seeded", "reason": "no_captain", "captain": null,
-          "usage": [{"model": "app.Game", "label": "game", "label_plural": "games", "count": 1, "teams": [{"pk": 8, "name": "Seeded"}]}]
+          "usage": [{"model": "tournament.Game", "label": "game", "label_plural": "games", "count": 1, "teams": [{"pk": 8, "name": "Seeded"}]}]
         }
       ],
       "cleared_deputies": [{"team": 4, "user": 31}]
@@ -1351,10 +1351,10 @@ teams whose captain is in the pool count as draft teams.
   {
     "error": "Teams are used by games or other records.",
     "code": "draft_reset_has_references",
-    "references": {"app.Game.radiant_team": 2, "app.Game.dire_team": 2, "bracket.BracketSlot.participant": 4},
+    "references": {"tournament.Game.radiant_team": 2, "tournament.Game.dire_team": 2, "bracket.BracketSlot.participant": 4},
     "usage": [
-      {"model": "app.Game", "label": "game", "label_plural": "games", "count": 2, "teams": [{"pk": 4, "name": "Team A"}, {"pk": 5, "name": "Team B"}]},
-      {"model": "bracket.BracketSlot", "label": "bracket slot", "label_plural": "bracket slots", "count": 4, "teams": [{"pk": 4, "name": "Team A"}, {"pk": 5, "name": "Team B"}]}
+      {"model": "bracket.BracketSlot", "label": "bracket slot", "label_plural": "bracket slots", "count": 4, "teams": [{"pk": 4, "name": "Team A"}, {"pk": 5, "name": "Team B"}]},
+      {"model": "tournament.Game", "label": "game", "label_plural": "games", "count": 2, "teams": [{"pk": 4, "name": "Team A"}, {"pk": 5, "name": "Team B"}]}
     ]
   }
   ```

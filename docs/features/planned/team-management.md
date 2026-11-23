@@ -158,13 +158,13 @@ When a tournament is linked to a season, the admin can import teams:
 
 ## Tournament Team Audit Log and Roster Service
 
-Built in #544 (epic #490). Tournament teams (`app.Team`) get an audit table and one
+Built in #544 (epic #490). Tournament teams (`tournament.Team`) get an audit table and one
 service for roster changes. The staff API (#545) and the tournament team dialog (#546)
 build on it.
 
 ### TeamLog
 
-`app.TeamLog` records one row per team change. It is read-only in the Django admin, not
+`tournament.TeamLog` records one row per team change. It is read-only in the Django admin, not
 cached, and the app never deletes rows (the retention purge, #499, will).
 
 | Field | Description |
@@ -343,7 +343,7 @@ as its id, for example "Player #12".
 New models live in the `league` app (alongside `LeagueUser`), not in the already-large `app/models.py`:
 
 - `league/models.py` — Season, SeasonSignup, SeasonTeam
-- `app/models.py` — Tournament gains `season` FK, Team gains `season_team_source` FK
+- `tournament/models/tournament.py` and `tournament/models/team.py` — Tournament gains `season` FK, Team gains `season_team_source` FK
 
 ---
 

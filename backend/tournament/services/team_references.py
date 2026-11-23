@@ -8,17 +8,19 @@ from typing import TypedDict
 from django.db import models
 from django.db.models import Q, QuerySet
 
-from app.models import Team
-from draft.models import DraftTeam, HeroDraft
+from draft.models import (
+    DraftTeam,
+    HeroDraft,
+    HeroDraftChatMembership,
+    HeroDraftChatMessage,
+)
+from tournament.models import Game, Team, TeamLog, Tournament
 
 _COUNTED_ON_DELETE = (models.CASCADE, models.SET_NULL)
 # Audit rows outlive the team (SET_NULL); chat dies with it. Neither blocks a reset or delete.
 _EXCLUDED_KEYS = frozenset(
-    {
-        "app.TeamLog.team",
-        "draft.HeroDraftChatMessage.team",
-        "draft.HeroDraftChatMembership.team",
-    }
+    f"{model._meta.label}.team"
+    for model in (TeamLog, HeroDraftChatMessage, HeroDraftChatMembership)
 )
 
 
@@ -62,12 +64,28 @@ _ROLLUPS: dict[type[models.Model], tuple[str, type[models.Model]]] = {
 }
 
 _LABELS: dict[str, tuple[str, str]] = {
-    "app.Game": ("game", "games"),
-    "app.Tournament": ("tournament result", "tournament results"),
+    Game._meta.label: ("game", "games"),
+    Tournament._meta.label: ("tournament result", "tournament results"),
     "bracket.BracketSlot": ("bracket slot", "bracket slots"),
     "draft.HeroDraft": ("HeroDraft", "HeroDrafts"),
     "lobby.GameLobby": ("lobby", "lobbies"),
 }
+
+# Display order by singular label, so moving a model between apps never reorders it.
+_USAGE_ORDER: tuple[str, ...] = (
+    "game",
+    "tournament result",
+    "bracket slot",
+    "HeroDraft",
+    "lobby",
+    "event captain",
+)
+
+
+def _usage_sort_key(usage: TeamUsage) -> tuple[int, str]:
+    label = usage["label"]
+    rank = _USAGE_ORDER.index(label) if label in _USAGE_ORDER else len(_USAGE_ORDER)
+    return rank, label.casefold()
 
 
 def _team_rows(teams: QuerySet[Team] | Iterable[Team]) -> dict[int, str]:
@@ -121,7 +139,7 @@ def team_usage(teams: QuerySet[Team] | Iterable[Team]) -> list[TeamUsage]:
                 ],
             }
         )
-    return sorted(usage, key=lambda u: u["model"])
+    return sorted(usage, key=_usage_sort_key)
 
 
 def team_references(teams: QuerySet[Team] | Iterable[Team]) -> dict[str, int]:

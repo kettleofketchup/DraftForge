@@ -4,7 +4,6 @@ from unittest import mock
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from app.models import GameMode
 from discordbot.models import DiscordMessageLog, DiscordTournamentLog
 from lobby import services, states, tasks
 from lobby.client import DotaLobbyError, DotaLobbyUnavailable
@@ -20,6 +19,7 @@ from lobby.tests.helpers import (
     make_tournament,
     make_user,
 )
+from tournament.choices import GameMode
 
 
 class Retry(Exception):

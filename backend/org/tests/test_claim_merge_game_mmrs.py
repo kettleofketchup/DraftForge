@@ -5,11 +5,12 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel, ProfileClaimRequest, Tournament
+from app.models import CustomUser, PositionsModel, ProfileClaimRequest
 from common.game import GameType
 from events.models import Event
 from events.services import create_tournament_for_event
 from org.models import Organization, OrgUser, OrgUserGameMmr
+from tournament.models import Tournament
 from user.tests.test_cacheops_integration import _redis_reachable
 
 _discord_ids = itertools.count(930_000_000_000_000_000)

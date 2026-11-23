@@ -14,10 +14,10 @@ Implements Redis caching with django-cacheops for the DTX Django backend.
 All models use 1-hour cache timeout (configured in `settings.py`):
 ```python
 CACHEOPS = {
-    "app.tournament": {"ops": "all", "timeout": 60 * 60},
-    "app.team": {"ops": "all", "timeout": 60 * 60},
+    "tournament.tournament": {"ops": "all", "timeout": 60 * 60},
+    "tournament.team": {"ops": "all", "timeout": 60 * 60},
     "app.customuser": {"ops": "all", "timeout": 60 * 60},
-    "app.game": {"ops": "all", "timeout": 60 * 60},
+    "tournament.game": {"ops": "all", "timeout": 60 * 60},
     "draft.draft": {"ops": "all", "timeout": 60 * 60},
     "draft.draftround": {"ops": "all", "timeout": 60 * 60},
     "draft.draftoptions": {"ops": "all", "timeout": 60 * 60},
