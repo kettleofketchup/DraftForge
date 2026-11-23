@@ -6,6 +6,7 @@ export {
   invalidateContributionQueries,
   invalidateLeadershipQueries,
   invalidateOrgContributionQueries,
+  invalidateOrgStandingQueries,
   leadershipKeys,
   orgFeaturesKey,
   promotionKeys,

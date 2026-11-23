@@ -64,6 +64,7 @@ import type { UserType } from '~/components/user/types';
 import {
   invalidateConductQueries,
   invalidateOrgContributionQueries,
+  invalidateOrgStandingQueries,
 } from '~/features/org-features/queryKeys';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
@@ -181,6 +182,7 @@ export function useEventActionMutation(eventId: number) {
         queryClient.setQueryData(['event', eventId], data);
         void invalidateEventLists(queryClient);
         void invalidateConductQueries(queryClient, data.organization);
+        void invalidateOrgStandingQueries(queryClient, data.organization);
       },
     }),
     startTournament: useMutation({
@@ -197,14 +199,20 @@ export function useEventActionMutation(eventId: number) {
         queryClient.setQueryData(['event', eventId], data);
         void invalidateEventLists(queryClient);
         void invalidateConductQueries(queryClient, data.organization);
+        void invalidateOrgStandingQueries(queryClient, data.organization);
       },
     }),
     deleteEvent: useMutation({
       mutationFn: () => deleteEventAPI(eventId),
       onSuccess: () => {
+        const orgId = queryClient.getQueryData<EventType>([
+          'event',
+          eventId,
+        ])?.organization;
         void invalidateEventLists(queryClient);
         queryClient.removeQueries({ queryKey: ['event', eventId] });
         void invalidateConductQueries(queryClient);
+        void invalidateOrgStandingQueries(queryClient, orgId);
       },
     }),
     restartTournament: useMutation({
@@ -220,7 +228,7 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         void invalidateEventLists(queryClient);
-        void invalidateOrgContributionQueries(queryClient, data.organization);
+        void invalidateOrgStandingQueries(queryClient, data.organization);
         void invalidateConductQueries(queryClient, data.organization);
       },
     }),
@@ -345,6 +353,7 @@ export function useUpdateEventMutation(eventId: number) {
         queryKey: ['event-lobby-password', eventId],
       });
       void invalidateConductQueries(queryClient, data.organization);
+      void invalidateOrgStandingQueries(queryClient, data.organization);
     },
   });
 }
