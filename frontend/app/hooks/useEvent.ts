@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 
 import type {
   EventRepeaterListItem,
@@ -100,11 +100,32 @@ export function useEvents(
   });
 }
 
+/** Drops manage flags computed for a different viewer (e.g. cached across a logout). */
+export function forViewer(
+  event: EventType,
+  viewerPk: number | null,
+): EventType {
+  if ((event.manage_viewer_pk ?? null) === viewerPk) return event;
+  if (!event.user_can_manage && !event.user_can_manage_event_staff)
+    return event;
+  return {
+    ...event,
+    user_can_manage: false,
+    user_can_manage_event_staff: false,
+  };
+}
+
 export function useEvent(eventId: number | null) {
-  return useQuery<EventType>({
+  const viewerPk = useUserStore((s) => s.currentUser?.pk ?? null);
+  const select = useCallback(
+    (event: EventType) => forViewer(event, viewerPk),
+    [viewerPk],
+  );
+  return useQuery<EventType, Error, EventType>({
     queryKey: ['event', eventId],
     queryFn: () => getEvent(eventId!),
     enabled: eventId !== null,
+    select,
   });
 }
 
