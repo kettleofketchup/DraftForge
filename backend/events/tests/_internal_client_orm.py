@@ -335,13 +335,24 @@ def _create_or_update_signup_message_orm(**data):
 
 def _transition_event_state_orm(event_pk, new_state):
     """Mirror POST /api/internal/events/<pk>/transition/."""
+    from events.ledger import SignupActor
     from events.models import Event
+    from events.ready_check import (
+        READY_CHECK_HELD_MESSAGE,
+        transition_with_ready_check,
+    )
 
     event = Event.objects.nocache().get(pk=event_pk)
     try:
-        event.transition_state(new_state)
+        started = transition_with_ready_check(
+            event, new_state, actor=SignupActor.system()
+        )
     except ValueError as exc:
         return _ResponseLike(400, {"error": str(exc)})
+    if not started:
+        return _ResponseLike(
+            409, {"code": "ready_check_held", "error": READY_CHECK_HELD_MESSAGE}
+        )
     return _ResponseLike(200, {"id": event.pk, "state": event.state})
 
 

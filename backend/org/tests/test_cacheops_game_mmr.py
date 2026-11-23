@@ -57,8 +57,12 @@ class GameMmrCachedAsGuardrailTest(SimpleTestCase):
         )
 
     def test_detail_payloads_with_org_mmr_list_game_mmr(self) -> None:
-        text = (BACKEND_ROOT / "app" / "views_main.py").read_text()
-        for key in ("team_detail:", "tournament_detail_v2:"):
+        views = BACKEND_ROOT / "tournament" / "views"
+        for key, module in (
+            ("team_detail:", "team.py"),
+            ("tournament_detail_v2:", "tournament.py"),
+        ):
+            text = (views / module).read_text()
             block_start = text.index("@cached_as", text.index(key))
             args = next(_cached_as_args(text[block_start:]))[1]
             self.assertIn("OrgUserGameMmr", args, key)

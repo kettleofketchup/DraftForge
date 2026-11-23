@@ -5,7 +5,6 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import { fetchOrganization } from '~/components/api/api';
 import {
   fetchManagedTeam,
   fetchTeamHistory,
@@ -15,10 +14,8 @@ import {
   type TeamActionBody,
   type TeamHistoryPage,
 } from '~/components/api/teamManagementAPI';
-import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
-import { useCanEditTournament } from '~/hooks/usePermissions';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { getLogger } from '~/lib/logger';
-import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('teamManage');
 
@@ -87,15 +84,7 @@ export function useTeamActionMutation(
 
 /** Display-only mirror of can_edit_tournament for the store tournament. */
 export function useCanEditCurrentTournament(): boolean {
-  const tournament = useUserStore((state) => state.tournament);
-  const orgPk = tournament?.organization_pk ?? undefined;
-  // Read directly rather than via useOrganization, which writes orgStore.
-  const { data: organization } = useQuery({
-    queryKey: organizationQueryKey(orgPk ?? -1),
-    queryFn: () => fetchOrganization(orgPk!),
-    enabled: !!orgPk,
-  });
-  return useCanEditTournament(tournament?.league, organization ?? null);
+  return useCanManageCurrentTournament();
 }
 
 type PkLike = { pk?: number | null } | number | null | undefined;

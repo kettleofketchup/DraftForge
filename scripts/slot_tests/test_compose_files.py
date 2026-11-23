@@ -215,3 +215,15 @@ def test_dota_lobby_simulator_matches_the_test_env() -> None:
     data = (ROOT / "backend" / "tests" / "data" / "dota_lobby.py").read_text()
     league = int(re.search(r"^LOBBY_STEAM_LEAGUE_ID = (\d+)$", data, re.M).group(1))
     assert all(bot["leagues"] == [league] for bot in config["bots"])
+
+
+@pytest.mark.parametrize(
+    "f", ["docker-compose.prod.yaml", "docker-compose.release.yaml"]
+)
+def test_prod_backend_mounts_the_sqlite_dir_not_the_file(f: str) -> None:
+    backend = render([f], {"VERSION": "0.0.0"}, project=None)["services"]["backend"]
+    binds = {v["target"]: v["source"] for v in backend["volumes"]}
+    assert binds["/app/backend/data"] == str(ROOT / "backend" / "data")
+    assert not [t for t in binds if ".sqlite3" in t]
+    sqlite_path = backend["environment"]["SQLITE_PATH"]
+    assert (Path("/app/backend") / sqlite_path).parent == Path("/app/backend/data")

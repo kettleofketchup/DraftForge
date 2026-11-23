@@ -10,7 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from events.models import Event
-from events.permissions import has_event_staff_access
+from events.permissions import has_event_operator_access
 from opsnotices.models import OPEN_STATES, OpsNotice
 from opsnotices.registry import NoticeCategory
 from opsnotices.serializers import OpsNoticeSerializer
@@ -120,7 +120,7 @@ def _event(request: Request, event_id: int) -> Event:
         Event.objects.select_related("organization", "tournament_league"),
         pk=event_id,
     )
-    if not has_event_staff_access(request.user, event):
+    if not has_event_operator_access(request.user, event):
         raise PermissionDenied()
     return event
 

@@ -1,12 +1,16 @@
 from collections import defaultdict
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
+from typing import Final
 
 from django.db import transaction
 from django.utils import timezone
 
+from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
+from events.models import Event
 from org.leadership.constants import (
     RATER_REVIVABLE,
     REASON_MAX_LENGTH,
@@ -14,8 +18,10 @@ from org.leadership.constants import (
     SCORE_MIN,
     VoidKind,
 )
+from org.leadership.errors import ReviewRefused
 from org.leadership.kinds import LeadershipKind
 from org.leadership.rating import captain_rating_points, review_mean
+from org.leadership.release import annotate_live, is_released, release_floor
 from org.leadership.settings import get_leadership_settings
 from org.leadership.traits import materialize_traits
 from org.models import ContributionEntry, Organization, OrgLog, OrgUser
@@ -25,19 +31,11 @@ from org.models_leadership import (
     EventCaptain,
     OrgLeadershipSettings,
 )
-from org.permissions import has_org_admin_access
+from org.permissions import has_org_staff_access
 from org.standing import ledger
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
-
-
-class ReviewRefused(Exception):
-    def __init__(self, code: str, status: int, detail: str) -> None:
-        super().__init__(detail)
-        self.code = code
-        self.status = status
-        self.detail = detail
 
 
 def _review_means(snapshot_id: int) -> list[Fraction]:
@@ -269,16 +267,21 @@ def _check_reason(reason: str) -> str:
     return cleaned
 
 
-def _lock_review(
-    org: Organization, review_id: int, actor: CustomUser
-) -> tuple[CaptainReview, EventCaptain]:
-    if not has_org_admin_access(actor, org):
+def require_moderator(actor: CustomUser, org: Organization) -> None:
+    if not has_org_staff_access(actor, org):
         raise ReviewRefused(
             "not_permitted", 403, "You do not have permission to moderate reviews."
         )
+
+
+def _lock_review(
+    org: Organization, review_id: int, actor: CustomUser
+) -> tuple[CaptainReview, EventCaptain]:
+    require_moderator(actor, org)
     snapshot_id = (
         CaptainReview.objects.nocache()
         .filter(pk=review_id, event_captain__organization=org)
+        .exclude(event_captain__captain__user_id=actor.pk)
         .values_list("event_captain_id", flat=True)
         .first()
     )
@@ -290,12 +293,6 @@ def _lock_review(
         .select_related("event", "captain")
         .get(pk=snapshot_id)
     )
-    if ec.captain.user_id == actor.pk:
-        raise ReviewRefused(
-            "cannot_moderate_own_reviews",
-            403,
-            "Another organizer has to moderate reviews of you.",
-        )
     review = CaptainReview.objects.nocache().get(pk=review_id)
     return review, ec
 
@@ -418,3 +415,152 @@ def unvoid_review(
         actor_id=actor.pk,
     )
     return review
+
+
+@dataclass(frozen=True, slots=True)
+class ReleaseResult:
+    released: list[int]
+    skipped: list[dict[str, object]]
+
+
+_RELEASE_REFUSALS: dict[str, tuple[int, str, str]] = {
+    "cannot_release_own_reviews": (
+        403,
+        "own_snapshot",
+        "Another moderator has to release results about you.",
+    ),
+    "snapshot_voided": (409, "voided", "Reviews for this event are closed."),
+    "window_open": (409, "window_open", "The review window is still open."),
+    "not_enough_reviews": (
+        409,
+        "not_enough_reviews",
+        "Not enough reviews to release these results.",
+    ),
+    "already_released": (
+        409,
+        "already_released",
+        "These results are already released.",
+    ),
+}
+_REFUSAL_ORDER: Final[list[str]] = list(_RELEASE_REFUSALS)
+
+
+def _release_refusal(
+    ec: EventCaptain,
+    *,
+    live: int,
+    actor: CustomUser,
+    settings: OrgLeadershipSettings,
+    now: datetime,
+) -> str | None:
+    if ec.captain.user_id == actor.pk:
+        return "cannot_release_own_reviews"
+    if ec.voided_at is not None:
+        return "snapshot_voided"
+    if ec.window_closes_at > now:
+        return "window_open"
+    if live < release_floor(settings.rating_min_reviewers):
+        return "not_enough_reviews"
+    if is_released(ec, live=live, settings=settings, now=now):
+        return "already_released"
+    return None
+
+
+def _refuse(code: str) -> ReviewRefused:
+    status, _, detail = _RELEASE_REFUSALS[code]
+    return ReviewRefused(code, status, detail)
+
+
+def _locked_snapshots(
+    org: Organization, event: Event, captain_ids: list[int] | None
+) -> list[EventCaptain]:
+    qs = (
+        EventCaptain.objects.nocache()
+        .select_for_update()
+        .select_related("captain")
+        .filter(event=event, organization=org)
+    )
+    if captain_ids is not None:
+        qs = qs.filter(captain_id__in=captain_ids)
+    rows = list(qs.order_by("captain_id"))
+    if captain_ids is not None and {ec.captain_id for ec in rows} != set(captain_ids):
+        raise ReviewRefused("not_found", 404, "No captain review for this event.")
+    return rows
+
+
+def _live_counts(rows: list[EventCaptain]) -> dict[int, int]:
+    return dict(
+        annotate_live(
+            EventCaptain.objects.nocache().filter(pk__in=[ec.pk for ec in rows])
+        ).values_list("pk", "live")
+    )
+
+
+@transaction.atomic
+def release_results(
+    org: Organization,
+    *,
+    event: Event,
+    actor: CustomUser,
+    captain_ids: list[int] | None,
+    now: datetime,
+) -> ReleaseResult:
+    require_moderator(actor, org)
+    settings = get_leadership_settings(org.pk)
+    if not settings.require_staff_release:
+        raise ReviewRefused(
+            "release_not_required",
+            409,
+            "Results release automatically for this org.",
+        )
+    rows = _locked_snapshots(org, event, captain_ids)
+    live = _live_counts(rows)
+    refusals = {
+        ec.pk: _release_refusal(
+            ec, live=live.get(ec.pk, 0), actor=actor, settings=settings, now=now
+        )
+        for ec in rows
+    }
+    if captain_ids is not None:
+        codes = [code for code in refusals.values() if code is not None]
+        if codes:
+            raise _refuse(min(codes, key=_REFUSAL_ORDER.index))
+    releasable = [ec for ec in rows if refusals[ec.pk] is None]
+    if not releasable:
+        raise ReviewRefused(
+            "nothing_to_release", 409, "No results are waiting for release."
+        )
+    EventCaptain.objects.nocache().filter(
+        pk__in=[ec.pk for ec in releasable], released_at__isnull=True
+    ).update(released_at=now, released_by=actor)
+    for ec in releasable:
+        ec.released_at = now
+        ec.released_by = actor
+    invalidate_after_commit(*releasable)
+    released = [ec.captain_id for ec in releasable]
+    OrgLog.objects.create(
+        organization=org,
+        actor=actor,
+        action="release_captain_reviews",
+        details={"event_id": event.pk, "captain_org_user_ids": released},
+    )
+    transaction.on_commit(
+        lambda: log.info(
+            "leadership_results_released",
+            system="org",
+            subsystem="leadership",
+            org_id=org.pk,
+            event_id=event.pk,
+            actor_id=actor.pk,
+            captain_org_user_ids=released,
+            count=len(released),
+        )
+    )
+    return ReleaseResult(
+        released=released,
+        skipped=[
+            {"org_user_id": ec.captain_id, "code": _RELEASE_REFUSALS[code][1]}
+            for ec in rows
+            if (code := refusals[ec.pk]) is not None
+        ],
+    )

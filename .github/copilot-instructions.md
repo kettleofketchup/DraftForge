@@ -5,7 +5,7 @@ DraftForge is a platform for managing Dota 2 tournaments, teams, and competitive
 ## Repo-wide rules
 
 - **Task runner is `just`.** Never invoke `pytest`, `python manage.py`, or `npm test` directly in CI / scripts / docs. Always go through a `just` recipe (e.g., `just test::run '<cmd>'`, `just db::makemigrations <app>`, `just dev::debug`). The venv auto-activates.
-- **WebSockets share the HTTP URL.** Daphne / Channels routes both protocols on the same `/api/...` path — there is no `/ws/...` namespace. WebSocket routes live in `backend/app/routing.py` and `backend/draft/routing.py`; the frontend connects to the same path with `protocol = ws|wss`.
+- **WebSockets share the HTTP URL.** Daphne / Channels routes both protocols on the same `/api/...` path — there is no `/ws/...` namespace. WebSocket routes live in `backend/tournament/routing.py` and `backend/draft/routing.py`; the frontend connects to the same path with `protocol = ws|wss`.
 - **No secrets in this repo.** `.env` files are excluded; never propose committing one.
 - **Frontend stack is Vite + React Router v7 (NOT Next.js).** Server Components do not apply; everything is a Client Component.
 

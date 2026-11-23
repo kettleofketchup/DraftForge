@@ -2,7 +2,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { Building2, ScrollText, Users, type LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, type ReactNode, type RefObject } from 'react';
-import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
+import {
+  useForm,
+  useFormState,
+  type FieldErrors,
+  type UseFormReturn,
+} from 'react-hook-form';
 import { toast } from 'sonner';
 import type { z } from 'zod';
 
@@ -43,6 +48,10 @@ import {
 } from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
+import {
+  DiscordConnectionCard,
+  discordConnectKeys,
+} from '~/features/discord-connect';
 import { invalidatePromotionQueries } from '~/features/org-features/queryKeys';
 
 export type OrgProfileSection = 'general' | 'discord' | 'members' | 'rules';
@@ -121,7 +130,7 @@ export function useOrgProfileSections(
         queryKey: organizationQueryKey(organization.pk),
       });
       queryClient.invalidateQueries({
-        queryKey: ['discordBotStatus', organization.pk],
+        queryKey: discordConnectKeys.botStatus(organization.pk),
       });
       queryClient.invalidateQueries({ queryKey: organizationsQueryKey });
       void invalidatePromotionQueries(queryClient, organization.pk);
@@ -153,7 +162,11 @@ export function useOrgProfileSections(
     discard: () => form.reset(valuesFrom(organization)),
   };
   // Memoized: dirty and error changes re-render the dialog, not these fields.
-  const content = useMemo(() => profileContent(form), [form]);
+  const { pk, discord_server_id: serverId } = organization;
+  const content = useMemo(
+    () => profileContent(form, pk ?? null, serverId),
+    [form, pk, serverId],
+  );
 
   const errorKeys = Object.keys(form.formState.errors).filter(
     (k) => k !== 'root',
@@ -177,8 +190,29 @@ type ProfileForm = UseFormReturn<
   EditOrganizationInput
 >;
 
+function DiscordConnection({
+  form,
+  orgId,
+  serverId,
+}: {
+  form: ProfileForm;
+  orgId: number;
+  serverId: string | null | undefined;
+}) {
+  const { isDirty } = useFormState({ control: form.control });
+  return (
+    <DiscordConnectionCard
+      orgId={orgId}
+      serverId={serverId}
+      hasUnsavedChanges={isDirty}
+    />
+  );
+}
+
 function profileContent(
   form: ProfileForm,
+  orgId: number | null,
+  serverId: string | null | undefined,
 ): Record<OrgProfileSection, ReactNode> {
   const wrap = (children: ReactNode) => (
     <Form {...form}>
@@ -281,6 +315,9 @@ function profileContent(
     ),
     discord: wrap(
       <>
+        {orgId != null && (
+          <DiscordConnection form={form} orgId={orgId} serverId={serverId} />
+        )}
         <FormField
           control={form.control}
           name="discord_link"
@@ -317,7 +354,8 @@ function profileContent(
                 />
               </FormControl>
               <FormDescription>
-                Discord server (guild) ID for fetching members
+                Filled in when you connect above; edit only to link a server by
+                hand
               </FormDescription>
               <FormMessage />
             </FormItem>

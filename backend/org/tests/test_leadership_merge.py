@@ -108,7 +108,13 @@ class UserDeleteTest(LeadershipTestCase):
         captain = self.ou(self.cap_a)
 
         def view() -> dict:
-            return member_payload(captain, now=tz.now(), detail=True, staff=False)
+            return member_payload(
+                captain,
+                now=tz.now(),
+                detail=True,
+                staff=False,
+                viewer_user_id=captain.user_id,
+            )
 
         before = view()
         self.assertEqual(before["events"][0]["reviews"], 3)
@@ -220,6 +226,45 @@ class ReassignMemberTest(LeadershipTestCase):
                 org_user=self.ou(self.cap_b), track="leadership"
             ).exists()
         )
+
+    def test_captain_collision_carries_release(self) -> None:
+        self.close()
+        OrgLeadershipSettings.objects.update_or_create(
+            organization=self.org, defaults={"require_staff_release": True}
+        )
+        released_at = tz.now() - timedelta(hours=1)
+        EventCaptain.objects.filter(pk=self.snapshot(self.cap_b).pk).update(
+            released_at=released_at, released_by=self.admin
+        )
+        self.assertIsNone(self.snapshot(self.cap_a).released_at)
+        self.reassign(self.cap_b, self.cap_a)
+        snap = EventCaptain.objects.nocache().get(event=self.event)
+        self.assertEqual(snap.captain.user, self.cap_a)
+        self.assertEqual(snap.released_at, released_at)
+        self.assertEqual(snap.released_by_id, self.admin.pk)
+
+    def test_captain_collision_keeps_earliest_release(self) -> None:
+        self.close()
+        other = self.make_user("ld_merge_mod")
+        early = tz.now() - timedelta(hours=3)
+        late = tz.now() - timedelta(hours=1)
+        cases = [("drop_earlier", early, late), ("keep_earlier", late, early)]
+        for name, drop_at, keep_at in cases:
+            with self.subTest(name):
+                EventCaptain.objects.filter(pk=self.snapshot(self.cap_b).pk).update(
+                    released_at=drop_at, released_by=self.admin
+                )
+                EventCaptain.objects.filter(pk=self.snapshot(self.cap_a).pk).update(
+                    released_at=keep_at, released_by=other
+                )
+                with transaction.atomic():
+                    sid = transaction.savepoint()
+                    self.reassign(self.cap_b, self.cap_a)
+                    snap = EventCaptain.objects.nocache().get(event=self.event)
+                    self.assertEqual(snap.released_at, early)
+                    expected = self.admin if drop_at == early else other
+                    self.assertEqual(snap.released_by_id, expected.pk)
+                    transaction.savepoint_rollback(sid)
 
     def test_rater_collision_keeps_newer(self) -> None:
         self.close()
@@ -427,6 +472,21 @@ class RepointAttributionTest(LeadershipTestCase):
                 track="leadership", awarded_by=drop
             ).exists()
         )
+
+    def test_repoint_attribution_moves_released_by(self) -> None:
+        self.run_snapshot()
+        drop = self.make_user("ld_rel_drop")
+        keep = self.make_user("ld_rel_keep")
+        snap = self.snapshot(self.cap_a)
+        EventCaptain.objects.filter(pk=snap.pk).update(
+            released_at=tz.now(), released_by=drop
+        )
+        with transaction.atomic():
+            moved = maintenance.repoint_attribution(drop, keep)
+        self.assertEqual(moved, 1)
+        snap.refresh_from_db()
+        self.assertEqual(snap.released_by, keep)
+        self.assertIsNotNone(snap.released_at)
 
 
 class DeleteUserRowsTest(LeadershipTestCase):
