@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
   Calendar,
@@ -16,11 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ShouldRevalidateFunctionArgs } from 'react-router';
 import { useParams } from 'react-router';
 import type { AddMemberPayload } from '~/components/api/api';
-import {
-  addOrgMember,
-  checkDiscordBotStatus,
-  fetchOrganization,
-} from '~/components/api/api';
+import { addOrgMember, fetchOrganization } from '~/components/api/api';
 import {
   CreateEventModal,
   EditEventModal,
@@ -35,15 +31,14 @@ import {
   DeleteOrganizationDangerZone,
   useOrganization,
 } from '~/components/organization';
+import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
 import { useOrgSettingsParam } from '~/components/organization/hooks/useOrgSettingsParam';
+import { orgUsersQueryKey } from '~/components/organization/hooks/useOrgUsersQuery';
+import { OrganizationHeaderTitle } from '~/components/organization/OrganizationHeaderTitle';
 import { buildOrgPageNavOptions } from '~/components/organization/orgPageNavOptions';
 import { OrgSettingsDialog } from '~/components/organization/OrgSettingsDialog';
 import { useOrgSettingsAccess } from '~/components/organization/tabs/orgSettings/useOrgSettingsAccess';
-import {
-  AddDiscordBotButton,
-  PrimaryButton,
-  SecondaryButton,
-} from '~/components/ui/buttons';
+import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import {
   EntityBreadcrumb,
   type BreadcrumbSegment,
@@ -60,6 +55,10 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
 import { PendingClaimsBadge, usePendingClaimsCount } from '~/features/claims';
+import {
+  useDiscordBotStatus,
+  useDiscordConnectResult,
+} from '~/features/discord-connect';
 import {
   LockedFeaturesPanel,
   removeFeatureQueries,
@@ -232,15 +231,13 @@ export default function OrganizationDetailPage() {
   const { data: repeaters = [], isLoading: repeatersLoading } =
     useEventRepeaters(pk ? { organization: pk } : undefined);
 
-  // Org users from store (pk array) + cache resolution
-  const { orgUserPks, orgUsersLoading, orgUsersOrgId, getOrgUsers } =
-    useOrgStore();
-  const orgUsers = useOrgUsers(pk ?? 0);
   const currentOrg = useOrgStore((s) => s.currentOrg);
 
   const onMemberViewerChange = useCallback(() => {
-    useOrgStore.getState().clearOrgUsers();
     if (pk) {
+      // Remove, not reset: this runs before useQuery applies enabled=false, so a
+      // reset would refetch the members list as the new (possibly anonymous) viewer.
+      queryClient.removeQueries({ queryKey: orgUsersQueryKey(pk) });
       useUserCacheStore.getState().dropScoped({ orgId: pk });
       removeFeatureQueries(queryClient, pk);
     }
@@ -249,18 +246,14 @@ export default function OrganizationDetailPage() {
   const { canView: canViewMembers, settled: memberAccessSettled } =
     useMemberAccess(organization, onMemberViewerChange);
 
-  useEffect(() => {
-    if (activeTab === 'users' && pk && memberAccessSettled && canViewMembers) {
-      getOrgUsers(pk);
-    }
-  }, [
-    activeTab,
-    pk,
-    memberAccessSettled,
-    canViewMembers,
-    getOrgUsers,
-    orgUsersOrgId,
-  ]);
+  const orgUsersEnabled =
+    activeTab === 'users' && memberAccessSettled && !!canViewMembers;
+  const {
+    users: orgUsers,
+    pks: orgUserPks,
+    isLoading: orgUsersLoading,
+    isLoaded: orgUsersLoaded,
+  } = useOrgUsers(pk ?? 0, { enabled: orgUsersEnabled });
 
   useEffect(() => {
     if (memberAccessSettled && !canViewMembers && activeTab === 'users') {
@@ -309,15 +302,19 @@ export default function OrganizationDetailPage() {
     async (payload: AddMemberPayload) => {
       if (!pk) throw new Error('No organization');
       const user = await addOrgMember(pk, payload);
-      // Optimistic update: upsert into cache + append pk
       useUserCacheStore.getState().upsert(user, { orgId: pk });
-      const { orgUserPks } = useOrgStore.getState();
-      if (user.pk != null) {
-        useOrgStore.setState({ orgUserPks: [...orgUserPks, user.pk] });
+      const addedPk = user.pk;
+      if (addedPk != null) {
+        queryClient.setQueryData<number[]>(orgUsersQueryKey(pk), (old) =>
+          old && !old.includes(addedPk) ? [...old, addedPk] : old,
+        );
       }
+      void queryClient.invalidateQueries({
+        queryKey: organizationQueryKey(pk),
+      });
       return user;
     },
-    [pk],
+    [pk, queryClient],
   );
 
   const addedPkSet = useMemo(() => new Set(orgUserPks), [orgUserPks]);
@@ -328,24 +325,17 @@ export default function OrganizationDetailPage() {
 
   const hasDiscordServer = Boolean(organization?.discord_server_id);
 
-  // Check if the DraftForge bot has access to the org's Discord server
-  const { data: botStatus } = useQuery({
-    queryKey: ['discordBotStatus', pk],
-    queryFn: () => checkDiscordBotStatus(pk!),
-    enabled:
-      !!pk &&
-      !!organization &&
-      !!currentUser &&
-      hasDiscordServer &&
-      !!isOrgAdmin,
-    staleTime: 5 * 60 * 1000, // match backend cache TTL
-  });
+  const { data: botStatus } = useDiscordBotStatus(
+    pk,
+    !!organization && !!currentUser && !!isOrgAdmin,
+  );
   const hasBotAccess = botStatus?.has_bot ?? null;
+  useDiscordConnectResult(pk);
 
   // Page nav options for mobile navbar dropdown
   const userCountDisplay = memberCountDisplay({
     entityId: pk,
-    loadedForId: orgUsersOrgId,
+    loadedForId: orgUsersEnabled && orgUsersLoaded ? pk : null,
     loading: orgUsersLoading,
     loadedCount: orgUserPks.length,
     fallbackCount: organization?.users_count,
@@ -421,19 +411,21 @@ export default function OrganizationDetailPage() {
 
             {/* Organization Info */}
             <div className="flex-1">
-              <div className="flex items-start justify-between mb-2">
-                <h1 className="text-3xl font-bold">{organization.name}</h1>
-                {settingsAccess.canOpen && (
-                  <SecondaryButton
-                    size="sm"
-                    data-testid="org-settings-button"
-                    onClick={() => settingsParam.openSettings()}
-                  >
-                    <Settings className="h-4 w-4" />
-                    Org Settings
-                  </SecondaryButton>
-                )}
-              </div>
+              <OrganizationHeaderTitle
+                name={organization.name}
+                action={
+                  settingsAccess.canOpen && (
+                    <SecondaryButton
+                      size="sm"
+                      data-testid="org-settings-button"
+                      onClick={() => settingsParam.openSettings()}
+                    >
+                      <Settings className="h-4 w-4" />
+                      Org Settings
+                    </SecondaryButton>
+                  )
+                }
+              />
 
               {/* Discord Link + Bot Status */}
               <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -449,12 +441,15 @@ export default function OrganizationDetailPage() {
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 )}
-                {isOrgAdmin && hasDiscordServer && hasBotAccess === false && (
-                  <AddDiscordBotButton
+                {isOrgAdmin && hasBotAccess === false && (
+                  <SecondaryButton
                     size="sm"
-                    compact
-                    tooltip="Enable Discord user search and event notifications"
-                  />
+                    onClick={() => settingsParam.openSettings('discord')}
+                    data-testid="org-connect-discord-button"
+                  >
+                    <DiscordIcon className="h-4 w-4" />
+                    {hasDiscordServer ? 'Add Discord bot' : 'Connect Discord'}
+                  </SecondaryButton>
                 )}
               </div>
 
@@ -752,9 +747,9 @@ export default function OrganizationDetailPage() {
           onOpenChange={setShowCSVImport}
           entityContext={{ orgId: pk }}
           onComplete={() => {
-            const { clearOrgUsers, getOrgUsers } = useOrgStore.getState();
-            clearOrgUsers();
-            getOrgUsers(pk!);
+            void queryClient.invalidateQueries({
+              queryKey: organizationQueryKey(pk),
+            });
           }}
         />
       )}

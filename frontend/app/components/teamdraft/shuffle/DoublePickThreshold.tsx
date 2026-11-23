@@ -1,6 +1,7 @@
 import { Zap } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { Card, CardContent } from '~/components/ui/card';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { DisplayName, type TeamType, type UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -35,7 +36,7 @@ export const DoublePickThreshold: React.FC = memo(() => {
   const teams = useUserStore(selectTeams);
   const curDraftRoundPk = useUserStore(selectCurDraftRoundPk);
   const currentUserPk = useUserStore(selectCurrentUserPk);
-  const isStaff = useUserStore((state) => state.isStaff);
+  const canManage = useCanManageCurrentTournament();
 
   // Derive the actual latest round from draft data (single source of truth)
   const latestRound = useMemo(() => {
@@ -64,7 +65,7 @@ export const DoublePickThreshold: React.FC = memo(() => {
   }
 
   const isCurrentPicker = latestRound.captain?.pk === currentUserPk;
-  if (!isCurrentPicker && !isStaff()) return null;
+  if (!isCurrentPicker && !canManage) return null;
 
   const getTeamMmr = (team: TeamType): number => {
     let total = team.captain?.mmr || 0;

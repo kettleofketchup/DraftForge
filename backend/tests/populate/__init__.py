@@ -25,6 +25,7 @@ import time
 from rich.console import Console
 
 from tests.helpers.tournament_config import populate_test_tournaments
+from tests.populate.activity import populate_activity_bracket_data
 from tests.populate.auth_matrix import populate_auth_matrix_data
 from tests.populate.avatars import populate_committed_avatars
 
@@ -122,6 +123,9 @@ def populate_all(force: bool = False) -> None:
         # Last: explicit pks (org/league 50, users 8000-8007) bump the
         # auto-increment counters every step above relies on.
         ("Game Org MMR Data", populate_game_org_mmr_data),
+        # Its tournament (explicit pk 950) brings auto-pk teams, games and
+        # matches, so it goes after every pk-sensitive step.
+        ("Activity Bracket Data", populate_activity_bracket_data),
         # Explicit pks (orgs 55-56, users 8100-8104), after Game Org MMR.
         ("MMR Sync API Data", populate_mmr_sync_data),
     ]
@@ -156,6 +160,7 @@ def populate_all(force: bool = False) -> None:
 __all__ = [
     # Main entry point
     "populate_all",
+    "populate_activity_bracket_data",
     # Population functions
     "populate_organizations_and_leagues",
     "populate_discord_name_sync_users",

@@ -317,8 +317,6 @@ export function AttendancePanel({
           open={walkInOpen}
           onOpenChange={setWalkInOpen}
           orgId={orgId}
-          eventId={eventId}
-          access={access}
           excludeUserPks={excludeUserPks}
           onPick={onPickWalkIn}
         />

@@ -25,6 +25,7 @@ import {
   patchLeadershipSettings,
   putReview,
   putTraits,
+  releaseResults,
   unvoidReview,
   voidReview,
 } from '../api';
@@ -131,6 +132,26 @@ describe('leadership api', () => {
     const result = await unvoidReview(1, 31);
     expect(post).toHaveBeenCalledWith(`${BASE}/reviews/31/unvoid/`, {});
     expect(result.void_kind).toBe('');
+  });
+
+  it('releases every pending captain of an event with an empty body', async () => {
+    post.mockResolvedValue({ data: { released: [7, 9], skipped: [] } });
+    const result = await releaseResults(1, 5);
+    expect(post).toHaveBeenCalledWith(`${BASE}/events/5/release/`, {});
+    expect(result.released).toEqual([7, 9]);
+  });
+
+  it('releases a captain list', async () => {
+    post.mockResolvedValue({ data: { released: [7], skipped: [] } });
+    await releaseResults(1, 5, [7]);
+    expect(post).toHaveBeenCalledWith(`${BASE}/events/5/release/`, {
+      captains: [7],
+    });
+  });
+
+  it('rejects a malformed release result', async () => {
+    post.mockResolvedValue({ data: { released: 'x', skipped: [] } });
+    await expect(releaseResults(1, 5)).rejects.toBeInstanceOf(ZodError);
   });
 
   it('gets the settings', async () => {

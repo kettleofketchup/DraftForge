@@ -217,6 +217,10 @@ Host and helper points are written when the event closes (below). After that, ch
 the host or helpers updates the ledger straight away, so mistakes can be fixed later.
 Changing an awarded event's name, start or end time moves its points with it.
 
+The host and helpers can also run the event's [ready check](events/roll-call.md#the-ready-check)
+(through the API until the staff board ships in #534) and see and resolve the event's
+ops notices. This gives them no other staff rights on the event or the organization.
+
 ---
 
 ## Completing an event

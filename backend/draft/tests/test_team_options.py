@@ -10,7 +10,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import Team, Tournament
-from app.serializers import DraftSerializerSlim, TournamentSerializer
 from draft.models import (
     Draft,
     DraftEvent,
@@ -26,6 +25,8 @@ from org.models import Organization
 from tests.data.users import REGULAR_USER
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, TestTournamentConfig
 from tournament.management.commands import import_prod_tournament, sync_prod_tournaments
+from tournament.serializers.draft import DraftSerializerSlim
+from tournament.serializers.tournament import TournamentSerializer
 
 User = get_user_model()
 

@@ -1,5 +1,6 @@
 """The celery worker and beat boot config.celery_light under config.settings_celery."""
 
+import ast
 import json
 import os
 import subprocess
@@ -12,6 +13,43 @@ from django.test import SimpleTestCase
 from config.redis_host import resolve_redis_host
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+# Entries intentionally scheduled by only one of the two beat schedules.
+LIGHT_ONLY_BEAT_ENTRIES: frozenset[str] = frozenset()
+FULL_ONLY_BEAT_ENTRIES: frozenset[str] = frozenset()
+
+
+def beat_task_names(filename: str) -> dict[str, str]:
+    """Every beat entry name -> task path in config/<filename>, parsed not imported."""
+    tree = ast.parse((BACKEND_DIR / "config" / filename).read_text())
+    entries: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        for key, value in zip(node.keys, node.values):
+            if not (isinstance(key, ast.Constant) and isinstance(value, ast.Dict)):
+                continue
+            for k, v in zip(value.keys, value.values):
+                if (
+                    isinstance(k, ast.Constant)
+                    and k.value == "task"
+                    and isinstance(v, ast.Constant)
+                ):
+                    entries[key.value] = v.value
+    return entries
+
+
+class BeatScheduleParityTest(SimpleTestCase):
+    """Prod beat runs config.celery_light; its schedule must match config.celery."""
+
+    def test_schedules_list_the_same_entries(self) -> None:
+        full = beat_task_names("celery.py")
+        light = beat_task_names("celery_light.py")
+        self.assertIn("sweep-stale-discord-leases", full)
+        shared = full.keys() & light.keys()
+        self.assertEqual({k: full[k] for k in shared}, {k: light[k] for k in shared})
+        self.assertEqual(full.keys() - light.keys(), FULL_ONLY_BEAT_ENTRIES)
+        self.assertEqual(light.keys() - full.keys(), LIGHT_ONLY_BEAT_ENTRIES)
 
 
 class CelerySettingsBootTest(SimpleTestCase):
@@ -50,6 +88,28 @@ class CelerySettingsBootTest(SimpleTestCase):
             "app.tasks.discord_name_sync.sync_active_org_discord_names", names
         )
         self.assertIn("app.tasks.discord_name_sync.sync_org_discord_names", names)
+
+    def test_worker_registers_every_light_beat_task(self) -> None:
+        env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}
+        code = (
+            "import json\n"
+            "from config.celery_light import app\n"
+            "app.loader.import_default_modules()\n"
+            "print(json.dumps(sorted(app.tasks)))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=BACKEND_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-3000:])
+        registered = set(json.loads(result.stdout.strip().splitlines()[-1]))
+        scheduled = set(beat_task_names("celery_light.py").values())
+        self.assertIn("discordbot.tasks.sweep_stale_discord_leases", registered)
+        self.assertEqual(scheduled - registered, set())
 
     def test_worker_boot_does_not_load_user_or_bracket_models(self) -> None:
         env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}

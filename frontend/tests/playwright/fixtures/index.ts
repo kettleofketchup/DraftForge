@@ -223,3 +223,13 @@ export {
   type MmrSyncRole,
   type MmrSyncTestData,
 } from './mmr-sync';
+
+// Discord Activity harness (20-activity specs)
+export {
+  ACTIVITY_HARNESS_PATH,
+  harnessCommands,
+  openActivityHarness,
+  setupDiscordActivity,
+  type DiscordActivitySetup,
+  type HarnessCommand,
+} from './discord-activity';

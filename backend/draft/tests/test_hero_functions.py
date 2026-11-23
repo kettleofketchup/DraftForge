@@ -5,7 +5,6 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from app.models import CustomUser, Game, Team, Tournament
-from app.serializers import tournament_organization
 from draft.models import DraftTeam, HeroDraft
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero import build_draft_rounds
@@ -13,6 +12,7 @@ from draft.services.hero_state import herodraft_state_queryset
 from league.models import League
 from org.models import Organization, OrgUser
 from tests.cache import flush_run_cache
+from tournament.serializers.users import tournament_organization
 
 
 class BuildDraftRoundsTest(TestCase):

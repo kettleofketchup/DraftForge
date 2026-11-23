@@ -85,9 +85,8 @@ vi.mock('~/store/tournamentStore', async () => {
 vi.mock('~/components/organization', () => ({
   useOrganization: () => ({ organization: undefined }),
 }));
-vi.mock('~/hooks/usePermissions', () => ({
-  useCanEditTournament: () => true,
-  useIsLeagueStaff: () => true,
+vi.mock('~/hooks/useCanManageTournament', () => ({
+  useCanManageCurrentTournament: () => true,
 }));
 vi.mock('~/hooks/useBracket', () => ({
   useBracketQuery: () => ({ isLoading: false, data: { matches: [] } }),

@@ -17,19 +17,30 @@ POINT_VALUE_MAX = 1000
 
 
 def settings_data(
-    row: OrgLeadershipSettings, points: list[dict[str, Any]]
+    row: OrgLeadershipSettings,
+    points: list[dict[str, Any]],
+    *,
+    moderator_count: int,
 ) -> dict[str, Any]:
     return {
         **{field: getattr(row, field) for field in SETTINGS_DEFAULTS},
         "defaults": dict(SETTINGS_DEFAULTS),
         "ranges": {k: list(v) for k, v in SETTINGS_RANGES.items()},
         "points": points,
+        "moderator_count": moderator_count,
     }
 
 
 def _int_field(name: str) -> serializers.IntegerField:
     low, high = SETTINGS_RANGES[name]
     return serializers.IntegerField(required=False, min_value=low, max_value=high)
+
+
+def _nullable_int_field(name: str) -> serializers.IntegerField:
+    low, high = SETTINGS_RANGES[name]
+    return serializers.IntegerField(
+        required=False, allow_null=True, min_value=low, max_value=high
+    )
 
 
 def _float_field(name: str) -> serializers.FloatField:
@@ -47,6 +58,8 @@ class SettingsUpdateSerializer(serializers.Serializer):
     half_life_days = _int_field("half_life_days")
     max_age_days = _int_field("max_age_days")
     leaderboard_public = serializers.BooleanField(required=False)
+    require_staff_release = serializers.BooleanField(required=False)
+    auto_release_after_hours = _nullable_int_field("auto_release_after_hours")
     points = serializers.DictField(
         child=serializers.IntegerField(
             min_value=0, max_value=POINT_VALUE_MAX, allow_null=True
@@ -91,3 +104,12 @@ class ReviewPutSerializer(serializers.Serializer):
 
 class ReasonSerializer(serializers.Serializer):
     reason = serializers.CharField(max_length=REASON_MAX_LENGTH)
+
+
+class ReleaseBodySerializer(serializers.Serializer):
+    captains = serializers.ListField(
+        child=serializers.IntegerField(),
+        max_length=64,
+        allow_empty=False,
+        required=False,
+    )

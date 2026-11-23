@@ -173,6 +173,23 @@ For the 18-dota-lobby specs against the simulated dota_lobby (`just test::dota-l
 | `requestLobby(context, gamePk, body?)` | POST `/api/games/<pk>/lobby/` | Staff create (expects `202`) |
 | `openBracket`, `bracketNode`, `openMatchModal`, `closeMatchModal`, `expectLobbyState` | UI | Bracket page, node by `data-game-pk`, Match Details dialog, `lobby-state-badge[data-lobby-state]` |
 
+## Discord Activity Fixture (`fixtures/discord-activity.ts`)
+
+For the 20-activity specs. No production SDK mocking: a same-origin harness page iframes
+`/activity?frame_id=…&instance_id=…&platform=desktop&guild_id=…&channel_id=…` and plays
+the Discord client's side of the embedded-app-sdk postMessage protocol.
+
+| Function | Purpose |
+|----------|---------|
+| `setupDiscordActivity(context)` | POST `/api/tests/discord-activity/setup/`; returns instance, channel, fake OAuth code, user and draft ids |
+| `openActivityHarness(page, setup)` | `page.route`s `${BASE_URL}/__activity_harness` to the harness HTML, opens it, returns a `FrameLocator` for the Activity |
+| `harnessCommands(page)` | Commands the SDK sent (`AUTHORIZE`, `AUTHENTICATE`, ...; `CAPTURE_LOG` dropped) |
+
+The harness answers handshake with READY, AUTHORIZE with the setup `code`, AUTHENTICATE
+with a schema-valid user, SUBSCRIBE/UNSUBSCRIBE with `{evt}` and acks the rest with `null`.
+The setup user captains the draft the Activity opens on, so switching views shows the
+leave dialog (`activity-leave-dialog` / `activity-leave-confirm`).
+
 ## Fixture Index (`fixtures/index.ts`)
 
 Re-exports all fixtures and helpers:

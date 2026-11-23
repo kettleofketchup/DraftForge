@@ -72,7 +72,10 @@ count) from the same aggregation as `points`.
 A track implements `access(org_id, *, viewer, roles) -> TrackAccess` (`can_view_rows`,
 `can_view_own`, `allowed`, `board_open`) and
 `member_standing(org_user, *, viewer, roles, now)`. `track_info()` is built on the base
-class from `access()` plus `roles.is_admin` for `can_manage`. A track reads only the
+class from `access()` plus `roles.is_admin` for `can_manage` and
+`moderated and roles.is_staff` for `can_moderate`. `TrackBase.moderated` is `False`, so
+other tracks never read `is_staff` for it; leadership sets it to `True` and its
+moderation screen and release actions follow `can_moderate`. A track reads only the
 roles it needs, so contribution's leaderboard costs the same single member-list query
 it always has. Contribution's `member_standing` returns `totals` and `monthly` for the
 member themselves or a viewer who can see the member list, in two queries.
@@ -236,15 +239,23 @@ entry point in a fresh interpreter).
 
 | Hook | Does | Output |
 |---|---|---|
-| `on_event_closed` | Completed: snapshots each team captain, the rater pool and placement, awards `captained`, `placement_N`, `draft_completed`, opens the review window. Cancelled: voids like a reopen. Nothing new while Leadership is locked | OrgLog `captains_snapshotted`, `leadership_awarded`; log `captain_reviews_voided`, `leadership_revoked` (always all four) |
+| `on_event_closed` | Completed: snapshots each team captain, the rater pool and placement, awards `captained`, `placement_N`, `draft_completed`, opens the review window; a re-snapshot clears any release stamp. Cancelled: voids like a reopen. Nothing new while Leadership is locked | OrgLog `captains_snapshotted`, `leadership_awarded`; log `captain_reviews_voided`, `leadership_revoked` (always all four) |
 | `on_event_reopened` | Voids the event's snapshots and reviews (`void_kind="lifecycle"`) and revokes its leadership rows | OrgLog `captain_reviews_voided`, `leadership_revoked` |
 | `on_event_deleted` | Deletes the event's snapshots, reviews and leadership rows | Nothing |
-| `merge_members`, `repoint_user` | Moves snapshots, rater pools, reviews and leadership ledger rows to the kept member; same-event snapshots and reviews fold into one, and a review the merge would turn into a self-review is dropped. When one person ends up with two reviews of a captain, a `moderated` one wins, otherwise the newer; the loser is deleted, or loses its rater (`rater=NULL`) when it is live and the window has closed. Repoints `voided_by`, settings `updated_by`, `awarded_by` and leadership point-value editors | Nothing |
+| `merge_members`, `repoint_user` | Moves snapshots, rater pools, reviews and leadership ledger rows to the kept member; same-event snapshots and reviews fold into one (a release on the dropped snapshot carries over, keeping the earlier `released_at` and its `released_by` when both were released), and a review the merge would turn into a self-review is dropped. When one person ends up with two reviews of a captain, a `moderated` one wins, otherwise the newer; the loser is deleted, or loses its rater (`rater=NULL`) when it is live and the window has closed. Repoints `voided_by`, `released_by`, settings `updated_by`, `awarded_by` and leadership point-value editors | Nothing |
 | `on_user_deleted` | Deletes the user's snapshots and reviews, except live reviews in closed windows, which lose their rater so released aggregates do not move; recomputes open captain ratings they fed, deletes their leadership ledger rows with one `delete_user_leadership` OrgLog per org | Nothing |
 
 `captain_rating` is upserted through `ledger.upsert_event_entry` on every review submit,
 edit, withdrawal and staff void or restore. Reopen, cancel and delete cost one extra
 query (an `EventCaptain` id read) when the event has no snapshots.
+
+Whether an event's results are released is decided only in `org/leadership/release.py`:
+`release_q` (the queryset form, over a `live` review-count annotation) and
+`release_state` / `is_released` (the Python form) are built from the same inputs, the
+window, voiding, the reviewer floor and the org's [release gate](../features/organization-leadership.md#release-gate).
+The rating board, the points ledger filter (`captain_rating` rows only), the member
+panel and the moderation payload all go through it, so a captain's rating and rating
+points appear together.
 
 With Leadership unlocked, its `track_info` in org detail and `standing/tracks/` costs
 three reads: the cached settings row, the viewer's membership and the trait list behind

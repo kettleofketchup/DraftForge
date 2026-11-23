@@ -37,6 +37,7 @@ from .test_bracket import force_mismatched_winning_team
 from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
 from .test_discord import seed_discord_members
+from .test_discord_activity import discord_activity_setup
 from .test_dota_lobby import (
     dota_lobby_data,
     dota_lobby_game_lobby,
@@ -276,6 +277,12 @@ urlpatterns = [
         "discord/<int:org_id>/seed-members/",
         seed_discord_members,
         name="test-seed-discord-members",
+    ),
+    # Discord Activity launch staged against the TEST-stack Discord fake
+    path(
+        "discord-activity/setup/",
+        discord_activity_setup,
+        name="test-discord-activity-setup",
     ),
     # Events reset (preserves fixtures for E2E tests)
     path(

@@ -458,3 +458,70 @@ class ResolveTests(OpsNoticeViewTestBase):
                 self.assertEqual(response.status_code, 404)
                 notice.refresh_from_db()
                 self.assertEqual(notice.state, OpsNotice.State.OPEN)
+
+
+class HostHelperAccessTests(OpsNoticeViewTestBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.host = self.make_user()
+        self.event.host = self.host
+        self.event.save(update_fields=["host"])
+        self.helper = self.make_user()
+        self.event.helpers.add(self.helper)
+        self.notice = self._notice(event=self.event)
+
+    def _resolve(self, user: CustomUser, notice: OpsNotice | None = None) -> Response:
+        url = self._resolve_url("event_ops_notice_resolve", notice or self.notice)
+        return self._as(user).post(url, {}, format="json")
+
+    def test_host_and_helper_list_event_notices(self) -> None:
+        for user in (self.host, self.helper):
+            with self.subTest(user=user.username):
+                response = self._event_list(user)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(self._ids(response), [self.notice.pk])
+
+    def test_host_and_helper_resolve_event_notice(self) -> None:
+        for user in (self.host, self.helper):
+            with self.subTest(user=user.username):
+                notice = self._notice(event=self.event)
+                response = self._resolve(user, notice)
+                self.assertEqual(response.status_code, 200)
+                notice.refresh_from_db()
+                self.assertEqual(notice.state, OpsNotice.State.RESOLVED)
+                self.assertEqual(notice.closed_by, user)
+
+    def test_host_of_other_event_denied(self) -> None:
+        other_host = self.make_user()
+        self.sibling_event.host = other_host
+        self.sibling_event.save(update_fields=["host"])
+        self.assertEqual(self._event_list(other_host).status_code, 403)
+        self.assertEqual(self._resolve(other_host).status_code, 403)
+
+    def test_helper_of_other_event_denied(self) -> None:
+        other_helper = self.make_user()
+        self.sibling_event.helpers.add(other_helper)
+        self.assertEqual(self._event_list(other_helper).status_code, 403)
+        self.assertEqual(self._resolve(other_helper).status_code, 403)
+
+    def test_removed_helper_loses_ops_notice_access(self) -> None:
+        self.assertEqual(self._event_list(self.helper).status_code, 200)
+        self.event.helpers.remove(self.helper)
+        self.assertEqual(self._event_list(self.helper).status_code, 403)
+        self.assertEqual(self._resolve(self.helper).status_code, 403)
+        self.notice.refresh_from_db()
+        self.assertEqual(self.notice.state, OpsNotice.State.OPEN)
+
+    def test_promoter_denied(self) -> None:
+        promoter = self.make_user()
+        self.org.promoters.add(promoter)
+        self.assertEqual(self._event_list(promoter).status_code, 403)
+        self.assertEqual(self._resolve(promoter).status_code, 403)
+
+    def test_helper_and_host_denied_org_notices(self) -> None:
+        for user in (self.host, self.helper):
+            with self.subTest(user=user.username):
+                self.assertEqual(self._org_list(user).status_code, 403)
+                url = self._resolve_url("org_ops_notice_resolve", self.notice)
+                response = self._as(user).post(url, {}, format="json")
+                self.assertEqual(response.status_code, 403)

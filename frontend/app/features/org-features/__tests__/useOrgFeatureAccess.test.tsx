@@ -54,6 +54,7 @@ const allTrue = {
       can_view_own: true,
       board_open: true,
       can_manage: true,
+      can_moderate: false,
     },
   ],
 };
