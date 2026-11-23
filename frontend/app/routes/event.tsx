@@ -84,6 +84,7 @@ import { MySignupActions } from '~/components/events/MySignupActions';
 import { OpsNoticesCard } from '~/components/events/OpsNoticesCard';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
+import { visibleEventTab } from '~/components/events/eventTabs';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
 import { EventState, rollCallLabel } from '~/components/events/schemas';
 import {
@@ -392,16 +393,18 @@ export default function EventPage() {
       ...(removedSignups.length > 0
         ? [{ value: 'removed', label: `${removedSignups.length} Removed` }]
         : []),
-      { value: 'discord', label: 'Discord' },
+      ...(isAdmin ? [{ value: 'discord', label: 'Discord' }] : []),
     ],
     [
+      isAdmin,
       activeSignups.length,
       tentativeSignups.length,
       waitlistedSignups.length,
       removedSignups.length,
     ],
   );
-  usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
+  const shownTab = visibleEventTab(activeTab, isAdmin);
+  usePageNav(event ? pageNavOptions : null, shownTab, handleTabChange);
 
   if (isLoading) {
     return (
@@ -623,7 +626,7 @@ export default function EventPage() {
       <EventLeadershipBanner event={event} access={eventOrgAccess} />
 
       <div>
-        <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <Tabs value={shownTab} onValueChange={handleTabChange}>
           {/* Below md the PageNavBar dropdown drives tab switching. */}
           <TabsList className="hidden md:inline-flex flex-wrap">
             <TabsTrigger value="details" data-testid="event-tab-details">
@@ -645,9 +648,11 @@ export default function EventPage() {
                 Removed ({removedSignups.length})
               </TabsTrigger>
             )}
-            <TabsTrigger value="discord" data-testid="event-tab-discord">
-              Discord
-            </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="discord" data-testid="event-tab-discord">
+                Discord
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="details">
@@ -720,13 +725,15 @@ export default function EventPage() {
             />
           </TabsContent>
 
-          <TabsContent value="discord">
-            <DiscordLogSection
-              eventId={event.id}
-              isAdmin={isAdmin}
-              eventTimezone={event.timezone}
-            />
-          </TabsContent>
+          {isAdmin && (
+            <TabsContent value="discord">
+              <DiscordLogSection
+                eventId={event.id}
+                isAdmin={isAdmin}
+                eventTimezone={event.timezone}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 
