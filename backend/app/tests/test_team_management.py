@@ -1683,3 +1683,88 @@ class TournamentCacheTests(TeamManagementFixture, TransactionTestCase):
         self.assertEqual(
             self.pks(self.roster(client)["dropin_members"]), {self.outsider.pk}
         )
+
+
+def eliminate(team: Team, placement: int) -> None:
+    Team.objects.filter(pk=team.pk).invalidated_update(placement=placement)
+
+
+class EliminatedTeamRuleTests(TeamManagementFixture, TestCase):
+    def placed_state(self) -> dict[str, Any]:
+        team = self.refresh(self.other)
+        return {
+            "members": self.member_pks(team),
+            "dropins": set(team.dropin_members.nocache().values_list("pk", flat=True)),
+            "left": set(team.left_members.nocache().values_list("pk", flat=True)),
+            "captain": team.captain_id,
+            "deputy": team.deputy_captain_id,
+            "placement": team.placement,
+            "logs": TeamLog.objects.filter(team_snapshot_id=team.pk).count(),
+        }
+
+    def test_other_team_user_ids_excludes_placed_team_members_and_dropins(
+        self,
+    ) -> None:
+        self.other.dropin_members.add(self.outsider)
+        eliminate(self.other, 3)
+        self.assertEqual(other_team_user_ids(self.team), set())
+
+    def test_other_team_user_ids_still_includes_live_team(self) -> None:
+        self.other.dropin_members.add(self.outsider)
+        placed = Team.objects.create(tournament=self.tournament, name="Placed")
+        placed.members.add(self.m2)
+        eliminate(placed, 4)
+        self.assertEqual(other_team_user_ids(self.team), {self.o1.pk, self.outsider.pk})
+
+    def test_add_standin_player_of_placed_team_succeeds(self) -> None:
+        eliminate(self.other, 3)
+        add_standin(
+            self.team, self.o1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+        self.assertTrue(
+            self.refresh(self.team)
+            .dropin_members.nocache()
+            .filter(pk=self.o1.pk)
+            .exists()
+        )
+
+    def test_restore_member_player_of_placed_team_succeeds(self) -> None:
+        self.team.left_members.add(self.o1)
+        eliminate(self.other, 3)
+        restore_member(
+            self.team, self.o1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+        self.assertIn(self.o1.pk, self.member_pks(self.team))
+
+    def test_set_captain_reseat_ghost_on_placed_team_succeeds(self) -> None:
+        self.drop_member_silently(self.team, self.c)
+        self.other.members.add(self.c)
+        eliminate(self.other, 3)
+        set_captain(self.team, self.c, actor=self.actor, via=TeamLogVia.WEB, reason="r")
+        self.assertIn(self.c.pk, self.member_pks(self.team))
+        self.assertIn(self.c.pk, self.member_pks(self.other))
+
+    def test_winner_team_frees_players(self) -> None:
+        eliminate(self.other, 1)
+        self.assertNotIn(self.o1.pk, other_team_user_ids(self.team))
+        add_standin(
+            self.team, self.o1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+    def test_placed_team_rows_unchanged_after_add_standin(self) -> None:
+        self.other.left_members.add(self.outsider)
+        eliminate(self.other, 3)
+        before = self.placed_state()
+        add_standin(
+            self.team, self.o1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+        self.assertEqual(self.placed_state(), before)
+
+    def test_on_other_team_detail_has_placement_hint(self) -> None:
+        with self.assertRaises(TeamManagementError) as ctx:
+            add_standin(
+                self.team, self.o1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+            )
+        self.assertEqual(ctx.exception.code, "on_other_team")
+        self.assertIn("Others", ctx.exception.message)
+        self.assertIn("set its placement first", ctx.exception.message)
