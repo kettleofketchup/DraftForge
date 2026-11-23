@@ -5,6 +5,7 @@ from django.urls import reverse
 from rest_framework.test import APIRequestFactory
 
 from discordbot.activity_config import activity_config
+from discordbot.activity_fake import FAKE_CLIENT_ID
 
 
 class ActivityConfigTests(SimpleTestCase):
@@ -31,10 +32,22 @@ class ActivityConfigTests(SimpleTestCase):
         response = activity_config(self.factory.get("/"))
         self.assertEqual(response.data, {"enabled": False, "client_id": None})
 
-    @override_settings(DISCORD_ACTIVITY_ENABLED=True, SOCIAL_AUTH_DISCORD_KEY=None)
+    @override_settings(
+        DISCORD_ACTIVITY_ENABLED=True, SOCIAL_AUTH_DISCORD_KEY=None, TEST=False
+    )
     def test_enabled_but_unconfigured_has_null_app_id(self):
         response = activity_config(self.factory.get("/"))
         self.assertEqual(response.data, {"enabled": True, "client_id": None})
+
+    @override_settings(
+        DISCORD_ACTIVITY_ENABLED=True,
+        SOCIAL_AUTH_DISCORD_KEY=None,
+        TEST=True,
+        RELEASE=False,
+    )
+    def test_unconfigured_test_stack_serves_the_fake_app_id(self):
+        response = activity_config(self.factory.get("/"))
+        self.assertEqual(response.data, {"enabled": True, "client_id": FAKE_CLIENT_ID})
 
     @override_settings(DISCORD_ACTIVITY_ENABLED=True, SOCIAL_AUTH_DISCORD_KEY="456")
     def test_updated_runtime_settings_are_reflected_on_next_request(self):

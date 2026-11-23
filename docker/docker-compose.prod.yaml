@@ -13,7 +13,7 @@ services:
     environment:
       OTEL_SERVICE_NAME: backend
     volumes:
-      - ./backend/db.sqlite3:/app/backend/prod.db.sqlite3
+      - ./backend/data:/app/backend/data
       - ./backend/.env:/app/backend/.env
       - ./backend/media:/app/backend/media
 

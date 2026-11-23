@@ -20,7 +20,6 @@ class TestMMRCalculation(TestCase):
             password="testpass",
             positions=self.positions,
         )
-        # Create org/league structure for MMR
         self.org = Organization.objects.create(name="Test Org", owner=self.user)
         self.league = League.objects.create(
             name="Test League",
@@ -150,12 +149,14 @@ class TestMMRCalculation(TestCase):
         self.league_user.refresh_from_db()
         self.assertEqual(self.league_user.mmr, 4200)  # 4000 + 200
 
-    def test_update_user_league_mmr_no_base_mmr(self):
-        """Should set league_mmr to 0 if user has no base mmr."""
+    def test_update_user_league_mmr_no_base_mmr(self) -> None:
+        """Should leave league_mmr unchanged if user has no base mmr."""
+        self.league_user.mmr = 3800
+        self.league_user.save(update_fields=["mmr"])
         ensure_org_user(self.user, self.org, mmr=0)
         update_user_league_mmr(self.user, organization=self.org, league=self.league)
         self.league_user.refresh_from_db()
-        self.assertEqual(self.league_user.mmr, 0)
+        self.assertEqual(self.league_user.mmr, 3800)
 
     def _stamp_verified(self, mmr: int) -> None:
         LeagueUser.objects.filter(pk=self.league_user.pk).update(
@@ -180,3 +181,11 @@ class TestMMRCalculation(TestCase):
         row = LeagueUser.objects.nocache().get(pk=self.league_user.pk)
         self.assertEqual(row.mmr, 5100)
         self.assertIsNotNone(row.mmr_verified_at)
+
+    def test_update_user_league_mmr_league_without_organization(self) -> None:
+        """Should leave league_mmr unchanged when no organization is given."""
+        self.league_user.mmr = 3800
+        self.league_user.save(update_fields=["mmr"])
+        update_user_league_mmr(self.user, league=self.league)
+        self.league_user.refresh_from_db()
+        self.assertEqual(self.league_user.mmr, 3800)

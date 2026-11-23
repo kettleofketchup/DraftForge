@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getOrganizationUsers } from '~/components/api/orgAPI';
 import type { UserType } from '~/components/user/types';
-import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import * as api from '../api';
 import { MmrRequestsTab } from '../MmrRequestsTab';
@@ -18,6 +18,12 @@ vi.mock('../api', async (importOriginal) => {
     approveMmrRequest: vi.fn(),
     rejectMmrRequest: vi.fn(),
   };
+});
+
+vi.mock('~/components/api/orgAPI', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('~/components/api/orgAPI')>();
+  return { ...actual, getOrganizationUsers: vi.fn() };
 });
 
 vi.mock('sonner', () => ({
@@ -134,14 +140,13 @@ describe('MmrRequestsTab', () => {
   });
 
   it('opens the set official dialog with a member picker', async () => {
-    const getOrgUsers = vi.fn().mockResolvedValue(undefined);
-    useOrgStore.setState({ getOrgUsers });
+    vi.mocked(getOrganizationUsers).mockResolvedValue([]);
     await renderTab();
-    expect(getOrgUsers).not.toHaveBeenCalled();
+    expect(getOrganizationUsers).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('set-official-mmr-open'));
     expect(
       await screen.findByTestId('set-official-mmr-member'),
     ).toBeInTheDocument();
-    expect(getOrgUsers).toHaveBeenCalledWith(3);
+    await waitFor(() => expect(getOrganizationUsers).toHaveBeenCalledWith(3));
   });
 });

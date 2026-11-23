@@ -27,7 +27,7 @@ def backfill_dota_verified_at(
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("org", "0020_leadership"),
+        ("org", "0021_leadership_release_gate"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

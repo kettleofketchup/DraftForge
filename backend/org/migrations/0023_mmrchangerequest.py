@@ -11,7 +11,7 @@ import org.models_mmr_requests
 class Migration(migrations.Migration):
     dependencies = [
         ("league", "0004_leagueuser_mmr_verification"),
-        ("org", "0021_orgusergamemmr_verification"),
+        ("org", "0022_orgusergamemmr_verification"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

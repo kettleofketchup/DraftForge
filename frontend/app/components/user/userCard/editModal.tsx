@@ -29,7 +29,8 @@ import {
   EditUserSchema,
   pickDirty,
   scopeToContext,
-  useScopedEditPermission,
+  useScopedEditMode,
+  useTournamentEditScope,
   type EditableField,
   type EditUserInput,
   type EditUserScope,
@@ -56,10 +57,12 @@ interface Props {
 
 export function UserEditModal({
   user,
-  scope = { kind: 'global' },
+  scope: scopeProp = { kind: 'global' },
   fields,
 }: Props) {
-  const canEdit = useScopedEditPermission(scope);
+  const scope = useTournamentEditScope(scopeProp, user.pk);
+  const editMode = useScopedEditMode(scope);
+  const canEdit = editMode !== null;
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [setOfficialOpen, setSetOfficialOpen] = useState(false);
@@ -289,6 +292,7 @@ export function UserEditModal({
             form={form}
             mmrGames={mmrGames}
             editingUserPk={user.pk}
+            mmrOnly={editMode === 'mmr'}
           />
         </Form>
       </FormDialog>

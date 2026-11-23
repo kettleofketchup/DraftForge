@@ -14,8 +14,8 @@ VERIFIED_ON = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
 
 class VerificationBackfillTest(MigratorTestCase):
-    migrate_from = ("org", "0020_leadership")
-    migrate_to = ("org", "0021_orgusergamemmr_verification")
+    migrate_from = ("org", "0021_leadership_release_gate")
+    migrate_to = ("org", "0022_orgusergamemmr_verification")
 
     def prepare(self) -> None:
         apps = self.old_state.apps

@@ -40,6 +40,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 
@@ -198,8 +199,8 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
   showTrigger = true,
   readOnly = false,
 }) => {
-  const staff = useUserStore((state) => state.isStaff);
-  const isStaff = () => !readOnly && staff();
+  const canManage = useCanManageCurrentTournament();
+  const isStaff = () => !readOnly && canManage;
   const draft = useUserStore((state) => state.draft);
 
   const setDraft = useUserStore((state) => state.setDraft);
