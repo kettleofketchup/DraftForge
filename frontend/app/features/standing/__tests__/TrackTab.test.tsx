@@ -8,6 +8,7 @@ import { periodOptions } from '~/features/contributions/timezone';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { getStandingLeaderboard } from '../api';
+import { TRACK_PANELS } from '../panels';
 import type {
   Metric,
   StandingLeaderboard,
@@ -161,6 +162,7 @@ async function pickPeriod(prefix: string, value: string) {
 
 afterEach(() => {
   vi.mocked(getStandingLeaderboard).mockReset();
+  delete TRACK_PANELS.contribution!.Banner;
 });
 
 describe('TrackTab', () => {
@@ -273,6 +275,54 @@ describe('TrackTab', () => {
     expect(
       await screen.findByTestId('contributions-admin'),
     ).toBeInTheDocument();
+  });
+
+  it('uses a select for more than three metrics and switches metric', async () => {
+    const extra: Metric = {
+      key: 'rating.comms',
+      label: 'Rating: Communication',
+      format: 'score5',
+      periodic: false,
+      default: false,
+    };
+    respond();
+    renderTab(track({ metrics: [POINTS, ENTRIES, SHOW_RATE, SCORE, extra] }));
+    await screen.findByTestId('contributions-row-1');
+    const trigger = screen.getByRole('combobox', { name: 'Metric' });
+    expect(trigger).toHaveAttribute(
+      'data-testid',
+      'standing-metric-contribution',
+    );
+    expect(trigger).toHaveTextContent('Points');
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+    fireEvent.click(
+      await screen.findByTestId('standing-metric-contribution-rating.comms'),
+    );
+    await waitFor(() =>
+      expect(getStandingLeaderboard).toHaveBeenLastCalledWith(
+        7,
+        'contribution',
+        extra,
+        'all',
+      ),
+    );
+    expect(trigger).toHaveTextContent('Rating: Communication');
+  });
+
+  it('renders the panel banner between the header and the board', async () => {
+    TRACK_PANELS.contribution!.Banner = () => <div data-testid="test-banner" />;
+    respond();
+    renderTab(track());
+    const rowEl = await screen.findByTestId('contributions-row-1');
+    const banner = screen.getByTestId('test-banner');
+    const heading = screen.getByRole('heading', { name: 'Contributions' });
+    expect(
+      heading.compareDocumentPosition(banner) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      banner.compareDocumentPosition(rowEl) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it('shows the error with the API message', async () => {

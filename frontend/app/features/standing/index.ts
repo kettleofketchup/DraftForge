@@ -2,9 +2,9 @@ export { MetricSwitcher, type MetricSwitcherProps } from './MetricSwitcher';
 export {
   TRACK_PANELS,
   panelFor,
-  type TrackAdminProps,
   type TrackDetailProps,
   type TrackPanelSet,
+  type TrackSlotProps,
 } from './panels';
 export { useStandingLeaderboard } from './queries';
 export * from './schemas';

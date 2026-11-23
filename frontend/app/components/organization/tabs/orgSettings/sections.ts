@@ -1,11 +1,13 @@
-import { ClipboardCheck, UserCog, type LucideIcon } from 'lucide-react';
+import { ClipboardCheck, Crown, UserCog, type LucideIcon } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
 import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
+import { leadershipAccess } from '~/features/leadership/access';
 import { useOrgFeatureAccess } from '~/features/org-features';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { useConductSection } from './ConductSection';
+import { useLeadershipSection } from './LeadershipSection';
 import { useStaffPlacementSection } from './StaffPlacementSection';
 
 export interface OrgSettingsSection {
@@ -27,6 +29,12 @@ export function useCanManageConduct(
   org: OrganizationType | undefined,
 ): boolean {
   return useOrgFeatureAccess(org).canManageConduct;
+}
+
+export function useCanManageLeadership(
+  org: OrganizationType | undefined,
+): boolean {
+  return leadershipAccess(useOrgFeatureAccess(org)).canManage;
 }
 
 export const ORG_SETTINGS_SECTIONS: readonly OrgSettingsSection[] = [
@@ -53,5 +61,14 @@ export const ORG_SETTINGS_SECTIONS: readonly OrgSettingsSection[] = [
     group: 'Organization',
     useSection: useConductSection,
     useVisible: useCanManageConduct,
+  },
+  {
+    id: 'leadership',
+    label: 'Leadership',
+    icon: Crown,
+    keywords: ['captain', 'traits', 'review window', 'rating', 'points'],
+    group: 'Organization',
+    useSection: useLeadershipSection,
+    useVisible: useCanManageLeadership,
   },
 ];
