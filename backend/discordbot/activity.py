@@ -18,6 +18,7 @@ from rest_framework.response import Response
 
 from app.models import CustomUser
 from app.serializers import UserSerializer
+from discordbot import activity_fake
 from discordbot.activity_auth import (
     ActivityIdentity,
     instance_pin,
@@ -55,6 +56,10 @@ def discord_json(
     method: str, path: str, *, bot: bool = False, **kwargs: Any
 ) -> dict[str, Any]:
     """Bot calls share the bot-wide rate limiter; OAuth calls carry their own token."""
+    if activity_fake.active():
+        fake = activity_fake.answer(method, path, kwargs)
+        if fake is not None:
+            return fake
     kwargs.setdefault("timeout", 10)
     url = f"{DISCORD_API_BASE}{path}"
     if bot:
@@ -99,7 +104,7 @@ def resolve_instance(
     """Trust Discord's instance metadata, never channel IDs supplied by the iframe."""
     instance = discord_json(
         "GET",
-        f"/applications/{settings.SOCIAL_AUTH_DISCORD_KEY}/activity-instances/{instance_id}",
+        f"/applications/{activity_fake.client_id()}/activity-instances/{instance_id}",
         bot=True,
     )
     if str(discord_user_id) not in {str(p) for p in instance["users"]}:

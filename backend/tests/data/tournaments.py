@@ -95,6 +95,19 @@ TEST_LEAGUE_TOURNAMENT_CONFIG = DynamicTournamentConfig(
     organization_pk=2,  # Test Organization
 )
 
+# Discord Activity bracket view (e2e/20-activity). Its bracket games come from
+# populate_activity_bracket_data, not BRACKET_TEST_CONFIGS.
+ACTIVITY_BRACKET_CONFIG = DynamicTournamentConfig(
+    pk=950,
+    name="Activity Bracket Test",
+    user_count=20,
+    team_count=4,
+    tournament_type="double_elimination",
+    league_name="DTX League",
+    completed_game_count=2,
+    match_id_base=9000000601,
+)
+
 # Bracket test configs (for steam match population)
 BRACKET_TEST_CONFIGS: list[DynamicTournamentConfig] = [
     COMPLETED_BRACKET_CONFIG,
