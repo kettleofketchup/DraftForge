@@ -1,0 +1,1 @@
+- The Users tab on organization and league pages shows the member count on every tab instead of "..." until the Users tab is opened.
