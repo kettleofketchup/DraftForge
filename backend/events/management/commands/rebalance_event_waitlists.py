@@ -51,7 +51,7 @@ class Command(BaseCommand):
                 if dry_run:
                     count = _would_promote(event)
                 else:
-                    count = len(_promote_from_waitlist(event))
+                    count = len(_promote_from_waitlist(event, cause=None))
                     invalidate_after_commit(event)
                     if count:
                         transaction.on_commit(lambda e=event: notify_signup_changed(e))

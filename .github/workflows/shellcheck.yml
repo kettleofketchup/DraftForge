@@ -1,10 +1,19 @@
 name: Shellcheck
 
+# `just ci::shellcheck` lints only the justfile, its modules under just/ and its own
+# checker scripts, so a run without one of those changed has nothing new to check.
 on:
   push:
     branches: [main]
+    paths: &recipes
+      - 'justfile'
+      - 'just/**'
+      - 'scripts/shellcheck_just.py'
+      - 'scripts/test_shellcheck_just.py'
+      - '.github/workflows/shellcheck.yml'
   pull_request:
     branches: [main]
+    paths: *recipes
 
 permissions:
   contents: read

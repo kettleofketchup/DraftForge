@@ -21,8 +21,9 @@ from app.discord_accounts import (
 from app.models import CustomUser
 from app.pipelines import associate_by_discord_id, save_discord
 from common.game import GameType
-from events.constants import EventState, SignupStatus
-from events.models import Event, EventSignup
+from events.constants import EventState, SignupAction, SignupStatus
+from events.ledger import ActorRole, SignupMeans
+from events.models import Event, EventSignup, SignupLedgerEntry
 from org.contributions.kinds import ContributionKind
 from org.models import ContributionEntry, Organization, OrgUser, OrgUserGameMmr
 
@@ -244,6 +245,50 @@ class MergeDiscordAccountsTest(TestCase):
     def test_guild_nickname_not_carried_over_as_column(self) -> None:
         self.assertNotIn("guildNickname", _CARRYOVER_COLUMN_FIELDS)
         self.assertIn("discordNickname", _CARRYOVER_COLUMN_FIELDS)
+
+    def test_merge_records_account_merged_as_system(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        signup = EventSignup.objects.create(
+            event=self.event, user=drop, status=SignupStatus.RSVP
+        )
+        drop_pk = drop.pk
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        signup.refresh_from_db()
+        self.assertEqual(signup.user_id, keep.pk)
+        [entry] = SignupLedgerEntry.objects.filter(
+            event=self.event, action=SignupAction.ACCOUNT_MERGED
+        )
+        self.assertEqual(entry.signup_id, signup.pk)
+        self.assertEqual(entry.subject_user_id, keep.pk)
+        self.assertIsNone(entry.actor_user_id)
+        self.assertEqual(entry.actor_role, ActorRole.SYSTEM)
+        self.assertEqual(entry.means, SignupMeans.SYSTEM)
+        self.assertRegex(entry.correlation_id, r"^merge-[0-9a-f]{12}$")
+        self.assertEqual(entry.before["extra"], {"from_user_id": drop_pk})
+
+    def test_merge_aborts_when_ledger_write_fails(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        signup = EventSignup.objects.create(event=self.event, user=drop)
+
+        with (
+            mock.patch(
+                "events.merge.record_signup_change", side_effect=RuntimeError("boom")
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            merge_discord_accounts(keep=keep, drop=drop)
+
+        self.assertTrue(CustomUser.objects.filter(pk=drop.pk).exists())
+        self.assertTrue(CustomUser.objects.filter(pk=keep.pk).exists())
+        self.assertEqual(
+            EventSignup.objects.nocache().get(pk=signup.pk).user_id, drop.pk
+        )
 
     def test_find_split_accounts(self):
         keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)

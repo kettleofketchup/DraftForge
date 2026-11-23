@@ -10,10 +10,9 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserType } from '~/components/user/types';
-import { useIsLeagueStaff } from '~/hooks/usePermissions';
 import { useTournamentUsers } from '~/hooks/useTournamentUsers';
 import { hydrateTournament } from '~/lib/hydrateTournament';
-import { useLeagueStore } from '~/store/leagueStore';
+import { canEditTournament } from '~/lib/tournamentPermissions';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import { hasErrors } from '../hasErrors';
@@ -24,7 +23,7 @@ export const PlayersTab: React.FC = memo(() => {
   const setTournament = useUserStore((state) => state.setTournament);
   const query = useUserStore((state) => state.userQuery);
   const setQuery = useUserStore((state) => state.setUserQuery);
-  const isStaff = useUserStore((state) => state.isStaff);
+  const currentUser = useUserStore((state) => state.currentUser);
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const queryClient = useQueryClient();
   const [showAddUser, setShowAddUser] = useState(false);
@@ -75,10 +74,11 @@ export const PlayersTab: React.FC = memo(() => {
     [addedPkSet],
   );
 
-  const currentLeague = useLeagueStore((s) => s.currentLeague);
-  const isLeagueStaff = useIsLeagueStaff(currentLeague);
   const hasDiscordServer = Boolean(currentOrg?.discord_server_id);
-  const canEdit = isStaff() || isLeagueStaff;
+  const canEdit = canEditTournament(currentUser, {
+    leaguePk: leagueId,
+    leagueOrgPk: organizationId,
+  });
 
   // Grid columns for tournament players (mobile-first ColumnBreakpoints
   // for the virtualized UserList grid).
