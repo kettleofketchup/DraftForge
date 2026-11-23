@@ -99,6 +99,20 @@ test.describe('Admin Claims Approval', () => {
         .getByTestId(`claim-card-${claim.id}`)
         .getByTestId('claim-target-merged'),
     ).toHaveText(`Merged into ${claim.claimer_username}`);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const card = page.getByTestId(`claim-card-${claim.id}`);
+    for (const locator of [card, card.getByTestId('claim-target-merged')]) {
+      await expect(async () => {
+        const box = await locator.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+      }).toPass({ timeout: 5000 });
+    }
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(390);
   });
 
   test('org admin can reject a claim with reason', async ({
