@@ -764,6 +764,7 @@ _TOURNAMENT_RETIRED_DEFS = {
         "AddMemberGuildNicknameTest",
     ),
     "app.tests.test_team_log": ("TeamLogModelTests",),
+    "app.tests.test_tournament_migration": ("TournamentFieldsTests",),
 }
 
 _TOURNAMENT_VIEW_NAMES = (
@@ -870,6 +871,7 @@ RETIRED_MODULE_HOMES: dict[str, str | None] = {
     "app.functions.tournament": "tournament.functions",
     "app.internal_client.tournaments": "tournament.internal_client",
     "app.views.admin_team": "tournament.views.members",
+    "app.tests.test_tournament_migration": "tournament.tests.test_tournament_fields",
 }
 
 # target app -> production file (relative to backend/) -> what it may import from that app
