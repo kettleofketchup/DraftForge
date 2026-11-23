@@ -368,6 +368,7 @@ export const eventResponseSchema = z.object({
   dota_lobby_password_mode: z.enum(['random', 'fixed']),
   user_can_manage: z.boolean(),
   user_can_manage_event_staff: z.boolean(),
+  user_is_event_operator: z.boolean().default(false),
   is_off_schedule: z.boolean(),
   can_review_captains: z.boolean().optional(),
   pending_captain_reviews: z.number().int().optional(),
