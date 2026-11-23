@@ -56,6 +56,8 @@ interface Props {
   mmrGames: GameTypeValue[];
   /** pk of the user being edited — their own Friend ID is never a conflict. */
   editingUserPk?: number;
+  /** League staff editing a player of their tournament may set org MMR only. */
+  mmrOnly?: boolean;
 }
 
 /** Friend ID field that warns on blur when the id belongs to someone else. */
@@ -306,7 +308,21 @@ export const UserEditForm: React.FC<Props> = ({
   form,
   mmrGames,
   editingUserPk,
+  mmrOnly = false,
 }) => {
+  const mmrFields = mmrGames.map((g) => (
+    <NumberField
+      key={g}
+      form={form}
+      fieldKey={`game_mmrs.${g}`}
+      label={`${GAME_LABEL[g]} org MMR`}
+      hotkey={GAME_MMR_HOTKEY[g]?.toUpperCase()}
+      testId={mmrTestId(g)}
+    />
+  ));
+  if (mmrOnly) {
+    return <div className="flex flex-col w-full gap-4">{mmrFields}</div>;
+  }
   // No outer <ScrollArea> — FormDialog already wraps its children in one.
   return (
     <div className="flex flex-col w-full gap-4">
@@ -316,16 +332,7 @@ export const UserEditForm: React.FC<Props> = ({
         label="Nickname"
         hotkey="N"
       />
-      {mmrGames.map((g) => (
-        <NumberField
-          key={g}
-          form={form}
-          fieldKey={`game_mmrs.${g}`}
-          label={`${GAME_LABEL[g]} org MMR`}
-          hotkey={GAME_MMR_HOTKEY[g]?.toUpperCase()}
-          testId={mmrTestId(g)}
-        />
-      ))}
+      {mmrFields}
       <div className="bg-base-300 border border-border rounded-lg p-4">
         <h3 className="text-foreground text-center text-sm font-medium mb-3">
           Positions
