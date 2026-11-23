@@ -17,12 +17,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { API_URL, waitForHydration } from '../fixtures/auth';
 import { BASE_URL } from '../fixtures/base-url';
-import { isCsrfCookie } from '../fixtures/cookies';
 import { waitForDemoReady } from '../fixtures/demo-utils';
 import {
   getCsrfToken,
   getEventsSeedData,
   loginEventUser,
+  postWithCsrf,
 } from '../fixtures/events';
 
 const VIDEO_OUTPUT_DIR = 'demo-results/videos/mmr_approval';
@@ -185,24 +185,31 @@ test.describe('MMR Approval Demo', () => {
         },
       },
     );
+    if (!createResp.ok()) {
+      throw new Error(
+        `event create failed: ${createResp.status()} ${await createResp.text()}`,
+      );
+    }
     const event = await createResp.json();
     const eventId = event.id;
 
-    // RSVP as player 1 (DotaProfile with Legend 3, screenshot)
-    await loginEventUser(context, 'player', 'event player');
-    const csrf2 =
-      (await context.cookies()).find((c) => isCsrfCookie(c.name))?.value || '';
-    await context.request.post(`${API_URL}/events/${eventId}/rsvp/`, {
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf2 },
-    });
-
-    // RSVP as player 2 (DotaProfile with Ancient 1)
-    await loginEventUser(context, 'player_2', 'event player 2');
-    const csrf3 =
-      (await context.cookies()).find((c) => isCsrfCookie(c.name))?.value || '';
-    await context.request.post(`${API_URL}/events/${eventId}/rsvp/`, {
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf3 },
-    });
+    // RSVP as player 1 (Legend 3, screenshot), then player 2 (Ancient 1).
+    for (const [role, label] of [
+      ['player', 'event player'],
+      ['player_2', 'event player 2'],
+    ] as const) {
+      await loginEventUser(context, role, label);
+      const resp = await postWithCsrf(
+        context,
+        `${API_URL}/events/${eventId}/signup/`,
+        { intent: 'rsvp' },
+      );
+      if (!resp.ok()) {
+        throw new Error(
+          `${label} signup failed: ${resp.status()} ${await resp.text()}`,
+        );
+      }
+    }
 
     await loginEventUser(context, 'admin', 'event admin');
 
@@ -263,6 +270,9 @@ test.describe('MMR Approval Demo', () => {
     // Click approve button in modal
     const confirmBtn = modal.getByTestId('mmr-modal-approve');
     await demoClick(page, confirmBtn, 300);
+    const confirmApprove = page.getByTestId('mmr-confirm-approve');
+    await confirmApprove.waitFor({ state: 'visible', timeout: 5000 });
+    await demoClick(page, confirmApprove, 300);
 
     // Wait for modal to close
     await modal.waitFor({ state: 'hidden', timeout: 10000 });
