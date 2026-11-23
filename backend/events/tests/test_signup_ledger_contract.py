@@ -41,7 +41,7 @@ from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.mmr import game_for_event
 
-BASE_PER_ROW = 5
+BASE_PER_ROW = 4
 
 SIGNUP_SERVICES: list[Callable[..., Any]] = [
     process_rsvp,

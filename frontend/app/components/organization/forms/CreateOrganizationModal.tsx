@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -14,7 +15,7 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
-import { useUserStore } from '~/store/userStore';
+import { organizationsQueryKey } from '../hooks/useOrganizations';
 import {
   CreateOrganizationSchema,
   type CreateOrganizationInput,
@@ -29,7 +30,7 @@ export function CreateOrganizationModal({
   open,
   onOpenChange,
 }: CreateOrganizationModalProps) {
-  const getOrganizations = useUserStore((state) => state.getOrganizations);
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<CreateOrganizationInput>({
@@ -49,7 +50,7 @@ export function CreateOrganizationModal({
     try {
       await createOrganization(data);
       toast.success('Organization created successfully');
-      getOrganizations();
+      await queryClient.invalidateQueries({ queryKey: organizationsQueryKey });
       onOpenChange(false);
       form.reset();
     } catch {

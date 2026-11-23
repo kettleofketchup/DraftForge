@@ -46,6 +46,7 @@ export const HeroDraftSchema = z.object({
   game: z.number(),
   tournament_id: z.number().nullable().optional(), // Tournament for "Return to Bracket" navigation
   organization_pk: z.number().nullable().optional(),
+  league_pk: z.number().nullable().optional(),
   state: z.enum([
     'waiting_for_captains',
     'rolling',

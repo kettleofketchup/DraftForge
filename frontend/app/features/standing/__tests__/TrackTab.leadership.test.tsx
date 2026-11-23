@@ -78,6 +78,7 @@ function leadershipTrack(overrides: Partial<TrackInfo> = {}): TrackInfo {
     can_view_own: true,
     board_open: true,
     can_manage: false,
+    can_moderate: false,
     ...overrides,
   };
 }
@@ -233,7 +234,7 @@ describe('TrackTab leadership', () => {
     expect(getMyReviews).not.toHaveBeenCalled();
   });
 
-  it('shows the admins-only message when the backend refuses a captain', async () => {
+  it('shows the staff-only message when the backend refuses a captain', async () => {
     respond();
     vi.mocked(getMemberLeadership).mockImplementation(async (_o, pk) => {
       if (pk === 1)
@@ -245,7 +246,7 @@ describe('TrackTab leadership', () => {
     fireEvent.click(screen.getByTestId('leadership-row-1'));
     expect(
       await screen.findByTestId('leadership-member-forbidden'),
-    ).toHaveTextContent("Only org admins can see other captains' details.");
+    ).toHaveTextContent("Only org staff can see other captains' details.");
   });
 
   it('admins open any captain', async () => {

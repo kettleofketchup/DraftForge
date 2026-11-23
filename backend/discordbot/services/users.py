@@ -2,6 +2,7 @@ import time
 
 import requests
 from cacheops import cached
+from django.conf import settings
 from django.core.cache import cache
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -11,7 +12,6 @@ from rest_framework.request import Request
 
 from app.models import CustomUser
 from app.permissions import IsStaff
-from backend import settings
 
 # Re-exported for existing importers; celery imports discord_members directly.
 from discordbot.services.discord_members import (  # noqa: F401
@@ -222,9 +222,9 @@ def search_discord_members(request: Request) -> JsonResponse:
     if not org_id:
         return JsonResponse({"error": "org_id is required"}, status=400)
 
-    if len(query) < 3:
+    if len(query) < 2:
         return JsonResponse(
-            {"error": "Search query must be at least 3 characters"}, status=400
+            {"error": "Search query must be at least 2 characters"}, status=400
         )
 
     try:
@@ -395,13 +395,17 @@ def _apply_refreshed_names(
 BOT_ACCESS_CACHE_TTL = 300  # 5 minutes
 
 
+def bot_access_cache_key(guild_id: str) -> str:
+    return f"discord_bot_access_{guild_id}"
+
+
 def check_bot_guild_access(guild_id: str) -> bool:
     """
     Check if the bot can access a Discord guild by fetching 1 member.
     Returns True if the bot has access, False otherwise.
     Caches result for 5 minutes.
     """
-    cache_key = f"discord_bot_access_{guild_id}"
+    cache_key = bot_access_cache_key(guild_id)
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -421,18 +425,3 @@ def check_bot_guild_access(guild_id: str) -> bool:
 
     cache.set(cache_key, has_access, timeout=BOT_ACCESS_CACHE_TTL)
     return has_access
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def check_discord_bot_status(request: Request, pk: int) -> JsonResponse:
-    """Check if the DraftForge bot has access to an organization's Discord server."""
-    org = get_object_or_404(Organization, pk=pk)
-
-    if not org.discord_server_id:
-        return JsonResponse(
-            {"has_bot": False, "reason": "no_server_configured"}, status=200
-        )
-
-    has_access = check_bot_guild_access(org.discord_server_id)
-    return JsonResponse({"has_bot": has_access})

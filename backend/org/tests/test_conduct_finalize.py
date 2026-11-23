@@ -2,21 +2,30 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from django.db import connection, transaction
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 
 from app.models import CustomUser
 from events.completion import CloseResult, close_event
-from events.constants import EventState, SignupStatus
-from events.models import Event, ReadyCheck
-from events.ready_check_constants import ReadyCheckOutcome, ReadyCheckPhase
+from events.constants import ActorRole, EventState, SignupMeans, SignupStatus
+from events.ledger import SignupActor
+from events.models import Event, EventSignup, ReadyCheck, RollCallMode
+from events.ready_check import close_ready_check, confirm_ready, open_ready_check
+from events.ready_check_constants import (
+    ReadyCheckConfirmVia,
+    ReadyCheckOutcome,
+    ReadyCheckPhase,
+)
 from events.reopen import reopen_event
-from events.services import cancel_event
+from events.services import approve_signup, cancel_event, unconfirm_signup
 from org.conduct.adapter import CONDUCT
+from org.conduct.attendance import event_attendance
 from org.conduct.constants import Outcome, OutcomeSource
 from org.conduct.finalize import finalize_event_outcomes
 from org.conduct.gate import get_conduct_settings
 from org.conduct.queries import member_scores
+from org.conduct.services import set_outcomes
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.models import OrgLog
@@ -218,6 +227,7 @@ class FinalizeAtCompletionTest(ConductTestCase):
             phase=ReadyCheckPhase.CLOSED,
             outcome=ReadyCheckOutcome.BINDING,
             closed_at=tz.now(),
+            settings_snapshot={"roll_call_enabled": True},
         )
 
         self._complete(event)
@@ -458,3 +468,168 @@ class FinalizeAtCompletionTest(ConductTestCase):
             settings=get_conduct_settings(self.org),
         )
         self.assertEqual(scores[late_row.org_user_id].counted_events, 1)
+
+
+class ReadyCheckConductTest(ConductTestCase):
+    def setUp(self) -> None:
+        self.unlock()
+        self.helper = self.make_user()
+
+    def _event(self, **overrides: object) -> Event:
+        fields: dict[str, object] = {
+            "scheduled_at": tz.now() - timedelta(minutes=30),
+        }
+        fields.update(overrides)
+        event = self.make_event(**fields)
+        event.helpers.add(self.helper)
+        return event
+
+    def _actor(self) -> SignupActor:
+        return SignupActor(
+            user=self.helper, role=ActorRole.STAFF, means=SignupMeans.WEB
+        )
+
+    def _members(self, event: Event, count: int) -> list[EventSignup]:
+        return [
+            self.signup(event, self.make_user(), SignupStatus.APPROVED)
+            for _ in range(count)
+        ]
+
+    def _run_check(self, event: Event, confirm: list[EventSignup]) -> ReadyCheck:
+        actor = self._actor()
+        open_ready_check(event, actor=actor)
+        for signup in confirm:
+            confirm_ready(event, signup.user, via=ReadyCheckConfirmVia.WEB, actor=actor)
+        result = close_ready_check(event, actor=actor)
+        assert result.check is not None
+        return result.check
+
+    def _complete(self, event: Event) -> Event:
+        event = Event.objects.nocache().get(pk=event.pk)
+        event.transition_state(EventState.IN_PROGRESS)
+        event = Event.objects.nocache().get(pk=event.pk)
+        self.assertTrue(
+            close_event(
+                event,
+                new_state=EventState.COMPLETED,
+                source="admin",
+                actor=self.admin,
+            ).closed
+        )
+        return Event.objects.nocache().get(pk=event.pk)
+
+    def _rows(self, event: Event) -> dict[int, AttendanceOutcome]:
+        return {
+            row.org_user.user_id: row
+            for row in AttendanceOutcome.objects.nocache()
+            .filter(event_id=event.pk)
+            .select_related("org_user")
+        }
+
+    def test_staff_verified_check_keeps_unconfirmed_pending(self) -> None:
+        event = self._event(roll_call_enabled=True)
+        confirmed, unconfirmed = self._members(event, 2)
+
+        check = self._run_check(event, [confirmed])
+        self.assertEqual(check.outcome, ReadyCheckOutcome.STAFF_VERIFIED)
+        event = self._complete(event)
+
+        rows = self._rows(event)
+        self.assertEqual(
+            (rows[confirmed.user_id].outcome, rows[confirmed.user_id].source),
+            (Outcome.ATTENDED, OutcomeSource.READY_CHECK),
+        )
+        pending = rows[unconfirmed.user_id]
+        self.assertEqual(
+            (pending.outcome, pending.source), (Outcome.PENDING, OutcomeSource.DEFAULT)
+        )
+        self.assertIsNone(pending.finalized_at)
+        flags = {
+            row["member"]["user_pk"]: row["flag"]
+            for row in event_attendance(event, now=tz.now())["rows"]
+        }
+        self.assertEqual(flags[unconfirmed.user_id], "roll_call_unconfirmed")
+        self.assertIsNone(flags[confirmed.user_id])
+
+    def test_staff_verified_close_keeps_late_and_unconfirmed_members_pending(
+        self,
+    ) -> None:
+        event = self._event(roll_call_enabled=True)
+        confirmed, unconfirm_later = self._members(event, 2)
+        check = self._run_check(event, [confirmed, unconfirm_later])
+        self.assertEqual(check.outcome, ReadyCheckOutcome.STAFF_VERIFIED)
+        late = self.signup(event, self.make_user(), SignupStatus.PENDING_APPROVAL)
+        approve_signup(late, actor=self._actor())
+        unconfirm_later.refresh_from_db()
+        unconfirm_signup(unconfirm_later, actor=self._actor())
+        late.refresh_from_db()
+        self.assertEqual(late.status, SignupStatus.APPROVED)
+        event = self._complete(event)
+
+        rows = self._rows(event)
+        self.assertEqual(
+            (rows[confirmed.user_id].outcome, rows[confirmed.user_id].source),
+            (Outcome.ATTENDED, OutcomeSource.READY_CHECK),
+        )
+        flags = {
+            row["member"]["user_pk"]: row["flag"]
+            for row in event_attendance(event, now=tz.now())["rows"]
+        }
+        for signup in (late, unconfirm_later):
+            row = rows[signup.user_id]
+            self.assertEqual(
+                (row.outcome, row.source), (Outcome.PENDING, OutcomeSource.DEFAULT)
+            )
+            self.assertEqual(flags[signup.user_id], "roll_call_unconfirmed")
+
+    def test_roll_call_off_check_does_not_change_sources(self) -> None:
+        event = self._event(roll_call_enabled=False)
+        confirmed, unconfirmed = self._members(event, 2)
+
+        check = self._run_check(event, [confirmed])
+        self.assertEqual(check.phase, ReadyCheckPhase.CLOSED)
+        self.assertEqual(check.outcome, ReadyCheckOutcome.STAFF_VERIFIED)
+        event = self._complete(event)
+
+        rows = self._rows(event)
+        self.assertEqual(set(rows), {confirmed.user_id, unconfirmed.user_id})
+        for row in rows.values():
+            self.assertEqual(
+                (row.outcome, row.source), (Outcome.ATTENDED, OutcomeSource.DEFAULT)
+            )
+        for row in event_attendance(event, now=tz.now())["rows"]:
+            self.assertIsNone(row["flag"])
+
+    @override_settings(READY_CHECK_AUTOMATIC_LIVE=True)
+    def test_helper_closed_automatic_check_sets_no_show_and_staff_override_wins(
+        self,
+    ) -> None:
+        event = self._event(
+            roll_call_enabled=True, roll_call_mode=RollCallMode.AUTOMATIC
+        )
+        signups = self._members(event, 4)
+        dropped = signups[3]
+
+        check = self._run_check(event, signups[:3])
+        self.assertEqual(check.outcome, ReadyCheckOutcome.BINDING)
+        dropped.refresh_from_db()
+        self.assertEqual(dropped.status, SignupStatus.DROPPED)
+        event = self._complete(event)
+
+        row = self._rows(event)[dropped.user_id]
+        self.assertEqual(
+            (row.outcome, row.source), (Outcome.NO_SHOW, OutcomeSource.READY_CHECK)
+        )
+
+        set_outcomes(
+            event,
+            actor=self.admin,
+            changes=[(self.org_user(dropped.user), Outcome.EXCUSED)],
+            reason="host misclicked the close",
+        )
+
+        row.refresh_from_db()
+        self.assertEqual(
+            (row.outcome, row.source), (Outcome.EXCUSED, OutcomeSource.STAFF)
+        )
+        self.assertEqual(row.set_by_id, self.admin.pk)

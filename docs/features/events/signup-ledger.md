@@ -88,6 +88,8 @@ A staff member acting on their own signup is recorded as `member`. When they use
 
 When a cancel, decline, rejection, switch to tentative or account merge frees a seat, the waitlisted signups that take it each get their own `promoted` entry. Moving a signup to the waitlist promotes nobody; staff fill that seat by hand. Its `caused_by` points at the entry for the change that freed the seat, and it shares that entry's correlation id. Promotions from the `rebalance_event_waitlists` command have no cause.
 
+When a ready check close or resolve drops members, the promotions into their seats point at the step's first `dropped` entry and are recorded as the operator who ran the step, not the system. Every other promotion is a system entry.
+
 ### Correlation ids
 
 The correlation id groups entries that belong to one action:
@@ -99,6 +101,7 @@ The correlation id groups entries that belong to one action:
 | Discord account merge | `merge-<id>`, one per merge |
 | Profile claim approval | `claim-<id>`, one per approval |
 | Stale repeater cleanup | `cleanup-<id>`, one per run |
+| Ready check | `rc<check id>:<step>`, for example `rc12:close`, on every entry the step writes |
 | Website | Empty |
 
 ### Approve with an MMR override

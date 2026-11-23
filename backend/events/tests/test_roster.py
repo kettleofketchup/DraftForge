@@ -1,4 +1,5 @@
 from datetime import time
+from functools import partial
 from unittest.mock import MagicMock, patch
 
 from django.utils import timezone as tz
@@ -7,6 +8,7 @@ from structlog.testing import capture_logs
 
 from app.models import CustomUser, Game, Team, Tournament
 from events.constants import EventState, SignupStatus
+from events.ledger import SignupActor
 from events.models import Event, EventRepeater, EventSignup
 from events.roster import (
     RosterPhase,
@@ -192,7 +194,11 @@ class RosterRuleTests(RosterTestCase):
     def test_explicit_removals_drop_team_members(self, *_mocks: MagicMock) -> None:
         actions = {
             "cancel": (SignupStatus.APPROVED, EventState.SIGNUPS_OPEN, cancel_signup),
-            "reject": (SignupStatus.CONFIRMED, EventState.SIGNUPS_OPEN, reject_signup),
+            "reject": (
+                SignupStatus.CONFIRMED,
+                EventState.SIGNUPS_OPEN,
+                partial(reject_signup, actor=SignupActor.system()),
+            ),
             "demote": (
                 SignupStatus.APPROVED,
                 EventState.SIGNUPS_OPEN,
@@ -201,7 +207,7 @@ class RosterRuleTests(RosterTestCase):
             "unconfirm": (
                 SignupStatus.CONFIRMED,
                 EventState.ROLL_CALL,
-                unconfirm_signup,
+                partial(unconfirm_signup, actor=SignupActor.system()),
             ),
         }
         for name, (status, state, action) in actions.items():

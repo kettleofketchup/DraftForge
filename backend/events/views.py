@@ -10,8 +10,10 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models, transaction
 from django.db.models import (
     Count,
+    Exists,
     F,
     Min,
+    OuterRef,
     Prefetch,
     Q,
     QuerySet,
@@ -50,7 +52,7 @@ from draft.models import Draft, HeroDraft
 from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
-from events.constants import Commitment, EventState
+from events.constants import ActorRole, Commitment, EventState
 from events.discord import notify_create_discord_event, notify_signup_changed
 from events.eligibility import (
     EligibilityResult,
@@ -65,9 +67,30 @@ from events.models import (
     EventSignup,
     EventTeam,
     OrgEventDefaults,
+    ReadyCheck,
+    ReadyCheckEntry,
     RepeaterSubscription,
 )
-from events.permissions import has_event_staff_access
+from events.permissions import has_event_operator_access, has_event_staff_access
+from events.ready_check import (
+    READY_CHECK_HELD_MESSAGE,
+    ConfirmResult,
+    NotHeldError,
+    cancel_ready_check,
+    close_for_start,
+    close_ready_check,
+    confirm_ready,
+    enter_roll_call,
+    escalate_ready_check,
+    live_ready_check,
+    lock_event,
+    open_ready_check,
+    refused_confirm_message,
+    resolve_held_ready_check,
+    staff_confirm_signup,
+)
+from events.ready_check_constants import ReadyCheckConfirmVia, ReadyCheckPhase
+from events.ready_check_core import LIVE_PHASES
 from events.reopen import ReopenNotPermitted
 from events.roster import RosterSyncResult
 from events.schemas import SignupInputPatch
@@ -77,9 +100,14 @@ from events.serializers import (
     EventSerializer,
     EventSignupSerializer,
     EventSlimSerializer,
+    EventStaffUserSerializer,
     EventTeamSerializer,
     OneOffEventCreateSerializer,
     OrgEventDefaultsSerializer,
+    ReadyCheckConfirmInputSerializer,
+    ReadyCheckEntrySerializer,
+    ReadyCheckResolveInputSerializer,
+    ReadyCheckSerializer,
     RepeaterSubscriptionSerializer,
 )
 from events.services import (
@@ -90,7 +118,6 @@ from events.services import (
     cancel_signup,
     changed_draft_option_fields,
     clear_signup_dedup_state,
-    confirm_signup,
     create_off_schedule_event,
     create_tentative_signup,
     create_tournament_for_event,
@@ -154,7 +181,7 @@ def with_event_staff(qs: QuerySet[Event]) -> QuerySet[Event]:
 def _attach_user_can_manage(
     payload: dict[str, Any] | list[dict[str, Any]], user: CustomUser | AnonymousUser
 ) -> dict[str, Any] | list[dict[str, Any]]:
-    """Mutate a serialized Event payload (or list of them) to set user_can_manage per-request.
+    """Mutate a serialized Event payload (or list of them) to set per-request user flags.
 
     Called AFTER cached_as serves a payload, so the cache itself stays user-agnostic.
     The Event instances are looked up by id from the payload; one batched query
@@ -167,8 +194,14 @@ def _attach_user_can_manage(
         return payload
     events_by_pk = {
         e.pk: e
-        for e in Event.objects.filter(pk__in=[p["id"] for p in items]).select_related(
-            "organization", "tournament_league"
+        for e in Event.objects.filter(pk__in=[p["id"] for p in items])
+        .select_related("organization", "tournament_league")
+        .annotate(
+            user_is_helper=Exists(
+                Event.helpers.through.objects.filter(
+                    event_id=OuterRef("pk"), customuser_id=user.pk
+                )
+            )
         )
     }
     admin_by_org: dict[int, bool] = {}
@@ -176,6 +209,9 @@ def _attach_user_can_manage(
         ev = events_by_pk.get(p["id"])
         if ev is not None:
             p["user_can_manage"] = has_event_staff_access(user, ev)
+            p["user_is_event_operator"] = (
+                p["user_can_manage"] or ev.host_id == user.pk or ev.user_is_helper
+            )
             if ev.organization_id not in admin_by_org:
                 admin_by_org[ev.organization_id] = has_org_admin_access(
                     user, ev.organization
@@ -212,6 +248,89 @@ def _roster_sync_payload(
     data = _event_payload(event.pk, user)
     data["roster_kept_on_team"] = [member.pk for member in synced.kept_on_team]
     return data
+
+
+NO_READY_CHECK_MESSAGE = "There is no ready check for this event."
+SELF_NOT_IN_CHECK_MESSAGE = "You are not in the ready check for this event."
+MEMBER_NOT_IN_CHECK_MESSAGE = "That member is not in the ready check for this event."
+
+
+def _ready_check_data(check_pk: int | None) -> dict[str, Any] | None:
+    if check_pk is None:
+        return None
+    check = (
+        ReadyCheck.objects.nocache()
+        .select_related("opened_by__base_profile", "resolved_by__base_profile")
+        .prefetch_related(
+            Prefetch(
+                "entries",
+                queryset=with_user_profiles(
+                    ReadyCheckEntry.objects.order_by("pk"), "user"
+                ),
+            )
+        )
+        .get(pk=check_pk)
+    )
+    return ReadyCheckSerializer(check).data
+
+
+def _live_check_pk(event: Event) -> int | None:
+    return (
+        ReadyCheck.objects.filter(event_id=event.pk, phase__in=LIVE_PHASES)
+        .values_list("pk", flat=True)
+        .first()
+    )
+
+
+def _ready_check_conflict(
+    code: str, error: str, *, host: CustomUser | None = None, with_host: bool = False
+) -> Response:
+    body: dict[str, Any] = {"code": code, "error": error}
+    if with_host:
+        body["host"] = EventStaffUserSerializer(host).data if host else None
+    return Response(body, status=status.HTTP_409_CONFLICT)
+
+
+def _confirm_response(
+    event: Event,
+    user: CustomUser | None,
+    *,
+    via: ReadyCheckConfirmVia,
+    actor: SignupActor,
+    not_in_check_message: str,
+) -> Response:
+    host: CustomUser | None = event.host
+    with transaction.atomic():
+        locked = lock_event(event)
+        check = live_ready_check(locked, lock=True)
+        if check is None:
+            return _ready_check_conflict(
+                "no_ready_check", NO_READY_CHECK_MESSAGE, host=host, with_host=True
+            )
+        result = (
+            confirm_ready(event, user, via=via, actor=actor)
+            if user is not None
+            else ConfirmResult.NOT_IN_CHECK
+        )
+        held = check.phase == ReadyCheckPhase.HELD
+    if result == ConfirmResult.NOT_IN_CHECK:
+        return _ready_check_conflict(
+            "not_in_check", not_in_check_message, host=host, with_host=True
+        )
+    if result == ConfirmResult.CLOSED:
+        return _ready_check_conflict(
+            "ready_check_closed",
+            refused_confirm_message(event, held=held),
+            host=host,
+            with_host=True,
+        )
+    assert user is not None
+    entry = with_user_profiles(ReadyCheckEntry.objects.all(), "user").get(
+        ready_check_id=check.pk, user_id=user.pk
+    )
+    return Response(
+        {"result": str(result), "entry": ReadyCheckEntrySerializer(entry).data}
+    )
 
 
 def _require_event_staff_manager(user: CustomUser, event: Event) -> None:
@@ -1042,12 +1161,12 @@ class EventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def start_roll_call(self, request: Request, pk: str | None = None) -> Response:
         event = self.get_object()
-        if not has_event_staff_access(request.user, event):
+        if not has_event_operator_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            with transaction.atomic():
-                event.transition_state(EventState.ROLL_CALL)
-                synced = sync_event_roster(event)
+            synced = enter_roll_call(
+                event, actor=SignupActor.from_request(request, role=ActorRole.STAFF)
+            )
             return Response(_roster_sync_payload(event, synced, request.user))
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -1065,6 +1184,11 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             with transaction.atomic():
+                cancel_ready_check(
+                    event,
+                    actor=SignupActor.from_request(request, role=ActorRole.STAFF),
+                    reason="reopened",
+                )
                 event.transition_state(EventState.SIGNUPS_OPEN)
                 synced = sync_event_roster(event)
             return Response(_roster_sync_payload(event, synced, request.user))
@@ -1087,15 +1211,154 @@ class EventViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             with transaction.atomic():
-                ensure_tournament_with_signups(event)
-                event.transition_state(EventState.IN_PROGRESS)
-                finalize_event_tournament(event)
+                held = event.state == EventState.ROLL_CALL and not close_for_start(
+                    event,
+                    actor=SignupActor.from_request(request, role=ActorRole.STAFF),
+                )
+                if not held:
+                    ensure_tournament_with_signups(event)
+                    event.transition_state(EventState.IN_PROGRESS)
+                    finalize_event_tournament(event)
+            if held:
+                return Response(
+                    {"code": "ready_check_held", "error": READY_CHECK_HELD_MESSAGE},
+                    status=status.HTTP_409_CONFLICT,
+                )
             qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def _ready_check_operator_event(self, request: Request) -> Event:
+        event = self.get_object()
+        if not has_event_operator_access(request.user, event):
+            raise PermissionDenied()
+        return event
+
+    @action(detail=True, methods=["get"], url_path="ready-check")
+    def ready_check(self, request: Request, pk: str | None = None) -> Response:
+        event = self._ready_check_operator_event(request)
+        return Response({"ready_check": _ready_check_data(_live_check_pk(event))})
+
+    @action(detail=True, methods=["post"], url_path="ready-check/open")
+    def ready_check_open(self, request: Request, pk: str | None = None) -> Response:
+        event = self._ready_check_operator_event(request)
+        try:
+            with transaction.atomic():
+                result = open_ready_check(
+                    event,
+                    actor=SignupActor.from_request(request, role=ActorRole.STAFF),
+                )
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "ready_check": _ready_check_data(result.check.pk),
+                "created": result.created,
+                "event": _event_payload(event.pk, request.user),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="ready-check/escalate")
+    def ready_check_escalate(self, request: Request, pk: str | None = None) -> Response:
+        event = self._ready_check_operator_event(request)
+        with transaction.atomic():
+            locked = lock_event(event)
+            check = live_ready_check(locked, lock=True)
+            if check is None:
+                return _ready_check_conflict("no_ready_check", NO_READY_CHECK_MESSAGE)
+            before = (check.phase, check.escalated_at)
+            escalate_ready_check(
+                event, actor=SignupActor.from_request(request, role=ActorRole.STAFF)
+            )
+            check.refresh_from_db()
+            changed = (check.phase, check.escalated_at) != before
+        return Response(
+            {"ready_check": _ready_check_data(check.pk), "changed": changed}
+        )
+
+    @action(detail=True, methods=["post"], url_path="ready-check/close")
+    def ready_check_close(self, request: Request, pk: str | None = None) -> Response:
+        event = self._ready_check_operator_event(request)
+        with transaction.atomic():
+            result = close_ready_check(
+                event, actor=SignupActor.from_request(request, role=ActorRole.STAFF)
+            )
+        if result.check is None:
+            return _ready_check_conflict("no_ready_check", NO_READY_CHECK_MESSAGE)
+        return Response(
+            {
+                "ready_check": _ready_check_data(result.check.pk),
+                "changed": result.changed,
+                "dropped_user_ids": list(result.dropped_user_ids),
+                "promoted_signup_ids": list(result.promoted_signup_ids),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="ready-check/resolve")
+    def ready_check_resolve(self, request: Request, pk: str | None = None) -> Response:
+        event = self._ready_check_operator_event(request)
+        body = ReadyCheckResolveInputSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                result = resolve_held_ready_check(
+                    event,
+                    actor=SignupActor.from_request(request, role=ActorRole.STAFF),
+                    apply_drops=body.validated_data["apply_drops"],
+                    keep_signup_ids=body.validated_data["keep_signup_ids"],
+                    reason=body.validated_data["reason"],
+                )
+        except NotHeldError as e:
+            return _ready_check_conflict("not_held", str(e))
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        if result.check is None:
+            return _ready_check_conflict("no_ready_check", NO_READY_CHECK_MESSAGE)
+        return Response(
+            {
+                "ready_check": _ready_check_data(result.check.pk),
+                "changed": result.changed,
+                "dropped_user_ids": list(result.dropped_user_ids),
+                "promoted_signup_ids": list(result.promoted_signup_ids),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="ready-check/confirm")
+    def ready_check_confirm(self, request: Request, pk: str | None = None) -> Response:
+        event = self._ready_check_operator_event(request)
+        body = ReadyCheckConfirmInputSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        member = (
+            CustomUser.objects.nocache()
+            .filter(pk=body.validated_data["user_id"])
+            .first()
+        )
+        return _confirm_response(
+            event,
+            member,
+            via=ReadyCheckConfirmVia.STAFF,
+            actor=SignupActor.from_request(request, role=ActorRole.STAFF),
+            not_in_check_message=MEMBER_NOT_IN_CHECK_MESSAGE,
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="ready",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def ready(self, request: Request, pk: str | None = None) -> Response:
+        event = self.get_object()
+        return _confirm_response(
+            event,
+            request.user,
+            via=ReadyCheckConfirmVia.WEB,
+            actor=SignupActor.from_request(request, role=ActorRole.MEMBER),
+            not_in_check_message=SELF_NOT_IN_CHECK_MESSAGE,
+        )
 
     def perform_destroy(self, instance: Event) -> None:
         """Clean up tournament and Discord messages before deleting event."""
@@ -1355,16 +1618,14 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
+            confirmed = staff_confirm_signup(
+                signup,
+                actor=SignupActor.for_request_on(
+                    request, signup.user, signup.event, staff_only=True
+                ),
+            )
             return Response(
-                EventSignupSerializer(
-                    confirm_signup(
-                        signup,
-                        actor=SignupActor.for_request_on(
-                            request, signup.user, signup.event, staff_only=True
-                        ),
-                    ),
-                    context={"request": request},
-                ).data
+                EventSignupSerializer(confirmed, context={"request": request}).data
             )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
