@@ -59,6 +59,7 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
+import { PendingClaimsBadge, usePendingClaimsCount } from '~/features/claims';
 import {
   LockedFeaturesPanel,
   removeFeatureQueries,
@@ -84,6 +85,7 @@ import {
   useIsOrganizationOwner,
   useIsOrganizationStaff,
 } from '~/hooks/usePermissions';
+import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { generateMeta } from '~/lib/seo';
 import type { OrganizationSSR } from '~/lib/ssr-types';
 import { queryClient } from '~/root';
@@ -146,7 +148,6 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-// Discord icon component
 const DiscordIcon = ({ className }: { className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -301,6 +302,7 @@ export default function OrganizationDetailPage() {
   const canEditEvents = isOrgStaff;
   const canAddMembers = isOrgStaff;
   const canViewClaims = isOrgStaff;
+  const pendingClaimsCount = usePendingClaimsCount(pk, !!canViewClaims);
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
@@ -341,8 +343,13 @@ export default function OrganizationDetailPage() {
   const hasBotAccess = botStatus?.has_bot ?? null;
 
   // Page nav options for mobile navbar dropdown
-  const userCountDisplay =
-    orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length;
+  const userCountDisplay = memberCountDisplay({
+    entityId: pk,
+    loadedForId: orgUsersOrgId,
+    loading: orgUsersLoading,
+    loadedCount: orgUserPks.length,
+    fallbackCount: organization?.users_count,
+  });
   const pageNavOptions = useMemo(
     () =>
       buildOrgPageNavOptions({
@@ -353,6 +360,7 @@ export default function OrganizationDetailPage() {
         standingTabs,
         canUsePromotion,
         canViewClaims,
+        pendingClaimsCount,
       }),
     [
       leagues.length,
@@ -362,6 +370,7 @@ export default function OrganizationDetailPage() {
       standingTabs,
       canUsePromotion,
       canViewClaims,
+      pendingClaimsCount,
     ],
   );
 
@@ -499,6 +508,10 @@ export default function OrganizationDetailPage() {
               <TabsTrigger value="claims" data-testid="org-tab-claims">
                 <ClipboardList className="w-4 h-4 mr-2" />
                 Claims
+                <PendingClaimsBadge
+                  count={pendingClaimsCount}
+                  testId="org-tab-claims-pending-count"
+                />
               </TabsTrigger>
             )}
           </TabsList>

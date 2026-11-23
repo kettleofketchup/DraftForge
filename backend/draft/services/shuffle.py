@@ -1,8 +1,10 @@
 """Shuffle draft logic - lowest MMR picks first."""
 
 import random
+from datetime import datetime, timedelta
 
 from django.db.models import QuerySet
+from django.utils import timezone
 
 from app.models import CustomUser
 from draft.models import Draft, DraftEvent, DraftRound
@@ -92,7 +94,6 @@ def get_lowest_mmr_team(teams: list) -> tuple:
             ],
             "roll_rounds": roll_rounds,
             "winner_id": winner.id,
-            "hold_ms": TIE_ROLL_HOLD_MS,
         }
         return winner, tie_data
 
@@ -145,8 +146,13 @@ def reassign_round_captain(
     exclude_team_ids: set[int],
     *,
     reason: str | None = None,
+    now: datetime | None = None,
 ) -> dict | None:
-    """Assign the lowest-MMR eligible team's captain to `round`; None if no team is eligible."""
+    """Assign the lowest-MMR eligible team's captain to `round`; None if no team is eligible.
+
+    Only these ties hold the next clock, so only they carry ``hold_ms`` and ``hold_until``
+    (``now`` plus the hold, when the clock starts). A tie at draft start holds nothing.
+    """
     eligible_teams = [
         t
         for t in draft.teams
@@ -161,6 +167,9 @@ def reassign_round_captain(
     round.captain = next_team.captain
     if tie_data:
         tie_data["pick_number"] = round.pick_number
+        tie_data["hold_ms"] = TIE_ROLL_HOLD_MS
+        hold = timedelta(milliseconds=TIE_ROLL_HOLD_MS)
+        tie_data["hold_until"] = ((now or timezone.now()) + hold).isoformat()
         round.was_tie = True
         round.tie_roll_data = tie_data
     round.save()
@@ -193,6 +202,7 @@ def reassign_round_captain(
                 "winner_id": tie_data["winner_id"],
                 "winner_name": captain.username,
                 "hold_ms": tie_data["hold_ms"],
+                "hold_until": tie_data["hold_until"],
             },
         )
         broadcast_event_after_commit(tie_event)
@@ -200,7 +210,9 @@ def reassign_round_captain(
     return tie_data
 
 
-def assign_next_shuffle_captain(draft: Draft) -> dict | None:
+def assign_next_shuffle_captain(
+    draft: Draft, *, now: datetime | None = None
+) -> dict | None:
     """After a pick, assign captain to the next captain-less round.
 
     Returns tie resolution data if a tie occurred, else None.
@@ -210,4 +222,4 @@ def assign_next_shuffle_captain(draft: Draft) -> dict | None:
     )
     if next_round is None:
         return None
-    return reassign_round_captain(draft, next_round, set())
+    return reassign_round_captain(draft, next_round, set(), now=now)

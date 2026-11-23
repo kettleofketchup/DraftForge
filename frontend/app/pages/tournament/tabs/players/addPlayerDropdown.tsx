@@ -8,6 +8,7 @@ import { DisplayName } from '~/components/user/avatar';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { userMatchesQuery } from '~/lib/userDisplayName';
 
 import { useState, type FormEvent } from 'react';
 import { Input } from '~/components/ui/input';
@@ -45,9 +46,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
       : users.filter(
           (person) =>
             !addedUsers?.some((added) => added?.pk === person?.pk) &&
-            (person?.username?.toLowerCase().includes(query.toLowerCase()) ||
-              person?.nickname?.toLowerCase().includes(query.toLowerCase()) ||
-              DisplayName(person).toLowerCase().includes(query.toLowerCase())),
+            userMatchesQuery(person, query),
         );
 
   const handleSearchUserSelect = async (userName: UserType | string | null) => {
