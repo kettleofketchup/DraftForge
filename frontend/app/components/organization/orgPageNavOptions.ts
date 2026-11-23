@@ -11,6 +11,7 @@ export interface OrgPageNavInput {
   canViewClaims: boolean;
   canReviewMmr: boolean;
   mmrPendingCount: number;
+  pendingClaimsCount?: number;
 }
 
 // Mobile page-nav entries; must match the desktop TabsList gates.
@@ -31,7 +32,11 @@ export function buildOrgPageNavOptions(
     opts.push({ value: 'promotion', label: 'Promotion' });
   }
   if (input.canViewClaims) {
-    opts.push({ value: 'claims', label: 'Claims' });
+    const pending = input.pendingClaimsCount ?? 0;
+    opts.push({
+      value: 'claims',
+      label: pending > 0 ? `Claims (${pending})` : 'Claims',
+    });
   }
   if (input.canReviewMmr) {
     opts.push({

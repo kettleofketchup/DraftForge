@@ -5,9 +5,9 @@ import {
   ComboboxOptions,
 } from '@headlessui/react';
 import React from 'react';
-import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { userMatchesQuery } from '~/lib/userDisplayName';
 import { useUserStore } from '~/store/userStore';
 
 import { Input } from '~/components/ui/input';
@@ -32,14 +32,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
   const filteredUsers =
     query === ''
       ? users
-      : users.filter((person) => {
-          const q = query.toLowerCase();
-          return (
-            person.username?.toLowerCase().includes(q) ||
-            person.nickname?.toLowerCase().includes(q) ||
-            DisplayName(person).toLowerCase().includes(q)
-          );
-        });
+      : users.filter((person) => userMatchesQuery(person, query));
 
   const handleSearchUserSelect = (userName: UserType | string | null) => {
     if (userName === null) {

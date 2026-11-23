@@ -11,9 +11,11 @@ from a row there, the tests fail (or you have a documentation bug).
 >    [`frontend/app/hooks/usePermissions.ts`][hooks]
 > 2. The matching backend helper in
 >    [`backend/org/permissions.py`][permissions] (org roles),
->    [`backend/league/permissions.py`][permissions-league] (league roles) or
->    [`backend/app/permissions_tournament.py`][permissions-tournament]
->    (tournament, game and lobby checks)
+>    [`backend/league/permissions.py`][permissions-league] (league roles and
+>    lobby Steam league IDs),
+>    [`backend/tournament/permissions.py`][permissions-tournament]
+>    (tournament and game checks) or
+>    [`backend/events/permissions.py`][permissions-events] (event staff)
 > 3. The expectations in the matrix spec under
 >    [`frontend/tests/playwright/e2e/17-auth/`][matrix]
 > 4. The corresponding row in this document
@@ -116,13 +118,14 @@ The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
 
 ## Edit + Bracket Matrix
 
-The eight entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
+The nine entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
 
 |                                        | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | promoter | leagueAdmin | leagueStaff | anonymous |
 | -------------------------------------- | :-------: | :-------: | :------: | :------: | :------: | :-------: | :------: | :---------: | :---------: | :-------: |
 | Org Users tab (not private)            |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✓     |    ✓     |      ✓      |      ✓      |     ✗     |
 | Edit User (org members tab)            |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✗      |      ✗      |     ✗     |
-| Edit User (tournament players tab)     |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |    ✗     |      ✓      |      ✗      |     ✗     |
+| Edit User (tournament players tab)     |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✗      |      ✗      |     ✗     |
+| Add Player (tournament players tab)    |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✓      |      ✓      |     ✗     |
 | Generate Bracket                       |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✓      |      ✓      |     ✗     |
 | Set Bracket Match Winner               |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✓      |      ✓      |     ✗     |
 | Link Steam Match (bracket)             |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |    ✗     |      ✗      |      ✗      |     ✗     |
@@ -151,31 +154,19 @@ The eight entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`
   (they fall back to the self-reported value or the default).
 - **Edit User (org members tab)** uses `useIsOrganizationStaff(currentOrg)`
   via the UserCard's org-scoped editScope — staff-permissive.
-- **Edit User (tournament players tab)** is a **known divergence**.
-  The card uses the shared
-  `resolveEditScope(user, { organizationId, leagueId, currentOrg, currentLeague })`,
-  which returns `{ kind: 'league', league, orgId }` only when the league store
-  has already loaded the matching league (`currentLeague.pk === leagueId`);
-  otherwise it falls back to `{ kind: 'org' }`, or to global when neither
-  store is loaded. So the gate a given user hits depends on store state at
-  render time, not on the tournament alone.
-
-  On the league branch the scope carries `orgId` but no `.organization`.
-  `useScopedEditPermission` gates league scope on `scope.organization`, so it
-  resolves to `useIsLeagueAdmin(league, undefined)`. The hook's org-admin
-  cascade only fires if `league.organization` is embedded — in this navigation
-  path it is not, so **org admins lose access**. Only site admins and direct
-  league admins pass. Same user record, two gates depending on which page
-  you're on.
-
-  `orgId` makes the **PATCH target** deterministic — `dispatchPatch` reads it
-  to pick the parent org's OrgUser endpoint, and `scopeToContext` reuses it to
-  key the user-cache upsert. Neither is read by the permission gate, so it
-  does not close this divergence.
+- **Edit User (tournament players tab)** resolves to league scope via
+  `resolveEditScope`. A league-scoped save goes through the parent org's
+  OrgUser endpoint (`update_org_user`, gated on `has_org_staff_access`), so
+  `useScopedEditPermission` gates league scope on the same thing: site staff,
+  or admin/staff of the parent org (`scopeToContext(scope).orgId` checked
+  against the user's `admin_organization_ids` / `staff_organization_ids`).
+  League admins and league staff who are not org staff do not get the button,
+  because the backend would reject their save. The Player Profile modal uses
+  the same check.
 - **Generate Bracket** and **Set Winner** use `useCanEditTournament` /
   `useIsLeagueStaff` — operational match-management actions that
   league staff legitimately do.
-- **Link Steam Match** is another **known divergence**: gates on
+- **Link Steam Match** is a **known divergence**: gates on
   `useUserStore.isStaff()` (site staff/superuser only) while the rest
   of the MatchStatsModal uses `useIsLeagueStaff`. If you're widening
   it, lift the gate to `useIsLeagueStaff` and flip the matrix row.
@@ -329,7 +320,8 @@ feature suites.
 | Frontend permission hooks         | `frontend/app/hooks/usePermissions.ts`                                                |
 | Backend org permission helpers    | `backend/org/permissions.py`                                                          |
 | Backend league permission helpers | `backend/league/permissions.py`                                                       |
-| Backend tournament/game checks    | `backend/app/permissions_tournament.py`                                               |
+| Backend tournament/game checks    | `backend/tournament/permissions.py`                                                   |
+| Backend event staff check         | `backend/events/permissions.py`                                                       |
 | User serializer (role memberships)| `backend/app/serializers.py` (`UserSerializer`)                                       |
 | Playwright role fixture           | `frontend/tests/playwright/fixtures/role-contexts.ts`                                 |
 | Login endpoints                   | `backend/tests/test_auth.py`, `backend/tests/urls.py`                                 |
@@ -341,5 +333,6 @@ feature suites.
 [hooks]: https://github.com/kettleofketchup/DraftForge/blob/main/frontend/app/hooks/usePermissions.ts
 [permissions]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/org/permissions.py
 [permissions-league]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/league/permissions.py
-[permissions-tournament]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/app/permissions_tournament.py
+[permissions-tournament]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/tournament/permissions.py
+[permissions-events]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/events/permissions.py
 [matrix]: https://github.com/kettleofketchup/DraftForge/tree/main/frontend/tests/playwright/e2e/17-auth

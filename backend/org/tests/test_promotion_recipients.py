@@ -7,6 +7,7 @@ from app.models import CustomUser, Tournament
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import decline_signup
+from events.tests.actors import SYSTEM
 from league.models import League
 from org.models import Organization, OrgUser, PromoSend
 from org.promotion.recipients import (
@@ -369,7 +370,7 @@ class CandidatesTest(_PoolFixture):
         self.assertEqual(set(rows), {"ann", "bob"})
 
     def test_decline_via_service_hides_candidate(self) -> None:
-        decline_signup(self.event, self.ann)
+        decline_signup(self.event, self.ann, actor=SYSTEM)
 
         self.assertEqual(set(self._rows_by_username()), {"bob"})
 

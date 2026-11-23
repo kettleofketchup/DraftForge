@@ -137,7 +137,7 @@ logging.basicConfig(
 # Quiet down noisy loggers unless explicitly debugging
 if _log_level != "DEBUG":
     logging.getLogger("app.models").setLevel(logging.INFO)
-    logging.getLogger("app.functions.tournament").setLevel(logging.INFO)
+    logging.getLogger("tournament.functions").setLevel(logging.INFO)
     logging.getLogger("draft.views.team_picks").setLevel(logging.INFO)
     logging.getLogger("draft.models.team").setLevel(logging.INFO)
     logging.getLogger("draft.views.team_setup").setLevel(logging.INFO)
@@ -161,7 +161,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "django_jinja",
     "corsheaders",
-    "bracket.apps.TournamentConfig",
+    "bracket.apps.BracketConfig",
     "user.apps.UserConfig",
     "cacheops",
 ]

@@ -6,6 +6,7 @@ from django.utils import timezone
 from app.models import CustomUser, GameType
 from events.models import Event, EventSignup, EventState, SignupStatus
 from events.services import create_tentative_signup
+from events.tests.actors import SYSTEM
 from org.models import Organization
 
 
@@ -22,7 +23,7 @@ class CreateTentativeSignupTests(TestCase):
         )
 
     def test_creates_tentative_signup(self):
-        signup = create_tentative_signup(self.event, self.user)
+        signup = create_tentative_signup(self.event, self.user, actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.TENTATIVE)
         self.assertEqual(signup.user, self.user)
 
@@ -32,7 +33,7 @@ class CreateTentativeSignupTests(TestCase):
         EventSignup.objects.create(
             event=self.event, user=self.user, status=SignupStatus.RSVP
         )
-        signup = create_tentative_signup(self.event, self.user)
+        signup = create_tentative_signup(self.event, self.user, actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.TENTATIVE)
         self.assertEqual(
             EventSignup.objects.filter(event=self.event, user=self.user).count(), 1
@@ -43,13 +44,13 @@ class CreateTentativeSignupTests(TestCase):
             event=self.event, user=self.user, status=SignupStatus.TENTATIVE
         )
         with self.assertRaises(ValueError):
-            create_tentative_signup(self.event, self.user)
+            create_tentative_signup(self.event, self.user, actor=SYSTEM)
 
     def test_cleans_up_cancelled_row(self):
         EventSignup.objects.create(
             event=self.event, user=self.user, status=SignupStatus.CANCELLED
         )
-        signup = create_tentative_signup(self.event, self.user)
+        signup = create_tentative_signup(self.event, self.user, actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.TENTATIVE)
         self.assertEqual(
             EventSignup.objects.filter(event=self.event, user=self.user).count(), 1
@@ -60,4 +61,4 @@ class CreateTentativeSignupTests(TestCase):
         self.event.state = EventState.CANCELLED
         self.event.save()
         with self.assertRaises(ValueError):
-            create_tentative_signup(self.event, self.user)
+            create_tentative_signup(self.event, self.user, actor=SYSTEM)

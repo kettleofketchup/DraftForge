@@ -30,7 +30,6 @@ from structlog.testing import capture_logs
 
 from app.models import CustomUser, Game, Team, Tournament
 from app.redis_client import get_redis_client
-from app.services.team_management import follow_captain
 from discordbot.activity_auth import ActivitySocketMiddleware, issue_activity_token
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 from draft.consumers.hero import HeroDraftConsumer
@@ -63,6 +62,7 @@ from draft.tests.ws_helpers import (
 )
 from league.models import League
 from org.models import Organization
+from tournament.services.team_management import follow_captain
 
 Channel = HeroDraftChatMessage.Channel
 Kind = HeroDraftChatMessage.Kind
