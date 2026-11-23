@@ -21,7 +21,7 @@
   `tournament.Tournament`, and their keys `tournament.Game.radiant_team`,
   `tournament.Game.dire_team` and so on, instead of `app.*`. Because `usage`
   is sorted by model label, `tournament.Game` entries now come after
-  `bracket.BracketSlot` entries.
+  `bracket.BracketSlot` and `draft.HeroDraft` entries.
 - `TOURNAMNET_TYPE_CHOICES` is renamed `TOURNAMENT_TYPE_CHOICES`.
 - HTTP and WebSocket paths, URL names, Redis keys and table names are
   unchanged.
