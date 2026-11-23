@@ -115,26 +115,34 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
           </div>
 
           {/* Target profile info */}
-          <div className="flex-1">
-            <div className="font-medium">
-              {claim.target_nickname || `Steam ID: ${claim.target_steamid}`}
+          {claim.target_user === null ? (
+            <div className="flex-1">
+              <div className="font-medium" data-testid="claim-target-merged">
+                Merged into {claim.claimer_username}
+              </div>
             </div>
-            <div className="text-sm text-muted-foreground">
-              {mmrs.length === 0
-                ? 'No MMR'
-                : mmrs.map(([g, v], i) => (
-                    <Fragment key={g}>
-                      {i > 0 && ' \u00b7 '}
-                      <span data-testid={`claim-target-mmr-${GAME_SLUG[g]}`}>
-                        {`${GAME_LABEL[g]} ${v} MMR`}
-                      </span>
-                    </Fragment>
-                  ))}
-              {claim.target_steamid && (
-                <span className="ml-2">Steam: {claim.target_steamid}</span>
-              )}
+          ) : (
+            <div className="flex-1">
+              <div className="font-medium">
+                {claim.target_nickname || `Steam ID: ${claim.target_steamid}`}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {mmrs.length === 0
+                  ? 'No MMR'
+                  : mmrs.map(([g, v], i) => (
+                      <Fragment key={g}>
+                        {i > 0 && ' \u00b7 '}
+                        <span data-testid={`claim-target-mmr-${GAME_SLUG[g]}`}>
+                          {`${GAME_LABEL[g]} ${v} MMR`}
+                        </span>
+                      </Fragment>
+                    ))}
+                {claim.target_steamid && (
+                  <span className="ml-2">Steam: {claim.target_steamid}</span>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Status and actions */}
           <div className="flex items-center gap-3">

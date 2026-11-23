@@ -105,6 +105,11 @@ test.describe('Admin Claims Approval', () => {
     await expect(page.getByTestId(`claim-card-${claim.id}`)).toBeVisible({
       timeout: 10000,
     });
+    await expect(
+      page
+        .getByTestId(`claim-card-${claim.id}`)
+        .getByTestId('claim-target-merged'),
+    ).toHaveText(`Merged into ${claim.claimer_username}`);
   });
 
   test('org admin can reject a claim with reason', async ({
