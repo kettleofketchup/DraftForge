@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { UserSchema } from '~/components/user/schemas';
 
-// Lightweight org schema for league list view
+// Lightweight org schema nested in league detail and tournament payloads
 export const LeagueOrganizationSchema = z.object({
   pk: z.number(),
   name: z.string(),
