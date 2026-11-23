@@ -82,9 +82,23 @@ import { EventStaffSection } from '~/components/events/EventStaffCard';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { MySignupActions } from '~/components/events/MySignupActions';
 import { OpsNoticesCard } from '~/components/events/OpsNoticesCard';
+import { SignupHistorySection } from '~/components/events/SignupHistorySection';
+import {
+  historySubjectFor,
+  SignupHistoryButton,
+  SignupHistorySheet,
+} from '~/components/events/SignupHistorySheet';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
-import type { EventSignupType, EventType } from '~/components/events/schemas';
+import {
+  eventTabOptions,
+  resolveEventTab,
+} from '~/components/events/eventTabs';
+import type {
+  EventSignupType,
+  EventType,
+  HistorySubject,
+} from '~/components/events/schemas';
 import { EventState, rollCallLabel } from '~/components/events/schemas';
 import {
   canRestoreSignup,
@@ -146,6 +160,8 @@ import {
 } from '~/features/org-features';
 import { canPromoteEvent, PromoteEventButton } from '~/features/promotion';
 import {
+  invalidateSignupHistory,
+  removeSignupHistoryQueries,
   useEvent,
   useEventActionMutation,
   useEventSignups,
@@ -215,6 +231,7 @@ export default function EventPage() {
   // selectOrgMmr; viewers without member access fall back to signup.org_user_mmr.
   const eventOrgPk = event?.organization ?? null;
   const onMemberViewerChange = useCallback(() => {
+    if (id) removeSignupHistoryQueries(queryClient, id);
     if (!eventOrgPk) return;
     if (useOrgStore.getState().orgUsersOrgId === eventOrgPk) {
       useOrgStore.getState().clearOrgUsers();
@@ -377,31 +394,33 @@ export default function EventPage() {
 
   // Mobile tab nav goes through usePageNav → centered navbar dropdown.
   const pageNavOptions = useMemo(
-    () => [
-      { value: 'details', label: 'Details' },
-      { value: 'signups', label: `${activeSignups.length} Signups` },
-      ...(tentativeSignups.length > 0
-        ? [
-            {
-              value: 'tentative',
-              label: `${tentativeSignups.length} Tentative`,
-            },
-          ]
-        : []),
-      { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
-      ...(removedSignups.length > 0
-        ? [{ value: 'removed', label: `${removedSignups.length} Removed` }]
-        : []),
-      { value: 'discord', label: 'Discord' },
-    ],
+    () =>
+      eventTabOptions(isAdmin, {
+        active: activeSignups.length,
+        tentative: tentativeSignups.length,
+        waitlisted: waitlistedSignups.length,
+        removed: removedSignups.length,
+      }),
     [
+      isAdmin,
       activeSignups.length,
       tentativeSignups.length,
       waitlistedSignups.length,
       removedSignups.length,
     ],
   );
-  usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
+  const shownTab = event ? resolveEventTab(activeTab, isAdmin) : activeTab;
+  usePageNav(event ? pageNavOptions : null, shownTab, handleTabChange);
+
+  const [historyFor, setHistoryFor] = useState<HistorySubject | null>(null);
+  const historyMemberOptions = useMemo(() => {
+    const byUser = new Map<number, EventSignupType>();
+    for (const s of signups ?? []) byUser.set(s.user, s);
+    return [...byUser.values()].map((s) => ({
+      user_id: s.user,
+      user: historySubjectFor(s),
+    }));
+  }, [signups]);
 
   if (isLoading) {
     return (
@@ -623,7 +642,7 @@ export default function EventPage() {
       <EventLeadershipBanner event={event} access={eventOrgAccess} />
 
       <div>
-        <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <Tabs value={shownTab} onValueChange={handleTabChange}>
           {/* Below md the PageNavBar dropdown drives tab switching. */}
           <TabsList className="hidden md:inline-flex flex-wrap">
             <TabsTrigger value="details" data-testid="event-tab-details">
@@ -648,6 +667,11 @@ export default function EventPage() {
             <TabsTrigger value="discord" data-testid="event-tab-discord">
               Discord
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="history" data-testid="event-tab-history">
+                History
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="details">
@@ -687,6 +711,7 @@ export default function EventPage() {
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
               state={event.state}
+              onShowHistory={setHistoryFor}
             />
           </TabsContent>
 
@@ -697,6 +722,7 @@ export default function EventPage() {
               signupActions={signupActions}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              onShowHistory={setHistoryFor}
             />
           </TabsContent>
 
@@ -707,6 +733,7 @@ export default function EventPage() {
               signupActions={signupActions}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              onShowHistory={setHistoryFor}
             />
           </TabsContent>
 
@@ -717,6 +744,7 @@ export default function EventPage() {
               signupActions={signupActions}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              onShowHistory={setHistoryFor}
             />
           </TabsContent>
 
@@ -727,8 +755,29 @@ export default function EventPage() {
               eventTimezone={event.timezone}
             />
           </TabsContent>
+
+          {isAdmin && currentUser && (
+            <TabsContent value="history">
+              <SignupHistorySection
+                eventId={event.id}
+                isAdmin={isAdmin}
+                eventTimezone={event.timezone}
+                memberOptions={historyMemberOptions}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
+
+      <SignupHistorySheet
+        eventId={event.id}
+        eventTimezone={event.timezone}
+        isAdmin={isAdmin && !!currentUser}
+        user={historyFor}
+        onOpenChange={(open) => {
+          if (!open) setHistoryFor(null);
+        }}
+      />
 
       <EditEventModal
         event={event}
@@ -928,8 +977,10 @@ function SignupsTab({
   state,
   autoApprove = true,
   conductMemberFor,
+  onShowHistory,
 }: {
   conductMemberFor?: ConductMemberLookup;
+  onShowHistory?: (user: HistorySubject) => void;
   signups: EventSignupType[];
   autoApprove?: boolean;
   isAdmin: boolean;
@@ -973,6 +1024,7 @@ function SignupsTab({
       }
       const resp = await adminAddSignup(eventId!, payload.user_id);
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+      invalidateSignupHistory(queryClient, eventId!);
       // Backend adds the user as an OrgUser when an admin signs them up; reset
       // the org-users cache so the org page reflects the new membership.
       void invalidateConductQueries(queryClient, orgId);
@@ -1039,7 +1091,7 @@ function SignupsTab({
           const handleWaitlist = () => signupActions.demote.mutate(signup.id);
 
           const adminActions = isAdmin ? (
-            <div className="flex gap-1">
+            <div className="flex gap-1 [&_button]:min-h-11 sm:[&_button]:min-h-8">
               {(signup.status === 'rsvp' ||
                 signup.status === 'pending_approval') && (
                 <>
@@ -1167,6 +1219,12 @@ function SignupsTab({
                     Restore signup
                   </TooltipContent>
                 </Tooltip>
+              )}
+              {onShowHistory && (
+                <SignupHistoryButton
+                  user={historySubjectFor(signup, user)}
+                  onClick={() => onShowHistory(historySubjectFor(signup, user))}
+                />
               )}
               {!isRemovedSignup(signup.status) && (
                 <Tooltip>
