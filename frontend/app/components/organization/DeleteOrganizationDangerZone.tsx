@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -6,6 +7,7 @@ import { deleteOrganization } from '~/components/api/orgAPI';
 import { DestructiveButton } from '~/components/ui/buttons';
 import { DeleteDialog } from '~/components/ui/dialogs';
 import { extractApiError } from '~/lib/apiError';
+import { organizationsQueryKey } from './hooks/useOrganizations';
 import type { OrganizationType } from './schemas';
 
 export interface DeleteOrganizationDangerZoneProps {
@@ -18,12 +20,14 @@ export function DeleteOrganizationDangerZone({
   const [showDelete, setShowDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   async function handleDelete() {
     if (!organization.pk) return;
     setIsDeleting(true);
     try {
       await deleteOrganization(organization.pk);
+      queryClient.invalidateQueries({ queryKey: organizationsQueryKey });
       toast.success(`Organization "${organization.name}" deleted`);
       navigate('/organizations');
     } catch (err) {
