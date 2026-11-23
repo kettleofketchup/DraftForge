@@ -1195,6 +1195,51 @@ class TeamRenameRequestSerializer(TeamActionRequestSerializer):
     name = serializers.CharField(allow_blank=True, trim_whitespace=False)
 
 
+def _is_pre_draft_team(team: Team) -> bool:
+    """Captain-only, with no placement, games, drafts or history."""
+    return (
+        team.placement is None
+        and not team.members.nocache().exclude(pk=team.captain_id).exists()
+        and not team.dropin_members.nocache().exists()
+        and not team.left_members.nocache().exists()
+        and not TeamLog.objects.nocache().filter(team=team).exists()
+        and not team_references([team])
+    )
+
+
+def _delete_pre_draft_captain_teams(
+    tournament: Tournament, removed_user_ids: set[int]
+) -> None:
+    """Delete pre-draft teams led by removed captains; played teams go through succession."""
+    teams = list(
+        Team.objects.nocache()
+        .filter(tournament=tournament, captain_id__in=removed_user_ids)
+        .order_by("pk")
+    )
+    if not teams:
+        return
+    deletable = [team.pk for team in teams if _is_pre_draft_team(team)]
+    kept = [team.pk for team in teams if team.pk not in deletable]
+    if kept:
+        log.info(
+            "captain_teams_kept",
+            system="api",
+            subsystem="serializer",
+            tournament_id=tournament.pk,
+            team_ids=kept,
+        )
+    if deletable:
+        log.info(
+            "captain_teams_removed",
+            system="api",
+            subsystem="serializer",
+            count=len(deletable),
+            tournament_id=tournament.pk,
+            team_ids=deletable,
+        )
+        Team.objects.filter(pk__in=deletable).delete()
+
+
 class TournamentSerializer(serializers.ModelSerializer):
     teams = TournamentTeamSerializer(many=True, read_only=True)
     users = serializers.SerializerMethodField()
@@ -1344,7 +1389,8 @@ class TournamentSerializer(serializers.ModelSerializer):
     def update(self, instance: Tournament, validated_data: dict) -> Tournament:
         """
         Override update to handle:
-        1. Captain removal when users are removed (delete their team)
+        1. Captain removal: delete their pre-draft teams; played teams stay
+           and the member-removal signal hands over the captaincy
         2. OrgUser/LeagueUser creation when users are added
         """
         with transaction.atomic():
@@ -1355,21 +1401,10 @@ class TournamentSerializer(serializers.ModelSerializer):
                 removed_users = current_users - new_users
                 added_users = new_users - current_users
 
-                # Bulk delete teams where removed users are captains
                 if removed_users:
-                    removed_user_ids = [u.pk for u in removed_users]
-                    captain_teams = Team.objects.filter(
-                        tournament=instance, captain_id__in=removed_user_ids
+                    _delete_pre_draft_captain_teams(
+                        instance, {u.pk for u in removed_users}
                     )
-                    if captain_teams.exists():
-                        log.info(
-                            "captain_teams_removed",
-                            system="api",
-                            subsystem="serializer",
-                            count=captain_teams.count(),
-                            tournament_id=instance.pk,
-                        )
-                        captain_teams.delete()
 
                 # Bulk create OrgUser and LeagueUser for added users
                 if added_users and instance.league:
