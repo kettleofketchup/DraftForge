@@ -171,46 +171,7 @@ export async function getOrganizationDiscordMembers(
   return response.data.members;
 }
 
-// Profile Claim Request types
-export interface ProfileClaimRequest {
-  id: number;
-  claimer: number;
-  claimer_username: string;
-  claimer_discord_id: string | null;
-  claimer_avatar: string | null;
-  target_user: number;
-  target_nickname: string | null;
-  target_steamid: number | null;
-  target_mmr: number | null;
-  target_game_mmrs?: Record<string, number> | null;
-  organization: number;
-  organization_name: string;
-  status: 'pending' | 'approved' | 'rejected';
-  reviewed_by: number | null;
-  reviewed_by_username: string | null;
-  rejection_reason: string;
-  created_at: string;
-  reviewed_at: string | null;
-}
-
-// Profile Claim Request API
-export async function getClaimRequests(options?: {
-  status?: 'pending' | 'approved' | 'rejected';
-  organizationId?: number;
-}): Promise<ProfileClaimRequest[]> {
-  const params = new URLSearchParams();
-  if (options?.status) {
-    params.append('status', options.status);
-  }
-  if (options?.organizationId) {
-    params.append('organization', options.organizationId.toString());
-  }
-  const queryString = params.toString() ? `?${params.toString()}` : '';
-  const response = await axios.get<ProfileClaimRequest[]>(
-    `/claim-requests/${queryString}`,
-  );
-  return response.data;
-}
+export type { ProfileClaimRequest } from '~/features/claims/schemas';
 
 export async function approveClaimRequest(
   claimId: number,

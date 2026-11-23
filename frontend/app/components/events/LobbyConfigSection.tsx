@@ -17,10 +17,10 @@ import {
 } from '~/components/ui/select';
 import { GameMode } from './schemas';
 
-/** Field set this section renders. Not extracted as a zod sub-schema (yet) —
- *  these keys are inline on createEventInputSchema, editEventSchema,
- *  editRepeaterSchema. The constraint catches field-name typos in this file
- *  without forcing a schema refactor across all four parent forms. */
+/** Field set this section renders. The four event forms (createEventInputSchema,
+ *  createSeriesEventInputSchema, editEventFormSchema, editRepeaterSchema) take
+ *  these keys from eventTemplateSchema; CreateTournamentSchema declares them
+ *  inline. The constraint catches field-name typos in this file. */
 interface LobbyFields {
   game_type: number;
   game_mode: string;

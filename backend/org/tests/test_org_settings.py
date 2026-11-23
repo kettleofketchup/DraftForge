@@ -765,8 +765,8 @@ class OrgSettingsInertTest(SimpleTestCase):
         {
             "events/overrides.py",
             "events/tests/test_overrides.py",
-            "app/services/team_management.py",
-            "app/tests/test_team_management.py",
+            "tournament/services/team_management.py",
+            "tournament/tests/test_team_management.py",
         }
     )
 

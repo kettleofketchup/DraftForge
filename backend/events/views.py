@@ -36,7 +36,6 @@ from rest_framework.views import APIView
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser, Game
-from app.permissions_tournament import has_event_staff_access
 from discordbot.models import (
     DiscordEvent,
     DiscordEventDM,
@@ -69,6 +68,7 @@ from events.models import (
     OrgEventDefaults,
     RepeaterSubscription,
 )
+from events.permissions import has_event_staff_access
 from events.reopen import ReopenNotPermitted
 from events.roster import RosterSyncResult
 from events.schemas import SignupInputPatch

@@ -8,7 +8,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Create your views here.
-from app.models import CustomUser, PositionsModel
+from app.models import PositionsModel
 from app.serializers import (
     PositionsSerializer,
     UserSerializer,
@@ -33,21 +33,6 @@ def _friend_id_error(exc: ValidationError) -> Response:
         else status.HTTP_400_BAD_REQUEST
     )
     return Response({"error": exc.messages[0], "code": exc.code}, status=http_status)
-
-
-# This allows a user to update only for certain fields
-class ProfileUserSerializer(serializers.ModelSerializer):
-    positions = PositionsSerializer(many=False, read_only=True)
-    nickname = serializers.CharField(required=False, allow_blank=True, max_length=100)
-    steam_account_id = serializers.IntegerField(required=False, allow_null=True)
-
-    class Meta:
-        model = CustomUser
-        fields = (
-            "nickname",
-            "positions",
-            "steam_account_id",
-        )
 
 
 class ProfileUpdateSerializer(serializers.Serializer):

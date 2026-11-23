@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from datetime import datetime
-from enum import IntEnum, StrEnum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 import requests
@@ -67,15 +67,6 @@ class PositionsModel(models.Model):
             targets += [dp, dp.base_profile, dp.base_profile.user]
         if targets:
             invalidate_after_commit(*targets)
-
-
-# Enum for Dota2 positions
-class PositionEnum(IntEnum):
-    Carry = 1
-    Mid = 2
-    Offlane = 3
-    SoftSupport = 4
-    HardSupport = 5
 
 
 # Team draft pick-order styles

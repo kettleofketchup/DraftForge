@@ -9,11 +9,7 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
-from app.permissions_tournament import (
-    check_lobby_steam_league_id,
-    request_user,
-)
-from app.services.team_references import team_references
+from app.permissions import request_user
 from app.steam_accounts import log_steam_verification_change
 from draft.models import Draft, DraftOptions, DraftRound
 from events.eligibility.steam import (
@@ -26,9 +22,11 @@ from events.overrides import (
     OverrideRequestSerializer,
 )
 from league.models import League, LeagueUser
+from league.permissions import check_lobby_steam_league_id
 from org.mmr import LEAGUE_GAME, game_for_tournament, game_mmrs_prefetch, org_mmr_map
 from org.models import Organization, OrgUser
 from telemetry.logging import get_logger
+from tournament.services.team_references import team_references
 from user.querysets import with_user_profiles
 
 from .models import (
@@ -999,7 +997,7 @@ class TeamSerializer(serializers.ModelSerializer):
             )
         return attrs
 
-    # Members last: emptying them may delete the team (see app.signals).
+    # Members last: emptying them may delete the team (see tournament.signals).
     _ROSTER_FIELDS: ClassVar[tuple[str, ...]] = (
         "dropin_members",
         "left_members",
@@ -1453,7 +1451,6 @@ class TournamentSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    teams = TeamSerializer(many=True, read_only=True)  # Associated teams
     positions = PositionsSerializer(many=False, read_only=False, required=False)
     default_organization = serializers.PrimaryKeyRelatedField(
         queryset=Organization.objects.all(),
@@ -1519,7 +1516,6 @@ class UserSerializer(serializers.ModelSerializer):
             "avatarUrl",
             "email",
             "date_joined",
-            "teams",  # Include associated teams
             "positions",
             "default_organization",
             "admin_organization_ids",

@@ -9,9 +9,9 @@ from django.contrib.auth.models import AnonymousUser
 from django.db.models import OuterRef, QuerySet, Subquery
 
 from app.models import CustomUser
-from app.permissions_tournament import has_event_staff_access
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
+from events.permissions import has_event_staff_access
 
 VOUCH_EXCLUDED_STATUSES: Final[tuple[str, ...]] = (
     SignupStatus.CANCELLED,
