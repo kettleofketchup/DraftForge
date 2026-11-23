@@ -1052,13 +1052,6 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         body = request.data or {}
         intent = body.get("intent")
-        try:
-            ensure_self_serve(event, request.user, intent=_intent_commitment(intent))
-        except SignupRefused as exc:
-            return _signup_refusal(event, request.user, intent, str(exc), exc.result)
-        except ValueError as exc:
-            return _signup_refusal(event, request.user, intent, str(exc))
-
         if not isinstance(intent, str) or intent not in _SIGNUP_INTENT_COMMITMENT:
             return _signup_refusal(
                 event, request.user, intent, "intent must be 'rsvp' or 'tentative'"
@@ -1071,10 +1064,9 @@ class EventViewSet(viewsets.ModelViewSet):
             msg = first.get("msg") or str(exc)
             return _signup_refusal(event, request.user, intent, msg)
 
-        org_user = resolve_or_create_org_user(request.user, event.organization)
-
         try:
             with transaction.atomic():
+                org_user = resolve_or_create_org_user(request.user, event.organization)
                 apply_signup_input(org_user=org_user, event=event, patch=patch)
                 if intent == "rsvp":
                     signup = process_rsvp(
@@ -1084,6 +1076,8 @@ class EventViewSet(viewsets.ModelViewSet):
                     signup = create_tentative_signup(
                         event, request.user, actor=SignupActor.from_request(request)
                     )
+        except SignupRefused as exc:
+            return _signup_refusal(event, request.user, intent, str(exc), exc.result)
         except DjangoValidationError as exc:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
             return _signup_refusal(event, request.user, intent, msg)
@@ -1206,7 +1200,7 @@ class EventViewSet(viewsets.ModelViewSet):
     def start_tournament(self, request: Request, pk: str | None = None) -> Response:
         """Start the tournament (after roll call or directly).
 
-        Self-heals legacy events whose tournament is missing or empty (#200).
+        Self-heals events whose tournament is missing or has an empty roster.
         """
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
@@ -1561,13 +1555,14 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                     )
 
         try:
-            result = approve_signup(
-                signup,
-                mmr_override=mmr_override,
-                actor=SignupActor.for_request_on(
-                    request, signup.user, signup.event, staff_only=True
-                ),
-            )
+            with transaction.atomic():
+                result = approve_signup(
+                    signup,
+                    mmr_override=mmr_override,
+                    actor=SignupActor.for_request_on(
+                        request, signup.user, signup.event, staff_only=True
+                    ),
+                )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

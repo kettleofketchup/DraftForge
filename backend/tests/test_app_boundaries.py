@@ -902,15 +902,17 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                 {
                     "OrgUser",
                     "api",
+                    "delete_counts",
                     "demote_colliding_earning_sends",
+                    "merge_member_dependents",
                     "merge_org_mmrs",
                     "repoint_mmr_requests",
                     "repoint_org_attribution",
                 }
             ),
-            "user account merge pairs org memberships, merges per-game org MMR "
-            "and standing, repoints org contribution and promo attribution and "
-            "MMR change requests",
+            "user account merge pairs org memberships, moves their dependents, "
+            "merges per-game org MMR and standing, and repoints org "
+            "contribution, promo attribution and MMR change requests",
         ),
         "app/management/commands/sync_prod_users.py": BackEdge(
             frozenset(
