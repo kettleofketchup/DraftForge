@@ -61,7 +61,6 @@ def can_edit_tournament(
     if not user.is_authenticated:
         return False
 
-    # Site admin/staff can edit anything
     if user.is_superuser or user.is_staff:
         return True
 
@@ -168,7 +167,6 @@ def can_manage_game(user: CustomUser | AnonymousUser, game: Game) -> bool:
     if not user.is_authenticated:
         return False
 
-    # Superuser can manage anything
     if user.is_superuser or user.is_staff:
         return True
 

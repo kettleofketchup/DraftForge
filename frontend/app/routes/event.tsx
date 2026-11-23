@@ -349,7 +349,6 @@ export default function EventPage() {
     return segments;
   }, [event]);
 
-  // Check if current user already has an active signup
   const mySignup = useMemo(() => {
     if (!signups || !currentUser?.pk) return undefined;
     return signups.find(
