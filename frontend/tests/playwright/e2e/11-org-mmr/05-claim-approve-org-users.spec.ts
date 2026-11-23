@@ -19,7 +19,8 @@ interface ClaimRequest {
 async function searchMembers(page: Page, query: string): Promise<void> {
   await page.getByTestId('org-tab-users').click();
   const search = page.getByPlaceholder('Search members...');
-  if (await search.isVisible()) await search.fill(query);
+  await expect(search).toBeVisible({ timeout: 15000 });
+  await search.fill(query);
 }
 
 test.describe('Approving a profile claim', () => {
