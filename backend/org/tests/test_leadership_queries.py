@@ -7,6 +7,7 @@ from django.utils import timezone as tz
 
 from app.models import CustomUser
 from events.models import Event
+from org.leadership.kinds import LeadershipKind
 from org.leadership.queries import (
     CaptainRating,
     EventAggregate,
@@ -16,9 +17,11 @@ from org.leadership.queries import (
     rating_board,
 )
 from org.leadership.rating import rate_params
-from org.leadership.settings import get_leadership_settings
+from org.leadership.settings import get_leadership_settings, update_leadership_settings
+from org.leadership.summary import member_payload
 from org.leadership.traits import effective_traits
-from org.models_leadership import CaptainTrait
+from org.models import ContributionEntry
+from org.models_leadership import CaptainTrait, EventCaptain, OrgLeadershipSettings
 from org.standing.periods import parse_period
 from org.standing.scoring import Observation, weighted_rate
 from org.tests.leadership_base import LeadershipTestCase, scores
@@ -45,7 +48,11 @@ class LeadershipQueriesTest(LeadershipTestCase):
         return {
             row["org_user"]: row["total"]
             for row in points_board(
-                self.org.pk, period, now=now, include_unreleased=include_unreleased
+                self.org.pk,
+                period,
+                now=now,
+                settings=get_leadership_settings(self.org),
+                include_unreleased=include_unreleased,
             )
         }
 
@@ -74,7 +81,12 @@ class LeadershipQueriesTest(LeadershipTestCase):
         self.assertEqual(self.points(now)[cap], 15)
         self.assertEqual(self.events_for(self.cap_a, now, staff=False), [])
         self.assertEqual(
-            member_points(self.ou(self.cap_a), now=now, include_unreleased=False),
+            member_points(
+                self.ou(self.cap_a),
+                now=now,
+                settings=get_leadership_settings(self.org),
+                include_unreleased=False,
+            ),
             {"all_time": 15, "this_month": 15},
         )
 
@@ -197,6 +209,170 @@ class LeadershipQueriesTest(LeadershipTestCase):
             after.overall, sum(after.traits.values()) / len(after.traits)
         )
         self.assertGreater(after.overall, before.overall)
+
+
+class ReleaseGateQueriesTest(LeadershipTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.run_snapshot()
+        for mate in self.mates_a:
+            self.review(mate, self.cap_a)
+        for mate in self.mates_b:
+            self.review(mate, self.cap_b)
+        self.later = tz.now() + AFTER_WINDOW
+
+    def gate(self, hours: int | None = None) -> None:
+        OrgLeadershipSettings.objects.update_or_create(
+            organization=self.org,
+            defaults={
+                "require_staff_release": True,
+                "auto_release_after_hours": hours,
+            },
+        )
+
+    def release(self, captain: CustomUser) -> None:
+        EventCaptain.objects.filter(pk=self.snapshot(captain).pk).update(
+            released_at=tz.now()
+        )
+
+    def rated(self, now: datetime) -> set[int]:
+        return set(
+            rating_board(
+                self.org.pk,
+                now=now,
+                settings=get_leadership_settings(self.org),
+                traits=effective_traits(self.org),
+            )
+        )
+
+    def board_points(self, now: datetime) -> dict[int, int]:
+        return {
+            row["org_user"]: row["total"]
+            for row in points_board(
+                self.org.pk,
+                parse_period(self.org, None),
+                now=now,
+                settings=get_leadership_settings(self.org),
+            )
+        }
+
+    def own_points(self, captain: CustomUser, now: datetime) -> int:
+        return member_points(
+            self.ou(captain),
+            now=now,
+            settings=get_leadership_settings(self.org),
+            include_unreleased=False,
+        )["all_time"]
+
+    def rating_points(self, captain: CustomUser) -> int:
+        return (
+            ContributionEntry.objects.nocache()
+            .get(
+                org_user__user=captain,
+                kind=LeadershipKind.CAPTAIN_RATING.value,
+                event=self.event,
+                track="leadership",
+            )
+            .points
+        )
+
+    def test_gate_hides_rating_until_release(self) -> None:
+        self.gate()
+        cap = self.ou(self.cap_a).pk
+        self.assertNotIn(cap, self.rated(self.later))
+        self.release(self.cap_a)
+        self.assertIn(cap, self.rated(self.later))
+
+    def test_gate_hides_captain_rating_points_but_keeps_other_kinds(self) -> None:
+        self.gate()
+        a, b = self.ou(self.cap_a).pk, self.ou(self.cap_b).pk
+        a_rating, b_rating = (
+            self.rating_points(self.cap_a),
+            self.rating_points(self.cap_b),
+        )
+        self.assertGreater(a_rating, 0)
+        self.assertGreater(b_rating, 0)
+        self.assertEqual(self.own_points(self.cap_a, self.later), 5 + 10)
+        self.assertEqual(self.own_points(self.cap_b, self.later), 5 + 6)
+        self.assertEqual(self.board_points(self.later), {a: 5 + 10, b: 5 + 6})
+
+        self.release(self.cap_a)
+        self.assertEqual(self.own_points(self.cap_a, self.later), 5 + 10 + a_rating)
+        self.assertEqual(self.own_points(self.cap_b, self.later), 5 + 6)
+        self.assertEqual(
+            self.board_points(self.later), {a: 5 + 10 + a_rating, b: 5 + 6}
+        )
+
+    def test_captain_events_gate(self) -> None:
+        self.gate()
+        captain = self.ou(self.cap_a)
+        settings = get_leadership_settings(self.org)
+        traits = effective_traits(self.org)
+        hidden = captain_events(
+            captain, now=self.later, settings=settings, traits=traits, staff=False
+        )
+        self.assertEqual(hidden, [])
+        (row,) = captain_events(
+            captain, now=self.later, settings=settings, traits=traits, staff=True
+        )
+        self.assertFalse(row["released"])
+        self.release(self.cap_a)
+        (row,) = captain_events(
+            captain, now=self.later, settings=settings, traits=traits, staff=False
+        )
+        self.assertTrue(row["released"])
+        self.assertEqual(row["captain_rating_points"], self.rating_points(self.cap_a))
+
+    def test_floor_raise_hides_rating_and_points_together(self) -> None:
+        b = self.ou(self.cap_b).pk
+        b_rating = self.rating_points(self.cap_b)
+        self.assertIn(b, self.rated(self.later))
+        self.assertEqual(self.board_points(self.later)[b], 5 + 6 + b_rating)
+        update_leadership_settings(
+            self.org, actor=self.admin, changes={"rating_min_reviewers": 3}
+        )
+        self.assertNotIn(b, self.rated(self.later))
+        self.assertEqual(self.board_points(self.later)[b], 5 + 6)
+        self.assertEqual(self.own_points(self.cap_b, self.later), 5 + 6)
+        self.assertIn(self.ou(self.cap_a).pk, self.rated(self.later))
+
+    def test_auto_release_shows_points_and_rating_together(self) -> None:
+        self.gate(hours=24)
+        closes = self.snapshot(self.cap_a).window_closes_at
+        a = self.ou(self.cap_a).pk
+        a_rating = self.rating_points(self.cap_a)
+        before = closes + timedelta(hours=24) - timedelta(seconds=1)
+        self.assertNotIn(a, self.rated(before))
+        self.assertEqual(self.own_points(self.cap_a, before), 5 + 10)
+        at = closes + timedelta(hours=24)
+        self.assertIn(a, self.rated(at))
+        self.assertEqual(self.own_points(self.cap_a, at), 5 + 10 + a_rating)
+        self.assertEqual(self.board_points(at)[a], 5 + 10 + a_rating)
+
+    def test_member_payload_self_ignores_staff_flag(self) -> None:
+        self.gate()
+        captain = self.ou(self.cap_a)
+
+        def payload(viewer_user_id: int) -> dict:
+            return member_payload(
+                captain,
+                now=self.later,
+                detail=True,
+                staff=True,
+                viewer_user_id=viewer_user_id,
+            )
+
+        own = payload(self.cap_a.pk)
+        self.assertIsNone(own["rating"])
+        self.assertEqual(own["reviews"], 0)
+        self.assertEqual(own["events"], [])
+        self.assertEqual(own["points"], 5 + 10)
+
+        other = payload(self.admin.pk)
+        self.assertIsNotNone(other["rating"])
+        self.assertEqual(len(other["events"]), 1)
+        self.assertFalse(other["events"][0]["released"])
+        self.assertEqual(other["points"], 5 + 10 + self.rating_points(self.cap_a))
 
 
 @override_settings(CACHEOPS_ENABLED=False)
