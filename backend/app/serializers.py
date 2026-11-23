@@ -1210,7 +1210,7 @@ def _is_pre_draft_team(team: Team) -> bool:
 def _delete_pre_draft_captain_teams(
     tournament: Tournament, removed_user_ids: set[int]
 ) -> None:
-    """Delete pre-draft teams led by removed captains; played teams go through succession."""
+    """Delete pre-draft teams of removed captains; the member-removal signal handles the rest."""
     teams = list(
         Team.objects.nocache()
         .filter(tournament=tournament, captain_id__in=removed_user_ids)
@@ -1389,8 +1389,9 @@ class TournamentSerializer(serializers.ModelSerializer):
     def update(self, instance: Tournament, validated_data: dict) -> Tournament:
         """
         Override update to handle:
-        1. Captain removal: delete their pre-draft teams; played teams stay
-           and the member-removal signal hands over the captaincy
+        1. Captain removal: delete their pre-draft teams; the member-removal
+           signal hands over the captaincy of the rest, or deletes them with an
+           audit log once emptied and unreferenced
         2. OrgUser/LeagueUser creation when users are added
         """
         with transaction.atomic():
