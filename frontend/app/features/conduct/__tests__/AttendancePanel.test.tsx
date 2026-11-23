@@ -325,7 +325,7 @@ describe('AttendancePanel', () => {
 
     expect(
       await screen.findByTestId('attendance-walkin-searching'),
-    ).toHaveTextContent('Searching...');
+    ).toHaveTextContent('Searching…');
   });
 
   it('adds a walk-in from org members only and saves it', async () => {
@@ -344,7 +344,7 @@ describe('AttendancePanel', () => {
     });
 
     const option = await screen.findByTestId('attendance-walkin-option-50');
-    expect(searchUsers).toHaveBeenCalledWith('wal', ORG);
+    expect(searchUsers).toHaveBeenCalledWith('wal', ORG, undefined);
     expect(screen.queryByTestId('attendance-walkin-option-51')).toBeNull();
     expect(screen.queryByTestId('attendance-walkin-option-111')).toBeNull();
     fireEvent.click(option);

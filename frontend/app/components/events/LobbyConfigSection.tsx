@@ -1,5 +1,6 @@
 import { useWatch, type Control, type FieldValues } from 'react-hook-form';
 import { GAME_TYPE } from '~/components/game/constants';
+import { IntegerInput } from '~/components/patterns/IntegerInput';
 import {
   FormControl,
   FormField,
@@ -125,17 +126,14 @@ export function LobbyConfigSection<T extends FieldValues & LobbyFields>({
             <FormItem>
               <FormLabel>Draft Time (seconds)</FormLabel>
               <FormControl>
-                <Input
-                  type="number"
+                <IntegerInput
                   min={1}
                   data-testid="lobby-config-draft-time"
-                  {...field}
-                  onChange={(e) => {
-                    const seconds = parseInt(e.target.value, 10);
-                    field.onChange(
-                      Number.isNaN(seconds) ? 10 : Math.max(1, seconds),
-                    );
-                  }}
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value}
+                  onValueChange={(v) => v != null && field.onChange(v)}
                 />
               </FormControl>
               <p className="text-xs text-muted-foreground">

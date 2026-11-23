@@ -1,4 +1,5 @@
 import type { Control, FieldValues } from 'react-hook-form';
+import { IntegerInput } from '~/components/patterns/IntegerInput';
 import {
   FormControl,
   FormDescription,
@@ -171,16 +172,14 @@ export function SeriesScheduleFields<T extends FieldValues & SeriesFields>({
           <FormItem>
             <FormLabel>Generate Days Ahead</FormLabel>
             <FormControl>
-              <Input
+              <IntegerInput
                 data-testid={`${p}-generate-days-input`}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                {...field}
-                value={field.value?.toString() ?? ''}
-                onChange={(e) =>
-                  field.onChange(parseInt(e.target.value, 10) || 7)
-                }
+                min={1}
+                name={field.name}
+                ref={field.ref}
+                onBlur={field.onBlur}
+                value={field.value}
+                onValueChange={(v) => v != null && field.onChange(v)}
               />
             </FormControl>
             <FormDescription>

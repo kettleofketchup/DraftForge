@@ -4,10 +4,12 @@
  * API functions for organization-related operations.
  */
 
+import { z } from 'zod';
 import type { GameTypeValue } from '~/components/game/constants';
-import type {
-  OrganizationType,
-  OrganizationsType,
+import {
+  OrganizationSchema,
+  type OrganizationType,
+  type OrganizationsType,
 } from '~/components/organization/schemas';
 import type { UserType } from '~/index';
 import axios from './axios';
@@ -31,9 +33,10 @@ export interface DiscordMember {
 }
 
 // Organization CRUD
+// Response shape: backend/app/serializers.py OrganizationsSerializer
 export async function getOrganizations(): Promise<OrganizationsType> {
-  const response = await axios.get<OrganizationsType>('/organizations/');
-  return response.data;
+  const response = await axios.get('/organizations/');
+  return z.array(OrganizationSchema).parse(response.data);
 }
 
 export async function fetchOrganization(pk: number): Promise<OrganizationType> {
