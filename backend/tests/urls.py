@@ -62,6 +62,7 @@ from .test_herodraft import (
     warp_herodraft_round,
 )
 from .test_org_features import login_org_features, org_features_data, reset_org_features
+from .test_signup_history import signup_history_data
 from .test_steam import create_test_match
 from .test_teamdraft import expire_draft_clock, stale_draft_heartbeat
 
@@ -365,6 +366,11 @@ urlpatterns = [
         "game-org-mmr/approve-setup/",
         game_org_mmr_approve_setup,
         name="test-game-org-mmr-approve-setup",
+    ),
+    path(
+        "signup-history/data/",
+        signup_history_data,
+        name="test-signup-history-data",
     ),
     path("healthz/", healthz, name="test-healthz"),
     # Bracket scenario helpers (gated on TEST=true)
