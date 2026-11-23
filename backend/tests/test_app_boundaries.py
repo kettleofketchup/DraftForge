@@ -340,6 +340,18 @@ _TOURNAMENT_SCHEMA_NAMES = (
     "AutoHeroDraftGameSchema",
 )
 
+# names split out of app modules that stay behind
+_TOURNAMENT_SPLIT_DEFS = {
+    "app.management.prod_payload": (
+        "TeamLookup",
+        "TeamRef",
+        "UserRef",
+        "index_users",
+        "parse_date_played",
+        "resolve_user",
+    ),
+}
+
 _TOURNAMENT_RETIRED_DEFS = {
     "app.services.team_management": (
         "TeamChange",
@@ -546,6 +558,11 @@ TOURNAMENT = MovedSlice(
             ),
             *(("app.internal_client", name) for name in _TOURNAMENT_CLIENT_NAMES),
             *(("app.schemas", name) for name in _TOURNAMENT_SCHEMA_NAMES),
+            *(
+                (module, name)
+                for module, names in _TOURNAMENT_SPLIT_DEFS.items()
+                for name in names
+            ),
         }
     ),
     retired_modules=frozenset(
