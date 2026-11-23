@@ -12,12 +12,13 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Game, GameType, Team, Tournament
+from app.models import CustomUser, GameType
 from draft.models import HeroDraft
 from league.models import League, LeagueUser
 from lobby.models import GameLobby
 from org.mmr import set_org_mmr
 from org.models import Organization, OrgUser
+from tournament.models import Game, Team, Tournament
 from tournament.serializers.game import BracketGameSerializer
 
 TEAM_SIZE = 5

@@ -2,9 +2,10 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import DotaLobbyLaunch, DotaLobbyMode, Game, Tournament
 from lobby.models import GameLobby, GameLobbyEvent
 from lobby.states import ENDED_STATES
+from tournament.choices import DotaLobbyLaunch, DotaLobbyMode
+from tournament.models import Game, Tournament
 
 
 class GameLobbyTests(TestCase):

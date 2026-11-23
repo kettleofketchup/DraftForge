@@ -5,12 +5,13 @@ from typing import Any
 from django.db.models import Prefetch, QuerySet
 from rest_framework.utils.serializer_helpers import ReturnList
 
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
 from org.mmr import game_for_tournament, game_mmrs_prefetch
 from org.models import Organization, OrgUser
 from org.serializers import OrgUserSerializer
+from tournament.models import Team, Tournament
 from user.querysets import with_user_profiles
 
 

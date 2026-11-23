@@ -4,7 +4,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel
 from common.game import GameType
 from draft.models import Draft
 from draft.services.shuffle import get_lowest_mmr_team, get_team_total_mmr
@@ -14,6 +14,7 @@ from league.models import League
 from org.mmr import set_org_mmr
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
+from tournament.models import Team, Tournament
 from tournament.services.team_leadership import successor_after_removal
 from user.tests.test_cacheops_integration import _redis_reachable
 

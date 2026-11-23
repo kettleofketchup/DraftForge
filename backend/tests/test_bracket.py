@@ -15,8 +15,8 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from app.models import Game, Team
 from common.utils import isTestEnvironment
+from tournament.models import Game, Team
 
 
 @csrf_exempt

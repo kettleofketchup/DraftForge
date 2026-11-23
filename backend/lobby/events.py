@@ -32,13 +32,13 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from app.models import Game
 from lobby import broadcast, states
 from lobby.models import GameLobby, GameLobbyEvent
 from lobby.schemas import LobbyEvent, LobbyView
 from lobby.services import game_teams, lobby_teams, match_abandoned, parse_team_ref
 from lobby.tasks import send_lobby_info
 from telemetry.logging import get_logger
+from tournament.models import Game
 
 log = get_logger(__name__)
 

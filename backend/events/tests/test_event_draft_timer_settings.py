@@ -6,7 +6,6 @@ from django.utils import timezone as tz
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import Team, Tournament
 from draft.models import Draft, DraftOptions, TimeoutAction
 from events.constants import RepeatFrequency
 from events.models import Event, EventRepeater, OrgEventDefaults
@@ -19,6 +18,7 @@ from events.services import (
     sync_tournament_from_event,
 )
 from events.tests.base import EventTestCase
+from tournament.models import Team, Tournament
 
 CUSTOM_SETTINGS: dict[str, Any] = {
     "draft_timer_enabled": False,

@@ -14,10 +14,9 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.display_names import user_display_name
-from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
+from app.models import CustomUser, GameType, PositionsModel
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
-from league.permissions import has_league_staff_access
 from org.mmr import (
     LEAGUE_GAME,
     OrgMmrError,
@@ -28,6 +27,8 @@ from org.mmr import (
 from org.models import Organization, OrgLog, OrgUser
 from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
+from tournament.models import Team, Tournament
+from tournament.permissions import can_edit_tournament
 
 if TYPE_CHECKING:
     from league.models import League
@@ -463,11 +464,7 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
         Tournament.objects.select_related("league__organization"), pk=tournament_id
     )
 
-    # Check access via league staff (includes org staff + league-specific staff)
-    has_access = False
-    if tournament.league:
-        has_access = has_league_staff_access(request.user, tournament.league)
-    if not has_access and not request.user.is_superuser and not request.user.is_staff:
+    if not can_edit_tournament(request.user, tournament):
         return Response(
             {"error": "You do not have permission"},
             status=status.HTTP_403_FORBIDDEN,

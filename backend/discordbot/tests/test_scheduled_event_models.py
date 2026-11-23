@@ -6,12 +6,12 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import Tournament
 from discordbot.embeds import event_announcement_embed, tournament_created_embed
 from discordbot.models import RSVP, EventTemplate, ScheduledEvent
 from discordbot.tasks import check_scheduled_events
 from discordbot.utils import sync_send_embed, sync_send_templated_embed
 from events.schemas import ScheduledEventDueSchema
+from tournament.models import Tournament
 
 User = get_user_model()
 

@@ -129,6 +129,13 @@ class SettingsEnvOverrideTests(SimpleTestCase):
             mod.BASE_DIR_PATH / _expected_db_name(),
         )
 
+    def test_relative_sqlite_path_resolves_under_backend_dir(self) -> None:
+        mod = _reload({"SQLITE_PATH": "data/prod.db.sqlite3"})
+        self.assertEqual(
+            mod.DATABASES["default"]["NAME"],
+            mod.BASE_DIR_PATH / "data" / "prod.db.sqlite3",
+        )
+
     def test_reload_drops_names_an_earlier_reload_set(self) -> None:
         _reload({"TRUST_X_FORWARDED_PROTO": "true"})
         self.assertFalse(hasattr(_reload(), "SECURE_PROXY_SSL_HEADER"))
