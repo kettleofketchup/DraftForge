@@ -14,7 +14,7 @@ import { refusalCode, refusalMessage } from './errors';
 import { useReleaseResults } from './queries';
 import type { EventCaptainReviews } from './schemas';
 
-const log = getLogger('EventLeadershipSection');
+const log = getLogger('ReleaseResultsDialog');
 
 export type ReleaseTarget = {
   captains: EventCaptainReviews[];
