@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
   BellOff,
@@ -38,6 +38,7 @@ import {
   repeaterKeys,
   useDeleteEventRepeaterMutation,
   useEventRepeater,
+  useEvents,
   useRepeaterSubscriptionMutation,
 } from '~/hooks/useEvent';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
@@ -61,15 +62,6 @@ export function meta({ data }: Route.MetaArgs) {
   return generateMeta({
     title: repeater?.name ? `${repeater.name} — Event Series` : 'Event Series',
     description: repeater?.description || 'Repeating event series details',
-  });
-}
-
-function useRepeaterEvents(repeaterId: number | null) {
-  return useQuery<EventType[]>({
-    queryKey: repeaterKeys.events(repeaterId),
-    queryFn: () =>
-      api.get(`/events/?event_repeater=${repeaterId}`).then((r) => r.data),
-    enabled: !!repeaterId,
   });
 }
 
@@ -132,7 +124,10 @@ export default function SeriesPage() {
   const queryClient = useQueryClient();
 
   const { data: repeater, isLoading } = useEventRepeater(id);
-  const { data: events } = useRepeaterEvents(id);
+  const { data: events } = useEvents(
+    { event_repeater: id ?? undefined },
+    { enabled: !!id },
+  );
   const [editOpen, setEditOpen] = useState(false);
   const [showDeleteSeries, setShowDeleteSeries] = useState(false);
   const [oneOffOpen, setOneOffOpen] = useState(false);
@@ -152,7 +147,6 @@ export default function SeriesPage() {
     onSuccess: (data) => {
       toast.success(data.detail);
       queryClient.invalidateQueries({ queryKey: repeaterKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: repeaterKeys.events(id) });
       queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       setShowReactivate(false);
@@ -447,9 +441,6 @@ export default function SeriesPage() {
             if (!open) {
               queryClient.invalidateQueries({
                 queryKey: repeaterKeys.detail(id),
-              });
-              queryClient.invalidateQueries({
-                queryKey: repeaterKeys.events(id),
               });
             }
           }}

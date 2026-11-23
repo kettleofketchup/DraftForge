@@ -75,23 +75,24 @@ import { useUserStore } from '~/store/userStore';
 export async function invalidateEventLists(
   queryClient: QueryClient,
 ): Promise<void> {
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ['events'] }),
-    queryClient.invalidateQueries({ queryKey: ['repeater-events'] }),
-  ]);
+  await queryClient.invalidateQueries({ queryKey: ['events'] });
 }
 
-export function useEvents(params?: {
-  organization?: number;
-  state?: string;
-  states?: string[];
-  search?: string;
-  ordering?: string;
-  event_repeater?: number;
-}) {
+export function useEvents(
+  params?: {
+    organization?: number;
+    state?: string;
+    states?: string[];
+    search?: string;
+    ordering?: string;
+    event_repeater?: number;
+  },
+  options?: { enabled?: boolean },
+) {
   return useQuery<EventType[]>({
     queryKey: ['events', params],
     queryFn: () => getEvents(params),
+    enabled: options?.enabled,
   });
 }
 
@@ -275,7 +276,6 @@ export const repeaterKeys = {
     ['event-repeaters', params] as const,
   detail: (id: number | null) => ['repeater', id] as const,
   subscribers: (id: number) => ['repeater-subscribers', id] as const,
-  events: (id: number | null) => ['repeater-events', id] as const,
 };
 
 export function useEventRepeaters(params?: { organization?: number }) {
@@ -349,7 +349,6 @@ export function useDeleteEventRepeaterMutation() {
       deleteEventRepeaterAPI(repeater.id),
     onSuccess: (_data, repeater) => {
       queryClient.removeQueries({ queryKey: repeaterKeys.detail(repeater.id) });
-      queryClient.removeQueries({ queryKey: repeaterKeys.events(repeater.id) });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
       void invalidateConductQueries(queryClient, repeater.organization);
