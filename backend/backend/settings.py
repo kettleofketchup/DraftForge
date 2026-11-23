@@ -47,6 +47,7 @@ DISCORD_GUILD_ID = 734185035623825559
 DISCORD_ADMIN_CHANNEL_ID = os.environ.get("DISCORD_ADMIN_CHANNEL_ID")
 DISCORD_PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
 DISCORD_ACTIVITY_ENABLED = env_bool("DISCORD_ACTIVITY_ENABLED")
+READY_CHECK_AUTOMATIC_LIVE = env_bool("READY_CHECK_AUTOMATIC_LIVE")
 DFLOGO_EMOJI_ID = os.environ.get("DFLOGO_EMOJI_ID")
 SITE_URL = os.environ.get("SITE_URL", "https://localhost")
 
@@ -127,7 +128,6 @@ REDIS_KEY_NAMESPACE: str = test_process_namespace() if RUNNING_TESTS else ""
 # All other DMs return a fake success. Prevents spamming real users during testing.
 TEST_DISCORD_USER_ID = os.environ.get("TEST_DISCORD_USER_ID", "243497113906970625")
 
-# Configure logging - default to INFO, allow override via LOG_LEVEL env var
 _log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=getattr(logging, _log_level, logging.INFO),
@@ -320,8 +320,9 @@ DATABASES = {
         },
     }
 }
-if os.environ.get("SQLITE_PATH"):
-    DATABASES["default"]["NAME"] = Path(os.environ["SQLITE_PATH"])
+# Relative paths resolve under backend/, so the host and the container agree.
+if sqlite_path := os.environ.get("SQLITE_PATH"):
+    DATABASES["default"]["NAME"] = BASE_DIR_PATH / sqlite_path
 
 
 IN_DOCKER = is_docker()

@@ -127,6 +127,14 @@ vi.mock('~/features/conduct/api', async (importOriginal) => ({
     defaults: conductValues,
   })),
 }));
+vi.mock('~/features/discord-connect/api', () => ({
+  getDiscordBotStatus: vi.fn().mockResolvedValue({
+    has_bot: false,
+    reason: 'no_server_configured',
+    guild_name: null,
+  }),
+  getDiscordInstallLink: vi.fn(),
+}));
 vi.mock('~/hooks/useEvent', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/hooks/useEvent')>()),
   useUpdateOrgDefaultsMutation: () => ({ mutateAsync: api.mutateAsync }),
