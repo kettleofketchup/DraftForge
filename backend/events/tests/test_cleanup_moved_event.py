@@ -9,11 +9,12 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone as tz
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from events.constants import EventState, RepeatFrequency, SignupAction, SignupStatus
 from events.ledger import ActorRole, SignupMeans
 from events.models import Event, EventRepeater, EventSignup, SignupLedgerEntry
 from org.models import Organization
+from tournament.models import Tournament
 
 _SCRIPT = (
     Path(__file__).resolve().parents[2] / "scripts" / "cleanup_stale_repeater_events.py"

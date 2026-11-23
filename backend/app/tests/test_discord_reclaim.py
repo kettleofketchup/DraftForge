@@ -18,7 +18,7 @@ from app.discord_accounts import (
     find_split_discord_accounts,
     merge_discord_accounts,
 )
-from app.models import CustomUser, Joke, Team, Tournament
+from app.models import CustomUser, Joke
 from app.pipelines import associate_by_discord_id, save_discord
 from common.game import GameType
 from discordbot.models import DiscordEvent, DiscordEventDM, DMType
@@ -34,6 +34,7 @@ from org.models import (
     OrgUserGameMmr,
     PlayerDotaProfile,
 )
+from tournament.models import Team, Tournament
 from user.models import BaseUserProfile, DeadlockUserProfile, DotaUserProfile
 
 DISCORD_ID = "555000111222333444"
