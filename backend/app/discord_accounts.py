@@ -14,6 +14,8 @@ This module reconciles the two rows: it keeps the account that already owns the
 it, moving the social-auth link and any other related data across.
 """
 
+from uuid import uuid4
+
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 from django.db.models import Model
@@ -22,6 +24,8 @@ from social_django.models import UserSocialAuth
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
 from draft.services.hero_chat import repoint_chat_attribution
+from events.ledger import SignupActor
+from events.merge import merge_user_signups
 from events.staff import dedupe_host_helpers
 from league.mmr import merge_user_league_memberships
 from league.models import LeagueUser
@@ -121,6 +125,11 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             drop_ou.delete()
         LeagueUser.objects.filter(pk__in=[lu.pk for lu, _ in league_pairs]).delete()
         demote_colliding_earning_sends(keep, drop)
+        merge_user_signups(
+            drop,
+            keep,
+            actor=SignupActor.system(correlation_id=f"merge-{uuid4().hex[:12]}"),
+        )
 
         for rel in drop._meta.related_objects:
             accessor = rel.get_accessor_name()

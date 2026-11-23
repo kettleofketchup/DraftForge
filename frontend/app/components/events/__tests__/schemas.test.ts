@@ -181,6 +181,25 @@ describe('eventSchema end and staff fields', () => {
   });
 });
 
+describe('eventSchema leadership viewer flags', () => {
+  const flags = z.object({
+    can_review_captains: eventSchema.shape.can_review_captains,
+    pending_captain_reviews: eventSchema.shape.pending_captain_reviews,
+  });
+
+  it('parses the leadership viewer flags when present and tolerates their absence', () => {
+    const present = flags.parse({
+      can_review_captains: true,
+      pending_captain_reviews: 2,
+    });
+    expect(present.pending_captain_reviews).toBe(2);
+    expect(present.can_review_captains).toBe(true);
+    const absent = flags.parse({});
+    expect(absent.pending_captain_reviews).toBeUndefined();
+    expect(absent.can_review_captains).toBeUndefined();
+  });
+});
+
 // Pre-refactor key lists: the fragment composition must keep them exact.
 const TEMPLATE_KEYS = [
   'name',

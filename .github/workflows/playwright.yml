@@ -1,14 +1,39 @@
 name: Playwright Tests
 
+# paths-ignore skips a run only when EVERY changed file matches. GitHub does not evaluate
+# path filters for tag pushes, so v* tags always run. '*.md' matches only at the repo root,
+# so frontend/app/data/CHANGELOG.md, which ships in the app, stays covered.
 on:
   push:
     branches: [main]
     tags:
       - 'v*'
+    paths-ignore: &docs-only
+      - 'docs/**'
+      - 'changelog.d/**'
+      - '*.md'
+      - 'mkdocs.yml'
+      - 'LICENSE'
+      - '.claude/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'helm/**'
+      - 'scripts/helm_*'
+      - 'scripts/preview_tests/**'
+      - '.github/workflows/changelog.yml'
+      - '.github/workflows/docs.yml'
+      - '.github/workflows/frontend-format.yml'
+      - '.github/workflows/frontend-shadcn-lint.yml'
+      - '.github/workflows/helm-chart.yml'
+      - '.github/workflows/issue-labeler.yml'
+      - '.github/workflows/pr-labeler.yml'
+      - '.github/workflows/preview-queue.yml'
+      - '.github/workflows/record-demos.yml'
+      - '.github/workflows/shellcheck.yml'
   pull_request:
     branches:
       - main
       - 'fix/**'
+    paths-ignore: *docs-only
 
 # Cancel superseded PR runs; let main runs finish so main always gets a result
 concurrency:
