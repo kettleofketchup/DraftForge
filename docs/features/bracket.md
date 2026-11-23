@@ -97,6 +97,25 @@ Team D     L      L       W       -
 - Match status tracking (pending, in-progress, completed)
 - Winner advancement to next round
 
+### Team Placement
+
+A team's `placement` is set when a result knocks it out of the bracket. The
+rules (`backend/app/services/bracket_placement.py`):
+
+| Bracket | Placement |
+|---------|-----------|
+| Grand finals | Winner 1st, loser 2nd |
+| Losers bracket | Losers final 3rd, the two rounds before it 4th, earlier rounds 5th and lower |
+| Single elimination | Final: winner 1st, loser 2nd. A loser `k` rounds before the final places `2^k + 1`: semi-finals 3rd, quarter-finals 5th, round of 16 9th |
+| Swiss | No placement (no elimination) |
+
+Tied teams share the top of their range (both semi-final losers are 3rd).
+
+Placements follow every way a result is entered: the match modal, the bracket
+toolbar's Save, and a linked or unlinked Steam match. Changing or clearing a
+result clears placements that no longer hold. A placement staff set by hand
+stays until a result change moves that team.
+
 ### Live Updates
 
 - Real-time bracket updates via WebSocket

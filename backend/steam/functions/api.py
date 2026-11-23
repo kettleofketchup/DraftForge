@@ -1,12 +1,17 @@
+from django.db import transaction
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.cache_utils import invalidate_obj
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import Game, Tournament
 from app.permissions_tournament import can_manage_game
+from app.services.bracket_placement import (
+    apply_bracket_placements,
+    tournament_bracket_placements,
+)
 from league.permissions import has_league_staff_access
 from steam.constants import LEAGUE_ID
 from steam.functions.game_linking import (
@@ -345,15 +350,14 @@ def unlink_game_match(request: Request, game_id: int) -> Response:
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    game.gameid = None
-    game.winning_team = None
-    game.status = "scheduled"
-    game.save(update_fields=["gameid", "winning_team", "status"])
-
-    # Invalidate cache for game and tournament
-    invalidate_obj(game)
-    if game.tournament:
-        invalidate_obj(game.tournament)
+    with transaction.atomic():
+        placements_before = tournament_bracket_placements(game.tournament_id)
+        game.gameid = None
+        game.winning_team = None
+        game.status = "scheduled"
+        game.save(update_fields=["gameid", "winning_team", "status"])
+        apply_bracket_placements(game.tournament_id, placements_before)
+        invalidate_after_commit(game, *([game.tournament] if game.tournament else []))
 
     return Response({"status": "unlinked"})
 
