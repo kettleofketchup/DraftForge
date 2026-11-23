@@ -10,6 +10,7 @@ from app.models import CustomUser
 from draft.models import HeroDraft
 from league.models import League
 from league.permissions import has_league_admin_access, has_league_staff_access
+from org.permissions import has_org_staff_access
 from tournament.models import Game, Tournament
 
 
@@ -20,6 +21,7 @@ def can_edit_tournament(
     Check if user can edit a tournament.
 
     Checks hierarchy: site admin/staff → org admin/staff → league admin/staff.
+    Without a league, admins/staff of the source event's org.
 
     Args:
         user: The user to check
@@ -39,7 +41,9 @@ def can_edit_tournament(
     if tournament.league:
         return has_league_staff_access(user, tournament.league)
 
-    return False
+    # A league-less tournament belongs to the org of the event that spawned it.
+    event = tournament.source_event.nocache().select_related("organization").first()
+    return event is not None and has_org_staff_access(user, event.organization)
 
 
 def can_create_team(

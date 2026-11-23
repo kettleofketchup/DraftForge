@@ -6,6 +6,7 @@ import { Button } from '~/components/ui/button';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import type { UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import {
@@ -27,7 +28,7 @@ export const ChoosePlayerButton: React.FC<{
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
   const curDraftRound = useUserStore((state) => state.curDraftRound);
   const draft = useUserStore((state) => state.draft);
-  const isStaff = useUserStore((state) => state.isStaff);
+  const canManage = useCanManageCurrentTournament();
   const timerEnabled = useDraftWebSocketStore(draftWsSelectors.timerEnabled);
   const activeRoundPk = useDraftWebSocketStore(draftWsSelectors.activeRoundPk);
 
@@ -50,7 +51,7 @@ export const ChoosePlayerButton: React.FC<{
     curDraftRound?.captain?.pk != null &&
     currentUser.pk === curDraftRound.captain.pk;
   const canPick =
-    isStaff() ||
+    canManage ||
     (isCaptainForRound &&
       (!timerEnabled || curDraftRound.pk === activeRoundPk));
   const pickAlreadyMade = !!curDraftRound?.choice;

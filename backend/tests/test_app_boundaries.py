@@ -753,7 +753,10 @@ _TOURNAMENT_RETIRED_DEFS = {
         "TeamUsageTests",
     ),
     "app.tests.test_team_create_permissions": ("TeamCreatePermissionTests",),
-    "app.tests.test_tournament_viewer": ("TournamentViewerTests",),
+    "app.tests.test_tournament_viewer": (
+        "TournamentViewerTests",
+        "LeaguelessEventTournamentViewerTests",
+    ),
     "app.tests.test_team_name_from_captain": ("TeamNameFromCaptainTest",),
     "app.views.admin_team": ("add_tournament_member",),
     "app.consumers": ("TournamentConsumer",),
