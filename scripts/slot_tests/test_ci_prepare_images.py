@@ -52,13 +52,20 @@ def refs() -> dict[str, str]:
 
 
 def prepare(
-    tmp_path: Path, present: set[str], push_status: int = 0, **extra: str
+    tmp_path: Path,
+    present: set[str],
+    push_status: int = 0,
+    *args: str,
+    present_refs: frozenset[str] = frozenset(),
+    **extra: str,
 ) -> tuple[subprocess.CompletedProcess[str], list[list[str]]]:
     assert JUST is not None
     log = tmp_path / "calls"
     log.touch()
     present_file = tmp_path / "present"
-    present_file.write_text("".join(f"{refs()[n]}\n" for n in present))
+    present_file.write_text(
+        "".join(f"{ref}\n" for ref in {refs()[n] for n in present} | present_refs)
+    )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     docker = bin_dir / "docker"
@@ -80,7 +87,13 @@ def prepare(
         **{
             k: v
             for k, v in os.environ.items()
-            if k not in {"GITHUB_STEP_SUMMARY", "DF_PREPARE_READONLY"}
+            if k
+            not in {
+                "GITHUB_STEP_SUMMARY",
+                "DF_PREPARE_READONLY",
+                "DF_PREPARE_PR",
+                "RUNNER_ENVIRONMENT",
+            }
         },
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
         "DF_JUST_PYTHON": str(python),
@@ -89,7 +102,7 @@ def prepare(
         **extra,
     }
     result = subprocess.run(
-        [JUST, "--justfile", str(ROOT / "justfile"), "ci::prepare-images"],
+        [JUST, "--justfile", str(ROOT / "justfile"), "ci::prepare-images", *args],
         cwd=ROOT,
         env=env,
         capture_output=True,
@@ -159,3 +172,103 @@ def test_readonly_reports_without_building(tmp_path: Path) -> None:
     assert builds(calls) == []
     assert status(result.stdout, "backend-dev").startswith("missing; not built")
     assert "::warning::prepare: backend-dev missing" in result.stdout
+
+
+CI_REGISTRY = "ghcr.io/kettleofketchup/draftforge-ci"
+PR = "42"
+
+
+def ci_ref(name: str) -> str:
+    return f"{CI_REGISTRY}/{name}:pr-{PR}-{refs()[name].rsplit(':', 1)[1]}"
+
+
+def tags(argv: list[str]) -> set[str]:
+    return {argv[i + 1] for i, a in enumerate(argv) if a == "--tag"}
+
+
+def test_pr_mode_pushes_only_draftforge_ci_tags(tmp_path: Path) -> None:
+    result, calls = prepare(
+        tmp_path,
+        ALL - {"frontend-dev", "nginx"},
+        DF_PREPARE_PR=PR,
+        RUNNER_ENVIRONMENT="self-hosted",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    built = builds(calls)
+    assert {t for argv in built for t in tags(argv)} == {
+        ci_ref("frontend-dev"),
+        ci_ref("nginx"),
+    }
+    for argv in built:
+        assert not any(a.startswith(f"{REGISTRY}/") for a in tags(argv))
+        cache_to = [argv[i + 1] for i, a in enumerate(argv) if a == "--cache-to"]
+        assert all("ghcr.io" not in c for c in cache_to), cache_to
+    # The remote home BuildKit, never a local docker-container builder.
+    creates = [c for c in calls if c[:2] == ["buildx", "create"]]
+    assert creates and all("remote" in c for c in creates)
+    assert not any("docker-container" in c for c in creates)
+    assert not any(c[0] in {"build", "push", "tag"} for c in calls)
+    assert status(result.stdout, "frontend-dev").startswith("built+pushed in ")
+    assert f"pr-{PR}-<hash>" in result.stdout
+
+
+def test_pr_mode_counts_this_prs_draftforge_ci_tag_as_present(tmp_path: Path) -> None:
+    result, calls = prepare(
+        tmp_path,
+        ALL - {"backend-dev"},
+        present_refs=frozenset({ci_ref("backend-dev")}),
+        DF_PREPARE_PR=PR,
+        RUNNER_ENVIRONMENT="self-hosted",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert status(result.stdout, "backend-dev") == "present"
+    assert builds(calls) == []
+    assert not [c for c in calls if c[:2] == ["buildx", "create"]]
+
+
+def test_hosted_mode_ignores_draftforge_ci_tags(tmp_path: Path) -> None:
+    # Without DF_PREPARE_PR (the hosted prepare job) only main's hash tag counts.
+    result, calls = prepare(
+        tmp_path,
+        ALL - {"backend-dev"},
+        present_refs=frozenset({ci_ref("backend-dev")}),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    (argv,) = builds(calls)
+    assert tags(argv) == {refs()["backend-dev"]}
+
+
+def test_pr_mode_test_db_goes_through_buildx(tmp_path: Path) -> None:
+    result, calls = prepare(
+        tmp_path, ALL - {"test-db"}, DF_PREPARE_PR=PR, RUNNER_ENVIRONMENT="self-hosted"
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    (argv,) = builds(calls)
+    assert tags(argv) == {ci_ref("test-db")}
+    assert "--push" in argv
+    assert not any(c[0] in {"build", "push", "tag"} for c in calls)
+    assert status(result.stdout, "test-db").startswith("built+pushed in ")
+
+
+def test_self_hosted_without_pr_mode_refuses(tmp_path: Path) -> None:
+    result, calls = prepare(tmp_path, ALL - {"nginx"}, RUNNER_ENVIRONMENT="self-hosted")
+    assert result.returncode == 1
+    assert "refusing to push draftforge/ tags" in result.stderr
+    assert builds(calls) == []
+    assert not [c for c in calls if c[:3] == ["buildx", "imagetools", "inspect"]]
+
+
+def test_pr_mode_rejects_a_non_numeric_pr(tmp_path: Path) -> None:
+    result, calls = prepare(tmp_path, ALL - {"nginx"}, DF_PREPARE_PR="1; true")
+    assert result.returncode == 2
+    assert calls == []
+
+
+def test_probe_prints_missing_and_builds_nothing(tmp_path: Path) -> None:
+    result, calls = prepare(
+        tmp_path, ALL - {"test-db", "nginx"}, 0, "--probe", DF_PREPARE_PR=PR
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip().splitlines() == ["missing=nginx test-db"]
+    assert builds(calls) == []
+    assert not [c for c in calls if c[:2] == ["buildx", "create"]]

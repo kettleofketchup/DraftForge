@@ -23,7 +23,7 @@ def search_users(request: Request) -> Response:
     Search users by username, nickname, Discord names, or Steam ID.
 
     Query params:
-    - q: Search query (min 3 characters)
+    - q: Search query (min 2 characters)
     - org_id: Optional org ID; also matches that org's server nicknames,
       ranks its members first and annotates membership (org staff only)
     - league_id: Optional league ID for membership annotation
@@ -32,9 +32,9 @@ def search_users(request: Request) -> Response:
     """
     query = request.query_params.get("q", "").strip()
 
-    if len(query) < 3:
+    if len(query) < 2:
         return Response(
-            {"error": "Search query must be at least 3 characters"},
+            {"error": "Search query must be at least 2 characters"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 

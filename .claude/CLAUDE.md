@@ -401,6 +401,7 @@ See `docs/development/test-stack-slots.md`.
 - `visual-debugging` - Chrome MCP browser automation for debugging
 - `changelog` - Changelog fragments (`changelog.d/`), the `changelog` CI check and release assembly
 - `release` - Cutting a release with `just version::set X.Y.Z`: preflight, changelog assembly, tag, image CI
+- `users` - Showing and finding people: `DisplayName`, `UserAvatar`, user search (`useUserSearch`, `filterUsers`, `UserPicker`), backend `user_name_q`
 - `api` - Frontend↔backend API binding: axios client, Zod response parsing, TanStack Query hooks, DRF errors, generated Zod from pydantic models (`just py::gen-*`)
 
 ## Demo Video Recording
