@@ -9,6 +9,7 @@ from events.constants import EventState
 from events.models import Event
 from events.services import process_rsvp
 from events.signup_window import user_signups_open_tournament_ids
+from events.tests.actors import SYSTEM
 from league.models import League
 from org.models import Organization
 
@@ -46,7 +47,7 @@ class UserSignupsOpenTournamentIdsTests(TestCase):
 
     def _rsvp_accepted(self, event: Event) -> bool:
         try:
-            process_rsvp(event, self.user)
+            process_rsvp(event, self.user, actor=SYSTEM)
         except ValueError:
             return False
         return True

@@ -14,6 +14,7 @@ from events.services import (
     process_rsvp,
     staff_add_signup,
 )
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.models import Organization, OrgUser
 
@@ -42,13 +43,13 @@ class StaffAddSignupTest(TestCase):
 
     def test_staff_add_succeeds_in_signups_open(self):
         event = self._make_event(EventState.SIGNUPS_OPEN)
-        signup = staff_add_signup(event, self.user)
+        signup = staff_add_signup(event, self.user, actor=SYSTEM)
         assert signup.pk is not None
         assert signup.event_id == event.pk
 
     def test_staff_add_succeeds_in_roll_call(self):
         event = self._make_event(EventState.ROLL_CALL)
-        signup = staff_add_signup(event, self.user)
+        signup = staff_add_signup(event, self.user, actor=SYSTEM)
         assert signup.pk is not None
 
     def test_staff_add_rejects_other_states(self):
@@ -60,13 +61,13 @@ class StaffAddSignupTest(TestCase):
         ):
             event = self._make_event(state)
             with self.assertRaises(ValueError):
-                staff_add_signup(event, self.user)
+                staff_add_signup(event, self.user, actor=SYSTEM)
 
     def test_process_rsvp_still_rejects_roll_call(self):
         """Regression: public path stays locked during roll call."""
         event = self._make_event(EventState.ROLL_CALL)
         with self.assertRaises(ValueError):
-            process_rsvp(event, self.user)
+            process_rsvp(event, self.user, actor=SYSTEM)
 
     def test_process_rsvp_still_rejects_other_states(self):
         for state in (
@@ -77,12 +78,12 @@ class StaffAddSignupTest(TestCase):
         ):
             event = self._make_event(state)
             with self.assertRaises(ValueError):
-                process_rsvp(event, self.user)
+                process_rsvp(event, self.user, actor=SYSTEM)
 
     @patch("events.services.invalidate_after_commit")
     def test_staff_add_invalidates_cache(self, mock_invalidate):
         event = self._make_event(EventState.ROLL_CALL)
-        staff_add_signup(event, self.user)
+        staff_add_signup(event, self.user, actor=SYSTEM)
         mock_invalidate.assert_called_with(event)
 
     def test_staff_add_waitlists_when_at_capacity(self):
@@ -98,7 +99,7 @@ class StaffAddSignupTest(TestCase):
             user=other,
             status=SignupStatus.APPROVED,
         )
-        signup = staff_add_signup(event, self.user)
+        signup = staff_add_signup(event, self.user, actor=SYSTEM)
         assert signup.status == SignupStatus.WAITLISTED
         assert signup.waitlist_position == 1
 
@@ -110,7 +111,7 @@ class StaffAddSignupTest(TestCase):
             status=SignupStatus.APPROVED,
         )
         with self.assertRaises(ValueError):
-            staff_add_signup(event, self.user)
+            staff_add_signup(event, self.user, actor=SYSTEM)
 
     def test_staff_add_re_rsvps_after_cancellation(self):
         """Cancelled signups can be staff-added again (covers _create_signup re-RSVP branch)."""
@@ -120,7 +121,7 @@ class StaffAddSignupTest(TestCase):
             user=self.user,
             status=SignupStatus.CANCELLED,
         )
-        signup = staff_add_signup(event, self.user)
+        signup = staff_add_signup(event, self.user, actor=SYSTEM)
         # The original cancelled row was deleted; the new one should NOT be cancelled.
         assert signup.status != SignupStatus.CANCELLED
 
@@ -135,14 +136,14 @@ class StaffAddSignupTest(TestCase):
         event.require_mmr_verified = False
         event.require_profile_complete = False
         event.save()
-        signup = staff_add_signup(event, self.user)
+        signup = staff_add_signup(event, self.user, actor=SYSTEM)
         assert signup.status == SignupStatus.CONFIRMED
 
     @patch("events.services.invalidate_after_commit")
     def test_process_rsvp_still_invalidates_cache(self, mock_invalidate):
         """Regression guard: extracting _create_signup must not drop the public-path invalidation."""
         event = self._make_event(EventState.SIGNUPS_OPEN)
-        process_rsvp(event, self.user)
+        process_rsvp(event, self.user, actor=SYSTEM)
         mock_invalidate.assert_called_with(event)
 
 
@@ -152,7 +153,7 @@ class PendingEligibilityReasonsTests(EventTestCase):
         self, _notify: object
     ) -> None:
         ev = self.make_event(require_steam_id=True)
-        signup = process_rsvp(ev, self.make_user())
+        signup = process_rsvp(ev, self.make_user(), actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.PENDING_APPROVAL)
         signup.refresh_from_db()
         self.assertEqual(
@@ -161,7 +162,7 @@ class PendingEligibilityReasonsTests(EventTestCase):
         self.assertEqual(signup.eligibility_reasons[0]["rule"], "require-steam-id")
         self.assertIsNotNone(signup.eligibility_checked_at)
 
-        approve_signup(signup)
+        approve_signup(signup, actor=SYSTEM)
         signup.refresh_from_db()
         self.assertEqual(signup.status, SignupStatus.APPROVED)
         self.assertEqual(signup.eligibility_reasons, [])
@@ -170,10 +171,12 @@ class PendingEligibilityReasonsTests(EventTestCase):
 
     def test_promotion_to_pending_stores_reasons(self, _notify: object) -> None:
         ev = self.make_event(require_steam_id=True, max_players=1)
-        holder = process_rsvp(ev, self.make_user(steamid=76561198000008181))
-        waiting = process_rsvp(ev, self.make_user())
+        holder = process_rsvp(
+            ev, self.make_user(steamid=76561198000008181), actor=SYSTEM
+        )
+        waiting = process_rsvp(ev, self.make_user(), actor=SYSTEM)
         self.assertEqual(waiting.status, SignupStatus.WAITLISTED)
-        cancel_signup(holder)
+        cancel_signup(holder, actor=SYSTEM)
         waiting.refresh_from_db()
         self.assertEqual(waiting.status, SignupStatus.PENDING_APPROVAL)
         self.assertEqual(
@@ -182,7 +185,7 @@ class PendingEligibilityReasonsTests(EventTestCase):
         self.assertIsNotNone(waiting.eligibility_checked_at)
 
     def test_eligible_signup_stores_no_reasons(self, _notify: object) -> None:
-        signup = process_rsvp(self.make_event(), self.make_user())
+        signup = process_rsvp(self.make_event(), self.make_user(), actor=SYSTEM)
         signup.refresh_from_db()
         self.assertEqual(signup.eligibility_reasons, [])
 
@@ -192,7 +195,7 @@ class RecheckSignupEndpointTests(EventTestCase):
     def test_staff_recheck_refreshes_reasons(self, _notify: object) -> None:
         ev = self.make_event(require_steam_id=True)
         user = self.make_user()
-        signup = process_rsvp(ev, user)
+        signup = process_rsvp(ev, user, actor=SYSTEM)
         user.steamid = 76561198000009191
         user.save()
         api = APIClient()
@@ -207,7 +210,7 @@ class RecheckSignupEndpointTests(EventTestCase):
 
     def test_recheck_restores_missing_reasons(self, _notify: object) -> None:
         ev = self.make_event(require_steam_id=True)
-        signup = process_rsvp(ev, self.make_user())
+        signup = process_rsvp(ev, self.make_user(), actor=SYSTEM)
         EventSignup.objects.filter(pk=signup.pk).update(eligibility_reasons=[])
         api = APIClient()
         api.force_authenticate(self.admin)
@@ -221,7 +224,7 @@ class RecheckSignupEndpointTests(EventTestCase):
     def test_non_staff_cannot_recheck(self, _notify: object) -> None:
         ev = self.make_event(require_steam_id=True)
         owner = self.make_user()
-        signup = process_rsvp(ev, owner)
+        signup = process_rsvp(ev, owner, actor=SYSTEM)
         api = APIClient()
         api.force_authenticate(owner)
         resp = api.post(f"/api/events/signups/{signup.pk}/recheck/")

@@ -191,7 +191,7 @@ Actions: `set_captain`, `set_deputy`, `mark_dropout`, `restore_member`, `add_sta
 
 ### Roster service
 
-`app/services/team_management.py` has `set_captain`, `set_deputy`, `mark_dropout`,
+`tournament/services/team_management.py` has `set_captain`, `set_deputy`, `mark_dropout`,
 `restore_member`, `add_standin`, `remove_standin`, `sub_in(standin, replacing=None)` and
 `rename`. Each takes `actor`, `via`, `reason` and `acknowledged_codes`, runs in one
 transaction, writes exactly one TeamLog row, invalidates the team, tournament and player

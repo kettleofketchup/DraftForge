@@ -12,27 +12,22 @@
  *                                       siteAdmin siteStaff orgOwner orgAdmin orgStaff orgMember promoter leagueAdmin leagueStaff anonymous
  *   orgUsersTab  (members_private off)  ✓         ✓         ✓        ✓        ✓        ✓         ✓        ✓           ✓           ✗
  *   editUser     (org members tab)      ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✗           ✗           ✗
- *   editUser     (tournament players)   ✓         ✓         ✗        ✗        ✗        ✗         ✗        ✓           ✗           ✗
+ *   editUser     (tournament players)   ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✗           ✗           ✗
+ *   addPlayer    (tournament players)   ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
  *   generateBracket                     ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
  *   setMatchWinner (radiant)            ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
  *   linkSteamMatch                      ✓         ✓         ✗        ✗        ✗        ✗         ✗        ✗           ✗           ✗
  *   editTournament (detail page)        ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
  *   deleteTournament (detail page)      ✓         ✓         ✗        ✗        ✗        ✗         ✗        ✗           ✗           ✗
  *
- * Two known divergences:
- *
- * - **Tournament players edit** uses ``useIsLeagueAdmin`` (via the
- *   hasErrors panel's ``resolveEditScope`` returning league scope) while
- *   the org members tab uses ``useIsOrganizationStaff``. Same user
- *   record, two gates — org staff can edit a user from the org page
- *   but not from a tournament players page with profile errors.
+ * One known divergence:
  *
  * - **Link Steam Match** gates on ``useUserStore.isStaff()`` (site
  *   staff only) while the rest of the MatchStatsModal uses
  *   ``useIsLeagueStaff``. Site staff get the button, org/league
  *   admins don't.
  *
- * Both are documented in ``docs/dev/auth/roles.md``.
+ * Documented in ``docs/dev/auth/roles.md``.
  */
 
 import type { Page } from '@playwright/test';
@@ -93,26 +88,18 @@ const EDIT_USER_ORG_EXPECTATIONS: Expectations = {
   anonymous: false,
 };
 
-// Edit User on the tournament players tab — first match on the page is
-// the hasErrors panel which uses the shared ``resolveEditScope(user, ctx)``.
-// That returns ``{ kind: 'league', league }`` (no ``.organization`` on
-// the scope) when the tournament has a league, so the gate is
-// ``useIsLeagueAdmin(league, undefined)``. The fallback to
-// ``league.organization`` for the org-admin cascade only triggers when
-// the leagueStore has the parent org embedded — in this navigation
-// path it doesn't, so org admins miss the cascade. siteAdmin/siteStaff
-// pass via the hook's site-admin bypass; leagueAdmin via direct
-// membership in League.admins. Documented in roles.md as a known
-// divergence from the org members tab gate.
+// Edit User on the tournament players tab resolves to league scope. The
+// save goes through the parent org's OrgUser endpoint (org staff gate), so
+// the button follows parent-org staff, not league roles.
 const EDIT_USER_TOURNAMENT_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
-  orgOwner: false, // owner cascade hits same store-state gap as orgAdmin
-  orgAdmin: false, // org-admin cascade doesn't trigger (no embedded org)
-  orgStaff: false,
+  orgOwner: true,
+  orgAdmin: true,
+  orgStaff: true,
   orgMember: false,
   promoter: false,
-  leagueAdmin: true,
+  leagueAdmin: false,
   leagueStaff: false,
   anonymous: false,
 };
@@ -326,6 +313,17 @@ test.describe('Edit + Bracket permission matrix (all roles in parallel)', () => 
       `/tournament/${TOURNAMENT_NO_BRACKET_PK}/players`,
       'edit-user-btn',
       EDIT_USER_TOURNAMENT_EXPECTATIONS,
+    );
+  });
+
+  test('Add Player button visibility (tournament players tab)', async ({
+    roleContexts,
+  }) => {
+    await assertGateAcrossRoles(
+      roleContexts,
+      `/tournament/${TOURNAMENT_NO_BRACKET_PK}/players`,
+      'tournamentAddPlayerBtn',
+      GENERATE_BRACKET_EXPECTATIONS,
     );
   });
 

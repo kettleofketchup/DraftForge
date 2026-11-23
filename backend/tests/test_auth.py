@@ -25,12 +25,13 @@ from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
 from app.models import CustomUser, ProfileClaimRequest, Tournament
-from app.serializers import TournamentSerializer, UserSerializer
+from app.serializers import UserSerializer
 from common.game import GameType
 from common.utils import isTestEnvironment
 from discordbot.models import DiscordEvent, DiscordEventLog
 from draft.models import Draft
 from events.constants import EventState
+from events.ledger import SignupActor
 from events.models import Event, EventRepeater, EventSignup, RepeaterSubscription
 from events.services import generate_events_for_repeater, process_rsvp
 from events.tasks import sync_discord_events
@@ -72,6 +73,7 @@ from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.utils import ensure_org_user
 from tests.test_events_discord import discord_auth_failure
 from tests.test_teamdraft import clear_teamdraft_redis
+from tournament.serializers.tournament import TournamentSerializer
 
 log = logging.getLogger(__name__)
 
@@ -1482,7 +1484,7 @@ def bulk_rsvp_for_event(request, event_pk):
     for pk in user_pks:
         try:
             user = CustomUser.objects.get(pk=pk)
-            signup = process_rsvp(event, user)
+            signup = process_rsvp(event, user, actor=SignupActor.system())
             results.append({"user_pk": pk, "status": signup.status})
         except (CustomUser.DoesNotExist, ValueError) as e:
             results.append({"user_pk": pk, "error": str(e)})

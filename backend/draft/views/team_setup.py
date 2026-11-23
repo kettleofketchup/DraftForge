@@ -9,9 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
-from app.functions.tournament import serialize_tournament
 from app.models import CustomUser, Team, TeamLog, TeamLogVia, Tournament
-from app.permissions_tournament import can_edit_tournament
 from draft.models import Draft
 from draft.serializers.team import DraftPredictMMRSerializer, DraftSerializerMMRs
 from draft.services.team_reset import (
@@ -22,6 +20,8 @@ from draft.services.team_reset import (
 from events.discord.tournament_dispatch import notify_draft_started
 from org.models import OrgUser, OrgUserGameMmr
 from telemetry.logging import get_logger
+from tournament.functions import serialize_tournament
+from tournament.permissions import can_edit_tournament
 from user.models import BaseUserProfile, DotaUserProfile
 
 log = get_logger(__name__)

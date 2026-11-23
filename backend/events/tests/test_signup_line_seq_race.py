@@ -12,6 +12,7 @@ from events import line
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import create_tentative_signup, decline_signup, process_rsvp
+from events.tests.actors import SYSTEM
 from org.models import Organization
 
 
@@ -42,13 +43,13 @@ class SignupLineSeqTransactionTests(TransactionTestCase):
         self.assertFalse(connection.in_atomic_block)
         with mock.patch("events.line.next_line_seq", side_effect=wrapper):
             site = "process_rsvp_seated"
-            seated = process_rsvp(self.event, self.users[0])
+            seated = process_rsvp(self.event, self.users[0], actor=SYSTEM)
             site = "process_rsvp_waitlisted"
-            waitlisted = process_rsvp(self.event, self.users[1])
+            waitlisted = process_rsvp(self.event, self.users[1], actor=SYSTEM)
             site = "create_tentative_signup"
-            create_tentative_signup(self.event, self.users[2])
+            create_tentative_signup(self.event, self.users[2], actor=SYSTEM)
             site = "decline_signup"
-            decline_signup(self.event, self.users[3])
+            decline_signup(self.event, self.users[3], actor=SYSTEM)
 
         self.assertEqual(seated.status, SignupStatus.RSVP)
         self.assertEqual(waitlisted.status, SignupStatus.WAITLISTED)
@@ -84,7 +85,9 @@ class SignupLineSeqTransactionTests(TransactionTestCase):
                 barrier.wait(timeout=5)
                 for attempt in range(1, 21):
                     try:
-                        signup: EventSignup = process_rsvp(self.event, user)
+                        signup: EventSignup = process_rsvp(
+                            self.event, user, actor=SYSTEM
+                        )
                         break
                     except OperationalError:
                         time.sleep(0.05 * attempt)

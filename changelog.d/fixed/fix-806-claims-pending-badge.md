@@ -1,0 +1,1 @@
+- The organization Claims tab now shows how many profile claims are waiting for review, and the Pending filter keeps its count while you look at approved or rejected claims (#806).

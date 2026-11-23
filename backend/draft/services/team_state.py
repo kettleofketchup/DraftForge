@@ -15,10 +15,11 @@ from django.db import connection, transaction
 from django.db.models import Prefetch, QuerySet
 
 from app.models import Tournament
-from app.serializers import DraftSerializerSlim, build_users_dict_with_org
-from app.tournament_state import draft_round_prefetch, qs, tournament_prefetches
 from draft.models import Draft, DraftEvent
 from draft.serializers.team import DraftEventSerializer
+from tournament.serializers.draft import DraftSerializerSlim
+from tournament.serializers.users import build_users_dict_with_org
+from tournament.state import draft_round_prefetch, qs, tournament_prefetches
 
 
 def draft_state_queryset(*, fresh: bool) -> QuerySet[Draft]:

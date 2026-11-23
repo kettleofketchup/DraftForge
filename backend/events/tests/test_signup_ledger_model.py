@@ -182,7 +182,7 @@ class LedgerAdminTest(SignupLedgerModelTestCase):
     def test_eventsignup_admin_add_and_change(self) -> None:
         self.client.force_login(self.superuser)
         add = self.client.get(reverse("admin:events_eventsignup_add"))
-        self.assertEqual(add.status_code, 200)
+        self.assertEqual(add.status_code, 403)
         change_url = reverse("admin:events_eventsignup_change", args=[self.signup.pk])
         change = self.client.get(change_url)
         self.assertEqual(change.status_code, 200)
@@ -199,7 +199,11 @@ class LedgerAdminTest(SignupLedgerModelTestCase):
             self.assertNotIn(name, form_fields)
 
         before = EventSignup.objects.values(
-            "first_signed_up_at", "first_commitment", "first_rsvp_class", "line_seq"
+            "status",
+            "first_signed_up_at",
+            "first_commitment",
+            "first_rsvp_class",
+            "line_seq",
         ).get(pk=self.signup.pk)
         data = {
             "event": self.event.pk,
@@ -221,7 +225,7 @@ class LedgerAdminTest(SignupLedgerModelTestCase):
             "first_rsvp_class",
             "line_seq",
         ).get(pk=self.signup.pk)
-        self.assertEqual(after.pop("status"), SignupStatus.APPROVED)
+        self.assertNotEqual(before["status"], SignupStatus.APPROVED)
         self.assertEqual(after, before)
 
 

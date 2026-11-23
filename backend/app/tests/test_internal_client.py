@@ -3,6 +3,9 @@ from unittest.mock import MagicMock, patch
 
 import requests
 from django.test import TestCase, override_settings
+from structlog.contextvars import bind_contextvars, clear_contextvars
+
+from app.internal_client.transport import headers as transport_headers
 
 
 class InternalClientHeadersTest(TestCase):
@@ -20,6 +23,17 @@ class InternalClientHeadersTest(TestCase):
         with patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": ""}):
             h = headers()
         self.assertEqual(h["X-Internal-Token"], "")
+
+    def test_headers_omit_interaction_id_when_unbound(self) -> None:
+        clear_contextvars()
+        self.assertNotIn("X-Discord-Interaction-ID", transport_headers())
+
+    def test_headers_carry_bound_interaction_id(self) -> None:
+        bind_contextvars(interaction_id=777)
+        try:
+            self.assertEqual(transport_headers()["X-Discord-Interaction-ID"], "777")
+        finally:
+            clear_contextvars()
 
 
 class InternalClientPostTest(TestCase):

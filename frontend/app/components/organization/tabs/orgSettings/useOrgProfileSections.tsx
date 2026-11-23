@@ -9,6 +9,7 @@ import type { z } from 'zod';
 import { updateOrganization } from '~/components/api/api';
 import { DiscordIcon } from '~/components/events/DiscordConfigSection';
 import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
+import { organizationsQueryKey } from '~/components/organization/hooks/useOrganizations';
 import {
   EditOrganizationSchema,
   type EditOrganizationInput,
@@ -121,6 +122,7 @@ export function useOrgProfileSections(
       queryClient.invalidateQueries({
         queryKey: ['discordBotStatus', organization.pk],
       });
+      queryClient.invalidateQueries({ queryKey: organizationsQueryKey });
       return true;
     } catch (err) {
       toast.error(
