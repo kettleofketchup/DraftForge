@@ -378,7 +378,11 @@ def test_populate_shell_helpers_pass_force(
 ) -> None:
     assert run("db::populate::demo-tournaments", *flags).returncode == 0
     [call] = run.calls()
-    code = f"from tests.populate import populate_demo_tournaments; populate_demo_tournaments(force={force})"
+    code = (
+        "from tests.populate import populate_demo_tournaments; "
+        "from tests.populate.utils import without_task_publishing\n"
+        f"with without_task_publishing(): populate_demo_tournaments(force={force})"
+    )
     assert call.argv == ["manage.py", "shell", "-c", code]
 
 
