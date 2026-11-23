@@ -965,8 +965,8 @@ function SignupsTab({
       }
       const resp = await adminAddSignup(eventId!, payload.user_id);
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-      // Backend adds the user as an OrgUser when an admin signs them up; reset
-      // the org-users cache so the org page reflects the new membership.
+      // Backend adds the user as an OrgUser when an admin signs them up;
+      // refetch the org members so the org page shows the new membership.
       void invalidateConductQueries(queryClient, orgId);
       if (orgId) {
         void queryClient.invalidateQueries({
