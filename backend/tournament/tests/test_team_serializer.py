@@ -21,8 +21,8 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.serializers import TeamSerializer
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
+from tournament.serializers.team import TeamSerializer
 from tournament.services.team_leadership import teams_with_leadership_problems
 from tournament.services.team_signals import TeamRosterChange, team_roster_changed
 from tournament.tests.test_team_management import TeamManagementFixture

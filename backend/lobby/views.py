@@ -38,7 +38,6 @@ from rest_framework.views import APIView
 
 from app.display_names import user_display_name
 from app.models import CustomUser, DotaLobbyMode, Game, Team, Tournament
-from app.serializers import tournament_organization
 from lobby import broadcast, events, services, states
 from lobby.client import DotaLobbyClient, DotaLobbyError
 from lobby.models import GameLobby
@@ -49,6 +48,7 @@ from tournament.permissions import (
     IsTournamentStaff,
     can_edit_tournament,
 )
+from tournament.serializers.users import tournament_organization
 
 log = get_logger(__name__)
 

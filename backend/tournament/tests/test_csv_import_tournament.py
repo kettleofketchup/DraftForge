@@ -474,7 +474,7 @@ class TournamentCSVImportGameTest(TestCase):
     def test_tournament_import_writes_org_mmrs_in_one_batch(self) -> None:
         self.dl_tournament.users.add(self.user)
         with patch(
-            "app.views.csv_import.bulk_set_org_mmrs",
+            "tournament.views.csv_import.bulk_set_org_mmrs",
             wraps=org_mmr.bulk_set_org_mmrs,
         ) as bulk:
             resp = self.post(
