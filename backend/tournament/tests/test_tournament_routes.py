@@ -1,6 +1,13 @@
+from typing import Any
+
+from channels.routing import URLRouter
+from django.contrib import admin
 from django.test import SimpleTestCase, TestCase
 from django.urls import ResolverMatch, resolve
 from rest_framework.test import APIClient
+
+from app.models import TeamLog
+from backend import asgi
 
 TOURNAMENT_HTTP_ROUTES: tuple[tuple[str, str, str | None, str], ...] = (
     (
@@ -130,6 +137,64 @@ TOURNAMENT_HTTP_ROUTES: tuple[tuple[str, str, str | None, str], ...] = (
         "advance_winner",
         "advance_winner",
     ),
+    (
+        "/api/tournaments/1/members/",
+        "tournament.views.members",
+        "add_tournament_member",
+        "add_tournament_member",
+    ),
+    (
+        "/api/tournaments/1/ssr/",
+        "tournament.ssr",
+        "tournament_ssr",
+        "TournamentSSRView",
+    ),
+    (
+        "/api/internal/tournaments/1/full/",
+        "tournament.views.internal",
+        None,
+        "get_tournament_for_task",
+    ),
+    (
+        "/api/internal/tournaments/1/participants/",
+        "tournament.views.internal",
+        None,
+        "get_tournament_participants",
+    ),
+    (
+        "/api/internal/games/1/participants/",
+        "tournament.views.internal",
+        None,
+        "get_match_participants",
+    ),
+)
+
+WS_ROUTES: tuple[tuple[str, str, str, str | None], ...] = (
+    (
+        "api/tournament/<int:tournament_id>/",
+        "tournament.consumers",
+        "TournamentConsumer",
+        None,
+    ),
+    (
+        "api/discord/activity/draft/<int:draft_id>/",
+        "draft.consumers.hero",
+        "HeroDraftConsumer",
+        "hero",
+    ),
+    (
+        "api/herodraft/<int:draft_id>/",
+        "draft.consumers.hero",
+        "HeroDraftConsumer",
+        None,
+    ),
+    (
+        "api/discord/activity/team-draft/<int:draft_id>/",
+        "draft.consumers.team",
+        "DraftConsumer",
+        "team",
+    ),
+    ("api/draft/<int:draft_id>/", "draft.consumers.team", "DraftConsumer", None),
 )
 
 EXPECTED_API_ROOT_KEYS: frozenset[str] = frozenset(
@@ -169,6 +234,35 @@ class TournamentRouteResolutionTests(SimpleTestCase):
                 match = resolve(path)
                 self.assertEqual(_view_target(match), (module, view))
                 self.assertEqual(match.url_name, url_name)
+
+
+def _websocket_router() -> URLRouter:
+    app: Any = asgi.application.application_mapping["websocket"]
+    while not isinstance(app, URLRouter):
+        app = getattr(app, "inner", None) or app.application
+    return app
+
+
+def _ws_target(callback: Any) -> tuple[str, str, str | None]:
+    kind = getattr(callback, "kind", None)
+    consumer = (callback.app if kind else callback).consumer_class
+    return consumer.__module__, consumer.__name__, kind
+
+
+class TournamentWebSocketRouteTests(SimpleTestCase):
+    def test_ws_route_resolves_to_tournament_consumer(self) -> None:
+        routes = [
+            (str(route.pattern), *_ws_target(route.callback))
+            for route in _websocket_router().routes
+        ]
+        self.assertEqual(routes, list(WS_ROUTES))
+
+
+class TournamentAdminTests(SimpleTestCase):
+    def test_admin_registers_teamlog(self) -> None:
+        self.assertEqual(
+            admin.site._registry[TeamLog].__class__.__module__, "tournament.admin"
+        )
 
 
 class ApiRootTests(TestCase):

@@ -175,6 +175,20 @@ _ORG_PERMISSION_NAMES = (
     "IsOrgStaff",
 )
 
+_ORG_ADMIN_TEAM_VIEWS = (
+    "add_org_admin",
+    "remove_org_admin",
+    "add_org_staff",
+    "remove_org_staff",
+    "transfer_org_ownership",
+    "add_org_member",
+    "update_org_user",
+    "_find_member",
+    "_cached_guild_member",
+    "_member_nick",
+    "_resolve_user",
+)
+
 ORG = MovedSlice(
     name="org",
     source_app="app",
@@ -189,17 +203,11 @@ ORG = MovedSlice(
             ("app.serializers", "_known_timezones"),
             ("app.serializers_ssr", "OrganizationSerializerSSR"),
             ("app.views.ssr", "OrganizationSSRView"),
-            ("app.views.admin_team", "add_org_admin"),
-            ("app.views.admin_team", "remove_org_admin"),
-            ("app.views.admin_team", "add_org_staff"),
-            ("app.views.admin_team", "remove_org_staff"),
-            ("app.views.admin_team", "transfer_org_ownership"),
-            ("app.views.admin_team", "add_org_member"),
-            ("app.views.admin_team", "update_org_user"),
-            ("app.views.admin_team", "_find_member"),
-            ("app.views.admin_team", "_cached_guild_member"),
-            ("app.views.admin_team", "_member_nick"),
-            ("app.views.admin_team", "_resolve_user"),
+            *(
+                (module, name)
+                for module in ("app.views.admin_team", "app.views.user_search")
+                for name in _ORG_ADMIN_TEAM_VIEWS
+            ),
             ("app.signals", "track_org_discord_server_id"),
             ("app.signals", "reset_guild_nicknames_on_server_change"),
             ("app.models", "Organization"),
@@ -280,7 +288,11 @@ LEAGUE = MovedSlice(
             ("app.models", "LeagueMatch"),
             ("app.models", "LeagueMatchParticipant"),
             ("app.models", "LeagueLog"),
-            *(("app.views.admin_team", name) for name in _LEAGUE_ADMIN_TEAM_VIEWS),
+            *(
+                (module, name)
+                for module in ("app.views.admin_team", "app.views.user_search")
+                for name in _LEAGUE_ADMIN_TEAM_VIEWS
+            ),
             *(
                 ("app.permissions_tournament", name)
                 for name in _LEAGUE_PERMISSION_NAMES
@@ -717,6 +729,16 @@ _TOURNAMENT_RETIRED_DEFS = {
     "app.tests.test_team_create_permissions": ("TeamCreatePermissionTests",),
     "app.tests.test_tournament_viewer": ("TournamentViewerTests",),
     "app.tests.test_team_name_from_captain": ("TeamNameFromCaptainTest",),
+    "app.views.admin_team": ("add_tournament_member",),
+    "app.consumers": ("TournamentConsumer",),
+    "app.routing": ("websocket_urlpatterns",),
+    "app.tests.test_add_member": (
+        "AddLeagueMemberTest",
+        "AddTournamentMemberTest",
+        "_discord_member",
+        "AddMemberGuildNicknameTest",
+    ),
+    "app.tests.test_team_log": ("TeamLogModelTests",),
 }
 
 _TOURNAMENT_VIEW_NAMES = (
@@ -756,6 +778,12 @@ TOURNAMENT = MovedSlice(
             *(("app.schemas", name) for name in _TOURNAMENT_SCHEMA_NAMES),
             *(("app.serializers", name) for name in _TOURNAMENT_SERIALIZER_NAMES),
             *(("app.views_main", name) for name in _TOURNAMENT_VIEW_NAMES),
+            ("app.views.internal", "get_tournament_for_task"),
+            ("app.views.internal", "get_tournament_participants"),
+            ("app.views.internal", "get_match_participants"),
+            ("app.views.ssr", "TournamentSSRView"),
+            ("app.serializers_ssr", "TournamentSerializerSSR"),
+            ("app.admin", "TeamLogAdmin"),
             # patched on views_main before the views moved
             ("app.views_main", "build_users_dict"),
             ("app.views_main", "tournament_bucket_cutoff"),
@@ -794,6 +822,7 @@ RETIRED_MODULE_HOMES: dict[str, str | None] = {
     "app.tournament_buckets": "tournament.buckets",
     "app.functions.tournament": "tournament.functions",
     "app.internal_client.tournaments": "tournament.internal_client",
+    "app.views.admin_team": "tournament.views.members",
 }
 
 # target app -> production file (relative to backend/) -> what it may import from that app
@@ -812,10 +841,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"DraftRound", "DraftTeam"}),
             "current_user lists the user's pending team-draft pick and the active "
             "hero drafts the user captains",
-        ),
-        "app/consumers.py": BackEdge(
-            frozenset({"recent_draft_events"}),
-            "TournamentConsumer replays a tournament's recent team-draft events",
         ),
     },
     "org": {
@@ -855,19 +880,12 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "UserSerializer.default_organization reads Organization at class "
             "definition",
         ),
-        "app/views/admin_team.py": BackEdge(
+        "app/views/user_search.py": BackEdge(
             frozenset(
-                {
-                    "OrgUser",
-                    "Organization",
-                    "has_org_staff_access",
-                    "resolve_member_user",
-                    "user_name_q",
-                }
+                {"OrgUser", "Organization", "has_org_staff_access", "user_name_q"}
             ),
-            "user search scopes by Organization, checks org staff and reports org "
-            "membership; tournament member adds resolve the user against the "
-            "league org's guild members; leaves with the tournament slice",
+            "user search scopes by Organization, matches org server nicknames, "
+            "checks org staff and reports org membership",
         ),
         "app/views/internal.py": BackEdge(
             frozenset({"OrgUser"}),
@@ -889,11 +907,10 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         ),
     },
     "league": {
-        "app/views/admin_team.py": BackEdge(
-            frozenset({"League", "LeagueUser", "has_league_staff_access"}),
+        "app/views/user_search.py": BackEdge(
+            frozenset({"League", "LeagueUser"}),
             "user search resolves ?league_id= to a League and flags league "
-            "membership; tournament member adds check league staff; leaves with "
-            "the tournament slice",
+            "membership",
         ),
         "app/views_main.py": BackEdge(
             frozenset({"League"}),
@@ -906,26 +923,11 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"TeamManagementError"}),
             "global DRF handler maps TeamManagementError",
         ),
-        "app/views/admin_team.py": BackEdge(
-            frozenset({"serialize_tournament"}),
-            "tournament member add returns the serialized tournament; leaves "
-            "with tournament 5b",
-        ),
     },
 }
 
 # (file relative to backend/, name) -> why a source-app module may define a moved name
-ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {
-    ("app/views/internal.py", "get_tournament_for_task"): (
-        "twin moves to tournament in 5b"
-    ),
-    ("app/views/internal.py", "get_tournament_participants"): (
-        "twin moves to tournament in 5b"
-    ),
-    ("app/views/internal.py", "get_match_participants"): (
-        "twin moves to tournament in 5b"
-    ),
-}
+ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {}
 
 GUARD_FILE = "tests/test_app_boundaries.py"
 
@@ -1648,6 +1650,7 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("league/models_rating.py", rels)
         self.assertIn("tournament/permissions.py", rels)
         self.assertIn("tournament/views/team.py", rels)
+        self.assertIn("tournament/consumers.py", rels)
         self.assertNotIn(GUARD_FILE, rels)
         self.assertFalse(any("/migrations/" in rel for rel in rels))
 
