@@ -176,15 +176,6 @@ export async function getOrganizationDiscordMembers(
 
 export type { ProfileClaimRequest } from '~/features/claims/schemas';
 
-export async function approveClaimRequest(
-  claimId: number,
-): Promise<{ message: string }> {
-  const response = await axios.post<{ message: string }>(
-    `/claim-requests/${claimId}/approve/`,
-  );
-  return response.data;
-}
-
 export async function rejectClaimRequest(
   claimId: number,
   reason?: string,

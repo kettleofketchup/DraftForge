@@ -87,7 +87,6 @@ export {
   addOrgMember,
   addOrgPromoter,
   addOrgStaff,
-  approveClaimRequest,
   checkDiscordBotStatus,
   createOrganization,
   deleteOrganization,
