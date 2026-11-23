@@ -348,6 +348,13 @@ export function AdminTeamSection({
         );
         throw new Error(extractApiError(err) ?? 'Failed to add promoter');
       }),
+    onSuccess: () => {
+      if (isOrgMode && entityId) {
+        void queryClient.invalidateQueries({
+          queryKey: organizationQueryKey(entityId),
+        });
+      }
+    },
     onSettled: () => queryClient.invalidateQueries({ queryKey: promotersKey }),
   });
 
