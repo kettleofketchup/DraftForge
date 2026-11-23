@@ -5,6 +5,7 @@ import type { UserType } from '~/components/user/types';
 import { PlusIconButton } from '~/components/ui/buttons';
 import { FormDialog } from '~/components/ui/dialogs';
 import UserCreateModal from '~/components/user/userCard/createModal';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { useOrgUsers } from '~/hooks/useOrgUsers';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrgStore } from '~/store/orgStore';
@@ -36,7 +37,7 @@ export const AddPlayerModal: React.FC<Props> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const currentUser = useUserStore((state) => state.currentUser);
-  const isStaff = useUserStore((state) => state.isStaff);
+  const canManage = useCanManageCurrentTournament();
 
   // Global users fallback (resolved from cache)
   const globalUserPks = useUserStore((state) => state.globalUserPks);
@@ -64,7 +65,7 @@ export const AddPlayerModal: React.FC<Props> = ({
     }
   }, [open, orgId, globalUserPks.length, getOrgUsers, getUsers]);
 
-  if (!isStaff()) {
+  if (!canManage) {
     return (
       <AdminOnlyButton
         buttonTxt=""

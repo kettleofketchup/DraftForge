@@ -116,17 +116,18 @@ The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
 
 ## Edit + Bracket Matrix
 
-The nine entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
+The ten entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
 
 |                                        | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | promoter | leagueAdmin | leagueStaff | anonymous |
 | -------------------------------------- | :-------: | :-------: | :------: | :------: | :------: | :-------: | :------: | :---------: | :---------: | :-------: |
 | Org Users tab (not private)            |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✓     |    ✓     |      ✓      |      ✓      |     ✗     |
 | Edit User (org members tab)            |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✗      |      ✗      |     ✗     |
-| Edit User (tournament players tab)     |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✗      |      ✗      |     ✗     |
+| Edit User (tournament players tab)     |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |   ✓ (MMR)   |   ✓ (MMR)   |     ✗     |
 | Add Player (tournament players tab)    |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✓      |      ✓      |     ✗     |
 | Generate Bracket                       |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✓      |      ✓      |     ✗     |
 | Set Bracket Match Winner               |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✓      |      ✓      |     ✗     |
-| Link Steam Match (bracket)             |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |    ✗     |      ✗      |      ✗      |     ✗     |
+| Start Hero Draft (bracket)             |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✓      |      ✓      |     ✗     |
+| Link Steam Match (bracket)             |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✓      |      ✓      |     ✗     |
 | Edit Tournament (detail page)          |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |    ✗     |      ✓      |      ✓      |     ✗     |
 | Delete Tournament (detail page)        |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |    ✗     |      ✗      |      ✗      |     ✗     |
 
@@ -154,32 +155,34 @@ The nine entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
   via the UserCard's org-scoped editScope — staff-permissive.
 - **Edit User (tournament players tab)** resolves to league scope via
   `resolveEditScope`. A league-scoped save goes through the parent org's
-  OrgUser endpoint (`update_org_user`, gated on `has_org_staff_access`), so
-  `useScopedEditPermission` gates league scope on the same thing: site staff,
-  or admin/staff of the parent org (`scopeToContext(scope).orgId` checked
-  against the user's `admin_organization_ids` / `staff_organization_ids`).
-  League admins and league staff who are not org staff do not get the button,
-  because the backend would reject their save. The Player Profile modal uses
-  the same check.
-- **Generate Bracket** and **Set Winner** use `useCanEditTournament` /
-  `useIsLeagueStaff` — operational match-management actions that
-  league staff legitimately do.
-- **Link Steam Match** is a **known divergence**: gates on
-  `useUserStore.isStaff()` (site staff/superuser only) while the rest
-  of the MatchStatsModal uses `useIsLeagueStaff`. If you're widening
-  it, lift the gate to `useIsLeagueStaff` and flip the matrix row.
-- **Edit Tournament** uses `canEditTournament` in
-  `~/lib/tournamentPermissions.ts`, computed from the user's id lists
+  OrgUser endpoint (`update_org_user`). Site staff and admins/staff of the
+  parent org edit every field. League admins and league staff edit **org MMR
+  only**, and only for players of a tournament in their league: the frontend
+  adds the store tournament to the scope (`useTournamentEditScope`) when the
+  player is in it, the form shows just the MMR fields, and the PATCH carries
+  `?tournament_id=`. The backend accepts that only when the user staffs the
+  tournament's league, the tournament is in this org, the player is one of
+  its users, and the body holds nothing but `game_mmrs` / `mmr` /
+  `mmr_game_type`. The Player Profile modal uses the same check.
+- **Tournament management** (Add Player, Generate Bracket, Set Winner, Start
+  Hero Draft, Link Steam Match, team-draft lobby Start/Force start, draft
+  moderation, captains, Edit Tournament) uses `useCanManageTournament` /
+  `canEditTournament` (`~/hooks/useCanManageTournament.ts`,
+  `~/lib/tournamentPermissions.ts`), computed from the user's id lists
   (`admin_league_ids`, `staff_league_ids`, `admin_organization_ids`,
   `staff_organization_ids`). It mirrors the backend's `can_edit_tournament`:
   site staff, admins and staff of the tournament's league, or admins and
-  staff of the league's own organization. It reads the league's org, never
-  the tournament's `organization_pk`, which falls back to the source event's
-  org. On a tournament with no league it is false for everyone but site
-  staff. In the dialog, moving the tournament to another league needs admin
-  access to both leagues, and only site staff can clear the league.
-  The dialog's Discord Activity tab reads `/api/tournaments/<pk>/discord-logs/`,
-  which uses the same `CanEditTournament` gate.
+  staff of the league's organization. A tournament with no league belongs to
+  the organization of the event that created it (`organization_pk`), so that
+  org's admins and staff manage it; league roles don't apply there. In the
+  edit dialog, moving the tournament to another league needs admin access to
+  both leagues, and only site staff can clear the league. The dialog's
+  Discord Activity tab reads `/api/tournaments/<pk>/discord-logs/`, which
+  uses the same `CanEditTournament` gate.
+- **Start Hero Draft**: `POST /api/games/<pk>/create-herodraft/` needs
+  tournament management access or a captain of one of the game's teams; only
+  managers may assign the game's teams through it, and only teams of the same
+  tournament.
 - **Delete Tournament** stays site staff (`is_staff || is_superuser`), even
   though the backend `destroy` action uses `CanEditTournament`.
 

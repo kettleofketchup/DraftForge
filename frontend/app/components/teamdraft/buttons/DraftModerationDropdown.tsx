@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
@@ -34,7 +35,7 @@ export const DraftModerationDropdown: React.FC<
   const setDraft = useUserStore((state) => state.setDraft);
   const curDraftRound = useUserStore((state) => state.curDraftRound);
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
-  const isStaff = useUserStore((state) => state.isStaff);
+  const canManage = useCanManageCurrentTournament();
   const { confirmForce, confirmForceDialog } = useConfirmForceReset();
   const { showResetSummary, resetSummaryDialog } = useDraftResetSummary();
 
@@ -63,7 +64,7 @@ export const DraftModerationDropdown: React.FC<
   };
 
   // Hide moderation controls entirely for non-staff users
-  if (!isStaff()) {
+  if (!canManage) {
     return null;
   }
 
