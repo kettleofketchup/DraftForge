@@ -63,7 +63,7 @@ export const TournamentDetailPage: React.FC = () => {
     );
   }, [tournament]);
 
-  // Sync hydrated data to userStore for ~35 existing consumers
+  // Sync hydrated data to userStore for its existing consumers
   useEffect(() => {
     if (hydratedTournament) {
       // Ingest _users dict into entity cache for cross-page deduplication
