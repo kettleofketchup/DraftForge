@@ -1,7 +1,7 @@
 """Bracket API views for tournament bracket management."""
 
 from django.db import transaction
-from django.db.models import Max, Prefetch
+from django.db.models import Prefetch
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -21,6 +21,11 @@ from tournament.serializers.game import (
     BracketSaveSerializer,
 )
 from tournament.serializers.users import TEAM_USER_INDEX, build_team_user_index
+from tournament.services.bracket_placement import (
+    apply_bracket_placements,
+    placement_for_game,
+    tournament_bracket_placements,
+)
 from tournament.services.team_audit import log_snapshot_fields, write_team_log
 from tournament.services.team_management import live_conflicts, roster_conflict_body
 
@@ -167,6 +172,7 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
         )
 
     matches = serializer.validated_data["matches"]
+    placements_before = tournament_bracket_placements(tournament.pk)
 
     # Build lookup of existing games by (bracket_type, round, position)
     existing_games = {
@@ -302,6 +308,8 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
             missing_loser_next=missing_loser_next_targets,
         )
 
+    placements_changed = apply_bracket_placements(tournament.pk, placements_before)
+
     log.info(
         "bracket_saved",
         system="bracket",
@@ -313,6 +321,7 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
         deleted=deleted_count,
         wired_next=wired_next,
         wired_loser_next=wired_loser_next,
+        placements_changed=placements_changed,
     )
 
     # Return saved games
@@ -328,42 +337,8 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
 
 
 def calculate_placement(game: Game) -> int | None:
-    """
-    Calculate placement for a team eliminated from this game.
-
-    Returns placement number or None if team isn't eliminated
-    (e.g., winners bracket losers go to losers bracket).
-    """
-    # Grand finals loser = 2nd place
-    if game.bracket_type == "grand_finals":
-        return 2
-
-    # Losers bracket elimination
-    if game.bracket_type == "losers":
-        # Find max losers round for this tournament
-        max_round = Game.objects.filter(
-            tournament=game.tournament,
-            bracket_type="losers",
-        ).aggregate(Max("round"))["round__max"]
-
-        if max_round is None:
-            return 3  # Only one losers game = losers finals
-
-        rounds_from_final = max_round - game.round
-
-        if rounds_from_final == 0:  # Losers finals
-            return 3
-        elif rounds_from_final <= 2:  # Losers semi (4th)
-            return 4
-        else:
-            # Each earlier round: 5th-6th, 7th-8th, etc.
-            base = 5
-            for i in range(rounds_from_final - 3):
-                base += 2**i
-            return base
-
-    # Winners bracket elimination → goes to losers (no placement yet)
-    return None
+    """Placement for a team eliminated from this game, or None if it isn't out."""
+    return placement_for_game(game)
 
 
 def _unset_winner(game: Game) -> Response:
@@ -424,18 +399,15 @@ def _unset_winner(game: Game) -> Response:
             )
         to_clear.append((target, slot))
 
+    placements_before = tournament_bracket_placements(game.tournament_id)
     for target, slot in to_clear:
         setattr(target, f"{slot}_team", None)
         target.save()
 
-    for team in reopening:
-        team.placement = None
-        team.save()
-    reset_teams = reopening
-
     game.winning_team = None
     game.status = "pending"
     game.save()
+    placements_changed = apply_bracket_placements(game.tournament_id, placements_before)
 
     log.info(
         "bracket_winner_unset",
@@ -445,13 +417,12 @@ def _unset_winner(game: Game) -> Response:
         tournament_id=game.tournament_id,
         bracket_type=game.bracket_type,
         cleared_downstream=[t.pk for t, _ in to_clear],
-        placements_cleared=[t.pk for t in reset_teams],
+        placements_changed=placements_changed,
     )
 
     invalidate_after_commit(
         game,
         *(t for t, _ in to_clear),
-        *reset_teams,
         *([game.tournament] if game.tournament else []),
     )
     return Response(BracketGameSerializer(game).data)
@@ -543,6 +514,7 @@ def advance_winner(request: Request, game_id: int) -> Response:
         winning_team = game.dire_team
         losing_team = game.radiant_team
 
+    placements_before = tournament_bracket_placements(game.tournament_id)
     game.winning_team = winning_team
     game.status = "completed"
     game.save()
@@ -568,7 +540,6 @@ def advance_winner(request: Request, game_id: int) -> Response:
 
     # Handle loser path
     loser_advanced_to = None
-    placement_set = None
     if losing_team:
         if (
             game.elimination_type == "double"
@@ -597,18 +568,8 @@ def advance_winner(request: Request, game_id: int) -> Response:
                 game_id=game.pk,
                 loser_next_game_id=game.loser_next_game_id,
             )
-        else:
-            # No loser path - team is eliminated, set placement
-            placement = calculate_placement(game)
-            if placement:
-                losing_team.placement = placement
-                losing_team.save()
-                placement_set = placement
 
-    # Grand finals - also set winner's placement
-    if game.bracket_type == "grand_finals":
-        winning_team.placement = 1
-        winning_team.save()
+    placements_changed = apply_bracket_placements(game.tournament_id, placements_before)
 
     log.info(
         "bracket_winner_advanced",
@@ -623,7 +584,7 @@ def advance_winner(request: Request, game_id: int) -> Response:
         losing_team_id=losing_team.pk if losing_team else None,
         winner_advanced_to=winner_advanced_to,
         loser_advanced_to=loser_advanced_to,
-        placement_set=placement_set,
+        placements_changed=placements_changed,
         elimination_type=game.elimination_type,
     )
 
