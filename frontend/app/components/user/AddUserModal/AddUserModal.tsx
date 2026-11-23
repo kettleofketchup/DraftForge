@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { AddMemberPayload } from '~/components/api/api';
 import {
@@ -22,7 +22,7 @@ import { SiteUserResults } from './SiteUserResults';
 import type { AddUserModalProps } from './types';
 
 const DEBOUNCE_MS = 300;
-const MIN_QUERY_LENGTH = 3;
+const MIN_QUERY_LENGTH = 2;
 
 export const AddUserModal: React.FC<AddUserModalProps> = ({
   open,
@@ -35,16 +35,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, DEBOUNCE_MS);
-  const [manualQuery, setManualQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    setManualQuery('');
-  }, [query]);
-
-  // Debounced auto-search for 3+ chars, or manual search on Enter for shorter queries
   const searchTerm =
-    debouncedQuery.length >= MIN_QUERY_LENGTH ? debouncedQuery : manualQuery;
+    debouncedQuery.length >= MIN_QUERY_LENGTH ? debouncedQuery : '';
   const [addedUsers, setAddedUsers] = useState<Set<number>>(new Set());
   const [addedDiscordIds, setAddedDiscordIds] = useState<Set<string>>(
     new Set(),
@@ -226,24 +220,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     isDesktop,
   });
 
-  // Wrap keydown: Enter with short query triggers search, otherwise defer to nav
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (
-        e.key === 'Enter' &&
-        query.length >= 1 &&
-        query.length < MIN_QUERY_LENGTH &&
-        highlightedIndex < 0
-      ) {
-        e.preventDefault();
-        setManualQuery(query);
-        return;
-      }
-      navKeyDown(e);
-    },
-    [query, highlightedIndex, navKeyDown],
-  );
-
   return (
     <FormDialog
       open={open}
@@ -263,7 +239,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             placeholder="Search by username, nickname, or Steam ID..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
+            onKeyDown={navKeyDown}
             className="pl-9"
             data-testid="add-user-search"
           />
@@ -283,13 +259,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             </div>
           )}
         </div>
-        {query.length > 0 &&
-          query.length < MIN_QUERY_LENGTH &&
-          !manualQuery && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Press Enter to search, or type {MIN_QUERY_LENGTH}+ characters
-            </p>
-          )}
+        {query.length > 0 && query.length < MIN_QUERY_LENGTH && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Type {MIN_QUERY_LENGTH}+ characters to search
+          </p>
+        )}
       </div>
 
       {isDesktop ? (
