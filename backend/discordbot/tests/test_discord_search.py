@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.core.cache import cache
 from django.test import TestCase, override_settings
@@ -117,12 +117,23 @@ class SearchDiscordMembersTest(TestCase):
         self.assertEqual(mock_fetch.call_count, 1)
 
     @patch("discordbot.services.users.get_discord_members_data")
-    def test_search_min_3_chars(self, mock_fetch):
+    def test_search_min_2_chars(self, mock_fetch: MagicMock) -> None:
         resp = self.client.get(
             "/api/discord/search-discord-members/",
-            {"q": "jo", "org_id": self.org.pk},
+            {"q": "j", "org_id": self.org.pk},
         )
         self.assertEqual(resp.status_code, 400)
+
+    @patch("discordbot.services.users.get_discord_members_data")
+    def test_search_two_chars(self, mock_fetch: MagicMock) -> None:
+        mock_fetch.return_value = MOCK_DISCORD_MEMBERS
+        resp = self.client.get(
+            "/api/discord/search-discord-members/",
+            {"q": "ja", "org_id": self.org.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        usernames = [r["user"]["username"] for r in resp.json()["results"]]
+        self.assertIn("janediscord", usernames)
 
     def test_search_requires_org_id(self):
         resp = self.client.get("/api/discord/search-discord-members/", {"q": "john"})
