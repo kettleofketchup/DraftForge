@@ -351,6 +351,53 @@ class ModerationTest(ReviewTestCase):
         self.refused("cannot_moderate_own_reviews", lambda: self.unvoid(review))
         self.unvoid(review, other)
 
+    def test_org_staff_can_void_others(self) -> None:
+        review = self.review(self.mates_a[0], self.cap_a, 5)
+        staff = self.make_user("ld_org_staff")
+        self.org.staff.add(staff)
+        voided = self.void(review, staff)
+        self.assertEqual(voided.voided_by_id, staff.pk)
+        self.unvoid(review, staff)
+
+    def test_every_role_refused_on_own_review(self) -> None:
+        event, tournament = self.make_event("Role Cup")
+        captains = {
+            "owner": self.admin,
+            "admin": self.make_user("ld_own_admin"),
+            "staff": self.make_user("ld_own_staff"),
+            "site_staff": CustomUser.objects.create_user(
+                username="ld_own_site", password="x", is_staff=True
+            ),
+            "superuser": CustomUser.objects.create_user(
+                username="ld_own_super", password="x", is_superuser=True
+            ),
+        }
+        self.org.admins.add(captains["admin"])
+        self.org.staff.add(captains["staff"])
+        mates = {name: self.make_user(f"ld_own_mate_{name}") for name in captains}
+        for name, captain in captains.items():
+            self.make_team(name, captain, [mates[name]], tournament=tournament)
+            self.admit(captain, event)
+            self.admit(mates[name], event)
+        self.run_snapshot(event)
+        for name, captain in captains.items():
+            with self.subTest(name):
+                review = self.review(mates[name], captain, 5, event=event)
+                exc = self.refused(
+                    "cannot_moderate_own_reviews", lambda: self.void(review, captain)
+                )
+                self.assertEqual(exc.status, 403)
+                self.assertEqual(
+                    exc.detail, "Another moderator has to moderate reviews of you."
+                )
+                CaptainReview.objects.filter(pk=review.pk).update(
+                    voided_at=tz.now(), void_kind="moderated"
+                )
+                self.refused(
+                    "cannot_moderate_own_reviews",
+                    lambda: self.unvoid(review, captain),
+                )
+
     def test_non_admin_cannot_moderate(self) -> None:
         review = self.review(self.mates_a[0], self.cap_a, 5)
         exc = self.refused("not_permitted", lambda: self.void(review, self.mates_a[1]))

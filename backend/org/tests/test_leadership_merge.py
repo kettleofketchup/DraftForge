@@ -434,6 +434,21 @@ class RepointAttributionTest(LeadershipTestCase):
             ).exists()
         )
 
+    def test_repoint_attribution_moves_released_by(self) -> None:
+        self.run_snapshot()
+        drop = self.make_user("ld_rel_drop")
+        keep = self.make_user("ld_rel_keep")
+        snap = self.snapshot(self.cap_a)
+        EventCaptain.objects.filter(pk=snap.pk).update(
+            released_at=tz.now(), released_by=drop
+        )
+        with transaction.atomic():
+            moved = maintenance.repoint_attribution(drop, keep)
+        self.assertEqual(moved, 1)
+        snap.refresh_from_db()
+        self.assertEqual(snap.released_by, keep)
+        self.assertIsNotNone(snap.released_at)
+
 
 class DeleteUserRowsTest(LeadershipTestCase):
     def setUp(self) -> None:

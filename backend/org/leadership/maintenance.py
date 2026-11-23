@@ -298,6 +298,9 @@ def _repoint_settings(drop: CustomUser, keep: CustomUser) -> int:
 def repoint_attribution(drop: CustomUser, keep: CustomUser) -> int:
     return (
         CaptainReview.objects.nocache().filter(voided_by=drop).update(voided_by=keep)
+        + EventCaptain.objects.nocache()
+        .filter(released_by=drop)
+        .update(released_by=keep)
         + _repoint_settings(drop, keep)
         + ledger.track_rows("leadership")
         .filter(awarded_by=drop)

@@ -4,6 +4,7 @@ from typing import Any
 from unittest import mock
 
 from django.utils import timezone as tz
+from structlog.testing import capture_logs
 
 from app.models import CustomUser
 from org.leadership.constants import VoidKind
@@ -16,13 +17,14 @@ from org.leadership.release import (
     release_state,
     released_snapshots,
 )
+from org.leadership.reviews import ReleaseResult, release_results, void_review
 from org.leadership.settings import (
     get_leadership_settings,
     moderator_count,
     update_leadership_settings,
 )
 from org.leadership.traits import effective_traits
-from org.models import Organization, OrgLog
+from org.models import Organization, OrgLog, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
 from org.standing.periods import parse_period
 from org.tests.leadership_base import LeadershipTestCase
@@ -406,3 +408,272 @@ class SettingsGateTest(LeadershipTestCase):
         self.assertEqual(moderator_count(org), 1)
         org.staff.add(self.make_user("mc_staff"))
         self.assertEqual(moderator_count(org), 2)
+
+
+class ReleaseServiceTest(LeadershipTestCase):
+    def setUp(self) -> None:
+        self.cap_c = self.make_user("ld_cap_c")
+        self.mates_c = [self.make_user(f"ld_c{i}") for i in range(2)]
+        super().setUp()
+        self.make_team("Charlie", self.cap_c, self.mates_c, placement=3)
+        for user in [self.cap_c, *self.mates_c]:
+            self.admit(user)
+        self.run_snapshot()
+        for captain, mates in (
+            (self.cap_a, self.mates_a),
+            (self.cap_b, self.mates_b),
+            (self.cap_c, self.mates_c),
+        ):
+            for mate in mates:
+                self.review(mate, captain)
+        OrgLeadershipSettings.objects.update_or_create(
+            organization=self.org, defaults={"require_staff_release": True}
+        )
+        self.snap_a = self.snapshot(self.cap_a)
+        self.snap_b = self.snapshot(self.cap_b)
+        self.snap_c = self.snapshot(self.cap_c)
+        for snap in (self.snap_a, self.snap_b, self.snap_c):
+            self.close_window(snap, 1)
+
+    def close_window(self, snap: EventCaptain, hours_ago: float) -> None:
+        EventCaptain.objects.filter(pk=snap.pk).update(
+            window_closes_at=tz.now() - timedelta(hours=hours_ago)
+        )
+
+    def open_window(self, snap: EventCaptain) -> None:
+        EventCaptain.objects.filter(pk=snap.pk).update(
+            window_closes_at=tz.now() + timedelta(hours=1)
+        )
+
+    def fresh(self, snap: EventCaptain) -> EventCaptain:
+        return EventCaptain.objects.nocache().get(pk=snap.pk)
+
+    def unstamp(self) -> None:
+        EventCaptain.objects.filter(event=self.event).update(
+            released_at=None, released_by=None
+        )
+
+    def stamped(self) -> set[int]:
+        return set(
+            EventCaptain.objects.nocache()
+            .filter(event=self.event, released_at__isnull=False)
+            .values_list("pk", flat=True)
+        )
+
+    def release(
+        self,
+        actor: CustomUser | None = None,
+        captain_ids: list[int] | None = None,
+        *,
+        now: datetime | None = None,
+    ) -> ReleaseResult:
+        return release_results(
+            self.org,
+            event=self.event,
+            actor=actor or self.admin,
+            captain_ids=captain_ids,
+            now=now or tz.now(),
+        )
+
+    def refused(self, code: str, status: int, fn: Any) -> None:
+        with self.assertRaises(ReviewRefused) as ctx:
+            fn()
+        self.assertEqual(ctx.exception.code, code)
+        self.assertEqual(ctx.exception.status, status)
+
+    def test_release_stamps_actor_and_time(self) -> None:
+        now = tz.now()
+        result = self.release(captain_ids=[self.ou(self.cap_a).pk], now=now)
+        self.assertEqual(result.released, [self.ou(self.cap_a).pk])
+        self.assertEqual(result.skipped, [])
+        snap = self.fresh(self.snap_a)
+        self.assertEqual(snap.released_at, now)
+        self.assertEqual(snap.released_by_id, self.admin.pk)
+        self.assertEqual(self.stamped(), {self.snap_a.pk})
+
+    def test_release_twice_already_released_409(self) -> None:
+        ids = [self.ou(self.cap_a).pk]
+        self.release(captain_ids=ids)
+        self.refused("already_released", 409, lambda: self.release(captain_ids=ids))
+
+    def test_release_gate_off_release_not_required_409(self) -> None:
+        OrgLeadershipSettings.objects.filter(organization=self.org).update(
+            require_staff_release=False
+        )
+        self.refused("release_not_required", 409, self.release)
+        self.assertEqual(self.stamped(), set())
+
+    def test_explicit_list_all_or_nothing(self) -> None:
+        self.open_window(self.snap_b)
+        ids = [self.ou(self.cap_a).pk, self.ou(self.cap_b).pk]
+        self.refused("window_open", 409, lambda: self.release(captain_ids=ids))
+        self.assertEqual(self.stamped(), set())
+
+    def test_explicit_own_403_before_409(self) -> None:
+        self.org.admins.add(self.cap_b)
+        self.open_window(self.snap_b)
+        ids = [self.ou(self.cap_a).pk, self.ou(self.cap_b).pk]
+        self.refused(
+            "cannot_release_own_reviews",
+            403,
+            lambda: self.release(self.cap_b, captain_ids=ids),
+        )
+        self.assertEqual(self.stamped(), set())
+
+    def test_explicit_unknown_captain_404(self) -> None:
+        other_owner = self.make_user("ld_rel_other")
+        other = Organization.objects.create(name="Release Other", owner=other_owner)
+        foreign = OrgUser.objects.create(user=self.cap_a, organization=other)
+        for unknown in (self.ou(self.mates_a[0]).pk, foreign.pk):
+            with self.subTest(unknown=unknown):
+                ids = [self.ou(self.cap_a).pk, unknown]
+                self.refused("not_found", 404, lambda: self.release(captain_ids=ids))
+                self.assertEqual(self.stamped(), set())
+
+    def test_event_wide_skips_own_and_non_releasable(self) -> None:
+        self.org.admins.add(self.cap_b)
+        self.open_window(self.snap_c)
+        result = self.release(self.cap_b)
+        self.assertEqual(result.released, [self.ou(self.cap_a).pk])
+        self.assertCountEqual(
+            result.skipped,
+            [
+                {"org_user_id": self.ou(self.cap_b).pk, "code": "own_snapshot"},
+                {"org_user_id": self.ou(self.cap_c).pk, "code": "window_open"},
+            ],
+        )
+        self.assertEqual(self.stamped(), {self.snap_a.pk})
+
+    def test_event_wide_all_skipped_is_nothing_to_release(self) -> None:
+        EventCaptain.objects.filter(pk=self.snap_a.pk).update(released_at=tz.now())
+        EventCaptain.objects.filter(pk=self.snap_b.pk).update(voided_at=tz.now())
+        review = CaptainReview.objects.filter(event_captain=self.snap_c).first()
+        assert review is not None
+        void_review(
+            self.org, review_id=review.pk, actor=self.admin, reason="x", now=tz.now()
+        )
+        self.refused("nothing_to_release", 409, self.release)
+
+    def test_event_wide_only_own_pending_is_nothing_to_release(self) -> None:
+        self.org.admins.add(self.cap_b)
+        EventCaptain.objects.filter(pk=self.snap_a.pk).update(released_at=tz.now())
+        self.open_window(self.snap_c)
+        self.refused("nothing_to_release", 409, lambda: self.release(self.cap_b))
+        self.assertIsNone(self.fresh(self.snap_b).released_at)
+        self.assertFalse(
+            OrgLog.objects.filter(action="release_captain_reviews").exists()
+        )
+
+    def test_release_after_void_below_floor_refused(self) -> None:
+        review = CaptainReview.objects.filter(event_captain=self.snap_b).first()
+        assert review is not None
+        void_review(
+            self.org, review_id=review.pk, actor=self.admin, reason="x", now=tz.now()
+        )
+        ids = [self.ou(self.cap_b).pk]
+        self.refused("not_enough_reviews", 409, lambda: self.release(captain_ids=ids))
+
+    def test_voided_snapshot_refused(self) -> None:
+        EventCaptain.objects.filter(pk=self.snap_b.pk).update(voided_at=tz.now())
+        ids = [self.ou(self.cap_b).pk]
+        self.refused("snapshot_voided", 409, lambda: self.release(captain_ids=ids))
+
+    def test_auto_released_counts_as_already_released(self) -> None:
+        OrgLeadershipSettings.objects.filter(organization=self.org).update(
+            auto_release_after_hours=24
+        )
+        self.close_window(self.snap_a, 30)
+        ids = [self.ou(self.cap_a).pk]
+        self.refused("already_released", 409, lambda: self.release(captain_ids=ids))
+        self.assertIsNone(self.fresh(self.snap_a).released_at)
+
+    def test_release_permission_roles(self) -> None:
+        admin = self.make_user("ld_rel_admin")
+        self.org.admins.add(admin)
+        staff = self.make_user("ld_rel_staff")
+        self.org.staff.add(staff)
+        site_staff = CustomUser.objects.create_user(
+            username="ld_rel_site", password="x", is_staff=True
+        )
+        ids = [self.ou(self.cap_a).pk]
+        for name, actor in (
+            ("owner", self.admin),
+            ("admin", admin),
+            ("staff", staff),
+            ("site_staff", site_staff),
+        ):
+            with self.subTest(name):
+                self.unstamp()
+                result = self.release(actor, captain_ids=ids)
+                self.assertEqual(result.released, ids)
+                self.assertEqual(self.fresh(self.snap_a).released_by_id, actor.pk)
+        self.unstamp()
+        with self.subTest("member"):
+            self.refused(
+                "not_permitted",
+                403,
+                lambda: self.release(self.mates_a[0], captain_ids=ids),
+            )
+        with self.subTest("superuser_captain"):
+            CustomUser.objects.filter(pk=self.cap_a.pk).update(is_superuser=True)
+            self.cap_a.refresh_from_db()
+            self.refused(
+                "cannot_release_own_reviews",
+                403,
+                lambda: self.release(self.cap_a, captain_ids=ids),
+            )
+        self.assertEqual(self.stamped(), set())
+
+    def test_release_logs_once(self) -> None:
+        with capture_logs() as logs:
+            with self.captureOnCommitCallbacks(execute=True):
+                self.release()
+        events = [e for e in logs if e["event"] == "leadership_results_released"]
+        self.assertEqual(len(events), 1)
+        caps = sorted(self.ou(u).pk for u in (self.cap_a, self.cap_b, self.cap_c))
+        expected = {
+            "system": "org",
+            "subsystem": "leadership",
+            "org_id": self.org.pk,
+            "event_id": self.event.pk,
+            "actor_id": self.admin.pk,
+            "captain_org_user_ids": caps,
+            "count": 3,
+        }
+        for key, value in expected.items():
+            self.assertEqual(events[0][key], value, key)
+
+    def test_release_not_logged_on_refusal(self) -> None:
+        self.release()
+        with capture_logs() as logs:
+            with self.captureOnCommitCallbacks(execute=True):
+                self.refused("nothing_to_release", 409, self.release)
+        self.assertFalse(
+            [e for e in logs if e["event"] == "leadership_results_released"]
+        )
+
+    def test_release_invalidates_after_commit(self) -> None:
+        self.open_window(self.snap_c)
+        with mock.patch("org.leadership.reviews.invalidate_after_commit") as inv:
+            self.release()
+        inv.assert_called_once()
+        args = inv.call_args.args
+        self.assertTrue(all(isinstance(a, EventCaptain) for a in args))
+        self.assertEqual({a.pk for a in args}, {self.snap_a.pk, self.snap_b.pk})
+
+    def test_release_orglog(self) -> None:
+        self.open_window(self.snap_c)
+        self.release()
+        entry = OrgLog.objects.get(
+            organization=self.org, action="release_captain_reviews"
+        )
+        self.assertEqual(entry.actor_id, self.admin.pk)
+        self.assertEqual(
+            entry.details,
+            {
+                "event_id": self.event.pk,
+                "captain_org_user_ids": sorted(
+                    [self.ou(self.cap_a).pk, self.ou(self.cap_b).pk]
+                ),
+            },
+        )
