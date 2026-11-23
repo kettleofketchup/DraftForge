@@ -155,11 +155,16 @@ export async function updateOrgUser(
     game_mmrs?: Partial<Record<GameTypeValue, number | null>>;
   },
   gameType?: number,
+  tournamentId?: number,
 ): Promise<UserType> {
+  const params = {
+    ...(gameType != null ? { game_type: gameType } : {}),
+    ...(tournamentId != null ? { tournament_id: tournamentId } : {}),
+  };
   const response = await axios.patch<UserType>(
     `/organizations/${organizationId}/users/${orgUserId}/`,
     data,
-    gameType != null ? { params: { game_type: gameType } } : undefined,
+    Object.keys(params).length ? { params } : undefined,
   );
   return response.data;
 }

@@ -12,6 +12,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
@@ -33,7 +34,7 @@ export const InitDraftButton: React.FC = () => {
   const setDraft = useUserStore((state) => state.setDraft);
   const curDraftRound = useUserStore((state) => state.curDraftRound);
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
-  const isStaff = useUserStore((state) => state.isStaff);
+  const canManage = useCanManageCurrentTournament();
   const { confirmForce, confirmForceDialog } = useConfirmForceReset();
   const { showResetSummary, resetSummaryDialog } = useDraftResetSummary();
 
@@ -61,7 +62,7 @@ export const InitDraftButton: React.FC = () => {
     setOpen(false);
   };
 
-  if (!isStaff()) {
+  if (!canManage) {
     return (
       <div className="justify-start self-start flex w-full">
         <AdminOnlyButton tooltipTxt="Must be an admin to make changes to the draft" />
