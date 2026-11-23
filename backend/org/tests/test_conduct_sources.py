@@ -11,6 +11,7 @@ from events.constants import (
     SignupAction,
     SignupMeans,
     SignupStatus,
+    VoicePresenceSource,
 )
 from events.ledger import SignupActor, record_signup_change
 from events.models import (
@@ -26,7 +27,7 @@ from events.ready_check_constants import (
     ReadyCheckPhase,
 )
 from org.conduct.constants import Outcome, OutcomeSource
-from org.conduct.sources import automatic_outcomes
+from org.conduct.sources import _voice_user_ids, automatic_outcomes
 from org.models import OrgUser
 from org.models_conduct import AttendanceOutcome
 from org.tests.conduct_base import ConductTestCase
@@ -245,6 +246,37 @@ class AutomaticOutcomesTest(ConductTestCase):
                 self._key(present.user): (Outcome.ATTENDED, OutcomeSource.VOICE),
                 self._key(joined.user): (Outcome.ATTENDED, OutcomeSource.VOICE),
             },
+        )
+
+    def test_manual_present_row_gives_no_voice_credit(self) -> None:
+        manual = self._member()
+        feed = self._member()
+        manual_joined = self._member()
+        EventVoicePresence.objects.create(
+            event=self.event,
+            user=manual.user,
+            present=True,
+            source=VoicePresenceSource.MANUAL,
+        )
+        EventVoicePresence.objects.create(
+            event=self.event,
+            user=feed.user,
+            present=True,
+            source=VoicePresenceSource.FEED,
+        )
+        EventVoicePresence.objects.create(
+            event=self.event,
+            user=manual_joined.user,
+            present=True,
+            source=VoicePresenceSource.MANUAL,
+            first_joined_at=tz.now(),
+        )
+
+        self.assertEqual(_voice_user_ids(self.event, {manual.user.pk}), set())
+        self.assertEqual(_voice_user_ids(self.event, {feed.user.pk}), {feed.user.pk})
+        self.assertEqual(
+            _voice_user_ids(self.event, {manual_joined.user.pk}),
+            {manual_joined.user.pk},
         )
 
 
