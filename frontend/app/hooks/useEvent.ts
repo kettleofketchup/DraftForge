@@ -65,6 +65,7 @@ import {
   invalidateConductQueries,
   invalidateOrgContributionQueries,
   invalidateOrgStandingQueries,
+  invalidatePromotionQueries,
 } from '~/features/org-features/queryKeys';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
@@ -212,6 +213,7 @@ export function useEventActionMutation(eventId: number) {
         queryClient.removeQueries({ queryKey: ['event', eventId] });
         void invalidateConductQueries(queryClient);
         void invalidateOrgStandingQueries(queryClient, orgId);
+        if (orgId != null) void invalidatePromotionQueries(queryClient, orgId);
       },
     }),
     restartTournament: useMutation({
@@ -354,6 +356,7 @@ export function useUpdateEventMutation(eventId: number) {
       });
       void invalidateConductQueries(queryClient, data.organization);
       void invalidateOrgStandingQueries(queryClient, data.organization);
+      void invalidatePromotionQueries(queryClient, data.organization);
     },
   });
 }
