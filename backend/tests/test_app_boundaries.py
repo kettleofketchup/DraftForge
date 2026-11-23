@@ -465,6 +465,7 @@ _TOURNAMENT_RETIRED_DEFS = {
         "_key",
         "_reference_relations",
         "_team_rows",
+        "_usage_sort_key",
         "all_reference_keys",
         "team_references",
         "team_usage",

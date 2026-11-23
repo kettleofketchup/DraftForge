@@ -19,9 +19,8 @@
 - Team usage and reference payloads (the `team_in_use` 409 on team delete
   and the draft reset responses) now name the models `tournament.Game` and
   `tournament.Tournament`, and their keys `tournament.Game.radiant_team`,
-  `tournament.Game.dire_team` and so on, instead of `app.*`. Because `usage`
-  is sorted by model label, `tournament.Game` entries now come after
-  `bracket.BracketSlot` and `draft.HeroDraft` entries.
+  `tournament.Game.dire_team` and so on, instead of `app.*`. The `usage`
+  list keeps its order.
 - `TOURNAMNET_TYPE_CHOICES` is renamed `TOURNAMENT_TYPE_CHOICES`.
 - HTTP and WebSocket paths, URL names, Redis keys and table names are
   unchanged.

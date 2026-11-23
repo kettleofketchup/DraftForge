@@ -5,11 +5,13 @@ from django.utils import timezone
 
 from app.models import CustomUser
 from bracket.models import BracketSlot, TournamentBracket
+from draft.models import DraftTeam, HeroDraft
 from league.models import League
 from org.models import Organization
 from tournament.models import Game, Team, TeamLog, Tournament
 from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.services.team_references import (
+    _usage_sort_key,
     all_reference_keys,
     team_references,
     team_usage,
@@ -93,10 +95,44 @@ class TeamUsageTests(TeamReferencesFixture, TestCase):
 
         self.assertEqual(
             [(u["model"], u["count"]) for u in usage],
-            [("bracket.BracketSlot", 1), ("tournament.Game", 1)],
+            [("tournament.Game", 1), ("bracket.BracketSlot", 1)],
         )
-        self.assertEqual([t["name"] for t in usage[0]["teams"]], ["Other"])
-        self.assertEqual([t["name"] for t in usage[1]["teams"]], ["Resetters", "Other"])
+        self.assertEqual([t["name"] for t in usage[0]["teams"]], ["Resetters", "Other"])
+        self.assertEqual([t["name"] for t in usage[1]["teams"]], ["Other"])
+
+    def test_usage_ordered_by_display_label_not_app_label(self) -> None:
+        other = Team.objects.create(tournament=self.tournament, name="Other")
+        game = Game.objects.create(
+            tournament=self.tournament, radiant_team=self.team, dire_team=other
+        )
+        self.tournament.winning_team = self.team
+        self.tournament.save()
+        bracket = TournamentBracket.objects.create(tournament=self.tournament)
+        BracketSlot.objects.create(
+            bracket=bracket, max_rounds=1, game=game, participant=other
+        )
+        hero_draft = HeroDraft.objects.create(game=game)
+        DraftTeam.objects.create(draft=hero_draft, tournament_team=self.team)
+        DraftTeam.objects.create(draft=hero_draft, tournament_team=other)
+
+        usage = team_usage(Team.objects.filter(pk__in=[self.team.pk, other.pk]))
+
+        self.assertEqual(
+            [u["label"] for u in usage],
+            ["game", "tournament result", "bracket slot", "HeroDraft"],
+        )
+
+    def test_unlisted_labels_sort_after_listed_ones(self) -> None:
+        rows = [
+            {"label": "zebra"},
+            {"label": "Apple"},
+            {"label": "HeroDraft"},
+            {"label": "game"},
+        ]
+        self.assertEqual(
+            [r["label"] for r in sorted(rows, key=_usage_sort_key)],
+            ["game", "HeroDraft", "Apple", "zebra"],
+        )
 
     def test_empty(self) -> None:
         self.assertEqual(team_usage(Team.objects.none()), [])
