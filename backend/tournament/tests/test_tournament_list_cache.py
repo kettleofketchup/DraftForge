@@ -36,7 +36,7 @@ class TournamentListCacheTests(TransactionTestCase):
         if not self._redis_ok:
             self.skipTest("Cacheops Redis not reachable")
         prefix = mock.patch(
-            "app.tournament_list.TOURNAMENTS_LIST_CACHE_PREFIX",
+            "tournament.listing.TOURNAMENTS_LIST_CACHE_PREFIX",
             "test_tournaments_list_cache",
         )
         prefix.start()
@@ -46,7 +46,7 @@ class TournamentListCacheTests(TransactionTestCase):
         self.client = APIClient()
 
     def _get(self, qs: str, now: datetime = NOW, **extra: Any) -> Response:
-        with mock.patch("app.tournament_buckets._now", return_value=now):
+        with mock.patch("tournament.buckets._now", return_value=now):
             return self.client.get(f"{LIST_URL}{qs}", **extra)
 
     def _stored_pages(self, spy: mock.MagicMock) -> list[dict[str, Any]]:

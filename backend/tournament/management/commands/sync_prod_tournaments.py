@@ -4,18 +4,18 @@ import requests
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
-from app.management.prod_payload import (
+from app.management.prod_payload import steam_account_id
+from app.models import CustomUser, Game, Team, Tournament
+from common.game import GameType
+from draft.models import Draft, DraftOptions, DraftRound
+from telemetry.logging import get_logger
+from tournament.management.prod_payload import (
     TeamLookup,
     UserRef,
     index_users,
     parse_date_played,
     resolve_user,
-    steam_account_id,
 )
-from app.models import CustomUser, Game, Team, Tournament
-from common.game import GameType
-from draft.models import Draft, DraftOptions, DraftRound
-from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 

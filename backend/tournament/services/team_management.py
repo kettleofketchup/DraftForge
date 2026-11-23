@@ -7,29 +7,16 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, Literal
 
-from cacheops import invalidate_obj
 from django.db import transaction
 from django.db.models import Q
 
-from app.cache_utils import invalidate_after_commit
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import (
     CustomUser,
     Team,
     TeamLog,
     TeamLogAction,
     TeamLogVia,
-)
-from app.services.team_audit import (
-    log_snapshot_fields,
-    roster_snapshot,
-    source_event,
-    write_team_log,
-)
-from app.services.team_leadership import successor_after_removal
-from app.services.team_signals import (
-    change_from_log,
-    owning_team_audit,
-    send_roster_changed_on_commit,
 )
 from draft.models import (
     Draft,
@@ -54,6 +41,18 @@ from league.models import LeagueUser
 from org.models import OrgSettings, OrgUser
 from org.settings_service import get_org_settings
 from telemetry.logging import get_logger
+from tournament.services.team_audit import (
+    log_snapshot_fields,
+    roster_snapshot,
+    source_event,
+    write_team_log,
+)
+from tournament.services.team_leadership import successor_after_removal
+from tournament.services.team_signals import (
+    change_from_log,
+    owning_team_audit,
+    send_roster_changed_on_commit,
+)
 
 log = get_logger(__name__)
 

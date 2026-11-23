@@ -7,7 +7,7 @@ from django.utils import timezone
 from structlog.testing import capture_logs
 
 from app.models import CustomUser, Team, TeamLog, TeamLogAction, TeamLogVia, Tournament
-from app.services.team_signals import (
+from tournament.services.team_signals import (
     TeamRosterChange,
     change_from_log,
     owning_team_audit,
@@ -15,7 +15,6 @@ from app.services.team_signals import (
     team_audit_owner,
     team_roster_changed,
 )
-from app.signals import team_roster_changed as reexported_signal
 
 
 class TeamRosterSignalTests(TestCase):
@@ -54,9 +53,6 @@ class TeamRosterSignalTests(TestCase):
 
     def record(self, sender: Any, change: TeamRosterChange, **kwargs: Any) -> None:
         self.calls.append({"sender": sender, "change": change})
-
-    def test_reexported_from_app_signals(self) -> None:
-        self.assertIs(reexported_signal, team_roster_changed)
 
     def test_change_from_log(self) -> None:
         change = change_from_log(self.log)

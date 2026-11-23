@@ -1,6 +1,5 @@
 """Tournament and game permission helpers."""
 
-from collections.abc import Mapping
 from typing import Any
 
 from django.contrib.auth.models import AnonymousUser
@@ -11,23 +10,6 @@ from app.models import CustomUser, Game, Tournament
 from draft.models import HeroDraft
 from league.models import League
 from league.permissions import has_league_admin_access, has_league_staff_access
-from org.permissions import has_org_staff_access
-
-
-def has_event_staff_access(user: CustomUser | AnonymousUser | None, event: Any) -> bool:
-    """Org staff for event.organization, or league staff for event.tournament_league."""
-    if not user or not getattr(user, "is_authenticated", False):
-        return False
-    if has_org_staff_access(user, event.organization):
-        return True
-    if event.tournament_league_id and has_league_staff_access(
-        user, event.tournament_league
-    ):
-        return True
-    return False
-
-
-# Tournament and Game level permission helpers
 
 
 def can_edit_tournament(
@@ -109,34 +91,6 @@ def check_tournament_league_change(
             if tournament is None
             else "You must be an admin of the league you are moving this tournament to."
         )
-
-
-def _lobby_league_error(message: str) -> serializers.ValidationError:
-    return serializers.ValidationError({"lobby_steam_league_id": message})
-
-
-def check_lobby_steam_league_id(
-    user: CustomUser | AnonymousUser, value: int | None, target: League | None
-) -> None:
-    """Authorize a lobby ticket ID: the target league's own, unowned, or one
-    owned by a league the user admins."""
-    if value is None:
-        return
-    if value <= 0:
-        raise _lobby_league_error("Steam league ID must be a positive integer.")
-    if target is not None and target.steam_league_id == value:
-        return
-    owner = League.objects.filter(steam_league_id=value).nocache().first()
-    if owner is not None and not has_league_admin_access(user, owner):
-        raise _lobby_league_error(
-            f"Steam league ID {value} belongs to '{owner.name}'. "
-            "Only an admin of that league can use it."
-        )
-
-
-def request_user(context: Mapping[str, Any]) -> CustomUser | AnonymousUser:
-    request = context.get("request")
-    return getattr(request, "user", None) or AnonymousUser()
 
 
 def can_manage_game(user: CustomUser | AnonymousUser, game: Game) -> bool:

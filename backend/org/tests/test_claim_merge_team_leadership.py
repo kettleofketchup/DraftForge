@@ -6,9 +6,9 @@ from django.test import TestCase
 from django.utils import timezone
 
 from app.models import CustomUser, PositionsModel, Team, Tournament
-from app.services.team_leadership import teams_with_leadership_problems
 from events.tests.actors import SYSTEM
 from org.views import ClaimRequestViewSet
+from tournament.services.team_leadership import teams_with_leadership_problems
 
 _discord_ids = itertools.count(571500)
 

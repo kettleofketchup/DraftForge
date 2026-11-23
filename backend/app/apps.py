@@ -8,7 +8,7 @@ class AppConfig(AppConfig):
     name = "app"
 
     def ready(self) -> None:
-        """Register signal handlers; cache freshness handled elsewhere.
+        """Reset the cache on test/dev boot; prod freshness is handled elsewhere.
 
         Production relies on two cheaper mechanisms than the previous
         `invalidate_all()` on every boot:
@@ -34,15 +34,12 @@ class AppConfig(AppConfig):
         cache should call `invalidate_model(Model)` from inside the
         migration (see e.g. `discordbot/migrations/0009_*`).
         """
-        import app.signals  # noqa: F401
-
         if os.environ.get("DISABLE_CACHE", "false").lower() == "true":
             return
 
         node_env = os.environ.get("NODE_ENV", "").lower()
         is_test_env = (
-            node_env in ("test", "dev")
-            or os.environ.get("TEST", "").lower() == "true"
+            node_env in ("test", "dev") or os.environ.get("TEST", "").lower() == "true"
         )
         if not is_test_env or getattr(settings, "RUNNING_TESTS", False):
             return

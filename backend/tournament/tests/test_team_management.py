@@ -20,25 +20,6 @@ from app.models import (
     Tournament,
 )
 from app.serializers import users_remaining_pks
-from app.services import team_management
-from app.services.team_management import (
-    DEFAULT_MAX_STANDINS,
-    TeamChange,
-    TeamManagementError,
-    _apply,
-    add_standin,
-    mark_dropout,
-    other_team_user_ids,
-    remove_standin,
-    rename,
-    restore_member,
-    set_captain,
-    set_deputy,
-    standin_cap,
-    sub_in,
-)
-from app.services.team_signals import TeamRosterChange, team_roster_changed
-from app.tournament_state import tournament_state_queryset
 from draft.models import (
     Draft,
     DraftEvent,
@@ -63,6 +44,25 @@ from org.models_profiles import PlayerDotaProfile
 from org.settings_constants import StaffOverridePolicy
 from org.settings_service import get_org_settings
 from tests.populate.utils import ensure_org_user
+from tournament.services import team_management
+from tournament.services.team_management import (
+    DEFAULT_MAX_STANDINS,
+    TeamChange,
+    TeamManagementError,
+    _apply,
+    add_standin,
+    mark_dropout,
+    other_team_user_ids,
+    remove_standin,
+    rename,
+    restore_member,
+    set_captain,
+    set_deputy,
+    standin_cap,
+    sub_in,
+)
+from tournament.services.team_signals import TeamRosterChange, team_roster_changed
+from tournament.state import tournament_state_queryset
 from user.tests.test_cacheops_integration import _redis_reachable
 
 

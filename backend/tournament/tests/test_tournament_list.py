@@ -10,9 +10,9 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import Tournament
-from app.tournament_buckets import tournament_bucket_cutoff
 from league.models import League
 from org.models import Organization
+from tournament.buckets import tournament_bucket_cutoff
 
 LIST_URL = "/api/tournaments-list/"
 PLAYED = datetime(2026, 11, 20, 18, 0, tzinfo=timezone.utc)
@@ -136,7 +136,7 @@ class _BucketFixtureMixin(TestCase):
         self.client = APIClient()
 
     def get(self, qs: str = "") -> Response:
-        with mock.patch("app.tournament_buckets._now", return_value=NOW):
+        with mock.patch("tournament.buckets._now", return_value=NOW):
             return self.client.get(f"{LIST_URL}{qs}")
 
     def pks(self, qs: str) -> list[int]:
