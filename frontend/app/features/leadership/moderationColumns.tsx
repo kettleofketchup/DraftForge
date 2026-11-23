@@ -18,6 +18,8 @@ export interface MakeModerationColumnsOptions {
   onVoid: (r: ModerationReview) => void;
   onUnvoid: (r: ModerationReview) => void;
   pendingPk: number | null;
+  /** Below sm: the action and date move into the rater cell. */
+  stacked: boolean;
 }
 
 const STATUS_LABELS = {
@@ -51,13 +53,78 @@ function scoreChips(scores: Scores, traits: ModerationTrait[]) {
   ));
 }
 
+type ReviewActionProps = Pick<
+  MakeModerationColumnsOptions,
+  'viewerPk' | 'onVoid' | 'onUnvoid' | 'pendingPk'
+>;
+
+function ReviewAction({
+  review: r,
+  viewerPk,
+  onVoid,
+  onUnvoid,
+  pendingPk,
+}: ReviewActionProps & { review: ModerationReview }) {
+  const name = r.rater ? DisplayName(r.rater) : 'deleted account';
+  if (viewerPk !== null && r.rater?.user_pk === viewerPk) {
+    return (
+      <span
+        className="text-sm text-muted-foreground"
+        data-testid={`leadership-own-review-${r.pk}`}
+      >
+        Your review
+      </span>
+    );
+  }
+  if (r.void_kind === 'moderated') {
+    return (
+      <SecondaryButton
+        size="sm"
+        className="min-h-11 sm:min-h-9"
+        data-testid={`leadership-unvoid-${r.pk}`}
+        aria-label={`Restore review by ${name}`}
+        disabled={pendingPk !== null}
+        onClick={(e) => {
+          e.stopPropagation();
+          onUnvoid(r);
+        }}
+      >
+        Restore
+      </SecondaryButton>
+    );
+  }
+  if (r.voided_at !== null) return null;
+  return (
+    <DestructiveButton
+      size="sm"
+      className="min-h-11 sm:min-h-9"
+      data-testid={`leadership-void-${r.pk}`}
+      aria-label={`Void review by ${name}`}
+      disabled={pendingPk !== null}
+      onClick={(e) => {
+        e.stopPropagation();
+        onVoid(r);
+      }}
+    >
+      Void
+    </DestructiveButton>
+  );
+}
+
 export function makeModerationColumns({
   viewerPk,
   traits,
   onVoid,
   onUnvoid,
   pendingPk,
+  stacked,
 }: MakeModerationColumnsOptions): AppColumnDef<ModerationReview>[] {
+  const actionProps: ReviewActionProps = {
+    viewerPk,
+    onVoid,
+    onUnvoid,
+    pendingPk,
+  };
   return [
     {
       id: 'rater',
@@ -67,24 +134,42 @@ export function makeModerationColumns({
         const r = row.original;
         return (
           <div className="flex min-w-0 flex-col gap-1">
-            <div className="flex min-w-0 items-center gap-2">
-              {r.rater && (
-                <span className="hidden shrink-0 sm:inline-flex">
-                  <UserAvatar
-                    user={{ ...r.rater, pk: r.rater.user_pk }}
-                    size="sm"
-                  />
-                </span>
-              )}
-              <span className="min-w-0 font-medium break-words">
-                {r.rater ? DisplayName(r.rater) : 'Deleted account'}
-              </span>
-            </div>
             <div
-              className="sm:hidden"
-              data-testid={`leadership-stacked-status-${r.pk}`}
+              className="flex min-w-0 items-center gap-2"
+              data-testid={`leadership-stacked-head-${r.pk}`}
             >
-              <StatusBadge review={r} />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  {r.rater && (
+                    <span className="hidden shrink-0 sm:inline-flex">
+                      <UserAvatar
+                        user={{ ...r.rater, pk: r.rater.user_pk }}
+                        size="sm"
+                      />
+                    </span>
+                  )}
+                  <span className="min-w-0 font-medium break-words">
+                    {r.rater ? DisplayName(r.rater) : 'Deleted account'}
+                  </span>
+                </div>
+                <div
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:hidden"
+                  data-testid={`leadership-stacked-status-${r.pk}`}
+                >
+                  <StatusBadge review={r} />
+                  <span
+                    className="text-xs whitespace-nowrap text-muted-foreground"
+                    data-testid={`leadership-stacked-submitted-${r.pk}`}
+                  >
+                    {formatOrgDate(r.submitted_at, undefined)}
+                  </span>
+                </div>
+              </div>
+              {stacked && (
+                <div className="shrink-0 sm:hidden">
+                  <ReviewAction review={r} {...actionProps} />
+                </div>
+              )}
             </div>
             <div
               className="flex flex-wrap gap-1 md:hidden"
@@ -151,54 +236,14 @@ export function makeModerationColumns({
       id: 'actions',
       enableSorting: false,
       header: () => <span className="sr-only">Actions</span>,
-      cell: ({ row }) => {
-        const r = row.original;
-        const name = r.rater ? DisplayName(r.rater) : 'deleted account';
-        if (viewerPk !== null && r.rater?.user_pk === viewerPk) {
-          return (
-            <span
-              className="text-sm text-muted-foreground"
-              data-testid={`leadership-own-review-${r.pk}`}
-            >
-              Your review
-            </span>
-          );
-        }
-        if (r.void_kind === 'moderated') {
-          return (
-            <SecondaryButton
-              size="sm"
-              className="min-h-11 sm:min-h-9"
-              data-testid={`leadership-unvoid-${r.pk}`}
-              aria-label={`Restore review by ${name}`}
-              disabled={pendingPk !== null}
-              onClick={(e) => {
-                e.stopPropagation();
-                onUnvoid(r);
-              }}
-            >
-              Restore
-            </SecondaryButton>
-          );
-        }
-        if (r.voided_at !== null) return null;
-        return (
-          <DestructiveButton
-            size="sm"
-            className="min-h-11 sm:min-h-9"
-            data-testid={`leadership-void-${r.pk}`}
-            aria-label={`Void review by ${name}`}
-            disabled={pendingPk !== null}
-            onClick={(e) => {
-              e.stopPropagation();
-              onVoid(r);
-            }}
-          >
-            Void
-          </DestructiveButton>
-        );
+      cell: ({ row }) =>
+        stacked ? null : (
+          <ReviewAction review={row.original} {...actionProps} />
+        ),
+      meta: {
+        headClassName: 'hidden w-24 sm:table-cell',
+        cellClassName: 'hidden w-24 sm:table-cell',
       },
-      meta: { headClassName: 'w-24', cellClassName: 'w-24' },
     },
   ];
 }

@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { Badge } from '~/components/ui/badge';
-import { DataTable } from '~/components/ui/data-table';
+import { CELL_BREAKPOINT_QUERIES, DataTable } from '~/components/ui/data-table';
 import { DisplayName } from '~/components/user/avatar';
+import { useMediaQuery } from '~/hooks/useMediaQuery';
 import { formatRating } from './format';
 import {
   makeModerationColumns,
@@ -9,7 +10,10 @@ import {
 } from './moderationColumns';
 import type { EventCaptainReviews } from './schemas';
 
-export type ReviewModerationTableProps = MakeModerationColumnsOptions & {
+export type ReviewModerationTableProps = Omit<
+  MakeModerationColumnsOptions,
+  'stacked'
+> & {
   captain: EventCaptainReviews;
 };
 
@@ -24,10 +28,18 @@ export function ReviewModerationTable({
   onUnvoid,
   pendingPk,
 }: ReviewModerationTableProps) {
+  const stacked = !useMediaQuery(CELL_BREAKPOINT_QUERIES.sm);
   const columns = useMemo(
     () =>
-      makeModerationColumns({ viewerPk, traits, onVoid, onUnvoid, pendingPk }),
-    [viewerPk, traits, onVoid, onUnvoid, pendingPk],
+      makeModerationColumns({
+        viewerPk,
+        traits,
+        onVoid,
+        onUnvoid,
+        pendingPk,
+        stacked,
+      }),
+    [viewerPk, traits, onVoid, onUnvoid, pendingPk, stacked],
   );
   const id = captain.org_user_id;
   const rating = captain.aggregate?.rating ?? null;

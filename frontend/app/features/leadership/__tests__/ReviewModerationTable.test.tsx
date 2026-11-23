@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { setViewportWidth } from '~/components/ui/data-table/__tests__/viewport';
 import { ReviewModerationTable } from '../ReviewModerationTable';
 import type { EventCaptainReviews, ModerationReview } from '../schemas';
 import {
@@ -170,5 +171,42 @@ describe('ReviewModerationTable', () => {
     expect(screen.getByTestId('leadership-stacked-scores-31')).toHaveClass(
       'md:hidden',
     );
+  });
+
+  it('puts the action beside the rater and the date under it below sm', () => {
+    renderTable(captainWith());
+    const row = screen.getByTestId('leadership-review-row-31');
+    const cells = row.querySelectorAll('td');
+    const head = screen.getByTestId('leadership-stacked-head-31');
+    expect(cells[0].contains(head)).toBe(true);
+    expect(within(head).getByTestId('leadership-void-31')).toBeInTheDocument();
+    expect(screen.getAllByTestId('leadership-void-31')).toHaveLength(1);
+    expect(
+      head.contains(screen.getByTestId('leadership-stacked-scores-31')),
+    ).toBe(false);
+    const stacked = screen.getByTestId('leadership-stacked-status-31');
+    expect(stacked).toHaveClass('sm:hidden');
+    expect(stacked).toHaveTextContent('Live');
+    expect(
+      within(stacked).getByTestId('leadership-stacked-submitted-31'),
+    ).toHaveTextContent(/\d{4}/);
+    const actionsCell = cells[cells.length - 1];
+    expect(actionsCell).toHaveClass('hidden', 'sm:table-cell');
+    expect(actionsCell.textContent).toBe('');
+  });
+
+  it('keeps the action in its own column from sm', () => {
+    const restore = setViewportWidth(1024);
+    try {
+      renderTable(captainWith());
+      const row = screen.getByTestId('leadership-review-row-31');
+      const cells = row.querySelectorAll('td');
+      const button = screen.getByTestId('leadership-void-31');
+      expect(screen.getAllByTestId('leadership-void-31')).toHaveLength(1);
+      expect(cells[cells.length - 1].contains(button)).toBe(true);
+      expect(cells[0].contains(button)).toBe(false);
+    } finally {
+      restore();
+    }
   });
 });
