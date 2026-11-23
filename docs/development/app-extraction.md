@@ -333,7 +333,7 @@ python manage.py migrate draft 0005
 python manage.py migrate events 0039
 python manage.py migrate league 0003
 python manage.py migrate lobby 0004
-python manage.py migrate org 0020
+python manage.py migrate org 0021
 python manage.py migrate steam 0008
 python manage.py migrate tournament zero
 python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='tournament', model__in=['tournament', 'team', 'game', 'teamlog']).delete()"

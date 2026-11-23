@@ -60,6 +60,15 @@ class OrgLeadershipSettings(models.Model):
     leaderboard_public = models.BooleanField(
         default=SETTINGS_DEFAULTS["leaderboard_public"]
     )
+    require_staff_release = models.BooleanField(
+        default=SETTINGS_DEFAULTS["require_staff_release"]
+    )
+    auto_release_after_hours = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        default=None,
+        validators=_range("auto_release_after_hours"),
+    )
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -77,6 +86,14 @@ class OrgLeadershipSettings(models.Model):
             models.CheckConstraint(
                 condition=Q(rating_min_reviewers__gte=MIN_RELEASE_REVIEWS),
                 name="leadership_min_reviewers_floor",
+            ),
+            models.CheckConstraint(
+                condition=Q(auto_release_after_hours__isnull=True)
+                | Q(
+                    auto_release_after_hours__gte=1,
+                    auto_release_after_hours__lte=720,
+                ),
+                name="leadership_auto_release_range",
             ),
         ]
 
@@ -129,6 +146,14 @@ class EventCaptain(models.Model):
     teammates = models.ManyToManyField("org.OrgUser", related_name="rater_pools")
     window_closes_at = models.DateTimeField()
     voided_at = models.DateTimeField(null=True, blank=True)
+    released_at = models.DateTimeField(null=True, blank=True)
+    released_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

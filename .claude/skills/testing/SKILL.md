@@ -119,6 +119,7 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | League | Discovery Home / Away / Open League | 30 / 31 / 32 | 17950 / 17951 / 17952 |
 | Tournament | Discovery tournaments (906 has open signups, org 32) | 900-906 | - |
 | Org / League | Game MMR Org / Game MMR League (per-game org MMR) | 50 | 17944 |
+| Tournament | Activity Bracket Test (Discord Activity bracket, DTX League, 2 of 6 games done) | 950 | - |
 
 | User | PK | Role | Login fixture |
 |------|----|------|--------------|

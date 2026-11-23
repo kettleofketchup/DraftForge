@@ -23,6 +23,8 @@ from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry, set_point_value
 from org.features import FeatureKey, org_has_feature, set_org_feature
 from org.leadership.kinds import LeadershipKind
+from org.leadership.release import released_snapshots
+from org.leadership.settings import get_leadership_settings
 from org.models import (
     ContributionEntry,
     ContributionPointValue,
@@ -32,7 +34,12 @@ from org.models import (
     PromoSend,
 )
 from org.models_conduct import AttendanceOutcome
-from org.models_leadership import CaptainReview, CaptainTrait, EventCaptain
+from org.models_leadership import (
+    CaptainReview,
+    CaptainTrait,
+    EventCaptain,
+    OrgLeadershipSettings,
+)
 from org.models_promotion import PromoTemplate
 from org.promotion.recipients import candidates
 from org.promotion.services import record_promo_send
@@ -75,6 +82,7 @@ from tests.populate.demo import (
 )
 from tests.populate.org_delete import populate_org_delete
 from tests.populate.org_features import (
+    org_features_test_data,
     populate_org_features_data,
     reset_org_features_data,
 )
@@ -93,6 +101,15 @@ from tests.test_org_features import (
     reset_org_features,
 )
 from tournament.models import Tournament
+
+
+def _released_captains(event_pk: int) -> set[int]:
+    released = released_snapshots(
+        FEATURES_ORG.pk,
+        now=timezone.now(),
+        settings=get_leadership_settings(FEATURES_ORG.pk),
+    )
+    return set(released.filter(event_id=event_pk).values_list("captain_id", flat=True))
 
 
 class EventLeagueStaffIsolationTest(TestCase):
@@ -394,9 +411,21 @@ class OrgFeaturesPopulateTest(TestCase):
         }
         released_pk = leadership["released_captain_org_user_pk"]
         open_pk = leadership["open_captain_org_user_pk"]
-        self.assertEqual(set(snaps), {released_pk, open_pk})
+        staff_pk = leadership["staff_captain_org_user_pk"]
+        self.assertEqual(set(snaps), {released_pk, open_pk, staff_pk})
         now = timezone.now()
         self.assertLess(snaps[released_pk].window_closes_at, now)
+        self.assertLess(snaps[staff_pk].window_closes_at, now)
+        self.assertEqual(
+            OrgUser.objects.nocache().get(pk=staff_pk).user_id,
+            ORG_FEATURES_ROLE_USERS["staff"].pk,
+        )
+        self.assertEqual(
+            CaptainReview.objects.nocache()
+            .filter(event_captain=snaps[staff_pk], voided_at__isnull=True)
+            .count(),
+            3,
+        )
         self.assertGreater(snaps[open_pk].window_closes_at, now)
         self.assertEqual(
             CaptainReview.objects.nocache()
@@ -466,6 +495,41 @@ class OrgFeaturesPopulateTest(TestCase):
                 ContributionEntry.objects.nocache().filter(track="leadership").count(),
             ),
             counts,
+        )
+
+    def test_reset_release_gate_leaves_pending(self) -> None:
+        data = reset_org_features_data(release_gate=True)
+        leadership = data["leadership"]
+        row = OrgLeadershipSettings.objects.nocache().get(
+            organization_id=FEATURES_ORG.pk
+        )
+        self.assertTrue(row.require_staff_release)
+        self.assertIsNone(row.auto_release_after_hours)
+        closed = EventCaptain.objects.nocache().filter(
+            event_id=leadership["event_pk"],
+            captain_id__in=[
+                leadership["released_captain_org_user_pk"],
+                leadership["staff_captain_org_user_pk"],
+            ],
+        )
+        self.assertEqual(closed.count(), 2)
+        self.assertTrue(all(s.released_at is None for s in closed))
+        self.assertTrue(all(s.released_by_id is None for s in closed))
+        self.assertEqual(_released_captains(leadership["event_pk"]), set())
+
+        reset_org_features_data()
+        self.assertFalse(
+            OrgLeadershipSettings.objects.nocache()
+            .filter(organization_id=FEATURES_ORG.pk)
+            .exists()
+        )
+        data = org_features_test_data()["leadership"]
+        self.assertEqual(
+            _released_captains(data["event_pk"]),
+            {
+                data["released_captain_org_user_pk"],
+                data["staff_captain_org_user_pk"],
+            },
         )
 
     def test_conduct_seeded(self) -> None:
@@ -791,6 +855,63 @@ class OrgFeaturesEndpointsTest(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertNotEqual(response.data["events"]["upcoming"]["pk"], before)
+
+    def test_data_lists_leadership_captains(self) -> None:
+        body = org_features_data(self.factory.get("/api/tests/org-features/data/")).data
+        leadership = body["leadership"]
+        captains = {
+            OrgUser.objects.get(pk=leadership[key]).user_id
+            for key in (
+                "released_captain_org_user_pk",
+                "open_captain_org_user_pk",
+                "staff_captain_org_user_pk",
+            )
+        }
+        self.assertEqual(len(captains), 3)
+        self.assertEqual(
+            OrgUser.objects.get(pk=leadership["released_captain_org_user_pk"]).user_id,
+            ORG_FEATURES_ROLE_USERS["member"].pk,
+        )
+        self.assertEqual(
+            OrgUser.objects.get(pk=leadership["staff_captain_org_user_pk"]).user_id,
+            ORG_FEATURES_ROLE_USERS["staff"].pk,
+        )
+
+    def _gate_row(self) -> OrgLeadershipSettings | None:
+        return (
+            OrgLeadershipSettings.objects.nocache()
+            .filter(organization_id=FEATURES_ORG.pk)
+            .first()
+        )
+
+    def test_reset_release_gate_body(self) -> None:
+        response = reset_org_features(
+            self.factory.post(
+                "/api/tests/org-features/reset/",
+                {"release_gate": True},
+                format="json",
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        row = self._gate_row()
+        assert row is not None
+        self.assertTrue(row.require_staff_release)
+
+        response = reset_org_features(
+            self.factory.post("/api/tests/org-features/reset/")
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(self._gate_row())
+
+    def test_reset_rejects_non_bool_release_gate(self) -> None:
+        response = reset_org_features(
+            self.factory.post(
+                "/api/tests/org-features/reset/",
+                {"release_gate": "yes"},
+                format="json",
+            )
+        )
+        self.assertEqual(response.status_code, 400)
 
 
 @override_settings(DEBUG=True)

@@ -44,7 +44,7 @@ class Migration(migrations.Migration):
         ("events", "0040_retarget_tournament_to_tournament"),
         ("league", "0004_retarget_leaguematch_game"),
         ("lobby", "0005_retarget_tournament_models"),
-        ("org", "0021_retarget_tournament_models"),
+        ("org", "0022_retarget_tournament_models"),
         ("steam", "0009_retarget_tournament_models"),
     ]
 

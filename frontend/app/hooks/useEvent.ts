@@ -56,12 +56,13 @@ import {
   signupIdOf,
 } from '~/components/events/signupOptimistic';
 import type { GameTypeValue } from '~/components/game/constants';
+import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
+import { orgUsersQueryKey } from '~/components/organization/hooks/useOrgUsersQuery';
 import type { UserType } from '~/components/user/types';
 import {
   invalidateConductQueries,
   invalidateOrgContributionQueries,
 } from '~/features/org-features/queryKeys';
-import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 
@@ -128,11 +129,16 @@ export function useSignupMutation(eventId: number) {
           queryKey: ['user-dota-profile', currentUserPk],
         });
       }
-      useOrgStore.getState().clearOrgUsers();
-      void invalidateConductQueries(
-        queryClient,
-        queryClient.getQueryData<EventType>(['event', eventId])?.organization,
-      );
+      const orgId = queryClient.getQueryData<EventType>([
+        'event',
+        eventId,
+      ])?.organization;
+      if (orgId) {
+        void queryClient.invalidateQueries({
+          queryKey: orgUsersQueryKey(orgId),
+        });
+      }
+      void invalidateConductQueries(queryClient, orgId);
     },
   });
 }
@@ -208,6 +214,9 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         void invalidateOrgContributionQueries(queryClient, data.organization);
+        void queryClient.invalidateQueries({
+          queryKey: organizationQueryKey(data.organization),
+        });
       },
     }),
   };

@@ -24,6 +24,11 @@ from .utils import (
     flush_redis_cache,
 )
 
+# Created by their own populate step, after every pk-sensitive step.
+OWN_STEP_CONFIG_PKS: frozenset[int] = frozenset(
+    {tournament_data.ACTIVITY_BRACKET_CONFIG.pk}
+)
+
 
 def create_dynamic_tournament(config: DynamicTournamentConfig, force: bool = False):
     """Create a tournament from a DynamicTournamentConfig.
@@ -170,6 +175,8 @@ def create_dyn_tournaments(force: bool = False):
     for name in dir(tournament_data):
         obj = getattr(tournament_data, name)
         if isinstance(obj, DynamicTournamentConfig):
+            if obj.pk in OWN_STEP_CONFIG_PKS:
+                continue
             tournament = create_dynamic_tournament(obj, force=force)
             if tournament:
                 created.append(tournament)

@@ -8,6 +8,8 @@ import {
   ModerationReviewSchema,
   MyReviewSchema,
   PendingReviewSchema,
+  ReleaseResultSchema,
+  ReleaseStateSchema,
   ScoresFormSchema,
   TraitFormSchema,
   TraitsSchema,
@@ -17,6 +19,7 @@ import {
   eventReviews,
   leadershipSettings,
   memberLeadership,
+  moderationCaptain,
   moderationReview,
   myReview,
   pendingReview,
@@ -107,6 +110,95 @@ describe('leadership response schemas', () => {
     expect(EventCaptainReviewsSchema.parse(own).reviews).toBeNull();
   });
 
+  it('parses the release fields of a moderation payload', () => {
+    const parsed = EventReviewsSchema.parse(
+      eventReviews({
+        require_staff_release: true,
+        captains: [
+          moderationCaptain({
+            released: false,
+            release_state: 'pending',
+            auto_release_at: '2026-11-06T19:00:00Z',
+            live_reviews: 4,
+            release_floor: 3,
+            can_release: true,
+          }),
+          moderationCaptain({
+            org_user_id: 9,
+            release_state: 'released',
+            released_at: '2026-11-05T10:00:00Z',
+            released_by: { pk: 3, username: 'mod' },
+          }),
+          moderationCaptain({
+            org_user_id: 10,
+            released: false,
+            release_state: 'hidden',
+            live_reviews: null,
+            release_floor: null,
+            own_snapshot: true,
+            reviews: null,
+          }),
+        ],
+      }),
+    );
+    expect(parsed.require_staff_release).toBe(true);
+    expect(parsed.captains.map((c) => c.release_state)).toEqual([
+      'pending',
+      'released',
+      'hidden',
+    ]);
+    expect(parsed.captains[0].auto_release_at).toBe('2026-11-06T19:00:00Z');
+    expect(parsed.captains[1].released_by).toEqual({ pk: 3, username: 'mod' });
+    expect(parsed.captains[2].live_reviews).toBeNull();
+  });
+
+  it('knows every release state and rejects others', () => {
+    for (const state of [
+      'voided',
+      'open',
+      'short',
+      'pending',
+      'released',
+      'hidden',
+    ]) {
+      expect(ReleaseStateSchema.parse(state)).toBe(state);
+    }
+    expect(() => ReleaseStateSchema.parse('stamped')).toThrow();
+  });
+
+  it('rejects a moderation payload without the gate flag', () => {
+    const { require_staff_release: _gate, ...rest } = eventReviews();
+    expect(() => EventReviewsSchema.parse(rest)).toThrow();
+  });
+
+  it('parses a release result', () => {
+    expect(
+      ReleaseResultSchema.parse({
+        released: [7],
+        skipped: [{ org_user_id: 9, code: 'own_snapshot' }],
+      }),
+    ).toEqual({
+      released: [7],
+      skipped: [{ org_user_id: 9, code: 'own_snapshot' }],
+    });
+  });
+
+  it('parses settings with release fields and moderator count', () => {
+    const parsed = LeadershipSettingsSchema.parse(
+      leadershipSettings({
+        require_staff_release: true,
+        auto_release_after_hours: 48,
+        moderator_count: 2,
+      }),
+    );
+    expect(parsed.auto_release_after_hours).toBe(48);
+    expect(parsed.moderator_count).toBe(2);
+    expect(
+      LeadershipSettingsSchema.parse(leadershipSettings())
+        .auto_release_after_hours,
+    ).toBeNull();
+  });
+
   it('accepts a moderated review without a rater', () => {
     const parsed = ModerationReviewSchema.parse(
       moderationReview({
@@ -145,6 +237,28 @@ describe('LeadershipSettingsFormSchema', () => {
     });
     expect(issues).toHaveLength(1);
     expect(issues[0].path).toEqual(['max_age_days']);
+  });
+
+  it('accepts no auto-release and the hour bounds', () => {
+    for (const hours of [null, 1, 720]) {
+      expect(
+        formIssues({ ...FORM_VALUES, auto_release_after_hours: hours }),
+      ).toEqual([]);
+    }
+  });
+
+  it('rejects auto-release hours outside 1 to 720', () => {
+    for (const hours of [0, 721, 1.5]) {
+      expect(
+        formIssues({ ...FORM_VALUES, auto_release_after_hours: hours })[0].path,
+      ).toEqual(['auto_release_after_hours']);
+    }
+  });
+
+  it('requires the gate flag to be a boolean', () => {
+    expect(
+      formIssues({ ...FORM_VALUES, require_staff_release: 'yes' })[0].path,
+    ).toEqual(['require_staff_release']);
   });
 
   it('rejects a point override above 1000', () => {

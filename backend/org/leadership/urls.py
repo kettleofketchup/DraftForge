@@ -1,6 +1,7 @@
 from django.urls import path
 
 from org.leadership.views import (
+    leadership_event_release,
     leadership_event_reviews,
     leadership_member,
     leadership_mine,
@@ -38,6 +39,11 @@ urlpatterns = [
         "events/<int:event_id>/reviews/",
         leadership_event_reviews,
         name="org-leadership-event-reviews",
+    ),
+    path(
+        "events/<int:event_id>/release/",
+        leadership_event_release,
+        name="org-leadership-event-release",
     ),
     path("members/<int:org_user_id>/", leadership_member, name="org-leadership-member"),
 ]

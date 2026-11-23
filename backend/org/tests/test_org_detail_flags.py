@@ -228,6 +228,21 @@ class OrgDetailFeatureFlagsTest(FlagsTestBase):
         self._unlock(FeatureKey.CONTRIBUTIONS)
         self.assertEqual(self._warm_query_count(self.staff), locked)
 
+    def test_contribution_track_info_no_staff_query(self) -> None:
+        self._unlock(FeatureKey.CONTRIBUTIONS)
+        url = f"/api/organizations/{self.org.pk}/standing/tracks/"
+        for role, user in (("staff", self.staff), ("member", self.member)):
+            with self.subTest(role=role):
+                self.client.force_authenticate(user=user)
+                self.client.get(url)
+                with CaptureQueriesContext(connection) as ctx:
+                    resp = self.client.get(url)
+                self.assertEqual(
+                    [t["key"] for t in resp.data["tracks"]], ["contribution"]
+                )
+                self.assertEqual(len(ctx.captured_queries), 4)
+                self.assertIs(resp.data["tracks"][0]["can_moderate"], False)
+
     def test_patch_cannot_write_flags(self) -> None:
         self.client.force_authenticate(user=self.admin)
         resp = self.client.patch(
@@ -380,6 +395,8 @@ class OrgDetailConductFlagsTest(FlagsTestBase):
                     f"/api/organizations/{self.org.pk}/standing/tracks/"
                 )
                 self.assertEqual(tracks, generic.data["tracks"])
+                for track in tracks:
+                    self.assertIs(track["can_moderate"], False)
         staff = self._get(self.staff)["standing_tracks"][1]
         self.assertEqual(
             (staff["can_view_rows"], staff["board_open"], staff["can_manage"]),

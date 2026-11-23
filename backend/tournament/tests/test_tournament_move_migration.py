@@ -46,7 +46,7 @@ BEFORE_MOVE: list[tuple[str, str | None]] = [
     ("events", "0039_alter_signupledgerentry_action"),
     ("league", "0003_move_league_models_from_app"),
     ("lobby", "0004_gamelobby_password"),
-    ("org", "0020_leadership"),
+    ("org", "0021_leadership_release_gate"),
     ("steam", "0008_gamematchsuggestion_tier"),
     ("tournament", None),
 ]
@@ -59,7 +59,7 @@ RETARGETS = (
     ("events", "0040_retarget_tournament_to_tournament"),
     ("league", "0004_retarget_leaguematch_game"),
     ("lobby", "0005_retarget_tournament_models"),
-    ("org", "0021_retarget_tournament_models"),
+    ("org", "0022_retarget_tournament_models"),
     ("steam", "0009_retarget_tournament_models"),
 )
 MIGRATED_APPS = (

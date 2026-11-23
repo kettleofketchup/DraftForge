@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("org", "0020_leadership"),
+        ("org", "0021_leadership_release_gate"),
         ("tournament", "0001_initial"),
     ]
 
