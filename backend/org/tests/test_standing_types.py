@@ -12,6 +12,7 @@ from org.standing.types import (
     Metric,
     OutputKeys,
     TrackAccess,
+    TrackInfo,
     TrackOutput,
 )
 
@@ -48,6 +49,11 @@ class TypesShapeTests(SimpleTestCase):
         access = TrackAccess(can_view_rows=True, can_view_own=False)
         with self.assertRaises(dataclasses.FrozenInstanceError):
             access.can_view_rows = False  # type: ignore[misc]
+
+    def test_track_info_requires_can_moderate(self) -> None:
+        fields = {f.name: f for f in dataclasses.fields(TrackInfo)}
+        self.assertIn("can_moderate", fields)
+        self.assertIs(fields["can_moderate"].default, dataclasses.MISSING)
 
     def test_leaderboard_carries_rows_visible(self) -> None:
         metric = Metric(key="points", label="Points", format="int", periodic=True)

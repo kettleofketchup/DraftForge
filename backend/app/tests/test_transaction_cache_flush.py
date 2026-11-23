@@ -9,9 +9,9 @@ from django.test import TransactionTestCase
 from django.utils import timezone
 
 from app.models import CustomUser, Tournament
-from app.serializers import tournament_organization
 from events.models import Event
 from org.models import Organization
+from tournament.serializers.users import tournament_organization
 from user.tests.test_cacheops_integration import _redis_reachable
 
 

@@ -59,6 +59,7 @@ export interface OrgFeaturesTestData {
     event_pk: number;
     released_captain_org_user_pk: number;
     open_captain_org_user_pk: number;
+    staff_captain_org_user_pk: number;
     pending_rater_role: OrgFeaturesRole;
   };
 }
@@ -81,12 +82,21 @@ export async function getOrgFeaturesData(
   );
 }
 
+export interface ResetOrgFeaturesOptions {
+  /** Turn the leadership staff release gate on, leaving closed snapshots pending. */
+  releaseGate?: boolean;
+}
+
 /** Rebuild ledger, promo sends, point values, events, templates, switches and roles. */
 export async function resetOrgFeatures(
   request: APIRequestContext,
+  options: ResetOrgFeaturesOptions = {},
 ): Promise<OrgFeaturesTestData> {
   return json(
-    await request.post(`${API_URL}/tests/org-features/reset/`),
+    await request.post(
+      `${API_URL}/tests/org-features/reset/`,
+      options.releaseGate ? { data: { release_gate: true } } : undefined,
+    ),
     'org-features reset',
   );
 }
