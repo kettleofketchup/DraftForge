@@ -55,13 +55,7 @@ import {
   Users,
   UserX,
 } from 'lucide-react';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -104,6 +98,10 @@ import {
 } from '~/components/game/constants';
 import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
 import { useOrganization } from '~/components/organization';
+import {
+  orgUsersQueryKey,
+  useOrgUsersQuery,
+} from '~/components/organization/hooks/useOrgUsersQuery';
 import { Badge } from '~/components/ui/badge';
 import {
   DestructiveButton,
@@ -160,7 +158,6 @@ import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useUserDotaProfile } from '~/hooks/useUserProfile';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
-import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 
@@ -216,9 +213,7 @@ export default function EventPage() {
   const eventOrgPk = event?.organization ?? null;
   const onMemberViewerChange = useCallback(() => {
     if (!eventOrgPk) return;
-    if (useOrgStore.getState().orgUsersOrgId === eventOrgPk) {
-      useOrgStore.getState().clearOrgUsers();
-    }
+    void queryClient.resetQueries({ queryKey: orgUsersQueryKey(eventOrgPk) });
     useUserCacheStore.getState().dropScoped({ orgId: eventOrgPk });
     removeFeatureQueries(queryClient, eventOrgPk);
     queryClient.invalidateQueries({ queryKey: ['event', id] });
@@ -227,12 +222,9 @@ export default function EventPage() {
   }, [eventOrgPk, id, queryClient, refetchEventOrg]);
   const { canView: canViewOrgMembers, settled: orgMemberAccessSettled } =
     useMemberAccess(eventOrg, onMemberViewerChange);
-  const orgUsersOrgId = useOrgStore((s) => s.orgUsersOrgId);
-  useEffect(() => {
-    if (eventOrgPk && orgMemberAccessSettled && canViewOrgMembers) {
-      useOrgStore.getState().getOrgUsers(eventOrgPk);
-    }
-  }, [eventOrgPk, orgMemberAccessSettled, canViewOrgMembers, orgUsersOrgId]);
+  useOrgUsersQuery(eventOrgPk, {
+    enabled: orgMemberAccessSettled && !!canViewOrgMembers,
+  });
   const signupMutation = useSignupMutation(id ?? 0);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
@@ -976,7 +968,11 @@ function SignupsTab({
       // Backend adds the user as an OrgUser when an admin signs them up; reset
       // the org-users cache so the org page reflects the new membership.
       void invalidateConductQueries(queryClient, orgId);
-      if (orgId) useOrgStore.getState().clearOrgUsers();
+      if (orgId) {
+        void queryClient.invalidateQueries({
+          queryKey: orgUsersQueryKey(orgId),
+        });
+      }
       // AddUserModal reads `.pk` off this to track optimistic adds — the signup
       // itself has no pk, so hand back the user it embeds.
       const added = resp.user_data;
@@ -1288,7 +1284,11 @@ function SignupsTab({
             {
               onSuccess: () => {
                 setApprovalSignup(null);
-                if (orgId) useOrgStore.getState().clearOrgUsers();
+                if (orgId) {
+                  void queryClient.invalidateQueries({
+                    queryKey: orgUsersQueryKey(orgId),
+                  });
+                }
                 if (previousMmr != null && previousMmr !== mmr) {
                   const delta = mmr - previousMmr;
                   toast.success(
