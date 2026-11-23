@@ -132,9 +132,11 @@ export function SignupHistorySection({
 
   const emptyMessage = (
     <span data-testid="signup-history-empty">
-      {memberView
-        ? 'No changes recorded for this member. Sign-ups made before history tracking began have no entries.'
-        : 'No changes recorded yet.'}
+      {action !== undefined
+        ? 'No changes match these filters.'
+        : memberView
+          ? 'No changes recorded for this member. Sign-ups made before history tracking began have no entries.'
+          : 'No changes recorded yet.'}
     </span>
   );
 

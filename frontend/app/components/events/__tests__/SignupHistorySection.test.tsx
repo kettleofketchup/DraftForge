@@ -480,6 +480,51 @@ describe('SignupHistorySection', () => {
     ).toContain('No changes recorded for this member.');
   });
 
+  it('shows a filter-aware empty message whenever a filter is active', async () => {
+    api.getEventSignupHistory.mockResolvedValue(page([]));
+    renderSection();
+    await screen.findByTestId('signup-history-empty');
+
+    choose('signup-history-action-filter', 'Withdrew');
+    await waitFor(() =>
+      expect(lastCall()).toEqual([EVENT_ID, { action: 'withdrew' }]),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('signup-history-empty').textContent).toBe(
+        'No changes match these filters.',
+      ),
+    );
+
+    choose('signup-history-member-filter', DisplayName(OTHER));
+    await waitFor(() =>
+      expect(lastCall()).toEqual([
+        EVENT_ID,
+        { user: OTHER.user_id, action: 'withdrew' },
+      ]),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('signup-history-empty').textContent).toBe(
+        'No changes match these filters.',
+      ),
+    );
+
+    cleanup();
+    renderSection({ fixedUser: SUBJECT, memberOptions: undefined });
+    await screen.findByTestId('signup-history-empty');
+    choose('signup-history-action-filter', 'Withdrew');
+    await waitFor(() =>
+      expect(lastCall()).toEqual([
+        EVENT_ID,
+        { user: SUBJECT.user_id, action: 'withdrew' },
+      ]),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('signup-history-empty').textContent).toBe(
+        'No changes match these filters.',
+      ),
+    );
+  });
+
   it('logs and shows an inline error when the load fails', async () => {
     const error = Object.assign(new Error('boom'), {
       response: { status: 500, data: { detail: 'Server exploded' } },
