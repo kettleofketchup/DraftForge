@@ -311,8 +311,9 @@ while seats are free is still seated, and seated members are never moved.
 - With **Public ranking** off, only org staff see the ranking. Members still see their
   own row and history on the tab, with a note that the org keeps its ranking private.
 - A member's full history (each event, outcome, source and weight) is visible to that
-  member and to org staff. Staff reasons and who made an edit are shown to org staff
-  only.
+  member and to org staff. In member history, staff reasons and who made an edit are
+  shown to org staff only. An event's Attendance panel shows them to that event's
+  staff, which includes staff of the event's league.
 - The forecast and the Attendance panel are visible to event staff only.
 - Deleting a user account deletes that user's conduct history.
 

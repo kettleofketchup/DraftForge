@@ -120,6 +120,7 @@ nav:
       - Backend Quickstart: development/backend-quickstart.md
       - Just Commands: development/just-commands.md
       - Testing: development/testing.md
+      - CI Runners: development/ci-runners.md
       - Test Stack Slots: development/test-stack-slots.md
       - Backend App Extraction: development/app-extraction.md
       - Contributing: development/contributing.md

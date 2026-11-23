@@ -76,7 +76,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     try {
       const result = await refreshDiscordMembers(entityContext.orgId);
       toast.success(`Refreshed ${result.count} Discord members`);
-      // Invalidate Discord search query to re-fetch
       queryClient.invalidateQueries({ queryKey: userSearchKeys.discordAll });
     } catch (err: unknown) {
       const message =
