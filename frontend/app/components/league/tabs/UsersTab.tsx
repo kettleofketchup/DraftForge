@@ -36,7 +36,11 @@ export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
   const leagueOrgPk =
     currentLeague?.organization?.pk ?? currentLeague?.organization_id;
 
-  const canEdit = useIsLeagueAdmin(currentLeague);
+  // league.organization carries no admin ids; the full org in orgStore does.
+  const canEdit = useIsLeagueAdmin(
+    currentLeague,
+    currentOrg && currentOrg.pk === leagueOrgPk ? currentOrg : null,
+  );
 
   useEffect(() => {
     if (leaguePk && canLoad) {

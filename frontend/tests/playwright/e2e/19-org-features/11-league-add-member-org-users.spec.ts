@@ -56,9 +56,13 @@ test.describe('Org features: league member adds reach the org @cicd', () => {
       'active',
     );
     const before = await usersTabCount(page);
+    // VirtualizedUserGrid leaves off-screen cards out of the DOM; search first.
+    const search = page.getByPlaceholder('Search members...');
+    await search.fill(outsider.username);
     await expect(page.getByTestId(`usercard-${outsider.username}`)).toHaveCount(
       0,
     );
+    await search.clear();
     await page.evaluate(() => {
       (window as Window & { __sameDocument?: boolean }).__sameDocument = true;
     });
@@ -92,6 +96,7 @@ test.describe('Org features: league member adds reach the org @cicd', () => {
     await expect(page.getByTestId('org-tab-users')).toHaveText(
       `Users (${before + 1})`,
     );
+    await page.getByPlaceholder('Search members...').fill(outsider.username);
     await expect(
       page.getByTestId(`usercard-${outsider.username}`),
     ).toBeVisible();

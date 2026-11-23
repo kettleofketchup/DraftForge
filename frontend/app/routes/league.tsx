@@ -137,8 +137,13 @@ export default function LeaguePage() {
       return leagueId === pk || t.league_pk === pk;
     }) || [];
 
-  // Permission check for edit - includes org admins via useIsLeagueAdmin
-  const canEdit = useIsLeagueAdmin(league);
+  // league.organization carries no admin ids; the full org in orgStore does.
+  const currentOrg = useOrgStore((s) => s.currentOrg);
+  const leagueOrg =
+    currentOrg && currentOrg.pk === league?.organization?.pk
+      ? currentOrg
+      : null;
+  const canEdit = useIsLeagueAdmin(league, leagueOrg);
 
   const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
     if (!league) return [];
