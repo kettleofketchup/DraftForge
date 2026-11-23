@@ -211,10 +211,20 @@ class PreviewImagesStructureTest(unittest.TestCase):
         for path, _ in strings_with_paths(self.wf):
             self.assertNotIn("cache-to", path)
 
-    def test_no_build_cache_and_no_prod_path(self):
-        self.assertNotIn("cache-from", self.build_push["with"])
+    def test_reads_only_main_build_cache_and_no_other_prod_path(self):
+        # main's :buildcache is written only by trusted hosted builds, so reading it is
+        # safe; any other prod path (or a cache-to) would let PR code touch prod images.
+        self.assertEqual(
+            self.build_push["with"]["cache-from"],
+            f"type=registry,ref={PROD_REPO}${{{{ matrix.name }}}}:buildcache",
+        )
+        cache_from_paths = [
+            p for p, _ in strings_with_paths(self.wf) if p[-1] == "cache-from"
+        ]
+        self.assertEqual(len(cache_from_paths), 1, cache_from_paths)
         for path, value in strings_with_paths(self.wf):
-            self.assertNotIn("cache-from", path)
+            if path[-1] == "cache-from":
+                continue
             self.assertNotIn(PROD_REPO, value, path)
 
     def test_build_tags_use_tag_output(self):

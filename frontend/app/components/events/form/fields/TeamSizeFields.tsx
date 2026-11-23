@@ -1,4 +1,5 @@
 import type { Control, FieldValues } from 'react-hook-form';
+import { IntegerInput } from '~/components/patterns/IntegerInput';
 import {
   FormControl,
   FormField,
@@ -6,7 +7,6 @@ import {
   FormLabel,
   FormMessage,
 } from '~/components/ui/form';
-import { Input } from '~/components/ui/input';
 import type { EventFieldTestIds } from '../testIds';
 
 export interface TeamSizeFieldValues {
@@ -34,14 +34,14 @@ export function TeamSizeFields<T extends FieldValues & TeamSizeFieldValues>({
           <FormItem>
             <FormLabel>People Per Team</FormLabel>
             <FormControl>
-              <Input
+              <IntegerInput
                 data-testid={testIds.peoplePerTeam}
-                type="number"
                 min={1}
-                {...field}
-                onChange={(e) =>
-                  field.onChange(parseInt(e.target.value, 10) || 1)
-                }
+                name={field.name}
+                ref={field.ref}
+                onBlur={field.onBlur}
+                value={field.value}
+                onValueChange={(v) => v != null && field.onChange(v)}
               />
             </FormControl>
             <FormMessage />
@@ -56,16 +56,15 @@ export function TeamSizeFields<T extends FieldValues & TeamSizeFieldValues>({
             <FormLabel>Max Teams</FormLabel>
             <div className="flex items-center gap-2">
               <FormControl>
-                <Input
+                <IntegerInput
                   data-testid={testIds.maxTeams}
-                  type="number"
                   min={2}
                   disabled={field.value === null}
-                  value={field.value ?? ''}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10);
-                    field.onChange(Number.isNaN(v) ? null : Math.max(2, v));
-                  }}
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value}
+                  onValueChange={(v) => v != null && field.onChange(v)}
                   placeholder="No limit"
                 />
               </FormControl>

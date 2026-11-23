@@ -2,14 +2,6 @@
 # This allows imports like `from app.views import UserView` to work
 
 from app.views_main import (  # ViewSets; Create views; Functions
-    GameCreateView,
-    GameView,
-    TeamCreateView,
-    TeamView,
-    TournamentCreateView,
-    TournamentListView,
-    TournamentsBasicView,
-    TournamentView,
     UserCreateView,
     UserView,
     bulk_users,
@@ -27,22 +19,11 @@ from app.views_main import (  # ViewSets; Create views; Functions
     validation_sent,
 )
 
-# Also import bracket functions
-from .bracket import advance_winner, generate_bracket, get_bracket, save_bracket
-
 __all__ = [
     # ViewSets
     "UserView",
-    "TournamentView",
-    "TournamentListView",
-    "TeamView",
-    "GameView",
-    "TournamentsBasicView",
     # Create views
     "UserCreateView",
-    "GameCreateView",
-    "TeamCreateView",
-    "TournamentCreateView",
     # Functions
     "bulk_users",
     "logout",
@@ -57,9 +38,4 @@ __all__ = [
     "refresh_avatar",
     "refresh_user_avatar_admin",
     "refresh_all_avatars",
-    # Bracket functions
-    "get_bracket",
-    "generate_bracket",
-    "save_bracket",
-    "advance_winner",
 ]

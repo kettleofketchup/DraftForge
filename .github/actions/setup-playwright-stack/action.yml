@@ -29,15 +29,24 @@ inputs:
 runs:
   using: composite
   steps:
+    # HOME_PREPARE and PR_NUMBER come from playwright.yml's env. When prepare ran on the
+    # home runner it pushed what it built as draftforge-ci/<img>:pr-<n>-<hash>, so the
+    # pulls below try that first (DF_CI_PR), then draftforge/<img>:<hash>, then the
+    # in-job rebuilds and populate.
     - name: Run host helpers on the runner's python3, Playwright in playwright-runner
       shell: bash
       env:
         PLAYWRIGHT: ${{ inputs.playwright }}
+        CI_PR: ${{ env.HOME_PREPARE == 'true' && env.PR_NUMBER || '' }}
       run: |
         echo "DF_JUST_PYTHON=python3" >> "$GITHUB_ENV"
         if [[ "$PLAYWRIGHT" == true ]]; then
           echo "DF_PW_CONTAINER=1" >> "$GITHUB_ENV"
           ln -sfn /app/node_modules frontend/node_modules
+        fi
+        if [[ "$CI_PR" =~ ^[0-9]+$ ]]; then
+          echo "DF_CI_PR=$CI_PR" >> "$GITHUB_ENV"
+          echo "prepare ran on the home runner: pulls try draftforge-ci/<img>:pr-$CI_PR-<hash> first"
         fi
 
     - uses: ./.github/actions/setup-toolchain

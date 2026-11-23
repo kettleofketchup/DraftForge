@@ -7,6 +7,7 @@ import re
 import secrets
 import shlex
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -17,6 +18,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
+from types import FrameType
 from typing import Final, Literal, cast
 
 Stack = Literal["test", "dev", "dev-m1", "prod", "release"]
@@ -793,6 +795,12 @@ TRANSITION_WARNING: Final = (
     "merge main into them first."
 )
 BACKGROUND_SERVICES: Final = ("discord-bot", "celery-beat")
+RUN_PROJECT_RE: Final = re.compile(r"^df-run-[0-9a-f]{8}$")
+# A df-run project without a run lock (made by a branch older than the lock) gets
+# this long to start its one-off container before it can be reaped.
+RUN_GRACE_S: Final = 600.0
+RUN_LOCK_DIR: Final = "df-runs"
+RunLockState = Literal["held", "free", "missing"]
 
 
 def _refuse_in_ci(what: str) -> None:
@@ -931,6 +939,90 @@ def claim_slot(n: int, root: Path | None = None, host: Host | None = None) -> Sl
     return env
 
 
+def _run_lock(root: Path, host: Host, project: str) -> Path:
+    return host.common_dir(root) / RUN_LOCK_DIR / f"{project}.lock"
+
+
+def run_lock_state(path: Path) -> RunLockState:
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except FileNotFoundError:
+        return "missing"
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return "held"
+    finally:
+        os.close(fd)
+    return "free"
+
+
+def _run_busy_reason(
+    project: str, owners: list[ContainerOwner], root: Path, host: Host
+) -> str | None:
+    """None when the df-run project is orphaned, else why it must be kept."""
+    for o in owners:
+        if o.oneoff and o.running:
+            return f"one-off container {o.name} is running, so its test::run is in progress"
+    lock = _run_lock(root, host, project)
+    state = run_lock_state(lock)
+    if state == "held":
+        return (
+            f"the test::run process that created it is still running (it holds {lock})"
+        )
+    if state == "free":
+        return None
+    t = host.container_activity(project)
+    if t is None:
+        return "its container start times are unknown"
+    age = host.clock() - t
+    if age < RUN_GRACE_S:
+        return (
+            f"it started {age / 60:.0f} min ago and has no run lock, so its test::run "
+            f"may still be starting; retry after {RUN_GRACE_S / 60:g} min"
+        )
+    return None
+
+
+def _down_run(project: str, root: Path, host: Host) -> None:
+    argv = ["docker", "compose", "-p", project, "down", "-v", "--remove-orphans"]
+    code, _ = host.run(argv, {}, False)
+    if code != 0:
+        raise SlotError(f"`{' '.join(argv)}` exited {code}")
+    _run_lock(root, host, project).unlink(missing_ok=True)
+
+
+def reap_run_orphans(root: Path | None = None, host: Host | None = None) -> list[str]:
+    root = (root or MODULE_ROOT).resolve()
+    _refuse_in_ci("slot reap")
+    host = host or REAL_HOST
+    by_project: dict[str, list[ContainerOwner]] = {}
+    for o in host.all_df_containers():
+        if RUN_PROJECT_RE.match(o.project):
+            by_project.setdefault(o.project, []).append(o)
+    reaped: list[str] = []
+    for project, owners in sorted(by_project.items()):
+        if any(
+            Path(f).name not in TEST_STACK_FILES for o in owners for f in o.config_files
+        ):
+            continue
+        try:
+            if _run_busy_reason(project, owners, root, host) is not None:
+                continue
+            _down_run(project, root, host)
+        except SlotError as exc:
+            print(f"{project}: not reaping: {exc}", file=sys.stderr)
+            continue
+        wds = sorted({str(o.working_dir) for o in owners if o.working_dir is not None})
+        print(
+            f"reaped orphaned test::run project {project} (worktree {', '.join(wds) or '-'}); "
+            f"{len(owners)} container(s) and volumes removed",
+            file=sys.stderr,
+        )
+        reaped.append(project)
+    return reaped
+
+
 def reap_project(
     project: str, root: Path | None = None, host: Host | None = None
 ) -> None:
@@ -941,6 +1033,12 @@ def reap_project(
         raise SlotError(
             f"refusing to reap {project!r}: only df, df-dev, df-s<N> and df-run-<hex> are accepted"
         )
+    if RUN_PROJECT_RE.match(project):
+        reason = _run_busy_reason(project, host.containers(project), root, host)
+        if reason is not None:
+            raise SlotError(f"refusing to reap {project}: {reason}")
+        _down_run(project, root, host)
+        return
     registry = registry_dir(root, host)
     with registry_lock(registry):
         live = host.live_worktrees(root)
@@ -1178,7 +1276,17 @@ def status_report(root: Path | None = None, host: Host | None = None) -> str:
             None,
         )
         reap = f"check it, then run `just test::slot-reap {project}`"
-        if not stack:
+        if RUN_PROJECT_RE.match(project):
+            try:
+                reason = _run_busy_reason(project, owners, root, host)
+            except SlotError as exc:
+                reason = f"activity unknown: {exc}"
+            label = (
+                f"test::run in progress or starting; not reapable: {reason}"
+                if reason is not None
+                else f"orphaned test::run; {reap}"
+            )
+        elif not stack:
             label = f"orphan hint (one-off only); {reap}"
         elif live_owner is not None:
             if res is not None and res.owner == live_owner:
@@ -1500,10 +1608,46 @@ def _run_ephemeral(args: Sequence[str], root: Path, host: Host) -> int:
     }
     print(OFFLINE_NOTE, file=sys.stderr)
     try:
-        code, _ = host.run([*base, "run", *args], env, False)
-        return code
+        reap_run_orphans(root, host)
+    except SlotError as exc:
+        print(f"skipped the orphaned test::run sweep: {exc}", file=sys.stderr)
+    lock = _run_lock(root, host, project)
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        with _exit_on_term():
+            try:
+                code, _ = host.run([*base, "run", *args], env, False)
+                return code
+            finally:
+                down, _ = host.run(
+                    [*base, "down", "-v", "--remove-orphans"], env, False
+                )
+                if down == 0:
+                    lock.unlink(missing_ok=True)
     finally:
-        host.run([*base, "down", "-v", "--remove-orphans"], env, False)
+        os.close(fd)
+
+
+TERM_SIGNALS: Final = (signal.SIGTERM, signal.SIGHUP)
+
+
+@contextmanager
+def _exit_on_term() -> Iterator[None]:
+    """Turn SIGTERM/SIGHUP into SystemExit so `finally` cleanup runs (SIGINT already does)."""
+
+    def handler(signum: int, frame: FrameType | None) -> None:
+        for s in TERM_SIGNALS:
+            signal.signal(s, signal.SIG_IGN)
+        raise SystemExit(128 + signum)
+
+    previous = {s: signal.signal(s, handler) for s in TERM_SIGNALS}
+    try:
+        yield
+    finally:
+        for s, h in previous.items():
+            signal.signal(s, h)
 
 
 def run_one_off(
@@ -1657,11 +1801,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise SlotError("slot reap takes either a project or --stale")
             if sub.project is not None:
                 reap_project(sub.project, root, host)
-            elif not reap_stale(root, host):
-                print(
-                    f"no slot idle longer than {stale_after_s() / 3600:g}h",
-                    file=sys.stderr,
-                )
+            else:
+                if not reap_stale(root, host):
+                    print(
+                        f"no slot idle longer than {stale_after_s() / 3600:g}h",
+                        file=sys.stderr,
+                    )
+                if not reap_run_orphans(root, host):
+                    print("no orphaned test::run project", file=sys.stderr)
         elif ns.cmd == "background":
             env = set_background(sub.state == "on", root, host)
             print(f"slot {env.slot} background {'on' if env.background else 'off'}")

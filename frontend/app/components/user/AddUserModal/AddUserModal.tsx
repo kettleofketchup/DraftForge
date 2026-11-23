@@ -1,28 +1,26 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { AddMemberPayload } from '~/components/api/api';
-import {
-  refreshDiscordMembers,
-  searchDiscordMembers,
-  searchUsers,
-} from '~/components/api/api';
+import { refreshDiscordMembers } from '~/components/api/api';
 import { FormDialog } from '~/components/ui/dialogs/FormDialog';
 import { Input } from '~/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
-import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useListKeyboardNav } from '~/hooks/useListKeyboardNav';
 import { useMediaQuery } from '~/hooks/useMediaQuery';
+import {
+  useDiscordMemberSearch,
+  userSearchKeys,
+  useUserSearch,
+} from '~/hooks/useUserSearch';
+import { USER_SEARCH_MIN_LENGTH } from '~/lib/userSearch';
 import { cn } from '~/lib/utils';
 import { DiscordMemberResults } from './DiscordMemberResults';
 import { SiteUserResults } from './SiteUserResults';
 import type { AddUserModalProps } from './types';
-
-const DEBOUNCE_MS = 300;
-const MIN_QUERY_LENGTH = 3;
 
 export const AddUserModal: React.FC<AddUserModalProps> = ({
   open,
@@ -34,48 +32,27 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   hasDiscordServer,
 }) => {
   const [query, setQuery] = useState('');
-  const debouncedQuery = useDebouncedValue(query, DEBOUNCE_MS);
-  const [manualQuery, setManualQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    setManualQuery('');
-  }, [query]);
-
-  // Debounced auto-search for 3+ chars, or manual search on Enter for shorter queries
-  const searchTerm =
-    debouncedQuery.length >= MIN_QUERY_LENGTH ? debouncedQuery : manualQuery;
   const [addedUsers, setAddedUsers] = useState<Set<number>>(new Set());
   const [addedDiscordIds, setAddedDiscordIds] = useState<Set<string>>(
     new Set(),
   );
   const queryClient = useQueryClient();
 
-  // Site user search via react-query (automatic race condition handling)
-  const siteQuery = useQuery({
-    queryKey: [
-      'userSearch',
-      searchTerm,
-      entityContext.orgId,
-      entityContext.leagueId,
-    ],
-    queryFn: () =>
-      searchUsers(searchTerm, entityContext.orgId, entityContext.leagueId),
-    enabled: open && searchTerm.length >= 1,
+  const site = useUserSearch(query, {
+    orgId: entityContext.orgId,
+    leagueId: entityContext.leagueId,
+    enabled: open,
+  });
+  const discord = useDiscordMemberSearch(query, entityContext.orgId, {
+    enabled: open && hasDiscordServer,
   });
 
-  const discordQuery = useQuery({
-    queryKey: ['discordSearch', searchTerm, entityContext.orgId],
-    queryFn: () => searchDiscordMembers(entityContext.orgId!, searchTerm),
-    enabled:
-      open &&
-      searchTerm.length >= 1 &&
-      hasDiscordServer &&
-      !!entityContext.orgId,
-  });
-
-  const siteResults = siteQuery.data ?? [];
-  const discordResults = discordQuery.data ?? [];
+  const siteResults = site.results;
+  const discordResults = discord.results;
+  const siteLoading = site.status === 'searching';
+  const discordLoading = discord.status === 'searching';
+  const siteQueryLength = site.status === 'too-short' ? 0 : site.term.length;
 
   // Render one layout only; CSS-hiding the other would put every result in the DOM twice.
   const isDesktop = useMediaQuery('(min-width: 1024px)');
@@ -99,7 +76,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     try {
       const result = await refreshDiscordMembers(entityContext.orgId);
       toast.success(`Refreshed ${result.count} Discord members`);
-      queryClient.invalidateQueries({ queryKey: ['discordSearch'] });
+      queryClient.invalidateQueries({ queryKey: userSearchKeys.discordAll });
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { error?: string } } })?.response?.data
@@ -121,7 +98,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       if (payload.discord_id) {
         setAddedDiscordIds((prev) => new Set(prev).add(payload.discord_id!));
         // Invalidate site user search so the new user appears there too
-        queryClient.invalidateQueries({ queryKey: ['userSearch'] });
+        queryClient.invalidateQueries({ queryKey: userSearchKeys.all });
       }
     },
     [onAdd, queryClient],
@@ -213,36 +190,14 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     ],
   );
 
-  const {
-    highlightedIndex,
-    activeColumn,
-    setActiveColumn,
-    handleKeyDown: navKeyDown,
-  } = useListKeyboardNav({
-    siteCount: sortedSiteResults.length,
-    discordCount: sortedDiscordResults.length,
-    hasDiscordColumn: hasDiscordServer,
-    onSelect: handleKeySelect,
-    isDesktop,
-  });
-
-  // Wrap keydown: Enter with short query triggers search, otherwise defer to nav
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (
-        e.key === 'Enter' &&
-        query.length >= 1 &&
-        query.length < MIN_QUERY_LENGTH &&
-        highlightedIndex < 0
-      ) {
-        e.preventDefault();
-        setManualQuery(query);
-        return;
-      }
-      navKeyDown(e);
-    },
-    [query, highlightedIndex, navKeyDown],
-  );
+  const { highlightedIndex, activeColumn, setActiveColumn, handleKeyDown } =
+    useListKeyboardNav({
+      siteCount: sortedSiteResults.length,
+      discordCount: sortedDiscordResults.length,
+      hasDiscordColumn: hasDiscordServer,
+      onSelect: handleKeySelect,
+      isDesktop,
+    });
 
   return (
     <FormDialog
@@ -260,7 +215,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by username, nickname, or Steam ID..."
+            placeholder="Search by name, Discord name, or Steam ID..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -268,7 +223,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             data-testid="add-user-search"
           />
           {/* Loading bar */}
-          {siteQuery.isFetching && (
+          {siteLoading && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden rounded-b">
               <div
                 className="h-full w-1/3 bg-primary animate-[loading_1s_ease-in-out_infinite]"
@@ -283,11 +238,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             </div>
           )}
         </div>
-        {query.length > 0 &&
-          query.length < MIN_QUERY_LENGTH &&
-          !manualQuery && (
+        {query.trim().length > 0 &&
+          query.trim().length < USER_SEARCH_MIN_LENGTH && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Press Enter to search, or type {MIN_QUERY_LENGTH}+ characters
+              Type at least {USER_SEARCH_MIN_LENGTH} characters to search
             </p>
           )}
       </div>
@@ -305,10 +259,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             </h3>
             <SiteUserResults
               results={sortedSiteResults}
-              loading={siteQuery.isFetching}
+              loading={siteLoading}
               onAdd={handleAdd}
               isAdded={checkIsAdded}
-              queryLength={searchTerm.length}
+              queryLength={siteQueryLength}
               highlightedIndex={activeColumn === 'site' ? highlightedIndex : -1}
             />
           </div>
@@ -323,7 +277,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             </h3>
             <DiscordMemberResults
               results={sortedDiscordResults}
-              loading={discordQuery.isFetching}
+              loading={discordLoading}
               onAdd={handleAdd}
               isAdded={checkIsAdded}
               isDiscordUserAdded={checkIsDiscordUserAdded}
@@ -353,10 +307,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           <TabsContent value="site">
             <SiteUserResults
               results={sortedSiteResults}
-              loading={siteQuery.isFetching}
+              loading={siteLoading}
               onAdd={handleAdd}
               isAdded={checkIsAdded}
-              queryLength={searchTerm.length}
+              queryLength={siteQueryLength}
               highlightedIndex={activeColumn === 'site' ? highlightedIndex : -1}
               showMembership={false}
             />
@@ -364,7 +318,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           <TabsContent value="discord">
             <DiscordMemberResults
               results={sortedDiscordResults}
-              loading={discordQuery.isFetching}
+              loading={discordLoading}
               onAdd={handleAdd}
               isAdded={checkIsAdded}
               isDiscordUserAdded={checkIsDiscordUserAdded}
