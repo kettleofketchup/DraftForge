@@ -1,6 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ChevronDown } from 'lucide-react';
-import { useEffect, useState, type ReactNode, type RefObject } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 
@@ -156,39 +162,43 @@ export function useConductSection(
     },
   };
 
-  const content = (
-    <section
-      data-testid="org-settings-conduct"
-      className="rounded-lg border border-border p-6"
-    >
-      <h2 className="text-lg font-semibold">Conduct</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        How attendance is scored, who sees the ranking, and whether a low show
-        rate limits sign-ups.
-      </p>
-      {isLoading && (
-        <div className="mt-4 flex flex-col gap-3">
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-32 w-full" />
-        </div>
-      )}
-      {isError && (
-        <p
-          className="mt-4 text-sm text-destructive"
-          data-testid="conduct-settings-error"
-        >
-          {extractApiError(error) ?? 'Failed to load conduct settings'}
+  // Memoized: dirty and error changes re-render the dialog, not these fields.
+  const content = useMemo(
+    () => (
+      <section
+        data-testid="org-settings-conduct"
+        className="rounded-lg border border-border p-6"
+      >
+        <h2 className="text-lg font-semibold">Conduct</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          How attendance is scored, who sees the ranking, and whether a low show
+          rate limits sign-ups.
         </p>
-      )}
-      {data && hydrated && (
-        <ConductSettingsFields
-          form={form}
-          defaults={data.defaults}
-          enforcementOpen={enforcementOpen}
-          onEnforcementOpenChange={setEnforcementOpen}
-        />
-      )}
-    </section>
+        {isLoading && (
+          <div className="mt-4 flex flex-col gap-3">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+        )}
+        {isError && (
+          <p
+            className="mt-4 text-sm text-destructive"
+            data-testid="conduct-settings-error"
+          >
+            {extractApiError(error) ?? 'Failed to load conduct settings'}
+          </p>
+        )}
+        {data && hydrated && (
+          <ConductSettingsFields
+            form={form}
+            defaults={data.defaults}
+            enforcementOpen={enforcementOpen}
+            onEnforcementOpenChange={setEnforcementOpen}
+          />
+        )}
+      </section>
+    ),
+    [isLoading, isError, error, data, hydrated, form, enforcementOpen],
   );
 
   return { content, unit };

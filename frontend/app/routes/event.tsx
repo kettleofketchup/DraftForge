@@ -858,7 +858,7 @@ function DetailsTab({
           />
           <Stat
             label="Teams"
-            value={`${event.number_of_teams} × ${event.people_per_team}`}
+            value={`${event.number_of_teams ?? 'No limit'} × ${event.people_per_team}`}
           />
           <Stat
             label="Game"
