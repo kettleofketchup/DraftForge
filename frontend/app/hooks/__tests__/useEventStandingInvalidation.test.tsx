@@ -13,7 +13,7 @@ import {
 const api = vi.hoisted(() => ({
   completeEvent: vi.fn(),
   cancelEvent: vi.fn(),
-  reopenSignups: vi.fn(),
+  restartTournament: vi.fn(),
   deleteEvent: vi.fn(),
   updateEvent: vi.fn(),
 }));
@@ -87,7 +87,7 @@ describe('event mutations refresh the org standing', () => {
     for (const name of [
       'completeEvent',
       'cancelEvent',
-      'reopenSignups',
+      'restartTournament',
       'updateEvent',
     ] as const)
       api[name].mockResolvedValue(event);
@@ -97,7 +97,7 @@ describe('event mutations refresh the org standing', () => {
   it.each([
     'completeEvent',
     'cancelEvent',
-    'reopenSignups',
+    'restartTournament',
     'deleteEvent',
   ] as const)(
     '%s refreshes this org’s leadership and contributions only',

@@ -182,7 +182,6 @@ export function useEventActionMutation(eventId: number) {
         queryClient.setQueryData(['event', eventId], data);
         void invalidateEventLists(queryClient);
         void invalidateConductQueries(queryClient, data.organization);
-        void invalidateOrgStandingQueries(queryClient, data.organization);
       },
     }),
     startTournament: useMutation({
@@ -221,6 +220,7 @@ export function useEventActionMutation(eventId: number) {
         queryClient.setQueryData(['event', eventId], data);
         void invalidateEventLists(queryClient);
         void invalidateConductQueries(queryClient, data.organization);
+        void invalidateOrgStandingQueries(queryClient, data.organization);
       },
     }),
     completeEvent: useMutation({
