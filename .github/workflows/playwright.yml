@@ -471,6 +471,9 @@ jobs:
       - name: Check the generated message types are current
         run: just py::gen-message-types --check
 
+      - name: Check the generated Discord connect API is current
+        run: just py::gen-discord-connect-api --check
+
       - name: Check the promotion render fixture copies match
         run: cmp backend/org/tests/render_fixture.json frontend/app/features/promotion/__tests__/render_fixture.json
 
