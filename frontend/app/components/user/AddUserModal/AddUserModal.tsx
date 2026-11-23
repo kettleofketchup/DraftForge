@@ -259,31 +259,33 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       data-testid="add-user-modal"
     >
       {/* Single search bar */}
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by username, nickname, or Steam ID..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="pl-9"
-          data-testid="add-user-search"
-        />
-        {/* Loading bar */}
-        {siteQuery.isFetching && (
-          <div className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden rounded-b">
-            <div
-              className="h-full w-1/3 bg-primary animate-[loading_1s_ease-in-out_infinite]"
-              style={{ animation: 'loading 1s ease-in-out infinite' }}
-            />
-            <style>{`
+      <div className="mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by username, nickname, or Steam ID..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="pl-9"
+            data-testid="add-user-search"
+          />
+          {/* Loading bar */}
+          {siteQuery.isFetching && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden rounded-b">
+              <div
+                className="h-full w-1/3 bg-primary animate-[loading_1s_ease-in-out_infinite]"
+                style={{ animation: 'loading 1s ease-in-out infinite' }}
+              />
+              <style>{`
               @keyframes loading {
                 0% { transform: translateX(-100%); }
                 100% { transform: translateX(400%); }
               }
             `}</style>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
         {query.length > 0 &&
           query.length < MIN_QUERY_LENGTH &&
           !manualQuery && (
