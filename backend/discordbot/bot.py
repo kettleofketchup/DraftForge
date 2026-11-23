@@ -1,5 +1,6 @@
 """Discord bot client with slash commands."""
 
+import asyncio
 import sys
 from collections.abc import Callable
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 import discord
 from asgiref.sync import sync_to_async
 from discord import app_commands
+from discord.ext import tasks
 from django.conf import settings
 
 from discordbot.interaction_router import route_component_interaction
@@ -18,6 +20,7 @@ from discordbot.internal_client.bot_actions import (
     remove_legacy_rsvp,
     set_legacy_rsvp,
 )
+from discordbot.voice_feed import VoiceFeed
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -66,10 +69,13 @@ class KettleBot(discord.Client):
         intents.reactions = True
         intents.members = True
         intents.message_content = True
+        intents.voice_states = True
 
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
         self.guild_id = settings.DISCORD_GUILD_ID
+        self.voice_feed = VoiceFeed(self)
+        self._voice_worker_task: asyncio.Task[None] | None = None
 
     async def setup_hook(self) -> None:
         """Called when bot is ready to sync commands."""
@@ -79,6 +85,24 @@ class KettleBot(discord.Client):
         log.info(
             "commands_synced", system="discord", subsystem="bot", guild_id=self.guild_id
         )
+        self._voice_worker_task = asyncio.create_task(self.voice_feed.worker())
+        self.voice_snapshot_loop.start()
+
+    @tasks.loop(seconds=60)
+    async def voice_snapshot_loop(self) -> None:
+        try:
+            self.voice_feed.enqueue_snapshot()
+        except Exception:
+            log.exception("voice_snapshot_failed", system="discord", subsystem="voice")
+
+    @voice_snapshot_loop.before_loop
+    async def _before_voice_snapshot_loop(self) -> None:
+        await self.wait_until_ready()
+
+    async def _resync_voice(self) -> None:
+        self.voice_feed.mark_connected()
+        await self.voice_feed.refresh_watched(force=True)
+        self.voice_feed.enqueue_snapshot()
 
     async def on_ready(self) -> None:
         """Called when bot successfully connects."""
@@ -92,6 +116,21 @@ class KettleBot(discord.Client):
         log.info(
             "bot_guild_count", system="discord", subsystem="bot", count=len(self.guilds)
         )
+        await self._resync_voice()
+
+    async def on_resumed(self) -> None:
+        await self._resync_voice()
+
+    async def on_disconnect(self) -> None:
+        self.voice_feed.mark_disconnected()
+
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+    ) -> None:
+        self.voice_feed.on_voice_state_update(member, before, after)
 
     async def on_raw_reaction_add(
         self, payload: discord.RawReactionActionEvent
