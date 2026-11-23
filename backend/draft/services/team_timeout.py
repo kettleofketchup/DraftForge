@@ -63,8 +63,9 @@ def skip_turn(draft: Draft, round: DraftRound) -> DraftRound | None:
         if team is None:
             _unavailable(draft, round, team)
             return None
+        now = timezone.now()
         tie_data = reassign_round_captain(
-            draft, round, {team.pk}, reason="timeout_skip"
+            draft, round, {team.pk}, reason="timeout_skip", now=now
         )
         if round.captain_id == team.captain_id:
             _unavailable(draft, round, team)
@@ -98,7 +99,7 @@ def skip_turn(draft: Draft, round: DraftRound) -> DraftRound | None:
             draft,
             round,
             options,
-            now=timezone.now(),
+            now=now,
             armed=True,
             hold_ms=tie_data["hold_ms"] if tie_data else 0,
         )
