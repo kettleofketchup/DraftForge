@@ -50,21 +50,15 @@ const TARGET_MATCH_SELECTOR =
   '[data-testid="bracket-match-node"][data-bracket-type="winners"][data-round="1"][data-position="0"]';
 
 test.describe('Bracket Unset Winner (e2e)', () => {
-  // All four tests reset and rebind the *same* tournament key in
-  // beforeEach (the endpoint deletes + recreates it). Default workers=1
-  // serializes this fine, but the project allows PLAYWRIGHT_WORKERS=2
-  // and fullyParallel is on globally, which would let two tests in this
-  // file race on the shared reset endpoint and the module-scoped
-  // tournamentPk. Pin to serial — the cost is zero at workers=1 and
-  // correctness insurance at workers>1.
+  // Every test resets the same tournament and rebinds the module-scoped
+  // tournamentPk; fullyParallel with PLAYWRIGHT_WORKERS=2 would race them.
+  // Serial costs nothing at workers=1.
   test.describe.configure({ mode: 'serial' });
 
   test.beforeEach(async ({ loginStaff, page }) => {
     await loginStaff();
-    // Reset the dedicated tournament between tests so each one starts from
-    // the populated baseline (all games pending). The endpoint returns the
-    // freshly-created tournament — we re-bind tournamentPk from its body
-    // because the delete-and-recreate gives it a new pk.
+    // Reset to the populated baseline (all games pending); the response
+    // carries the recreated tournament's new pk.
     const resetResp = await page
       .context()
       .request.post('/api/tests/reset-tournament/bracket_unset_winner/');
@@ -92,9 +86,9 @@ test.describe('Bracket Unset Winner (e2e)', () => {
   }
 
   async function closeModal(page: Page): Promise<void> {
-    // Use the dialog's explicit close button — Escape was flaky when focus
-    // landed on something non-dismissable inside the modal, leaving the
-    // backdrop overlaying the Save button so the next click timed out.
+    // Close via the button: Escape is ignored when focus sits on a
+    // non-dismissable element, leaving the backdrop over Save and timing out
+    // the next click.
     const dialog = page.locator('[data-testid="matchStatsModal"]');
     await dialog.locator('[data-testid="dialog-close-button"]').click();
     await expect(dialog).toBeHidden({ timeout: 5000 });
