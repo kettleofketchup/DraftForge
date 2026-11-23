@@ -33,7 +33,7 @@ export interface DiscordMember {
 }
 
 // Organization CRUD
-// Mirrors backend/app/serializers.py OrganizationsSerializer
+// Response shape: backend/app/serializers.py OrganizationsSerializer
 export async function getOrganizations(): Promise<OrganizationsType> {
   const response = await axios.get('/organizations/');
   return z.array(OrganizationSchema).parse(response.data);

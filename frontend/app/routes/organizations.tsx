@@ -68,7 +68,6 @@ export default function OrganizationsPage() {
   const isLoggedIn = useIsLoggedIn();
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
-  // Render the organization grid content based on state
   const renderOrganizationGrid = () => {
     // If we have organizations, show them immediately
     if (organizations.length > 0) {
@@ -81,7 +80,6 @@ export default function OrganizationsPage() {
       );
     }
 
-    // No organizations yet - show skeleton while loading
     if (isLoading) {
       return <OrganizationGridSkeleton count={6} />;
     }
