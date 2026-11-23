@@ -7,7 +7,9 @@ from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import QuerySet
+from django.db.models import F, IntegerField, OrderBy, OuterRef, QuerySet, Subquery
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Cast
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
@@ -1079,6 +1081,7 @@ class TeamLogAction(models.TextChoices):
     EMPTY_TEAM_KEPT = "empty_team_kept", "Empty Team Kept"
     TEAM_DELETED = "team_deleted", "Team Deleted"
     MATERIALIZE = "materialize", "Materialize"
+    REPLACE_CAPTAIN = "replace_captain", "Replace Captain"
 
 
 class TeamLog(models.Model):
@@ -1137,6 +1140,37 @@ class TeamLog(models.Model):
     def __str__(self) -> str:
         actor_name = self.actor.username if self.actor else "System"
         return f"{actor_name} {self.action} on {self.team_name}"
+
+
+LIVE_TEAM_FIRST: tuple[OrderBy, str] = (F("placement").asc(nulls_first=True), "pk")
+
+
+def _snapshot_captain_id(side: str) -> Cast:
+    return Cast(
+        KeyTextTransform("captain_id", KeyTextTransform(side, "details")),
+        IntegerField(),
+    )
+
+
+def with_captain_acquired_at(qs: QuerySet[Team]) -> QuerySet[Team]:
+    """Annotate when the current captain last took this captaincy, by any action."""
+    latest = (
+        TeamLog.objects.annotate(
+            before_captain_id=_snapshot_captain_id("before"),
+            after_captain_id=_snapshot_captain_id("after"),
+        )
+        .filter(team=OuterRef("pk"), after_captain_id=OuterRef("captain_id"))
+        .exclude(before_captain_id=OuterRef("captain_id"))
+        .order_by("-created_at")
+        .values("created_at")[:1]
+    )
+    return qs.annotate(captain_acquired_at=Subquery(latest))
+
+
+ORIGINAL_CAPTAINCY_FIRST: tuple[OrderBy, str] = (
+    F("captain_acquired_at").asc(nulls_first=True),
+    "pk",
+)
 
 
 class ProfileClaimRequest(models.Model):
