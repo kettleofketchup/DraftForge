@@ -71,7 +71,6 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const navigate = useNavigate();
   const currentUser = useUserStore((state) => state.currentUser);
   const setCurrentUser = useUserStore((state) => state.setCurrentUser);
-  const canEdit = currentUser?.is_staff || currentUser?.is_superuser;
 
   const { playerModalState } = useSharedPopover();
   const ctx = playerModalState.context;
@@ -114,17 +113,18 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     currentLeague,
   ]);
 
+  const canEdit = useScopedEditPermission(editScope);
+
   // Fetch full user data for editing (player prop may have partial data from herodraft)
   const [fullUserData, setFullUserData] = useState<UserType | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
 
-  const scopedEdit = useScopedEditPermission(editScope);
   const steamGate =
     open &&
     player.pk != null &&
     !!(player.steam_account_id ?? fullUserData?.steam_account_id) &&
-    (!!canEdit || scopedEdit || hasAnyStaffPlacement(currentUser));
+    (canEdit || hasAnyStaffPlacement(currentUser));
   const steamVerification = useSteamVerification(player.pk ?? -1, {
     enabled: steamGate,
   });

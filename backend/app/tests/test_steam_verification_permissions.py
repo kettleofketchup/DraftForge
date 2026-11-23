@@ -9,6 +9,7 @@ from app.permissions_steam import (
 )
 from events.models import Event, EventSignup
 from events.services import cancel_signup, process_rsvp, staff_add_signup
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.membership import resolve_or_create_org_user
 from org.models import Organization
@@ -22,12 +23,12 @@ class SteamVerifyPermissionTests(EventTestCase):
         self.open_event: Event = self.make_event(tournament_league=self.league)
 
     def _self_signup(self, event: Event) -> EventSignup:
-        signup = process_rsvp(event, self.target)
+        signup = process_rsvp(event, self.target, actor=SYSTEM)
         self.assertTrue(signup.self_made)
         return signup
 
     def _staff_signup(self, event: Event) -> EventSignup:
-        signup = staff_add_signup(event, self.target)
+        signup = staff_add_signup(event, self.target, actor=SYSTEM)
         self.assertFalse(signup.self_made)
         return signup
 
@@ -98,7 +99,7 @@ class SteamVerifyPermissionTests(EventTestCase):
         self.assertIsNone(can_verify_steam_account(self.league_staff, self.target))
 
     def test_cancelled_self_signup_denied(self) -> None:
-        cancel_signup(self._self_signup(self.open_event))
+        cancel_signup(self._self_signup(self.open_event), actor=SYSTEM)
         self.assertIsNone(can_verify_steam_account(self.admin, self.target))
         self.assertEqual(list(self_signup_events(self.target)), [])
 

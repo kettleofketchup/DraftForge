@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, ProfileClaimRequest
+from events.tests.actors import SYSTEM
 from league.models import League
 from org.contributions.kinds import ContributionKind
 from org.models import ContributionEntry, Organization, OrgUser
@@ -59,7 +60,7 @@ class ClaimMergeLeagueSummaryTests(TransactionTestCase):
         get_league_summary(STEAM_LEAGUE, 5)
         with patch.object(CustomUser, "delete"), transaction.atomic():
             ClaimRequestViewSet()._merge_profiles(
-                self.claimer, self.target, approver=self.admin
+                self.claimer, self.target, actor=SYSTEM
             )
         players = get_league_summary(STEAM_LEAGUE, 5)["players"]
         self.assertEqual(players[str(self.claimer.pk)]["games"], 5)

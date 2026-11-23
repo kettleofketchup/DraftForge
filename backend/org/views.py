@@ -5,6 +5,7 @@ Handles org admin functionality including claim request management.
 """
 
 from typing import Any
+from uuid import uuid4
 
 from django.db import transaction
 from django.db.models import Q, QuerySet
@@ -21,6 +22,8 @@ from app.steam_accounts import log_steam_verification_change
 from draft.models import DraftRound
 from draft.services.hero_chat import repoint_chat_attribution
 from events.eligibility import apply_admin_steam_account_id
+from events.ledger import ActorRole, SignupActor, SignupMeans
+from events.merge import merge_user_signups
 from events.models import Event
 from events.staff import dedupe_host_helpers
 from league.models import LeagueLog, LeagueUser
@@ -124,7 +127,16 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
             claim_request.save()
 
             # Perform the merge (this deletes target_user)
-            self._merge_profiles(claimer, target_user, approver=request.user)
+            self._merge_profiles(
+                claimer,
+                target_user,
+                actor=SignupActor(
+                    user=request.user,
+                    role=ActorRole.STAFF,
+                    means=SignupMeans.WEB,
+                    correlation_id=f"claim-{uuid4().hex[:12]}",
+                ),
+            )
 
             # Log the action
             OrgLog.objects.create(
@@ -189,7 +201,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         )
 
     def _merge_profiles(
-        self, claimer: CustomUser, target_user: CustomUser, *, approver: CustomUser
+        self, claimer: CustomUser, target_user: CustomUser, *, actor: SignupActor
     ) -> None:
         """
         Merge target_user's profile into claimer.
@@ -255,6 +267,8 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 *stale_events,
                 *Event.objects.nocache().filter(pk__in=staffed_ids),
             )
+
+        merge_user_signups(target_user, claimer, actor=actor)
 
         # LeagueUser memberships
         for league_user in LeagueUser.objects.filter(user=target_user):
@@ -358,7 +372,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         target_user.save(update_fields=["steam_account_id", "steamid"])
 
         verify_grant = (
-            apply_admin_steam_account_id(claimer, stub_steam_id, actor=approver)
+            apply_admin_steam_account_id(claimer, stub_steam_id, actor=actor.user)
             if stub_steam_id is not None
             else None
         )
@@ -366,5 +380,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         # Save claimer and delete target
         claimer.save()
         if verify_grant is not None:
-            log_steam_verification_change(claimer, approver, verify_grant.org_id, True)
+            log_steam_verification_change(
+                claimer, actor.user, verify_grant.org_id, True
+            )
         target_user.delete()

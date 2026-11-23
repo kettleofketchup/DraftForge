@@ -8,6 +8,7 @@ from events.services import (
     process_rsvp,
     staff_add_signup,
 )
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 
 
@@ -20,32 +21,32 @@ class SignupSelfMadeTests(EventTestCase):
         return EventSignup.objects.get(event=self.open_event, user=self.member)
 
     def test_process_rsvp_marks_self_made(self) -> None:
-        signup = process_rsvp(self.open_event, self.member)
+        signup = process_rsvp(self.open_event, self.member, actor=SYSTEM)
         self.assertTrue(signup.self_made)
         self.assertTrue(self._row().self_made)
 
     def test_tentative_marks_self_made(self) -> None:
-        signup = create_tentative_signup(self.open_event, self.member)
+        signup = create_tentative_signup(self.open_event, self.member, actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.TENTATIVE)
         self.assertTrue(self._row().self_made)
 
     def test_staff_add_signup_not_self_made(self) -> None:
-        signup = staff_add_signup(self.open_event, self.member)
+        signup = staff_add_signup(self.open_event, self.member, actor=SYSTEM)
         self.assertFalse(signup.self_made)
         self.assertFalse(self._row().self_made)
 
     def test_resignup_after_cancel_self_made(self) -> None:
-        staff_row = staff_add_signup(self.open_event, self.member)
+        staff_row = staff_add_signup(self.open_event, self.member, actor=SYSTEM)
         self.assertFalse(staff_row.self_made)
-        cancel_signup(staff_row)
-        signup = process_rsvp(self.open_event, self.member)
+        cancel_signup(staff_row, actor=SYSTEM)
+        signup = process_rsvp(self.open_event, self.member, actor=SYSTEM)
         self.assertNotEqual(signup.pk, staff_row.pk)
         self.assertTrue(self._row().self_made)
 
     def test_waitlisted_signup_self_made(self) -> None:
         full_event = self.make_event(max_players=1)
-        process_rsvp(full_event, self.make_user())
-        signup = process_rsvp(full_event, self.member)
+        process_rsvp(full_event, self.make_user(), actor=SYSTEM)
+        signup = process_rsvp(full_event, self.member, actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.WAITLISTED)
         self.assertTrue(
             EventSignup.objects.get(event=full_event, user=self.member).self_made

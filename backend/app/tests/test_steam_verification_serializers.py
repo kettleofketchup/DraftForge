@@ -8,6 +8,7 @@ from app.models import CustomUser
 from app.serializers import TournamentUserSerializer, UserSerializer
 from events.models import Event, EventSignup
 from events.services import process_rsvp, staff_add_signup
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
@@ -151,7 +152,7 @@ class SteamVerificationSerializerTests(EventTestCase):
 
     def test_signup_can_verify_true_for_event_staff_self_signup(self) -> None:
         event = self.make_event()
-        signup = process_rsvp(event, self.target)
+        signup = process_rsvp(event, self.target, actor=SYSTEM)
         self.assertTrue(signup.self_made)
         row = self._row(self._signups(event, self.admin), self.target)
         self.assertIs(row["can_verify_steam_account"], True)
@@ -161,21 +162,21 @@ class SteamVerificationSerializerTests(EventTestCase):
 
     def test_signup_can_verify_false_for_own_row(self) -> None:
         event = self.make_event()
-        signup = process_rsvp(event, self.admin)
+        signup = process_rsvp(event, self.admin, actor=SYSTEM)
         self.assertTrue(signup.self_made)
         row = self._row(self._signups(event, self.admin), self.admin)
         self.assertIs(row["can_verify_steam_account"], False)
 
     def test_signup_can_verify_false_for_on_behalf_signup(self) -> None:
         event = self.make_event()
-        signup = staff_add_signup(event, self.target)
+        signup = staff_add_signup(event, self.target, actor=SYSTEM)
         self.assertFalse(signup.self_made)
         row = self._row(self._signups(event, self.admin), self.target)
         self.assertIs(row["can_verify_steam_account"], False)
 
     def test_signup_can_verify_false_for_non_staff(self) -> None:
         event = self.make_event()
-        process_rsvp(event, self.target)
+        process_rsvp(event, self.target, actor=SYSTEM)
         for viewer in (None, self.unrelated_user):
             row = self._row(self._signups(event, viewer), self.target)
             self.assertIs(row["can_verify_steam_account"], False)
@@ -187,7 +188,7 @@ class SteamVerificationSerializerTests(EventTestCase):
 
     def test_signup_tournament_event_user_data_carries_org_name(self) -> None:
         event = self.make_event(tournament_league=self.league)
-        process_rsvp(event, self.target)
+        process_rsvp(event, self.target, actor=SYSTEM)
         row = self._row(self._signups(event, self.admin), self.target)
         self.assertEqual(row["user_data"][ORG_NAME_KEY], "Vouching Org")
 
@@ -225,7 +226,7 @@ class SteamVerificationQueryCountTests(EventTestCase):
     def test_signup_list_query_count(self) -> None:
         event = self.make_event()
         for user in self.members:
-            self.assertTrue(process_rsvp(event, user).self_made)
+            self.assertTrue(process_rsvp(event, user, actor=SYSTEM).self_made)
         self.assertEqual(EventSignup.objects.filter(event=event).count(), 3)
         client = APIClient()
         client.force_authenticate(self.admin)

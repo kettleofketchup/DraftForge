@@ -19,6 +19,7 @@ from app.steam_verification_schemas import SteamVerificationOut
 from app.user_cache import serialize_user_core
 from events.models import Event, EventSignup
 from events.services import process_rsvp, staff_add_signup
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.membership import resolve_or_create_org_user
 from org.models import Organization
@@ -40,7 +41,7 @@ class SteamVerificationEndpointTests(EventTestCase):
         self.client = APIClient()
 
     def _self_signup(self) -> EventSignup:
-        signup = process_rsvp(self.open_event, self.target)
+        signup = process_rsvp(self.open_event, self.target, actor=SYSTEM)
         self.assertTrue(signup.self_made)
         return signup
 
@@ -109,7 +110,7 @@ class SteamVerificationEndpointTests(EventTestCase):
     def test_post_self_as_event_staff_403(self) -> None:
         self.admin.steam_account_id = 6161
         self.admin.save()
-        process_rsvp(self.open_event, self.admin)
+        process_rsvp(self.open_event, self.admin, actor=SYSTEM)
         resp = self._post(self.admin, steam_account_id=6161, target=self.admin)
         self.assertEqual(resp.status_code, 403)
 
@@ -140,7 +141,7 @@ class SteamVerificationEndpointTests(EventTestCase):
         self.assertUnverified()
 
     def test_post_on_behalf_signup_403(self) -> None:
-        signup = staff_add_signup(self.open_event, self.target)
+        signup = staff_add_signup(self.open_event, self.target, actor=SYSTEM)
         self.assertFalse(signup.self_made)
         self.assertEqual(self._post(self.admin).status_code, 403)
         self.assertEqual(self._post(self.league_staff).status_code, 403)

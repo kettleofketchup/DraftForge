@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from app.models import CustomUser, PositionsModel, Team, Tournament
 from app.services.team_leadership import teams_with_leadership_problems
+from events.tests.actors import SYSTEM
 from org.views import ClaimRequestViewSet
 
 _discord_ids = itertools.count(571500)
@@ -35,9 +36,7 @@ class ClaimMergeTeamLeadershipTests(TestCase):
         self.team.members.set([self.target, self.other])
 
     def _merge(self) -> None:
-        ClaimRequestViewSet()._merge_profiles(
-            self.claimer, self.target, approver=self.claimer
-        )
+        ClaimRequestViewSet()._merge_profiles(self.claimer, self.target, actor=SYSTEM)
         self.team.refresh_from_db()
 
     def test_claimer_inherits_captaincy(self) -> None:

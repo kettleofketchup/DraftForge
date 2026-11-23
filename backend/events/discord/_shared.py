@@ -19,6 +19,7 @@ from discordbot.models import DiscordEventLog
 from events.admission import self_serve_refusal
 from events.constants import SignupStatus
 from events.eligibility import unmet_labels
+from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from telemetry.logging import get_logger
 
@@ -224,7 +225,7 @@ def _direct_signup(event: Event, user: CustomUser) -> dict[str, object]:
     """
     from events.services import process_rsvp
 
-    signup = process_rsvp(event, user)
+    signup = process_rsvp(event, user, actor=SignupActor.discord(user))
     log.info(
         "signup_persisted",
         system="discord",

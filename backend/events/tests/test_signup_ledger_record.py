@@ -1,15 +1,19 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import AnonymousUser
+from django.http import HttpRequest
 from django.test import RequestFactory
 from django.utils import timezone as tz
+from structlog.contextvars import bind_contextvars, clear_contextvars
 from structlog.testing import capture_logs
 
+from app.models import CustomUser
 from events import ledger
 from events.constants import ActorRole, SignupAction, SignupMeans, SignupStatus
 from events.ledger import (
     PLACEMENT_ACTIONS,
     SignupActor,
+    current_interaction_id,
     event_snapshot,
     record_signup_change,
     snapshot,
@@ -252,3 +256,142 @@ class ActorTest(EventTestCase):
         self.assertIs(ledger.ActorRole, ActorRole)
         self.assertIs(ledger.SignupAction, SignupAction)
         self.assertIs(ledger.SignupMeans, SignupMeans)
+
+
+class SignupActorBuildersTests(EventTestCase):
+    def tearDown(self) -> None:
+        clear_contextvars()
+
+    def _request(self, user: CustomUser | AnonymousUser) -> HttpRequest:
+        request = RequestFactory().post("/")
+        request.user = user
+        return request
+
+    def test_system_actor_carries_correlation_id(self) -> None:
+        actor = SignupActor.system(correlation_id="merge-abc")
+        self.assertEqual(actor.correlation_id, "merge-abc")
+        self.assertEqual(actor.role, ActorRole.SYSTEM)
+        self.assertEqual(actor.means, SignupMeans.SYSTEM)
+        self.assertIsNone(actor.user)
+        self.assertFalse(actor.staff_power)
+
+    def test_discord_actor_reads_bound_interaction_id(self) -> None:
+        self.assertEqual(SignupActor.discord(self.user).correlation_id, "")
+        bind_contextvars(interaction_id="123456789012345678")
+        self.assertEqual(
+            SignupActor.discord(self.user).correlation_id, "123456789012345678"
+        )
+        self.assertEqual(
+            SignupActor.discord(
+                self.user, correlation_id="reaction:1:2"
+            ).correlation_id,
+            "reaction:1:2",
+        )
+
+    def test_current_interaction_id_truncates_to_64(self) -> None:
+        self.assertEqual(current_interaction_id(), "")
+        bind_contextvars(interaction_id="9" * 80)
+        self.assertEqual(current_interaction_id(), "9" * 64)
+
+    def test_for_request_on_roles(self) -> None:
+        cases: list[
+            tuple[CustomUser | AnonymousUser, CustomUser, bool, ActorRole, bool]
+        ] = [
+            (self.admin, self.user, False, ActorRole.STAFF, False),
+            (self.admin, self.user, True, ActorRole.STAFF, False),
+            (self.admin, self.admin, True, ActorRole.MEMBER, True),
+            (self.admin, self.admin, False, ActorRole.MEMBER, False),
+            (self.user, self.user, True, ActorRole.MEMBER, False),
+            (self.unrelated_user, self.user, False, ActorRole.MEMBER, False),
+            (AnonymousUser(), self.user, False, ActorRole.MEMBER, False),
+        ]
+        for acting, subject, staff_only, role, staff_power in cases:
+            with self.subTest(
+                acting=str(acting), subject=subject.username, staff_only=staff_only
+            ):
+                actor = SignupActor.for_request_on(
+                    self._request(acting), subject, self.event, staff_only=staff_only
+                )
+                self.assertEqual(actor.role, role)
+                self.assertEqual(actor.staff_power, staff_power)
+                self.assertEqual(actor.means, SignupMeans.WEB)
+                self.assertEqual(actor.correlation_id, "")
+                if acting.is_authenticated:
+                    self.assertEqual(actor.user, acting)
+                else:
+                    self.assertIsNone(actor.user)
+
+    def test_for_request_on_ignores_bound_interaction_id(self) -> None:
+        bind_contextvars(interaction_id="123")
+        actor = SignupActor.for_request_on(
+            self._request(self.user), self.user, self.event
+        )
+        self.assertEqual(actor.correlation_id, "")
+
+
+class RecordFallbackTests(EventTestCase):
+    def setUp(self) -> None:
+        self.signup = EventSignup.objects.create(event=self.event, user=self.user)
+
+    def test_record_falls_back_to_actor_correlation_id(self) -> None:
+        actor = SignupActor.system(correlation_id="x1")
+        entry = record_signup_change(
+            event=self.event,
+            subject=self.user,
+            actor=actor,
+            action=SignupAction.PROMOTED,
+        )
+        entry.refresh_from_db()
+        self.assertEqual(entry.correlation_id, "x1")
+        explicit = record_signup_change(
+            event=self.event,
+            subject=self.user,
+            actor=actor,
+            action=SignupAction.PROMOTED,
+            correlation_id="y2",
+        )
+        explicit.refresh_from_db()
+        self.assertEqual(explicit.correlation_id, "y2")
+
+    def test_record_marks_staff_power_without_mutating_snapshot(self) -> None:
+        actor = SignupActor(
+            user=self.admin,
+            role=ActorRole.MEMBER,
+            means=SignupMeans.WEB,
+            staff_power=True,
+        )
+        after = snapshot(self.signup, extra={"fill_tier": 1})
+        entry = record_signup_change(
+            event=self.event,
+            subject=self.admin,
+            actor=actor,
+            action=SignupAction.REINSTATED,
+            signup=self.signup,
+            after=after,
+        )
+        entry.refresh_from_db()
+        self.assertIs(entry.after["extra"]["staff_power"], True)
+        self.assertEqual(entry.after["extra"]["fill_tier"], 1)
+        self.assertEqual(after.extra, {"fill_tier": 1})
+
+        none_after = record_signup_change(
+            event=self.event,
+            subject=self.admin,
+            actor=actor,
+            action=SignupAction.WITHDREW,
+            signup=self.signup,
+        )
+        none_after.refresh_from_db()
+        self.assertIsNone(none_after.after)
+
+    def test_record_without_staff_power_leaves_extra(self) -> None:
+        entry = record_signup_change(
+            event=self.event,
+            subject=self.user,
+            actor=SignupActor.discord(self.user),
+            action=SignupAction.SIGNED_UP,
+            signup=self.signup,
+            after=snapshot(self.signup),
+        )
+        entry.refresh_from_db()
+        self.assertEqual(entry.after["extra"], {})

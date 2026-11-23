@@ -74,6 +74,34 @@ describe('useOrgSettingsAccess', () => {
     ).toEqual(['staff-placement']);
   });
 
+  it('shows the leadership section only with leadership manage access', () => {
+    const track = (canManage: boolean) => ({
+      key: 'leadership',
+      label: 'Leadership',
+      metrics: [{ key: 'points', label: 'Points' }],
+      can_view_rows: true,
+      can_view_own: true,
+      board_open: true,
+      can_manage: canManage,
+    });
+    expect(
+      access(
+        org({
+          owner_id: VIEWER,
+          standing_tracks: [track(true)],
+        } as Partial<OrganizationType>),
+      ).visibleSectionIds,
+    ).toEqual(['staff-placement', 'leadership']);
+    expect(
+      access(
+        org({
+          owner_id: VIEWER,
+          standing_tracks: [track(false)],
+        } as Partial<OrganizationType>),
+      ).visibleSectionIds,
+    ).toEqual(['staff-placement']);
+  });
+
   it('allows an org admin', () => {
     expect(access(org({ admin_ids: [VIEWER] })).canOpen).toBe(true);
   });

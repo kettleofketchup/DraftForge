@@ -17,6 +17,7 @@ from app.steam_accounts import (
 )
 from discordbot.models import DiscordEvent
 from events.constants import EventState, RepeatFrequency, SignupStatus
+from events.ledger import SignupActor
 from events.models import (
     Event,
     EventRepeater,
@@ -627,7 +628,7 @@ def _ensure_steam_verify_user(
 def _ensure_self_made_signup(event: Event, user: CustomUser) -> None:
     signup = EventSignup.objects.filter(event=event, user=user).first()
     if signup is None:
-        process_rsvp(event, user)
+        process_rsvp(event, user, actor=SignupActor.system())
         return
     if signup.status != SignupStatus.RSVP or not signup.self_made:
         signup.status = SignupStatus.RSVP

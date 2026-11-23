@@ -1,5 +1,10 @@
 import * as React from 'react';
-import type { FieldErrors, FieldValues, UseFormReturn } from 'react-hook-form';
+import {
+  useFormState,
+  type FieldErrors,
+  type FieldValues,
+  type UseFormReturn,
+} from 'react-hook-form';
 import { toast } from 'sonner';
 import {
   SettingsDialog,
@@ -71,9 +76,9 @@ export function EventFormDialog<
     [],
   );
 
-  const errorKeys = Object.keys(form.formState.errors).filter(
-    (k) => k !== 'root',
-  );
+  // Not form.formState: that would re-render the tab contents on error changes.
+  const { errors } = useFormState({ control: form.control });
+  const errorKeys = Object.keys(errors).filter((k) => k !== 'root');
   const first = tabs[0].value;
   // Where the field renders in this modal, else its registry home, else the first tab.
   const tabFor = (field: string) => {

@@ -23,6 +23,7 @@ from app.steam_accounts import (
     steam_account_id_conflict_payload,
 )
 from events.services import process_rsvp
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.models import Organization, OrgUser
 from steam.services.account_lookup import SteamLookupRateLimited
@@ -215,7 +216,7 @@ class OrgUserPatchVerificationTests(EventTestCase):
 
     def test_event_staff_of_self_signup_change_verifies_with_org(self) -> None:
         event = self.make_event(tournament_league=self.league)
-        self.assertTrue(process_rsvp(event, self.target).self_made)
+        self.assertTrue(process_rsvp(event, self.target, actor=SYSTEM).self_made)
         with patch(ENSURE) as ensure:
             resp = self._patch(self.admin, {"steam_account_id": 727272})
         self.assertEqual(resp.status_code, 200, resp.content)

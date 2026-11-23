@@ -115,7 +115,7 @@ Players RSVP from the event page (web) or via the Discord signup post. The signu
 - **Waitlist** — when max players is reached, new signups are waitlisted with position tracking
 - **Re-RSVP** — cancelled signups can re-register
 
-Each signup keeps a place in line and its original sign-up, and the signup ledger will keep a durable record of its changes: see [Signup Ledger & Line Position](events/signup-ledger.md).
+Each signup keeps a place in line and its original sign-up, and the signup ledger records every change to it, with who made it and how: see [Signup Ledger & Line Position](events/signup-ledger.md).
 
 #### Web vs Discord parity
 
@@ -140,7 +140,7 @@ The endpoint is a single canonical action accepting `{intent, profile}`; the old
 Admin approve uses `POST /api/event-signups/{id}/approve/` with optional `{ "mmr": <int> }`. On approve:
 
 - `EventSignup.status` → `approved`.
-- If `mmr` is supplied, the org MMR of the event's game is written and the OrgLog records `set_mmr` with `game_type`. An `OrgUser` row is created if missing. The value is checked against that game's range (0–20000); an out-of-range value returns 400.
+- If `mmr` is supplied, the org MMR of the event's game is written and the OrgLog records `set_mmr` with `game_type`. The signup ledger's `approved` entry also records the override as `mmr_override` and `game_type` in its after snapshot. An `OrgUser` row is created if missing. The value is checked against that game's range (0–20000); an out-of-range value returns 400.
 - The Dota verification flags (`has_active_dota_mmr`, `dota_mmr_last_verified`) are set only when the event is Dota 2.
 - The approval dialog suggests a value only for Dota events (`suggested_mmr`). For Deadlock signups `suggested_mmr_range` is `null` with source `"none"`, and `suggested_mmr` is the member's existing Deadlock org MMR or `null`; the dialog shows the self-reported Deadlock rank instead and the input is required.
 - **Approve does NOT mutate positions.** The legacy behavior that flattened `pos_N` booleans into `priority=1` on `CustomUser.positions` at approve time has been removed — priorities now come exclusively from the signup write via `apply_signup_input`, which is authoritative. The per-org `PlayerDotaProfile.pos_N` booleans are the derived binary view for that event.
