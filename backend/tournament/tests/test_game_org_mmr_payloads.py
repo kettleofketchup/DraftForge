@@ -12,7 +12,6 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, PositionsModel, ProfileClaimRequest, Team, Tournament
 from app.schemas import TournamentUserSchema
 from app.serializers import UserSerializer
-from app.tests.test_game_org_mmr_drafts import GameOrgMmrFixtures
 from common.game import GameType
 from draft.models import Draft
 from draft.services.team_state import build_draft_state
@@ -23,6 +22,7 @@ from org.models import Organization, OrgUser
 from org.serializers import OrgUserSerializer
 from tests.populate.utils import ensure_org_user
 from tournament.functions import serialize_tournament
+from tournament.tests.test_game_org_mmr_drafts import GameOrgMmrFixtures
 
 _discord_ids = itertools.count(910_000_000_000_000_000)
 

@@ -302,7 +302,9 @@ GUILD = "999888777"
 DISCORD_ID = "424242"
 
 
-def _member(discord_id: str = DISCORD_ID, nick: str | None = "DragonClaw") -> dict:
+def _discord_member(
+    discord_id: str = DISCORD_ID, nick: str | None = "DragonClaw"
+) -> dict:
     return {
         "user": {
             "id": discord_id,
@@ -343,7 +345,7 @@ class AddMemberGuildNicknameTest(TestCase):
 
     def test_league_add_by_user_id_seeds_nickname(self) -> None:
         user = self._existing()
-        self._warm(_member())
+        self._warm(_discord_member())
         resp = self.client.post(
             f"/api/leagues/{self.league.pk}/members/",
             {"user_id": user.pk},
@@ -356,7 +358,7 @@ class AddMemberGuildNicknameTest(TestCase):
         self.assertEqual(self._org_nick(user), "DragonClaw")
 
     def test_league_add_by_discord_id_seeds_nickname(self) -> None:
-        self._warm(_member())
+        self._warm(_discord_member())
         resp = self.client.post(
             f"/api/leagues/{self.league.pk}/members/",
             {"discord_id": DISCORD_ID},
@@ -374,7 +376,7 @@ class AddMemberGuildNicknameTest(TestCase):
         OrgUser.objects.create(
             user=user, organization=self.org, guild_nickname="Synced"
         )
-        self._warm(_member())
+        self._warm(_discord_member())
         resp = self.client.post(
             f"/api/leagues/{self.league.pk}/members/",
             {"user_id": user.pk},
@@ -385,7 +387,7 @@ class AddMemberGuildNicknameTest(TestCase):
 
     def test_league_add_invalidates_user_after_commit(self) -> None:
         user = self._existing()
-        self._warm(_member())
+        self._warm(_discord_member())
         with mock.patch("league.views_admin_team.invalidate_after_commit") as spy:
             self.client.post(
                 f"/api/leagues/{self.league.pk}/members/",
@@ -412,7 +414,7 @@ class AddMemberGuildNicknameTest(TestCase):
         self.assertIn(user, self.tournament.users.all())
 
     def test_tournament_add_by_discord_id(self) -> None:
-        self._warm(_member())
+        self._warm(_discord_member())
         resp = self.client.post(
             f"/api/tournaments/{self.tournament.pk}/members/",
             {"discord_id": DISCORD_ID},

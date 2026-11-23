@@ -16,13 +16,13 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.serializers import users_remaining_pks
 from bracket.models import BracketSlot, TournamentBracket
 from draft.models import Draft, DraftEvent, DraftOptions, DraftTeam, HeroDraft
 from draft.services.team_reset import reset_draft_teams
 from league.models import League, LeagueUser
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
+from tournament.serializers.draft import users_remaining_pks
 from tournament.state import tournament_state_queryset
 from user.tests.test_cacheops_integration import _redis_reachable
 

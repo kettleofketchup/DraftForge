@@ -250,10 +250,10 @@ Django Channels provides WebSocket support for real-time features via Daphne ASG
 
 The `ProtocolTypeRouter` in `backend/asgi.py` automatically routes connections based on protocol:
 - HTTP requests → Django URL router (`backend/urls.py`)
-- WebSocket connections → Channels URL router (`app/routing.py` and `draft/routing.py`, combined in `backend/asgi.py`)
+- WebSocket connections → Channels URL router (`tournament/routing.py` and `draft/routing.py`, combined in `backend/asgi.py`)
 
 ```python
-# backend/app/routing.py
+# backend/tournament/routing.py
 websocket_urlpatterns = [
     path("api/tournament/<int:tournament_id>/", TournamentConsumer.as_asgi()),
 ]

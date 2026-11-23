@@ -3,9 +3,10 @@ from typing import Any
 from rest_framework import serializers
 
 from app.models import CustomUser
-from app.serializers import TournamentUserSerializer, tournament_organization
+from app.serializers import TournamentUserSerializer
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftRound
 from org.models import OrgUser
+from tournament.serializers.users import tournament_organization
 
 
 class HeroDraftRoundSerializerFull(serializers.ModelSerializer):
