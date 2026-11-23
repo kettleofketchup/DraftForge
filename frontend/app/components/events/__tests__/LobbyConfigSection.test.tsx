@@ -154,21 +154,27 @@ describe('LobbyConfigSection', () => {
     expect(draftTime()).toBeNull();
   });
 
-  it('writes Draft Time as a number, clamped to at least 1', () => {
+  it('writes Draft Time as a number, clamped to at least 1 on blur', () => {
     renderSection({ game_mode: GameMode.CAPTAINS_MODE });
     type(draftTime(), '25');
     expect(form.getValues('captains_draft_time')).toBe(25);
-    type(draftTime(), '-5');
-    expect(form.getValues('captains_draft_time')).toBe(1);
     type(draftTime(), '0');
+    expect(form.getValues('captains_draft_time')).toBe(25);
+    fireEvent.blur(draftTime()!);
     expect(form.getValues('captains_draft_time')).toBe(1);
+    expect(draftTime()).toHaveValue(1);
   });
 
-  it('falls back to 10 seconds when Draft Time is cleared or not a number', () => {
-    renderSection({ game_mode: GameMode.CAPTAINS_MODE });
+  it('keeps Draft Time empty while editing and restores it on blur', () => {
+    renderSection({
+      game_mode: GameMode.CAPTAINS_MODE,
+      captains_draft_time: 30,
+    });
     type(draftTime(), '');
-    expect(form.getValues('captains_draft_time')).toBe(10);
-    expect(draftTime()).toHaveValue(10);
+    expect(draftTime()).toHaveValue(null);
+    expect(form.getValues('captains_draft_time')).toBe(30);
+    fireEvent.blur(draftTime()!);
+    expect(draftTime()).toHaveValue(30);
   });
 
   it('shows Custom Game Name only for a custom lobby and writes it', () => {

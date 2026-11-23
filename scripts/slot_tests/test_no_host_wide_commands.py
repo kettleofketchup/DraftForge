@@ -29,6 +29,7 @@ RAW_COMPOSE_EXEMPT: dict[str, str] = {
     "scripts/slot_tests/test_slots_allocate.py": "asserts the helper's printed down hint",
     "scripts/slot_tests/test_slots_lifecycle.py": "asserts the helper's down argv",
     "scripts/slot_tests/test_slots_stale.py": "asserts the stale reaper's down argv",
+    "scripts/slot_tests/test_slots_run_orphans.py": "asserts the run-orphan reaper's down argv",
     "scripts/test_version.py": "matches compose file names to check they exist",
 }
 
