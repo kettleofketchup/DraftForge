@@ -405,6 +405,29 @@ _TOURNAMENT_SERIALIZER_NAMES = (
     "LeagueMinimalSerializer",
 )
 
+# names split out of app modules that stay behind
+_TOURNAMENT_SPLIT_DEFS = {
+    "app.management.prod_payload": (
+        "TeamLookup",
+        "TeamRef",
+        "UserRef",
+        "index_users",
+        "parse_date_played",
+        "resolve_user",
+    ),
+    "app.tests.test_prod_import_commands": (
+        "ImportProdTournamentCommandTest",
+        "SyncProdTournamentsCommandTest",
+        "mmr_rows",
+        "tournament_payload",
+    ),
+    "app.tests.test_schema_drift": (
+        "GameWithoutHeroDraftSchemaDriftTest",
+        "TournamentParticipantSchemaDriftTest",
+        "TournamentTaskSchemaDriftTest",
+    ),
+}
+
 _TOURNAMENT_RETIRED_DEFS = {
     "app.services.team_management": (
         "TeamChange",
@@ -793,6 +816,11 @@ TOURNAMENT = MovedSlice(
                     *_TOURNAMENT_VIEW_NAMES,
                     *_TOURNAMENT_RETIRED_DEFS["app.views.bracket"],
                 )
+            ),
+            *(
+                (module, name)
+                for module, names in _TOURNAMENT_SPLIT_DEFS.items()
+                for name in names
             ),
         }
     ),

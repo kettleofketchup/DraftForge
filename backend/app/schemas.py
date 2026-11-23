@@ -4,11 +4,11 @@ These schemas serve as the contract between Django (producer) and
 celery workers (consumer). They validate at both ends:
 
 Django side (serializer):
-    EventTaskData.model_validate(EventSerializer(event).data)
+    TournamentUserSchema.model_validate(TournamentUserSerializer(user).data)
     → catches if serializer output drifts from schema
 
 Celery side (consumer):
-    event = EventTaskData(**api_response)
+    user = TournamentUserSchema(**api_response)
     → catches if API response drifts from what celery expects
 
 When Django model fields change, update BOTH the serializer AND this
