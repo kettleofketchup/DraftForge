@@ -1490,3 +1490,57 @@ class TeamUsageTests(TeamApiFixture, TestCase):
                 self.assertEqual(resp.json()["code"], "not_permitted")
         resp = APIClient().get(action_url(self.team.pk, "usage"))
         self.assertEqual(resp.status_code, 401)
+
+
+class TeamPatchPlacementGuardTests(TeamApiFixture, TestCase):
+    def patch(self, team: Team, body: dict[str, Any]) -> Any:
+        return self.client_for(self.site_staff).patch(
+            f"/api/teams/{team.pk}/", body, format="json"
+        )
+
+    def take_over(self) -> None:
+        eliminate(self.other, 4)
+        team_management.replace_captain(
+            self.team, self.o1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+    def legacy_rows(self, team: Team) -> int:
+        return TeamLog.objects.filter(
+            team_snapshot_id=team.pk, action=TeamLogAction.LEGACY_PATCH
+        ).count()
+
+    def test_patch_placement_null_after_takeover_409(self) -> None:
+        self.take_over()
+
+        resp = self.patch(self.other, {"placement": None})
+
+        self.assertEqual(resp.status_code, 409, resp.content)
+        body = resp.json()
+        self.assertEqual(body["code"], "roster_conflict")
+        self.assertEqual(
+            body["details"], {"team_id": self.other.pk, "user_ids": [self.o1.pk]}
+        )
+        self.assertIn(self.o1.username, body["error"])
+        self.assertEqual(Team.objects.nocache().get(pk=self.other.pk).placement, 4)
+        self.assertEqual(self.legacy_rows(self.other), 0)
+
+    def test_patch_placement_null_without_conflict_ok(self) -> None:
+        eliminate(self.other, 4)
+
+        resp = self.patch(self.other, {"placement": None})
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertIsNone(Team.objects.nocache().get(pk=self.other.pk).placement)
+
+    def test_patch_other_fields_unaffected(self) -> None:
+        self.take_over()
+
+        resp = self.patch(self.other, {"name": "Renamed Others"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        resp = self.patch(self.other, {"placement": 3})
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        other = Team.objects.nocache().get(pk=self.other.pk)
+        self.assertEqual(other.name, "Renamed Others")
+        self.assertEqual(other.placement, 3)

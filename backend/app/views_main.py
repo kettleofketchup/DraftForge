@@ -49,12 +49,14 @@ from app.services.team_management import (
     TeamChange,
     add_standin,
     follow_captain,
+    live_conflicts,
     mark_dropout,
     other_team_user_ids,
     remove_standin,
     rename,
     replace_captain,
     restore_member,
+    roster_conflict_body,
     set_captain,
     set_deputy,
     sub_in,
@@ -1107,6 +1109,26 @@ class TeamView(viewsets.ModelViewSet):
 
             serializer = self.get_serializer(team, data=request.data, partial=partial)
             serializer.is_valid(raise_exception=True)
+            reopens = (
+                team.placement is not None
+                and "placement" in serializer.validated_data
+                and serializer.validated_data["placement"] is None
+            )
+            conflicts = live_conflicts(team) if reopens else []
+            if conflicts:
+                log.warning(
+                    "team_patch_blocked_roster_conflict",
+                    system="tournament",
+                    subsystem="teams",
+                    team_id=team.pk,
+                    tournament_id=team.tournament_id,
+                    actor_id=request.user.pk,
+                    user_ids=[u.pk for u in conflicts],
+                )
+                return Response(
+                    roster_conflict_body(team, conflicts),
+                    status=status.HTTP_409_CONFLICT,
+                )
             self.perform_update(serializer)
 
             deleted = serializer.instance.pk is None

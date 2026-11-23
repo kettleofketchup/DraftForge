@@ -118,6 +118,52 @@ def other_team_user_ids(team: Team) -> set[int]:
     )
 
 
+def _live_after_reopen(team: Team, reopening: Collection[Team]) -> QuerySet[Team]:
+    reopened = [t.pk for t in reopening if t.pk != team.pk]
+    return (
+        Team.objects.nocache()
+        .filter(tournament_id=team.tournament_id)
+        .filter(Q(placement__isnull=True) | Q(pk__in=reopened))
+        .exclude(pk=team.pk)
+    )
+
+
+def live_conflicts(team: Team, *, reopening: Collection[Team] = ()) -> list[CustomUser]:
+    """Members/stand-ins of `team` also on another live team (or one in `reopening`)."""
+    if team.tournament_id is None:
+        return []
+    others = _live_after_reopen(team, reopening)
+    return list(
+        CustomUser.objects.nocache()
+        .filter(Q(teams_as_member=team) | Q(teams_as_dropin=team))
+        .filter(Q(teams_as_member__in=others) | Q(teams_as_dropin__in=others))
+        .distinct()
+        .order_by("pk")
+    )
+
+
+def roster_conflict_body(
+    team: Team, users: Sequence[CustomUser], *, reopening: Collection[Team] = ()
+) -> dict[str, Any]:
+    """409 `roster_conflict` payload for reopening `team` while `users` play elsewhere."""
+    names = ", ".join(user.username for user in users)
+    teams = ", ".join(
+        _live_after_reopen(team, reopening)
+        .filter(Q(members__in=users) | Q(dropin_members__in=users))
+        .distinct()
+        .order_by("name", "pk")
+        .values_list("name", flat=True)
+    )
+    return {
+        "code": "roster_conflict",
+        "error": (
+            f"{names} also play for {teams or 'another team'}. "
+            "Resolve that before reopening this team."
+        ),
+        "details": {"team_id": team.pk, "user_ids": [user.pk for user in users]},
+    }
+
+
 def _on_other_team_error(team: Team, user: CustomUser) -> TeamManagementError:
     other = (
         _live_other_teams(team)

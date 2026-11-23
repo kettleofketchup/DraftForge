@@ -18,6 +18,7 @@ from app.serializers import (
     BracketSaveSerializer,
     build_team_user_index,
 )
+from app.services.team_management import live_conflicts, roster_conflict_body
 from draft.models import HeroDraft
 from lobby.models import GameLobby
 from telemetry.logging import get_logger
@@ -374,6 +375,27 @@ def _unset_winner(game: Game) -> Response:
         elif winning_team.pk == game.dire_team_id:
             losing_team = game.radiant_team
 
+    teams_to_reset = [losing_team]
+    if game.bracket_type == "grand_finals":
+        teams_to_reset.append(winning_team)
+    reopening = [t for t in teams_to_reset if t is not None and t.placement is not None]
+    for team in reopening:
+        conflicts = live_conflicts(team, reopening=reopening)
+        if conflicts:
+            log.warning(
+                "bracket_unset_blocked_roster_conflict",
+                system="bracket",
+                subsystem="advance",
+                game_id=game.pk,
+                tournament_id=game.tournament_id,
+                team_id=team.pk,
+                user_ids=[u.pk for u in conflicts],
+            )
+            return Response(
+                roster_conflict_body(team, conflicts, reopening=reopening),
+                status=status.HTTP_409_CONFLICT,
+            )
+
     to_clear: list[tuple[Game, str]] = []
     for target, slot, team in (
         (game.next_game, game.next_game_slot, winning_team),
@@ -405,15 +427,10 @@ def _unset_winner(game: Game) -> Response:
         setattr(target, f"{slot}_team", None)
         target.save()
 
-    teams_to_reset = [losing_team]
-    if game.bracket_type == "grand_finals":
-        teams_to_reset.append(winning_team)
-    reset_teams: list[Team] = []
-    for team in teams_to_reset:
-        if team is not None and team.placement is not None:
-            team.placement = None
-            team.save()
-            reset_teams.append(team)
+    for team in reopening:
+        team.placement = None
+        team.save()
+    reset_teams = reopening
 
     game.winning_team = None
     game.status = "pending"
@@ -669,6 +686,21 @@ def set_team_placement(request: Request, tournament_id: int, team_id: int) -> Re
             )
 
     previous_placement = team.placement
+    if placement is None and previous_placement is not None:
+        conflicts = live_conflicts(team)
+        if conflicts:
+            log.warning(
+                "bracket_placement_blocked_roster_conflict",
+                system="bracket",
+                subsystem="placement",
+                tournament_id=tournament_id,
+                team_id=team.pk,
+                user_ids=[u.pk for u in conflicts],
+            )
+            return Response(
+                roster_conflict_body(team, conflicts),
+                status=status.HTTP_409_CONFLICT,
+            )
     team.placement = placement
     team.save()
 
