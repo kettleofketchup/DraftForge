@@ -192,7 +192,7 @@ export function useLeadershipSection(
   const content = (
     <section
       data-testid="org-settings-leadership"
-      className="rounded-lg border border-border p-4 sm:p-6"
+      className="rounded-lg border border-border p-6"
     >
       <h2 className="text-lg font-semibold">Leadership</h2>
       <p className="mt-1 text-sm text-muted-foreground">
