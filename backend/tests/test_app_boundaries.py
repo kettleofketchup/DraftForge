@@ -1,7 +1,7 @@
 import ast
 import tempfile
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from django.apps import apps
@@ -310,7 +310,281 @@ LEAGUE = MovedSlice(
     cached_labels=frozenset({"league"}),
 )
 
-MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG, LEAGUE)
+_TOURNAMENT_PERMISSION_NAMES = (
+    "can_edit_tournament",
+    "can_create_team",
+    "_league_change_error",
+    "check_tournament_league_change",
+    "can_manage_game",
+    "CanEditTournament",
+    "CanEditTeam",
+    "CanManageGame",
+    "IsTournamentStaff",
+    "has_event_staff_access",
+    "check_lobby_steam_league_id",
+    "_lobby_league_error",
+)
+
+_TOURNAMENT_CLIENT_NAMES = (
+    "create_herodraft_for_game",
+    "get_auto_herodraft_games",
+    "get_match_participants",
+    "get_tournament_for_task",
+    "get_tournament_participants",
+)
+
+_TOURNAMENT_SCHEMA_NAMES = (
+    "TournamentParticipantSchema",
+    "TournamentTaskSchema",
+    "GameWithoutHeroDraftSchema",
+    "AutoHeroDraftGameSchema",
+)
+
+# names split out of app modules that stay behind
+_TOURNAMENT_SPLIT_DEFS = {
+    "app.management.prod_payload": (
+        "TeamLookup",
+        "TeamRef",
+        "UserRef",
+        "index_users",
+        "parse_date_played",
+        "resolve_user",
+    ),
+    "app.tests.test_prod_import_commands": (
+        "ImportProdTournamentCommandTest",
+        "SyncProdTournamentsCommandTest",
+        "mmr_rows",
+        "tournament_payload",
+    ),
+    "app.tests.test_schema_drift": (
+        "GameWithoutHeroDraftSchemaDriftTest",
+        "TournamentParticipantSchemaDriftTest",
+        "TournamentTaskSchemaDriftTest",
+    ),
+}
+
+_TOURNAMENT_RETIRED_DEFS = {
+    "app.services.team_management": (
+        "TeamChange",
+        "TeamManagementError",
+        "_apply",
+        "_change_captain",
+        "_dropout_mutation",
+        "_ensure_tournament_user",
+        "_is_dropout",
+        "_is_member",
+        "_is_standin",
+        "_leadership_touched_by",
+        "_org_settings",
+        "_problem_pairs",
+        "_refresh_herodrafts",
+        "_standin_violations",
+        "add_standin",
+        "follow_captain",
+        "mark_dropout",
+        "other_team_user_ids",
+        "remove_standin",
+        "rename",
+        "restore_member",
+        "set_captain",
+        "set_deputy",
+        "standin_cap",
+        "sub_in",
+        "broadcast_herodraft_state",
+    ),
+    "app.services.team_references": (
+        "TeamRef",
+        "TeamUsage",
+        "_key",
+        "_reference_relations",
+        "_team_rows",
+        "all_reference_keys",
+        "team_references",
+        "team_usage",
+    ),
+    "app.services.team_audit": (
+        "_sorted_ids",
+        "log_snapshot_fields",
+        "roster_snapshot",
+        "source_event",
+        "write_team_log",
+    ),
+    "app.services.team_signals": (
+        "TeamRosterChange",
+        "_receiver_name",
+        "change_from_log",
+        "owning_team_audit",
+        "send_roster_changed_on_commit",
+        "team_roster_changed",
+        "team_audit_owner",
+    ),
+    "app.services.team_leadership": (
+        "successor_after_removal",
+        "teams_with_leadership_problems",
+    ),
+    "app.services.tournament_completion": (
+        "find_final_game",
+        "sync_tournament_completion",
+    ),
+    "app.signals": (
+        "_after_members_removed",
+        "_before_removal",
+        "_handle_empty_team",
+        "_handle_reverse_member_change",
+        "_write_system_log",
+        "handle_team_member_removal",
+        "handle_tournament_user_addition",
+        "handle_tournament_user_removal",
+        "sync_tournament_on_game_result",
+        "track_game_winner_change",
+        "team_roster_changed",
+    ),
+    "app.management.commands.audit_team_leadership": ("Command",),
+    "app.management.commands.import_prod_tournament": ("Command", "requests"),
+    "app.management.commands.sync_prod_tournaments": ("Command", "requests"),
+    "app.tests.test_team_management": (
+        "AddStandinTests",
+        "CaptainDraftFollowUpTests",
+        "DraftBookkeepingTests",
+        "DropoutTests",
+        "FixtureHelperTests",
+        "HeroDraftCaptainCacheTests",
+        "InvariantTests",
+        "RenameTests",
+        "ReseatGhostDeputyTests",
+        "RosterSignalTests",
+        "SetCaptainTests",
+        "SetDeputyTests",
+        "StandinAndRestoreTests",
+        "SubInTests",
+        "SubInTournamentUserTests",
+        "TeamManagementCacheTests",
+        "TeamManagementFixture",
+        "TournamentCacheTests",
+        "_problems",
+    ),
+    "app.tests.test_team_signals": (
+        "EmptyTeamAuditTests",
+        "SuccessionAuditTests",
+        "SuccessorAfterRemovalTests",
+        "SystemRowSignalTests",
+        "TeamMemberRemovalTests",
+        "TeamValidationTests",
+        "TournamentUserRemovalCascadeTests",
+        "_roster_user",
+    ),
+    "app.tests.test_team_roster_signal": ("TeamRosterSignalTests",),
+    "app.tests.test_team_references": (
+        "TeamReferencesFixture",
+        "TeamReferencesTests",
+        "TeamUsageTests",
+    ),
+    "app.tests.test_tournament_completion": (
+        "AdvanceWinnerCompletionTest",
+        "BracketShapeCompletionTest",
+        "SaveBracketCompletionTest",
+        "SteamLinkCompletionTest",
+        "TournamentCompletionTestBase",
+    ),
+    "app.tournament_state": (
+        "draft_round_prefetch",
+        "qs",
+        "team_prefetches",
+        "tournament_prefetches",
+        "tournament_state_queryset",
+    ),
+    "app.tournament_list": (
+        "ArchiveCursor",
+        "TournamentListPagination",
+        "TournamentListParams",
+        "_parse_cursor",
+        "_parse_int",
+        "_parse_open_signups",
+        "_parse_organizations",
+        "archive_after_q",
+        "build_cursor_envelope",
+        "build_page_envelope",
+        "decode_archive_cursor",
+        "normalize_search",
+        "parse_tournament_list_params",
+        "resolve_organizations",
+        "tournaments_list_cache_key",
+        "TOURNAMENTS_LIST_CACHE_PREFIX",
+    ),
+    "app.tournament_buckets": (
+        "_now",
+        "tournament_bucket_cutoff",
+        "upcoming_q",
+        "upcoming_rank",
+        "utc_day_start",
+    ),
+    "app.functions.tournament": (
+        "CreateTournamentTeamRequestSerializer",
+        "create_team_from_captain",
+        "serialize_tournament",
+    ),
+    "app.internal_client.tournaments": _TOURNAMENT_CLIENT_NAMES,
+    "app.tests.test_tournament_list": (
+        "LeagueMinimalSerializerTests",
+        "TournamentListArchivedCursorTests",
+        "TournamentListBucketTests",
+        "TournamentListPaginationTests",
+        "_BucketFixtureMixin",
+    ),
+    "app.tests.test_tournament_buckets": (
+        "ArchiveCursorTests",
+        "BuildPageEnvelopeTests",
+        "NormalizeSearchTests",
+        "ParseTournamentListParamsTests",
+        "ResolveOrganizationsTests",
+        "TournamentBucketCutoffTests",
+        "TournamentListPaginationTests",
+        "TournamentsListCacheKeyTests",
+        "_b64",
+    ),
+    "app.tests.test_tournament_state_queries": (
+        "TournamentResponseFreshTests",
+        "TournamentResponseOutputTests",
+        "TournamentResponseQueryCountTests",
+    ),
+    "app.tests.test_tournament_discovery_seed": ("TournamentDiscoverySeedTests",),
+    "app.tests.test_tournament_list_cache": ("TournamentListCacheTests",),
+    "app.tests.test_tournament_list_scope": ("TournamentListScopeTests",),
+}
+
+TOURNAMENT = MovedSlice(
+    name="tournament",
+    source_app="app",
+    new_app="tournament",
+    moved=frozenset(
+        {
+            *(
+                ("app.permissions_tournament", name)
+                for name in _TOURNAMENT_PERMISSION_NAMES
+            ),
+            *(
+                (module, name)
+                for module, names in _TOURNAMENT_RETIRED_DEFS.items()
+                for name in names
+            ),
+            *(("app.internal_client", name) for name in _TOURNAMENT_CLIENT_NAMES),
+            *(("app.schemas", name) for name in _TOURNAMENT_SCHEMA_NAMES),
+            *(
+                (module, name)
+                for module, names in _TOURNAMENT_SPLIT_DEFS.items()
+                for name in names
+            ),
+        }
+    ),
+    retired_modules=frozenset(
+        {"app.permissions_tournament", *_TOURNAMENT_RETIRED_DEFS}
+    ),
+    model_labels=frozenset(),
+    move_migration=("app", "0115_move_tournament_models_to_tournament"),
+    cached_labels=frozenset(),
+)
+
+MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG, LEAGUE, TOURNAMENT)
 
 # Slices cut before the rule that a retired module's defs go into `moved`;
 # their modules were renamed or split on the way out.
@@ -322,6 +596,12 @@ RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
 # under the new app; None means renamed within the source app.
 RETIRED_MODULE_HOMES: dict[str, str | None] = {
     "app.tests.test_league_rating": None,
+    "app.permissions_tournament": "tournament.permissions",
+    "app.tournament_state": "tournament.state",
+    "app.tournament_list": "tournament.listing",
+    "app.tournament_buckets": "tournament.buckets",
+    "app.functions.tournament": "tournament.functions",
+    "app.internal_client.tournaments": "tournament.internal_client",
 }
 
 # target app -> production file (relative to backend/) -> what it may import from that app
@@ -336,34 +616,9 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "TYPE_CHECKING-only return annotation for Tournament.get_draft_options",
             type_only=frozenset({"DraftOptions"}),
         ),
-        "app/services/team_management.py": BackEdge(
-            frozenset(
-                {
-                    "Draft",
-                    "DraftRound",
-                    "DraftTeam",
-                    "HeroDraft",
-                    "HeroDraftState",
-                    "TeamDraftState",
-                    "apply_captain_tenure",
-                    "broadcast_herodraft_state",
-                    "emit_event",
-                }
-            ),
-            "roster changes update live team and hero drafts, emit team_changed"
-            " and move hero draft chat membership with captaincy",
-        ),
-        "app/services/team_references.py": BackEdge(
-            frozenset({"DraftTeam", "HeroDraft"}),
-            "Team-domain reference counts include hero drafts",
-        ),
         "app/serializers.py": BackEdge(
             frozenset({"Draft", "DraftOptions", "DraftRound"}),
             "draft serializers embedded in TournamentSerializer",
-        ),
-        "app/tournament_state.py": BackEdge(
-            frozenset({"Draft", "DraftOptions", "DraftRound", "HeroDraft"}),
-            "tournament prefetch plan prefetches the team draft and games__herodraft",
         ),
         "app/views_main.py": BackEdge(
             frozenset({"Draft", "DraftRound", "DraftTeam", "apply_draft_options"}),
@@ -374,21 +629,9 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"recent_draft_events"}),
             "TournamentConsumer replays a tournament's recent team-draft events",
         ),
-        "app/permissions_tournament.py": BackEdge(
-            frozenset({"HeroDraft"}),
-            "tournament staff check resolves a hero draft's tournament",
-        ),
         "app/views/bracket.py": BackEdge(
             frozenset({"HeroDraft"}),
             "bracket view prefetches each game's hero draft",
-        ),
-        "app/management/commands/import_prod_tournament.py": BackEdge(
-            frozenset({"Draft", "DraftOptions", "DraftRound"}),
-            "tournament import tooling copies a tournament's team draft",
-        ),
-        "app/management/commands/sync_prod_tournaments.py": BackEdge(
-            frozenset({"Draft", "DraftOptions", "DraftRound"}),
-            "tournament sync tooling copies a tournament's team draft",
         ),
     },
     "org": {
@@ -412,24 +655,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "and standing, repoints org contribution and promo attribution and "
             "MMR change requests",
         ),
-        "app/functions/tournament.py": BackEdge(
-            frozenset({"guild_nicknames", "org_nicknames_public"}),
-            "tournament player payloads show the league org's guild nicknames",
-        ),
-        "app/management/commands/import_prod_tournament.py": BackEdge(
-            frozenset(
-                {
-                    "OrgMmrError",
-                    "OrgUser",
-                    "Organization",
-                    "bulk_set_org_mmrs",
-                    "resolve_game_type",
-                    "validate_org_mmr",
-                }
-            ),
-            "tournament import writes imported users' MMR as org MMR for the "
-            "target organization",
-        ),
         "app/management/commands/sync_prod_users.py": BackEdge(
             frozenset(
                 {
@@ -442,10 +667,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             ),
             "prod user sync clears org conduct, contribution, leadership and promo "
             "rows before reloading users, and keeps organization owners",
-        ),
-        "app/permissions_tournament.py": BackEdge(
-            frozenset({"has_org_staff_access"}),
-            "has_event_staff_access grants event staff via the event org's staff role",
         ),
         "app/serializers.py": BackEdge(
             frozenset(
@@ -464,24 +685,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "OrgUserSerializer; OrganizationsSerializer and "
             "UserSerializer.default_organization read Organization at class "
             "definition",
-        ),
-        "app/services/team_leadership.py": BackEdge(
-            frozenset({"OrgUser", "OrgUserGameMmr", "game_for_tournament"}),
-            "captain succession falls back to the highest org MMR (tournament game) "
-            "in the league org",
-        ),
-        "app/services/team_management.py": BackEdge(
-            frozenset({"OrgSettings", "OrgUser", "get_org_settings"}),
-            "roster rules read the league org's settings; member adds report OrgUser creation",
-        ),
-        "app/signals.py": BackEdge(
-            frozenset({"LEAGUE_GAME", "OrgUser", "org_mmr_map"}),
-            "tournament user auto-add creates the league org's OrgUser and seeds "
-            "league MMR from its Dota 2 org MMR",
-        ),
-        "app/tournament_state.py": BackEdge(
-            frozenset({"Organization"}),
-            "tournament state prefetch loads the league's Organization",
         ),
         "app/views/admin_team.py": BackEdge(
             frozenset(
@@ -545,36 +748,14 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "user account merge folds the dropped account's league memberships "
             "into the kept account before its paired org memberships cascade",
         ),
-        "app/management/commands/import_prod_tournament.py": BackEdge(
-            frozenset({"League"}),
-            "tournament import attaches the tournament to a local League",
-        ),
-        "app/permissions_tournament.py": BackEdge(
-            frozenset({"League", "has_league_admin_access", "has_league_staff_access"}),
-            "event, tournament and game permissions fall back to league staff; "
-            "tournament league changes and lobby Steam league IDs need league "
-            "admin, and the Steam league ID check looks up the owning League; "
-            "leaves with the tournament slice",
-        ),
         "app/serializers.py": BackEdge(
-            frozenset({"League", "LeagueUser"}),
-            "LeaguesSerializer and LeagueMinimalSerializer are embedded in "
+            frozenset({"League", "LeagueUser", "check_lobby_steam_league_id"}),
+            "TournamentSerializer checks lobby Steam league IDs against league "
+            "admin; LeaguesSerializer and LeagueMinimalSerializer are embedded in "
             "tournament serializers at class definition and TournamentSerializer "
             "validates league_id against League; tournament, team and draft user "
             "serializers prefetch the league membership behind league MMR; "
             "TournamentSerializer.update creates LeagueUser rows for added users",
-        ),
-        "app/services/team_management.py": BackEdge(
-            frozenset({"LeagueUser"}),
-            "team member adds report whether the tournament add created a LeagueUser",
-        ),
-        "app/signals.py": BackEdge(
-            frozenset({"LeagueUser"}),
-            "tournament user auto-add creates the tournament league's LeagueUser",
-        ),
-        "app/tournament_state.py": BackEdge(
-            frozenset({"League"}),
-            "tournament prefetch plan prefetches the tournament's League",
         ),
         "app/views/admin_team.py": BackEdge(
             frozenset({"League", "LeagueUser", "has_league_staff_access"}),
@@ -598,13 +779,93 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "aggregate",
         ),
     },
+    "tournament": {
+        "app/exception_handler.py": BackEdge(
+            frozenset({"TeamManagementError"}),
+            "global DRF handler maps TeamManagementError",
+        ),
+        "app/views/admin_team.py": BackEdge(
+            frozenset({"serialize_tournament"}),
+            "tournament member add returns the serialized tournament; leaves "
+            "with tournament 5b",
+        ),
+        "app/views/bracket.py": BackEdge(
+            frozenset({"IsTournamentStaff"}),
+            "bracket views require tournament staff; leaves with tournament 5b",
+        ),
+        "app/serializers.py": BackEdge(
+            frozenset({"team_references"}),
+            "team serializer refuses to empty a team that games or hero drafts "
+            "reference; leaves with tournament 5b",
+        ),
+        "app/views_main.py": BackEdge(
+            frozenset(
+                {
+                    "CanEditTeam",
+                    "CanEditTournament",
+                    "CanManageGame",
+                    "can_create_team",
+                    "can_edit_tournament",
+                    "can_manage_game",
+                    "check_tournament_league_change",
+                    "TeamChange",
+                    "TeamUsage",
+                    "add_standin",
+                    "change_from_log",
+                    "follow_captain",
+                    "log_snapshot_fields",
+                    "mark_dropout",
+                    "other_team_user_ids",
+                    "owning_team_audit",
+                    "remove_standin",
+                    "rename",
+                    "restore_member",
+                    "roster_snapshot",
+                    "send_roster_changed_on_commit",
+                    "set_captain",
+                    "set_deputy",
+                    "sub_in",
+                    "team_references",
+                    "team_usage",
+                    "write_team_log",
+                    "ArchiveCursor",
+                    "TournamentListPagination",
+                    "TournamentListParams",
+                    "archive_after_q",
+                    "buckets",
+                    "build_cursor_envelope",
+                    "build_page_envelope",
+                    "parse_tournament_list_params",
+                    "resolve_organizations",
+                    "tournament_bucket_cutoff",
+                    "tournaments_list_cache_key",
+                    "upcoming_q",
+                    "upcoming_rank",
+                    "utc_day_start",
+                }
+            ),
+            "tournament, team and game views check tournament permissions and "
+            "drive the team roster, audit and reference services; the "
+            "tournament list parses its params, buckets and pages through "
+            "tournament.listing and tournament.buckets; leaves with tournament 5b",
+        ),
+    },
 }
 
 # (file relative to backend/, name) -> why a source-app module may define a moved name
 ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {
-    ("app/internal_client/tournaments.py", "create_herodraft_for_game"): (
-        "worker-side HTTP client for the moved internal view; it calls the "
-        "draft endpoint rather than redefining it"
+    ("app/tests/test_team_management_api.py", "TeamUsageTests"): (
+        "twin moves to tournament in 5b"
+    ),
+    ("app/views/csv_import.py", "_parse_int"): "twin moves to tournament in 5b",
+    ("app/views/internal.py", "get_tournament_for_task"): (
+        "twin moves to tournament in 5b"
+    ),
+    ("app/views/internal.py", "get_tournament_participants"): (
+        "twin moves to tournament in 5b"
+    ),
+    ("app/views/internal.py", "get_match_participants"): (
+        "twin moves to tournament in 5b"
     ),
 }
 
@@ -635,6 +896,16 @@ def _resolve(node: ast.ImportFrom, path: str) -> str:
 
 def _within(name: str, prefix: str) -> bool:
     return name == prefix or name.startswith(f"{prefix}.")
+
+
+def _is_label_reference(value: str, app_label: str, model_label: str) -> bool:
+    label = f"{app_label}.{model_label}"
+    folded = value.casefold()
+    return folded == label or folded.startswith((f"{label}.", f"{label}_"))
+
+
+def _is_command_module(module_name: str) -> bool:
+    return ".management.commands." in f".{module_name}"
 
 
 def _is_test_module(path: str) -> bool:
@@ -748,7 +1019,10 @@ def find_violations(
                 )
         if _within(module_name, s.source_app):
             moved_names = {name for _old, name in s.moved} - moved_here
+            command_module = _is_command_module(module_name)
             for name, line in _top_level_defs(tree):
+                if name == "Command" and command_module:
+                    continue
                 if name in moved_names and (path, name) not in collisions:
                     found.append(
                         f"{path}:{line}: [{s.name}] moved name {name} redefined "
@@ -765,7 +1039,6 @@ def find_violations(
         if not _is_migration_code(path):
             for line, what in _references_moved_model(tree, s):
                 found.append(f"{path}:{line}: [{s.name}] {what}")
-        lazy_labels = {f"{s.source_app}.{label}" for label in s.model_labels}
         prefixes = [f"{old}.{name}" for old, name in s.moved] + sorted(
             s.retired_modules
         )
@@ -773,9 +1046,11 @@ def find_violations(
             if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
                 continue
             value = node.value
-            if value.casefold() not in lazy_labels and any(
-                _within(value, p) for p in prefixes
-            ):
+            is_label = any(
+                _is_label_reference(value, s.source_app, label)
+                for label in s.model_labels
+            )
+            if not is_label and any(_within(value, p) for p in prefixes):
                 found.append(
                     f"{path}:{node.lineno}: [{s.name}] string back-door {value!r}"
                 )
@@ -823,10 +1098,12 @@ def _migration_key(path: str) -> tuple[str, str]:
 def _references_moved_model(
     tree: ast.Module, s: MovedSlice
 ) -> Iterator[tuple[int, str]]:
-    lazy_labels = {f"{s.source_app}.{label}" for label in s.model_labels}
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if node.value.casefold() in lazy_labels:
+            if any(
+                _is_label_reference(node.value, s.source_app, label)
+                for label in s.model_labels
+            ):
                 yield node.lineno, f"lazy model label {node.value!r}"
         elif isinstance(node, ast.Call):
             func = node.func
@@ -1207,6 +1484,77 @@ class GuardSelfTests(SimpleTestCase):
             with self.subTest(path=path, name=name):
                 self.assertTrue(reason.strip())
 
+    def test_label_reference_matches_through_model_string(self) -> None:
+        self.assertFlagged(
+            'm2m_changed.connect(f, sender="src.Moved_members")\n', "x.py"
+        )
+        self.assertFlagged('SENDER = "SRC.moved_users"\n', "x.py")
+        self.assertClean('SENDER = "dst.Moved_members"\n', "x.py")
+        self.assertTrue(_is_label_reference("app.Team_members", "app", "team"))
+
+    def test_label_reference_matches_dotted_field_key(self) -> None:
+        self.assertFlagged('EXCLUDED = {"src.Moved.team"}\n', "x.py")
+        self.assertClean('EXCLUDED = {"dst.Moved.team"}\n', "x.py")
+        self.assertTrue(_is_label_reference("app.TeamLog.team", "app", "teamlog"))
+
+    def test_label_reference_rejects_near_miss(self) -> None:
+        self.assertClean('LABEL = "src.movedx"\n', "x.py")
+        self.assertClean('LABEL = "src.Movedx.team"\n', "x.py")
+        self.assertClean('LABEL = "src.mov"\n', "x.py")
+        self.assertFalse(_is_label_reference("app.teamlogx", "app", "teamlog"))
+
+    def command_violations(self, source: str, path: str) -> list[str]:
+        command_slice = replace(
+            FIXTURE_SLICE,
+            moved=FIXTURE_SLICE.moved | {("src.old", "Command")},
+        )
+        return find_violations(
+            source, path, slices=(command_slice,), back_edges={}, collisions={}
+        )
+
+    def test_command_in_source_app_command_module_not_flagged(self) -> None:
+        source = "class Command(BaseCommand):\n    pass\n"
+        self.assertEqual(
+            self.command_violations(source, "src/management/commands/x.py"), []
+        )
+
+    def test_command_outside_command_module_still_flagged(self) -> None:
+        source = "class Command(BaseCommand):\n    pass\n"
+        self.assertNotEqual(self.command_violations(source, "src/x.py"), [])
+        self.assertNotEqual(self.command_violations(source, "src/management/x.py"), [])
+
+    def test_split_retirement_cross_app_names_listed_same_app_names_not(
+        self,
+    ) -> None:
+        split = replace(
+            FIXTURE_SLICE,
+            moved=frozenset({("src.old", "to_new_app"), ("src.old", "to_third_app")}),
+        )
+
+        def violations(source: str, path: str) -> list[str]:
+            return find_violations(
+                source, path, slices=(split,), back_edges={}, collisions={}
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "dst").mkdir()
+            (Path(tmp) / "dst" / "old.py").write_text("def to_new_app() -> None: ...\n")
+            self.assertEqual(
+                find_unlisted_retired_defs((split,), Path(tmp), {}, frozenset()), []
+            )
+        self.assertEqual(violations("def stays() -> None: ...\n", "src/renamed.py"), [])
+        self.assertEqual(
+            violations("def to_third_app() -> None: ...\n", "other/thing.py"), []
+        )
+        self.assertEqual(violations("from src.renamed import stays\n", "x.py"), [])
+        self.assertEqual(
+            violations("from other.thing import to_third_app\n", "x.py"), []
+        )
+        self.assertNotEqual(violations("from src.old import stays\n", "x.py"), [])
+        self.assertNotEqual(
+            violations("def to_third_app() -> None: ...\n", "src/renamed.py"), []
+        )
+
 
 class AppBoundaryTests(SimpleTestCase):
     base: Path = settings.BASE_DIR_PATH
@@ -1240,6 +1588,7 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("league/permissions.py", rels)
         self.assertIn("league/models.py", rels)
         self.assertIn("league/models_rating.py", rels)
+        self.assertIn("tournament/permissions.py", rels)
         self.assertNotIn(GUARD_FILE, rels)
         self.assertFalse(any("/migrations/" in rel for rel in rels))
 

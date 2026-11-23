@@ -11,6 +11,7 @@ import { Input } from '~/components/ui/input';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
+import { userMatchesQuery } from '~/lib/userDisplayName';
 import {
   VirtualizedUserGrid,
   type ColumnBreakpoints,
@@ -196,13 +197,10 @@ export function UserList({
   // Filter users with debounced query
   const filteredUsers = useMemo(() => {
     if (debouncedQuery === '') return users;
-    const q = debouncedQuery.toLowerCase();
-    return users.filter(
-      (person) =>
-        person.username?.toLowerCase().includes(q) ||
-        person.nickname?.toLowerCase().includes(q),
+    return users.filter((person) =>
+      userMatchesQuery(person, debouncedQuery, { orgId: organizationId }),
     );
-  }, [users, debouncedQuery]);
+  }, [users, debouncedQuery, organizationId]);
 
   // Loading state - show skeleton
   if (isLoading && users.length === 0) {

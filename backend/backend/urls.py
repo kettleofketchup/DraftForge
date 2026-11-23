@@ -4,7 +4,6 @@ from django.views.generic.base import RedirectView
 from rest_framework import routers
 
 from app import views_main as app_views
-from app.functions.tournament import create_team_from_captain
 from app.functions.user import profile_update
 from app.views import (
     GameCreateView,
@@ -100,6 +99,7 @@ from steam.views_internal import (
     update_league_stats,
 )
 from telemetry.logging import get_logger
+from tournament.functions import create_team_from_captain
 from user.internal.avatar import (
     bulk_update_user_avatars,
     list_discord_guild_ids,

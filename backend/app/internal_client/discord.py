@@ -123,7 +123,7 @@ def check_message_log_exists(source: str, source_id: int) -> bool:
 
 
 def search_message_logs(**params: Any) -> list["MessageLogSchema"]:
-    """Search DiscordMessageLog entries. Returns list of MessageLogEntry."""
+    """Search DiscordMessageLog entries. Returns list of MessageLogSchema."""
 
     resp = transport.get("/discord/message-logs/", params)
     if resp and resp.ok:
@@ -253,7 +253,7 @@ def update_event_dm(pk: int, **data: Any) -> requests.Response | None:
 
 
 def get_sync_discord_state() -> "SyncDiscordStateSchema | None":
-    """Get bulk Discord sync state. Returns SyncDiscordState or None."""
+    """Get bulk Discord sync state. Returns SyncDiscordStateSchema or None."""
 
     resp = transport.get("/discord/sync-state/")
     if resp and resp.ok:
@@ -262,7 +262,7 @@ def get_sync_discord_state() -> "SyncDiscordStateSchema | None":
 
 
 def get_discord_event_state(event_id: int) -> "DiscordEventStateSchema | None":
-    """Get Discord event state. Returns DiscordEventState or None."""
+    """Get Discord event state. Returns DiscordEventStateSchema or None."""
 
     resp = transport.get(f"/discord/event-state/{event_id}/")
     if resp and resp.ok:

@@ -1,19 +1,21 @@
 import { AlertCircle, Check, Clock, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  approveClaimRequest,
-  getClaimRequests,
-  rejectClaimRequest,
-  type ProfileClaimRequest,
-} from '~/components/api/api';
+import { useEffect, useMemo, useState } from 'react';
+import { approveClaimRequest, rejectClaimRequest } from '~/components/api/api';
 import { Alert, AlertDescription } from '~/components/ui/alert';
-import { Badge } from '~/components/ui/badge';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { MobileNavDropdown } from '~/components/ui/mobile-nav-dropdown';
 import { Spinner } from '~/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import {
+  PendingClaimsBadge,
+  useClaimRequests,
+  useInvalidateClaims,
+  usePendingClaimsCount,
+  type ClaimStatus,
+  type ProfileClaimRequest,
+} from '~/features/claims';
 import { getLogger } from '~/lib/logger';
 import { ClaimCard } from './ClaimCard';
 
@@ -23,13 +25,28 @@ interface Props {
   organizationId: number;
 }
 
-type ClaimStatus = 'pending' | 'approved' | 'rejected';
-
 export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
-  const [claims, setClaims] = useState<ProfileClaimRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<ClaimStatus>('pending');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const {
+    data: claims = [],
+    isLoading,
+    isError,
+    error: fetchError,
+  } = useClaimRequests(organizationId, statusFilter);
+  const pendingCount = usePendingClaimsCount(organizationId, true);
+  const invalidateClaims = useInvalidateClaims(organizationId);
+
+  useEffect(() => {
+    if (isError) log.error('fetch claims failed', { err: fetchError });
+  }, [isError, fetchError]);
+
+  const error = isError ? 'Failed to load claim requests' : actionError;
+
+  const selectStatus = (value: string) => {
+    setStatusFilter(value as ClaimStatus);
+    setActionError(null);
+  };
 
   // Rejection modal state
   const [rejectingClaim, setRejectingClaim] =
@@ -42,37 +59,17 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
     useState<ProfileClaimRequest | null>(null);
   const [isApproving, setIsApproving] = useState(false);
 
-  const fetchClaims = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await getClaimRequests({
-        organizationId,
-        status: statusFilter,
-      });
-      setClaims(data);
-    } catch (err) {
-      setError('Failed to load claim requests');
-      log.error('fetch claims failed', { err });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [organizationId, statusFilter]);
-
-  useEffect(() => {
-    fetchClaims();
-  }, [fetchClaims]);
-
   const handleApprove = async () => {
     if (!approvingClaim) return;
 
     setIsApproving(true);
     try {
       await approveClaimRequest(approvingClaim.id);
-      fetchClaims();
+      setActionError(null);
+      await invalidateClaims();
     } catch (err) {
       log.error('approve claim failed', { err });
-      setError('Failed to approve claim request');
+      setActionError('Failed to approve claim request');
     } finally {
       setIsApproving(false);
       setApprovingClaim(null);
@@ -85,18 +82,17 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
     setIsRejecting(true);
     try {
       await rejectClaimRequest(rejectingClaim.id, rejectionReason);
-      fetchClaims();
+      setActionError(null);
+      await invalidateClaims();
     } catch (err) {
       log.error('reject claim failed', { err });
-      setError('Failed to reject claim request');
+      setActionError('Failed to reject claim request');
     } finally {
       setIsRejecting(false);
       setRejectingClaim(null);
       setRejectionReason('');
     }
   };
-
-  const pendingCount = claims.filter((c) => c.status === 'pending').length;
 
   const claimStatusOptions = useMemo(
     () => [
@@ -114,15 +110,12 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
       </div>
 
       {/* Status filter tabs */}
-      <Tabs
-        value={statusFilter}
-        onValueChange={(v) => setStatusFilter(v as ClaimStatus)}
-      >
+      <Tabs value={statusFilter} onValueChange={selectStatus}>
         {/* Mobile dropdown */}
         <MobileNavDropdown
           options={claimStatusOptions}
           value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v as ClaimStatus)}
+          onValueChange={selectStatus}
           variant="secondary"
           className="md:hidden mb-4"
         />
@@ -136,11 +129,10 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
           >
             <Clock className="w-4 h-4" />
             Pending
-            {statusFilter !== 'pending' && pendingCount > 0 && (
-              <Badge variant="secondary" className="ml-1 text-xs">
-                {pendingCount}
-              </Badge>
-            )}
+            <PendingClaimsBadge
+              count={pendingCount}
+              testId="claims-pending-count"
+            />
           </TabsTrigger>
           <TabsTrigger value="approved" data-testid="claims-tab-approved">
             <Check className="w-4 h-4 mr-2" />
