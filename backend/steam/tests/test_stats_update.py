@@ -14,8 +14,8 @@ from steam.models import LeaguePlayerStats, Match, PlayerMatchStats
 
 class TestStatsUpdate(TestCase):
     def setUp(self) -> None:
-        # mmr/positions moved off CustomUser (mmr -> OrgUser,
-        # positions -> DotaUserProfile). update_player_league_stats reads neither.
+        # mmr lives on OrgUser and positions on DotaUserProfile;
+        # update_player_league_stats reads neither.
         self.user = CustomUser.objects.create_user(
             username="testplayer",
             password="testpass",
@@ -25,7 +25,6 @@ class TestStatsUpdate(TestCase):
 
     def test_update_player_league_stats_creates_new(self):
         """Should create LeaguePlayerStats if doesn't exist."""
-        # Create a match and player stats
         match = Match.objects.create(
             match_id=1001,
             radiant_win=True,
@@ -64,7 +63,6 @@ class TestStatsUpdate(TestCase):
 
     def test_update_player_league_stats_accumulates(self):
         """Should accumulate stats from multiple matches."""
-        # Create two matches
         for i, (radiant_win, player_slot) in enumerate([(True, 0), (False, 0)]):
             match = Match.objects.create(
                 match_id=1001 + i,
