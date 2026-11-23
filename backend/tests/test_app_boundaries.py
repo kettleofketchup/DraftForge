@@ -570,16 +570,14 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "tournament prefetch plan prefetches the tournament's League",
         ),
         "app/views/admin_team.py": BackEdge(
-            frozenset({"League", "LeagueUser", "has_league_staff_access"}),
+            frozenset({"League", "LeagueUser"}),
             "user search resolves ?league_id= to a League and flags league "
-            "membership; tournament member adds check league staff; leaves with "
-            "the tournament slice",
+            "membership; leaves with the tournament slice",
         ),
         "app/views/csv_import.py": BackEdge(
-            frozenset({"League", "LeagueUser", "has_league_staff_access"}),
-            "shared CSV import pipeline checks league staff on the tournament "
-            "door and writes LeagueUser MMR; League annotates the MMR target "
-            "helper; moves whole with the tournament slice",
+            frozenset({"League", "LeagueUser"}),
+            "shared CSV import pipeline writes LeagueUser MMR; League annotates "
+            "the MMR target helper; moves whole with the tournament slice",
             type_only=frozenset({"League"}),
         ),
         "app/views_main.py": BackEdge(
