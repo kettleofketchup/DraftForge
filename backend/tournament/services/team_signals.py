@@ -8,14 +8,14 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from django.apps import apps
 from django.db import transaction
 from django.dispatch import Signal
 
 from telemetry.logging import get_logger
+from tournament.models import Team
 
 if TYPE_CHECKING:
-    from app.models import TeamLog
+    from tournament.models import TeamLog
 
 log = get_logger(__name__)
 
@@ -77,8 +77,7 @@ def _receiver_name(receiver: Any) -> str:
 
 def send_roster_changed_on_commit(change: TeamRosterChange) -> None:
     def _send() -> None:
-        sender = apps.get_model("app", "Team")
-        results = team_roster_changed.send_robust(sender=sender, change=change)
+        results = team_roster_changed.send_robust(sender=Team, change=change)
         for receiver, result in results:
             if isinstance(result, Exception):
                 log.error(

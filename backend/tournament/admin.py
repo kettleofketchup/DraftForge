@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.http import HttpRequest
 
-from app.models import TeamLog
+from tournament.models import TeamLog
 
 
 class TeamLogAdmin(admin.ModelAdmin):

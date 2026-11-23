@@ -1,13 +1,14 @@
 from django.test import TransactionTestCase
 from django.utils import timezone
 
-from app.models import CustomUser, GameType, Tournament
+from app.models import CustomUser, GameType
 from events.models import Event
 from events.services import create_tournament_for_event
 from league.models import League, LeagueUser
 from org.mmr import set_org_mmr
 from org.models import Organization, OrgUser
 from tests.populate.utils import ensure_org_user
+from tournament.models import Tournament
 from tournament.serializers.tournament import TournamentSerializer
 from tournament.serializers.users import _serialize_users_with_mmr, build_users_dict
 

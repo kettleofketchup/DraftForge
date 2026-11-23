@@ -11,7 +11,7 @@ from typing import Any
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
-from app.models import Team
+from tournament.models import Team
 
 UserRef = dict[str, Any] | int | str | None
 TeamRef = dict[str, Any] | int | None
