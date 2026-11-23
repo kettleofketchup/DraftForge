@@ -14,7 +14,7 @@ from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
 from app.discord_accounts import merge_discord_accounts
-from app.models import CustomUser, ProfileClaimRequest, Tournament
+from app.models import CustomUser, ProfileClaimRequest
 from events.completion import close_event
 from events.constants import EventState
 from events.models import Event
@@ -32,6 +32,7 @@ from org.models import (
     PromoTemplate,
 )
 from org.promotion.services import record_promo_send, undo_promo_send
+from tournament.models import Tournament
 
 # Close, reopen, merge and delete counts include the registered conduct and
 # leadership tracks.

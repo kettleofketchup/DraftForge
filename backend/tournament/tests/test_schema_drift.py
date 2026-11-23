@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 from pydantic import ValidationError
 
-from app.models import Tournament
+from tournament.models import Tournament
 from tournament.schemas import (
     GameWithoutHeroDraftSchema,
     TournamentParticipantSchema,

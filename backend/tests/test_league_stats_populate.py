@@ -2,13 +2,13 @@ from unittest import mock
 
 from django.test import TestCase
 
-from app.models import Team, Tournament
 from draft.models import Draft, TeamDraftState
 from league.models import League, LeagueUser
 from org.models import Organization
 from steam.functions.league_summary import compute_league_summary
 from steam.models import LeaguePlayerStats, Match, PlayerMatchStats
 from tests.populate.league_stats import populate_league_stats_data
+from tournament.models import Team, Tournament
 
 STEAM_LEAGUE_ID = 17938
 EXPECTED_RANKS: dict[str, int] = {

@@ -31,6 +31,7 @@ from org.permissions import has_org_staff_access
 from org.promotion.services import release_earning_sends
 from org.standing import api as standing
 from telemetry.logging import get_logger
+from tournament.models import Game, Tournament
 
 # BaseUserProfile owns nickname/avatar; DotaUserProfile owns
 # positions/dota-mmr. Every @cached_as site below that ships
@@ -41,7 +42,7 @@ from user.models import BaseUserProfile, DotaUserProfile
 from user.querysets import with_user_profiles
 
 from .decorators import render_to
-from .models import CustomUser, Game, ProfileClaimRequest, Tournament
+from .models import CustomUser, ProfileClaimRequest
 from .permissions import IsStaff
 from .serializers import UserSerializer
 from .steam_accounts import steam_account_id_holder, steam_account_id_identity

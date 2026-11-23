@@ -2,7 +2,7 @@ from datetime import date
 
 from django.test import TestCase
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from league.models import League
 from org.models import Organization, OrgUser
 from steam.models import Match, PlayerMatchStats, SuggestionTier
@@ -11,6 +11,7 @@ from steam.services.match_suggestions import (
     get_match_suggestions_for_game,
     get_team_steam_ids,
 )
+from tournament.models import Game, Team, Tournament
 
 
 class CalculateSuggestionTierTest(TestCase):
