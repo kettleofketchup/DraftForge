@@ -183,7 +183,7 @@ cy.loginAdmin().then(() => {
 ```bash
 just test::run 'python manage.py test -v 2'                   # whole suite, same as CI
 just test::run 'python manage.py test app.tests -v 2'         # one package
-just test::run 'python manage.py test app.tests.test_bracket -v 2'  # one module
+just test::run 'python manage.py test tournament.tests.test_bracket -v 2'  # one module
 ```
 
 `BackendDiscoverRunner` (`backend/backend/test_runner.py`) anchors discovery at

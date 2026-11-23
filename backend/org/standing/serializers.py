@@ -22,6 +22,7 @@ def track_info_data(info: TrackInfo) -> dict[str, Any]:
         "can_view_own": info.can_view_own,
         "board_open": info.board_open,
         "can_manage": info.can_manage,
+        "can_moderate": info.can_moderate,
     }
 
 

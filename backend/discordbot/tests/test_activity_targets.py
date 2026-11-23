@@ -49,8 +49,8 @@ class ActivityImportTests(SimpleTestCase):
                 sys.executable,
                 "-c",
                 "import django; django.setup(); "
-                "import discordbot.activity_targets, discordbot.urls, app.routing, draft.routing, "
-                "discordbot.activity_launch",
+                "import discordbot.activity_targets, discordbot.urls, "
+                "tournament.routing, draft.routing, discordbot.activity_launch",
             ],
             cwd=BACKEND_DIR,
             env=os.environ,

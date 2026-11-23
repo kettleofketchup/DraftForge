@@ -45,12 +45,15 @@ export function canEditTournament(
 ): boolean {
   if (!user) return false;
   if (isSiteStaff(user)) return true;
-  if (t.leaguePk == null) return false;
-  return (
-    has(user.admin_league_ids, t.leaguePk) ||
-    has(user.staff_league_ids, t.leaguePk) ||
+  // leagueOrgPk is the event's org for a league-less tournament.
+  const orgRole =
     has(user.admin_organization_ids, t.leagueOrgPk) ||
-    has(user.staff_organization_ids, t.leagueOrgPk)
+    has(user.staff_organization_ids, t.leagueOrgPk);
+  if (t.leaguePk == null) return orgRole;
+  return (
+    orgRole ||
+    has(user.admin_league_ids, t.leaguePk) ||
+    has(user.staff_league_ids, t.leaguePk)
   );
 }
 
