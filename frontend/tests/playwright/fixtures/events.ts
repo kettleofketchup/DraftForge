@@ -66,6 +66,7 @@ export interface EventsTestData {
   users: {
     admin: number;
     player: number;
+    player_2: number;
     player_4: number;
     no_profile: number;
   };
@@ -131,7 +132,8 @@ export async function resetEventsData(context: BrowserContext): Promise<void> {
   }
 }
 
-async function loginEventUser(
+/** Login as one of the seeded events users, by role. */
+export async function loginEventUser(
   context: BrowserContext,
   role: keyof EventsTestData['users'],
   label: string,
