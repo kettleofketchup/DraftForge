@@ -9,11 +9,7 @@ from rest_framework import serializers
 from app.auth import InternalServiceUser
 from app.display_names import user_display_name
 from app.models import CustomUser
-from app.permissions_tournament import (
-    check_lobby_steam_league_id,
-    has_event_staff_access,
-    request_user,
-)
+from app.permissions import request_user
 from app.serializers import TournamentUserSerializer, _serialize_users_with_mmr
 from app.user_cache import serialize_users_core
 from common.game import GameType
@@ -30,6 +26,7 @@ from events.models import (
     RepeaterSubscription,
     SignupLedgerEntry,
 )
+from events.permissions import has_event_staff_access
 from events.ready_check_settings import (
     READY_CHECK_FIELD_KWARGS,
     READY_CHECK_SETTINGS_FIELDS,
@@ -49,6 +46,7 @@ from events.signup_schedule import (
     policy_from_explicit_open_at,
 )
 from league.models import League
+from league.permissions import check_lobby_steam_league_id
 from lobby.passwords import MAX_LENGTH as LOBBY_PASSWORD_MAX_LENGTH
 from lobby.passwords import PasswordMode, validate_password
 from org.display_names import guild_nicknames, org_nicknames_public

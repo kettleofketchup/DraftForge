@@ -92,7 +92,6 @@ export {
   createOrganization,
   deleteOrganization,
   fetchOrganization,
-  getClaimRequests,
   getOrgPromoters,
   getOrganizationDiscordMembers,
   getOrganizationUsers,

@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from '~/components/ui/alert';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { User } from '~/components/user/user';
 import { UserCard } from '~/components/user/userCard';
+import { userMatchesQuery } from '~/lib/userDisplayName';
 export default function PlayersTab({
   tournament,
 }: {
@@ -15,13 +16,7 @@ export default function PlayersTab({
   const filteredUsers =
     query === ''
       ? tournament.users
-      : tournament.users?.filter((person) => {
-          const q = query.toLowerCase();
-          return (
-            person.username?.toLowerCase().includes(q) ||
-            person.nickname?.toLowerCase().includes(q)
-          );
-        });
+      : tournament.users?.filter((person) => userMatchesQuery(person, query));
   if (!tournament || !tournament.users || tournament.users.length === 0) {
     return (
       <div className="flex justify-center items-center h-screen">

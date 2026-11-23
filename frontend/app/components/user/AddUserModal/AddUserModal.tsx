@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { AddMemberPayload } from '~/components/api/api';
 import {
@@ -22,7 +22,7 @@ import { SiteUserResults } from './SiteUserResults';
 import type { AddUserModalProps } from './types';
 
 const DEBOUNCE_MS = 300;
-const MIN_QUERY_LENGTH = 3;
+const MIN_QUERY_LENGTH = 2;
 
 export const AddUserModal: React.FC<AddUserModalProps> = ({
   open,
@@ -35,17 +35,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, DEBOUNCE_MS);
-  const [manualQuery, setManualQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  // Reset manual query when input changes
-  useEffect(() => {
-    setManualQuery('');
-  }, [query]);
-
-  // Debounced auto-search for 3+ chars, or manual search on Enter for shorter queries
   const searchTerm =
-    debouncedQuery.length >= MIN_QUERY_LENGTH ? debouncedQuery : manualQuery;
+    debouncedQuery.length >= MIN_QUERY_LENGTH ? debouncedQuery : '';
   const [addedUsers, setAddedUsers] = useState<Set<number>>(new Set());
   const [addedDiscordIds, setAddedDiscordIds] = useState<Set<string>>(
     new Set(),
@@ -65,7 +58,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     enabled: open && searchTerm.length >= 1,
   });
 
-  // Discord member search via react-query
   const discordQuery = useQuery({
     queryKey: ['discordSearch', searchTerm, entityContext.orgId],
     queryFn: () => searchDiscordMembers(entityContext.orgId!, searchTerm),
@@ -101,7 +93,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     try {
       const result = await refreshDiscordMembers(entityContext.orgId);
       toast.success(`Refreshed ${result.count} Discord members`);
-      // Invalidate Discord search query to re-fetch
       queryClient.invalidateQueries({ queryKey: ['discordSearch'] });
     } catch (err: unknown) {
       const message =
@@ -229,24 +220,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     isDesktop,
   });
 
-  // Wrap keydown: Enter with short query triggers search, otherwise defer to nav
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (
-        e.key === 'Enter' &&
-        query.length >= 1 &&
-        query.length < MIN_QUERY_LENGTH &&
-        highlightedIndex < 0
-      ) {
-        e.preventDefault();
-        setManualQuery(query);
-        return;
-      }
-      navKeyDown(e);
-    },
-    [query, highlightedIndex, navKeyDown],
-  );
-
   return (
     <FormDialog
       open={open}
@@ -259,38 +232,38 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       data-testid="add-user-modal"
     >
       {/* Single search bar */}
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by username, nickname, or Steam ID..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="pl-9"
-          data-testid="add-user-search"
-        />
-        {/* Loading bar */}
-        {siteQuery.isFetching && (
-          <div className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden rounded-b">
-            <div
-              className="h-full w-1/3 bg-primary animate-[loading_1s_ease-in-out_infinite]"
-              style={{ animation: 'loading 1s ease-in-out infinite' }}
-            />
-            <style>{`
+      <div className="mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by username, nickname, or Steam ID..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={navKeyDown}
+            className="pl-9"
+            data-testid="add-user-search"
+          />
+          {/* Loading bar */}
+          {siteQuery.isFetching && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden rounded-b">
+              <div
+                className="h-full w-1/3 bg-primary animate-[loading_1s_ease-in-out_infinite]"
+                style={{ animation: 'loading 1s ease-in-out infinite' }}
+              />
+              <style>{`
               @keyframes loading {
                 0% { transform: translateX(-100%); }
                 100% { transform: translateX(400%); }
               }
             `}</style>
-          </div>
-        )}
-        {query.length > 0 &&
-          query.length < MIN_QUERY_LENGTH &&
-          !manualQuery && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Press Enter to search, or type {MIN_QUERY_LENGTH}+ characters
-            </p>
+            </div>
           )}
+        </div>
+        {query.length > 0 && query.length < MIN_QUERY_LENGTH && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Type {MIN_QUERY_LENGTH}+ characters to search
+          </p>
+        )}
       </div>
 
       {isDesktop ? (

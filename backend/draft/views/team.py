@@ -12,9 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
-from app.functions.tournament import serialize_tournament
 from app.models import Team
-from app.permissions_tournament import can_edit_tournament
 from draft.models import Draft, DraftOptions, DraftRound, TeamDraftState
 from draft.services.team import (
     RESUME_COUNTDOWN_SECONDS,
@@ -28,6 +26,8 @@ from draft.services.team import (
 from draft.services.team_broadcast import atomic_sharing_draft_state
 from draft.tasks.team_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
+from tournament.functions import serialize_tournament
+from tournament.permissions import can_edit_tournament
 
 log = get_logger(__name__)
 

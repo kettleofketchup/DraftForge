@@ -105,10 +105,10 @@ beforeEach(() => {
 });
 
 describe('AddStandinPicker', () => {
-  it('sends no request under three characters and shows a hint', async () => {
+  it('sends no request under two characters and shows a hint', async () => {
     renderPicker();
-    await search('ab');
-    expect(screen.getByText(/at least 3 characters/i)).toBeTruthy();
+    await search('a');
+    expect(screen.getByText(/at least 2 characters/i)).toBeTruthy();
     await new Promise((r) => setTimeout(r, 400));
     expect(searchCalls()).toHaveLength(0);
   });

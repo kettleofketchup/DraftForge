@@ -80,7 +80,7 @@ def get_events(params: dict[str, Any] | None = None) -> requests.Response | None
 def get_event_for_task(pk: int) -> "EventTaskSchema | None":
     """Get full event data + org Discord config for celery tasks.
 
-    Returns EventTaskData (Pydantic) with typed attribute access,
+    Returns EventTaskSchema (Pydantic) with typed attribute access,
     or None if event not found / API error.
     """
 
@@ -110,7 +110,7 @@ def generate_repeater_events(repeater_pk: int) -> int:
 
 
 def get_repeater_subscribers(repeater_id: int) -> list["RepeaterSubscriberSchema"]:
-    """Get subscribers for a repeater. Returns list of RepeaterSubscriber."""
+    """Get subscribers for a repeater. Returns list of RepeaterSubscriberSchema."""
 
     resp = transport.get(f"/repeaters/{repeater_id}/subscribers/")
     if resp and resp.ok:
@@ -119,7 +119,7 @@ def get_repeater_subscribers(repeater_id: int) -> list["RepeaterSubscriberSchema
 
 
 def get_due_scheduled_events() -> list["ScheduledEventDueSchema"]:
-    """Get ScheduledEvents due for posting. Returns list of ScheduledEventDue."""
+    """Get ScheduledEvents due for posting. Returns list of ScheduledEventDueSchema."""
 
     resp = transport.get("/scheduled-events/due/")
     if resp and resp.ok:

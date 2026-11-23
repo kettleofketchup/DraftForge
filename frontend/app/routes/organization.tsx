@@ -36,6 +36,7 @@ import {
   useOrganization,
 } from '~/components/organization';
 import { useOrgSettingsParam } from '~/components/organization/hooks/useOrgSettingsParam';
+import { OrganizationHeaderTitle } from '~/components/organization/OrganizationHeaderTitle';
 import { buildOrgPageNavOptions } from '~/components/organization/orgPageNavOptions';
 import { OrgSettingsDialog } from '~/components/organization/OrgSettingsDialog';
 import { useOrgSettingsAccess } from '~/components/organization/tabs/orgSettings/useOrgSettingsAccess';
@@ -59,6 +60,7 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
+import { PendingClaimsBadge, usePendingClaimsCount } from '~/features/claims';
 import {
   LockedFeaturesPanel,
   removeFeatureQueries,
@@ -84,6 +86,7 @@ import {
   useIsOrganizationOwner,
   useIsOrganizationStaff,
 } from '~/hooks/usePermissions';
+import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { generateMeta } from '~/lib/seo';
 import type { OrganizationSSR } from '~/lib/ssr-types';
 import { queryClient } from '~/root';
@@ -146,7 +149,6 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-// Discord icon component
 const DiscordIcon = ({ className }: { className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -301,6 +303,7 @@ export default function OrganizationDetailPage() {
   const canEditEvents = isOrgStaff;
   const canAddMembers = isOrgStaff;
   const canViewClaims = isOrgStaff;
+  const pendingClaimsCount = usePendingClaimsCount(pk, !!canViewClaims);
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
@@ -341,8 +344,13 @@ export default function OrganizationDetailPage() {
   const hasBotAccess = botStatus?.has_bot ?? null;
 
   // Page nav options for mobile navbar dropdown
-  const userCountDisplay =
-    orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length;
+  const userCountDisplay = memberCountDisplay({
+    entityId: pk,
+    loadedForId: orgUsersOrgId,
+    loading: orgUsersLoading,
+    loadedCount: orgUserPks.length,
+    fallbackCount: organization?.users_count,
+  });
   const pageNavOptions = useMemo(
     () =>
       buildOrgPageNavOptions({
@@ -353,6 +361,7 @@ export default function OrganizationDetailPage() {
         standingTabs,
         canUsePromotion,
         canViewClaims,
+        pendingClaimsCount,
       }),
     [
       leagues.length,
@@ -362,6 +371,7 @@ export default function OrganizationDetailPage() {
       standingTabs,
       canUsePromotion,
       canViewClaims,
+      pendingClaimsCount,
     ],
   );
 
@@ -412,19 +422,21 @@ export default function OrganizationDetailPage() {
 
             {/* Organization Info */}
             <div className="flex-1">
-              <div className="flex items-start justify-between mb-2">
-                <h1 className="text-3xl font-bold">{organization.name}</h1>
-                {settingsAccess.canOpen && (
-                  <SecondaryButton
-                    size="sm"
-                    data-testid="org-settings-button"
-                    onClick={() => settingsParam.openSettings()}
-                  >
-                    <Settings className="h-4 w-4" />
-                    Org Settings
-                  </SecondaryButton>
-                )}
-              </div>
+              <OrganizationHeaderTitle
+                name={organization.name}
+                action={
+                  settingsAccess.canOpen && (
+                    <SecondaryButton
+                      size="sm"
+                      data-testid="org-settings-button"
+                      onClick={() => settingsParam.openSettings()}
+                    >
+                      <Settings className="h-4 w-4" />
+                      Org Settings
+                    </SecondaryButton>
+                  )
+                }
+              />
 
               {/* Discord Link + Bot Status */}
               <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -499,6 +511,10 @@ export default function OrganizationDetailPage() {
               <TabsTrigger value="claims" data-testid="org-tab-claims">
                 <ClipboardList className="w-4 h-4 mr-2" />
                 Claims
+                <PendingClaimsBadge
+                  count={pendingClaimsCount}
+                  testId="org-tab-claims-pending-count"
+                />
               </TabsTrigger>
             )}
           </TabsList>

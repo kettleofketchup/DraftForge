@@ -6,10 +6,10 @@ from typing import Any
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 
-from app.services.team_management import TeamManagementError
 from discordbot.activity_errors import ActivityAuthFailed
 from events.overrides import OverrideReasonRequired, OverrideRequired
 from telemetry.logging import get_logger
+from tournament.services.team_management import TeamManagementError
 
 log = get_logger("app.exception_handler")
 

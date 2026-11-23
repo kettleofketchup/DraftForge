@@ -11,9 +11,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
-from app.functions.tournament import serialize_tournament
 from app.models import CustomUser, Team, Tournament
-from app.permissions_tournament import can_edit_tournament
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound, TeamDraftState
 from draft.services.shuffle import assign_next_shuffle_captain
 from draft.services.team import (
@@ -28,6 +26,8 @@ from draft.services.team_broadcast import (
 from draft.tasks.draft_tick import evaluate_client_pick_time
 from draft.tasks.team_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
+from tournament.functions import serialize_tournament
+from tournament.permissions import can_edit_tournament
 
 log = get_logger(__name__)
 
@@ -225,7 +225,7 @@ def _pick_under_lock(
 
     tie_data = None
     if draft.draft_style == "shuffle" and draft.users_remaining.exists():
-        tie_data = assign_next_shuffle_captain(draft)
+        tie_data = assign_next_shuffle_captain(draft, now=now)
 
     advance_after_pick(
         draft,
