@@ -6,7 +6,7 @@ from django.utils import timezone as tz
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from events.constants import EventState, SignupStatus
 from events.ledger import SignupActor
 from events.models import Event, EventRepeater, EventSignup
@@ -34,6 +34,7 @@ from events.services import (
 )
 from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
+from tournament.models import Game, Team, Tournament
 
 
 class RosterTestCase(EventTestCase):

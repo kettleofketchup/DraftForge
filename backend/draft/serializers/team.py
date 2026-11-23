@@ -2,9 +2,10 @@
 
 from rest_framework import serializers
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from app.serializers import TournamentUserSerializer, UserPkField
 from draft.models import Draft, DraftEvent, DraftRound
+from tournament.models import Tournament
 from tournament.serializers.draft import DraftRoundSerializerSlim
 from tournament.serializers.team import TeamSerializerForTournament, TeamSerializerSlim
 from tournament.serializers.users import serialize_user_with_mmr

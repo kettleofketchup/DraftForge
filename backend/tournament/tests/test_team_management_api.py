@@ -24,15 +24,7 @@ from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
 from app.exception_handler import exception_handler
-from app.models import (
-    CustomUser,
-    Game,
-    Team,
-    TeamLog,
-    TeamLogAction,
-    TeamLogVia,
-    Tournament,
-)
+from app.models import CustomUser
 from app.serializers import UserSerializer
 from draft.models import DraftTeam, HeroDraft
 from draft.serializers.hero import HeroDraftSerializer
@@ -43,6 +35,8 @@ from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
 from league.models import League
 from org.models import Organization
 from tournament.functions import serialize_tournament
+from tournament.models import Game, Team, TeamLog, Tournament
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.serializers.team import (
     ManagedTeamSerializer,
     TeamActionRequestSerializer,

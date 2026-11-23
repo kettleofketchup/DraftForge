@@ -6,7 +6,7 @@ from unittest import mock
 from django.dispatch import Signal
 from django.test import override_settings
 
-from app.models import CustomUser, Team
+from app.models import CustomUser
 from events import capacity, ready_check_core, ready_check_signals
 from events.constants import (
     ActorRole,
@@ -53,6 +53,7 @@ from events.services import (
     ensure_tournament_with_signups,
 )
 from events.tests.base import EventTestCase
+from tournament.models import Team
 
 NOTIFY = "events.discord.dispatch.notify_signup_changed"
 

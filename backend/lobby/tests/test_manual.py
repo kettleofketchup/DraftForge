@@ -5,11 +5,11 @@ from django.contrib.admin.sites import AdminSite
 from django.core.management import CommandError, call_command
 from django.test import RequestFactory, TestCase
 
-from app.models import DotaLobbyMode
 from lobby import services, states
 from lobby.admin import GameLobbyAdmin
 from lobby.models import GameLobby
 from lobby.tests.helpers import lobby_settings, make_game, make_tournament, make_user
+from tournament.choices import DotaLobbyMode
 
 
 @lobby_settings

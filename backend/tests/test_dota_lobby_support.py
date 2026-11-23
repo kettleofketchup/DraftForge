@@ -14,7 +14,6 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory
 
-from app.models import DotaLobbyMode, Game, Team, Tournament
 from events.models import Event, EventRepeater, EventSignup
 from lobby import services, states
 from lobby.models import GameLobby
@@ -36,6 +35,8 @@ from tests.populate.dota_lobby import (
     populate_dota_lobby_data,
     reset_dota_lobby_data,
 )
+from tournament.choices import DotaLobbyMode
+from tournament.models import Game, Team, Tournament
 
 SIM_ENV = {
     "DOTA_LOBBY_URL": "http://dota-lobby:8080",
