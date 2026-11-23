@@ -227,6 +227,45 @@ class ReassignMemberTest(LeadershipTestCase):
             ).exists()
         )
 
+    def test_captain_collision_carries_release(self) -> None:
+        self.close()
+        OrgLeadershipSettings.objects.update_or_create(
+            organization=self.org, defaults={"require_staff_release": True}
+        )
+        released_at = tz.now() - timedelta(hours=1)
+        EventCaptain.objects.filter(pk=self.snapshot(self.cap_b).pk).update(
+            released_at=released_at, released_by=self.admin
+        )
+        self.assertIsNone(self.snapshot(self.cap_a).released_at)
+        self.reassign(self.cap_b, self.cap_a)
+        snap = EventCaptain.objects.nocache().get(event=self.event)
+        self.assertEqual(snap.captain.user, self.cap_a)
+        self.assertEqual(snap.released_at, released_at)
+        self.assertEqual(snap.released_by_id, self.admin.pk)
+
+    def test_captain_collision_keeps_earliest_release(self) -> None:
+        self.close()
+        other = self.make_user("ld_merge_mod")
+        early = tz.now() - timedelta(hours=3)
+        late = tz.now() - timedelta(hours=1)
+        cases = [("drop_earlier", early, late), ("keep_earlier", late, early)]
+        for name, drop_at, keep_at in cases:
+            with self.subTest(name):
+                EventCaptain.objects.filter(pk=self.snapshot(self.cap_b).pk).update(
+                    released_at=drop_at, released_by=self.admin
+                )
+                EventCaptain.objects.filter(pk=self.snapshot(self.cap_a).pk).update(
+                    released_at=keep_at, released_by=other
+                )
+                with transaction.atomic():
+                    sid = transaction.savepoint()
+                    self.reassign(self.cap_b, self.cap_a)
+                    snap = EventCaptain.objects.nocache().get(event=self.event)
+                    self.assertEqual(snap.released_at, early)
+                    expected = self.admin if drop_at == early else other
+                    self.assertEqual(snap.released_by_id, expected.pk)
+                    transaction.savepoint_rollback(sid)
+
     def test_rater_collision_keeps_newer(self) -> None:
         self.close()
         newer = self.review(self.mates_a[0], self.cap_a, 2)
