@@ -69,8 +69,13 @@ import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 
 /** Lists filter and sort on state and signup counts, so refresh them all. */
-export function invalidateEventLists(queryClient: QueryClient): Promise<void> {
-  return queryClient.invalidateQueries({ queryKey: ['events'] });
+export async function invalidateEventLists(
+  queryClient: QueryClient,
+): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['events'] }),
+    queryClient.invalidateQueries({ queryKey: ['repeater-events'] }),
+  ]);
 }
 
 export function useEvents(params?: {
