@@ -63,8 +63,13 @@ base=$(git -C <wt> merge-base origin/main HEAD)
 git -C <main> worktree add --detach <main>/.worktrees/pr-<n>-base "$base"
 ln -s <main>/.venv <main>/.worktrees/pr-<n>-base/.venv     # recipes need .venv
 cp <main>/backend/.env <main>/.worktrees/pr-<n>-base/backend/.env
+npm --prefix <main>/.worktrees/pr-<n>-base/frontend ci   # else the frontend 502s
 setfacl -R -m u:100999:rwX -m d:u:100999:rwX <main>/.worktrees/pr-<n>-base/frontend <main>/.worktrees/pr-<n>-base/backend
 ```
+
+Run `setfacl` after `npm ci` so `node_modules` gets the ACL too. If the frontend
+already started without them, restart it with nginx:
+`cd <base-wt> && just test::compose restart frontend nginx  # allow-cd`.
 
 Then, in the base worktree (cd form for each):
 
@@ -85,8 +90,8 @@ cd <base-wt> && just test::down && just test::slot-release  # allow-cd
 
 ### After (PR head)
 
-Same four commands in `<wt>` (skip the worktree setup; add `.venv`, `backend/.env` and
-`setfacl` only if missing), capture with the same script, then
+Same four commands in `<wt>` (skip the worktree setup; add `.venv`, `backend/.env`,
+`frontend/node_modules` and `setfacl` only if missing), capture with the same script, then
 `cd <wt> && just test::down && just test::slot-release  # allow-cd`.
 Confirm with the read-only `just test::slots` (`test::slot` would allocate again).
 
