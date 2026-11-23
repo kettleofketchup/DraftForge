@@ -1,4 +1,7 @@
+import type { QueryClient } from '@tanstack/react-query';
 import {
+  keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useMutationState,
   useQuery,
@@ -27,6 +30,7 @@ import {
   getEventRepeater,
   getEventRepeaters,
   getEvents,
+  getEventSignupHistory,
   getEventSignups,
   openSignups as openSignupsAPI,
   reinstateSignup as reinstateSignupAPI,
@@ -61,6 +65,7 @@ import {
   invalidateConductQueries,
   invalidateOrgContributionQueries,
 } from '~/features/org-features/queryKeys';
+import { nextCursor } from '~/hooks/useTournamentList';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
@@ -96,6 +101,53 @@ export function useEventSignups(eventId: number | null) {
   });
 }
 
+export type SignupHistoryFilters = { user?: number; action?: string };
+
+export const signupHistoryKey = (
+  eventId: number,
+  filters: SignupHistoryFilters,
+) => ['event-signup-history', eventId, filters] as const;
+
+export function useSignupHistory(
+  eventId: number | undefined,
+  filters: SignupHistoryFilters,
+  enabled: boolean,
+) {
+  const key: SignupHistoryFilters = {
+    ...(filters.user !== undefined && { user: filters.user }),
+    ...(filters.action !== undefined && { action: filters.action }),
+  };
+  return useInfiniteQuery({
+    queryKey: signupHistoryKey(eventId ?? 0, key),
+    queryFn: ({ pageParam }) =>
+      getEventSignupHistory(eventId!, {
+        ...key,
+        ...(pageParam !== null && { cursor: pageParam }),
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => nextCursor(last.next),
+    enabled: !!eventId && enabled,
+    staleTime: 15_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function invalidateSignupHistory(
+  queryClient: QueryClient,
+  eventId: number,
+): void {
+  void queryClient.invalidateQueries({
+    queryKey: ['event-signup-history', eventId],
+  });
+}
+
+export function removeSignupHistoryQueries(
+  queryClient: QueryClient,
+  eventId: number,
+): void {
+  queryClient.removeQueries({ queryKey: ['event-signup-history', eventId] });
+}
+
 /** The server fills an empty `steam_account_id` from the signup; mirror it. */
 export function syncCurrentUserFriendId(body: SignupBody): void {
   const submitted = String(body.profile?.steam_account_id ?? '').trim();
@@ -120,6 +172,7 @@ export function useSignupMutation(eventId: number) {
       queryClient.invalidateQueries({
         queryKey: ['event-lobby-password', eventId],
       });
+      invalidateSignupHistory(queryClient, eventId);
       if (currentUserPk != null) {
         // Match useUserDotaProfile's queryKey shape: ['user-dota-profile', userPk, orgId].
         // We don't have orgId in scope here, so invalidate the prefix — TanStack
@@ -142,12 +195,16 @@ export function useEventActionMutation(eventId: number) {
   return {
     openSignups: useMutation({
       mutationFn: () => openSignupsAPI(eventId),
-      onSuccess: (data) => queryClient.setQueryData(['event', eventId], data),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['event', eventId], data);
+        invalidateSignupHistory(queryClient, eventId);
+      },
     }),
     startRollCall: useMutation({
       mutationFn: () => startRollCallAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
+        invalidateSignupHistory(queryClient, eventId);
         void invalidateConductQueries(queryClient, data.organization);
       },
     }),
@@ -156,6 +213,7 @@ export function useEventActionMutation(eventId: number) {
       mutationFn: () => reopenSignupsAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
+        invalidateSignupHistory(queryClient, eventId);
         // The events list filters by state — a regression from roll_call → signups_open
         // changes which lists this event appears in.
         queryClient.invalidateQueries({ queryKey: ['events'] });
@@ -166,6 +224,7 @@ export function useEventActionMutation(eventId: number) {
       mutationFn: () => startTournamentAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
+        invalidateSignupHistory(queryClient, eventId);
         void invalidateConductQueries(queryClient, data.organization);
       },
     }),
@@ -173,6 +232,7 @@ export function useEventActionMutation(eventId: number) {
       mutationFn: () => cancelEventAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
+        invalidateSignupHistory(queryClient, eventId);
         queryClient.invalidateQueries({ queryKey: ['events'] });
         void invalidateConductQueries(queryClient, data.organization);
       },
@@ -182,6 +242,7 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['events'] });
         queryClient.removeQueries({ queryKey: ['event', eventId] });
+        removeSignupHistoryQueries(queryClient, eventId);
         void invalidateConductQueries(queryClient);
       },
     }),
@@ -189,6 +250,7 @@ export function useEventActionMutation(eventId: number) {
       mutationFn: () => restartTournamentAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
+        invalidateSignupHistory(queryClient, eventId);
         queryClient.invalidateQueries({ queryKey: ['events'] });
         void invalidateConductQueries(queryClient, data.organization);
       },
@@ -197,6 +259,7 @@ export function useEventActionMutation(eventId: number) {
       mutationFn: () => completeEventAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
+        invalidateSignupHistory(queryClient, eventId);
         queryClient.invalidateQueries({ queryKey: ['events'] });
         void invalidateOrgContributionQueries(queryClient, data.organization);
         void invalidateConductQueries(queryClient, data.organization);
@@ -207,6 +270,7 @@ export function useEventActionMutation(eventId: number) {
         setEventStaffAPI(eventId, payload),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
+        invalidateSignupHistory(queryClient, eventId);
         void invalidateOrgContributionQueries(queryClient, data.organization);
       },
     }),
@@ -330,6 +394,7 @@ export function useSignupActionMutations(eventId: number) {
         return;
       queryClient.invalidateQueries({ queryKey: signupsKey });
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+      invalidateSignupHistory(queryClient, eventId);
       queryClient.invalidateQueries({
         queryKey: ['event-lobby-password', eventId],
       });
