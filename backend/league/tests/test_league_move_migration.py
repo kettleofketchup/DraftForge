@@ -7,11 +7,12 @@ from django.test import TransactionTestCase
 from django.utils import timezone
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Game, Tournament
+from app.models import CustomUser
 from events.models import Event
 from league.models import League, LeagueLog, LeagueUser
 from league.models_rating import LeagueMatch, LeagueMatchParticipant, LeagueRating
 from org.models import Organization, OrgUser
+from tournament.models import Game, Tournament
 
 LEAGUE_MODELS = (
     "league",

@@ -20,7 +20,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from discordbot.activity import discord_json
 from discordbot.activity_intent import record_intent
 from discordbot.activity_targets import draft_site_url, draft_tournament_id
@@ -28,6 +28,7 @@ from discordbot.models import DraftActivityChannel
 from draft.models import Draft, HeroDraft
 from events.models import Event
 from telemetry.logging import get_logger
+from tournament.models import Tournament
 from tournament.permissions import can_edit_tournament
 
 log = get_logger(__name__)

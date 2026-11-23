@@ -12,7 +12,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
+from app.models import CustomUser, GameType, PositionsModel
 from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
 from draft.services.team import apply_draft_options
 from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
@@ -95,6 +95,7 @@ from org.models_profiles import PlayerDotaProfile
 from org.standing import api as standing
 from org.standing.cache import StandingCache
 from telemetry.logging import get_logger
+from tournament.models import Team, Tournament
 
 if TYPE_CHECKING:
     from discordbot.models import DiscordEvent

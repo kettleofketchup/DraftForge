@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from discordbot.activity_auth import issue_activity_token
 from discordbot.activity_intent import peek_intent, record_intent
 from discordbot.activity_roles import draft_role
@@ -23,6 +23,7 @@ from discordbot.tests.activity_helpers import ClearIntentsMixin
 from draft.models import Draft, DraftTeam, HeroDraft, HeroDraftState, TeamDraftState
 from league.models import League
 from org.models import Organization
+from tournament.models import Game, Team, Tournament
 
 URL = "/api/discord/activity/drafts/"
 VIEWS_URL = "/api/discord/activity/views/"

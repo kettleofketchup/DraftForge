@@ -1,7 +1,8 @@
 from django.db import models
 
 from app.cache_utils import invalidate_obj
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
+from tournament.models import Tournament
 
 
 class HeroDraftState(models.TextChoices):
@@ -21,7 +22,7 @@ class HeroDraft(models.Model):
     """Captain's Mode hero draft for a tournament game."""
 
     game = models.OneToOneField(
-        "app.Game", on_delete=models.CASCADE, related_name="herodraft"
+        "tournament.Game", on_delete=models.CASCADE, related_name="herodraft"
     )
     state = models.CharField(
         max_length=32,
@@ -77,7 +78,7 @@ class DraftTeam(models.Model):
         HeroDraft, on_delete=models.CASCADE, related_name="draft_teams"
     )
     tournament_team = models.ForeignKey(
-        "app.Team", on_delete=models.CASCADE, related_name="hero_draft_teams"
+        "tournament.Team", on_delete=models.CASCADE, related_name="hero_draft_teams"
     )
     is_first_pick = models.BooleanField(null=True, blank=True)
     is_radiant = models.BooleanField(null=True, blank=True)

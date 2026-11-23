@@ -22,7 +22,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_model, invalidate_obj
-from app.models import CustomUser, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from league.models import League
@@ -85,6 +85,7 @@ from tests.data.org_features import (
     PRIVATE_FEATURES_ORG,
 )
 from tests.populate.utils import delete_ledger_for_users, ensure_org_user
+from tournament.models import Team, Tournament
 
 # (org pk, owner, admins, staff, promoters)
 _ROLES: list[tuple[int, TestUser, list[TestUser], list[TestUser], list[TestUser]]] = [

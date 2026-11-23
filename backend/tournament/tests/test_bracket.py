@@ -6,7 +6,8 @@ from django.test import TestCase
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
+from tournament.models import Game, Team, Tournament
 from tournament.views.bracket import calculate_placement
 
 
