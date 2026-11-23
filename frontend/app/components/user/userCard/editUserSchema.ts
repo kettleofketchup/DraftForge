@@ -15,15 +15,12 @@ import { parseGameMmrs } from '~/components/game/gameMmrs';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user/types';
-import {
-  useIsLeagueAdmin,
-  useIsOrganizationStaff,
-  useIsSuperuser,
-} from '~/hooks/usePermissions';
+import { useIsOrganizationStaff, useIsSuperuser } from '~/hooks/usePermissions';
 import { selectOrgMmr } from '~/store/selectOrgMmr';
 import { selectPositions } from '~/store/selectPositions';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
+import { useUserStore } from '~/store/userStore';
 
 // Dota positions use a 0-5 self-rating scale: 0=hidden, 1=favorite, 5=avoid.
 const PositionFieldSchema = z.coerce.number().int().min(0).max(5);
@@ -334,12 +331,18 @@ export function useScopedEditPermission(scope: EditUserScope): boolean {
   const orgStaff = useIsOrganizationStaff(
     scope.kind === 'org' ? scope.organization : null,
   );
-  const leagueAdmin = useIsLeagueAdmin(
-    scope.kind === 'league' ? scope.league : null,
-    scope.kind === 'league' ? scope.organization : null,
-  );
+  const currentUser = useUserStore((s) => s.currentUser);
   const superuser = useIsSuperuser();
   if (scope.kind === 'org') return orgStaff;
-  if (scope.kind === 'league') return leagueAdmin;
+  if (scope.kind === 'league') {
+    // Saves go through the parent org's OrgUser endpoint, gated on org staff.
+    const orgId = scopeToContext(scope)?.orgId;
+    return (
+      superuser ||
+      (orgId != null &&
+        (!!currentUser?.admin_organization_ids?.includes(orgId) ||
+          !!currentUser?.staff_organization_ids?.includes(orgId)))
+    );
+  }
   return superuser;
 }
