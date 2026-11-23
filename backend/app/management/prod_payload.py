@@ -4,14 +4,19 @@ Current payloads reference users by pk into a ``_users`` dict and teams by pk;
 older ones nested the serialized user or team. Both shapes are accepted.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, time
 from datetime import timezone as dt_timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
-from app.models import CustomUser, PositionsModel, Team
+from app.models import CustomUser, PositionsModel
+
+if TYPE_CHECKING:
+    from tournament.models import Team
 
 UserRef = dict[str, Any] | int | str | None
 TeamRef = dict[str, Any] | int | None

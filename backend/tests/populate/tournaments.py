@@ -8,12 +8,13 @@ from datetime import date, datetime, timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from app.models import CustomUser, Game, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel
 from league.models import League
 from tests.data import tournaments as tournament_data
 from tests.data.models import DynamicTournamentConfig, TestUser
 from tests.data.teams import REAL_TOURNAMENT_38_TEAMS
 from tests.data.tournaments import REAL_TOURNAMENT_38
+from tournament.models import Game, Team, Tournament
 
 from .avatars import apply_committed_avatars
 from .constants import DTX_STEAM_LEAGUE_ID, TEST_STEAM_LEAGUE_ID

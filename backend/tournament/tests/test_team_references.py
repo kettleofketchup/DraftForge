@@ -3,18 +3,12 @@
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import (
-    CustomUser,
-    Game,
-    Team,
-    TeamLog,
-    TeamLogAction,
-    TeamLogVia,
-    Tournament,
-)
+from app.models import CustomUser
 from bracket.models import BracketSlot, TournamentBracket
 from league.models import League
 from org.models import Organization
+from tournament.models import Game, Team, TeamLog, Tournament
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.services.team_references import (
     all_reference_keys,
     team_references,
@@ -41,11 +35,11 @@ class TeamReferencesFixture:
 class TeamReferencesTests(TeamReferencesFixture, TestCase):
     def test_team_references_relation_names(self) -> None:
         expected = {
-            "app.Game.radiant_team",
-            "app.Game.dire_team",
-            "app.Game.winning_team",
+            "tournament.Game.radiant_team",
+            "tournament.Game.dire_team",
+            "tournament.Game.winning_team",
             "draft.DraftTeam.tournament_team",
-            "app.Tournament.winning_team",
+            "tournament.Tournament.winning_team",
             "bracket.BracketSlot.participant",
             "lobby.GameLobby.radiant_team",
             "lobby.GameLobby.dire_team",
@@ -67,11 +61,13 @@ class TeamReferencesTests(TeamReferencesFixture, TestCase):
 
         refs = team_references(Team.objects.filter(pk=self.team.pk))
 
-        self.assertEqual(refs, {"app.Game.radiant_team": 2})
+        self.assertEqual(refs, {"tournament.Game.radiant_team": 2})
         self.assertEqual(team_references(Team.objects.none()), {})
 
     def test_teamlog_not_a_reference_key(self) -> None:
-        self.assertNotIn("app.TeamLog.team", all_reference_keys())
+        keys = all_reference_keys()
+        self.assertTrue(keys)
+        self.assertFalse([k for k in keys if k.lower().endswith("teamlog.team")])
 
     def test_herodraft_chat_not_a_reference_key(self) -> None:
         keys = all_reference_keys()
@@ -97,10 +93,10 @@ class TeamUsageTests(TeamReferencesFixture, TestCase):
 
         self.assertEqual(
             [(u["model"], u["count"]) for u in usage],
-            [("app.Game", 1), ("bracket.BracketSlot", 1)],
+            [("bracket.BracketSlot", 1), ("tournament.Game", 1)],
         )
-        self.assertEqual([t["name"] for t in usage[0]["teams"]], ["Resetters", "Other"])
-        self.assertEqual([t["name"] for t in usage[1]["teams"]], ["Other"])
+        self.assertEqual([t["name"] for t in usage[0]["teams"]], ["Other"])
+        self.assertEqual([t["name"] for t in usage[1]["teams"]], ["Resetters", "Other"])
 
     def test_empty(self) -> None:
         self.assertEqual(team_usage(Team.objects.none()), [])

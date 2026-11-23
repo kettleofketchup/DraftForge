@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import decline_signup
@@ -19,6 +19,7 @@ from org.promotion.recipients import (
     in_pool,
     recent_org_tournaments,
 )
+from tournament.models import Tournament
 
 
 class ClampPoolNTest(SimpleTestCase):

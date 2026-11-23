@@ -70,7 +70,7 @@ up *args:
     echo "Auto-linking tournament games to Steam matches..."
     {{compose}} exec -T backend python -c "$(cat <<'PY'
     import django; django.setup()
-    from app.models import Tournament
+    from tournament.models import Tournament
     from steam.functions.game_linking import auto_link_matches_for_tournament
     results = [auto_link_matches_for_tournament(t.id) for t in Tournament.objects.all()]
     linked = sum(r['auto_linked_count'] for r in results)

@@ -118,7 +118,7 @@ class EventCaptain(models.Model):
         "org.OrgUser", on_delete=models.CASCADE, related_name="captained_events"
     )
     team = models.ForeignKey(
-        "app.Team",
+        "tournament.Team",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

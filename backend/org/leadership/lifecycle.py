@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from django.db.models import Prefetch
 
-from app.models import CustomUser, Team
+from app.models import CustomUser
 from draft.models.team import Draft, TeamDraftState
 from events.capacity import lock_event
 from events.constants import REGISTERED_SIGNUP_STATUSES
@@ -20,6 +20,7 @@ from org.models_leadership import CaptainReview, EventCaptain
 from org.standing import ledger
 from org.standing.kinds import kinds_for
 from telemetry.logging import get_logger
+from tournament.models import Team
 
 log = get_logger(__name__)
 

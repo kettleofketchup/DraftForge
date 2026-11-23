@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import Tournament
 from events.admission import NOT_ACCEPTING_MESSAGE, SELF_SERVE_DISABLED_MESSAGE
 from events.constants import EventState, RepeatFrequency, SignupStatus
 from events.models import Event, EventRepeater, EventSignup
@@ -18,6 +17,7 @@ from events.services import (
 from events.signup_window import user_signups_open_tournament_ids
 from events.tests.base import EventTestCase
 from tests.cache import flush_run_cache
+from tournament.models import Tournament
 
 LIST_URL = "/api/tournaments-list/?open_signups=1"
 

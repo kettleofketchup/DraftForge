@@ -5,9 +5,9 @@ from typing import Any
 from django.db.models import QuerySet
 
 from app.cache_utils import invalidate_obj
-from app.models import Game, Team, Tournament
 from steam.models import GameMatchSuggestion, Match
 from telemetry.logging import get_logger
+from tournament.models import Game, Team, Tournament
 
 log = get_logger(__name__)
 

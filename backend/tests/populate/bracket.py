@@ -11,11 +11,12 @@ from datetime import date, datetime
 from datetime import time as dt_time
 from datetime import timezone as dt_tz
 
-from app.models import CustomUser, Game, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel
 from league.models import League
 from steam.models import Match, PlayerMatchStats
 from tests.data.teams import BRACKET_UNSET_WINNER_TEAMS
 from tests.data.tournaments import BRACKET_UNSET_WINNER_TOURNAMENT
+from tournament.models import Game, Team, Tournament
 
 from .constants import BRACKET_STEAM_ID_BASE, BRACKET_USER_COUNT, DTX_STEAM_LEAGUE_ID
 from .utils import _ensure_league_user, _ensure_org_user, _flush_redis_cache

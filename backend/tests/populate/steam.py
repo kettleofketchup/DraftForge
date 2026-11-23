@@ -3,10 +3,9 @@ Steam matches population module for test database.
 Creates mock Steam matches and bracket games for tournaments.
 """
 
-from django.db import models
-
-from app.models import CustomUser, Game
+from app.models import CustomUser
 from tests.data.tournaments import BRACKET_TEST_CONFIGS
+from tournament.models import Game
 
 from .constants import DTX_STEAM_LEAGUE_ID
 from .utils import flush_redis_cache
@@ -23,9 +22,8 @@ def populate_steam_matches(force=False):
     Args:
         force: If True, delete existing mock matches and games first
     """
-    from app.models import Tournament
-    from steam.mocks.mock_match_generator import generate_mock_matches_for_tournament
-    from steam.models import Match, PlayerMatchStats
+    from steam.models import Match
+    from tournament.models import Tournament
 
     print("Populating Steam matches and bracket games...")
 
@@ -53,7 +51,7 @@ def populate_steam_matches(force=False):
             existing_matches.delete()
             existing_games.delete()
         else:
-            print(f"Mock data already exists. Use force=True to regenerate.")
+            print("Mock data already exists. Use force=True to regenerate.")
             return
 
     # Define bracket structure for 4-team double elimination

@@ -138,7 +138,7 @@ class TournamentTaskSchemaDriftTest(TestCase):
     """Verify Tournament model output validates against TournamentTaskSchema schema."""
 
     def test_tournament_validates(self):
-        from app.models import Tournament
+        from tournament.models import Tournament
 
         t = Tournament.objects.create(
             name="Test", state="future", date_played=timezone.now()

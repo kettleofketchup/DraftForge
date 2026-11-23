@@ -6,12 +6,13 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from app.management.commands import sync_prod_users
-from app.models import CustomUser, GameType, Team, Tournament
+from app.models import CustomUser, GameType
 from draft.models import Draft
 from league.models import League
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
 from tournament.management.commands import import_prod_tournament, sync_prod_tournaments
+from tournament.models import Team, Tournament
 
 TOURNAMENT_GET = "tournament.management.commands.import_prod_tournament.requests.get"
 USERS_GET = "app.management.commands.sync_prod_users.requests.get"

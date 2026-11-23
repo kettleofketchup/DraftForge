@@ -28,7 +28,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 )
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from app.redis_client import get_redis_client
 from discordbot.activity_auth import ActivitySocketMiddleware, issue_activity_token
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
@@ -62,6 +62,7 @@ from draft.tests.ws_helpers import (
 )
 from league.models import League
 from org.models import Organization
+from tournament.models import Game, Team, Tournament
 from tournament.services.team_management import follow_captain
 
 Channel = HeroDraftChatMessage.Channel

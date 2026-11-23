@@ -418,7 +418,8 @@ class TournamentParticipantsEndpointTest(TestCase):
     def setUp(self):
         from datetime import date
 
-        from app.models import CustomUser, Team, Tournament
+        from app.models import CustomUser
+        from tournament.models import Team, Tournament
 
         self.client = APIClient()
         self.client.credentials(**HEADERS)
@@ -477,7 +478,8 @@ class AutoHeroDraftGamesEndpointTest(TestCase):
     def setUp(self) -> None:
         from datetime import date
 
-        from app.models import CustomUser, Game, Team, Tournament
+        from app.models import CustomUser
+        from tournament.models import Game, Team, Tournament
 
         self.client = APIClient()
         self.client.credentials(**HEADERS)

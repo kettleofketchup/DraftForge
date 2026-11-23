@@ -26,7 +26,7 @@ class HeroDraftChatMessage(models.Model):
     )
     channel = models.CharField(max_length=8, choices=Channel.choices)
     team = models.ForeignKey(
-        "app.Team",
+        "tournament.Team",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -73,7 +73,9 @@ class HeroDraftChatMembership(models.Model):
     """One continuous stint of a user on a team, as seen by this draft's chat."""
 
     draft = models.ForeignKey(HeroDraft, on_delete=models.CASCADE, related_name="+")
-    team = models.ForeignKey("app.Team", on_delete=models.CASCADE, related_name="+")
+    team = models.ForeignKey(
+        "tournament.Team", on_delete=models.CASCADE, related_name="+"
+    )
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="+")
     joined_at = models.DateTimeField()
     left_at = models.DateTimeField(null=True, blank=True)

@@ -13,7 +13,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from draft.models import Draft, DraftRound
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
@@ -92,6 +92,7 @@ from tests.test_org_features import (
     org_features_data,
     reset_org_features,
 )
+from tournament.models import Tournament
 
 
 class EventLeagueStaffIsolationTest(TestCase):

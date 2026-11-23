@@ -13,7 +13,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser, Game, Team
+from app.models import CustomUser
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 from draft.serializers.hero import HeroDraftEventSerializer, HeroDraftSerializer
 from draft.services.hero import (
@@ -28,6 +28,7 @@ from draft.services.hero_chat import reconcile_draft_memberships
 from draft.tasks import hero_tick
 from events.discord.tournament_dispatch import notify_herodraft_created
 from telemetry.logging import get_logger
+from tournament.models import Game, Team
 from tournament.permissions import (
     IsTournamentStaff,
     can_edit_tournament,

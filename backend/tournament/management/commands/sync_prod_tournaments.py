@@ -12,10 +12,11 @@ from app.management.prod_payload import (
     resolve_user,
     steam_account_id,
 )
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from common.game import GameType
 from draft.models import Draft, DraftOptions, DraftRound
 from telemetry.logging import get_logger
+from tournament.models import Game, Team, Tournament
 
 log = get_logger(__name__)
 

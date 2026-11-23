@@ -759,6 +759,22 @@ _TOURNAMENT_VIEW_NAMES = (
     "GameView",
 )
 
+_TOURNAMENT_MODEL_NAMES = (
+    "Tournament",
+    "Team",
+    "Game",
+    "TeamLog",
+    "LeadershipProblem",
+    "_LEADERSHIP_MESSAGES",
+    "TeamLogVia",
+    "TeamLogAction",
+    "DraftStyles",
+    "GameMode",
+    "DotaLobbyMode",
+    "DotaLobbyLaunch",
+    "TOURNAMNET_TYPE_CHOICES",
+)
+
 TOURNAMENT = MovedSlice(
     name="tournament",
     source_app="app",
@@ -784,6 +800,7 @@ TOURNAMENT = MovedSlice(
             ("app.views.ssr", "TournamentSSRView"),
             ("app.serializers_ssr", "TournamentSerializerSSR"),
             ("app.admin", "TeamLogAdmin"),
+            *(("app.models", name) for name in _TOURNAMENT_MODEL_NAMES),
             # patched on views_main before the views moved
             ("app.views_main", "build_users_dict"),
             ("app.views_main", "tournament_bucket_cutoff"),
@@ -799,9 +816,9 @@ TOURNAMENT = MovedSlice(
     retired_modules=frozenset(
         {"app.permissions_tournament", *_TOURNAMENT_RETIRED_DEFS}
     ),
-    model_labels=frozenset(),
+    model_labels=frozenset({"tournament", "team", "game", "teamlog"}),
     move_migration=("app", "0115_move_tournament_models_to_tournament"),
-    cached_labels=frozenset(),
+    cached_labels=frozenset({"tournament", "team", "game"}),
 )
 
 MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG, LEAGUE, TOURNAMENT)
@@ -831,11 +848,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         "app/discord_accounts.py": BackEdge(
             frozenset({"repoint_chat_attribution"}),
             "Discord account merge repoints hero draft chat authorship",
-        ),
-        "app/models.py": BackEdge(
-            frozenset({"DraftOptions"}),
-            "TYPE_CHECKING-only return annotation for Tournament.get_draft_options",
-            type_only=frozenset({"DraftOptions"}),
         ),
         "app/views_main.py": BackEdge(
             frozenset({"DraftRound", "DraftTeam"}),
@@ -922,6 +934,16 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         "app/exception_handler.py": BackEdge(
             frozenset({"TeamManagementError"}),
             "global DRF handler maps TeamManagementError",
+        ),
+        "app/management/prod_payload.py": BackEdge(
+            frozenset({"Team"}),
+            "TYPE_CHECKING-only annotation on TeamLookup, shared prod payload "
+            "readers used by the tournament prod sync commands",
+            type_only=frozenset({"Team"}),
+        ),
+        "app/views_main.py": BackEdge(
+            frozenset({"Game", "Tournament"}),
+            "home_stats cross-domain aggregate",
         ),
     },
 }
@@ -1651,6 +1673,7 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("tournament/permissions.py", rels)
         self.assertIn("tournament/views/team.py", rels)
         self.assertIn("tournament/consumers.py", rels)
+        self.assertIn("tournament/models/team.py", rels)
         self.assertNotIn(GUARD_FILE, rels)
         self.assertFalse(any("/migrations/" in rel for rel in rels))
 

@@ -5,7 +5,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
-from app.models import Game, Tournament
 from league.permissions import has_league_staff_access
 from steam.constants import LEAGUE_ID
 from steam.functions.game_linking import (
@@ -40,6 +39,7 @@ from steam.serializers import (
 from steam.services.match_suggestions import get_match_suggestions_for_game
 from steam.utils.steam_api_caller import SteamAPI
 from telemetry.logging import get_logger
+from tournament.models import Game, Tournament
 from tournament.permissions import can_manage_game
 
 log = get_logger(__name__)

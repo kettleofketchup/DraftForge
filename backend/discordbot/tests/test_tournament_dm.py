@@ -13,7 +13,7 @@ from tournament.schemas import (
 
 class DiscordTournamentLogTest(TestCase):
     def setUp(self):
-        from app.models import Tournament
+        from tournament.models import Tournament
 
         self.tournament = Tournament.objects.create(
             name="Test", state="future", date_played=timezone.now()
@@ -54,7 +54,7 @@ class DiscordTournamentLogTest(TestCase):
 
 class DiscordTournamentConfigFieldsTest(TestCase):
     def test_tournament_has_config_fields(self):
-        from app.models import Tournament
+        from tournament.models import Tournament
 
         t = Tournament()
         self.assertFalse(t.auto_create_hero_drafts)
@@ -83,7 +83,8 @@ class DiscordTournamentConfigFieldsTest(TestCase):
 
 class TournamentDiscordLogAPITest(TestCase):
     def setUp(self):
-        from app.models import CustomUser, Tournament
+        from app.models import CustomUser
+        from tournament.models import Tournament
 
         self.user = CustomUser.objects.create_user(
             username="admin", password="testpass", is_staff=True
@@ -450,7 +451,7 @@ class DiscordTournamentLogSuccessNullableTest(TestCase):
     'in-flight' state between create and update."""
 
     def setUp(self):
-        from app.models import Tournament
+        from tournament.models import Tournament
 
         self.tournament = Tournament.objects.create(
             name="Nullable", state="future", date_played=timezone.now()

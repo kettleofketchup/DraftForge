@@ -2,7 +2,6 @@ from unittest import mock
 
 from django.test import TestCase, override_settings
 
-from app.models import DotaLobbyMode
 from draft.models import DraftTeam, HeroDraft
 from lobby import services, states
 from lobby.models import GameLobby
@@ -13,6 +12,7 @@ from lobby.tests.helpers import (
     make_team,
     make_tournament,
 )
+from tournament.choices import DotaLobbyMode
 
 
 @lobby_settings

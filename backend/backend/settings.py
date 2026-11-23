@@ -366,8 +366,8 @@ CACHEOPS_REDIS = {
 CACHEOPS = {
     "org.organization": {"ops": "all", "timeout": 60 * 60},
     "league.league": {"ops": "all", "timeout": 60 * 60},
-    "app.tournament": {"ops": "all", "timeout": 60 * 60},
-    "app.team": {"ops": "all", "timeout": 60 * 60},
+    "tournament.tournament": {"ops": "all", "timeout": 60 * 60},
+    "tournament.team": {"ops": "all", "timeout": 60 * 60},
     "app.customuser": {"ops": "all", "timeout": 60 * 60},
     # BaseUserProfile owns nickname/avatar. Every @cached_as
     # site that ships nickname/avatar must list BaseUserProfile so PATCH
@@ -382,7 +382,7 @@ CACHEOPS = {
     "user.deadlockuserprofile": {"ops": "all", "timeout": 60 * 60},
     "draft.draft": {"ops": "all", "timeout": 60 * 60},
     "draft.draftoptions": {"ops": "all", "timeout": 60 * 60},
-    "app.game": {"ops": "all", "timeout": 60 * 60},
+    "tournament.game": {"ops": "all", "timeout": 60 * 60},
     "draft.herodraft": {"ops": "all", "timeout": 60 * 60},
     "draft.draftteam": {"ops": "all", "timeout": 60 * 60},
     "draft.draftround": {"ops": "all", "timeout": 60 * 60},

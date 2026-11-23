@@ -4,7 +4,6 @@ from collections.abc import Callable
 
 from django.utils import timezone
 
-from app.models import Team
 from draft.models import Draft, DraftRound, TimeoutAction
 from draft.services.shuffle import reassign_round_captain
 from draft.services.team import (
@@ -14,6 +13,7 @@ from draft.services.team import (
     team_payload,
 )
 from telemetry.logging import get_logger
+from tournament.models import Team
 
 log = get_logger(__name__)
 
