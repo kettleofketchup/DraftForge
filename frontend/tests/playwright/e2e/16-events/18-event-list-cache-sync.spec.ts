@@ -149,7 +149,9 @@ test.describe('Events - list stays in sync with the event page (@cicd)', () => {
     );
     await markDocument(page);
     const card = page.getByTestId(`event-card-${event.id}`);
-    await expect(card).toContainText(/\b0 signups \//);
+    await expect(card.getByTestId('event-card-signup-count')).toHaveText(
+      /^0 signups \//,
+    );
 
     await card.click();
     await expect(page).toHaveURL(new RegExp(`/events/${event.id}`));
@@ -168,9 +170,11 @@ test.describe('Events - list stays in sync with the event page (@cicd)', () => {
     await closeAddUserModal(page);
 
     await backToEventsList(page);
-    await expect(page.getByTestId(`event-card-${event.id}`)).toContainText(
-      /\b1 signup \//,
-    );
+    await expect(
+      page
+        .getByTestId(`event-card-${event.id}`)
+        .getByTestId('event-card-signup-count'),
+    ).toHaveText(/^1 signup \//);
     await expectSameDocument(page);
   });
 });
