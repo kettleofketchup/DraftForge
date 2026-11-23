@@ -32,7 +32,13 @@ from discordbot.models import DiscordEvent, DiscordEventLog
 from draft.models import Draft
 from events.constants import EventState
 from events.ledger import SignupActor
-from events.models import Event, EventRepeater, EventSignup, RepeaterSubscription
+from events.models import (
+    Event,
+    EventRepeater,
+    EventSignup,
+    RepeaterSubscription,
+    SignupLedgerEntry,
+)
 from events.services import generate_events_for_repeater, process_rsvp
 from events.tasks import sync_discord_events
 from league.models import League, LeagueUser
@@ -1419,6 +1425,7 @@ def reset_events_data(request):
             old_tournament.delete()
         else:
             signup_event.save()
+        SignupLedgerEntry.objects.filter(event=signup_event).purge()
         EventSignup.objects.filter(event=signup_event).delete()
         invalidate_obj(signup_event)
         reset_count += 1
@@ -1434,6 +1441,7 @@ def reset_events_data(request):
         DiscordEvent.objects.filter(event=event).delete()
         if event.tournament:
             event.tournament.delete()
+        SignupLedgerEntry.objects.filter(event=event).purge()
         event.delete()
         deleted_generated += 1
 
@@ -1458,6 +1466,8 @@ def reset_events_demo(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     EVENTS_ORG_NAME = "Events Test Org"
+
+    SignupLedgerEntry.objects.filter(event__organization__name=EVENTS_ORG_NAME).purge()
 
     # Delete all signups
     signups_deleted = EventSignup.objects.filter(
