@@ -154,9 +154,11 @@ def with_event_staff(qs: QuerySet[Event]) -> QuerySet[Event]:
 def _attach_user_can_manage(
     payload: dict[str, Any] | list[dict[str, Any]], user: CustomUser | AnonymousUser
 ) -> dict[str, Any] | list[dict[str, Any]]:
-    """Mutate a serialized Event payload (or list of them) to set user_can_manage per-request.
+    """Set per-request viewer fields on a serialized Event payload (or list of them).
 
-    manage_viewer_pk records the viewer the flags were computed for.
+    Sets user_can_manage and user_can_manage_event_staff, plus manage_viewer_pk:
+    the viewer the flags were computed for (None for anonymous, who keep the
+    serializer's False defaults).
 
     Called AFTER cached_as serves a payload, so the cache itself stays user-agnostic.
     The Event instances are looked up by id from the payload; one batched query

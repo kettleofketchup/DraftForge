@@ -684,15 +684,9 @@ class EventSerializer(
                 "event_repeater",
                 self.instance.event_repeater if self.instance else None,
             )
-            # On create, fall back to False when the field is absent — matches
-            # original behavior so callers that don't explicitly set this field
-            # aren't surprised. The model default of True remains a latent
-            # inconsistency (events get saved with reminder=True but the
-            # validator silently allows it on create); fix is out of scope here
-            # since correcting it would require a model migration + sweep of
-            # ~10 Playwright tests that don't pass this field. Tracked
-            # separately. The validator still rejects explicit signup_reminder=True
-            # on a single event.
+            # On create an absent field is validated as False, but the model
+            # default (True) is what gets saved, so a single event can still end
+            # up with reminder=True. An explicit True on a single event is rejected.
             default_reminder = (
                 self.instance.discord_signup_reminder if self.instance else False
             )
