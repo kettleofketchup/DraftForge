@@ -87,10 +87,10 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
         transition-colors"
       data-testid={`claim-card-${claim.id}`}
     >
-      <div className="flex flex-col gap-2 p-6">
-        <div className="flex items-start gap-4">
+      <div className="flex flex-col gap-2 p-3 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
           {/* Claimer info */}
-          <div className="flex items-center gap-3 flex-1">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <UserAvatar
               user={{
                 pk: claim.claimer,
@@ -101,8 +101,10 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
               size="lg"
               border="primary"
             />
-            <div>
-              <div className="font-medium">{claim.claimer_username}</div>
+            <div className="min-w-0">
+              <div className="font-medium break-words">
+                {claim.claimer_username}
+              </div>
               <div className="text-sm text-muted-foreground">
                 wants to claim
               </div>
@@ -111,19 +113,22 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
 
           {/* Arrow */}
           <div className="flex items-center text-muted-foreground">
-            <span className="text-2xl">&rarr;</span>
+            <span className="rotate-90 text-2xl sm:rotate-0">&rarr;</span>
           </div>
 
           {/* Target profile info */}
           {claim.target_user === null ? (
-            <div className="flex-1">
-              <div className="font-medium" data-testid="claim-target-merged">
+            <div className="min-w-0 flex-1">
+              <div
+                className="font-medium break-words"
+                data-testid="claim-target-merged"
+              >
                 Merged into {claim.claimer_username}
               </div>
             </div>
           ) : (
-            <div className="flex-1">
-              <div className="font-medium">
+            <div className="min-w-0 flex-1">
+              <div className="font-medium break-words">
                 {claim.target_nickname || `Steam ID: ${claim.target_steamid}`}
               </div>
               <div className="text-sm text-muted-foreground">
@@ -145,7 +150,7 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
           )}
 
           {/* Status and actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {getStatusBadge(claim.status)}
 
             {claim.status === 'pending' && (
