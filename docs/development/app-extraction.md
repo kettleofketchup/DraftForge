@@ -330,7 +330,7 @@ python manage.py migrate app 0114
 python manage.py migrate bracket 0002
 python manage.py migrate discordbot 0014
 python manage.py migrate draft 0005
-python manage.py migrate events 0038
+python manage.py migrate events 0039
 python manage.py migrate league 0003
 python manage.py migrate lobby 0004
 python manage.py migrate org 0020

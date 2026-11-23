@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("events", "0038_ready_check_recipient_help_text"),
+        ("events", "0039_alter_signupledgerentry_action"),
         ("tournament", "0001_initial"),
     ]
 

@@ -41,7 +41,7 @@ class Migration(migrations.Migration):
         ("bracket", "0003_retarget_tournament_models"),
         ("discordbot", "0015_retarget_tournament_models"),
         ("draft", "0006_retarget_tournament_models"),
-        ("events", "0039_retarget_tournament_to_tournament"),
+        ("events", "0040_retarget_tournament_to_tournament"),
         ("league", "0004_retarget_leaguematch_game"),
         ("lobby", "0005_retarget_tournament_models"),
         ("org", "0021_retarget_tournament_models"),
