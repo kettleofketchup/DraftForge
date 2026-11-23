@@ -45,6 +45,10 @@ just test::run 'python manage.py test -v 2'
 just test::pw::headless              # All tests
 just test::pw::spec csv-import       # Specific suite
 just test::pw::ui                    # Interactive UI mode
+just test::pw::report                # Newest run's HTML report
+# Each local run writes to its own frontend/test-results/runs/<id>/
+# (artifacts/, report/, run-logs/); frontend/test-results/latest is the newest.
+# CI keeps the flat frontend/test-results/.
 
 # Full setup (down, update, build, populate, up)
 just test::setup
