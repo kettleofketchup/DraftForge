@@ -3,6 +3,7 @@
 import os
 
 import requests
+from structlog.contextvars import get_contextvars
 
 from telemetry.logging import get_logger
 
@@ -32,10 +33,14 @@ class InternalAPIUnavailable(RuntimeError):
 
 
 def headers() -> dict[str, str]:
-    return {
+    result = {
         "X-Internal-Token": os.environ.get("INTERNAL_SERVICE_TOKEN", ""),
         "Content-Type": "application/json",
     }
+    interaction_id = get_contextvars().get("interaction_id")
+    if interaction_id:
+        result["X-Discord-Interaction-ID"] = str(interaction_id)
+    return result
 
 
 def log_http_error(method: str, path: str, status_code: int, body_excerpt: str) -> None:

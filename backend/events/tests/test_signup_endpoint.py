@@ -6,6 +6,7 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser, GameType
 from events.models import Event, EventState
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.models import Organization, OrgUser
 
@@ -287,7 +288,7 @@ class SignupEndpointRollbackTests(TransactionTestCase):
         )
         user = CustomUser.objects.create(username="alice")
         # Simulate Discord-side signup first.
-        process_rsvp(event, user)
+        process_rsvp(event, user, actor=SYSTEM)
         # Now web tries to sign up.
         client = APIClient()
         client.force_authenticate(user)
