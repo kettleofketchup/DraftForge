@@ -16,12 +16,12 @@ from django.test import RequestFactory
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import Tournament
 from discordbot.models import DiscordEvent, DiscordMessageLog
 from events.admin import EventAdmin, EventRepeaterAdmin
 from events.constants import EventState, RepeatFrequency
 from events.models import Event, EventRepeater
 from events.tests.base import EventTestCase
+from tournament.models import Tournament
 
 
 class SeriesDeleteCleanupTest(EventTestCase):

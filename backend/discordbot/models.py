@@ -327,7 +327,7 @@ class DiscordTournamentLog(models.Model):
         ERROR = "error", "Error"
 
     tournament = models.ForeignKey(
-        "app.Tournament", on_delete=models.CASCADE, related_name="discord_logs"
+        "tournament.Tournament", on_delete=models.CASCADE, related_name="discord_logs"
     )
     category = models.CharField(
         max_length=20, choices=Category.choices, default=Category.NOTIFICATION

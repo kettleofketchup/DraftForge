@@ -6,9 +6,9 @@ from django.db import transaction
 from django.db.models import QuerySet
 
 from app.cache_utils import invalidate_after_commit
-from app.models import Game, Team, Tournament
 from steam.models import GameMatchSuggestion, Match
 from telemetry.logging import get_logger
+from tournament.models import Game, Team, Tournament
 from tournament.services.bracket_placement import (
     apply_bracket_placements,
     tournament_bracket_placements,

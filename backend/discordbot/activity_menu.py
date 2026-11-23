@@ -8,7 +8,7 @@ from django.conf import settings
 from django.db.models import Prefetch, Q
 from django.utils import timezone
 
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser
 from discordbot.activity_auth import (
     ActivityIdentity,
     Pin,
@@ -20,6 +20,7 @@ from discordbot.activity_roles import Role, draft_role, involves_user
 from discordbot.activity_targets import draft_tournament_id
 from discordbot.models import DraftActivityChannel
 from draft.models import Draft, DraftTeam, HeroDraft
+from tournament.models import Team, Tournament
 from tournament.permissions import can_edit_tournament
 
 ViewRef = dict

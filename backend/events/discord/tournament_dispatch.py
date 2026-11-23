@@ -15,8 +15,8 @@ from events.tournament_tasks import (
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
-    from app.models import Game, Tournament
     from draft.models import Draft, HeroDraft
+    from tournament.models import Game, Tournament
 
 logger = get_logger(__name__)
 

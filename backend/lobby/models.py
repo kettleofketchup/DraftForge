@@ -35,7 +35,7 @@ class GameLobby(models.Model):
         MANUAL = "manual", "Manual"
 
     game = models.ForeignKey(
-        "app.Game", related_name="lobbies", on_delete=models.CASCADE
+        "tournament.Game", related_name="lobbies", on_delete=models.CASCADE
     )
     external_ref = models.CharField(max_length=128, db_index=True)
     # dota_lobby's ID (lob_...), null until the create request is accepted.
@@ -68,14 +68,14 @@ class GameLobby(models.Model):
     # The teams actually sent as Radiant and Dire. Game.radiant_team and
     # Game.dire_team are bracket slots, not in-game sides.
     radiant_team = models.ForeignKey(
-        "app.Team",
+        "tournament.Team",
         related_name="+",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
     )
     dire_team = models.ForeignKey(
-        "app.Team",
+        "tournament.Team",
         related_name="+",
         null=True,
         blank=True,
@@ -102,7 +102,7 @@ class GameLobby(models.Model):
     provisional_outcome_name = models.CharField(max_length=32, blank=True, default="")
     provisional_winner_side = models.CharField(max_length=8, blank=True, default="")
     provisional_winner_team = models.ForeignKey(
-        "app.Team",
+        "tournament.Team",
         related_name="+",
         null=True,
         blank=True,

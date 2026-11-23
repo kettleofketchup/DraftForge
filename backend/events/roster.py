@@ -3,9 +3,10 @@ from enum import StrEnum
 
 from django.db.models import Q
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from events.constants import EventState, SignupStatus
 from events.models import Event
+from tournament.models import Tournament
 
 
 class RosterPhase(StrEnum):

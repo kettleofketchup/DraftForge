@@ -14,7 +14,7 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.display_names import user_display_name
-from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
+from app.models import CustomUser, GameType, PositionsModel
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
 from org.mmr import (
@@ -27,6 +27,7 @@ from org.mmr import (
 from org.models import Organization, OrgLog, OrgUser
 from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
+from tournament.models import Team, Tournament
 from tournament.permissions import can_edit_tournament
 
 if TYPE_CHECKING:

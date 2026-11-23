@@ -10,7 +10,6 @@ from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 from django.urls import re_path
 
-from app.models import Team, Tournament
 from draft.consumers.team import DraftConsumer
 from draft.models import Draft, DraftEvent, DraftRound
 from draft.tests.ws_helpers import (
@@ -18,6 +17,7 @@ from draft.tests.ws_helpers import (
     next_non_ping_output,
     read_until_type,
 )
+from tournament.models import Team, Tournament
 
 User = get_user_model()
 
