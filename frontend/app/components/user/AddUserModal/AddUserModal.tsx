@@ -38,7 +38,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const [manualQuery, setManualQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  // Reset manual query when input changes
   useEffect(() => {
     setManualQuery('');
   }, [query]);
@@ -65,7 +64,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     enabled: open && searchTerm.length >= 1,
   });
 
-  // Discord member search via react-query
   const discordQuery = useQuery({
     queryKey: ['discordSearch', searchTerm, entityContext.orgId],
     queryFn: () => searchDiscordMembers(entityContext.orgId!, searchTerm),
@@ -101,7 +99,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     try {
       const result = await refreshDiscordMembers(entityContext.orgId);
       toast.success(`Refreshed ${result.count} Discord members`);
-      // Invalidate Discord search query to re-fetch
       queryClient.invalidateQueries({ queryKey: ['discordSearch'] });
     } catch (err: unknown) {
       const message =
@@ -259,31 +256,33 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       data-testid="add-user-modal"
     >
       {/* Single search bar */}
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by username, nickname, or Steam ID..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="pl-9"
-          data-testid="add-user-search"
-        />
-        {/* Loading bar */}
-        {siteQuery.isFetching && (
-          <div className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden rounded-b">
-            <div
-              className="h-full w-1/3 bg-primary animate-[loading_1s_ease-in-out_infinite]"
-              style={{ animation: 'loading 1s ease-in-out infinite' }}
-            />
-            <style>{`
+      <div className="mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by username, nickname, or Steam ID..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="pl-9"
+            data-testid="add-user-search"
+          />
+          {/* Loading bar */}
+          {siteQuery.isFetching && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden rounded-b">
+              <div
+                className="h-full w-1/3 bg-primary animate-[loading_1s_ease-in-out_infinite]"
+                style={{ animation: 'loading 1s ease-in-out infinite' }}
+              />
+              <style>{`
               @keyframes loading {
                 0% { transform: translateX(-100%); }
                 100% { transform: translateX(400%); }
               }
             `}</style>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
         {query.length > 0 &&
           query.length < MIN_QUERY_LENGTH &&
           !manualQuery && (

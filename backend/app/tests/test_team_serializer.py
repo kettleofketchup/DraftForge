@@ -22,10 +22,10 @@ from app.models import (
     Tournament,
 )
 from app.serializers import TeamSerializer
-from app.services.team_leadership import teams_with_leadership_problems
-from app.services.team_signals import TeamRosterChange, team_roster_changed
-from app.tests.test_team_management import TeamManagementFixture
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
+from tournament.services.team_leadership import teams_with_leadership_problems
+from tournament.services.team_signals import TeamRosterChange, team_roster_changed
+from tournament.tests.test_team_management import TeamManagementFixture
 
 _discord_ids = itertools.count(571000)
 

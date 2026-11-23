@@ -38,10 +38,6 @@ from rest_framework.views import APIView
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser, Game
-from app.permissions_tournament import (
-    has_event_operator_access,
-    has_event_staff_access,
-)
 from discordbot.models import (
     DiscordEvent,
     DiscordEventDM,
@@ -75,6 +71,7 @@ from events.models import (
     ReadyCheckEntry,
     RepeaterSubscription,
 )
+from events.permissions import has_event_operator_access, has_event_staff_access
 from events.ready_check import (
     READY_CHECK_HELD_MESSAGE,
     ConfirmResult,

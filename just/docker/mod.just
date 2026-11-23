@@ -6,6 +6,8 @@ set positional-arguments
 root := clean(source_directory() / "../..")
 just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
 registry := "ghcr.io/kettleofketchup/draftforge"
+ci_registry := "ghcr.io/kettleofketchup/draftforge-ci"
+zot := env("DF_ZOT_REGISTRY", "zot.zot.svc.cluster.local:5000")
 
 mod backend 'backend.just'
 mod frontend 'frontend.just'
@@ -34,6 +36,17 @@ all-pull:
     fi
     {{just}} docker::parallel -- "${recipes[@]}"
 
+# Pull the three images the test stack runs (backend-dev, frontend-dev, nginx) by content hash; with DF_PW_CONTAINER=1 also the Playwright runner
+[group('docker')]
+test-pull:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    recipes=(docker::backend::pull-dev docker::frontend::pull-dev docker::nginx::pull)
+    if [[ "${DF_PW_CONTAINER-}" == 1 ]]; then
+        recipes+=(docker::frontend::pull-pw)
+    fi
+    {{just}} docker::parallel -- "${recipes[@]}"
+
 # Output content hashes for Docker images
 [group('docker')]
 hash service="all":
@@ -49,51 +62,91 @@ hash service="all":
         ./scripts/hash-docker-image.sh "$1"
     fi
 
-# docker buildx build one image: tags :latest and :<content-hash> (plus :<version> with --release); --push pushes, otherwise loads locally; --hash-only tags only :<content-hash> and leaves :buildcache alone (PR pushes)
+# docker buildx build one image for linux/amd64. --mode=trusted (default; hosted main/release, and the hosted prepare job with --hash-only): tags :latest and :<content-hash> (plus :<version> with --release); --push pushes and writes GHCR :buildcache, otherwise loads locally; --hash-only tags only :<content-hash> and leaves :buildcache alone; --no-cache neither reads nor writes :buildcache. --mode=pr --pr=<n> (prepare on the home runner): pushes only draftforge-ci/<img>:pr-<n>-<hash>, reads Zot's per-PR cache and GHCR :buildcache, writes only Zot's per-PR cache
 [private]
 buildx service image target dockerfile context *flags:
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{quote(root)}}
-    service=$1 image="{{registry}}/$2" target=$3 dockerfile=$4 context=$5
-    push=false release=false hash_only=false
+    service=$1 name=$2 image="{{registry}}/$2" target=$3 dockerfile=$4 context=$5
+    mode=trusted pr="" push=false release=false hash_only=false no_cache=false
+    usage="use --push, --release, --hash-only, --no-cache, --mode=trusted|pr, --pr=<n>"
     for flag in "${@:6}"; do
         case "$flag" in
             --push) push=true ;;
             --release) release=true ;;
             --hash-only) hash_only=true ;;
-            *) echo "docker: unknown option $flag (use --push, --release, --hash-only)" >&2; exit 2 ;;
+            --no-cache) no_cache=true ;;
+            --mode=*) mode=${flag#--mode=} ;;
+            --pr=*) pr=${flag#--pr=} ;;
+            *) echo "docker: unknown option $flag ($usage)" >&2; exit 2 ;;
         esac
     done
-    if [[ "$hash_only" == true && "$release" == true ]]; then
-        echo "docker: --hash-only and --release are exclusive" >&2
-        exit 2
-    fi
-    version=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml | head -n 1)
+    case "$mode" in
+        trusted)
+            if [[ -n "$pr" ]]; then
+                echo "docker: --pr needs --mode=pr" >&2
+                exit 2
+            fi
+            if [[ "$hash_only" == true && "$release" == true ]]; then
+                echo "docker: --hash-only and --release are exclusive" >&2
+                exit 2
+            fi
+            ;;
+        pr)
+            if [[ ! "$pr" =~ ^[0-9]+$ ]]; then
+                echo "docker: --mode=pr needs a numeric --pr=<n>" >&2
+                exit 2
+            fi
+            if [[ "$release" == true || "$no_cache" == true || "$hash_only" == true ]]; then
+                echo "docker: --mode=pr does not take --release, --no-cache or --hash-only" >&2
+                exit 2
+            fi
+            ;;
+        *) echo "docker: unknown mode $mode ($usage)" >&2; exit 2 ;;
+    esac
     hash=$(./scripts/hash-docker-image.sh "$service")
-    args=(--file "$dockerfile" --target "$target")
-    if [[ "$hash_only" == false ]]; then
-        args+=(--tag "$image:latest")
-    fi
-    if [[ "$release" == true ]]; then
-        args+=(--tag "$image:$version")
-    fi
-    args+=(--tag "$image:$hash")
-    # podman's buildx shim rejects BuildKit's type=registry cache syntax.
+    args=(--file "$dockerfile" --target "$target" --platform linux/amd64)
+    # podman's buildx shim rejects BuildKit's type=registry cache syntax and --provenance.
     registry_cache=true
     if docker --version 2>/dev/null | grep -qi podman; then
         registry_cache=false
     fi
-    if [[ "$registry_cache" == true ]]; then
-        args+=(--cache-from "type=registry,ref=$image:buildcache")
+    if [[ "$mode" == pr || "$registry_cache" == true ]]; then
+        args+=(--provenance=false)
     fi
-    if [[ "$push" == true ]]; then
-        if [[ "$registry_cache" == true && "$hash_only" == false ]]; then
-            args+=(--cache-to "type=registry,ref=$image:buildcache,mode=max")
-        fi
+    if [[ "$mode" == pr ]]; then
+        # Never a draftforge/ tag, never :latest, never a GHCR cache-to: a PR build
+        # must not be able to change what main, tags or releases read.
+        zot_cache="{{zot}}/buildcache/pr/draftforge/$name:pr-$pr"
+        args+=(--tag "{{ci_registry}}/$name:pr-$pr-$hash")
+        args+=(--cache-from "type=registry,ref=$zot_cache")
+        args+=(--cache-from "type=registry,ref=$image:buildcache")
+        args+=(--cache-to "type=registry,ref=$zot_cache,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true")
         args+=(--push)
     else
-        args+=(--load)
+        version=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml | head -n 1)
+        if [[ "$hash_only" == false ]]; then
+            args+=(--tag "$image:latest")
+        fi
+        if [[ "$release" == true ]]; then
+            args+=(--tag "$image:$version")
+        fi
+        args+=(--tag "$image:$hash")
+        # A release neither reads nor overwrites the :buildcache that main and previews read.
+        if [[ "$no_cache" == true ]]; then
+            args+=(--no-cache)
+        elif [[ "$registry_cache" == true ]]; then
+            args+=(--cache-from "type=registry,ref=$image:buildcache")
+        fi
+        if [[ "$push" == true ]]; then
+            if [[ "$registry_cache" == true && "$hash_only" == false && "$no_cache" == false ]]; then
+                args+=(--cache-to "type=registry,ref=$image:buildcache,mode=max")
+            fi
+            args+=(--push)
+        else
+            args+=(--load)
+        fi
     fi
     if [[ "$registry_cache" == true ]]; then
         meta=$(mktemp)
@@ -108,7 +161,7 @@ buildx service image target dockerfile context *flags:
             --label "$2 ($target)" --seconds "$((SECONDS - start))" || true
     fi
 
-# Pull <image>:<content-hash>, else :latest, and tag it :latest for compose
+# Pull <image>:<content-hash>, else :latest, and tag it :latest for compose. With DF_CI_PR=<n> (test jobs after prepare ran on the home runner) first try that PR's draftforge-ci/<image>:pr-<n>-<hash> and tag it as the draftforge/ hash too
 [private]
 pull-image service image:
     #!/usr/bin/env bash
@@ -116,6 +169,21 @@ pull-image service image:
     cd {{quote(root)}}
     image="{{registry}}/$2"
     hash=$(./scripts/hash-docker-image.sh "$1")
+    pr="${DF_CI_PR-}"
+    if [[ -n "$pr" && ! "$pr" =~ ^[0-9]+$ ]]; then
+        echo "  ✗ DF_CI_PR must be a PR number, got '$pr'" >&2
+        exit 2
+    fi
+    if [[ -n "$pr" ]]; then
+        ci="{{ci_registry}}/$2:pr-$pr-$hash"
+        if docker pull -q "$ci" >/dev/null 2>&1; then
+            echo "  ✓ Found PR $pr image $ci"
+            docker tag "$ci" "$image:$hash"
+            docker tag "$ci" "$image:latest"
+            exit 0
+        fi
+        echo "  No PR $pr image for $2, trying $image..."
+    fi
     echo "Pulling $image by hash (${hash:0:12}...)..."
     if docker pull -q "$image:$hash" >/dev/null 2>&1; then
         echo "  ✓ Found exact match for $image (hash: ${hash:0:12}...)"

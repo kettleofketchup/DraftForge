@@ -10,9 +10,9 @@ from django.http import HttpRequest
 from django.utils import timezone as tz
 from structlog.contextvars import get_contextvars
 
-from app.permissions_tournament import has_event_staff_access
 from events.constants import ActorRole, SignupAction, SignupMeans
 from events.models import Event, EventSignup, ReadyCheck, SignupLedgerEntry
+from events.permissions import has_event_staff_access
 from events.schemas import SignupSnapshot
 from telemetry.logging import get_logger
 

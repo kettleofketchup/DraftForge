@@ -1,6 +1,7 @@
 import { Users } from 'lucide-react';
 import type { TournamentType } from '~/components/tournament/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { useLeagueStore } from '~/store/leagueStore';
 import type { LeagueType } from './schemas';
 import { InfoTab } from './tabs/InfoTab';
@@ -33,11 +34,13 @@ export const LeagueTabs: React.FC<Props> = ({
     (state) => state.leagueUsersLeagueId,
   );
 
-  // Show "..." if loading or if we haven't fetched for this league yet
-  const userCountDisplay =
-    leagueUsersLoading || leagueUsersLeagueId !== league.pk
-      ? '...'
-      : leagueUserPks.length;
+  const userCountDisplay = memberCountDisplay({
+    entityId: league.pk,
+    loadedForId: leagueUsersLeagueId,
+    loading: leagueUsersLoading,
+    loadedCount: leagueUserPks.length,
+    fallbackCount: league.users_count,
+  });
 
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">

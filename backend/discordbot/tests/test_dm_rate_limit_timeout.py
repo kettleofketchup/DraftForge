@@ -2,7 +2,6 @@ from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase, override_settings
 
-from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
 from discordbot.utils import (
     DiscordRateLimitTimeout,
     sync_create_dm_channel,
@@ -12,6 +11,7 @@ from events.tournament_tasks import (
     send_tournament_draft_links,
     send_tournament_herodraft_links,
 )
+from tournament.schemas import TournamentParticipantSchema, TournamentTaskSchema
 
 RATE_LIMIT_TIMEOUT = DiscordRateLimitTimeout(
     "Discord rate limit: no token within 10.0s"

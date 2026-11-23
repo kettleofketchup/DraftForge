@@ -7,12 +7,12 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
-from app.services.team_leadership import teams_with_leadership_problems
 from league.models import League, LeagueUser
 from org import mmr as org_mmr
 from org.mmr import org_mmr_for
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
+from tournament.services.team_leadership import teams_with_leadership_problems
 
 
 class TournamentCSVImportTest(TestCase):
@@ -473,13 +473,10 @@ class TournamentCSVImportGameTest(TestCase):
 
     def test_tournament_import_writes_org_mmrs_in_one_batch(self) -> None:
         self.dl_tournament.users.add(self.user)
-        with (
-            patch(
-                "app.views.csv_import.bulk_set_org_mmrs",
-                wraps=org_mmr.bulk_set_org_mmrs,
-            ) as bulk,
-            patch("app.views.csv_import.set_org_mmr", create=True) as single,
-        ):
+        with patch(
+            "app.views.csv_import.bulk_set_org_mmrs",
+            wraps=org_mmr.bulk_set_org_mmrs,
+        ) as bulk:
             resp = self.post(
                 self.dl_tournament,
                 [
@@ -491,7 +488,6 @@ class TournamentCSVImportGameTest(TestCase):
 
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual(resp.data["summary"]["errors"], 0)
-        single.assert_not_called()
         bulk.assert_called_once()
         org_id, game, values = bulk.call_args.args
         new_user = CustomUser.objects.get(steamid=self.NEW_STEAM_ID)
