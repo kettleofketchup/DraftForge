@@ -16,7 +16,7 @@ from tests.populate.signup_history import (
     populate_signup_history_data,
     signup_history_test_data,
 )
-from tests.test_signup_history import signup_history_data
+from tests.test_signup_history import reset_signup_history, signup_history_data
 
 DATA_KEYS: set[str] = {
     "org_pk",
@@ -158,3 +158,38 @@ class SignupHistoryPopulateTest(TestCase):
         response = signup_history_data(request)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, self.data)
+
+    @patch("tests.test_signup_history.isTestEnvironment", return_value=True)
+    def test_reset_endpoint_restores_seeded_state(self, _env: Any) -> None:
+        event_pk = self.data["event_pk"]
+        seeded = dict(
+            EventSignup.objects.nocache()
+            .filter(event_id=event_pk)
+            .values_list("user_id", "status")
+        )
+        seeded_actions = sorted(e.action for e in self._entries())
+        EventSignup.objects.nocache().filter(event_id=event_pk).update(
+            status=SignupStatus.WAITLISTED
+        )
+
+        request = APIRequestFactory().post("/api/tests/signup-history/reset/")
+        response = reset_signup_history(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(response.data), DATA_KEYS)
+        self.data = response.data
+        self.assertEqual(
+            dict(
+                EventSignup.objects.nocache()
+                .filter(event_id=self.data["event_pk"])
+                .values_list("user_id", "status")
+            ),
+            seeded,
+        )
+        self.assertEqual(sorted(e.action for e in self._entries()), seeded_actions)
+        self.assertFalse(SignupLedgerEntry.objects.filter(event_id=event_pk).exists())
+
+    @patch("tests.test_signup_history.isTestEnvironment", return_value=False)
+    def test_reset_endpoint_outside_test_env(self, _env: Any) -> None:
+        request = APIRequestFactory().post("/api/tests/signup-history/reset/")
+        self.assertEqual(reset_signup_history(request).status_code, 404)

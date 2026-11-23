@@ -3,7 +3,8 @@
  * the per-row history Sheet, staff-only access and phone layout.
  *
  * Uses the isolated "Signup History Org" data (backend
- * tests.data.signup_history). Tests run in file order; the last one mutates
+ * tests.data.signup_history), rebuilt in beforeAll so reruns and retries
+ * start from the seeded ledger. Tests run in file order; the last one mutates
  * the fixture (staff moves a member to the waitlist).
  */
 
@@ -12,7 +13,7 @@ import { expect, test, visitAndWaitForHydration } from '../../fixtures';
 import { loginAsUser } from '../../fixtures/auth';
 import { API_URL } from '../../fixtures/base-url';
 import {
-  getSignupHistoryData,
+  resetSignupHistoryData,
   type SignupHistoryData,
 } from '../../fixtures/signup-history';
 
@@ -156,7 +157,7 @@ async function expectCellsFit(scope: Locator, where: string) {
 test.describe('Staff sign-up history (@cicd)', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
-    data = await getSignupHistoryData(context);
+    data = await resetSignupHistoryData(context);
     await loginAsUser(context, data.staff_pk);
     names = new Map();
     for (const entry of await historyPage(context, '?page_size=100')) {
@@ -424,7 +425,7 @@ test.describe('Staff sign-up history (@cicd)', () => {
       .find((s) => s?.status === 'rsvp');
     if (!target) {
       throw new Error(
-        'no RSVP fixture signup left to waitlist; run just db::populate::all',
+        'no RSVP fixture signup left to waitlist after the beforeAll reset',
       );
     }
     const before = (await historyPage(context, '?action=demoted')).length;

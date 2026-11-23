@@ -37,3 +37,18 @@ export async function getSignupHistoryData(
   }
   return resp.json() as Promise<SignupHistoryData>;
 }
+
+/** Rebuild the signup history event and its ledger; returns the new pks. */
+export async function resetSignupHistoryData(
+  context: BrowserContext,
+): Promise<SignupHistoryData> {
+  const resp = await context.request.post(
+    `${API_URL}/tests/signup-history/reset/`,
+  );
+  if (!resp.ok()) {
+    throw new Error(
+      `signup-history reset failed: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+  return resp.json() as Promise<SignupHistoryData>;
+}
