@@ -103,7 +103,7 @@ jobs:
           bootstrap: 'false'
 
       # Home runner only: the test DB populates on the host, and the runner image has no
-      # pipx for `just ci::venv`, so set up Python and Poetry only when it is missing.
+      # pipx for `just ci::venv`, so set up Python and Poetry only when the test DB is missing.
       - name: Check whether the test DB needs building
         id: home-probe
         if: runner.environment == 'self-hosted'
