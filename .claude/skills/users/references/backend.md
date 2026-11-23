@@ -28,7 +28,7 @@ are not searches and stay as they are.
 
 `app/views/admin_team.py: search_users`, behind `useUserSearch` on the frontend.
 
-- `q`: at least 3 characters, or 400. A numeric `q` also matches `steamid` and
+- `q`: at least 2 characters, or 400. A numeric `q` also matches `steamid` and
   `steam_account_id`.
 - `org_id`: also matches that org's server nicknames, ranks its members first and
   annotates `membership` (`org`, `league`, `other_org`, null) and
@@ -42,7 +42,7 @@ are not searches and stay as they are.
 `discordbot/services/users.py: search_discord_members`, behind
 `useDiscordMemberSearch`. Searches the org's Discord server members (cached in
 Redis for an hour; `refresh-discord-members` refetches) on `nick`,
-`global_name` and `username`, 3-character minimum, 20 results, each flagged
+`global_name` and `username`, 2-character minimum, 20 results, each flagged
 with `has_site_account` / `site_user_pk`.
 
 ## Keeping both sides in step

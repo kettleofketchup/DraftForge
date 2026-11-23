@@ -55,15 +55,15 @@ afterEach(() => {
 });
 
 describe('WalkInPicker', () => {
-  it('does not search under 3 characters', async () => {
+  it('does not search under 2 characters', async () => {
     vi.mocked(searchUsers).mockResolvedValue([]);
     renderPicker();
 
-    type('ab');
+    type('a');
     expect(
       await screen.findByTestId('attendance-walkin-hint'),
-    ).toHaveTextContent('Type at least 3 characters');
-    type(' ab ');
+    ).toHaveTextContent('Type at least 2 characters');
+    type(' a ');
     await new Promise((r) => setTimeout(r, 400));
     expect(searchUsers).not.toHaveBeenCalled();
     expect(screen.getByTestId('attendance-walkin-hint')).toBeInTheDocument();

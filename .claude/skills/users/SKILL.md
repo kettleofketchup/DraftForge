@@ -25,7 +25,7 @@ Rules:
   or rebuild the name chain by hand.
 - Never hand-roll a name match (`u.username.toLowerCase().includes(q)`); it misses
   Discord and server nicknames.
-- Server searches need 3+ characters; the hooks handle the minimum and debounce.
+- Server searches need 2+ characters; the hooks handle the minimum and debounce.
 
 The `draftforge/*` rules in `npm run lint:shadcn` enforce the frontend side (see
 the `shadcn-lint` skill); every error links to its section in

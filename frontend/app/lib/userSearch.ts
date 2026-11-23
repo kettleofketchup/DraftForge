@@ -10,7 +10,7 @@ import {
 } from '~/lib/userDisplayName';
 
 /** `/users/search/` and the Discord member search both reject shorter queries. */
-export const USER_SEARCH_MIN_LENGTH = 3;
+export const USER_SEARCH_MIN_LENGTH = 2;
 export const USER_SEARCH_DEBOUNCE_MS = 300;
 
 export type SearchableUser = UserRef | DiscordMemberLike;

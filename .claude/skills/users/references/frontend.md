@@ -140,7 +140,7 @@ page, as for `DisplayName`). Discord guild members match on `nick`,
 `global_name` and `username`. The backend uses the same set (`user_name_q`, see
 [backend.md](backend.md)) plus Discord username and Steam ID.
 
-The server rejects queries under `USER_SEARCH_MIN_LENGTH` (3); the hooks debounce
+The server rejects queries under `USER_SEARCH_MIN_LENGTH` (2); the hooks debounce
 by `USER_SEARCH_DEBOUNCE_MS` and stay idle below the minimum. Their `status` is
 `too-short`, `searching`, `error` or `done`.
 

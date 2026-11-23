@@ -76,7 +76,7 @@ export interface UseUserSearchOptions {
   enabled?: boolean;
 }
 
-/** Server-side site user search (`/users/search/`): debounced, 3-character minimum. */
+/** Server-side site user search (`/users/search/`): debounced, with the shared minimum length. */
 export function useUserSearch(
   query: string,
   { orgId, leagueId, enabled = true }: UseUserSearchOptions = {},

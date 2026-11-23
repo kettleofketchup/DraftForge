@@ -63,7 +63,7 @@ describe('UserPicker', () => {
   it('renders remote search states', () => {
     const { unmount } = render(
       <UserPicker
-        query="ab"
+        query="a"
         onQueryChange={() => {}}
         results={[]}
         status="too-short"
@@ -72,7 +72,7 @@ describe('UserPicker', () => {
       />,
     );
     expect(screen.getByTestId('picker-hint')).toHaveTextContent(
-      'at least 3 characters',
+      'at least 2 characters',
     );
     unmount();
     renderPicker({ results: [], status: 'error', errorMessage: 'Nope' });
