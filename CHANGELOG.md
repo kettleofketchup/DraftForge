@@ -14,6 +14,51 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.19.0] - 2026-11-22
+
+### Upgrading
+
+Migration `org.0020_leadership` adds a `track` column to the contribution ledger (`org_contributionentry`) and creates the leadership tables. On SQLite adding the column rebuilds the whole ledger table under a write lock; it is quick at current row counts, but deploy with `just dev::release` in a quiet window. Existing rows read `track="contribution"`, so no points change.
+
+The new Leadership feature is locked for every organization until a site admin unlocks it. While it is locked, completing an event records nothing for leadership. Each organization starts with the default settings, the default point values and the four default traits (Communication, Drafting, Composure, Sportsmanship); nothing needs to be configured before unlocking.
+
+### Added
+
+- Organization Leadership (locked feature): captains earn points for captaining, placing and finishing the draft, and teammates rate them 1 to 5 on per-org traits during a review window after the event. Ratings stay hidden until the window closes with enough reviews, raters can see their own past reviews, and org admins can moderate reviews of anyone but themselves. Leadership boards (overall rating, per-trait rating and points) are served by the standing endpoints. Backend and API only; the screens ship in a later release.
+
+### Changed
+
+- `just dev::release` now pulls the release images first and stops if the pull fails,
+  before it touches the database or the running stack. It then runs
+  `makemigrations --check` and stops, with the site still up, if the models have changes
+  with no migration. Only then does it stop the release stack, run migrations and start
+  the new version, so a release that drops a column no longer
+  needs a manual stop-first sequence. The site is down for the migration and container
+  start (seconds). It pulls the exact `:VERSION` images the release stack runs instead of
+  calling `docker::release::pull`.
+- CI: a `prepare` job in the Playwright workflow builds each missing stack image and the
+  test DB once and pushes it under its content-hash tag only, so the test jobs pull
+  instead of each rebuilding. PR builds never push `:latest` or the registry build cache
+  (`docker::buildx --hash-only`, `docker::db::push --hash-only`).
+- The "Confirm attendance via Discord" event setting is now "Post attendance reminder in Discord", and its description says what it does: post a reminder in the announcement channel before the event. It never tracked replies; use the ready check to require confirmation.
+- The ready check settings now say who gets each message: members by DM for the Ready
+  request, nudge, sign-up and drop notices, and org or league staff, the event host and
+  helpers through ops notices for the per-member chase and held or non-binding checks.
+  Both ready check blocks also say they are not active yet.
+
+### Fixed
+
+- The event signup form scrolls again when it is taller than the window, so the rank
+  fields below the fold can be filled in and Sign Up enables (#799). Other scrollable
+  panels built on the same scroll area now size the same way.
+- An event's Tournament Info card shows "No limit × 5" instead of "null × 5" when the
+  team count is unlimited.
+- The event picker on manual contribution awards shows each event's date, so
+  repeating events with the same name can be told apart.
+- Captain's Mode Draft Time accepts only positive whole seconds: typing `0` now sets 1
+  second, like any value below 1, instead of jumping to the 10-second default. An empty
+  field still falls back to 10.
+
 ## [0.18.0] - 2026-11-22
 
 ### Upgrading

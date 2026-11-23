@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { ShieldCheck } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBlocker } from 'react-router';
 import { AdminTeamSection } from '~/components/admin-team';
 import { useOrgEventDefaultsSections } from '~/components/events/useOrgEventDefaultsSections';
@@ -93,6 +93,20 @@ export function OrgSettingsDialog({
   );
   const blocked = blocker.state === 'blocked';
 
+  const adminTeam = useMemo(
+    () => (
+      <AdminTeamSection
+        organization={organization}
+        onUpdate={() =>
+          queryClient.invalidateQueries({
+            queryKey: organizationQueryKey(pk ?? 0),
+          })
+        }
+      />
+    ),
+    [organization, queryClient, pk],
+  );
+
   if (pk == null || !canOpen) return null;
 
   const sections: SettingsSection[] = [
@@ -104,16 +118,7 @@ export function OrgSettingsDialog({
       keywords: ['owner', 'admin', 'staff', 'promoter', 'roles'],
       group: 'Organization',
       lazy: true,
-      content: (
-        <AdminTeamSection
-          organization={organization}
-          onUpdate={() =>
-            queryClient.invalidateQueries({
-              queryKey: organizationQueryKey(pk),
-            })
-          }
-        />
-      ),
+      content: adminTeam,
     },
     ...registry
       .filter((r) => visibleSectionIds.includes(r.section.id))

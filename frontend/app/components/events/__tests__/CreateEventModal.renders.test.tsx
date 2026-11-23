@@ -120,6 +120,33 @@ describe('CreateEventModal renders', () => {
     expect(renders).toEqual({});
   });
 
+  it('after a failed submit, edits still leave the other tabs alone', async () => {
+    const name = await renderReady();
+    fireEvent.change(name, { target: { value: '' } });
+    submit();
+    await waitFor(() =>
+      expect(screen.getByTestId('event-modal-tab-event')).toHaveAttribute(
+        'data-invalid',
+      ),
+    );
+    for (const key of Object.keys(renders)) delete renders[key];
+
+    fireEvent.change(screen.getByTestId('event-description-input'), {
+      target: { value: 'a' },
+    });
+    fireEvent.click(field('require_steam_id'));
+    fireEvent.click(field('require_steam_id'));
+    fireEvent.click(screen.getByTestId(READY_CHECK_TEST_IDS.toggle));
+    fireEvent.change(name, { target: { value: 'N' } });
+    await waitFor(() =>
+      expect(screen.getByTestId('event-modal-tab-event')).not.toHaveAttribute(
+        'data-invalid',
+      ),
+    );
+
+    expect(renders).toEqual({});
+  });
+
   it('keeps values across tab switches and changes nothing else on submit', async () => {
     const untouched = await submittedBody(async () => {
       fireEvent.change(await renderReady(), { target: { value: 'Night 5' } });

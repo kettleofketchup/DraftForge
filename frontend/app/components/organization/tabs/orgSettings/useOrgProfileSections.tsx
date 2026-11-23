@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { Building2, ScrollText, Users, type LucideIcon } from 'lucide-react';
-import { useEffect, type ReactNode, type RefObject } from 'react';
-import { useForm, type FieldErrors } from 'react-hook-form';
+import { useEffect, useMemo, type ReactNode, type RefObject } from 'react';
+import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 import type { z } from 'zod';
 
@@ -148,13 +148,41 @@ export function useOrgProfileSections(
       submitForm(form, onSubmit, onInvalid(opts?.select !== false)),
     discard: () => form.reset(valuesFrom(organization)),
   };
+  // Memoized: dirty and error changes re-render the dialog, not these fields.
+  const content = useMemo(() => profileContent(form), [form]);
+
+  const errorKeys = Object.keys(form.formState.errors).filter(
+    (k) => k !== 'root',
+  );
+  const sections = (Object.keys(content) as OrgProfileSection[]).map(
+    (value) => ({
+      value,
+      ...META[value],
+      group: 'Organization',
+      content: content[value],
+      invalid: errorKeys.some((k) => sectionFor(k) === value),
+    }),
+  );
+
+  return { sections, unit };
+}
+
+type ProfileForm = UseFormReturn<
+  z.input<typeof EditOrganizationSchema>,
+  unknown,
+  EditOrganizationInput
+>;
+
+function profileContent(
+  form: ProfileForm,
+): Record<OrgProfileSection, ReactNode> {
   const wrap = (children: ReactNode) => (
     <Form {...form}>
       <div className="flex flex-col gap-4">{children}</div>
     </Form>
   );
 
-  const content: Record<OrgProfileSection, ReactNode> = {
+  return {
     general: wrap(
       <>
         <FormField
@@ -345,19 +373,4 @@ export function useOrgProfileSections(
       </>,
     ),
   };
-
-  const errorKeys = Object.keys(form.formState.errors).filter(
-    (k) => k !== 'root',
-  );
-  const sections = (Object.keys(content) as OrgProfileSection[]).map(
-    (value) => ({
-      value,
-      ...META[value],
-      group: 'Organization',
-      content: content[value],
-      invalid: errorKeys.some((k) => sectionFor(k) === value),
-    }),
-  );
-
-  return { sections, unit };
 }
