@@ -350,6 +350,17 @@ _TOURNAMENT_SPLIT_DEFS = {
         "parse_date_played",
         "resolve_user",
     ),
+    "app.tests.test_prod_import_commands": (
+        "ImportProdTournamentCommandTest",
+        "SyncProdTournamentsCommandTest",
+        "mmr_rows",
+        "tournament_payload",
+    ),
+    "app.tests.test_schema_drift": (
+        "GameWithoutHeroDraftSchemaDriftTest",
+        "TournamentParticipantSchemaDriftTest",
+        "TournamentTaskSchemaDriftTest",
+    ),
 }
 
 _TOURNAMENT_RETIRED_DEFS = {
