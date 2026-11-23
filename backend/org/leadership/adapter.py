@@ -68,6 +68,7 @@ class LeadershipTrack(TrackBase):
     key = "leadership"
     label = "Leadership"
     feature = FeatureKey.LEADERSHIP
+    moderated = True
     metrics = (
         Metric(
             key="rating", label="Rating", format="score5", periodic=False, default=True

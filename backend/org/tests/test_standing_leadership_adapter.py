@@ -300,6 +300,34 @@ class EndpointTest(LeadershipTestCase):
         self.assertEqual(metrics[:2], ["rating", "points"])
         self.assertIn("rating.communication", metrics)
 
+    def test_track_info_can_moderate_for_org_staff(self) -> None:
+        staff = self.make_user("ld_org_staff")
+        self.org.staff.add(staff)
+        self.admit(staff)
+        expected = {
+            "admin": (self.admin, True, True),
+            "staff": (staff, True, False),
+            "member": (self.cap_a, False, False),
+        }
+        for role, (user, can_moderate, can_manage) in expected.items():
+            with self.subTest(role=role):
+                (info,) = standing.tracks_for(
+                    self.org.pk,
+                    viewer=user,
+                    features={"leadership"},
+                    roles=standing.viewer_roles(self.org, user),
+                )
+                self.assertEqual(info.key, "leadership")
+                self.assertIs(info.can_moderate, can_moderate)
+                self.assertIs(info.can_manage, can_manage)
+                track = (
+                    self.client_for(user)
+                    .get(f"/api/organizations/{self.org.pk}/standing/tracks/")
+                    .json()["tracks"][0]
+                )
+                self.assertIs(track["can_moderate"], can_moderate)
+                self.assertIs(track["can_manage"], can_manage)
+
     def test_anonymous_denied_on_private_board(self) -> None:
         self.set_public(False)
         status, body = self.board(APIClient())
