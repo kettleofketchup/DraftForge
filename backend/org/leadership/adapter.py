@@ -28,7 +28,7 @@ from org.leadership.settings import get_leadership_settings
 from org.leadership.summary import member_payload
 from org.leadership.traits import effective_traits
 from org.models import Organization, OrgUser
-from org.models_leadership import CaptainReview, EventCaptain
+from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
 from org.standing import ledger
 from org.standing.base import TrackBase
 from org.standing.periods import Period
@@ -218,7 +218,9 @@ class LeadershipTrack(TrackBase):
         public = get_leadership_settings(org_user.organization_id).leaderboard_public
         if not (own or roles.is_staff or (public and roles.can_view_members)):
             return None
-        payload = member_payload(org_user, now=now, detail=False, staff=False)
+        payload = member_payload(
+            org_user, now=now, detail=False, staff=False, viewer_user_id=viewer.pk
+        )
         payload.pop("member", None)
         return payload
 
@@ -237,12 +239,17 @@ class LeadershipTrack(TrackBase):
             viewer.pk if viewer is not None and viewer.is_authenticated else None
         )
         total: int | None = None
+        settings = get_leadership_settings(org)
         if metric.key == "points":
-            rows, own_row = self._points_rows(org, period, own_user_id, now=now)
+            rows, own_row = self._points_rows(
+                org, period, own_user_id, now=now, settings=settings
+            )
             total = sum(int(r.value or 0) for r in rows)
             label = period.label
         else:
-            rows, own_row = self._rating_rows(org, metric, own_user_id, now=now)
+            rows, own_row = self._rating_rows(
+                org, metric, own_user_id, now=now, settings=settings
+            )
             label = "current"
         if own_row is None and access.can_view_own and own_user_id is not None:
             own_row = self._unrated_row(org, own_user_id)
@@ -284,8 +291,9 @@ class LeadershipTrack(TrackBase):
         own_user_id: int | None,
         *,
         now: datetime,
+        settings: OrgLeadershipSettings,
     ) -> tuple[list[LeaderboardRow], LeaderboardRow | None]:
-        sums = list(points_board(org.pk, period, now=now))
+        sums = list(points_board(org.pk, period, now=now, settings=settings))
         members = self._members(org, [s["org_user"] for s in sums])
         rows = [
             LeaderboardRow(
@@ -310,8 +318,8 @@ class LeadershipTrack(TrackBase):
         own_user_id: int | None,
         *,
         now: datetime,
+        settings: OrgLeadershipSettings,
     ) -> tuple[list[LeaderboardRow], LeaderboardRow | None]:
-        settings = get_leadership_settings(org)
         traits = effective_traits(org)
         ratings = rating_board(org.pk, now=now, settings=settings, traits=traits)
         trait_pk = None

@@ -340,7 +340,8 @@ def leadership_member(request: Request, org_id: int, org_user_id: int) -> Respon
         org_user,
         now=timezone.now(),
         detail=own or staff,
-        staff=staff and not own,
+        staff=staff,
+        viewer_user_id=user.pk,
         period_points=True,
     )
     return Response(payload)

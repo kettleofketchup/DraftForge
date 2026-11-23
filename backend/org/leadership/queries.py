@@ -51,15 +51,13 @@ class EventAggregate(TypedDict):
     captain_rating_points: int | None
 
 
-def released_points_q(org_id: int, *, now: datetime) -> Q:
-    closed = EventCaptain.objects.nocache().filter(
-        organization_id=org_id,
-        event=OuterRef("event"),
-        captain=OuterRef("org_user"),
-        voided_at__isnull=True,
-        window_closes_at__lte=now,
+def released_points_q(
+    org_id: int, *, now: datetime, settings: OrgLeadershipSettings
+) -> Q:
+    released = released_snapshots(org_id, now=now, settings=settings).filter(
+        event=OuterRef("event"), captain=OuterRef("org_user")
     )
-    return ~Q(kind=LeadershipKind.CAPTAIN_RATING.value) | Q(Exists(closed))
+    return ~Q(kind=LeadershipKind.CAPTAIN_RATING.value) | Q(Exists(released))
 
 
 def rating_board(
@@ -115,25 +113,38 @@ def rating_board(
 
 
 def points_board(
-    org_id: int, period: Period, *, now: datetime, include_unreleased: bool = False
+    org_id: int,
+    period: Period,
+    *,
+    now: datetime,
+    settings: OrgLeadershipSettings,
+    include_unreleased: bool = False,
 ) -> QuerySet[ContributionEntry]:
     return ledger.sum_by_member(
         org_id,
         track="leadership",
         period=period,
-        where=None if include_unreleased else released_points_q(org_id, now=now),
+        where=(
+            None
+            if include_unreleased
+            else released_points_q(org_id, now=now, settings=settings)
+        ),
     )
 
 
 def member_points(
-    org_user: OrgUser, *, now: datetime, include_unreleased: bool
+    org_user: OrgUser,
+    *,
+    now: datetime,
+    settings: OrgLeadershipSettings,
+    include_unreleased: bool,
 ) -> dict[str, int]:
     org_id = org_user.organization_id
     tz = resolve_org_tz(org_user.organization)
     local_now = now.astimezone(tz)
     where = Q(org_user=org_user)
     if not include_unreleased:
-        where &= released_points_q(org_id, now=now)
+        where &= released_points_q(org_id, now=now, settings=settings)
     all_time = Period(start=None, end=None, label=ALL_TIME)
     this_month = month_period(tz, local_now.year, local_now.month)
     return {

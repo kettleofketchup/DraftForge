@@ -108,7 +108,13 @@ class UserDeleteTest(LeadershipTestCase):
         captain = self.ou(self.cap_a)
 
         def view() -> dict:
-            return member_payload(captain, now=tz.now(), detail=True, staff=False)
+            return member_payload(
+                captain,
+                now=tz.now(),
+                detail=True,
+                staff=False,
+                viewer_user_id=captain.user_id,
+            )
 
         before = view()
         self.assertEqual(before["events"][0]["reviews"], 3)

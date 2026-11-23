@@ -20,6 +20,7 @@ from org.contributions.services import award_entry
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.leadership.adapter import LEADERSHIP
+from org.leadership.kinds import LeadershipKind
 from org.models import (
     AttendanceOutcome,
     CaptainReview,
@@ -31,6 +32,7 @@ from org.models import (
 )
 from org.standing import api as standing
 from org.standing.periods import parse_period
+from org.standing.types import TrackAccess
 from org.tests.leadership_base import LeadershipTestCase
 
 CLOSE_KEYS = ("captains_snapshotted", "leadership_awarded")
@@ -387,6 +389,72 @@ class EndpointTest(LeadershipTestCase):
             )
 
 
+class ReleaseGateAdapterTest(LeadershipTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.close()
+        for mate in self.mates_a:
+            self.review(mate, self.cap_a, 5)
+        self.expire_window()
+        OrgLeadershipSettings.objects.update_or_create(
+            organization=self.org,
+            defaults={
+                "leaderboard_public": True,
+                "ranked_min_reviews": 2,
+                "require_staff_release": True,
+            },
+        )
+        self.rating_points = (
+            ContributionEntry.objects.nocache()
+            .get(
+                org_user__user=self.cap_a,
+                kind=LeadershipKind.CAPTAIN_RATING.value,
+                track="leadership",
+            )
+            .points
+        )
+
+    def release(self) -> None:
+        EventCaptain.objects.filter(captain__user=self.cap_a).update(
+            released_at=tz.now()
+        )
+
+    def own_row(self, metric: str) -> object:
+        board = standing.leaderboard(
+            self.org,
+            "leadership",
+            metric,
+            parse_period(self.org, None),
+            viewer=self.cap_a,
+        )
+        self.assertIsNotNone(board.own_row)
+        return board.own_row
+
+    def test_leaderboard_own_row_hidden_until_release(self) -> None:
+        self.assertEqual(self.own_row("points").value, 5 + 10)
+        rating = self.own_row("rating")
+        self.assertIsNone(rating.value)
+        self.assertEqual(rating.sample, 0)
+        self.release()
+        self.assertEqual(self.own_row("points").value, 5 + 10 + self.rating_points)
+        self.assertIsNotNone(self.own_row("rating").value)
+
+    def test_member_standing_never_unreleased(self) -> None:
+        captain = self.ou(self.cap_a)
+        for viewer in (self.cap_a, self.admin, self.mates_b[0]):
+            with self.subTest(viewer=viewer.username):
+                payload = LEADERSHIP.member_standing(
+                    captain,
+                    viewer=viewer,
+                    roles=standing.viewer_roles(self.org, viewer),
+                    now=tz.now(),
+                )
+                self.assertIsNotNone(payload)
+                self.assertIsNone(payload["rating"])
+                self.assertEqual(payload["reviews"], 0)
+                self.assertEqual(payload["points"], 5 + 10)
+
+
 @override_settings(CACHEOPS_ENABLED=False)
 class LeaderboardBudgetTest(LeadershipTestCase):
     def setUp(self) -> None:
@@ -420,5 +488,28 @@ class LeaderboardBudgetTest(LeadershipTestCase):
     def test_leaderboard_budget(self) -> None:
         self.add_captains(3)
         small = {m: self.measure(m) for m in ("rating", "points")}
+        self.assertEqual(small, {"rating": 9, "points": 8})
         self.add_captains(9)
         self.assertEqual({m: self.measure(m) for m in ("rating", "points")}, small)
+
+    def test_points_leaderboard_settings_read_once(self) -> None:
+        self.add_captains(3)
+        period = parse_period(self.org, None)
+        access = TrackAccess(can_view_rows=True, can_view_own=True)
+        for metric in LEADERSHIP.metrics:
+            with self.subTest(metric=metric.key):
+                with CaptureQueriesContext(connection) as ctx:
+                    LEADERSHIP.leaderboard(
+                        self.org,
+                        metric,
+                        period,
+                        viewer=self.admin,
+                        now=tz.now(),
+                        access=access,
+                    )
+                reads = [
+                    q
+                    for q in ctx.captured_queries
+                    if '"org_orgleadershipsettings"' in q["sql"]
+                ]
+                self.assertEqual(len(reads), 1)
