@@ -56,10 +56,9 @@ export function DiscordConnectionCard({
         data-testid="org-discord-connected"
       >
         <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
-        Connected to{' '}
-        <strong className="truncate">
-          {status.data?.guild_name ?? serverId}
-        </strong>
+        <span className="min-w-0 truncate">
+          Connected to <strong>{status.data?.guild_name ?? serverId}</strong>
+        </span>
       </span>
     );
   } else if (serverId) {
@@ -94,8 +93,9 @@ export function DiscordConnectionCard({
       </div>
       <div className="text-sm">{summary}</div>
       <p className="text-sm text-muted-foreground">
-        Adds the DraftForge bot to your server and links it here, which turns on
-        member search, event posts and signups.
+        {hasBot
+          ? 'Member search, event posts and signups use this server. Switch to add the bot to a different one.'
+          : 'Adds the DraftForge bot to your server and links it here, which turns on member search, event posts and signups.'}
       </p>
       <div className="flex flex-wrap items-center gap-3">
         {hasBot ? (
