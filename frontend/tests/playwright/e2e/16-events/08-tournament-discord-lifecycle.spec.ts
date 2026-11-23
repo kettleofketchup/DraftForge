@@ -474,8 +474,10 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     await expect(
       forceDialog
         .getByTestId('draft-force-reset-usage-row')
-        .getByText('1 game', { exact: true }),
-    ).toBeVisible();
+        .first()
+        .locator('span')
+        .first(),
+    ).toHaveText('1 game');
     const forced = page.waitForRequest(
       (r) => isInitDraft(r.url()) && r.postDataJSON()?.force === true,
     );
