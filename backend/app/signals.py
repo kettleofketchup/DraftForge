@@ -4,7 +4,7 @@ Django signals for Team and Tournament member management.
 Handles:
 - Captain/deputy succession when members are removed
 - Empty teams: kept when referenced, deleted otherwise, both audited
-- Cascade removal from tournament.users to team.members
+- Cascade removal from tournament.users to the members of teams still playing
 - Auto-add tournament users to organization and league
 - Mark a tournament past when its bracket final is decided (issue #419)
 """
@@ -213,26 +213,20 @@ def handle_tournament_user_removal(
     pk_set: set[int] | None,
     **kwargs: object,
 ) -> None:
-    """Cascade removal from tournament.users to team.members."""
-    # Handle clear all users
+    """Cascade removal from tournament.users into the rosters of teams still playing."""
+    if action not in ("post_clear", "post_remove"):
+        return
+
+    live_teams = instance.teams.nocache().filter(placement__isnull=True).order_by("pk")
     if action == "post_clear":
-        # Clear all teams' members - this triggers team deletion via team signal
-        for team in instance.teams.all():
+        for team in live_teams:
             team.members.clear()
         return
 
-    if action != "post_remove":
-        return
-
-    tournament = instance
-    removed_pks = pk_set
-
-    # Remove users from all teams in this tournament
-    for team in tournament.teams.all():
-        members_to_remove = team.members.filter(pk__in=removed_pks)
+    for team in live_teams:
+        members_to_remove = team.members.filter(pk__in=pk_set or ())
         if not members_to_remove.exists():
             continue
-        # This will trigger handle_team_member_removal signal
         team.members.remove(*members_to_remove)
 
 
