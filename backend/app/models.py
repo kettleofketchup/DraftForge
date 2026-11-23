@@ -542,4 +542,6 @@ class ProfileClaimRequest(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"{self.claimer.username} -> {self.target_user.nickname or self.target_user.steamid} ({self.status})"
+        target = self.target_user
+        label = (target.nickname or target.steamid) if target else "(deleted profile)"
+        return f"{self.claimer.username} -> {label} ({self.status})"

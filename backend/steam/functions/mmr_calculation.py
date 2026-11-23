@@ -86,6 +86,8 @@ def update_user_league_mmr(
     """
     Set user's league_mmr to base mmr + best league adjustment.
 
+    Without a base MMR (no organization, or no org Dota MMR) nothing is written.
+
     Args:
         user: CustomUser instance
         organization: Optional Organization to get base MMR from OrgUser
@@ -96,17 +98,6 @@ def update_user_league_mmr(
     )
 
     if not base_mmr:
-        # No base MMR - update LeagueUser if we have league context
-        if league:
-            try:
-                league_user = LeagueUser.objects.get(user=user, league=league)
-                league_user.mmr = 0
-                league_user.save(update_fields=["mmr"])
-            except LeagueUser.DoesNotExist:
-                pass
-        else:
-            # No league context, nothing to update
-            pass
         return
 
     best_adjustment = user.league_stats.aggregate(Max("mmr_adjustment"))[
@@ -118,7 +109,6 @@ def update_user_league_mmr(
 
     calculated_league_mmr = base_mmr + best_adjustment
 
-    # Update LeagueUser if league context provided
     if league:
         try:
             league_user = LeagueUser.objects.get(user=user, league=league)

@@ -49,7 +49,7 @@ migrate-env stack:
 
 [private]
 touch-dbs:
-    cd {{quote(db_dir)}} && touch -a test.db.sqlite3 dev.db.sqlite3 prod.db.sqlite3
+    cd {{quote(db_dir)}} && mkdir -p data && touch -a test.db.sqlite3 dev.db.sqlite3 data/prod.db.sqlite3
 
 [group('db')]
 reset-test:
