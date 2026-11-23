@@ -7,6 +7,7 @@ export {
   eventSignupSchema,
   eventTeamSchema,
   type CreateEventInput,
+  type EventListItem,
   type EventSignupType,
   type EventTeamType,
   type EventType,

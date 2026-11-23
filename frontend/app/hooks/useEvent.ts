@@ -46,7 +46,11 @@ import {
   updateEventRepeater as updateEventRepeaterAPI,
   updateOrgEventDefaults,
 } from '~/components/api/api';
-import type { EventSignupType, EventType } from '~/components/events/schemas';
+import type {
+  EventListItem,
+  EventSignupType,
+  EventType,
+} from '~/components/events/schemas';
 import type {
   PendingSignupAction,
   SignupAction,
@@ -89,7 +93,7 @@ export function useEvents(
   },
   options?: { enabled?: boolean },
 ) {
-  return useQuery<EventType[]>({
+  return useQuery<EventListItem[]>({
     queryKey: ['events', params],
     queryFn: () => getEvents(params),
     enabled: options?.enabled,

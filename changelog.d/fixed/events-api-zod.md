@@ -1,0 +1,1 @@
+- Event pages and event lists now report an error when the server sends event data in an unexpected shape, instead of quietly showing blank or wrong details.
