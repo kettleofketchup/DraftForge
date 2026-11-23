@@ -2,6 +2,7 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Create your views here.
@@ -15,21 +16,6 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
-# This allows a user to update only for certain fields
-class ProfileUserSerializer(serializers.ModelSerializer):
-    positions = PositionsSerializer(many=False, read_only=True)
-    nickname = serializers.CharField(required=False, allow_blank=True, max_length=100)
-    steam_account_id = serializers.IntegerField(required=False, allow_null=True)
-
-    class Meta:
-        model = CustomUser
-        fields = (
-            "nickname",
-            "positions",
-            "steam_account_id",
-        )
-
-
 class ProfileUpdateSerializer(serializers.Serializer):
     positions = PositionsSerializer(many=False, required=False)
     nickname = serializers.CharField(required=False, allow_blank=True, max_length=100)
@@ -38,7 +24,7 @@ class ProfileUpdateSerializer(serializers.Serializer):
 
 @api_view(["post"])
 @permission_classes([IsAuthenticated])
-def profile_update(request):
+def profile_update(request: Request) -> Response:
     user = request.user
     if user.is_anonymous or not user.is_authenticated:
         return Response({"error": "Unauthorized"}, status=401)

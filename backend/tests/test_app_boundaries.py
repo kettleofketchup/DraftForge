@@ -405,6 +405,31 @@ _TOURNAMENT_SERIALIZER_NAMES = (
     "LeagueMinimalSerializer",
 )
 
+# names split out of app modules that stay behind
+_TOURNAMENT_SPLIT_DEFS = {
+    "app.management.prod_payload": (
+        "TeamLookup",
+        "TeamRef",
+        "UserRef",
+        "index_users",
+        "parse_date_played",
+        "resolve_user",
+    ),
+    "app.tests.test_prod_import_commands": (
+        "ImportProdTournamentCommandTest",
+        "SyncProdTournamentsCommandTest",
+        "mmr_rows",
+        "tournament_payload",
+    ),
+    "app.tests.test_import_order": ("TOURNAMENT_SERIALIZER_MODULES",),
+    "app.tests.test_internal_endpoints": ("TournamentParticipantsEndpointTest",),
+    "app.tests.test_schema_drift": (
+        "GameWithoutHeroDraftSchemaDriftTest",
+        "TournamentParticipantSchemaDriftTest",
+        "TournamentTaskSchemaDriftTest",
+    ),
+}
+
 _TOURNAMENT_RETIRED_DEFS = {
     "app.services.team_management": (
         "TeamChange",
@@ -811,6 +836,11 @@ TOURNAMENT = MovedSlice(
                     *_TOURNAMENT_RETIRED_DEFS["app.views.bracket"],
                 )
             ),
+            *(
+                (module, name)
+                for module, names in _TOURNAMENT_SPLIT_DEFS.items()
+                for name in names
+            ),
         }
     ),
     retired_modules=frozenset(
@@ -934,12 +964,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         "app/exception_handler.py": BackEdge(
             frozenset({"TeamManagementError"}),
             "global DRF handler maps TeamManagementError",
-        ),
-        "app/management/prod_payload.py": BackEdge(
-            frozenset({"Team"}),
-            "TYPE_CHECKING-only annotation on TeamLookup, shared prod payload "
-            "readers used by the tournament prod sync commands",
-            type_only=frozenset({"Team"}),
         ),
         "app/views_main.py": BackEdge(
             frozenset({"Game", "Tournament"}),

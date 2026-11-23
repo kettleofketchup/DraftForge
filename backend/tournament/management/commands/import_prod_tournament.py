@@ -4,15 +4,7 @@ import requests
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db import transaction
 
-from app.management.prod_payload import (
-    TeamLookup,
-    UserRef,
-    create_positions,
-    index_users,
-    parse_date_played,
-    resolve_user,
-    steam_account_id,
-)
+from app.management.prod_payload import create_positions, steam_account_id
 from app.models import CustomUser
 from common.game import GameType
 from draft.models import Draft, DraftOptions, DraftRound
@@ -20,6 +12,13 @@ from league.models import League
 from org.mmr import OrgMmrError, bulk_set_org_mmrs, resolve_game_type, validate_org_mmr
 from org.models import Organization, OrgUser
 from telemetry.logging import get_logger
+from tournament.management.prod_payload import (
+    TeamLookup,
+    UserRef,
+    index_users,
+    parse_date_played,
+    resolve_user,
+)
 from tournament.models import Game, Team, Tournament
 
 log = get_logger(__name__)
