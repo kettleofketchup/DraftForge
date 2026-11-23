@@ -7,6 +7,8 @@ export interface LeadershipAccess {
   /** The viewer is an org member, so the rater endpoints answer. */
   member: boolean;
   canManage: boolean;
+  /** Org staff or site staff: event moderation and release. */
+  canModerate: boolean;
   /** Members can see the board; always true for org staff. */
   boardOpen: boolean;
 }
@@ -24,6 +26,7 @@ export function leadershipAccess(access: OrgFeatureAccess): LeadershipAccess {
     unlocked: track !== undefined,
     member: track?.can_view_own === true,
     canManage: track?.can_manage === true,
+    canModerate: track?.can_moderate === true,
     boardOpen: track?.board_open === true,
   };
 }

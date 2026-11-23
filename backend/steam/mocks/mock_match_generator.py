@@ -13,7 +13,8 @@ from datetime import datetime, time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from app.models import CustomUser, Team, Tournament
+    from app.models import CustomUser
+    from tournament.models import Team, Tournament
 
 # Hero IDs (popular competitive heroes)
 HERO_IDS = [

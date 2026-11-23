@@ -10,6 +10,7 @@ import type {
   TournamentBucket,
   TournamentType,
 } from '~/components/tournament/types';
+import { canEditTournament } from '~/lib/tournamentPermissions';
 import { cn } from '~/lib/utils';
 
 import { motion } from 'framer-motion';
@@ -404,7 +405,15 @@ export const TournamentCard: React.FC<Props> = React.memo(
     };
 
     const ActionButtons = () => {
-      const showEditBtn = currentUser?.is_staff;
+      const league =
+        typeof tournament.league === 'object' ? tournament.league : null;
+      const showEditBtn = canEditTournament(currentUser, {
+        leaguePk: league?.pk ?? tournament.league_pk,
+        leagueOrgPk:
+          league?.organization?.pk ??
+          league?.organization_id ??
+          tournament.organization_pk,
+      });
 
       return (
         <>

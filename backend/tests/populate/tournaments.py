@@ -8,12 +8,13 @@ from datetime import date, datetime, timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from app.models import CustomUser, Game, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel
 from league.models import League
 from tests.data import tournaments as tournament_data
 from tests.data.models import DynamicTournamentConfig, TestUser
 from tests.data.teams import REAL_TOURNAMENT_38_TEAMS
 from tests.data.tournaments import REAL_TOURNAMENT_38
+from tournament.models import Game, Team, Tournament
 
 from .avatars import apply_committed_avatars
 from .constants import DTX_STEAM_LEAGUE_ID, TEST_STEAM_LEAGUE_ID
@@ -21,6 +22,11 @@ from .utils import (
     ensure_league_user,
     ensure_org_user,
     flush_redis_cache,
+)
+
+# Created by their own populate step, after every pk-sensitive step.
+OWN_STEP_CONFIG_PKS: frozenset[int] = frozenset(
+    {tournament_data.ACTIVITY_BRACKET_CONFIG.pk}
 )
 
 
@@ -169,6 +175,8 @@ def create_dyn_tournaments(force: bool = False):
     for name in dir(tournament_data):
         obj = getattr(tournament_data, name)
         if isinstance(obj, DynamicTournamentConfig):
+            if obj.pk in OWN_STEP_CONFIG_PKS:
+                continue
             tournament = create_dynamic_tournament(obj, force=force)
             if tournament:
                 created.append(tournament)

@@ -23,9 +23,9 @@ from .embeds import (
 from .services.discord_members import DISCORD_HTTP_TIMEOUT_S
 
 if TYPE_CHECKING:
-    from app.models import Tournament
     from discordbot.models import EventTemplate
     from draft.models import Draft
+    from tournament.models import Tournament
 
 JSONDict = dict[str, Any]
 Snowflake = int | str

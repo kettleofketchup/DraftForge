@@ -312,6 +312,23 @@ describe('dispatchPatch', () => {
     expect(buildDefaults(user, scope).nickname).toBe('After');
   });
 
+  it('sends the tournament id for a tournament-scoped league edit', async () => {
+    mockUpdateOrgUser.mockResolvedValue({ pk: 1 } as UserType);
+    const user = userClass();
+    await dispatchPatch(
+      user,
+      { kind: 'league', league: lg, orgId: 2, tournamentId: 5 },
+      { game_mmrs: { 1: 4200 } },
+    );
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(
+      2,
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      5,
+    );
+  });
+
   it('keeps user.pk intact — OrgUserSerializer maps pk to the User pk', async () => {
     mockUpdateOrgUser.mockResolvedValue({
       pk: 1,

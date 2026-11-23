@@ -12,8 +12,8 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
-from app.models import Game
 from draft.services.hero import new_herodraft_for_game
+from tournament.models import Game
 
 _auth = [InternalServiceAuth]
 _perm = [IsInternalService]

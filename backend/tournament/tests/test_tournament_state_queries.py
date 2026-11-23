@@ -12,8 +12,6 @@ from unittest.mock import patch
 from cacheops.conf import settings as cacheops_settings
 from django.test import TestCase, TransactionTestCase
 
-from app.models import Tournament
-from app.serializers import TournamentSerializer
 from draft.services.team_state import build_draft_state
 from draft.tests.team_fixtures import (
     TimedDraftFixture,
@@ -24,6 +22,8 @@ from draft.tests.team_fixtures import (
     rename_team,
 )
 from tournament.functions import serialize_tournament
+from tournament.models import Tournament
+from tournament.serializers.tournament import TournamentSerializer
 from tournament.state import tournament_state_queryset
 
 # Includes the OrgUserGameMmr prefetch in the users dict.

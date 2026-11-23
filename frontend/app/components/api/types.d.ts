@@ -30,7 +30,7 @@ export interface DraftTeamRef {
 
 /** Distinct records of one kind that use some of the teams. */
 export interface DraftTeamUsage {
-  /** Model label, e.g. `app.Game` or `app.HeroDraft`. */
+  /** Model label, e.g. `tournament.Game` or `draft.HeroDraft`. */
   model: string;
   label: string;
   label_plural: string;

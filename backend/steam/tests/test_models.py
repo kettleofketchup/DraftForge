@@ -1,7 +1,8 @@
 from django.test import TestCase
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from steam.models import GameMatchSuggestion, LeagueSyncState, Match, PlayerMatchStats
+from tournament.models import Game, Team, Tournament
 
 
 class PlayerMatchStatsUserLinkTest(TestCase):

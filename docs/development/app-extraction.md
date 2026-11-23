@@ -2,7 +2,7 @@
 
 `backend/app` started as the only Django app and still holds most of the backend. We are splitting it into domain apps one slice per PR, models included. Each PR moves one slice, and `app/` only ever gets smaller.
 
-The first slice moved the hero draft family into the new `draft` app, and the second moved the team draft family into the same app. The third moved `Organization`, `OrgLog` and the org permissions into the existing `org` app, and the fourth moved the league domain into the existing `league` app. This page is the recipe they followed, written so later slices can repeat it step by step.
+The first slice moved the hero draft family into the new `draft` app, and the second moved the team draft family into the same app. The third moved `Organization`, `OrgLog` and the org permissions into the existing `org` app, the fourth moved the league domain into the existing `league` app, and the fifth moved `Tournament`, `Team`, `Game`, `TeamLog` and all tournament, team and game code into the new `tournament` app in three stacked PRs. This page is the recipe they followed, written so later slices can repeat it step by step.
 
 Planned slices, in order:
 
@@ -12,13 +12,13 @@ Planned slices, in order:
 | Team draft (done: `Draft`, `DraftRound`, `DraftEvent`, `DraftOptions`, teamdraft/shuffle/draft_picks, `draft_tick`, `teamdraft_tick`) | `app` | `draft` |
 | Organization (done: `Organization`, `OrgLog`, org permissions) | `app` | `org` |
 | League (done: `League`, `LeagueRating`, `LeagueMatch`, `LeagueMatchParticipant`, `LeagueLog`, league permissions, rating and match services) | `app` | `league` |
-| Tournament (in progress, three PRs: domain layer, HTTP/WebSocket surface, then `Tournament`, `Team`, `Game`, `TeamLog`) | `app` | `tournament` |
+| Tournament (done, three PRs: domain layer, HTTP/WebSocket surface, then `Tournament`, `Team`, `Game`, `TeamLog`) | `app` | `tournament` |
 | Bracket models (later: `TournamentBracket`, `BracketSlot`; bracket views and URL wiring already live in `tournament`) | `bracket` | `tournament` |
 | Users, profile claims, jokes (later) | `app` | to be decided |
 
 `CustomUser` stays in `app` (it is `AUTH_USER_MODEL`).
 
-After the league slice, `app/models.py` points at `league` through three lazy strings, all of which leave with the tournament slice: `"league.League"` in `Tournament.league` and `Game.league`, and `"league.LeagueUser"` in `Team.league_users` (plus its method-body use through `self.league_users.model`). Two lazy `"org.Organization"` strings remain, on `CustomUser.default_organization` and `ProfileClaimRequest.organization`; `League.organization` left with the model. Lazy strings are not import edges, so they are not in `ALLOWED_BACK_EDGES`.
+After the tournament slice, `app/models.py` holds `CustomUser`, `PositionsModel`, `ProfileClaimRequest` and `Joke`. The `"league.League"` and `"league.LeagueUser"` lazy strings left with `Tournament`, `Game` and `Team`. Two lazy `"org.Organization"` strings remain, on `CustomUser.default_organization` and `ProfileClaimRequest.organization`. Lazy strings are not import edges, so they are not in `ALLOWED_BACK_EDGES`. `app.models` still re-exports `GameType` from `common.game` for its many importers outside `app`.
 
 ## Rules for every slice
 
@@ -323,6 +323,24 @@ python manage.py shell -c "from django.contrib.contenttypes.models import Conten
 
 `migrate app 0111` reverses the relabel first. `org 0016` is the migration before `org/0017_retarget_default_league_to_league`; going further back would also unapply unrelated `org` migrations. Never delete `app_label='league'` alone: `leagueuser` is a pre-existing `league` model, and deleting its ContentType cascades its permissions and grants. If the prep PR (4a) shipped and the model-move PR (4b) is rolled back, 4a stays: it has no migrations.
 
+For the tournament slice, the clean rollback is:
+
+```bash
+python manage.py migrate app 0114
+python manage.py migrate bracket 0002
+python manage.py migrate discordbot 0014
+python manage.py migrate draft 0005
+python manage.py migrate events 0039
+python manage.py migrate league 0003
+python manage.py migrate lobby 0004
+python manage.py migrate org 0021
+python manage.py migrate steam 0008
+python manage.py migrate tournament zero
+python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='tournament', model__in=['tournament', 'team', 'game', 'teamlog']).delete()"
+```
+
+`migrate app 0114` reverses the relabel first. Each other app goes back only to the migration before its `retarget` migration, so no unrelated migration is unapplied. `tournament` has no other models yet, but the delete still filters on model names, as later slices may add some. The 5a and 5b PRs have no migrations, so they stay if only 5c is rolled back.
+
 !!! danger "Never delete by `app_label` alone"
     `ContentType.objects.filter(app_label='<new_app>').delete()` also hits every other model in the destination app, including slices moved earlier. The delete cascades through `auth_permission`, `auth_user_user_permissions` and `auth_group_permissions`, so their real grants are wiped, and `django_admin_log.content_type` is set to NULL for their log entries. Always filter on the moved model names.
 
@@ -364,3 +382,19 @@ python manage.py shell -c "from django.contrib.contenttypes.models import Conten
 - **Eager package re-exports are dropped, not carried over.** `app/services/__init__.py` re-exported the league services; it now holds only its docstring, and the new `league/services/` package has an empty `__init__`.
 - **Serializers embedded in source-app serializers stay even when their domain moves.** `LeaguesSerializer` and `LeagueMinimalSerializer` stay in `app.serializers`. `LeagueSerializer`, which only the moved view uses, moved.
 - **Revisit the slice table during recon.** Ratings, matches and league logs were listed as separate later slices but belonged to the league domain, so they moved with it.
+
+## What the tournament slice learned
+
+- **Three stacked PRs for a slice whose code surface alone passes the threshold.** 5a moved the domain layer (permissions, services, signals, state and listing helpers, internal client, schemas, management commands), 5b the HTTP and WebSocket surface (serializers, views, URL wiring, consumer, SSR, internal endpoints, admin), and 5c the models. 5a and 5b add no migrations, so each PR can merge and roll back on its own.
+- **A new target app can be in `MODEL_APPS` with no `migrations/` until its model PR.** `notifications` is the precedent. The `just/db/mod.just` and `scripts/slot_tests` app lists follow the migrations directory, so `tournament` joined them only in 5c.
+- **Put the new app in `MODEL_APPS` where the source app is.** `tournament` sits right after `app`, so the moved `Game` and `Team.members` receivers keep their dispatch order relative to `draft` and `lobby` receivers. `tournament/tests/test_signal_order.py` pins the order with literals captured before the move.
+- **M2M through-model sender strings and `_meta.label` field keys are references to the moved model.** `"app.Team_members"` senders and the `"app.TeamLog.team"` key in `team_references` had to follow the model. `team_references` now derives its keys from `_meta.label`, and the guard matches lazy labels by prefix.
+- **Split retirements list only the names that leave the source app.** When `app/permissions_tournament.py` was split, `request_user` stayed in `app.permissions` and is not in `moved`; `has_event_staff_access` went to `events.permissions` and is.
+- **Code-first PRs leave interim twins in the source app.** Record each in `ALLOWED_NAME_COLLISIONS` with the PR that removes it. All of them were gone by the end of 5b.
+- **A function-local import can guard the Celery app set, not only a cycle.** `build_users_dict_with_org` keeps `from app.user_cache import serialize_users_core` inside the function because `app.user_cache` loads `user.models`, which Celery does not install. Before hoisting, check whether the imported module pulls a model from an app outside `MODEL_APPS`. `test_celery_settings` now boots the worker's default modules and asserts `user.models` and `bracket.models` stay unloaded.
+- **Leftovers waiting on the slice's domain move with it.** `OrganizationsSerializer`, `LeaguesSerializer` and `LeagueMinimalSerializer` stayed in `app.serializers` after the org and league slices only because tournament serializers embedded them. The serializer split moved them to `org.serializers` and `league.serializers` in the same PR.
+- **Enums that other apps' models import at module level go in a dependency-free `choices.py`.** `tournament/choices.py` imports only Django, so `events.models` and `bracket.models` can import `GameMode`, `DotaLobbyMode` and `DraftStyles` without loading `tournament.models`.
+- **Unused back-compat re-exports are deleted, not moved.** `app.schemas` re-exported `discordbot` and `events` schemas and kept four aliases nobody imported. Dropping them also removed a function-local import and a forward-ref rebuild workaround in `events/schemas.py`.
+- **Re-list the inbound FKs after every merge of `main`.** `org/0020_leadership` landed mid-slice with `EventCaptain.team`, so the model move needed a tenth migration (`org/0021_retarget_tournament_models`) that the plan had not listed.
+- **Never order a payload by model label.** `team_usage` sorted by `_meta.label`, so relabelling `Game` moved its row in the draft force-reset dialog. It now sorts by display label with a fixed order (`_USAGE_ORDER`), pinned by `test_usage_ordered_by_display_label_not_app_label`. The `model` values still change from `app.*` to `tournament.*`; the changelog lists that.
+- **Each move adds nodes that existing migration tests step through.** Run back to back on one host, the `migrations` CI group took 403s for 31 tests on `main` and 571s for 37 tests after 5c (+41%). The new tournament move test accounts for about 60s. The other 107s (+27%) come from existing tests that roll `org` or `user` back and now unapply ten more state-only migrations. It is now the slowest backend group, so split `migrations` into two matrix groups in `just ci::backend-test-labels` before slice 6 adds more nodes, for example `draft`, `league` and `tournament` in one group and `org` and `user` in the other (about 285s and 330s with setup, close to the `rest` group).

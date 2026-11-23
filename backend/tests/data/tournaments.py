@@ -95,6 +95,19 @@ TEST_LEAGUE_TOURNAMENT_CONFIG = DynamicTournamentConfig(
     organization_pk=2,  # Test Organization
 )
 
+# Discord Activity bracket view (e2e/20-activity). Its bracket games come from
+# populate_activity_bracket_data, not BRACKET_TEST_CONFIGS.
+ACTIVITY_BRACKET_CONFIG = DynamicTournamentConfig(
+    pk=950,
+    name="Activity Bracket Test",
+    user_count=20,
+    team_count=4,
+    tournament_type="double_elimination",
+    league_name="DTX League",
+    completed_game_count=2,
+    match_id_base=9000000601,
+)
+
 # Bracket test configs (for steam match population)
 BRACKET_TEST_CONFIGS: list[DynamicTournamentConfig] = [
     COMPLETED_BRACKET_CONFIG,
@@ -178,6 +191,30 @@ DEMO_HERODRAFT_TOURNAMENT: TestTournament = TestTournament(
 
 BRACKET_UNSET_WINNER_TOURNAMENT: TestTournament = TestTournament(
     name="bracket:unsetWinner Tournament",
+    tournament_type="double_elimination",
+    state="in_progress",
+    steam_league_id=DTX_STEAM_LEAGUE_ID,
+    league_name="DTX League",
+    teams=BRACKET_UNSET_WINNER_TEAMS,
+)
+
+# =============================================================================
+# Bracket Placement Tournaments (#843)
+# 4-team brackets, all games pending, for the placement E2E spec.
+# They reuse the unset-winner rosters' users in their own teams.
+# =============================================================================
+
+BRACKET_PLACEMENT_SINGLE_TOURNAMENT: TestTournament = TestTournament(
+    name="bracket:placement Single Tournament",
+    tournament_type="single_elimination",
+    state="in_progress",
+    steam_league_id=DTX_STEAM_LEAGUE_ID,
+    league_name="DTX League",
+    teams=BRACKET_UNSET_WINNER_TEAMS,
+)
+
+BRACKET_PLACEMENT_DOUBLE_TOURNAMENT: TestTournament = TestTournament(
+    name="bracket:placement Double Tournament",
     tournament_type="double_elimination",
     state="in_progress",
     steam_league_id=DTX_STEAM_LEAGUE_ID,
