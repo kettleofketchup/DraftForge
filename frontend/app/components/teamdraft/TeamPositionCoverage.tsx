@@ -109,7 +109,6 @@ export const computeTeamPositionCoverage = (
     },
   };
 
-  // Build position -> players mapping with ranks
   const positionPlayers: Record<PositionKey, PlayerWithRank[]> = {
     carry: [],
     mid: [],
@@ -130,7 +129,6 @@ export const computeTeamPositionCoverage = (
     // Sort by rank (best/lowest first)
     positionPlayers[pos].sort((a, b) => a.rank - b.rank);
 
-    // Calculate average MMR for players who can play this position
     const playersForPos = positionPlayers[pos];
     const possibleMMR =
       playersForPos.length > 0
@@ -157,7 +155,6 @@ export const computeTeamPositionCoverage = (
 
   const assignedPlayers = new Set<number>();
   const assignedPositions = new Set<PositionKey>();
-  // Track which player is assigned to which position
   const positionAssignments = new Map<PositionKey, number>(); // position -> player pk
   const playerAssignments = new Map<number, PositionKey>(); // player pk -> position
 
@@ -227,7 +224,6 @@ export const computeTeamPositionCoverage = (
     }
   }
 
-  // Build conflict/status messages for each position
   for (const pos of positionKeys) {
     const messages: string[] = [];
     const playersForPos = positionPlayers[pos];
@@ -247,7 +243,6 @@ export const computeTeamPositionCoverage = (
         messages.push(`${favoritePlayers.join(' & ')} both want this`);
       }
 
-      // Check if position is contested with other positions
       if (isContested) {
         // Show each player's contest situation
         for (const player of playersForPos.slice(0, 2)) {
@@ -283,7 +278,6 @@ export const computeTeamPositionCoverage = (
         }
       }
 
-      // Check if position can't be uniquely assigned
       if (!hasUniqueAssignment && playersForPos.length > 0 && !isContested) {
         // Find why - all players are needed elsewhere
         const playerConflicts: string[] = [];
@@ -350,7 +344,7 @@ export const computeTeamPositionCoverage = (
     result[pos].conflicts = messages;
   }
 
-  // A position has a warning if conflicts exist
+  // Covered positions warn when unassigned, favorited by several players, or sharing a sole player with another position
   const positionHasWarning = (pos: PositionKey): boolean => {
     if (result[pos].bestRank >= 6) return false;
     if (!assignedPositions.has(pos)) return true;
@@ -534,10 +528,8 @@ const BestPlayersRow = memo(
       );
     }
 
-    // Sort: assigned player first, then by rank
     const sortedPlayers = useMemo(() => {
       return [...players].sort((a, b) => {
-        // Assigned player always comes first
         if (a.user.pk === assignedPlayerPk) return -1;
         if (b.user.pk === assignedPlayerPk) return 1;
         // Then sort by rank (lower rank = higher priority)
@@ -597,7 +589,6 @@ const PositionConflictTable = memo(
             const hasUniqueAssignment = assignedPositions.has(pos);
             const noCoverage = coverage.bestRank >= 6;
 
-            // Determine row color
             let rowColorClass = 'bg-success/10 border-success/30';
             if (noCoverage) {
               rowColorClass = 'bg-error/10 border-error/30';

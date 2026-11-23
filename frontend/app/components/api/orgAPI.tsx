@@ -7,8 +7,8 @@
 import { z } from 'zod';
 import type { GameTypeValue } from '~/components/game/constants';
 import {
-  OrganizationSchema,
   OrgMemberSchema,
+  OrganizationSchema,
   type OrgMemberType,
   type OrganizationType,
   type OrganizationsType,
