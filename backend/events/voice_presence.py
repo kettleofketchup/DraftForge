@@ -15,8 +15,8 @@ from django.utils import timezone as tz
 from app.models import CustomUser
 from app.redis_client import get_redis_client
 from app.redis_keys import namespaced_key
-from events.constants import EventState, VoicePresenceSource
-from events.ledger import SignupActor
+from events.constants import EventState, SignupAction, VoicePresenceSource
+from events.ledger import SignupActor, snapshot
 from events.models import (
     Event,
     EventSignup,
@@ -38,10 +38,12 @@ from events.ready_check_constants import (
     ReadyCheckPhase,
 )
 from events.ready_check_core import ACCEPTING_PHASES
+from events.services import _record_leaf
 from telemetry.logging import get_logger
 
 __all__ = [
     "FEED_HEARTBEAT_TTL_SECONDS",
+    "ManualPresenceResult",
     "PRESENCE_FRESH",
     "PresenceOutcome",
     "SNAPSHOT_GRACE",
@@ -51,6 +53,7 @@ __all__ = [
     "WatchedChannel",
     "apply_voice_snapshot",
     "apply_voice_state",
+    "set_presence_manually",
     "touch_feed_heartbeat",
     "voice_feed_age_seconds",
     "watched_channels",
@@ -88,6 +91,13 @@ class PresenceOutcome:
     unknown_users: int = 0
     not_signed_up: int = 0
     detail: str = ""
+
+
+@dataclass(frozen=True)
+class ManualPresenceResult:
+    presence: EventVoicePresence
+    ledger_entry_id: int
+    confirm: ConfirmResult | None
 
 
 class Transition(StrEnum):
@@ -527,3 +537,60 @@ def apply_voice_snapshot(
     if failure is not None:
         raise failure
     return outcome
+
+
+def set_presence_manually(
+    event: Event,
+    user: CustomUser,
+    *,
+    present: bool,
+    reason: str,
+    actor: SignupActor,
+) -> ManualPresenceResult:
+    with transaction.atomic():
+        locked = lock_event(event)
+        signup = EventSignup.objects.nocache().filter(event=locked, user=user).first()
+        if signup is None:
+            raise ValueError("not_signed_up")
+        row = (
+            EventVoicePresence.objects.select_for_update()
+            .filter(event=locked, user=user)
+            .first()
+        ) or EventVoicePresence(event=locked, user=user)
+        previous = row.present
+        row.present = present
+        row.source = VoicePresenceSource.MANUAL
+        row.save()
+        entry = _record_leaf(
+            signup,
+            event=locked,
+            actor=actor,
+            action=SignupAction.VOICE_PRESENCE_SET,
+            before=snapshot(signup),
+            extra={
+                "voice": {
+                    "present": present,
+                    "previous": previous,
+                    "source": str(VoicePresenceSource.MANUAL),
+                }
+            },
+            reason=reason,
+            correlation_id=f"vp{locked.pk}:{user.pk}",
+        )
+        confirm = (
+            _maybe_confirm(locked, user, actor=actor, caused_by=entry)
+            if present
+            else None
+        )
+    log.info(
+        "voice_presence_set_manually",
+        **_LOG,
+        event_id=locked.pk,
+        user_id=user.pk,
+        actor_user_id=actor.user.pk if actor.user else None,
+        present=present,
+        previous=previous,
+        ledger_entry_id=entry.pk,
+        confirm=str(confirm) if confirm else None,
+    )
+    return ManualPresenceResult(presence=row, ledger_entry_id=entry.pk, confirm=confirm)

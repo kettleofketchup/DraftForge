@@ -28,6 +28,7 @@ from events.models import (
     RollCallMode,
     SignupLedgerEntry,
 )
+from events.ready_check import ConfirmResult
 from events.ready_check_constants import (
     ReadyCheckConfirmVia,
     ReadyCheckEntryState,
@@ -47,11 +48,13 @@ from events.voice_presence import (
     _reconcile_pending,
     apply_voice_snapshot,
     apply_voice_state,
+    set_presence_manually,
     touch_feed_heartbeat,
     voice_feed_age_seconds,
     watched_channels,
     watched_events,
 )
+from org.conduct.sources import _voice_user_ids
 
 GUILD = "200000000000000532"
 CHANNEL = "100000000000000532"
@@ -854,3 +857,122 @@ class VoiceReconcileTests(VoiceSnapshotTestCase):
                     check.entries.get(user=user).state,
                     ReadyCheckEntryState.PENDING,
                 )
+
+
+class ManualPresenceTests(VoiceStateTestCase):
+    def _manual(
+        self,
+        event: Event,
+        user: CustomUser,
+        *,
+        present: bool,
+        reason: str = "on stage, mic broken",
+    ) -> voice_presence.ManualPresenceResult:
+        with self.captureOnCommitCallbacks(execute=True):
+            return set_presence_manually(
+                event, user, present=present, reason=reason, actor=self.staff_actor
+            )
+
+    def test_manual_requires_signup(self) -> None:
+        event = self._event()
+        user = self._linked()
+        with self.assertRaisesMessage(ValueError, "not_signed_up"):
+            self._manual(event, user, present=True)
+        self.assertFalse(EventVoicePresence.objects.filter(event=event).exists())
+        self.assertEqual(self._rows(SignupAction.VOICE_PRESENCE_SET, event), [])
+
+    def test_manual_sets_present_and_source_only(self) -> None:
+        event = self._event()
+        user = self._member(event)
+        result = self._manual(event, user, present=True)
+        row = self._row(event, user)
+        self.assertEqual(result.presence.pk, row.pk)
+        self.assertTrue(row.present)
+        self.assertEqual(row.source, VoicePresenceSource.MANUAL)
+        self.assertIsNone(row.first_joined_at)
+        self.assertIsNone(row.last_joined_at)
+        self.assertIsNone(row.last_left_at)
+        self.assertIsNone(row.last_seen_at)
+        self.assertIsNone(result.confirm)
+
+    def test_manual_keeps_feed_timestamps(self) -> None:
+        event = self._event()
+        user = self._member(event)
+        self._state(None, CHANNEL, user)
+        joined = self._row(event, user).first_joined_at
+        self._manual(event, user, present=False)
+        row = self._row(event, user)
+        self.assertFalse(row.present)
+        self.assertEqual(row.source, VoicePresenceSource.MANUAL)
+        self.assertEqual(row.first_joined_at, joined)
+        self.assertIsNone(row.last_left_at)
+
+    def test_manual_ledger_row(self) -> None:
+        event = self._event()
+        user = self._member(event)
+        result = self._manual(event, user, present=True, reason="seen on stream")
+        (entry,) = self._rows(SignupAction.VOICE_PRESENCE_SET, event)
+        self.assertEqual(entry.pk, result.ledger_entry_id)
+        self.assertEqual(entry.reason, "seen on stream")
+        self.assertEqual(entry.actor_user, self.helper)
+        self.assertEqual(entry.actor_role, ActorRole.STAFF)
+        self.assertEqual(entry.subject_user, user)
+        self.assertEqual(entry.correlation_id, f"vp{event.pk}:{user.pk}")
+        self.assertEqual(
+            entry.after["extra"]["voice"],
+            {"present": True, "previous": False, "source": "manual"},
+        )
+        self._manual(event, user, present=False)
+        _first, second = self._rows(SignupAction.VOICE_PRESENCE_SET, event)
+        self.assertEqual(
+            second.after["extra"]["voice"],
+            {"present": False, "previous": True, "source": "manual"},
+        )
+
+    def test_manual_present_confirms_with_caused_by(self) -> None:
+        event = self._event(voice_presence_confirms=True)
+        user = self._member(event)
+        check = self._open(event).check
+        result = self._manual(event, user, present=True)
+        self.assertEqual(result.confirm, ConfirmResult.CONFIRMED)
+        entry = check.entries.get(user=user)
+        self.assertEqual(entry.state, ReadyCheckEntryState.CONFIRMED)
+        self.assertEqual(entry.confirmed_via, ReadyCheckConfirmVia.VOICE)
+        (confirmed,) = self._rows(SignupAction.CONFIRMED, event)
+        self.assertEqual(confirmed.caused_by_id, result.ledger_entry_id)
+        self.assertEqual(confirmed.actor_role, ActorRole.STAFF)
+
+    def test_manual_present_flag_off_no_confirm(self) -> None:
+        event = self._event(voice_presence_confirms=False)
+        user = self._member(event)
+        check = self._open(event).check
+        result = self._manual(event, user, present=True)
+        self.assertIsNone(result.confirm)
+        self.assertEqual(
+            check.entries.get(user=user).state, ReadyCheckEntryState.PENDING
+        )
+
+    def test_manual_absent_does_not_unconfirm(self) -> None:
+        event = self._event(voice_presence_confirms=True)
+        user = self._member(event)
+        check = self._open(event).check
+        self._state(None, CHANNEL, user)
+        self.assertEqual(
+            check.entries.get(user=user).state, ReadyCheckEntryState.CONFIRMED
+        )
+        result = self._manual(event, user, present=False)
+        self.assertIsNone(result.confirm)
+        self.assertFalse(self._row(event, user).present)
+        self.assertEqual(
+            check.entries.get(user=user).state, ReadyCheckEntryState.CONFIRMED
+        )
+        signup = EventSignup.objects.nocache().get(event=event, user=user)
+        self.assertEqual(signup.status, SignupStatus.CONFIRMED)
+        self.assertEqual(self._rows(SignupAction.UNCONFIRMED, event), [])
+
+    def test_manual_pin_then_unpin_gives_no_conduct_credit(self) -> None:
+        event = self._event()
+        user = self._member(event)
+        self._manual(event, user, present=True)
+        self._manual(event, user, present=False)
+        self.assertEqual(_voice_user_ids(event, {user.pk}), set())
