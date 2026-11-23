@@ -80,6 +80,7 @@ export function SignupHistorySection({
     isPlaceholderData,
     hasNextPage,
     isFetchingNextPage,
+    isFetchNextPageError,
     fetchNextPage,
   } = useSignupHistory(eventId, filters, enabled);
 
@@ -121,6 +122,9 @@ export function SignupHistorySection({
   if (!allowed) return null;
 
   const filtered = (!fixedUser && member !== undefined) || action !== undefined;
+  // A failed Load more keeps the loaded rows; only a first-page failure replaces them.
+  const loadError = error && !isFetchNextPageError ? error : null;
+  const moreError = error && isFetchNextPageError ? error : null;
   const clearFilters = () => {
     setMember(undefined);
     setAction(undefined);
@@ -193,9 +197,9 @@ export function SignupHistorySection({
         )}
       </div>
 
-      {error ? (
+      {loadError ? (
         <p className="text-sm text-error" data-testid="signup-history-error">
-          {extractApiError(error) ?? 'Could not load sign-up history.'}
+          {extractApiError(loadError) ?? 'Could not load sign-up history.'}
         </p>
       ) : isPending ? (
         <div
@@ -222,15 +226,30 @@ export function SignupHistorySection({
         </div>
       )}
 
-      {showMore && !error && (
-        <SecondaryButton
-          className="min-h-11 self-center"
-          onClick={() => void fetchNextPage()}
-          disabled={isPlaceholderData || isFetchingNextPage}
-          data-testid="signup-history-load-more"
-        >
-          {isFetchingNextPage ? 'Loading…' : 'Load more'}
-        </SecondaryButton>
+      {showMore && !loadError && (
+        <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
+          {moreError && !isFetchingNextPage && (
+            <p
+              className="text-center text-sm text-error"
+              role="alert"
+              data-testid="signup-history-load-more-error"
+            >
+              {extractApiError(moreError) ?? 'Could not load more history.'}
+            </p>
+          )}
+          <SecondaryButton
+            className="min-h-11"
+            onClick={() => void fetchNextPage()}
+            disabled={isPlaceholderData || isFetchingNextPage}
+            data-testid="signup-history-load-more"
+          >
+            {isFetchingNextPage
+              ? 'Loading…'
+              : moreError
+                ? 'Retry'
+                : 'Load more'}
+          </SecondaryButton>
+        </div>
       )}
     </section>
   );

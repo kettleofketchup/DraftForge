@@ -328,6 +328,39 @@ describe('SignupHistorySection', () => {
     expect(screen.queryByTestId('signup-history-load-more')).toBeNull();
   });
 
+  it('keeps loaded rows and offers a retry when Load more fails', async () => {
+    const error = Object.assign(new Error('boom'), {
+      response: { status: 500, data: { detail: 'Server exploded' } },
+    });
+    api.getEventSignupHistory
+      .mockResolvedValueOnce(page([entry(4), entry(3)], NEXT))
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce(page([entry(2), entry(1)]));
+    renderSection();
+    await screen.findByTestId('signup-history-row-4');
+
+    fireEvent.click(screen.getByTestId('signup-history-load-more'));
+    expect(
+      (await screen.findByTestId('signup-history-load-more-error')).textContent,
+    ).toContain('Server exploded');
+    expect(row(4)).toBeTruthy();
+    expect(row(3)).toBeTruthy();
+    expect(screen.queryByTestId('signup-history-error')).toBeNull();
+    expect(logger.error).toHaveBeenCalledWith(
+      'signup_history_load_failed',
+      expect.objectContaining({ eventId: EVENT_ID, error }),
+    );
+
+    const retry = screen.getByTestId('signup-history-load-more');
+    expect(retry.textContent).toBe('Retry');
+    fireEvent.click(retry);
+    await screen.findByTestId('signup-history-row-1');
+    expect(lastCall()).toEqual([EVENT_ID, { cursor: 'abc|2' }]);
+    expect(row(4)).toBeTruthy();
+    expect(screen.queryByTestId('signup-history-load-more-error')).toBeNull();
+    expect(screen.queryByTestId('signup-history-load-more')).toBeNull();
+  });
+
   it('marks the table busy and disables Load more while placeholder data shows', async () => {
     let resolveFiltered: (p: SignupHistoryPage) => void = () => undefined;
     api.getEventSignupHistory
