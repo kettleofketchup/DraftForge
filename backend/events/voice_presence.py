@@ -4,17 +4,32 @@ import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Final
 
 import redis
+from django.db import transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone as tz
 
+from app.models import CustomUser
 from app.redis_client import get_redis_client
 from app.redis_keys import namespaced_key
-from events.constants import EventState
-from events.models import Event
-from events.ready_check_constants import PRESENCE_FRESH, ReadyCheckPhase
+from events.constants import EventState, VoicePresenceSource
+from events.ledger import SignupActor
+from events.models import Event, EventSignup, EventVoicePresence, SignupLedgerEntry
+from events.ready_check import (
+    ConfirmResult,
+    confirm_ready,
+    live_ready_check,
+    lock_event,
+)
+from events.ready_check_constants import (
+    PRESENCE_FRESH,
+    ReadyCheckConfirmVia,
+    ReadyCheckPhase,
+)
+from events.ready_check_core import ACCEPTING_PHASES
 from telemetry.logging import get_logger
 
 __all__ = [
@@ -22,9 +37,11 @@ __all__ = [
     "PRESENCE_FRESH",
     "PresenceOutcome",
     "SNAPSHOT_GRACE",
+    "Transition",
     "WATCH_LOOKAHEAD",
     "WATCH_LOOKBEHIND",
     "WatchedChannel",
+    "apply_voice_state",
     "touch_feed_heartbeat",
     "voice_feed_age_seconds",
     "watched_channels",
@@ -62,6 +79,14 @@ class PresenceOutcome:
     unknown_users: int = 0
     not_signed_up: int = 0
     detail: str = ""
+
+
+class Transition(StrEnum):
+    JOINED = "joined"
+    LEFT = "left"
+    SEEN = "seen"
+    PINNED = "pinned"
+    NONE = "none"
 
 
 def watched_events(now: datetime | None = None) -> QuerySet[Event]:
@@ -145,3 +170,154 @@ def voice_feed_age_seconds(
     except (TypeError, ValueError):
         return None
     return max(0.0, time.time() - stamp)
+
+
+def _apply_presence(
+    event: Event, user: CustomUser, present: bool, now: datetime, *, from_gateway: bool
+) -> Transition:
+    row = (
+        EventVoicePresence.objects.select_for_update()
+        .filter(event=event, user=user)
+        .first()
+    )
+    if row is None:
+        if not present:
+            return Transition.NONE
+        row = EventVoicePresence(event=event, user=user)
+    manual = row.source == VoicePresenceSource.MANUAL
+    if manual and not from_gateway:
+        if present and row.present:
+            row.last_seen_at = now
+            row.save(update_fields=["last_seen_at", "updated_at"])
+        return Transition.PINNED
+    # A manual pin is not feed evidence, so a gateway report applies in full.
+    was_present = row.present and not manual
+    row.source = VoicePresenceSource.FEED
+    if present and not was_present:
+        row.present = True
+        if row.first_joined_at is None:
+            row.first_joined_at = now
+        row.last_joined_at = now
+        row.last_seen_at = now
+        row.guild_id = event.organization.discord_server_id or ""
+        row.channel_id = event.event_voice_channel_id
+        transition = Transition.JOINED
+    elif not present and (was_present or manual):
+        row.present = False
+        row.last_left_at = now
+        transition = Transition.LEFT
+    elif present:
+        row.last_seen_at = now
+        transition = Transition.SEEN
+    else:
+        transition = Transition.NONE
+    row.save()
+    return transition
+
+
+def _maybe_confirm(
+    locked: Event,
+    user: CustomUser,
+    *,
+    actor: SignupActor,
+    caused_by: SignupLedgerEntry | None = None,
+) -> ConfirmResult | None:
+    check = live_ready_check(locked)
+    if (
+        check is None
+        or check.phase not in ACCEPTING_PHASES
+        or check.settings_snapshot.get("voice_presence_confirms") is not True
+        or not locked.voice_presence_confirms
+    ):
+        return None
+    result = confirm_ready(
+        locked,
+        user,
+        via=ReadyCheckConfirmVia.VOICE,
+        actor=actor,
+        caused_by=caused_by,
+    )
+    if result in (ConfirmResult.NOT_IN_CHECK, ConfirmResult.CLOSED):
+        log.debug(
+            "voice_presence_confirm_skipped",
+            **_LOG,
+            event_id=locked.pk,
+            ready_check_id=check.pk,
+            user_id=user.pk,
+            outcome=str(result),
+        )
+    return result
+
+
+def apply_voice_state(
+    *,
+    guild_id: str,
+    discord_user_id: str,
+    before_channel_id: str | None,
+    after_channel_id: str | None,
+) -> PresenceOutcome:
+    outcome = PresenceOutcome()
+    before = before_channel_id or None
+    after = after_channel_id or None
+    if before == after:
+        return outcome
+    now = tz.now()
+    channels = [channel for channel in (before, after) if channel]
+    events = list(
+        watched_events(now)
+        .filter(
+            event_voice_channel_id__in=channels,
+            organization__discord_server_id=guild_id,
+        )
+        .order_by("pk")
+    )
+    if not events:
+        outcome.detail = "not_watched"
+        return outcome
+    user = CustomUser.objects.nocache().filter(discordId=discord_user_id).first()
+    if user is None:
+        outcome.unknown_users = 1
+        outcome.detail = "user_not_linked"
+        log.debug(
+            "voice_state_user_not_linked",
+            **_LOG,
+            guild_id=guild_id,
+            event_count=len(events),
+        )
+        return outcome
+    for event in events:
+        if not EventSignup.objects.nocache().filter(event=event, user=user).exists():
+            outcome.not_signed_up += 1
+            continue
+        outcome.events += 1
+        with transaction.atomic():
+            locked = lock_event(event)
+            channel = locked.event_voice_channel_id
+            if channel == after:
+                present = True
+            elif channel == before:
+                present = False
+            else:
+                continue
+            transition = _apply_presence(locked, user, present, now, from_gateway=True)
+            if transition == Transition.JOINED:
+                outcome.joined += 1
+                result = _maybe_confirm(locked, user, actor=SignupActor.voice(user))
+                if result == ConfirmResult.CONFIRMED:
+                    outcome.confirmed += 1
+            elif transition == Transition.LEFT:
+                outcome.left += 1
+    log.info(
+        "voice_state_applied",
+        **_LOG,
+        guild_id=guild_id,
+        user_id=user.pk,
+        before_channel_id=before,
+        after_channel_id=after,
+        events=outcome.events,
+        joined=outcome.joined,
+        left=outcome.left,
+        confirmed=outcome.confirmed,
+        not_signed_up=outcome.not_signed_up,
+    )
+    return outcome
