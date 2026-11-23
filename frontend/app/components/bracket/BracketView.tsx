@@ -24,7 +24,7 @@ import './bracket-styles.css';
 import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
 import { useOrganization } from '~/components/organization';
 import { useBracketQuery } from '~/hooks/useBracket';
-import { useCanEditTournament } from '~/hooks/usePermissions';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { cn } from '~/lib/utils';
 import { useBracketStore } from '~/store/bracketStore';
 import { useTournamentStore } from '~/store/tournamentStore';
@@ -147,15 +147,9 @@ function BracketFlowInner({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tournament = useUserStore((state) => state.tournament);
-  // Fetch the full org so org-staff membership flows into useCanEditTournament —
-  // tournament.league is LeagueMinimalSchema (no .organization field), so we
-  // fetch the org separately via useOrganization and pass it as the second arg.
-  const { organization } = useOrganization(
-    tournament?.organization_pk ?? undefined,
-  );
-  // Mirrors the backend's can_edit_tournament cascade — covers site staff,
-  // org admin/staff, league admin, and league staff for the tournament's league.
-  const canEdit = useCanEditTournament(tournament?.league, organization);
+  // Loads the org into orgStore for the bracket's player popovers.
+  useOrganization(tournament?.organization_pk ?? undefined);
+  const canEdit = useCanManageCurrentTournament();
   const pendingDraftId = useTournamentStore((state) => state.pendingDraftId);
   const setPendingDraftId = useTournamentStore(
     (state) => state.setPendingDraftId,

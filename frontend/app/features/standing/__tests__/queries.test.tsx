@@ -27,6 +27,7 @@ const conduct: TrackInfo = {
   can_view_own: true,
   board_open: true,
   can_manage: false,
+  can_moderate: false,
 };
 
 const board: StandingLeaderboard = {

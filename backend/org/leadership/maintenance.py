@@ -140,6 +140,23 @@ def _fold_pools(target_of: dict[int, int], keep: OrgUser) -> None:
         )
 
 
+def _fold_releases(target_of: dict[int, int]) -> None:
+    stamps = {
+        pk: (released_at, released_by_id)
+        for pk, released_at, released_by_id in EventCaptain.objects.nocache()
+        .filter(pk__in=[*target_of, *target_of.values()])
+        .values_list("pk", "released_at", "released_by_id")
+    }
+    for drop_pk, keep_pk in target_of.items():
+        drop_at, drop_by = stamps[drop_pk]
+        keep_at, _ = stamps[keep_pk]
+        if drop_at is None or (keep_at is not None and keep_at <= drop_at):
+            continue
+        EventCaptain.objects.nocache().filter(pk=keep_pk).update(
+            released_at=drop_at, released_by_id=drop_by
+        )
+
+
 def _merge_snapshots(
     drop: OrgUser, keep: OrgUser, *, now: datetime
 ) -> tuple[int, set[int]]:
@@ -174,6 +191,7 @@ def _merge_snapshots(
     if target_of:
         moved += _fold_reviews(target_of, keep, now=now)
         _fold_pools(target_of, keep)
+        _fold_releases(target_of)
         EventCaptain.objects.nocache().filter(pk__in=list(target_of)).delete()
     return moved, {*plain, *target_of.values()}
 
@@ -298,6 +316,9 @@ def _repoint_settings(drop: CustomUser, keep: CustomUser) -> int:
 def repoint_attribution(drop: CustomUser, keep: CustomUser) -> int:
     return (
         CaptainReview.objects.nocache().filter(voided_by=drop).update(voided_by=keep)
+        + EventCaptain.objects.nocache()
+        .filter(released_by=drop)
+        .update(released_by=keep)
         + _repoint_settings(drop, keep)
         + ledger.track_rows("leadership")
         .filter(awarded_by=drop)

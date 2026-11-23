@@ -15,6 +15,7 @@ describe('leadershipAccess', () => {
       unlocked: true,
       member: true,
       canManage: true,
+      canModerate: false,
       boardOpen: false,
     });
   });
@@ -34,16 +35,30 @@ describe('leadershipAccess', () => {
       unlocked: false,
       member: false,
       canManage: false,
+      canModerate: false,
       boardOpen: false,
     });
+  });
+
+  it('reads can_moderate for org staff who cannot manage', () => {
+    const flags = leadershipAccess(
+      leadershipFeatureAccess({
+        track: { can_moderate: true, can_manage: false },
+      }),
+    );
+    expect(flags.canModerate).toBe(true);
+    expect(flags.canManage).toBe(false);
   });
 
   it('ignores tracks until access is settled', () => {
     const access = makeOrgFeatureAccess({
       settled: false,
-      standingTracks: [leadershipTrackInfo({ can_manage: true })],
+      standingTracks: [
+        leadershipTrackInfo({ can_manage: true, can_moderate: true }),
+      ],
     });
     expect(leadershipTrack(access)).toBeUndefined();
     expect(leadershipAccess(access).canManage).toBe(false);
+    expect(leadershipAccess(access).canModerate).toBe(false);
   });
 });

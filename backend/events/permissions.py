@@ -20,3 +20,16 @@ def has_event_staff_access(user: CustomUser | AnonymousUser | None, event: Any) 
     ):
         return True
     return False
+
+
+def has_event_operator_access(
+    user: CustomUser | AnonymousUser | None, event: Any
+) -> bool:
+    """Event staff, the event host, or one of the event's helpers."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if has_event_staff_access(user, event):
+        return True
+    if event.host_id is not None and event.host_id == user.pk:
+        return True
+    return event.helpers.nocache().filter(pk=user.pk).exists()

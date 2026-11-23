@@ -37,6 +37,13 @@ EXPECTED_ACTIONS: list[str] = [
     "account_merged",
     "moved_event",
     "event_cancelled",
+    "dropped",
+    "ready_check_asked",
+    "ready_check_nudged",
+    "ready_check_held",
+    "ready_check_kept",
+    "ready_check_withdrawn",
+    "ready_check_transition",
 ]
 
 
