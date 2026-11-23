@@ -10,7 +10,7 @@ export type RefusalContext =
   | 'release'
   | 'settings';
 
-// backend/org/leadership/reviews.py ReviewRefused codes and
+// ReviewRefused codes raised in backend/org/leadership/ and
 // backend/org/feature_errors.py.
 const REFUSALS: Record<string, string> = {
   review_window_closed: 'The review window has closed.',
