@@ -1,6 +1,6 @@
 /**
- * Positions changed in the signup modal show up in the next signup modal
- * without a reload.
+ * Positions changed in the signup modal show up in Edit Profile's Dota tab
+ * without a reload, even when the profile was already loaded before signup.
  */
 
 import type { BrowserContext, Page } from '@playwright/test';
@@ -47,7 +47,41 @@ async function pickRating(
   await page.getByRole('option', { name: label, exact: true }).click();
 }
 
-test('positions edited in the signup modal reach the next signup without a reload', async ({
+/** Client-side navigation to the own profile, then open Edit Profile → Dota. */
+async function openDotaTab(page: Page): Promise<void> {
+  await page.getByTestId('user-avatar').first().click();
+  await page.getByTestId('navbarProfileButton').click();
+  await expect(page).toHaveURL(new RegExp(`/user/${PLAYER_PK}`));
+  // The profile link sits in a menu label, so the menu stays open.
+  await page.keyboard.press('Escape');
+  await page.getByTestId('edit-user-btn').first().click();
+  await page.getByTestId('edit-user-tab-dota').click();
+  await expect(page.getByTestId('edit-user-dota-save')).toBeVisible();
+}
+
+async function expectDotaPositions(
+  page: Page,
+  carry: number,
+  mid: number,
+): Promise<void> {
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByTestId('position-choice-carry')).toContainText(
+    new RegExp(`^${carry}: `),
+  );
+  await expect(dialog.getByTestId('position-choice-mid')).toContainText(
+    new RegExp(`^${mid}: `),
+  );
+}
+
+async function closeDialog(page: Page): Promise<void> {
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Cancel' })
+    .click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+}
+
+test('positions edited in the signup modal reach Edit Profile without a reload', async ({
   context,
   page,
 }) => {
@@ -96,6 +130,7 @@ test('positions edited in the signup modal reach the next signup without a reloa
           json: {
             ...body,
             rank_status: 'never',
+            rank_medal: null,
             battle_cup_tier: null,
             pos_1: false,
             pos_2: false,
@@ -107,11 +142,17 @@ test('positions edited in the signup modal reach the next signup without a reloa
       },
     );
 
+    await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto(`/events/${eventId}`);
-    let reloaded = false;
-    page.on('framenavigated', (frame) => {
-      if (frame === page.mainFrame()) reloaded = true;
+    await page.evaluate(() => {
+      (window as unknown as { __noReload: boolean }).__noReload = true;
     });
+
+    // Warm the Edit Profile query with the old positions.
+    await openDotaTab(page);
+    await expectDotaPositions(page, 1, 2);
+    await closeDialog(page);
+    await page.goBack();
 
     await page.getByTestId('event-signup-btn').click();
     const modal = page.getByTestId('event-signup-modal');
@@ -131,17 +172,14 @@ test('positions edited in the signup modal reach the next signup without a reloa
     await modal.getByTestId('event-signup-submit-btn').click();
     await expect(modal).toHaveCount(0, { timeout: 10000 });
 
-    await page.getByTestId('event-cancel-rsvp-btn').click();
-    await page
-      .getByRole('alertdialog')
-      .getByRole('button', { name: 'Cancel RSVP' })
-      .click();
-    await page.getByTestId('event-signup-btn').click();
-    await expect(modal).toBeVisible();
-    await expect(
-      modal.getByTestId('signup-prefilled-summary-positions'),
-    ).toContainText('Mid · Carry');
-    expect(reloaded).toBe(false);
+    await openDotaTab(page);
+    await expectDotaPositions(page, 2, 1);
+    await closeDialog(page);
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __noReload?: boolean }).__noReload,
+      ),
+    ).toBe(true);
   } finally {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await loginPlayer(context);

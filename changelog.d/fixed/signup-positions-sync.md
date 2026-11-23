@@ -1,1 +1,1 @@
-- Position priorities you change while signing up for an event now show on your profile and in the next signup form without reloading the page.
+- Position priorities you change while signing up for an event now show in Edit Profile, on your profile and in the next signup form without reloading the page.

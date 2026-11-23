@@ -157,6 +157,13 @@ export function useSignupMutation(eventId: number) {
         queryClient.invalidateQueries({
           queryKey: ['user-dota-profile', currentUserPk],
         });
+        if (body.profile?.positions != null) {
+          // Edit Profile seeds its form once from cached data; drop it so the next open refetches.
+          queryClient.removeQueries({
+            queryKey: ['userProfile', currentUserPk],
+          });
+          queryClient.invalidateQueries({ queryKey: ['user', currentUserPk] });
+        }
       }
       const orgId = queryClient.getQueryData<EventType>([
         'event',
