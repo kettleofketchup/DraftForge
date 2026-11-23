@@ -17,8 +17,8 @@ const toText = (v: number | null | undefined): string =>
   v == null || Number.isNaN(v) ? '' : String(v);
 
 /**
- * Number input that keeps what the user is typing. Empty or below-min text
- * never reaches the form mid-edit; it is resolved on blur instead.
+ * Number input that keeps what the user is typing. Below-min text, and empty
+ * text unless nullable, never reaches the form mid-edit; blur resolves it.
  */
 export function IntegerInput({
   value,
