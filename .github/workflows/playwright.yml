@@ -1,8 +1,8 @@
 name: Playwright Tests
 
 # paths-ignore skips a run only when EVERY changed file matches. GitHub does not evaluate
-# path filters for tag pushes, so v* tags always run. Markdown is ignored only at the repo
-# root and under docs/: frontend/app/data/CHANGELOG.md ships in the app and stays covered.
+# path filters for tag pushes, so v* tags always run. '*.md' matches only at the repo root,
+# so frontend/app/data/CHANGELOG.md, which ships in the app, stays covered.
 on:
   push:
     branches: [main]
