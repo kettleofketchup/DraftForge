@@ -13,8 +13,10 @@ from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, DotaLobbyMode, Game, GameMode, Team, Tournament
+from app.models import CustomUser
 from lobby.webhook import sign
+from tournament.choices import DotaLobbyMode, GameMode
+from tournament.models import Game, Team, Tournament
 
 TOKEN = "test-internal-token"
 SECRET = "whsec_test"

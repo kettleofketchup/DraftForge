@@ -7,11 +7,11 @@ from channels.testing import WebsocketCommunicator
 from django.test import TransactionTestCase, override_settings
 from django.urls import path
 
-from app.models import Tournament
 from lobby import broadcast
 from lobby.models import GameLobby
 from lobby.tests.helpers import make_game
 from tournament.consumers import TournamentConsumer
+from tournament.models import Tournament
 
 
 @override_settings(

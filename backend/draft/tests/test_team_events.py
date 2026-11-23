@@ -4,12 +4,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory
 
-from app.models import CustomUser, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound
 from draft.serializers.team import DraftEventSerializer
 from draft.services.shuffle import assign_next_shuffle_captain, build_shuffle_rounds
 from draft.services.team_broadcast import broadcast_event
 from draft.views.team_picks import pick_player_for_round, undo_last_pick
+from tournament.models import Team, Tournament
 
 
 class DraftEventModelTest(TestCase):

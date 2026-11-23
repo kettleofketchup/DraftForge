@@ -7,9 +7,9 @@ from pathlib import Path
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase
 
-from app.models import Game, Tournament
 from discordbot.activity_targets import draft_site_url, draft_tournament_id
 from draft.models import Draft, HeroDraft
+from tournament.models import Game, Tournament
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 

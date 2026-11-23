@@ -37,7 +37,7 @@ from rest_framework.utils.serializer_helpers import ReturnDict, ReturnList
 from rest_framework.views import APIView
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, Game
+from app.models import CustomUser
 from discordbot.models import (
     DiscordEvent,
     DiscordEventDM,
@@ -166,6 +166,7 @@ from org.permissions import (
 from org.standing import api as standing
 from telemetry.logging import get_logger
 from tournament.listing import build_cursor_envelope
+from tournament.models import Game
 from user.models import BaseUserProfile, DotaUserProfile
 from user.querysets import with_user_profiles
 

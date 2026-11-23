@@ -5,10 +5,11 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from draft.models import HeroDraft
 from events.models import Event
 from org.models import Organization
+from tournament.models import Game, Team, Tournament
 
 
 class TaskScheduleEndpointTest(TestCase):

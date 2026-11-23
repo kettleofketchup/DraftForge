@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from steam.functions.game_linking import (
     _get_game_player_steam_ids,
     auto_link_matches_for_tournament,
@@ -14,6 +14,7 @@ from steam.functions.game_linking import (
     get_suggestions_for_tournament,
 )
 from steam.models import GameMatchSuggestion, Match, PlayerMatchStats
+from tournament.models import Game, Team, Tournament
 
 
 class CheckMatchForGamesTest(TestCase):
@@ -538,7 +539,7 @@ class AutoLinkMatchesForTournamentTest(TestCase):
         self.game1.gameid = 888001
         self.game1.save()
 
-        result = auto_link_matches_for_tournament(self.tournament.id)
+        auto_link_matches_for_tournament(self.tournament.id)
 
         # game1 should not be re-linked
         self.game1.refresh_from_db()
@@ -555,7 +556,7 @@ class AutoLinkMatchesForTournamentTest(TestCase):
             player_overlap=5,
         )
 
-        result = auto_link_matches_for_tournament(self.tournament.id)
+        auto_link_matches_for_tournament(self.tournament.id)
 
         # Should not create duplicate
         self.assertEqual(

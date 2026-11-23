@@ -2,9 +2,10 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Permission
 from django.test import RequestFactory, TestCase
 
-from app.models import CustomUser, Game
+from app.models import CustomUser
 from lobby.admin import GameLobbyAdmin
 from lobby.models import GameLobby
+from tournament.models import Game
 
 
 class GameLobbyAdminTests(TestCase):
