@@ -187,8 +187,9 @@ ORG_FEATURES_CONDUCT_NEW_MEMBER: Final[TestUser] = ORG_FEATURES_PLAYERS[9]
 # Approved on the forecast event.
 ORG_FEATURES_CONDUCT_SIGNUPS: Final[list[TestUser]] = ORG_FEATURES_PLAYERS[0:6]
 
-# Leadership seed: a completed event with two captained teams, one past its
-# review window (released rating) and one still open (promoter yet to rate).
+# Leadership seed: a completed event with three captained teams. Two are past
+# their review window (member's released rating, and one captained by org staff,
+# who must not see their own reviews) and one is still open (promoter yet to rate).
 ORG_FEATURES_LEADERSHIP_EVENT_NAME: Final = "Features Leadership Event"
 ORG_FEATURES_LEADERSHIP_TOURNAMENT: Final[tuple[int, str]] = (
     264,
@@ -217,6 +218,18 @@ ORG_FEATURES_LEADERSHIP_TEAMS: Final[
         2,
         True,
         [(ORG_FEATURES_PLAYERS[5], 3)],
+    ),
+    (
+        "Leaders Staff",
+        OF_STAFF,
+        [ORG_FEATURES_PLAYERS[3], *ORG_FEATURES_PLAYERS[7:9]],
+        3,
+        False,
+        [
+            (ORG_FEATURES_PLAYERS[3], 4),
+            (ORG_FEATURES_PLAYERS[7], 3),
+            (ORG_FEATURES_PLAYERS[8], 4),
+        ],
     ),
 ]
 

@@ -2,12 +2,17 @@ from datetime import datetime, time
 from datetime import timezone as dt_timezone
 from typing import Any
 
+from django.db import transaction
 from django.db.models import QuerySet
 
-from app.cache_utils import invalidate_obj
+from app.cache_utils import invalidate_after_commit
 from app.models import Game, Team, Tournament
 from steam.models import GameMatchSuggestion, Match
 from telemetry.logging import get_logger
+from tournament.services.bracket_placement import (
+    apply_bracket_placements,
+    tournament_bracket_placements,
+)
 
 log = get_logger(__name__)
 
@@ -222,12 +227,11 @@ def _link_game_to_match(game: Game, match: Match) -> None:
             match_id=match.match_id,
         )
 
-    game.save(update_fields=["gameid", "winning_team", "status"])
-
-    # Invalidate cache for game and tournament
-    invalidate_obj(game)
-    if game.tournament:
-        invalidate_obj(game.tournament)
+    with transaction.atomic():
+        placements_before = tournament_bracket_placements(game.tournament_id)
+        game.save(update_fields=["gameid", "winning_team", "status"])
+        apply_bracket_placements(game.tournament_id, placements_before)
+        invalidate_after_commit(game, *([game.tournament] if game.tournament else []))
 
 
 def get_suggestions_for_tournament(

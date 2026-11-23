@@ -1,4 +1,4 @@
-"""Hero and team draft WebSocket routes; composed with app.routing in backend/asgi.py."""
+"""Hero and team draft WebSocket routes; composed with tournament.routing in backend/asgi.py."""
 
 from django.urls import URLPattern, path
 

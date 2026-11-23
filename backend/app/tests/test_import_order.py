@@ -1,4 +1,4 @@
-"""app.serializers must load without pulling team_management into a cycle (#544)."""
+"""Serializers must load without pulling team_management into a cycle (#544)."""
 
 import os
 import subprocess
@@ -36,5 +36,5 @@ class ImportOrderTests(SimpleTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_serializers_never_import_team_management(self) -> None:
-        source = (BACKEND_DIR / "app" / "serializers.py").read_text()
-        self.assertNotIn("team_management", source)
+        path = BACKEND_DIR / "app" / "serializers.py"
+        self.assertNotIn("team_management", path.read_text())

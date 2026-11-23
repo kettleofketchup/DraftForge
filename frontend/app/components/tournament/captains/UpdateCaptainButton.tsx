@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import type { TeamType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
@@ -33,7 +34,7 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
   hideDraftOrder = false,
 }) => {
   const tournament = useUserStore((state) => state.tournament);
-  const isStaff = useUserStore((state) => state.isStaff);
+  const canManage = useCanManageCurrentTournament();
 
   const determineIsCaptain = () => {
     return !!tournament?.captains?.some((c) => c.pk === user.pk);
@@ -73,7 +74,7 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
     });
   };
 
-  if (!isStaff()) {
+  if (!canManage) {
     return compact ? (
       <div className="flex flex-col items-stretch gap-0.5 w-9">
         <span

@@ -66,6 +66,7 @@ class StandingEndpointsTest(ConductTestCase):
                 "can_view_own",
                 "board_open",
                 "can_manage",
+                "can_moderate",
             },
         )
 

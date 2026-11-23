@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
   Calendar,
@@ -16,11 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ShouldRevalidateFunctionArgs } from 'react-router';
 import { useParams } from 'react-router';
 import type { AddMemberPayload } from '~/components/api/api';
-import {
-  addOrgMember,
-  checkDiscordBotStatus,
-  fetchOrganization,
-} from '~/components/api/api';
+import { addOrgMember, fetchOrganization } from '~/components/api/api';
 import {
   CreateEventModal,
   EditEventModal,
@@ -42,11 +38,7 @@ import { OrganizationHeaderTitle } from '~/components/organization/OrganizationH
 import { buildOrgPageNavOptions } from '~/components/organization/orgPageNavOptions';
 import { OrgSettingsDialog } from '~/components/organization/OrgSettingsDialog';
 import { useOrgSettingsAccess } from '~/components/organization/tabs/orgSettings/useOrgSettingsAccess';
-import {
-  AddDiscordBotButton,
-  PrimaryButton,
-  SecondaryButton,
-} from '~/components/ui/buttons';
+import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import {
   EntityBreadcrumb,
   type BreadcrumbSegment,
@@ -63,6 +55,10 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
 import { PendingClaimsBadge, usePendingClaimsCount } from '~/features/claims';
+import {
+  useDiscordBotStatus,
+  useDiscordConnectResult,
+} from '~/features/discord-connect';
 import {
   LockedFeaturesPanel,
   removeFeatureQueries,
@@ -330,19 +326,12 @@ export default function OrganizationDetailPage() {
 
   const hasDiscordServer = Boolean(organization?.discord_server_id);
 
-  // Check if the DraftForge bot has access to the org's Discord server
-  const { data: botStatus } = useQuery({
-    queryKey: ['discordBotStatus', pk],
-    queryFn: () => checkDiscordBotStatus(pk!),
-    enabled:
-      !!pk &&
-      !!organization &&
-      !!currentUser &&
-      hasDiscordServer &&
-      !!isOrgAdmin,
-    staleTime: 5 * 60 * 1000, // match backend cache TTL
-  });
+  const { data: botStatus } = useDiscordBotStatus(
+    pk,
+    !!organization && !!currentUser && !!isOrgAdmin,
+  );
   const hasBotAccess = botStatus?.has_bot ?? null;
+  useDiscordConnectResult(pk);
 
   // Page nav options for mobile navbar dropdown
   const userCountDisplay = memberCountDisplay({
@@ -453,12 +442,15 @@ export default function OrganizationDetailPage() {
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 )}
-                {isOrgAdmin && hasDiscordServer && hasBotAccess === false && (
-                  <AddDiscordBotButton
+                {isOrgAdmin && hasBotAccess === false && (
+                  <SecondaryButton
                     size="sm"
-                    compact
-                    tooltip="Enable Discord user search and event notifications"
-                  />
+                    onClick={() => settingsParam.openSettings('discord')}
+                    data-testid="org-connect-discord-button"
+                  >
+                    <DiscordIcon className="h-4 w-4" />
+                    {hasDiscordServer ? 'Add Discord bot' : 'Connect Discord'}
+                  </SecondaryButton>
                 )}
               </div>
 

@@ -2,13 +2,16 @@ import json
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.test import TransactionTestCase, override_settings
+from django.urls import path
 
 from app.models import Tournament
 from lobby import broadcast
 from lobby.models import GameLobby
 from lobby.tests.helpers import make_game
+from tournament.consumers import TournamentConsumer
 
 
 @override_settings(
@@ -16,11 +19,6 @@ from lobby.tests.helpers import make_game
 )
 class TournamentSocketLobbyTests(TransactionTestCase):
     def test_lobby_event_and_bracket_update_reach_clients(self):
-        from channels.routing import URLRouter
-        from django.urls import path
-
-        from app.consumers import TournamentConsumer
-
         application = URLRouter(
             [path("api/tournament/<int:tournament_id>/", TournamentConsumer.as_asgi())]
         )

@@ -13,7 +13,6 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from app.models import CustomUser, Tournament
-from app.serializers import OrganizationsSerializer
 from league.models import League
 from org.features import FeatureKey, active_features
 from org.membership import member_access
@@ -27,7 +26,11 @@ from org.permissions import (
     is_org_role_holder,
     org_admin_staff_from_payload,
 )
-from org.serializers import OrganizationSerializer, OrgUserSerializer
+from org.serializers import (
+    OrganizationSerializer,
+    OrganizationsSerializer,
+    OrgUserSerializer,
+)
 from org.standing import api as standing
 
 # BaseUserProfile owns nickname/avatar; DotaUserProfile owns

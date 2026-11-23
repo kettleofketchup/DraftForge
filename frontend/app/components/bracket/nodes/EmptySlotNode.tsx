@@ -2,13 +2,13 @@ import { type NodeProps, Position } from '@xyflow/react';
 import { memo } from 'react';
 import { BaseHandle } from '~/components/ui/base-handle';
 import { BaseNode, BaseNodeContent } from '~/components/ui/base-node';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { cn } from '~/lib/utils';
-import { useUserStore } from '~/store/userStore';
 import type { EmptySlotData } from '../types';
 
 export const EmptySlotNode = memo(
   ({ data }: NodeProps & { data: EmptySlotData }) => {
-    const isStaff = useUserStore((state) => state.isStaff());
+    const isStaff = useCanManageCurrentTournament();
 
     return (
       <BaseNode
