@@ -85,7 +85,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
   async function openTargetModal(page: Page): Promise<Locator> {
     const node = page.locator(TARGET_MATCH_SELECTOR);
     await expect(node).toBeVisible({ timeout: 10000 });
-    await node.click({ force: true });
+    await node.click();
     const dialog = page.locator('[data-testid="matchStatsModal"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
     return dialog;
@@ -100,14 +100,6 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     await expect(dialog).toBeHidden({ timeout: 5000 });
     // A reload before the URL drops /match/<id> deep-links the dialog open again.
     await expect(page).not.toHaveURL(/\/bracket\/match\//);
-  }
-
-  async function reloadBracket(page: Page): Promise<void> {
-    await page.reload();
-    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
-      timeout: 15000,
-    });
-    await page.waitForLoadState('networkidle');
   }
 
   type ApiTeam = { pk: number } | null;
@@ -184,7 +176,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     );
     await closeModal(page);
 
-    await reloadBracket(page);
+    await loadBracket(page);
 
     // The server placed the winner in the next game and the loser in the
     // losers bracket.
@@ -237,7 +229,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       dialog.locator('[data-testid="radiantWinsButton"]'),
     );
     await closeModal(page);
-    await reloadBracket(page);
+    await loadBracket(page);
 
     dialog = await openTargetModal(page);
     await clickAndPersistMatchResult(
@@ -245,7 +237,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       dialog.locator('[data-testid="unsetWinnerButton"]'),
     );
     await closeModal(page);
-    await reloadBracket(page);
+    await loadBracket(page);
 
     // The advanced teams were pulled back out of the downstream slots.
     const games = await fetchGames(page);
@@ -307,11 +299,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     expect(forcedBody.winning_team_id).not.toBe(forcedBody.radiant_team_id);
     expect(forcedBody.winning_team_id).not.toBe(forcedBody.dire_team_id);
 
-    await page.reload();
-    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
-      timeout: 15000,
-    });
-    await page.waitForLoadState('networkidle');
+    await loadBracket(page);
 
     // Bracket card: neither team is marked as winner since the FK doesn't
     // resolve to either slot. (The defining trait of the stuck state.)
@@ -343,7 +331,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       dialog.locator('[data-testid="unsetWinnerButton"]'),
     );
     await closeModal(page);
-    await reloadBracket(page);
+    await loadBracket(page);
 
     const recoveredDialog = await openTargetModal(page);
     await expect(

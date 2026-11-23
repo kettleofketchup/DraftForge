@@ -350,7 +350,7 @@ export async function openMatchModal(
 ): Promise<Locator> {
   const node = bracketNode(page, gamePk);
   await expect(node).toBeVisible({ timeout: 15_000 });
-  await node.click({ force: true });
+  await node.click();
   const dialog = page.locator('[data-testid="matchStatsModal"]');
   await expect(dialog).toBeVisible({ timeout: 10_000 });
   return dialog;
