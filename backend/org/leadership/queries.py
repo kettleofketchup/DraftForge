@@ -4,11 +4,19 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, TypedDict
 
-from django.db.models import Avg, Count, Exists, OuterRef, Q, QuerySet
+from django.db.models import Avg, Exists, OuterRef, Q, QuerySet
 
-from org.leadership.constants import MIN_EVENT_AGGREGATE_REVIEWS, MIN_RELEASE_REVIEWS
+from org.leadership.constants import MIN_EVENT_AGGREGATE_REVIEWS
 from org.leadership.kinds import LeadershipKind
 from org.leadership.rating import display, overall_rate, rate_params
+from org.leadership.release import (
+    annotate_live,
+    is_released,
+    released_snapshots,
+)
+from org.leadership.release import (
+    release_floor as release_floor,
+)
 from org.models import ContributionEntry, OrgUser
 from org.models_leadership import (
     CaptainTrait,
@@ -19,8 +27,6 @@ from org.models_leadership import (
 from org.standing import ledger
 from org.standing.periods import ALL_TIME, Period, month_period, resolve_org_tz
 from org.standing.scoring import cutoff, from_score5, score_groups
-
-_LIVE_REVIEWS = Q(reviews__voided_at__isnull=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,23 +49,6 @@ class EventAggregate(TypedDict):
     rating: float | None
     traits: list[dict[str, Any]] | None
     captain_rating_points: int | None
-
-
-def release_floor(min_reviewers: int) -> int:
-    return max(min_reviewers, MIN_RELEASE_REVIEWS)
-
-
-def released_snapshots(
-    org_id: int, *, now: datetime, min_reviewers: int
-) -> QuerySet[EventCaptain]:
-    return (
-        EventCaptain.objects.nocache()
-        .filter(
-            organization_id=org_id, voided_at__isnull=True, window_closes_at__lte=now
-        )
-        .annotate(live=Count("reviews", filter=_LIVE_REVIEWS))
-        .filter(live__gte=release_floor(min_reviewers))
-    )
 
 
 def released_points_q(org_id: int, *, now: datetime) -> Q:
@@ -90,9 +79,7 @@ def rating_board(
         review__event_captain__event__scheduled_at__gte=cutoff(now, params),
     )
     if not include_unreleased:
-        released = released_snapshots(
-            org_id, now=now, min_reviewers=settings.rating_min_reviewers
-        )
+        released = released_snapshots(org_id, now=now, settings=settings)
         rows = rows.filter(review__event_captain__in=released.values("pk"))
     if captain_ids is not None:
         rows = rows.filter(review__event_captain__captain_id__in=list(captain_ids))
@@ -185,18 +172,13 @@ def captain_events(
     traits: Sequence[CaptainTrait],
     staff: bool,
 ) -> list[EventAggregate]:
-    floor = release_floor(settings.rating_min_reviewers)
     snaps = list(
-        EventCaptain.objects.nocache()
-        .filter(captain=org_user)
+        annotate_live(EventCaptain.objects.nocache().filter(captain=org_user))
         .select_related("event")
-        .annotate(live=Count("reviews", filter=_LIVE_REVIEWS))
         .order_by("-event__scheduled_at", "-pk")
     )
     released = {
-        s.pk
-        for s in snaps
-        if s.voided_at is None and s.window_closes_at <= now and s.live >= floor
+        s.pk for s in snaps if is_released(s, live=s.live, settings=settings, now=now)
     }
     visible = [s for s in snaps if staff or s.pk in released]
     shown = {s.pk for s in visible if staff or s.live >= MIN_EVENT_AGGREGATE_REVIEWS}

@@ -1,4 +1,4 @@
-from typing import Final
+from typing import Final, Literal
 
 from django.db import models
 
@@ -47,6 +47,8 @@ NULLABLE_SETTINGS: Final[frozenset[str]] = frozenset({"auto_release_after_hours"
 BOOL_SETTINGS: Final[frozenset[str]] = frozenset(
     {"leaderboard_public", "require_staff_release"}
 )
+
+ReleaseState = Literal["voided", "open", "short", "pending", "released"]
 
 
 class VoidKind(models.TextChoices):
