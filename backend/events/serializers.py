@@ -9,12 +9,8 @@ from rest_framework import serializers
 from app.auth import InternalServiceUser
 from app.display_names import user_display_name
 from app.models import CustomUser
-from app.permissions_tournament import (
-    check_lobby_steam_league_id,
-    has_event_staff_access,
-    request_user,
-)
-from app.serializers import TournamentUserSerializer, _serialize_users_with_mmr
+from app.permissions import request_user
+from app.serializers import TournamentUserSerializer
 from app.user_cache import serialize_users_core
 from common.game import GameType
 from events.capacity import seat_holding_statuses
@@ -28,6 +24,7 @@ from events.models import (
     OrgEventDefaults,
     RepeaterSubscription,
 )
+from events.permissions import has_event_staff_access
 from events.ready_check_settings import (
     READY_CHECK_FIELD_KWARGS,
     READY_CHECK_SETTINGS_FIELDS,
@@ -47,6 +44,7 @@ from events.signup_schedule import (
     policy_from_explicit_open_at,
 )
 from league.models import League
+from league.permissions import check_lobby_steam_league_id
 from lobby.passwords import MAX_LENGTH as LOBBY_PASSWORD_MAX_LENGTH
 from lobby.passwords import PasswordMode, validate_password
 from org.display_names import guild_nicknames, org_nicknames_public
@@ -54,6 +52,7 @@ from org.mmr import game_for_event, game_mmrs_prefetch, get_org_mmr, get_org_mmr
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 from org.permissions import can_view_org_members
+from tournament.serializers.users import _serialize_users_with_mmr
 
 # The lobby password is write-only on every events serializer: event and
 # series payloads are cached, public and handed to Celery. Staff and

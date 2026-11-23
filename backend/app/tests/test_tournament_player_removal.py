@@ -15,9 +15,9 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.services.team_audit import log_snapshot_fields, write_team_log
 from league.models import League
 from org.models import Organization, OrgUser
+from tournament.services.team_audit import log_snapshot_fields, write_team_log
 
 
 class TournamentPlayerRemovalTests(TestCase):

@@ -20,14 +20,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.functions.tournament import serialize_tournament
 from app.models import CustomUser, Team, Tournament
-from app.serializers import (
-    DraftSerializerSlim,
-    TournamentSerializer,
-    tournament_organization,
-)
-from app.tournament_state import tournament_state_queryset
 from draft.consumers.team import DraftConsumer
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
 from draft.services import team_broadcast as broadcast
@@ -51,6 +44,11 @@ from draft.tests.team_fixtures import (
 from events.models import Event
 from league.models import LeagueUser
 from org.models import Organization, OrgUser
+from tournament.functions import serialize_tournament
+from tournament.serializers.draft import DraftSerializerSlim
+from tournament.serializers.tournament import TournamentSerializer
+from tournament.serializers.users import tournament_organization
+from tournament.state import tournament_state_queryset
 
 # Paused org draft: draft, tournament, rounds, teams, members, dropins, lefts,
 # users (8 prefetch), users_remaining (1), draft_options (1), league +

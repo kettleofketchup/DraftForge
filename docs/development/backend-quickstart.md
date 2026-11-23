@@ -136,10 +136,10 @@ DISABLE_CACHE=true python manage.py test app.tests -v 2
 
 ## Creating New Endpoints
 
-1. **Add serializer** in `backend/app/serializers.py`
-2. **Add viewset** in `backend/app/views.py`
-3. **Add permissions** from `backend/app/permissions.py`
-4. **Register route** in `backend/app/urls.py`
+1. **Add serializer** in the owning app (for example `backend/tournament/serializers/`)
+2. **Add viewset** in that app's views (for example `backend/tournament/views/`)
+3. **Add permissions** from that app's `permissions.py` (for example `backend/tournament/permissions.py`)
+4. **Register route** in `backend/backend/urls.py`
 
 ## Common Commands
 

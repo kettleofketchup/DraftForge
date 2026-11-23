@@ -1,9 +1,9 @@
 import { Loader2, Users } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { SearchUserDropdown } from '~/components/user/searchUser';
+import { useEffect, useState } from 'react';
+import { UserSearchInput } from '~/components/user/search';
 import { VirtualizedUserGrid } from '~/components/user/VirtualizedUserGrid';
-import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
+import { useFilteredUsers } from '~/hooks/useUserSearch';
 import { useUserStore } from '~/store/userStore';
 
 /** Skeleton loader for user cards */
@@ -72,7 +72,6 @@ export function UsersPage() {
   const hasHydrated = useUserStore((state) => state.hasHydrated);
 
   const [query, setQuery] = useState('');
-  const debouncedQuery = useDebouncedValue(query, 300);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,16 +82,7 @@ export function UsersPage() {
     }
   }, [currentUser?.pk, getCurrentUser]);
 
-  // Filter users with debounced query - memoized for performance
-  const filteredUsers = useMemo(() => {
-    if (debouncedQuery === '') return users;
-    const q = debouncedQuery.toLowerCase();
-    return users.filter(
-      (person) =>
-        person.username?.toLowerCase().includes(q) ||
-        person.nickname?.toLowerCase().includes(q),
-    );
-  }, [users, debouncedQuery]);
+  const filteredUsers = useFilteredUsers(users, query);
 
   // Fetch users after hydration
   useEffect(() => {
@@ -162,7 +152,7 @@ export function UsersPage() {
           <Users className="w-6 h-6 text-primary" />
           <h1 className="text-xl font-semibold">Users</h1>
           <span className="text-sm text-muted-foreground">
-            {debouncedQuery ? (
+            {query.trim() ? (
               <>
                 {filteredUsers.length} of {users.length}
               </>
@@ -173,7 +163,12 @@ export function UsersPage() {
         </div>
 
         <div className="w-full">
-          <SearchUserDropdown users={users} query={query} setQuery={setQuery} />
+          <UserSearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search for users"
+            data-testid="userSearchInput"
+          />
         </div>
       </div>
 

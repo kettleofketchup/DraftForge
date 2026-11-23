@@ -14,17 +14,17 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from app.models import CustomUser, Game, Tournament
-from app.serializers import LeagueMatchSerializer, LeaguesSerializer
 from league.models import League, LeagueUser
 from league.permissions import (
     IsLeagueAdmin,
     can_view_league_members,
     can_view_league_members_from_payload,
 )
-from league.serializers import LeagueSerializer, LeagueUserSerializer
+from league.serializers import LeagueSerializer, LeaguesSerializer, LeagueUserSerializer
 from org.membership import member_access
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from org.permissions import can_view_org_members, has_org_staff_access
+from tournament.serializers.game import LeagueMatchSerializer
 from user.models import BaseUserProfile, DotaUserProfile
 from user.querysets import with_user_profiles
 
