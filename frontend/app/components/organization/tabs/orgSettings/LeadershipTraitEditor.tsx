@@ -157,7 +157,7 @@ export function LeadershipTraitEditor({
           className="text-sm font-medium"
           data-testid="leadership-traits-count"
         >
-          {activeCount} of {MAX_ACTIVE_TRAITS} active
+          {activeCount} active · up to {MAX_ACTIVE_TRAITS}
         </p>
         <ol className="flex flex-col gap-3">
           {fields.map((item, index) => {

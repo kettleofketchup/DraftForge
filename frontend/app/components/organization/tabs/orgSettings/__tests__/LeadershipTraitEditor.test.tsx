@@ -202,7 +202,7 @@ describe('LeadershipTraitEditor', () => {
     await loaded();
     expect(label('communication').value).toBe('Communication');
     expect(screen.getByTestId('leadership-traits-count')).toHaveTextContent(
-      '4 of 8 active',
+      '4 active · up to 8',
     );
     expect(unit.isDirty).toBe(false);
   });
