@@ -186,7 +186,6 @@ export default function SeriesPage() {
     onError: () => toast.error('Failed to delete event series'),
   });
 
-  // Current: signups_open, roll_call, in_progress
   const currentEvents = useMemo(
     () =>
       events?.filter((e) =>
@@ -201,7 +200,6 @@ export default function SeriesPage() {
     [events],
   );
 
-  // Past: completed, cancelled
   const pastEvents = useMemo(
     () =>
       events?.filter((e) => ['completed', 'cancelled'].includes(e.state)) || [],
