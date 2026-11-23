@@ -4,10 +4,16 @@ import binascii
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from django.db.models import Q, QuerySet
+from pydantic import ValidationError
 
 from events.models import Event, SignupLedgerEntry
+from events.schemas import SignupSnapshot
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 HISTORY_PAGE_SIZE: int = 50
 HISTORY_MAX_PAGE_SIZE: int = 100
@@ -75,3 +81,23 @@ def signup_history_queryset(
     return qs.select_related(
         "subject_user__base_profile", "actor_user__base_profile"
     ).order_by("-occurred_at", "-pk")
+
+
+def reduce_history_snapshot(value: Any, *, entry_id: int) -> dict[str, Any] | None:
+    """Validated snapshot with ``extra`` limited to ``HISTORY_EXTRA_KEYS``."""
+    if value is None:
+        return None
+    try:
+        if not isinstance(value, dict):
+            raise TypeError(type(value).__name__)
+        data = SignupSnapshot.model_validate(value).model_dump(mode="json")
+    except (ValidationError, TypeError):
+        log.warning(
+            "signup_history_snapshot_invalid",
+            system="events",
+            subsystem="ledger",
+            entry_id=entry_id,
+        )
+        return None
+    data["extra"] = {k: v for k, v in data["extra"].items() if k in HISTORY_EXTRA_KEYS}
+    return data
