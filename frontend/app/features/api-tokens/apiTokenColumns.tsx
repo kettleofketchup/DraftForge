@@ -68,8 +68,8 @@ export function makeApiTokenColumns({
         const t = row.original;
         return (
           <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="wrap-anywhere font-medium">{t.name}</span>
-            <span className="font-mono text-xs text-muted-foreground sm:hidden">
+            <span className="break-words font-medium">{t.name}</span>
+            <span className="font-mono text-xs break-all text-muted-foreground sm:hidden">
               {maskedToken(t.prefix)}
             </span>
             <span className="text-xs text-muted-foreground md:hidden">
@@ -78,6 +78,10 @@ export function makeApiTokenColumns({
             </span>
           </div>
         );
+      },
+      meta: {
+        headClassName: 'min-w-36 pr-4',
+        cellClassName: 'min-w-36',
       },
     },
     prefix: {

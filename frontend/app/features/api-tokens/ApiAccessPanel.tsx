@@ -249,7 +249,7 @@ function TokenSecret({ token }: { token: string }) {
   };
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-start gap-2">
+      <div className="flex items-stretch gap-2">
         <code
           className="min-w-0 flex-1 break-all rounded-md border border-border bg-base-900/40 p-3 font-mono text-sm select-all"
           data-testid="api-token-secret"
@@ -259,7 +259,7 @@ function TokenSecret({ token }: { token: string }) {
         <SecondaryButton
           type="button"
           size="sm"
-          className="min-h-11 sm:min-h-8"
+          className="h-auto min-h-11 self-stretch sm:min-h-8"
           onClick={copy}
           aria-label="Copy token"
           data-testid="api-token-copy"
