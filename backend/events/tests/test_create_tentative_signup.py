@@ -4,7 +4,13 @@ from django.test import TestCase
 from django.utils import timezone
 
 from app.models import CustomUser, GameType
-from events.models import Event, EventSignup, EventState, SignupStatus
+from events.models import (
+    Event,
+    EventSignup,
+    EventState,
+    SignupLedgerEntry,
+    SignupStatus,
+)
 from events.services import create_tentative_signup
 from events.tests.actors import SYSTEM
 from org.models import Organization
@@ -62,3 +68,15 @@ class CreateTentativeSignupTests(TestCase):
         self.event.save()
         with self.assertRaises(ValueError):
             create_tentative_signup(self.event, self.user, actor=SYSTEM)
+
+    def test_ledger_snapshots_the_stored_event_not_a_stale_instance(self) -> None:
+        Event.objects.filter(pk=self.event.pk).update(name="Renamed")
+        signup = create_tentative_signup(self.event, self.user, actor=SYSTEM)
+        entry = SignupLedgerEntry.objects.get(signup=signup)
+        self.assertEqual(entry.event_snapshot["name"], "Renamed")
+
+    def test_stale_open_instance_does_not_admit_a_cancelled_event(self) -> None:
+        Event.objects.filter(pk=self.event.pk).update(state=EventState.CANCELLED)
+        with self.assertRaises(ValueError):
+            create_tentative_signup(self.event, self.user, actor=SYSTEM)
+        self.assertFalse(EventSignup.objects.filter(user=self.user).exists())

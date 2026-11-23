@@ -354,6 +354,7 @@ def _create_signup(
     return signup
 
 
+@transaction.atomic
 def process_rsvp(
     event: Event,
     user: CustomUser,
@@ -369,6 +370,7 @@ def process_rsvp(
         event_id=event.pk,
         user_id=user.pk,
     )
+    event = _reread_event(event)
     ensure_self_serve(event, user, intent=Commitment.MAIN)
     signup = _create_signup(event, user, event_team=event_team, actor=actor)
     # Defer signup_created log until the outermost atomic commits — otherwise
@@ -404,6 +406,7 @@ def create_tentative_signup(
       - If existing CANCELLED/REJECTED row -> delete it, create fresh TENTATIVE.
       - Records one ledger entry and dispatches notify_signup_changed once.
     """
+    event = _reread_event(event)
     ensure_self_serve(event, user, intent=Commitment.MAYBE)
 
     existing = (
@@ -450,9 +453,10 @@ def decline_signup(
     a user who never signed up still appears in the Declined list.
     Raises ValueError if the user has already declined.
     """
+    event = _reread_event(event)
     existing = (
         EventSignup.objects.nocache()
-        .select_related("event", "user__base_profile")
+        .select_related("user__base_profile")
         .filter(event=event, user=user)
         .first()
     )
@@ -473,15 +477,15 @@ def decline_signup(
     prior_status = _withdraw(existing, by_member=_by_member(actor))
     entry = _record_leaf(
         existing,
-        event=existing.event,
+        event=event,
         actor=actor,
         action=SignupAction.DECLINED,
         before=before,
     )
-    if prior_status in seat_holding_statuses(existing.event):
-        _promote_from_waitlist(existing.event, cause=entry)
-    invalidate_after_commit(existing, existing.event)
-    transaction.on_commit(lambda: notify_signup_changed(existing.event))
+    if prior_status in seat_holding_statuses(event):
+        _promote_from_waitlist(event, cause=entry)
+    invalidate_after_commit(existing, event)
+    transaction.on_commit(lambda: notify_signup_changed(event))
     return existing
 
 
@@ -663,6 +667,11 @@ APPROVABLE_STATUSES = [
     SignupStatus.PENDING_APPROVAL,
     SignupStatus.WAITLISTED,
 ]
+
+
+def _reread_event(event: Event) -> Event:
+    # The caller's instance can come from cacheops and be stale.
+    return Event.objects.nocache().get(pk=event.pk)
 
 
 def _reread_signup(signup: EventSignup) -> None:
@@ -954,7 +963,8 @@ def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
 
 @transaction.atomic
 def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
-    """Move an active signup to the end of the waitlist."""
+    """Move an active signup to the end of the waitlist. Staff fill the freed
+    seat by hand; nobody is promoted."""
     _reread_signup(signup)
     if signup.status in (*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED):
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
@@ -1376,8 +1386,10 @@ def ensure_tournament_with_signups(
     event: Event, phase: RosterPhase | None = None
 ) -> Tournament:
     """Self-heal before a tournament starts: create it if missing and sync its
-    roster. Defaults to the start rule: confirmed only from roll call (#378),
-    approved and confirmed when starting straight from signups."""
+    roster. Defaults to the start rule: starting from roll call rosters only
+    confirmed players, because an approved player who never confirmed did not
+    answer roll call; starting straight from signups rosters approved and
+    confirmed players."""
     return sync_event_roster(event, phase or start_phase(event)).tournament
 
 

@@ -474,7 +474,7 @@ class RollbackPathTests(TransactionTestCase):
         self.assertNotIn("embed_update_queued", events)
         self.assertNotIn(
             "signup_created", events
-        )  # New: deferred to on_commit, suppressed on rollback
+        )  # deferred to on_commit, so a rollback suppresses it
         mock_apply_async.assert_not_called()
         self.assertEqual(
             EventSignup.objects.filter(event=self.event, user=self.user).count(), 0
