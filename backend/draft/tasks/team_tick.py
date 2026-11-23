@@ -10,7 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from app.models import Team
+from app.models import LIVE_TEAM_FIRST, Team
 from app.redis_keys import namespaced_key
 from draft.models import Draft, DraftRound, TeamDraftState
 from draft.services.team import emit_event, team_for_round, team_payload
@@ -300,6 +300,7 @@ async def check_captain_heartbeats(draft_id: int) -> str | None:
         team = (
             Team.objects.nocache()
             .filter(tournament=draft.tournament, captain_id=rnd.captain_id)
+            .order_by(*LIVE_TEAM_FIRST)
             .first()
         )
         captain = team.captain if team else None
@@ -389,6 +390,7 @@ def read_timeout_candidate(draft_id: int) -> tuple[int, datetime] | None:
     reserve = (
         Team.objects.nocache()
         .filter(tournament_id=draft.tournament_id, captain_id=active.captain_id)
+        .order_by(*LIVE_TEAM_FIRST)
         .values_list("draft_reserve_ms", flat=True)
         .first()
     )
@@ -421,6 +423,7 @@ def _check_timeout_sync(draft_id: int) -> DraftRound | None:
             Team.objects.nocache()
             .select_for_update()
             .filter(tournament=draft.tournament, captain_id=rnd.captain_id)
+            .order_by(*LIVE_TEAM_FIRST)
             .first()
         )
         options = draft.tournament.get_draft_options(fresh=True)

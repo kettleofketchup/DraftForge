@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from django.db import transaction
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Team, Tournament
+from app.models import LIVE_TEAM_FIRST, CustomUser, Team, Tournament
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound, TeamDraftState
 from draft.services.team_broadcast import broadcast_event_after_commit
 from telemetry.logging import get_logger
@@ -77,9 +77,11 @@ def emit_event(
 
 
 def team_for_round(draft: Draft, round: DraftRound) -> Team | None:
-    return Team.objects.filter(
-        tournament=draft.tournament, captain_id=round.captain_id
-    ).first()
+    return (
+        Team.objects.filter(tournament=draft.tournament, captain_id=round.captain_id)
+        .order_by(*LIVE_TEAM_FIRST)
+        .first()
+    )
 
 
 def activate_round(

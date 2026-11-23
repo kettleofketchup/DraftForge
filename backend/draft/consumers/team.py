@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
 from app.consumer_db import consumer_db
-from app.models import Team
+from app.models import LIVE_TEAM_FIRST, Team
 from draft.consumers.base import BaseDraftConsumer
 from draft.models import Draft, DraftEvent
 from draft.serializers.team import DraftEventSerializer
@@ -27,6 +27,14 @@ if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
 
 log = get_logger(__name__)
+
+
+def _captain_team(draft_id: int, user: "AbstractBaseUser") -> Team | None:
+    return (
+        Team.objects.filter(tournament__draft__pk=draft_id, captain=user)
+        .order_by(*LIVE_TEAM_FIRST)
+        .first()
+    )
 
 
 class DraftConsumer(BaseDraftConsumer):
@@ -54,7 +62,7 @@ class DraftConsumer(BaseDraftConsumer):
     def get_captain_draft_team(
         self, draft_id: int, user: "AbstractBaseUser"
     ) -> "Team | None":
-        return Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
+        return _captain_team(draft_id, user)
 
     def get_active_draft_state_values(self) -> list[str]:
         return ["drafting", "resuming"]
@@ -75,7 +83,7 @@ class DraftConsumer(BaseDraftConsumer):
     def _set_presence(
         self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
     ) -> None:
-        team = Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
+        team = _captain_team(draft_id, user)
         if team is None:
             return
         draft = Draft.objects.get(pk=draft_id)
@@ -139,7 +147,7 @@ class DraftConsumer(BaseDraftConsumer):
 
     @consumer_db
     def _restore_presence(self, draft_id: int, user: "AbstractBaseUser") -> None:
-        team = Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
+        team = _captain_team(draft_id, user)
         if team is None or team.draft_has_connected:
             return
         team.draft_is_connected = True

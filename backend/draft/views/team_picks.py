@@ -12,7 +12,7 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
 from app.functions.tournament import serialize_tournament
-from app.models import CustomUser, Team, Tournament
+from app.models import LIVE_TEAM_FIRST, CustomUser, Team, Tournament
 from app.permissions_tournament import can_edit_tournament
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound, TeamDraftState
 from draft.services.shuffle import assign_next_shuffle_captain
@@ -195,6 +195,7 @@ def _pick_under_lock(
     team = (
         Team.objects.select_for_update()
         .filter(tournament=draft.tournament_id, captain_id=draft_round.captain_id)
+        .order_by(*LIVE_TEAM_FIRST)
         .first()
     )
     tournament = draft.tournament

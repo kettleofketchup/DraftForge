@@ -13,7 +13,7 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
 from app.functions.tournament import serialize_tournament
-from app.models import Team
+from app.models import LIVE_TEAM_FIRST, Team
 from app.permissions_tournament import can_edit_tournament
 from draft.models import Draft, DraftOptions, DraftRound, TeamDraftState
 from draft.services.team import (
@@ -67,9 +67,14 @@ def teamdraft_set_ready(request: Request, draft_pk: int) -> Response:
         draft = Draft.objects.select_for_update().get(pk=draft_pk)
         if draft.state != TeamDraftState.PENDING:
             return _wrong_state(draft)
-        team = Team.objects.select_for_update().get(
-            tournament=draft.tournament, captain=request.user
+        team = (
+            Team.objects.select_for_update()
+            .filter(tournament=draft.tournament, captain=request.user)
+            .order_by(*LIVE_TEAM_FIRST)
+            .first()
         )
+        if team is None:
+            return _error("not_captain", status.HTTP_403_FORBIDDEN)
         team.draft_is_ready = ready
         team.save(update_fields=["draft_is_ready"])
         invalidate_after_commit(draft.tournament)
