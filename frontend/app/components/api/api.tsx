@@ -148,6 +148,7 @@ export {
   createEventRepeater,
   createSeriesOneOffEvent,
   deleteEvent,
+  deleteEventRepeater,
   demoteSignup,
   getDiscordChannels,
   getDiscordRoles,

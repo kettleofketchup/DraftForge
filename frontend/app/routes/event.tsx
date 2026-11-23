@@ -58,14 +58,9 @@ import {
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import type { AddMemberPayload } from '~/components/api/api';
-import {
-  adminAddSignup,
-  subscribeToRepeater,
-  unsubscribeFromRepeater,
-} from '~/components/api/api';
-import api from '~/components/api/axios';
+import { adminAddSignup } from '~/components/api/api';
 import { EventStateBadge } from '~/components/events';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
@@ -146,8 +141,10 @@ import { canPromoteEvent, PromoteEventButton } from '~/features/promotion';
 import {
   useEvent,
   useEventActionMutation,
+  useEventRepeater,
   useEventSignups,
   useEventSignupUsers,
+  useRepeaterSubscriptionMutation,
   useSignupActionMutations,
   useSignupMutation,
 } from '~/hooks/useEvent';
@@ -286,35 +283,13 @@ export default function EventPage() {
 
   // Repeater subscription state
   const repeaterId = event?.event_repeater;
-  const { data: repeaterData } = useQuery({
-    queryKey: ['repeater', repeaterId],
-    queryFn: () =>
-      api.get(`/events/repeaters/${repeaterId}/`).then((r) => r.data),
-    enabled: !!repeaterId && !!currentUser,
-  });
+  const { data: repeaterData } = useEventRepeater(
+    repeaterId && currentUser ? repeaterId : null,
+  );
   const isSubscribed = repeaterData?.is_subscribed ?? false;
 
-  const subscribeMutation = useMutation({
-    mutationFn: () => subscribeToRepeater(repeaterId!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
-      queryClient.invalidateQueries({
-        queryKey: ['repeater-subscribers', repeaterId],
-      });
-      toast.success('Subscribed to event series notifications');
-    },
-  });
-
-  const unsubscribeMutation = useMutation({
-    mutationFn: () => unsubscribeFromRepeater(repeaterId!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
-      queryClient.invalidateQueries({
-        queryKey: ['repeater-subscribers', repeaterId],
-      });
-      toast.success('Unsubscribed from event series notifications');
-    },
-  });
+  const { subscribe: subscribeMutation, unsubscribe: unsubscribeMutation } =
+    useRepeaterSubscriptionMutation();
 
   const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
     if (!event) return [];
@@ -582,7 +557,14 @@ export default function EventPage() {
                 (isSubscribed ? (
                   <SecondaryButton
                     size="sm"
-                    onClick={() => unsubscribeMutation.mutate()}
+                    onClick={() =>
+                      unsubscribeMutation.mutate(event.event_repeater!, {
+                        onSuccess: () =>
+                          toast.success(
+                            'Unsubscribed from event series notifications',
+                          ),
+                      })
+                    }
                     disabled={unsubscribeMutation.isPending}
                   >
                     <BellOff className="h-4 w-4 mr-1" />
@@ -591,7 +573,14 @@ export default function EventPage() {
                 ) : (
                   <PrimaryButton
                     size="sm"
-                    onClick={() => subscribeMutation.mutate()}
+                    onClick={() =>
+                      subscribeMutation.mutate(event.event_repeater!, {
+                        onSuccess: () =>
+                          toast.success(
+                            'Subscribed to event series notifications',
+                          ),
+                      })
+                    }
                     disabled={subscribeMutation.isPending}
                   >
                     <Bell className="h-4 w-4 mr-1" />

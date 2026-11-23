@@ -22,6 +22,7 @@ import {
   createEvent as createEventAPI,
   createEventRepeater as createEventRepeaterAPI,
   deleteEvent as deleteEventAPI,
+  deleteEventRepeater as deleteEventRepeaterAPI,
   demoteSignup as demoteSignupAPI,
   getEvent,
   getEventRepeater,
@@ -222,45 +223,55 @@ export function useEventActionMutation(eventId: number) {
   };
 }
 
+export const repeaterKeys = {
+  lists: () => ['event-repeaters'] as const,
+  list: (params?: { organization?: number }) =>
+    ['event-repeaters', params] as const,
+  detail: (id: number | null) => ['repeater', id] as const,
+  subscribers: (id: number) => ['repeater-subscribers', id] as const,
+  events: (id: number | null) => ['repeater-events', id] as const,
+};
+
 export function useEventRepeaters(params?: { organization?: number }) {
   return useQuery<EventRepeaterListItem[]>({
-    queryKey: ['event-repeaters', params],
+    queryKey: repeaterKeys.list(params),
     queryFn: () => getEventRepeaters(params),
   });
 }
 
 export function useEventRepeater(id: number | null) {
   return useQuery<EventRepeaterType>({
-    queryKey: ['repeater', id],
+    queryKey: repeaterKeys.detail(id),
     queryFn: () => getEventRepeater(id as number),
     enabled: id !== null,
   });
 }
 
-export function useCreateEventMutation(organizationId: number) {
+export function useCreateEventMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: Partial<EventType>) => createEventAPI(payload),
+    mutationFn: ({
+      payload,
+      openSignups = false,
+    }: {
+      payload: EventWritePayload;
+      openSignups?: boolean;
+    }) => createEventAPI(payload, openSignups),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['events', { organization: organizationId }],
-      });
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
     },
   });
 }
 
-export function useCreateEventRepeaterMutation(organizationId: number) {
+export function useCreateEventRepeaterMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: Partial<EventRepeaterType>) =>
       createEventRepeaterAPI(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['events', { organization: organizationId }],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ['event-repeaters', { organization: organizationId }],
-      });
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
     },
   });
 }
@@ -271,14 +282,31 @@ export function useUpdateEventRepeaterMutation(repeaterId: number) {
     mutationFn: (payload: Partial<EventRepeaterType>) =>
       updateEventRepeaterAPI(repeaterId, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
-      queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
+      queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
+      queryClient.invalidateQueries({
+        queryKey: repeaterKeys.detail(repeaterId),
+      });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       // The series cascade may have changed its events' passwords.
       queryClient.invalidateQueries({
         queryKey: ['repeater-lobby-password', repeaterId],
       });
       queryClient.invalidateQueries({ queryKey: ['event-lobby-password'] });
+    },
+  });
+}
+
+export function useDeleteEventRepeaterMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (repeater: { id: number; organization: number }) =>
+      deleteEventRepeaterAPI(repeater.id),
+    onSuccess: (_data, repeater) => {
+      queryClient.removeQueries({ queryKey: repeaterKeys.detail(repeater.id) });
+      queryClient.removeQueries({ queryKey: repeaterKeys.events(repeater.id) });
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
+      void invalidateConductQueries(queryClient, repeater.organization);
     },
   });
 }
@@ -424,18 +452,23 @@ const EMPTY_SIGNUPS: EventSignupType[] = [];
 
 export function useRepeaterSubscriptionMutation() {
   const queryClient = useQueryClient();
+  const onSuccess = (_data: void, repeaterId: number) => {
+    queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
+    queryClient.invalidateQueries({
+      queryKey: repeaterKeys.detail(repeaterId),
+    });
+    queryClient.invalidateQueries({
+      queryKey: repeaterKeys.subscribers(repeaterId),
+    });
+  };
   return {
     subscribe: useMutation({
       mutationFn: (repeaterId: number) => subscribeToRepeater(repeaterId),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
-      },
+      onSuccess,
     }),
     unsubscribe: useMutation({
       mutationFn: (repeaterId: number) => unsubscribeFromRepeater(repeaterId),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
-      },
+      onSuccess,
     }),
   };
 }
