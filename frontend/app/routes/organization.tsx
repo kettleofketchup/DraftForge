@@ -147,7 +147,6 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-// Discord icon component
 const DiscordIcon = ({ className }: { className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
