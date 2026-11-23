@@ -68,7 +68,8 @@ export const computeTeamPositionCoverage = (
   const members = currentTeam?.members || [];
   const positionsFor = (member: UserType): PositionsType | undefined =>
     (member.pk != null ? positionsByPk?.get(member.pk) : undefined) ??
-    member.positions;
+    member.positions ??
+    undefined;
 
   const result: Record<PositionKey, PositionCoverage> = {
     carry: {
