@@ -7,12 +7,12 @@ from django.db.models import QuerySet
 
 from app.cache_utils import invalidate_after_commit
 from app.models import Game, Team, Tournament
-from app.services.bracket_placement import (
+from steam.models import GameMatchSuggestion, Match
+from telemetry.logging import get_logger
+from tournament.services.bracket_placement import (
     apply_bracket_placements,
     tournament_bracket_placements,
 )
-from steam.models import GameMatchSuggestion, Match
-from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 

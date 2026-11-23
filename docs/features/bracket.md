@@ -100,7 +100,7 @@ Team D     L      L       W       -
 ### Team Placement
 
 A team's `placement` is set when a result knocks it out of the bracket. The
-rules (`backend/app/services/bracket_placement.py`):
+rules (`backend/tournament/services/bracket_placement.py`):
 
 | Bracket | Placement |
 |---------|-----------|

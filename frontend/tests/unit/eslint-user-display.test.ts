@@ -191,3 +191,46 @@ tester.run('no-avatar-fallback', rule('no-avatar-fallback'), {
     },
   ],
 });
+
+tester.run('use-user-search', rule('use-user-search'), {
+  valid: [
+    'const r = filterUsers(users, q);',
+    'const r = users.filter((u) => userMatchesQuery(u, q));',
+    'const r = teams.filter((t) => t.name.toLowerCase().includes(q));',
+    'const same = a.username === b.username;',
+    'const isMe = u.pk === me.pk;',
+    'const sorted = users.sort((a, b) => a.username.localeCompare(b.username));',
+    'const has = names.includes(u.username);',
+    'const label = u.username.toLowerCase();',
+  ],
+  invalid: [
+    {
+      code: 'const r = users.filter((u) => u.username.toLowerCase().includes(q));',
+      errors: [{ messageId: 'manual' }],
+    },
+    {
+      code: "const r = users.filter((u) => (u.nickname || '').toLowerCase().includes(q));",
+      errors: [{ messageId: 'manual' }],
+    },
+    {
+      code: 'const r = users.filter((u) => u?.username?.toLowerCase().startsWith(q));',
+      errors: [{ messageId: 'manual' }],
+    },
+    {
+      code: 'const r = users.find((u) => u.nickname?.toLowerCase() === s.toLowerCase());',
+      errors: [{ messageId: 'manual' }],
+    },
+    {
+      code: 'const r = members.filter((m) => m.nick?.toLowerCase().includes(q) || m.user.global_name?.toLowerCase().includes(q));',
+      errors: [{ messageId: 'manual' }, { messageId: 'manual' }],
+    },
+    {
+      code: 'const r = users.filter((u) => DisplayName(u).toLowerCase().includes(q));',
+      errors: [{ messageId: 'manual' }],
+    },
+    {
+      code: 'const r = users.filter((u) => u.discordNickname.includes(q));',
+      errors: [{ messageId: 'manual' }],
+    },
+  ],
+});

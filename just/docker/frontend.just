@@ -13,12 +13,12 @@ build *flags:
     {{just}} docker::frontend::build-prod "$@"
     {{just}} docker::frontend::build-dev "$@"
 
-# Build the production frontend image (runtime); --push, --release (adds the version tag)
+# Build the production frontend image (runtime); --push, --release (adds the version tag), --no-cache, --mode=trusted|pr --pr=<n>
 [group('docker::frontend')]
 build-prod *flags:
     {{just}} docker::buildx frontend frontend runtime frontend/Dockerfile frontend "$@"
 
-# Build the dev frontend image with Playwright (runtime-dev, slower); --push
+# Build the dev frontend image with Playwright (runtime-dev, slower); --push, --mode=trusted|pr --pr=<n>
 [group('docker::frontend')]
 build-dev *flags:
     {{just}} docker::buildx frontend frontend-dev runtime-dev frontend/Dockerfile frontend "$@"
@@ -43,6 +43,11 @@ pull:
 [group('docker::frontend')]
 pull-pw:
     {{just}} docker::pull-image playwright playwright-runner
+
+# Pull frontend-dev by content hash (the image the test stack runs)
+[group('docker::frontend')]
+pull-dev:
+    {{just}} docker::pull-image frontend frontend-dev
 
 # Run the frontend image interactively
 [group('docker::frontend')]

@@ -107,6 +107,7 @@ export interface TieRollPayload {
   winner_id: number;
   winner_name: string;
   hold_ms?: number;
+  hold_until?: string;
 }
 
 export interface PickUndonePayload {

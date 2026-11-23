@@ -6,6 +6,7 @@ import { TeamCard } from '~/components/teamdraft/CompletedTeamDraftView';
 import { DraftModal } from '~/components/teamdraft/draftModal';
 import { CaptainSelectionModal } from '~/components/tournament/captains/captainSelectionModal';
 import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
+import { userMatchesQuery } from '~/lib/userSearch';
 
 import type { UserType } from '~/components/user/types';
 import type { TeamType } from '~/index';
@@ -28,11 +29,9 @@ export const TeamsTab: React.FC = memo(() => {
     return tournament.teams
       .filter((team: TeamType) => {
         // Check if any user in the team matches the query
-        const userMatches = team.members?.some((user: UserType) => {
-          const usernameMatch = user.username?.toLowerCase().includes(q);
-          const nicknameMatch = user.nickname?.toLowerCase().includes(q);
-          return usernameMatch || nicknameMatch;
-        });
+        const userMatches = team.members?.some((user: UserType) =>
+          userMatchesQuery(user, q),
+        );
 
         // Check if team name matches
         const teamNameMatch = team.name?.toLowerCase().includes(q);

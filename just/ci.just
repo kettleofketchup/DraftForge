@@ -26,7 +26,7 @@ prefetch-start:
     rm -rf "$dir" && mkdir -p "$dir"
     just={{quote(just_executable())}}
     justfile={{quote(root / "justfile")}}
-    for task in images:docker::all-pull db:docker::db::pull; do
+    for task in images:docker::test-pull db:docker::db::pull; do
         name="${task%%:*}" recipe="${task#*:}"
         # shellcheck disable=SC2016 # expanded by the inner bash
         nohup bash -c '
@@ -73,17 +73,36 @@ buildx-builder:
     docker buildx create --name df-ci --driver docker-container --use --bootstrap >/dev/null
     echo "buildx builder df-ci ready"
 
-# Build and push, under the content-hash tag only, every Playwright-stack image and the test DB the registry lacks (the Playwright `prepare` job); DF_PREPARE_READONLY=1 only reports. Failures warn and exit 0: test jobs rebuild what is still missing.
+# Build and push, under the content-hash tag only, every Playwright-stack image and the test DB the registry lacks (the Playwright `prepare` job); DF_PREPARE_READONLY=1 only reports. DF_PREPARE_PR=<n> (prepare on the home runner) builds through the home BuildKit and pushes only draftforge-ci/<img>:pr-<n>-<hash>, never a draftforge/ tag. --probe prints `missing=<names>` and builds nothing. Build and push failures warn and exit 0 (test jobs rebuild what is still missing); building on a self-hosted runner outside PR mode is an error.
 [group('ci')]
-prepare-images:
+[positional-arguments]
+prepare-images *flags:
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{quote(root)}}
     start=$SECONDS
+    probe=false
+    for flag in "$@"; do
+        case "$flag" in
+            --probe) probe=true ;;
+            *) echo "ci::prepare-images: unknown option $flag (use --probe)" >&2; exit 2 ;;
+        esac
+    done
     just={{quote(just_executable())}}
     justfile={{quote(root / "justfile")}}
     registry=ghcr.io/kettleofketchup/draftforge
+    ci_registry=ghcr.io/kettleofketchup/draftforge-ci
     db_registry="${DF_TEST_DB_REGISTRY:-$registry/test-db}"
+    pr="${DF_PREPARE_PR-}"
+    if [[ -n "$pr" && ! "$pr" =~ ^[0-9]+$ ]]; then
+        echo "::error::ci::prepare-images: DF_PREPARE_PR must be a PR number, got '$pr'" >&2
+        exit 2
+    fi
+    # The home runner builds PR code: it may push only draftforge-ci/ tags (PR mode).
+    if [[ -z "$pr" && "${RUNNER_ENVIRONMENT-}" == self-hosted ]]; then
+        echo "::error::ci::prepare-images: on a self-hosted runner only PR mode (DF_PREPARE_PR=<n>) may build; refusing to push draftforge/ tags" >&2
+        exit 1
+    fi
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
     # name, service hashed by hash-docker-image.sh, build recipe
@@ -93,7 +112,7 @@ prepare-images:
         "playwright-runner playwright docker::frontend::build-pw"
         "nginx nginx docker::nginx::build"
     )
-    declare -A ref recipe
+    declare -A ref ci_ref recipe
     names=()
     for entry in "${images[@]}"; do
         read -r name service build <<< "$entry"
@@ -103,34 +122,68 @@ prepare-images:
     done
     names+=(test-db)
     ref[test-db]="$db_registry:$(./scripts/hash-test-db-sources.sh)"
+    if [[ -n "$pr" ]]; then
+        for name in "${names[@]}"; do
+            ci_ref[$name]="$ci_registry/$name:pr-$pr-${ref[$name]##*:}"
+        done
+    fi
 
+    # In PR mode an item is present when main's hash tag or this PR's draftforge-ci tag exists.
     for name in "${names[@]}"; do
-        ( docker buildx imagetools inspect "${ref[$name]}" >/dev/null 2>&1 && touch "$dir/$name.present" ) &
+        (
+            if docker buildx imagetools inspect "${ref[$name]}" >/dev/null 2>&1 \
+                || { [[ -n "$pr" ]] && docker buildx imagetools inspect "${ci_ref[$name]}" >/dev/null 2>&1; }; then
+                touch "$dir/$name.present"
+            fi
+        ) &
     done
     wait
     missing=()
     for name in "${names[@]}"; do
         [[ -f "$dir/$name.present" ]] || missing+=("$name")
     done
+    if [[ "$probe" == true ]]; then
+        echo "missing=${missing[*]}"
+        exit 0
+    fi
 
     line() { local h="${ref[$1]##*:}"; printf '%-18s %s  %s\n' "$1" "${h:0:12}" "$2" | tee -a "$dir/summary"; }
     readonly_reason=""
     if [[ "${DF_PREPARE_READONLY-}" == 1 ]]; then
         readonly_reason="no registry write access"
     fi
+    if [[ -n "$pr" ]]; then
+        echo "PR mode: builds push only $ci_registry/<image>:pr-$pr-<hash>" | tee -a "$dir/summary"
+    fi
 
     if [[ ${#missing[@]} -gt 0 && -z "$readonly_reason" ]]; then
-        if [[ " ${missing[*]} " != " test-db " ]]; then
+        if [[ -n "$pr" ]]; then
+            # PR mode builds everything, the test DB included, on the remote home BuildKit.
+            "$just" --justfile "$justfile" ci::home-builder
+        elif [[ " ${missing[*]} " != " test-db " ]]; then
             "$just" --justfile "$justfile" ci::buildx-builder
         fi
         for name in "${missing[@]}"; do
             (
                 t=$SECONDS
-                if [[ "$name" == test-db ]]; then
+                if [[ "$name" == test-db && -n "$pr" ]]; then
+                    if python="${DF_JUST_PYTHON:-$("$just" --justfile "$justfile" ci::venv)}" \
+                        && DF_JUST_PYTHON="$python" "$just" --justfile "$justfile" docker::db::build --mode=pr --pr="$pr"; then
+                        s=ok
+                    else
+                        s=fail
+                    fi
+                elif [[ "$name" == test-db ]]; then
                     # Populate runs on the host: DF_JUST_PYTHON must have Django, else ci::venv makes one.
                     if python="${DF_JUST_PYTHON:-$("$just" --justfile "$justfile" ci::venv)}" \
                         && DF_JUST_PYTHON="$python" "$just" --justfile "$justfile" docker::db::build \
                         && "$just" --justfile "$justfile" docker::db::push --hash-only; then
+                        s=ok
+                    else
+                        s=fail
+                    fi
+                elif [[ -n "$pr" ]]; then
+                    if "$just" --justfile "$justfile" "${recipe[$name]}" --mode=pr --pr="$pr"; then
                         s=ok
                     else
                         s=fail
@@ -181,6 +234,19 @@ prepare-images:
         { echo '```'; cat "$dir/summary"; echo "done in $((SECONDS - start))s"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
     fi
 
+# Create or reuse the `home` remote buildx builder (the home cluster's BuildKit) and bootstrap it; the draftforge-home runner has no Docker daemon. Unreachable is an ::error:: and exit 1.
+[group('ci')]
+home-builder:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    addr="${DF_HOME_BUILDKIT:-tcp://buildkit-0.buildkit.buildkit.svc.cluster.local:1234}"
+    docker buildx create --name home --driver remote "$addr" --use >/dev/null 2>&1 || docker buildx use home
+    if ! timeout 20 docker buildx inspect --bootstrap home >/dev/null; then
+        echo "::error::home BuildKit unreachable; unset the SELF_HOSTED_RUNNERS repo variable so prepare runs on ubuntu-latest"
+        exit 1
+    fi
+    echo "buildx builder home ready"
+
 # Create .venv with Poetry for a job set up with python: 'false' that needs Django on the host (the test-DB populate fallback); prints its python
 [group('ci')]
 venv:
@@ -192,6 +258,44 @@ venv:
         POETRY_VIRTUALENVS_IN_PROJECT=true poetry install --no-interaction --no-ansi >&2
     fi
     echo "$PWD/.venv/bin/python"
+
+# Write the Zot cache registry's auth entry (user ci, password from env ZOT_PASSWORD) into
+# $DOCKER_CONFIG/config.json (default ~/.docker), keeping every other key. Zot is plain
+# HTTP on a ClusterIP and client-side `docker login` assumes HTTPS, so the entry is
+# written directly; BuildKit reads it from the client config through the buildx session.
+# Prints only the ::add-mask:: line for the encoded value.
+[group('ci')]
+zot-auth:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -z "${ZOT_PASSWORD:-}" ]]; then
+        echo "::error::ZOT_PASSWORD is empty; not writing a Zot credential" >&2
+        exit 1
+    fi
+    python3 -I - <<'PY'
+    import base64, json, os, tempfile
+    registry = "zot.zot.svc.cluster.local:5000"
+    auth = base64.b64encode(("ci:" + os.environ["ZOT_PASSWORD"]).encode()).decode()
+    print("::add-mask::" + auth, flush=True)
+    config_dir = os.environ.get("DOCKER_CONFIG") or os.path.expanduser("~/.docker")
+    os.makedirs(config_dir, mode=0o700, exist_ok=True)
+    path = os.path.join(config_dir, "config.json")
+    try:
+        with open(path) as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        config = {}
+    config.setdefault("auths", {})[registry] = {"auth": auth}
+    fd, tmp = tempfile.mkstemp(dir=config_dir, prefix=".config.json.")
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(config, f, indent="\t")
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+    PY
 
 # Every event: fragment rules (including [Unreleased] holding only the pointer and no
 # fragment a release already consumed) and the checker's tests. push to main: HEAD
@@ -325,3 +429,12 @@ backend-test-labels group:
 [positional-arguments]
 timing *args:
     cd {{quote(root)}} && python3 -I scripts/ci_timing.py "$@"
+
+# Check which jobs may use the draftforge-home runner, plus the checker's tests (the `runs-on-guard` CI job); needs mikefarah yq
+[group('ci')]
+check-runs-on:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{quote(root)}}
+    python3 -I scripts/test_check_runs_on.py
+    bash scripts/check-runs-on.sh

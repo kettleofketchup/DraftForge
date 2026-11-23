@@ -4,6 +4,12 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from tournament.schemas import (
+    AutoHeroDraftGameSchema,
+    TournamentParticipantSchema,
+    TournamentTaskSchema,
+)
+
 
 class DiscordTournamentLogTest(TestCase):
     def setUp(self):
@@ -121,8 +127,6 @@ class SendDraftLinksTaskTest(TestCase):
     def test_sends_dm_to_participants(
         self, mock_get_tourn, mock_get_parts, mock_dm, mock_log
     ):
-        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
-
         mock_get_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
@@ -160,7 +164,6 @@ class SendDraftLinksTaskTest(TestCase):
         mock_update,
         _invite,
     ):
-        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
         from events.tournament_tasks import send_tournament_draft_links
 
         mock_tournament.return_value = TournamentTaskSchema(
@@ -196,7 +199,6 @@ class SendDraftLinksTaskTest(TestCase):
         mock_update,
         mock_invite,
     ):
-        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
         from events.tournament_tasks import send_tournament_draft_links
 
         mock_tournament.return_value = TournamentTaskSchema(
@@ -238,7 +240,6 @@ class SendDraftLinksTaskTest(TestCase):
         mock_update,
         mock_invite,
     ):
-        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
         from events.tournament_tasks import send_tournament_herodraft_links
 
         mock_tournament.return_value = TournamentTaskSchema(
@@ -263,8 +264,6 @@ class SendDraftLinksTaskTest(TestCase):
 
     @patch("events.tournament_tasks.get_tournament_for_task")
     def test_skips_when_disabled(self, mock_get):
-        from app.schemas import TournamentTaskSchema
-
         mock_get.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
@@ -281,8 +280,6 @@ class SendDraftLinksTaskTest(TestCase):
     @patch("events.tournament_tasks.get_tournament_participants")
     @patch("events.tournament_tasks.get_tournament_for_task")
     def test_creates_log(self, mock_get_tourn, mock_get_parts, mock_dm, mock_log):
-        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
-
         mock_get_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
@@ -312,8 +309,6 @@ class SendHeroDraftLinksTaskTest(TestCase):
     @patch("events.tournament_tasks.get_match_participants")
     @patch("events.tournament_tasks.get_tournament_for_task")
     def test_sends_dm_to_match_players(self, mock_tourn, mock_parts, mock_dm, mock_log):
-        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
-
         mock_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
@@ -343,7 +338,6 @@ class SendHeroDraftLinksTaskTest(TestCase):
     def test_activity_button_is_in_hero_draft_dm(
         self, mock_tournament, mock_participants, mock_dm, mock_log, mock_update
     ):
-        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
         from events.tournament_tasks import send_tournament_herodraft_links
 
         mock_tournament.return_value = TournamentTaskSchema(
@@ -365,8 +359,6 @@ class SendHeroDraftLinksTaskTest(TestCase):
 class SweepAutoHeroDraftsTaskTest(TestCase):
     @staticmethod
     def _game(game_id: int, tournament_id: int = 1, send_link: bool = True):
-        from app.schemas import AutoHeroDraftGameSchema
-
         return AutoHeroDraftGameSchema(
             id=game_id,
             tournament_id=tournament_id,
@@ -512,8 +504,6 @@ class SendDraftLinksRaceTest(TestCase):
     def test_create_log_passes_success_none(
         self, mock_tourn, mock_parts, mock_dm, mock_create, mock_update
     ):
-        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
-
         mock_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Race",
@@ -551,8 +541,6 @@ class SendDraftLinksRaceTest(TestCase):
     def test_update_log_sets_terminal_state(
         self, mock_tourn, mock_parts, mock_dm, mock_create, mock_update
     ):
-        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
-
         mock_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Race",
@@ -588,8 +576,6 @@ class SendHerodraftLinksRaceTest(TestCase):
     def test_create_log_passes_success_none(
         self, mock_tourn, mock_parts, mock_dm, mock_create, mock_update
     ):
-        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
-
         mock_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Race",

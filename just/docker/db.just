@@ -1,10 +1,12 @@
 # Test database image commands
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
+set positional-arguments
 
 root := clean(source_directory() / "../..")
 image := env("DF_TEST_DB_IMAGE", "draftforge/test-db")
 registry := env("DF_TEST_DB_REGISTRY", "ghcr.io/kettleofketchup/draftforge/test-db")
+ci_image := "ghcr.io/kettleofketchup/draftforge-ci/test-db"
 just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
 # The slot guard tests point this at a temp file
 test_db := env("DF_TEST_DB_FILE", root / "backend/test.db.sqlite3")
@@ -17,14 +19,54 @@ hash:
     cd {{root}}
     ./scripts/hash-test-db-sources.sh
 
-# Build test-db image locally (skips if hash unchanged)
+# Build test-db image locally (skips if hash unchanged). --mode=pr --pr=<n> (home prepare job): always populates, then pushes only draftforge-ci/test-db:pr-<n>-<hash> through buildx
 [group('docker::db')]
-build:
+build *flags:
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{root}}
 
+    mode=trusted pr=""
+    usage="use --mode=trusted|pr, --pr=<n>"
+    for flag in "$@"; do
+        case "$flag" in
+            --mode=*) mode=${flag#--mode=} ;;
+            --pr=*) pr=${flag#--pr=} ;;
+            *) echo "docker::db: unknown option $flag ($usage)" >&2; exit 2 ;;
+        esac
+    done
+    case "$mode" in
+        trusted)
+            if [[ -n "$pr" ]]; then
+                echo "docker::db: --pr needs --mode=pr" >&2
+                exit 2
+            fi
+            ;;
+        pr)
+            if [[ ! "$pr" =~ ^[0-9]+$ ]]; then
+                echo "docker::db: --mode=pr needs a numeric --pr=<n>" >&2
+                exit 2
+            fi
+            ;;
+        *) echo "docker::db: unknown mode $mode ($usage)" >&2; exit 2 ;;
+    esac
+
     HASH=$(./scripts/hash-test-db-sources.sh)
+
+    if [[ "$mode" == pr ]]; then
+        # The home runner has no Docker daemon: no image inspect, tag, push or plain
+        # build, only the remote buildx builder. Never a draftforge/ tag or :latest.
+        {{just}} db::populate::fresh
+        CTX=$(mktemp -d)
+        trap 'rm -rf "$CTX"' EXIT
+        cp {{quote(test_db)}} "$CTX/test.db.sqlite3"
+        cp docker/Dockerfile.test-db "$CTX/Dockerfile"
+        tag="{{ci_image}}:pr-$pr-$HASH"
+        docker buildx build --platform linux/amd64 --provenance=false \
+            --build-arg CONTENT_HASH="$HASH" --tag "$tag" --push "$CTX"
+        echo "Pushed $tag"
+        exit 0
+    fi
 
     if docker image inspect "{{image}}:$HASH" >/dev/null 2>&1; then
         echo "Test DB image up-to-date (hash: ${HASH:0:12}...)"
@@ -50,7 +92,7 @@ build:
     docker build "${args[@]}" "$CTX"
     echo "Built {{image}} (hash: ${HASH:0:12}...)"
 
-# Pull test-db image from GHCR (tries hash first, then latest)
+# Pull test-db image from GHCR (tries hash first, then latest; with DF_CI_PR=<n>, this PR's draftforge-ci/test-db:pr-<n>-<hash> before both)
 [group('docker::db')]
 pull:
     #!/usr/bin/env bash
@@ -59,6 +101,19 @@ pull:
 
     HASH=$(./scripts/hash-test-db-sources.sh)
     echo "Content hash: ${HASH:0:12}..."
+
+    # Strategy 0: the image prepare built for this PR on the home runner (DF_CI_PR=<n>)
+    pr="${DF_CI_PR-}"
+    if [[ -n "$pr" && ! "$pr" =~ ^[0-9]+$ ]]; then
+        echo "✗ DF_CI_PR must be a PR number, got '$pr'" >&2
+        exit 2
+    fi
+    if [[ -n "$pr" ]] && docker pull "{{ci_image}}:pr-$pr-$HASH" 2>/dev/null; then
+        echo "✓ Found PR $pr test DB for hash ${HASH:0:12}..."
+        docker tag "{{ci_image}}:pr-$pr-$HASH" "{{image}}:latest"
+        docker tag "{{ci_image}}:pr-$pr-$HASH" "{{image}}:$HASH"
+        exit 0
+    fi
 
     # Strategy 1: Try exact hash-tagged image (no migrations needed)
     if docker pull "{{registry}}:$HASH" 2>/dev/null; then

@@ -11,10 +11,10 @@ just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
 build *flags:
     {{just}} docker::parallel --release "$@" -- docker::backend::build docker::frontend::build-prod docker::nginx::build
 
-# Build and push the release images
+# Build and push the release images without reading or writing the build cache
 [group('docker::release')]
 push:
-    {{just}} docker::release::build --push
+    {{just}} docker::release::build --push --no-cache
 
 # Pull the production images (no -dev); a missing image warns but does not fail
 [group('docker::release')]
