@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, Tournament
+from app.models import CustomUser, GameType
 from discordbot.models import DiscordMessageLog
 from events.admission import SignupRefused, ensure_self_serve
 from events.constants import EventState, SignupStatus
@@ -42,6 +42,7 @@ from org.conduct.services import set_outcomes, update_conduct_settings
 from org.models_conduct import AttendanceOutcome, OrgConductSettings
 from org.models_profiles import PlayerDeadlockProfile
 from org.tests.conduct_base import ConductTestCase
+from tournament.models import Tournament
 
 DISCORD_ID = "300000000000000077"
 CODE = Unmet.CONDUCT_BELOW_THRESHOLD.value

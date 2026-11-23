@@ -6,7 +6,9 @@ from django.test import TestCase
 from django.utils import timezone
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Team, TeamLog, TeamLogAction, TeamLogVia, Tournament
+from app.models import CustomUser
+from tournament.models import Team, TeamLog, Tournament
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.services.team_signals import (
     TeamRosterChange,
     change_from_log,

@@ -4,6 +4,16 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from app.models import CustomUser
+from config.celery import app as celery_app
+from discordbot.models import DiscordTournamentLog
+from events.models import Event, EventRepeater, OrgEventDefaults
+from events.tournament_tasks import (
+    send_tournament_draft_links,
+    send_tournament_herodraft_links,
+    sweep_auto_herodrafts,
+)
+from tournament.models import Tournament
 from tournament.schemas import (
     AutoHeroDraftGameSchema,
     TournamentParticipantSchema,
@@ -13,15 +23,11 @@ from tournament.schemas import (
 
 class DiscordTournamentLogTest(TestCase):
     def setUp(self):
-        from app.models import Tournament
-
         self.tournament = Tournament.objects.create(
             name="Test", state="future", date_played=timezone.now()
         )
 
     def test_create_log(self):
-        from discordbot.models import DiscordTournamentLog
-
         # success is nullable (NULL = in flight). Unset defaults to None, not
         # True — see model docstring for the state machine. Callers MUST flip
         # to True/False explicitly when the work is done.
@@ -36,8 +42,6 @@ class DiscordTournamentLogTest(TestCase):
         self.assertEqual(log_entry.notification_type, "draft_link")
 
     def test_log_ordering_newest_first(self):
-        from discordbot.models import DiscordTournamentLog
-
         DiscordTournamentLog.objects.create(
             tournament=self.tournament,
             notification_type="draft_link",
@@ -54,8 +58,6 @@ class DiscordTournamentLogTest(TestCase):
 
 class DiscordTournamentConfigFieldsTest(TestCase):
     def test_tournament_has_config_fields(self):
-        from app.models import Tournament
-
         t = Tournament()
         self.assertFalse(t.auto_create_hero_drafts)
         # Draft/herodraft DM defaults flipped to True in 81af2454
@@ -63,28 +65,20 @@ class DiscordTournamentConfigFieldsTest(TestCase):
         self.assertTrue(t.discord_send_herodraft_link)
 
     def test_event_has_tournament_discord_fields(self):
-        from events.models import Event
-
         self.assertTrue(hasattr(Event, "discord_send_draft_link"))
         self.assertTrue(hasattr(Event, "discord_send_herodraft_link"))
 
     def test_event_repeater_has_fields(self):
-        from events.models import EventRepeater
-
         self.assertTrue(hasattr(EventRepeater, "discord_send_draft_link"))
         self.assertTrue(hasattr(EventRepeater, "auto_create_hero_drafts"))
 
     def test_org_event_defaults_has_fields(self):
-        from events.models import OrgEventDefaults
-
         self.assertTrue(hasattr(OrgEventDefaults, "auto_create_hero_drafts"))
         self.assertTrue(hasattr(OrgEventDefaults, "discord_send_draft_link"))
 
 
 class TournamentDiscordLogAPITest(TestCase):
     def setUp(self):
-        from app.models import CustomUser, Tournament
-
         self.user = CustomUser.objects.create_user(
             username="admin", password="testpass", is_staff=True
         )
@@ -95,8 +89,6 @@ class TournamentDiscordLogAPITest(TestCase):
         self.client.force_authenticate(user=self.user)
 
     def test_get_discord_logs(self):
-        from discordbot.models import DiscordTournamentLog
-
         DiscordTournamentLog.objects.create(
             tournament=self.tournament,
             notification_type="draft_link",
@@ -141,8 +133,6 @@ class SendDraftLinksTaskTest(TestCase):
         mock_dm.return_value = {"id": "msg123"}
         mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
 
-        from events.tournament_tasks import send_tournament_draft_links
-
         send_tournament_draft_links(1, 42)
         self.assertEqual(mock_dm.call_count, 2)
 
@@ -164,8 +154,6 @@ class SendDraftLinksTaskTest(TestCase):
         mock_update,
         _invite,
     ):
-        from events.tournament_tasks import send_tournament_draft_links
-
         mock_tournament.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
@@ -199,8 +187,6 @@ class SendDraftLinksTaskTest(TestCase):
         mock_update,
         mock_invite,
     ):
-        from events.tournament_tasks import send_tournament_draft_links
-
         mock_tournament.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
@@ -240,8 +226,6 @@ class SendDraftLinksTaskTest(TestCase):
         mock_update,
         mock_invite,
     ):
-        from events.tournament_tasks import send_tournament_herodraft_links
-
         mock_tournament.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
@@ -270,7 +254,6 @@ class SendDraftLinksTaskTest(TestCase):
             state="in_progress",
             discord_send_draft_link=False,
         )
-        from events.tournament_tasks import send_tournament_draft_links
 
         result = send_tournament_draft_links(1, 42)
         self.assertIn("disabled", result.lower())
@@ -292,8 +275,6 @@ class SendDraftLinksTaskTest(TestCase):
         ]
         mock_dm.return_value = {"id": "msg123"}
         mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
-
-        from events.tournament_tasks import send_tournament_draft_links
 
         send_tournament_draft_links(1, 42)
         # Tournament log is created before DMs (for FK linking)
@@ -322,8 +303,6 @@ class SendHeroDraftLinksTaskTest(TestCase):
         mock_dm.return_value = {"id": "msg123"}
         mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
 
-        from events.tournament_tasks import send_tournament_herodraft_links
-
         send_tournament_herodraft_links(
             1, 99, 10, radiant_name="Alpha", dire_name="Bravo"
         )
@@ -338,8 +317,6 @@ class SendHeroDraftLinksTaskTest(TestCase):
     def test_activity_button_is_in_hero_draft_dm(
         self, mock_tournament, mock_participants, mock_dm, mock_log, mock_update
     ):
-        from events.tournament_tasks import send_tournament_herodraft_links
-
         mock_tournament.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
@@ -382,8 +359,6 @@ class SweepAutoHeroDraftsTaskTest(TestCase):
             MagicMock(ok=True, json=lambda: {"id": 98, "created": True}),
         ]
 
-        from events.tournament_tasks import sweep_auto_herodrafts
-
         sweep_auto_herodrafts()
         self.assertEqual([c.args for c in mock_create.call_args_list], [(10,), (20,)])
         mock_links.assert_called_once_with(1, 99, 10, radiant_name="A", dire_name="B")
@@ -398,8 +373,6 @@ class SweepAutoHeroDraftsTaskTest(TestCase):
         mock_create.return_value = MagicMock(
             ok=True, json=lambda: {"id": 99, "created": False}
         )
-
-        from events.tournament_tasks import sweep_auto_herodrafts
 
         sweep_auto_herodrafts()
         mock_links.assert_not_called()
@@ -416,16 +389,12 @@ class SweepAutoHeroDraftsTaskTest(TestCase):
             MagicMock(ok=True, json=lambda: {"id": 98, "created": True}),
         ]
 
-        from events.tournament_tasks import sweep_auto_herodrafts
-
         sweep_auto_herodrafts()
         self.assertEqual(mock_create.call_count, 2)
         mock_links.assert_called_once()
 
     def test_sweep_is_on_the_beat_schedule(self) -> None:
-        from config.celery import app
-
-        tasks = {e["task"] for e in app.conf.beat_schedule.values()}
+        tasks = {e["task"] for e in celery_app.conf.beat_schedule.values()}
         self.assertIn("events.tournament_tasks.sweep_auto_herodrafts", tasks)
 
 
@@ -450,15 +419,11 @@ class DiscordTournamentLogSuccessNullableTest(TestCase):
     'in-flight' state between create and update."""
 
     def setUp(self):
-        from app.models import Tournament
-
         self.tournament = Tournament.objects.create(
             name="Nullable", state="future", date_played=timezone.now()
         )
 
     def test_success_can_be_null_at_create(self):
-        from discordbot.models import DiscordTournamentLog
-
         log = DiscordTournamentLog.objects.create(
             tournament=self.tournament,
             notification_type="draft_link",
@@ -474,7 +439,6 @@ class DiscordTournamentLogSuccessNullableTest(TestCase):
         DiscordTournamentLog.objects.create. Verify the ORM path
         the view ultimately calls accepts success=None — covers what the view does
         without going through the IP-whitelisted internal HTTP auth layer."""
-        from discordbot.models import DiscordTournamentLog
 
         # Mirror the keys the internal view passes through (it filters to
         # ALLOWED_FIELDS but is otherwise a thin .create wrapper).
@@ -518,8 +482,6 @@ class SendDraftLinksRaceTest(TestCase):
         mock_dm.return_value = {"id": "msg123"}
         mock_create.return_value = MagicMock(ok=True, json=lambda: {"id": 42})
 
-        from events.tournament_tasks import send_tournament_draft_links
-
         send_tournament_draft_links(1, 99)
 
         # The create call is the one a poller could observe mid-flight. It
@@ -555,8 +517,6 @@ class SendDraftLinksRaceTest(TestCase):
         mock_dm.return_value = {"id": "msg123"}
         mock_create.return_value = MagicMock(ok=True, json=lambda: {"id": 42})
 
-        from events.tournament_tasks import send_tournament_draft_links
-
         send_tournament_draft_links(1, 99)
 
         mock_update.assert_called_once()
@@ -587,8 +547,6 @@ class SendHerodraftLinksRaceTest(TestCase):
         ]
         mock_dm.return_value = {"id": "msg123"}
         mock_create.return_value = MagicMock(ok=True, json=lambda: {"id": 42})
-
-        from events.tournament_tasks import send_tournament_herodraft_links
 
         send_tournament_herodraft_links(
             1, 99, 10, radiant_name="Alpha", dire_name="Bravo"

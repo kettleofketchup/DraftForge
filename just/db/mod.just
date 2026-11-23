@@ -13,7 +13,7 @@ db_dir := env("DF_DB_DIR", root / "backend")
 
 # makemigrations takes an explicit app list (it does not read INSTALLED_APPS):
 # add new Django apps here.
-apps := "steam app bracket discordbot events org user lobby opsnotices league draft"
+apps := "steam app bracket discordbot events org user lobby opsnotices league draft tournament"
 
 mod migrate 'migrate.just'
 mod populate 'populate.just'
