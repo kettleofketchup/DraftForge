@@ -119,11 +119,10 @@ def populate_all(force: bool = False) -> None:
         # After every pk-sensitive step: these users take auto-incremented pks.
         ("Discord Name Sync Users", populate_discord_name_sync_users),
         ("Discord Avatars", populate_committed_avatars),
-        # Last: explicit pks (org/league 50, users 8000-8007) bump the
-        # auto-increment counters every step above relies on.
-        ("Game Org MMR Data", populate_game_org_mmr_data),
-        # Last: explicit pks (org 60, users 9000-9006) bump the auto-increment
+        # These two run last: their explicit pks (org/league 50, users
+        # 8000-8007; org 60, users 9000-9006) bump the auto-increment
         # counters every step above relies on.
+        ("Game Org MMR Data", populate_game_org_mmr_data),
         ("Signup History Data", populate_signup_history_data),
     ]
 
