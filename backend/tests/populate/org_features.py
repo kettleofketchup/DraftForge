@@ -89,7 +89,11 @@ from tests.populate.promotion_audiences import (
     restore_promotion_audience_settings,
     seed_promotion_audiences,
 )
-from tests.populate.utils import delete_ledger_for_users, ensure_org_user
+from tests.populate.utils import (
+    delete_events,
+    delete_ledger_for_users,
+    ensure_org_user,
+)
 from tournament.models import Team, Tournament
 
 # (org pk, owner, admins, staff, promoters)
@@ -441,7 +445,7 @@ def _rebuild() -> list[Organization]:
     ContributionEntry.objects.nocache().filter(organization__in=org_pks).delete()
     PromoSend.objects.nocache().filter(organization__in=org_pks).delete()
     ContributionPointValue.objects.nocache().filter(organization__in=org_pks).delete()
-    Event.objects.nocache().filter(organization__in=org_pks).delete()
+    delete_events(Event.objects.nocache().filter(organization__in=org_pks))
     Tournament.objects.nocache().filter(league__organization__in=org_pks).exclude(
         pk__in=[pk for pk, _, _, _ in ORG_FEATURES_TOURNAMENTS]
     ).delete()
