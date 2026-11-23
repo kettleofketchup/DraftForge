@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
-from typing import Any
+from typing import Any, TypedDict
 
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import Prefetch, QuerySet
@@ -35,6 +35,8 @@ from org.feature_errors import (
     require_org_staff,
 )
 from org.features import FeatureKey
+from org.leadership.constants import ModerationReleaseState
+from org.leadership.errors import ReviewRefused
 from org.leadership.queries import EventAggregate, captain_events
 from org.leadership.release import (
     annotate_live,
@@ -43,7 +45,6 @@ from org.leadership.release import (
     release_state,
 )
 from org.leadership.reviews import (
-    ReviewRefused,
     release_results,
     submit_review,
     unvoid_review,
@@ -415,6 +416,17 @@ def _released_by(snap: EventCaptain) -> dict[str, Any] | None:
     return None if user is None else {"pk": user.pk, "username": user.username}
 
 
+class ReleaseFields(TypedDict):
+    released: bool
+    release_state: ModerationReleaseState
+    released_at: datetime | None
+    released_by: dict[str, Any] | None
+    auto_release_at: datetime | None
+    live_reviews: int | None
+    release_floor: int | None
+    can_release: bool
+
+
 def _release_fields(
     snap: EventCaptain,
     *,
@@ -422,7 +434,7 @@ def _release_fields(
     floor: int,
     settings: OrgLeadershipSettings,
     now: datetime,
-) -> dict[str, Any]:
+) -> ReleaseFields:
     state = release_state(snap, live=snap.live, settings=settings, now=now)
     released = state == "released"
     if own:

@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
+from typing import Final
 
 from django.db import transaction
 from django.utils import timezone
@@ -17,7 +18,7 @@ from org.leadership.constants import (
     SCORE_MIN,
     VoidKind,
 )
-from org.leadership.errors import ReviewRefused as ReviewRefused
+from org.leadership.errors import ReviewRefused
 from org.leadership.kinds import LeadershipKind
 from org.leadership.rating import captain_rating_points, review_mean
 from org.leadership.release import annotate_live, is_released, release_floor
@@ -441,7 +442,7 @@ _RELEASE_REFUSALS: dict[str, tuple[int, str, str]] = {
         "These results are already released.",
     ),
 }
-_REFUSAL_ORDER = list(_RELEASE_REFUSALS)
+_REFUSAL_ORDER: Final[list[str]] = list(_RELEASE_REFUSALS)
 
 
 def _release_refusal(

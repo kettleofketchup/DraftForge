@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta
+from typing import Final
 
 from django.db.models import Count, Q, QuerySet
 
 from org.leadership.constants import MIN_RELEASE_REVIEWS, ReleaseState
 from org.models_leadership import EventCaptain, OrgLeadershipSettings
 
-LIVE_REVIEWS = Q(reviews__voided_at__isnull=True)
+LIVE_REVIEWS: Final[Q] = Q(reviews__voided_at__isnull=True)
 
 
 def release_floor(min_reviewers: int) -> int:

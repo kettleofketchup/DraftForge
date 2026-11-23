@@ -49,6 +49,7 @@ BOOL_SETTINGS: Final[frozenset[str]] = frozenset(
 )
 
 ReleaseState = Literal["voided", "open", "short", "pending", "released"]
+ModerationReleaseState = ReleaseState | Literal["hidden"]
 
 
 class VoidKind(models.TextChoices):

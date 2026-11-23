@@ -10,9 +10,9 @@ from django.utils import timezone as tz
 
 from app.models import CustomUser
 from org.leadership import reviews as reviews_module
+from org.leadership.errors import ReviewRefused
 from org.leadership.lifecycle import void_event
 from org.leadership.reviews import (
-    ReviewRefused,
     unvoid_review,
     void_review,
     withdraw_review,

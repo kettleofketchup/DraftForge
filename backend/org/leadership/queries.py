@@ -14,9 +14,6 @@ from org.leadership.release import (
     is_released,
     released_snapshots,
 )
-from org.leadership.release import (
-    release_floor as release_floor,
-)
 from org.models import ContributionEntry, OrgUser
 from org.models_leadership import (
     CaptainTrait,
