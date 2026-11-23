@@ -6,7 +6,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser
 from draft.models import Draft, DraftOptions, DraftRound
 from draft.serializers.team import DraftSerializer
 from draft.services.shuffle import (
@@ -19,6 +19,7 @@ from draft.services.shuffle import (
 from league.models import League
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
+from tournament.models import Team, Tournament
 
 
 class GetTeamTotalMmrTest(TestCase):

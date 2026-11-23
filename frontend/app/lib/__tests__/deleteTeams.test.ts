@@ -21,7 +21,7 @@ function axiosError(status: number, data: unknown): AxiosError {
 
 // Same shape as backend TeamUsage (app/services/team_references.py).
 const gameUsage = {
-  model: 'app.Game',
+  model: 'tournament.Game',
   label: 'game',
   label_plural: 'games',
   count: 2,

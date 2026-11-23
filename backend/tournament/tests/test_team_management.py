@@ -9,17 +9,7 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import (
-    CustomUser,
-    Game,
-    LeadershipProblem,
-    Team,
-    TeamLog,
-    TeamLogAction,
-    TeamLogVia,
-    Tournament,
-)
-from app.serializers import users_remaining_pks
+from app.models import CustomUser
 from draft.models import (
     Draft,
     DraftEvent,
@@ -44,6 +34,10 @@ from org.models_profiles import PlayerDotaProfile
 from org.settings_constants import StaffOverridePolicy
 from org.settings_service import get_org_settings
 from tests.populate.utils import ensure_org_user
+from tournament.models import Game, Team, TeamLog, Tournament
+from tournament.models.team import LeadershipProblem
+from tournament.models.team_log import TeamLogAction, TeamLogVia
+from tournament.serializers.draft import users_remaining_pks
 from tournament.services import team_management
 from tournament.services.team_management import (
     DEFAULT_MAX_STANDINS,

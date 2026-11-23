@@ -33,7 +33,9 @@ QUALIFYING_CHECK_OUTCOMES: tuple[str, ...] = (
 def qualifying_ready_check(event: Event) -> ReadyCheck | None:
     return (
         event.ready_checks.filter(
-            phase=ReadyCheckPhase.CLOSED, outcome__in=QUALIFYING_CHECK_OUTCOMES
+            phase=ReadyCheckPhase.CLOSED,
+            outcome__in=QUALIFYING_CHECK_OUTCOMES,
+            settings_snapshot__roll_call_enabled=True,
         )
         .order_by("-closed_at")
         .first()

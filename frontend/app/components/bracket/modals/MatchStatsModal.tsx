@@ -5,7 +5,6 @@ import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { LobbyPanel } from '~/components/lobby/LobbyPanel';
 import { provisionalWinnerSlot } from '~/components/lobby/provisional';
-import { useOrganization } from '~/components/organization';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import type { TeamType } from '~/components/tournament/types';
 import { Badge } from '~/components/ui/badge';
@@ -21,9 +20,9 @@ import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { usePersistMatchResult } from '~/hooks/useBracket';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { useGameLobby } from '~/hooks/useGameLobby';
 import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
-import { useIsLeagueStaff } from '~/hooks/usePermissions';
 import { cn } from '~/lib/utils';
 import { useBracketStore } from '~/store/bracketStore';
 import { useUserStore } from '~/store/userStore';
@@ -52,15 +51,9 @@ export function MatchStatsModal({
 }: MatchStatsModalProps) {
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
-  const isStaff = useUserStore((state) => state.isStaff());
   const currentUser = useUserStore((state) => state.currentUser);
   const tournament = useUserStore((state) => state.tournament);
-  // Fetch the full org so org-staff membership flows into useIsLeagueStaff —
-  // tournament.league.organization (when serialized) is the lightweight org without staff_ids.
-  const { organization: leagueOrg } = useOrganization(
-    tournament?.organization_pk ?? undefined,
-  );
-  const isLeagueStaff = useIsLeagueStaff(tournament?.league, leagueOrg);
+  const canManage = useCanManageCurrentTournament();
 
   // Subscribe to match directly from store for reactive updates
   const storeMatch = useBracketStore((state) =>
@@ -262,7 +255,7 @@ export function MatchStatsModal({
 
           {/* Staff controls */}
           {!embedded &&
-            isLeagueStaff &&
+            canManage &&
             match.status !== 'completed' &&
             match.radiantTeam &&
             match.direTeam && (
@@ -318,7 +311,7 @@ export function MatchStatsModal({
               prior team change broke the derivation in bracketStore.ts), and
               admins need a recovery path. */}
           {!embedded &&
-            isLeagueStaff &&
+            canManage &&
             (match.status === 'completed' || match.winner) && (
               <div className="border-t pt-4">
                 <SecondaryButton
@@ -357,7 +350,7 @@ export function MatchStatsModal({
                 match.radiantTeam?.captain?.pk === currentUser?.pk ||
                 match.direTeam?.captain?.pk === currentUser?.pk;
 
-              const canAccessDraft = isStaff || isCaptain;
+              const canAccessDraft = canManage || isCaptain;
 
               // If draft exists, anyone can view it
               // If draft doesn't exist, only staff/captain can start it
@@ -399,7 +392,7 @@ export function MatchStatsModal({
                         )}
                         {match.herodraft_id ? 'View Draft' : 'Start Draft'}
                       </PrimaryButton>
-                      {isStaff && match.herodraft_id && (
+                      {canManage && match.herodraft_id && (
                         <SecondaryButton
                           size="sm"
                           onClick={() => setShowResetConfirm(true)}
@@ -452,7 +445,7 @@ export function MatchStatsModal({
           )}
 
           {/* Staff: Link Steam Match button */}
-          {isStaff && !embedded && (
+          {canManage && !embedded && (
             <div className="border-t pt-4">
               <SecondaryButton
                 size="sm"

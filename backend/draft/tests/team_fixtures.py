@@ -15,12 +15,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from app.models import CustomUser, Team, Tournament
-from app.serializers import (
-    collect_org_mmr,
-    collect_tournament_user_pks,
-    tournament_organization,
-)
+from app.models import CustomUser
 from app.user_cache import serialize_user_core
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound
 from draft.services import team as teamdraft
@@ -30,6 +25,12 @@ from draft.views.team_picks import pick_player_for_round, undo_last_pick
 from league.models import League
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
+from tournament.models import Team, Tournament
+from tournament.serializers.users import (
+    collect_org_mmr,
+    collect_tournament_user_pks,
+    tournament_organization,
+)
 
 User = get_user_model()
 

@@ -9,8 +9,9 @@ memberships (non-seeded OrgUsers are deleted), the seeded tournaments (non-seede
 ones in the features leagues are deleted), org name and timezone, and the
 conduct seed (finalized attendance outcomes on completed events, conduct
 settings deleted, approved signups on the forecast event), and the leadership
-seed (tournament 264 and a completed event with one released and one open
-captain snapshot; traits and leadership settings deleted).
+seed (tournament 264 and a completed event with two closed captain snapshots,
+one captained by org staff, and one open; traits and leadership settings
+deleted, or recreated with the staff release gate on when asked).
 org_features_test_data is the lookup the specs read.
 """
 
@@ -21,7 +22,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_model, invalidate_obj
-from app.models import CustomUser, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from league.models import League
@@ -84,6 +85,7 @@ from tests.data.org_features import (
     PRIVATE_FEATURES_ORG,
 )
 from tests.populate.utils import delete_ledger_for_users, ensure_org_user
+from tournament.models import Team, Tournament
 
 # (org pk, owner, admins, staff, promoters)
 _ROLES: list[tuple[int, TestUser, list[TestUser], list[TestUser], list[TestUser]]] = [
@@ -466,9 +468,17 @@ def _rebuild() -> list[Organization]:
     return list(orgs.values())
 
 
-def reset_org_features_data() -> dict[str, Any]:
-    """Put the locked features data back to the seeded state; returns the lookup."""
+def reset_org_features_data(*, release_gate: bool = False) -> dict[str, Any]:
+    """Put the locked features data back to the seeded state; returns the lookup.
+
+    release_gate turns the leadership staff release gate on without stamping,
+    so the closed captain snapshots stay pending release.
+    """
     orgs = _rebuild()
+    if release_gate:
+        OrgLeadershipSettings.objects.create(
+            organization_id=FEATURES_ORG.pk, require_staff_release=True
+        )
     for model in (
         Event,
         ContributionEntry,
@@ -516,13 +526,14 @@ def _leadership_payload(org: Organization) -> dict[str, Any]:
         OrgUser.objects.nocache().filter(organization=org).values_list("user_id", "pk")
     )
     captains = {
-        window_open: org_user_pks[captain.pk]
-        for _, captain, _, _, window_open, _ in ORG_FEATURES_LEADERSHIP_TEAMS
+        team_name: org_user_pks[captain.pk]
+        for team_name, captain, _, _, _, _ in ORG_FEATURES_LEADERSHIP_TEAMS
     }
     return {
         "event_pk": _event_payload(org, ORG_FEATURES_LEADERSHIP_EVENT_NAME)["pk"],
-        "released_captain_org_user_pk": captains[False],
-        "open_captain_org_user_pk": captains[True],
+        "released_captain_org_user_pk": captains["Leaders Released"],
+        "open_captain_org_user_pk": captains["Leaders Open"],
+        "staff_captain_org_user_pk": captains["Leaders Staff"],
         "pending_rater_role": "promoter",
     }
 

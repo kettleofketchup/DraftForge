@@ -15,7 +15,6 @@ from django.test import SimpleTestCase, TransactionTestCase
 from django.urls import re_path
 from django.utils import timezone
 
-from app.models import Game, Team, Tournament
 from draft.consumers.hero import HeroDraftConsumer
 from draft.models import (
     DraftTeam,
@@ -27,6 +26,7 @@ from draft.models import (
 from draft.tasks import hero_tick
 from draft.tasks.hero_tick import HERO_TICK_DRIVER
 from draft.tests.ws_helpers import read_until_type
+from tournament.models import Game, Team, Tournament
 
 User = get_user_model()
 

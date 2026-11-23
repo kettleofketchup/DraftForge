@@ -6,9 +6,10 @@ Not covered by the test-db hash: the tournament is built on demand through
 
 from datetime import date
 
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser
 from league.models import League
 from tests.populate.constants import DTX_STEAM_LEAGUE_ID
+from tournament.models import Team, Tournament
 
 KNOCKED_OUT_ROSTER_TOURNAMENT_NAME: str = "Knocked Out Roster Tournament"
 KNOCKED_OUT_ROSTER_USER_PREFIX: str = "ko_roster_"
