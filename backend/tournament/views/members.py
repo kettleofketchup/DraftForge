@@ -8,9 +8,9 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import Tournament
 from org.member_resolution import resolve_member_user
 from tournament.functions import serialize_tournament
+from tournament.models import Tournament
 from tournament.permissions import can_edit_tournament
 
 

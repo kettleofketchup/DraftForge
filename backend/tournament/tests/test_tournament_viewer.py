@@ -4,11 +4,12 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from events.models import Event
 from events.services import create_tournament_for_event
 from league.models import League
 from org.models import Organization
+from tournament.models import Tournament
 
 
 class TournamentViewerTests(TestCase):

@@ -5,7 +5,7 @@ from django.db import transaction
 from django.test import override_settings
 from django.utils import timezone as tz
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from events import ready_check_core
 from events.constants import (
     ActorRole,
@@ -41,6 +41,7 @@ from events.ready_check_core import (
 )
 from events.services import create_tournament_for_event
 from events.tests.base import EventTestCase
+from tournament.models import Tournament
 
 
 class ReadyCheckCoreTestCase(EventTestCase):

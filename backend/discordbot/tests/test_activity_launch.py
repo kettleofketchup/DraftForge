@@ -12,7 +12,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from discordbot.activity_auth import authenticate_token, issue_activity_token
 from discordbot.activity_ids import decode_draft_launch
 from discordbot.activity_intent import peek_intent
@@ -21,6 +21,7 @@ from discordbot.activity_launch_gateway import handle_draft_launch
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 from discordbot.tests.activity_helpers import ClearIntentsMixin
 from draft.models import Draft, DraftTeam, HeroDraft
+from tournament.models import Game, Team, Tournament
 
 
 @override_settings(

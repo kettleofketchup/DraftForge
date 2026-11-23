@@ -21,8 +21,8 @@ from collections.abc import Iterable
 from django.db.models import Max
 
 from app.cache_utils import invalidate_after_commit
-from app.models import Game, Team
 from telemetry.logging import get_logger
+from tournament.models import Game, Team
 
 log = get_logger(__name__)
 

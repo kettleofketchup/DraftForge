@@ -10,10 +10,11 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Team
+from app.models import CustomUser
 from draft.models import Draft, DraftRound, TeamDraftState
 from draft.services import team_broadcast as broadcast
 from draft.tests.team_fixtures import TimedDraftFixture
+from tournament.models import Team
 
 BROADCAST_CALL_SITES: tuple[str, ...] = (
     "draft.services.team",

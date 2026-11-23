@@ -7,11 +7,12 @@ from datetime import datetime
 from django.db import transaction
 from django.utils import timezone
 
-from app.models import CustomUser, Game
+from app.models import CustomUser
 from league.models import League
 from league.models_rating import LeagueMatch, LeagueMatchParticipant, LeagueRating
 from league.services.rating import get_rating_system
 from org.mmr import LEAGUE_GAME, org_mmr_map
+from tournament.models import Game
 
 
 class LeagueMatchService:
