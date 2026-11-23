@@ -5,7 +5,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, PositionsModel, Tournament
+from app.models import CustomUser, PositionsModel
 from common.game import GameType
 from league.models import League, LeagueUser
 from org.mmr import bulk_set_org_mmrs, set_org_mmr
@@ -13,6 +13,7 @@ from org.models import Organization, OrgUser, OrgUserGameMmr
 from steam.functions.mmr_calculation import update_user_league_mmr
 from steam.functions.stats_update import update_all_league_stats_for_league
 from steam.models import LeaguePlayerStats, Match, PlayerMatchStats
+from tournament.models import Tournament
 from user.tests.test_cacheops_integration import _redis_reachable
 
 _discord_ids = itertools.count(930_000_000_000_000_000)

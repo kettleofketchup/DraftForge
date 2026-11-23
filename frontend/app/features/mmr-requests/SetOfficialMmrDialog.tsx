@@ -42,7 +42,6 @@ import { useLeagueUsers } from '~/hooks/useLeagueUsers';
 import { useOrgUsers } from '~/hooks/useOrgUsers';
 import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
-import { useOrgStore } from '~/store/orgStore';
 import { MmrStatusBadge } from './MmrStatusBadge';
 import { useStaffSetMmr, useUserMmrSummary } from './queries';
 import type { MmrScope } from './queryKeys';
@@ -178,13 +177,14 @@ function applyServerError(error: unknown, form: StaffForm): void {
 function useScopeMembers(scope: MmrScope, open: boolean, enabled: boolean) {
   const orgId = 'org' in scope ? scope.org : 0;
   const leagueId = 'league' in scope ? scope.league : 0;
-  const orgUsers = useOrgUsers(orgId);
+  const { users: orgUsers } = useOrgUsers(orgId, {
+    enabled: open && enabled,
+  });
   const leagueUsers = useLeagueUsers(leagueId);
   useEffect(() => {
     if (!open || !enabled) return;
-    if (orgId) void useOrgStore.getState().getOrgUsers(orgId);
     if (leagueId) void useLeagueStore.getState().getLeagueUsers(leagueId);
-  }, [open, enabled, orgId, leagueId]);
+  }, [open, enabled, leagueId]);
   return 'org' in scope ? orgUsers : leagueUsers;
 }
 

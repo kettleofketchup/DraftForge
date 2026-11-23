@@ -8,6 +8,7 @@ python := env("DF_JUST_PYTHON", root / ".venv/bin/python")
 just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
 in_env := quote(root / "scripts/in-env.sh")
 slots := quote(python) + " -m scripts.slots --root " + quote(root)
+db_dir := env("DF_DB_DIR", root / "backend")
 compose := in_env + " - . " + slots + " compose --stack dev"
 
 # Migrate the dev DB, then start the dev stack in the foreground (hot reload)
@@ -70,7 +71,7 @@ up *args:
     echo "Auto-linking tournament games to Steam matches..."
     {{compose}} exec -T backend python -c "$(cat <<'PY'
     import django; django.setup()
-    from app.models import Tournament
+    from tournament.models import Tournament
     from steam.functions.game_linking import auto_link_matches_for_tournament
     results = [auto_link_matches_for_tournament(t.id) for t in Tournament.objects.all()]
     linked = sum(r['auto_linked_count'] for r in results)
@@ -168,6 +169,12 @@ local-prod:
 release:
     #!/usr/bin/env bash
     set -euo pipefail
+    legacy_db={{quote(db_dir / "prod.db.sqlite3")}}
+    if [[ -s "$legacy_db" && ! -s {{quote(db_dir / "data/prod.db.sqlite3")}} ]]; then
+        echo "ERROR: the release DB now lives in backend/data/prod.db.sqlite3, but only ${legacy_db} has data." >&2
+        echo "ERROR: stop the backend, then move it and its -wal/-shm files into backend/data/ (CHANGELOG.md, Upgrading)." >&2
+        exit 1
+    fi
     env_file={{quote(root / "backend/.env")}}
     if ! grep -qE '^DJANGO_SECRET_KEY=.+' "$env_file" 2>/dev/null; then
         echo "WARNING: ${env_file} has no DJANGO_SECRET_KEY; Django would sign with the public development key." >&2

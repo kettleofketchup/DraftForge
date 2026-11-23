@@ -71,6 +71,7 @@ class TrackInfo:
     can_view_own: bool
     board_open: bool
     can_manage: bool
+    can_moderate: bool
 
 
 RoleCheck = Callable[[], bool]

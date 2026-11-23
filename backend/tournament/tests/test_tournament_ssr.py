@@ -4,9 +4,9 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import Tournament
 from league.models import League
 from org.models import Organization
+from tournament.models import Tournament
 
 
 class TournamentSSREndpointTests(TestCase):

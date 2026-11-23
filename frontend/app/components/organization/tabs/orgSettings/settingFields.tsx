@@ -40,19 +40,22 @@ export function SettingsGroup({
 export function SettingNumberInput({
   value,
   onChange,
+  nullable = false,
   ...props
 }: Omit<ComponentProps<typeof Input>, 'value' | 'onChange'> & {
-  value: number | undefined;
-  onChange: (value: number) => void;
+  value: number | null | undefined;
+  onChange: (value: number | null) => void;
+  nullable?: boolean;
 }) {
+  const empty = nullable ? null : Number.NaN;
   return (
     <Input
       type="number"
       inputMode="decimal"
       className="w-full sm:w-40"
-      value={value === undefined || Number.isNaN(value) ? '' : value}
+      value={value == null || Number.isNaN(value) ? '' : value}
       onChange={(e) =>
-        onChange(e.target.value === '' ? Number.NaN : Number(e.target.value))
+        onChange(e.target.value === '' ? empty : Number(e.target.value))
       }
       {...props}
     />
@@ -83,7 +86,8 @@ function DefaultControls<TForm extends FieldValues, N extends Path<TForm>>({
   label,
   defaultValue,
   testIdPrefix,
-}: Omit<SettingProps<TForm, N>, 'help'>) {
+  disabled = false,
+}: Omit<SettingProps<TForm, N>, 'help'> & { disabled?: boolean }) {
   const value = useWatch({ control, name });
   const isDefault = value === defaultValue;
   const testId = settingTestId(testIdPrefix, name);
@@ -99,7 +103,7 @@ function DefaultControls<TForm extends FieldValues, N extends Path<TForm>>({
         size="sm"
         data-testid={`${testId}-reset`}
         aria-label={`Reset ${label} to default`}
-        disabled={isDefault}
+        disabled={disabled || isDefault}
         onClick={() =>
           setValue(name, defaultValue, {
             shouldDirty: true,
@@ -117,7 +121,16 @@ function DefaultControls<TForm extends FieldValues, N extends Path<TForm>>({
 export function NumberSetting<
   TForm extends FieldValues,
   N extends Path<TForm>,
->({ step, ...props }: SettingProps<TForm, N> & { step: number }) {
+>({
+  step,
+  nullable = false,
+  disabled = false,
+  ...props
+}: SettingProps<TForm, N> & {
+  step: number;
+  nullable?: boolean;
+  disabled?: boolean;
+}) {
   const { control, name, label, help, testIdPrefix } = props;
   return (
     <FormField
@@ -127,11 +140,13 @@ export function NumberSetting<
         <FormItem>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <FormLabel>{label}</FormLabel>
-            <DefaultControls {...props} />
+            <DefaultControls {...props} disabled={disabled} />
           </div>
           <FormControl>
             <SettingNumberInput
               step={step}
+              nullable={nullable}
+              disabled={disabled}
               data-testid={settingTestId(testIdPrefix, name)}
               name={field.name}
               ref={field.ref}

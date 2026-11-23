@@ -7,6 +7,7 @@ import {
   ModerationReviewSchema,
   MyReviewSchema,
   PendingReviewSchema,
+  ReleaseResultSchema,
   ReviewResultSchema,
   TraitsSchema,
   type EventReviews,
@@ -16,6 +17,7 @@ import {
   type ModerationReview,
   type MyReview,
   type PendingReview,
+  type ReleaseResult,
   type ReviewResult,
   type Scores,
   type Trait,
@@ -106,6 +108,18 @@ export async function unvoidReview(
     {},
   );
   return ModerationReviewSchema.parse(response.data);
+}
+
+export async function releaseResults(
+  orgId: number,
+  eventId: number,
+  captains?: number[],
+): Promise<ReleaseResult> {
+  const response = await api.post(
+    `${base(orgId)}/events/${eventId}/release/`,
+    captains === undefined ? {} : { captains },
+  );
+  return ReleaseResultSchema.parse(response.data);
 }
 
 export async function getLeadershipSettings(

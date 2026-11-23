@@ -2,13 +2,12 @@ import math
 
 from django.db import models
 
-from app.models import TOURNAMNET_TYPE_CHOICES, Game, Team, Tournament
 from telemetry.logging import get_logger
+from tournament.choices import TOURNAMENT_TYPE_CHOICES
+from tournament.models import Game, Team, Tournament
 
 log = get_logger(__name__)
 
-# Create your models here.
-# TODO Move tournament related stuff to here
 STATUS_CHOICES = (
     ("pending", "Pending"),
     ("in_progress", "In Progress"),
@@ -25,16 +24,16 @@ class TournamentBracket(models.Model):
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     type = models.CharField(
-        max_length=20, choices=TOURNAMNET_TYPE_CHOICES, default="double_elimination"
+        max_length=20, choices=TOURNAMENT_TYPE_CHOICES, default="double_elimination"
     )
 
     class Meta:
         verbose_name_plural = "Tournament Brackets"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Bracket for {self.tournament.name} - Round {self.max_rounds}"
 
-    def generate_double_elimination_bracket(self):
+    def generate_double_elimination_bracket(self) -> None:
         """
         Generates a double elimination bracket structure for a number of teams
         that is a power of 2 (4, 8, 16).

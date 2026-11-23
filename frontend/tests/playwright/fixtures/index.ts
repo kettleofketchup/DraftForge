@@ -225,3 +225,13 @@ export {
   type MmrRequestsUser,
   type ResetMmrRequestsOptions,
 } from './mmr-requests';
+
+// Discord Activity harness (20-activity specs)
+export {
+  ACTIVITY_HARNESS_PATH,
+  harnessCommands,
+  openActivityHarness,
+  setupDiscordActivity,
+  type DiscordActivitySetup,
+  type HarnessCommand,
+} from './discord-activity';

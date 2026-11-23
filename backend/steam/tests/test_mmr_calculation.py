@@ -20,7 +20,6 @@ class TestMMRCalculation(TestCase):
             password="testpass",
             positions=self.positions,
         )
-        # Create org/league structure for MMR
         self.org = Organization.objects.create(name="Test Org", owner=self.user)
         self.league = League.objects.create(
             name="Test League",
@@ -190,3 +189,11 @@ class TestMMRCalculation(TestCase):
         row = LeagueUser.objects.nocache().get(pk=self.league_user.pk)
         self.assertEqual(row.mmr, 5100)
         self.assertIsNotNone(row.mmr_verified_at)
+
+    def test_update_user_league_mmr_league_without_organization(self) -> None:
+        """Without an organization the league's own org MMR is the base."""
+        self.league_user.mmr = 3800
+        self.league_user.save(update_fields=["mmr"])
+        update_user_league_mmr(self.user, league=self.league)
+        self.league_user.refresh_from_db()
+        self.assertEqual(self.league_user.mmr, 4000)

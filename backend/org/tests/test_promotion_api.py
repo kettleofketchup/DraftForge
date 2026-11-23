@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from league.models import League
@@ -21,6 +21,7 @@ from org.models import (
 from org.promotion.render import PLACEHOLDERS
 from org.promotion.services import record_promo_send
 from org.promotion.starter import STARTER_TEMPLATE_NAME
+from tournament.models import Tournament
 
 ROLES = (
     "owner",

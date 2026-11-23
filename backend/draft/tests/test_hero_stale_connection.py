@@ -17,10 +17,10 @@ from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 from django.urls import re_path
 
-from app.models import Game, Team, Tournament
 from draft.consumers.hero import HeroDraftConsumer
 from draft.models import DraftTeam, HeroDraft, HeroDraftState
 from draft.tests.ws_helpers import read_until_type
+from tournament.models import Game, Team, Tournament
 
 User = get_user_model()
 

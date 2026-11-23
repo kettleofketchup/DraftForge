@@ -10,9 +10,9 @@ from django.utils import timezone as tz
 
 from app.models import CustomUser
 from org.leadership import reviews as reviews_module
+from org.leadership.errors import ReviewRefused
 from org.leadership.lifecycle import void_event
 from org.leadership.reviews import (
-    ReviewRefused,
     unvoid_review,
     void_review,
     withdraw_review,
@@ -335,7 +335,7 @@ class ModerationTest(ReviewTestCase):
         void_event(self.event, now=tz.now())
         self.refused("snapshot_voided", lambda: self.unvoid(review))
 
-    def test_admin_cannot_moderate_own_reviews(self) -> None:
+    def test_admin_own_reviews_look_missing(self) -> None:
         event, tournament = self.make_event("Admin Cup")
         mate = self.make_user("ld_admin_mate")
         self.make_team("Admins", self.admin, [mate], tournament=tournament)
@@ -343,13 +343,53 @@ class ModerationTest(ReviewTestCase):
         self.admit(mate, event)
         self.run_snapshot(event)
         review = self.review(mate, self.admin, 5, event=event)
-        exc = self.refused("cannot_moderate_own_reviews", lambda: self.void(review))
-        self.assertEqual(exc.status, 403)
+        exc = self.refused("not_found", lambda: self.void(review))
+        self.assertEqual(exc.status, 404)
         other = self.make_user("ld_admin_two")
         self.org.admins.add(other)
         self.void(review, other)
-        self.refused("cannot_moderate_own_reviews", lambda: self.unvoid(review))
+        self.refused("not_found", lambda: self.unvoid(review))
         self.unvoid(review, other)
+
+    def test_org_staff_can_void_others(self) -> None:
+        review = self.review(self.mates_a[0], self.cap_a, 5)
+        staff = self.make_user("ld_org_staff")
+        self.org.staff.add(staff)
+        voided = self.void(review, staff)
+        self.assertEqual(voided.voided_by_id, staff.pk)
+        self.unvoid(review, staff)
+
+    def test_every_role_refused_on_own_review(self) -> None:
+        event, tournament = self.make_event("Role Cup")
+        captains = {
+            "owner": self.admin,
+            "admin": self.make_user("ld_own_admin"),
+            "staff": self.make_user("ld_own_staff"),
+            "site_staff": CustomUser.objects.create_user(
+                username="ld_own_site", password="x", is_staff=True
+            ),
+            "superuser": CustomUser.objects.create_user(
+                username="ld_own_super", password="x", is_superuser=True
+            ),
+        }
+        self.org.admins.add(captains["admin"])
+        self.org.staff.add(captains["staff"])
+        mates = {name: self.make_user(f"ld_own_mate_{name}") for name in captains}
+        for name, captain in captains.items():
+            self.make_team(name, captain, [mates[name]], tournament=tournament)
+            self.admit(captain, event)
+            self.admit(mates[name], event)
+        self.run_snapshot(event)
+        for name, captain in captains.items():
+            with self.subTest(name):
+                review = self.review(mates[name], captain, 5, event=event)
+                exc = self.refused("not_found", lambda: self.void(review, captain))
+                self.assertEqual(exc.status, 404)
+                self.assertEqual(exc.detail, "Review not found.")
+                CaptainReview.objects.filter(pk=review.pk).update(
+                    voided_at=tz.now(), void_kind="moderated"
+                )
+                self.refused("not_found", lambda: self.unvoid(review, captain))
 
     def test_non_admin_cannot_moderate(self) -> None:
         review = self.review(self.mates_a[0], self.cap_a, 5)
