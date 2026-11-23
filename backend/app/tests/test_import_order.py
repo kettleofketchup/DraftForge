@@ -8,10 +8,6 @@ from pathlib import Path
 from django.test import SimpleTestCase
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-TOURNAMENT_SERIALIZER_MODULES = tuple(
-    f"tournament.serializers.{name}"
-    for name in ("users", "team", "draft", "game", "tournament")
-)
 
 
 class ImportOrderTests(SimpleTestCase):
@@ -31,12 +27,6 @@ class ImportOrderTests(SimpleTestCase):
         result = self._import_first("app.serializers")
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_tournament_serializers_first(self) -> None:
-        for module in TOURNAMENT_SERIALIZER_MODULES:
-            with self.subTest(module=module):
-                result = self._import_first(module)
-                self.assertEqual(result.returncode, 0, result.stderr)
-
     def test_broadcast_first(self) -> None:
         result = self._import_first("draft.services.team_broadcast")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -46,18 +36,5 @@ class ImportOrderTests(SimpleTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_serializers_never_import_team_management(self) -> None:
-        paths = [
-            BACKEND_DIR / "app" / "serializers.py",
-            *sorted((BACKEND_DIR / "tournament" / "serializers").glob("*.py")),
-        ]
-        self.assertGreater(len(paths), len(TOURNAMENT_SERIALIZER_MODULES))
-        for path in paths:
-            with self.subTest(path=path.name):
-                self.assertNotIn("team_management", path.read_text())
-
-    def test_tournament_serializers_never_import_functions(self) -> None:
-        paths = sorted((BACKEND_DIR / "tournament" / "serializers").glob("*.py"))
-        self.assertGreaterEqual(len(paths), len(TOURNAMENT_SERIALIZER_MODULES))
-        for path in paths:
-            with self.subTest(path=path.name):
-                self.assertNotIn("tournament.functions", path.read_text())
+        path = BACKEND_DIR / "app" / "serializers.py"
+        self.assertNotIn("team_management", path.read_text())

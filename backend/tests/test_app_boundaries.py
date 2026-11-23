@@ -421,6 +421,8 @@ _TOURNAMENT_SPLIT_DEFS = {
         "mmr_rows",
         "tournament_payload",
     ),
+    "app.tests.test_import_order": ("TOURNAMENT_SERIALIZER_MODULES",),
+    "app.tests.test_internal_endpoints": ("TournamentParticipantsEndpointTest",),
     "app.tests.test_schema_drift": (
         "GameWithoutHeroDraftSchemaDriftTest",
         "TournamentParticipantSchemaDriftTest",
