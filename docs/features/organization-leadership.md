@@ -10,11 +10,6 @@ A site admin unlocks Leadership per organization, the same way as the other
 a [standing track](../development/org-standing.md), so its leaderboards are served by
 the generic [standing endpoints](../api/endpoints.md#organization-standing).
 
-!!! note "Screens ship separately"
-    This release adds the backend: the data, the review window, the scoring and the
-    API. The rating dialog, the captain's card and the moderation table arrive in a
-    later release.
-
 ## What is tracked
 
 When an event that has a tournament is completed, every team's captain at that moment
@@ -142,6 +137,110 @@ written to the organization log with the points before and after.
 
 The max age must stay at least the half-life. The minimum reviews for points can never
 go below 2.
+
+## Using Leadership
+
+### The Leadership tab
+
+The organization page gets a **Leadership** tab once the feature is unlocked. The
+metric picker chooses the board: **Rating** (overall), **Points** (with a period
+picker) and one board per active trait. Adding or renaming a trait in the settings
+updates the picker without a reload.
+
+Selecting a row opens that member's panel:
+
+- the overall rating, with a **New** badge while the captain has fewer released
+  reviews than the org's "Reviews to be ranked";
+- "No released ratings yet" until a review window closes with enough reviews;
+- **Points all time** and **Points this month**;
+- one bar per trait with a released rating; a trait with no released rating says
+  **Not released** and draws no bar;
+- **Rated events**: each event the captain was rated for, with the team, its
+  placement and the captain rating points. A released event with fewer than 3
+  reviews shows the review count but no per-trait averages.
+
+Which events are listed depends on who is looking:
+
+- a captain viewing their own panel sees released events only;
+- an org admin viewing another captain also sees events still inside their window
+  or without the minimum number of reviews, marked **Not released**. For an admin
+  the headline rating, review count and trait bars include those unreleased
+  reviews; the panel labels the count "(includes unreleased)" and says the figures
+  are visible to admins only.
+
+The points totals count captaining, placement and draft points from every event,
+including events that are still in their review window or did not get enough
+reviews. A captain's own list leaves those events out, so it does not add up to the
+totals; the panel says so under the totals.
+
+Who can open which panel:
+
+- every member can open their own;
+- org admins can open anyone's;
+- other members can open other captains only when the leaderboard is public.
+
+Any row on a visible board can be clicked; when the backend refuses the panel (for
+example, org staff who are not admins on a private board) it shows "Only org admins
+can see other captains' details."
+
+A captain's own panel shows aggregates only: their rating, per-trait averages for
+released events with at least 3 reviews, and their points. It never shows who rated
+them or any single review. A note at the top says who else can see it: only the
+captain and org admins on a private board, or, when the leaderboard is public, every
+member for the rating and points (the per-event detail stays with the captain and
+admins).
+
+### Rate your captain
+
+A teammate who can still rate a captain sees a **Rate your captain** banner on the
+event page and a card at the top of the Leadership tab, one entry per captain. The
+dialog has a 1 to 5 score for each active trait, as a radio group that works with the
+keyboard (arrow keys move between scores). Every trait must be scored.
+
+While the window is open, a countdown shows the time left and the rater can submit,
+edit (**Update**) or **Withdraw** the review. When the countdown reaches zero the
+dialog shows "The review window has closed." and its buttons are disabled. A review
+an organizer voided is read-only: the dialog says so and offers only **Close**. Other
+refusals, such as a captain the rater can no longer rate, are shown as plain messages
+inside the dialog. The dialog stays open with the message even when the refusal also
+removes the captain from the pending list.
+
+**Your reviews**, a collapsed list on the same card, shows the rater's own past
+reviews with their scores, and marks a review that was withdrawn, no longer counted
+after a reopen, or removed by an organizer. It never shows anyone else's review.
+
+### Moderation on the event page
+
+Org admins see a **Captain reviews** section on the event page's Details tab for
+any event with captain snapshots, including an event reopened after its reviews were
+voided. For each captain it shows whether the rating is released and a table of the
+reviews with the rater, the scores and the status. If the reviews fail to load, the
+section says so instead of disappearing.
+**Void** asks for a reason (1 to 500 characters) and marks the review "Voided by
+staff" with the reason under the rater; **Restore** puts it back. On teams the admin
+captained, the section shows only the released aggregate and the note "Another admin
+has to moderate its reviews", with no reviews and no actions. A review the admin
+wrote as a teammate shows "Your review" in place of **Void** and **Restore**.
+
+### Settings
+
+Org admins edit Leadership under **Settings → Leadership**:
+
+- the review window, minimum reviewers, reviews to be ranked, the baseline rating and
+  strength, half-life, max age and whether the leaderboard is public;
+- the captain rating maximum and the points per kind (captained, placements, draft
+  completed). Each field shows a **Default** badge and a reset button that restores
+  the default;
+- the trait list: add a trait, rename it, move it up or down, and switch it active or
+  inactive. At least one trait stays active, and at most 8 can be. **Delete** asks
+  for confirmation on a saved trait; a trait added since the last save is simply
+  removed. A trait that already has scores is refused ("This trait has scores.
+  Deactivate it instead.") and switched to inactive for the next save; a trait
+  another admin already deleted is dropped from the list.
+
+The settings and the trait list are saved together with the section's save button.
+Server-side validation errors are shown under the field they belong to; an error
+that names no field is shown as a toast.
 
 ## API
 

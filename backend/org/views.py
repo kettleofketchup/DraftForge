@@ -5,11 +5,12 @@ Handles org admin functionality including claim request management.
 """
 
 from typing import Any
+from uuid import uuid4
 
 from django.db import transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -19,6 +20,8 @@ from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, PositionsModel, ProfileClaimRequest, Team
 from draft.models import DraftRound
 from draft.services.hero_chat import repoint_chat_attribution
+from events.ledger import ActorRole, SignupActor, SignupMeans
+from events.merge import merge_user_signups
 from events.models import Event
 from events.staff import dedupe_host_helpers
 from league.models import LeagueLog, LeagueUser
@@ -36,7 +39,9 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
-class ClaimRequestViewSet(viewsets.ModelViewSet):
+class ClaimRequestViewSet(
+    mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+):
     """
     ViewSet for managing profile claim requests.
 
@@ -122,7 +127,16 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
             claim_request.save()
 
             # Perform the merge (this deletes target_user)
-            self._merge_profiles(claimer, target_user)
+            self._merge_profiles(
+                claimer,
+                target_user,
+                actor=SignupActor(
+                    user=request.user,
+                    role=ActorRole.STAFF,
+                    means=SignupMeans.WEB,
+                    correlation_id=f"claim-{uuid4().hex[:12]}",
+                ),
+            )
 
             # Log the action
             OrgLog.objects.create(
@@ -186,7 +200,9 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
-    def _merge_profiles(self, claimer: CustomUser, target_user: CustomUser) -> None:
+    def _merge_profiles(
+        self, claimer: CustomUser, target_user: CustomUser, *, actor: SignupActor
+    ) -> None:
         """
         Merge target_user's profile into claimer.
 
@@ -252,6 +268,8 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 *stale_events,
                 *Event.objects.nocache().filter(pk__in=staffed_ids),
             )
+
+        merge_user_signups(target_user, claimer, actor=actor)
 
         # LeagueUser memberships
         for league_user in LeagueUser.objects.filter(user=target_user):

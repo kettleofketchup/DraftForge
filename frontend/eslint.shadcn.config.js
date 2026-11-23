@@ -61,6 +61,8 @@ export default defineConfig([
       'draftforge/no-user-reshape': 'error',
       'draftforge/no-direct-name-resolver': 'error',
       'draftforge/no-avatar-fallback': 'error',
+      // Name searches match every name a person is shown by (#833).
+      'draftforge/use-user-search': 'error',
       // Raw palette classes in strings shadcn/no-raw-colors cannot trace to a
       // className (maps, arrays, returns); the processor drops its duplicates.
       'draftforge/no-raw-color-strings': 'error',
@@ -80,6 +82,7 @@ export default defineConfig([
       'app/components/user/UserAvatar.tsx',
       'app/components/user/avatar.tsx',
       'app/lib/userDisplayName.ts',
+      'app/lib/userSearch.ts',
       'app/lib/displayOrg.ts',
       'app/components/ui/**',
     ],
@@ -90,6 +93,7 @@ export default defineConfig([
       'draftforge/no-user-reshape': 'off',
       'draftforge/no-direct-name-resolver': 'off',
       'draftforge/no-avatar-fallback': 'off',
+      'draftforge/use-user-search': 'off',
     },
   },
   {

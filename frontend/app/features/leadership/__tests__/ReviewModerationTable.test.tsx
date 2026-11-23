@@ -1,0 +1,212 @@
+// @vitest-environment jsdom
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { setViewportWidth } from '~/components/ui/data-table/__tests__/viewport';
+import { ReviewModerationTable } from '../ReviewModerationTable';
+import type { EventCaptainReviews, ModerationReview } from '../schemas';
+import {
+  DEFAULT_TRAITS,
+  eventAggregate,
+  eventReviews,
+  moderationReview,
+} from './fixtures';
+
+function captainWith(
+  overrides: Partial<EventCaptainReviews> = {},
+): EventCaptainReviews {
+  return { ...eventReviews().captains[0], ...overrides };
+}
+
+function renderTable(
+  captain: EventCaptainReviews,
+  handlers: {
+    onVoid?: (r: ModerationReview) => void;
+    onUnvoid?: (r: ModerationReview) => void;
+  } = {},
+  viewerPk: number | null = 1,
+) {
+  return render(
+    <ReviewModerationTable
+      captain={captain}
+      viewerPk={viewerPk}
+      traits={DEFAULT_TRAITS}
+      onVoid={handlers.onVoid ?? vi.fn()}
+      onUnvoid={handlers.onUnvoid ?? vi.fn()}
+      pendingPk={null}
+    />,
+  );
+}
+
+describe('ReviewModerationTable', () => {
+  it('lists reviews with rater and scores', () => {
+    renderTable(captainWith());
+    const block = screen.getByTestId('leadership-moderation-7');
+    expect(within(block).getByText('alice')).toBeInTheDocument();
+    const row = screen.getByTestId('leadership-review-row-31');
+    expect(within(row).getAllByText('bob').length).toBeGreaterThan(0);
+    expect(within(row).getAllByText('Drafting: 3').length).toBeGreaterThan(0);
+    expect(within(row).getAllByText('Live').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('leadership-void-31')).toBeInTheDocument();
+    expect(screen.queryByTestId('leadership-unvoid-31')).toBeNull();
+  });
+
+  it('calls onVoid and onUnvoid for the right rows', () => {
+    const onVoid = vi.fn();
+    const onUnvoid = vi.fn();
+    const moderated = moderationReview({
+      pk: 32,
+      voided_at: '2026-11-03T10:00:00Z',
+      void_kind: 'moderated',
+      void_reason: 'spam',
+    });
+    renderTable(captainWith({ reviews: [moderationReview(), moderated] }), {
+      onVoid,
+      onUnvoid,
+    });
+    fireEvent.click(screen.getByTestId('leadership-void-31'));
+    expect(onVoid).toHaveBeenCalledWith(expect.objectContaining({ pk: 31 }));
+    expect(screen.queryByTestId('leadership-void-32')).toBeNull();
+    fireEvent.click(screen.getByTestId('leadership-unvoid-32'));
+    expect(onUnvoid).toHaveBeenCalledWith(expect.objectContaining({ pk: 32 }));
+  });
+
+  it('offers no void or restore on a review the viewer wrote', () => {
+    const moderated = moderationReview({
+      pk: 32,
+      voided_at: '2026-11-03T10:00:00Z',
+      void_kind: 'moderated',
+    });
+    renderTable(
+      captainWith({ reviews: [moderationReview(), moderated] }),
+      {},
+      12,
+    );
+    expect(screen.queryByTestId('leadership-void-31')).toBeNull();
+    expect(screen.queryByTestId('leadership-unvoid-32')).toBeNull();
+    expect(screen.getByTestId('leadership-own-review-32')).toHaveTextContent(
+      'Your review',
+    );
+  });
+
+  it('offers no action on a withdrawn review', () => {
+    renderTable(
+      captainWith({
+        reviews: [
+          moderationReview({
+            voided_at: '2026-11-03T10:00:00Z',
+            void_kind: 'withdrawn',
+          }),
+        ],
+      }),
+    );
+    expect(screen.queryByTestId('leadership-void-31')).toBeNull();
+    expect(screen.queryByTestId('leadership-unvoid-31')).toBeNull();
+    expect(screen.getAllByText('Withdrawn').length).toBeGreaterThan(0);
+  });
+
+  it('shows the own-snapshot note without rows or actions', () => {
+    renderTable(
+      captainWith({
+        own_snapshot: true,
+        reviews: null,
+        aggregate: eventAggregate({ rating: 4.1 }),
+      }),
+    );
+    expect(screen.getByTestId('leadership-moderation-own-7')).toHaveTextContent(
+      'You captained this team. Another admin has to moderate its reviews.',
+    );
+    expect(screen.getByTestId('leadership-moderation-7')).toHaveTextContent(
+      '4.1',
+    );
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByTestId(/^leadership-(void|unvoid)-/)).toBeNull();
+  });
+
+  it('shows a deleted rater', () => {
+    renderTable(captainWith({ reviews: [moderationReview({ rater: null })] }));
+    expect(
+      within(screen.getByTestId('leadership-review-row-31')).getByText(
+        'Deleted account',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the empty message without reviews', () => {
+    renderTable(captainWith({ reviews: [] }));
+    expect(screen.getByText('No reviews')).toBeInTheDocument();
+  });
+
+  it('keeps the status column badge-only and puts a long reason under the rater', () => {
+    const reason = 'x'.repeat(500);
+    renderTable(
+      captainWith({
+        reviews: [
+          moderationReview({
+            voided_at: '2026-11-03T10:00:00Z',
+            void_kind: 'moderated',
+            void_reason: reason,
+          }),
+        ],
+      }),
+    );
+    const row = screen.getByTestId('leadership-review-row-31');
+    const cells = row.querySelectorAll('td');
+    const raterCell = cells[0];
+    const reasonEl = screen.getByTestId('leadership-void-reason-31');
+    expect(raterCell.contains(reasonEl)).toBe(true);
+    expect(reasonEl).toHaveTextContent(reason);
+    expect(reasonEl).toHaveClass('break-words', 'line-clamp-3');
+    expect(reasonEl).toHaveAttribute('title', reason);
+    const statusCell = screen.getByTestId('leadership-status-31').closest('td');
+    expect(statusCell).not.toBeNull();
+    expect(statusCell!.className).not.toMatch(/(^|\s)w-\d/);
+    expect(statusCell!.textContent).toBe('Voided by staff');
+  });
+
+  it('stacks status below sm and scores below md', () => {
+    renderTable(captainWith());
+    expect(screen.getByTestId('leadership-stacked-status-31')).toHaveClass(
+      'sm:hidden',
+    );
+    expect(screen.getByTestId('leadership-stacked-scores-31')).toHaveClass(
+      'md:hidden',
+    );
+  });
+
+  it('puts the action beside the rater and the date under it below sm', () => {
+    renderTable(captainWith());
+    const row = screen.getByTestId('leadership-review-row-31');
+    const cells = row.querySelectorAll('td');
+    const head = screen.getByTestId('leadership-stacked-head-31');
+    expect(cells[0].contains(head)).toBe(true);
+    expect(within(head).getByTestId('leadership-void-31')).toBeInTheDocument();
+    expect(screen.getAllByTestId('leadership-void-31')).toHaveLength(1);
+    expect(
+      head.contains(screen.getByTestId('leadership-stacked-scores-31')),
+    ).toBe(false);
+    const stacked = screen.getByTestId('leadership-stacked-status-31');
+    expect(stacked).toHaveClass('sm:hidden');
+    expect(stacked).toHaveTextContent('Live');
+    expect(
+      within(stacked).getByTestId('leadership-stacked-submitted-31'),
+    ).toHaveTextContent(/\d{4}/);
+    const actionsCell = cells[cells.length - 1];
+    expect(actionsCell).toHaveClass('hidden', 'sm:table-cell');
+    expect(actionsCell.textContent).toBe('');
+  });
+
+  it('keeps the action in its own column from sm', () => {
+    const restore = setViewportWidth(1024);
+    try {
+      renderTable(captainWith());
+      const row = screen.getByTestId('leadership-review-row-31');
+      const cells = row.querySelectorAll('td');
+      const button = screen.getByTestId('leadership-void-31');
+      expect(screen.getAllByTestId('leadership-void-31')).toHaveLength(1);
+      expect(cells[cells.length - 1].contains(button)).toBe(true);
+      expect(cells[0].contains(button)).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+});

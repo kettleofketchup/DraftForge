@@ -1049,7 +1049,7 @@ class HeroesModuleIsLeafTest(SimpleTestCase):
             {
                 m
                 for m in self.imports(services / "heroes.py")
-                if m.startswith(("app", "draft"))
+                if m.startswith(("app", "draft", "tournament"))
             },
             {"draft.models", "draft.models.HeroDraft"},
         )

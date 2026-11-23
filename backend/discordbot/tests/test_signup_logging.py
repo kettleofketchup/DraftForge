@@ -28,8 +28,9 @@ from app.models import CustomUser, GameType
 from discordbot.components import SignupButton
 from events.constants import EventState, SignupStatus
 from events.discord.handlers import handle_signup_button
-from events.models import Event, EventSignup
+from events.models import Event, EventSignup, SignupLedgerEntry
 from events.services import resolve_or_create_org_user
+from events.tests.actors import SYSTEM
 from org.models import Organization
 from org.models_profiles import PlayerDotaProfile
 
@@ -455,13 +456,14 @@ class RollbackPathTests(TransactionTestCase):
 
         from events.services import process_rsvp
 
+        ledger_before = SignupLedgerEntry.objects.filter(event=self.event).count()
         with (
             capture_logs() as logs,
             patch("events.tasks.send_signup_update.apply_async") as mock_apply_async,
         ):
             try:
                 with transaction.atomic():
-                    process_rsvp(self.event, self.user)
+                    process_rsvp(self.event, self.user, actor=SYSTEM)
                     raise RuntimeError("force rollback after process_rsvp")
             except RuntimeError:
                 pass
@@ -476,6 +478,9 @@ class RollbackPathTests(TransactionTestCase):
         mock_apply_async.assert_not_called()
         self.assertEqual(
             EventSignup.objects.filter(event=self.event, user=self.user).count(), 0
+        )
+        self.assertEqual(
+            SignupLedgerEntry.objects.filter(event=self.event).count(), ledger_before
         )
 
 

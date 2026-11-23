@@ -14,10 +14,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.models import CustomUser, Game, Team
-from app.permissions_tournament import (
-    IsTournamentStaff,
-    can_edit_tournament,
-)
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 from draft.serializers.hero import HeroDraftEventSerializer, HeroDraftSerializer
 from draft.services.hero import (
@@ -32,6 +28,10 @@ from draft.services.hero_chat import reconcile_draft_memberships
 from draft.tasks import hero_tick
 from events.discord.tournament_dispatch import notify_herodraft_created
 from telemetry.logging import get_logger
+from tournament.permissions import (
+    IsTournamentStaff,
+    can_edit_tournament,
+)
 
 log = get_logger(__name__)
 

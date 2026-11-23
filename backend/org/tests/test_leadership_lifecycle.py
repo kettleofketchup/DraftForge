@@ -6,7 +6,6 @@ from django.utils import timezone as tz
 from structlog.testing import capture_logs
 
 from app.models import Team, TeamLogVia
-from app.services.team_management import replace_captain
 from events.constants import EventState
 from events.models import Event
 from events.reopen import reopen_event
@@ -19,6 +18,7 @@ from org.models import ContributionEntry, ContributionPointValue, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
 from org.standing import api as standing
 from org.tests.leadership_base import LeadershipTestCase
+from tournament.services.team_management import replace_captain
 
 SNAPSHOT_QUERIES = 18
 

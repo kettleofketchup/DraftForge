@@ -28,6 +28,7 @@ from events.services import (
     process_rsvp,
     reinstate_signup,
 )
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
@@ -363,20 +364,20 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         ev = self._screenshot_event()
         u = self.make_user()
         self._declared(u, "active", mmr=4000)
-        s = process_rsvp(ev, u)
+        s = process_rsvp(ev, u, actor=SYSTEM)
         self.assertEqual(s.status, SignupStatus.RSVP)
         s.refresh_from_db()
         self.assertEqual(s.unmet_requirements, [Unmet.RANK_SCREENSHOT_MISSING.value])
 
     def test_auto_approve_signup_stores_codes(self, _notify: MagicMock) -> None:
         ev = self.make_event(min_mmr=3000)
-        s = process_rsvp(ev, self.make_user())
+        s = process_rsvp(ev, self.make_user(), actor=SYSTEM)
         self.assertEqual(s.status, SignupStatus.PENDING_APPROVAL)
         s.refresh_from_db()
         self.assertEqual(s.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
 
     def test_eligible_signup_stores_no_codes(self, _notify: MagicMock) -> None:
-        s = process_rsvp(self.make_event(), self.make_user())
+        s = process_rsvp(self.make_event(), self.make_user(), actor=SYSTEM)
         s.refresh_from_db()
         self.assertEqual(s.unmet_requirements, [])
 
@@ -385,7 +386,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         EventSignup.objects.create(
             event=ev, user=self.make_user(), status=SignupStatus.APPROVED
         )
-        s = process_rsvp(ev, self.make_user())
+        s = process_rsvp(ev, self.make_user(), actor=SYSTEM)
         self.assertEqual(s.status, SignupStatus.WAITLISTED)
         s.refresh_from_db()
         self.assertEqual(s.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
@@ -394,7 +395,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         ev = self._screenshot_event()
         u = self.make_user()
         self._declared(u, "active", mmr=4000)
-        s = process_rsvp(ev, u)
+        s = process_rsvp(ev, u, actor=SYSTEM)
         EventSignup.objects.get(pk=s.pk).unmet_requirements  # warm the cache
         with self.captureOnCommitCallbacks(execute=True):
             apply_signup_input(
@@ -445,7 +446,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         ev = self._screenshot_event()
         u = self.make_user()
         self._declared(u, "active", mmr=4000)
-        s = process_rsvp(ev, u)
+        s = process_rsvp(ev, u, actor=SYSTEM)
         api = APIClient()
         api.force_authenticate(self.admin)
         resp = api.patch(
@@ -461,8 +462,8 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         ev = self._screenshot_event()
         u = self.make_user()
         self._declared(u, "active", mmr=4000)
-        s = process_rsvp(ev, u)
-        approve_signup(s)
+        s = process_rsvp(ev, u, actor=SYSTEM)
+        approve_signup(s, actor=SYSTEM)
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.APPROVED)
         self.assertEqual(s.unmet_requirements, [])
@@ -471,7 +472,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         ev = self.make_event(min_mmr=3000)
         u = self.make_user()
         s = EventSignup.objects.create(event=ev, user=u, status=SignupStatus.CANCELLED)
-        reinstate_signup(s)
+        reinstate_signup(s, actor=SYSTEM)
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.PENDING_APPROVAL)
         self.assertEqual(s.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
@@ -483,7 +484,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         s = EventSignup.objects.create(
             event=ev, user=self.make_user(), status=SignupStatus.CANCELLED
         )
-        reinstate_signup(s)
+        reinstate_signup(s, actor=SYSTEM)
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.APPROVED)
         self.assertEqual(s.unmet_requirements, [])
@@ -495,7 +496,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         ev = self.make_event(auto_confirm=True, tournament=tournament)
         u = self.make_user()
         s = EventSignup.objects.create(event=ev, user=u, status=SignupStatus.CANCELLED)
-        reinstate_signup(s)
+        reinstate_signup(s, actor=SYSTEM)
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.CONFIRMED)
         self.assertTrue(tournament.users.filter(pk=u.pk).exists())
@@ -507,7 +508,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         u = self.make_user()
         self._declared(u, "active", mmr=4000)
         s = EventSignup.objects.create(event=ev, user=u, status=SignupStatus.CANCELLED)
-        reinstate_signup(s)
+        reinstate_signup(s, actor=SYSTEM)
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.RSVP)
         self.assertEqual(s.unmet_requirements, [Unmet.RANK_SCREENSHOT_MISSING.value])
@@ -520,7 +521,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
             status=SignupStatus.REJECTED,
             unmet_requirements=[Unmet.DOTA_RANK_UNDECLARED.value],
         )
-        reinstate_signup(s)
+        reinstate_signup(s, actor=SYSTEM)
         s.refresh_from_db()
         self.assertEqual(s.status, SignupStatus.APPROVED)
         self.assertEqual(s.unmet_requirements, [])
@@ -529,17 +530,21 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         self, _notify: MagicMock
     ) -> None:
         u = self.make_user()
-        first = process_rsvp(self.make_event(require_mmr_verified=True), u)
-        other = process_rsvp(self.make_event(require_mmr_verified=True), u)
+        first = process_rsvp(
+            self.make_event(require_mmr_verified=True), u, actor=SYSTEM
+        )
+        other = process_rsvp(
+            self.make_event(require_mmr_verified=True), u, actor=SYSTEM
+        )
         other.refresh_from_db()
         self.assertEqual(other.unmet_requirements, [Unmet.MMR_UNVERIFIED.value])
-        approve_signup(first, mmr_override=5000)
+        approve_signup(first, mmr_override=5000, actor=SYSTEM)
         other.refresh_from_db()
         self.assertEqual(other.unmet_requirements, [])
 
     def test_admin_mmr_edit_refreshes_codes(self, _notify: MagicMock) -> None:
         u = self.make_user()
-        s = process_rsvp(self.make_event(require_mmr_verified=True), u)
+        s = process_rsvp(self.make_event(require_mmr_verified=True), u, actor=SYSTEM)
         api = APIClient()
         api.force_authenticate(self.admin)
         resp = api.patch(
@@ -557,7 +562,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         ev = self.make_event(auto_approve=False, min_mmr=3000)
         u = self.make_user()
         self._declared(u, "active", mmr=4000)
-        s = process_rsvp(ev, u)
+        s = process_rsvp(ev, u, actor=SYSTEM)
         s.refresh_from_db()
         self.assertEqual(s.unmet_requirements, [])
         api = APIClient()
@@ -582,7 +587,7 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
             status=SignupStatus.WAITLISTED,
             waitlist_position=1,
         )
-        cancel_signup(seated)
+        cancel_signup(seated, actor=SYSTEM)
         row.refresh_from_db()
         self.assertEqual(row.status, SignupStatus.PENDING_APPROVAL)
         self.assertEqual(row.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
@@ -595,7 +600,7 @@ class UnmetRequirementsVisibilityTests(EventTestCase):
     ) -> None:
         ev = self.make_event(min_mmr=3000)
         owner = self.make_user()
-        process_rsvp(ev, owner)
+        process_rsvp(ev, owner, actor=SYSTEM)
         other = self.make_user()
         api = APIClient()
         expected = {
@@ -615,5 +620,5 @@ class UnmetRequirementsVisibilityTests(EventTestCase):
 
     def test_serializer_without_request_hides_codes(self, _notify: MagicMock) -> None:
         ev = self.make_event(min_mmr=3000)
-        s = process_rsvp(ev, self.make_user())
+        s = process_rsvp(ev, self.make_user(), actor=SYSTEM)
         self.assertEqual(EventSignupSerializer(s).data["unmet_requirements"], [])

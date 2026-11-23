@@ -1,7 +1,8 @@
 // DraftForge design-system rules for people: avatars go through UserAvatar, names
-// through DisplayName (which picks org server nickname, Discord name or username).
+// through DisplayName (which picks org server nickname, Discord name or username),
+// and name searches through ~/lib/userSearch.
 
-const GUIDE = '.claude/skills/frontend-development/resources/users.md';
+const GUIDE = '.claude/skills/users/references/frontend.md';
 const see = (rule) => ` See ${GUIDE}#${rule}`;
 
 const NAME_FIELDS = new Set([
@@ -438,6 +439,84 @@ const noAvatarFallback = {
   },
 };
 
+const SEARCH_NAME =
+  /(^|_)(username|nickname|nick|discordnickname|discordusername|guildnickname|global_name)$/i;
+const NEVER = /$^/;
+const LOWER = new Set(['toLowerCase', 'toLocaleLowerCase', 'toUpperCase']);
+const MATCHERS = new Set([
+  'includes',
+  'startsWith',
+  'endsWith',
+  'indexOf',
+  'match',
+  'search',
+]);
+const EQUALITY = new Set(['===', '!==', '==', '!=']);
+
+function outerChain(node) {
+  let n = node;
+  while (n.parent?.type === 'ChainExpression') n = n.parent;
+  return n;
+}
+
+// `<value>.includes(q)` or `<value> === s`, where <value> is the expression being tested.
+function isMatchedText(value) {
+  const n = outerChain(value);
+  const p = n.parent;
+  if (
+    p?.type === 'MemberExpression' &&
+    p.object === n &&
+    MATCHERS.has(propertyName(p) ?? '')
+  ) {
+    const call = outerChain(p).parent;
+    return call?.type === 'CallExpression' && unwrap(call.callee) === p;
+  }
+  return p?.type === 'BinaryExpression' && EQUALITY.has(p.operator);
+}
+
+const useUserSearch = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description: 'Match users through the shared search helpers',
+      url: `${GUIDE}#use-user-search`,
+    },
+    messages: {
+      manual:
+        'Hand-rolled person-name match; use filterUsers / useFilteredUsers / findUserByName (~/lib/userSearch) so Discord names and org server nicknames match too.' +
+        see('use-user-search'),
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      CallExpression(node) {
+        const callee = unwrap(node.callee);
+        if (callee?.type !== 'MemberExpression') return;
+        const method = propertyName(callee);
+        const target = unwrap(callee.object);
+        if (LOWER.has(method ?? '')) {
+          if (
+            (readsMatching(target, SEARCH_NAME, NEVER) ||
+              callsDisplayName(target)) &&
+            isMatchedText(node)
+          )
+            context.report({ node, messageId: 'manual' });
+          return;
+        }
+        // Case-sensitive `user.username.includes(q)`.
+        if (
+          MATCHERS.has(method ?? '') &&
+          method !== 'indexOf' &&
+          target?.type === 'MemberExpression' &&
+          SEARCH_NAME.test(propertyName(target) ?? '')
+        )
+          context.report({ node, messageId: 'manual' });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: 'draftforge' },
   rules: {
@@ -447,5 +526,6 @@ export default {
     'no-user-reshape': noUserReshape,
     'no-direct-name-resolver': noDirectNameResolver,
     'no-avatar-fallback': noAvatarFallback,
+    'use-user-search': useUserSearch,
   },
 };

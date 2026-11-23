@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
 import { Crown, UserPlus } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 
@@ -7,7 +6,6 @@ import {
   type OtherTeamSummary,
   type RosterUser,
 } from '~/components/api/teamManagementAPI';
-import { searchUsers } from '~/components/api/userAPI';
 import type { OrganizationType } from '~/components/organization/schemas';
 import { Badge } from '~/components/ui/badge';
 import { SecondaryButton } from '~/components/ui/buttons';
@@ -25,8 +23,9 @@ import {
 } from '~/components/ui/popover';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
+import { useUserSearch } from '~/hooks/useUserSearch';
+import { USER_SEARCH_MIN_LENGTH } from '~/lib/userSearch';
 import { cn } from '~/lib/utils';
 import {
   candidateLabels,
@@ -35,9 +34,6 @@ import {
   type TeamCandidateRow,
 } from './candidateStatus';
 import { ROSTER_BADGE_SIZE, RosterStatusBadge } from './RosterStatusBadge';
-
-const MIN_QUERY_LENGTH = 3;
-const DEBOUNCE_MS = 300;
 
 export type CandidatePickerMode = 'standin' | 'captain';
 
@@ -114,16 +110,15 @@ export function UserCandidatePicker({
   const open = openProp ?? innerOpen;
   const [query, setQuery] = useState('');
   const trimmed = query.trim();
-  const term = useDebouncedValue(trimmed, DEBOUNCE_MS);
   const isOrgStaff =
     useIsOrganizationStaff(organization) && organization?.pk != null;
   const orgPk = isOrgStaff ? organization?.pk : undefined;
   const league = isOrgStaff ? (leaguePk ?? undefined) : undefined;
 
-  const search = useQuery({
-    queryKey: ['userSearch', mode, term, orgPk ?? null, league ?? null],
-    queryFn: () => searchUsers(term, orgPk, league),
-    enabled: open && term.length >= MIN_QUERY_LENGTH,
+  const search = useUserSearch(query, {
+    orgId: orgPk,
+    leagueId: league,
+    enabled: open,
   });
 
   const labels = useMemo(
@@ -159,7 +154,7 @@ export function UserCandidatePicker({
     ]);
     const inside: Candidate[] = [];
     const outside: Candidate[] = [];
-    for (const result of search.data ?? []) {
+    for (const result of search.results) {
       if (result.pk == null || skip.has(result.pk)) continue;
       const parsed = RosterUserSchema.safeParse(result);
       if (!parsed.success) continue;
@@ -178,7 +173,7 @@ export function UserCandidatePicker({
       (isInside ? inside : outside).push(candidate);
     }
     return { inside, outside };
-  }, [search.data, excludePks, teamGroup, freeGroup, labels, isOrgStaff]);
+  }, [search.results, excludePks, teamGroup, freeGroup, labels, isOrgStaff]);
 
   const handleOpenChange = (next: boolean) => {
     if (!next) setQuery('');
@@ -252,14 +247,14 @@ export function UserCandidatePicker({
   };
 
   const clientCount = teamGroup.length + freeGroup.length;
-  const ready = trimmed.length >= MIN_QUERY_LENGTH;
-  const settled = ready && term === trimmed;
   let searchBody: ReactNode = null;
-  if (!ready) {
-    searchBody = <Status>Type at least 3 characters to search.</Status>;
-  } else if (search.isError) {
+  if (search.status === 'too-short') {
+    searchBody = (
+      <Status>{`Type at least ${USER_SEARCH_MIN_LENGTH} characters to search.`}</Status>
+    );
+  } else if (search.status === 'error') {
     searchBody = <Status>Search unavailable</Status>;
-  } else if (!settled || search.isPending) {
+  } else if (search.status === 'searching') {
     searchBody = <Status>Searching…</Status>;
   } else if (inside.length + outside.length === 0) {
     searchBody = clientCount ? null : <Status>No users found</Status>;

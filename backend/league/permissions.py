@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from django.contrib.auth.models import AnonymousUser
-from rest_framework import permissions
+from rest_framework import permissions, serializers
 from rest_framework.request import Request
 
 from app.models import CustomUser
@@ -90,6 +90,29 @@ def can_view_league_members_from_payload(
     ):
         return True
     return _is_league_member(user, data["pk"])
+
+
+def _lobby_league_error(message: str) -> serializers.ValidationError:
+    return serializers.ValidationError({"lobby_steam_league_id": message})
+
+
+def check_lobby_steam_league_id(
+    user: CustomUser | AnonymousUser, value: int | None, target: League | None
+) -> None:
+    """Authorize a lobby ticket ID: the target league's own, unowned, or one
+    owned by a league the user admins."""
+    if value is None:
+        return
+    if value <= 0:
+        raise _lobby_league_error("Steam league ID must be a positive integer.")
+    if target is not None and target.steam_league_id == value:
+        return
+    owner = League.objects.filter(steam_league_id=value).nocache().first()
+    if owner is not None and not has_league_admin_access(user, owner):
+        raise _lobby_league_error(
+            f"Steam league ID {value} belongs to '{owner.name}'. "
+            "Only an admin of that league can use it."
+        )
 
 
 class IsLeagueAdmin(permissions.BasePermission):

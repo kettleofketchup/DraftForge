@@ -32,6 +32,7 @@ import argparse
 import datetime
 import os
 import sys
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
@@ -44,7 +45,8 @@ django.setup()
 from django.db import transaction  # noqa: E402
 
 from discordbot.models import DiscordEvent  # noqa: E402
-from events.constants import EventState  # noqa: E402
+from events.constants import EventState, SignupAction  # noqa: E402
+from events.ledger import SignupActor, record_signup_change, snapshot  # noqa: E402
 from events.models import Event, EventRepeater, EventSignup  # noqa: E402
 from events.services import (  # noqa: E402
     _python_weekday,
@@ -100,20 +102,48 @@ def find_target_event(stale: Event, candidates: list[Event]) -> Event | None:
     return best
 
 
-def migrate_signups(stale: Event, target: Event) -> tuple[int, int]:
+def migrate_signups(
+    stale: Event, target: Event, *, correlation_id: str
+) -> tuple[int, int]:
     existing = set(
         EventSignup.objects.filter(event=target).values_list("user_id", flat=True)
     )
+    actor = SignupActor.system(correlation_id=correlation_id)
     moved = 0
     skipped = 0
-    for s in EventSignup.objects.filter(event=stale).select_related("user"):
+    for s in (
+        EventSignup.objects.nocache()
+        .filter(event=stale)
+        .select_related("user__base_profile")
+    ):
         if s.user_id in existing:
             print(f"    skip signup user={s.user_id} ({s.user}) — already on target")
             skipped += 1
             continue
+        before = snapshot(s, extra={"event_id": stale.pk})
         s.event = target
         s.event_team = None
         s.save(update_fields=["event", "event_team", "updated_at"])
+        after = snapshot(s, extra={"event_id": target.pk})
+        source = record_signup_change(
+            event=stale,
+            subject=s.user,
+            actor=actor,
+            action=SignupAction.MOVED_EVENT,
+            signup=s,
+            before=before,
+            after=after,
+        )
+        record_signup_change(
+            event=target,
+            subject=s.user,
+            actor=actor,
+            action=SignupAction.MOVED_EVENT,
+            signup=s,
+            before=before,
+            after=after,
+            caused_by=source,
+        )
         moved += 1
     return moved, skipped
 
@@ -209,6 +239,7 @@ def main() -> None:
             f"local={local:%a %Y-%m-%d %H:%M}"
         )
 
+    correlation_id = f"cleanup-{uuid4().hex[:12]}"
     print("\n--- Migration plan ---")
     for stale_ev in stale:
         target = find_target_event(stale_ev, candidates)
@@ -232,7 +263,9 @@ def main() -> None:
 
         with transaction.atomic():
             if target:
-                moved, skipped = migrate_signups(stale_ev, target)
+                moved, skipped = migrate_signups(
+                    stale_ev, target, correlation_id=correlation_id
+                )
                 t_moved = migrate_tournament_users(stale_ev, target)
                 print(
                     f"  migrated signups={moved} skipped_conflicts={skipped} "

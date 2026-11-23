@@ -10,7 +10,6 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import Game, Team, TeamLogAction, TeamLogVia, Tournament
-from app.permissions_tournament import IsTournamentStaff
 from app.serializers import (
     TEAM_USER_INDEX,
     BracketGameSerializer,
@@ -18,12 +17,13 @@ from app.serializers import (
     BracketSaveSerializer,
     build_team_user_index,
 )
-from app.services.team_audit import log_snapshot_fields, write_team_log
-from app.services.team_management import live_conflicts, roster_conflict_body
 from draft.models import HeroDraft
 from events.overrides import REASON_MAX_LENGTH
 from lobby.models import GameLobby
 from telemetry.logging import get_logger
+from tournament.permissions import IsTournamentStaff
+from tournament.services.team_audit import log_snapshot_fields, write_team_log
+from tournament.services.team_management import live_conflicts, roster_conflict_body
 
 log = get_logger(__name__)
 

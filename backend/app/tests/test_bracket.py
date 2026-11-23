@@ -15,8 +15,8 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.services.team_management import live_conflicts, replace_captain
-from app.tests.test_team_management import TeamManagementFixture, eliminate
+from tournament.services.team_management import live_conflicts, replace_captain
+from tournament.tests.test_team_management import TeamManagementFixture, eliminate
 
 
 class SaveBracketTest(TestCase):
