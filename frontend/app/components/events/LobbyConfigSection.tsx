@@ -1,5 +1,6 @@
 import { useWatch, type Control, type FieldValues } from 'react-hook-form';
 import { GAME_TYPE } from '~/components/game/constants';
+import { IntegerInput } from '~/components/patterns/IntegerInput';
 import {
   FormControl,
   FormField,
@@ -17,10 +18,10 @@ import {
 } from '~/components/ui/select';
 import { GameMode } from './schemas';
 
-/** Field set this section renders. Not extracted as a zod sub-schema (yet) —
- *  these keys are inline on createEventInputSchema, editEventSchema,
- *  editRepeaterSchema. The constraint catches field-name typos in this file
- *  without forcing a schema refactor across all four parent forms. */
+/** Field set this section renders. The four event forms (createEventInputSchema,
+ *  createSeriesEventInputSchema, editEventFormSchema, editRepeaterSchema) take
+ *  these keys from eventTemplateSchema; CreateTournamentSchema declares them
+ *  inline. The constraint catches field-name typos in this file. */
 interface LobbyFields {
   game_type: number;
   game_mode: string;
@@ -125,17 +126,14 @@ export function LobbyConfigSection<T extends FieldValues & LobbyFields>({
             <FormItem>
               <FormLabel>Draft Time (seconds)</FormLabel>
               <FormControl>
-                <Input
-                  type="number"
+                <IntegerInput
                   min={1}
                   data-testid="lobby-config-draft-time"
-                  {...field}
-                  onChange={(e) => {
-                    const seconds = parseInt(e.target.value, 10);
-                    field.onChange(
-                      Number.isNaN(seconds) ? 10 : Math.max(1, seconds),
-                    );
-                  }}
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value}
+                  onValueChange={(v) => v != null && field.onChange(v)}
                 />
               </FormControl>
               <p className="text-xs text-muted-foreground">

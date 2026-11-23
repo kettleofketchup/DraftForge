@@ -377,6 +377,7 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>(
               winner_id: trPayload.winner_id,
               pick_number: trPayload.pick_number,
               hold_ms: trPayload.hold_ms,
+              hold_until: trPayload.hold_until,
             };
           }
           if (

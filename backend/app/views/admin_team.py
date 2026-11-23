@@ -9,7 +9,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.functions.tournament import serialize_tournament
 from app.models import CustomUser, Tournament
 from app.serializers import TournamentUserSerializer
 from league.models import League, LeagueUser
@@ -18,6 +17,7 @@ from org.member_resolution import resolve_member_user
 from org.models import Organization, OrgUser
 from org.permissions import has_org_staff_access
 from org.user_search import user_name_q
+from tournament.functions import serialize_tournament
 from user.querysets import with_user_profiles
 
 # =============================================================================
@@ -32,7 +32,7 @@ def search_users(request: Request) -> Response:
     Search users by username, nickname, Discord names, or Steam ID.
 
     Query params:
-    - q: Search query (min 3 characters)
+    - q: Search query (min 2 characters)
     - org_id: Optional org ID; also matches that org's server nicknames,
       ranks its members first and annotates membership (org staff only)
     - league_id: Optional league ID for membership annotation
@@ -41,9 +41,9 @@ def search_users(request: Request) -> Response:
     """
     query = request.query_params.get("q", "").strip()
 
-    if len(query) < 3:
+    if len(query) < 2:
         return Response(
-            {"error": "Search query must be at least 3 characters"},
+            {"error": "Search query must be at least 2 characters"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 

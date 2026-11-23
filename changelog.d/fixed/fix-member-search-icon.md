@@ -1,0 +1,1 @@
+- The search icon in the Add Member dialog stays centred in the search box when the "Press Enter to search" hint appears.

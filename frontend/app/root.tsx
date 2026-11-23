@@ -129,9 +129,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <div className="flex flex-col w-screen h-screen justify-between">
                 {!isActivity && <ResponsiveAppBar />}
                 {!isActivity && <ActiveDraftBanner />}
-                <ScrollArea id="outlet_root" className="flex-grow h-0">
-                  {children}
-                </ScrollArea>
+                {isActivity ? (
+                  <main id="outlet_root" className="flex-grow h-0 min-h-0">
+                    {children}
+                  </main>
+                ) : (
+                  <ScrollArea id="outlet_root" className="flex-grow h-0">
+                    {children}
+                  </ScrollArea>
+                )}
               </div>
               <Toaster richColors closeButton position="top-center" />
               {!isActivity && <FloatingDraftIndicator />}

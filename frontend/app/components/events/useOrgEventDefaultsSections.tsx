@@ -11,6 +11,7 @@ import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { getOrgEventDefaults } from '~/components/api/api';
+import { IntegerInput } from '~/components/patterns/IntegerInput';
 import type {
   SettingsDialogHandle,
   SettingsSection,
@@ -33,7 +34,6 @@ import {
   FormLabel,
   FormMessage,
 } from '~/components/ui/form';
-import { Input } from '~/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -339,15 +339,15 @@ function defaultsContent({
               <FormItem>
                 <FormLabel>Max Players</FormLabel>
                 <FormControl>
-                  <Input
+                  <IntegerInput
                     data-testid="org-defaults-max-players-input"
-                    type="number"
                     min={1}
-                    value={field.value ?? ''}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      field.onChange(Number.isNaN(v) ? null : Math.max(1, v));
-                    }}
+                    nullable
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value}
+                    onValueChange={field.onChange}
                     placeholder="No limit"
                   />
                 </FormControl>

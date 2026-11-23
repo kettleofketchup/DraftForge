@@ -117,7 +117,7 @@ def _create_bracket(
         team.members.set(users)
         team_rows.append(team)
     # add, not set(clear=True): clearing tournament.users empties (and so
-    # deletes) its teams (app.signals.handle_tournament_user_removal).
+    # deletes) its teams (tournament.signals.handle_tournament_user_removal).
     tournament.users.add(*(u for t in team_rows for u in t.members.all()))
 
     first_round = [
