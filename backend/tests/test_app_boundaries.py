@@ -776,9 +776,14 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "global DRF handler maps TeamManagementError",
         ),
         "app/views/admin_team.py": BackEdge(
-            frozenset({"serialize_tournament"}),
-            "tournament member add returns the serialized tournament; leaves "
-            "with tournament 5b",
+            frozenset({"can_edit_tournament", "serialize_tournament"}),
+            "tournament member add checks tournament staff and returns the "
+            "serialized tournament; leaves with tournament 5b",
+        ),
+        "app/views/csv_import.py": BackEdge(
+            frozenset({"can_edit_tournament"}),
+            "tournament CSV import checks tournament staff; moves whole with "
+            "the tournament slice",
         ),
         "app/views/bracket.py": BackEdge(
             frozenset({"IsTournamentStaff"}),

@@ -10,6 +10,7 @@ from app.models import CustomUser, Game, Tournament
 from draft.models import HeroDraft
 from league.models import League
 from league.permissions import has_league_admin_access, has_league_staff_access
+from org.permissions import has_org_staff_access
 
 
 def can_edit_tournament(
