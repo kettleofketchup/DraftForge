@@ -24,8 +24,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
-from app.models import CustomUser, ProfileClaimRequest, Tournament
-from app.serializers import TournamentSerializer, UserSerializer
+from app.models import CustomUser, ProfileClaimRequest
+from app.serializers import UserSerializer
 from common.game import GameType
 from common.utils import isTestEnvironment
 from discordbot.models import DiscordEvent, DiscordEventLog
@@ -40,6 +40,8 @@ from org.mmr import game_mmrs_prefetch, get_org_mmr, get_org_mmrs
 from org.models import Organization, OrgUser
 from org.serializers import ProfileClaimRequestSerializer
 from tests.data.tournaments import (
+    BRACKET_PLACEMENT_DOUBLE_TOURNAMENT,
+    BRACKET_PLACEMENT_SINGLE_TOURNAMENT,
     BRACKET_UNSET_WINNER_TOURNAMENT,
     SHUFFLE_TIE_TOURNAMENT,
 )
@@ -68,11 +70,17 @@ from tests.helpers.team_management_fixture import (
     populate_team_management_tournament,
 )
 from tests.helpers.tournament_config import TEST_KEY_TO_NAME, TEST_TOURNAMENTS
-from tests.populate.bracket import populate_bracket_unset_winner_tournament
+from tests.populate.bracket import (
+    populate_bracket_placement_double,
+    populate_bracket_placement_single,
+    populate_bracket_unset_winner_tournament,
+)
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.utils import ensure_org_user
 from tests.test_events_discord import discord_auth_failure
 from tests.test_teamdraft import clear_teamdraft_redis
+from tournament.models import Tournament
+from tournament.serializers.tournament import TournamentSerializer
 
 log = logging.getLogger(__name__)
 
@@ -1000,6 +1008,8 @@ def reset_tournament_by_key(request, key: str):
     RESET_FUNCTIONS = {
         "shuffle_tie_resolution": populate_shuffle_tie_data,
         "bracket_unset_winner": populate_bracket_unset_winner_tournament,
+        "bracket_placement_single": populate_bracket_placement_single,
+        "bracket_placement_double": populate_bracket_placement_double,
         "team_management": populate_team_management_tournament,
     }
 
@@ -1017,6 +1027,8 @@ def reset_tournament_by_key(request, key: str):
     RESET_TOURNAMENT_NAMES = {
         "shuffle_tie_resolution": SHUFFLE_TIE_TOURNAMENT.name,
         "bracket_unset_winner": BRACKET_UNSET_WINNER_TOURNAMENT.name,
+        "bracket_placement_single": BRACKET_PLACEMENT_SINGLE_TOURNAMENT.name,
+        "bracket_placement_double": BRACKET_PLACEMENT_DOUBLE_TOURNAMENT.name,
         "team_management": TEAM_MANAGEMENT_TOURNAMENT_NAME,
     }
 

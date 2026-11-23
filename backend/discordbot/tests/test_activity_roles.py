@@ -2,11 +2,12 @@ from datetime import date
 
 from django.test import TestCase
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from discordbot.activity_roles import draft_role, involves_user
 from draft.models import Draft, DraftTeam, HeroDraft
 from league.models import League
 from org.models import Organization
+from tournament.models import Game, Team, Tournament
 
 
 class DraftRoleTests(TestCase):

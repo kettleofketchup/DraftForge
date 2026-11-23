@@ -84,6 +84,10 @@ Rules, all checked by `validate_registry()` and the registry tests:
 - **Auto-resolve**: `auto_resolves=True` needs a `dedupe_key` hook, because a notice
   without a dedupe key cannot be resolved by identity.
 - **No secrets** in payloads. Staff see the raw payload through the API.
+- **No org-only data on event notices.** A notice emitted with an `event` is visible,
+  payload, subject and actor included, to that event's host and helpers, who need not
+  hold any org role. Keep guild and channel config, moderation context and anything
+  else meant for org staff off event-scoped notices; emit those without an event.
 - **No input values in validator messages.** Only each error's `loc` and `type` are
   kept; messages are dropped, but do not rely on that.
 
@@ -227,16 +231,20 @@ and `closed_by` (null when the system closed it).
 | Method | Path | Who |
 |---|---|---|
 | GET | `/api/organizations/<org_id>/ops-notices/` | org staff |
-| GET | `/api/events/<event_id>/ops-notices/` | event staff (includes league staff of a tournament event) |
+| GET | `/api/events/<event_id>/ops-notices/` | event staff (includes league staff of a tournament event), the event host and helpers |
 | POST | `/api/organizations/<org_id>/ops-notices/<notice_id>/resolve/` | org staff |
-| POST | `/api/events/<event_id>/ops-notices/<notice_id>/resolve/` | event staff |
+| POST | `/api/events/<event_id>/ops-notices/<notice_id>/resolve/` | event staff, the event host and helpers |
 
-Anonymous users and non-staff get 403; an unknown org, event, or a notice outside the
+The event endpoints use `has_event_operator_access` (event staff, the event host, or an
+event helper); the org endpoints stay org staff only, so a host or helper with no org
+role gets 403 there. Promoters get nothing unless they hold one of those roles.
+Anonymous users and everyone else get 403; an unknown org, event, or a notice outside the
 scope gets 404. List parameters: `state=open|resolved|all` (default `open`),
 `category=log,urgent,task` (default all), `limit` (default 50, capped at 200). Resolve
 takes an optional `reason` (default `"resolved by staff"`).
 
-The event page's details tab shows `OpsNoticesCard` to event staff. It polls open
+The event page's details tab shows `OpsNoticesCard` to event staff, the event host and
+helpers (the event payload's `user_is_event_operator` flag). It polls open
 `urgent` and `task` notices every 15 seconds and renders nothing when there are none.
 Its `noticeHref` prop is unused until the notice pages (#563) exist.
 

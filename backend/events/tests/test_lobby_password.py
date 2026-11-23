@@ -7,7 +7,7 @@ from django.test import override_settings
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, DotaLobbyMode, GameMode, Team, Tournament
+from app.models import CustomUser
 from events.constants import EventState, RepeatFrequency, SignupStatus
 from events.models import Event, EventRepeater, EventSignup
 from events.serializers import EventSerializer
@@ -21,6 +21,8 @@ from events.services import (
 )
 from events.tests.base import EventTestCase
 from lobby.passwords import ALPHABET, GENERATED_LENGTH, PasswordMode
+from tournament.choices import DotaLobbyMode, GameMode
+from tournament.models import Team, Tournament
 
 FIXED = PasswordMode.FIXED
 RANDOM = PasswordMode.RANDOM

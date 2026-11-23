@@ -1,14 +1,16 @@
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Create your views here.
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from app.permissions import IsStaff
+from bracket.models import TournamentBracket
 from telemetry.logging import get_logger
+from tournament.models import Tournament
 
 log = get_logger(__name__)
-from bracket.models import TournamentBracket
 
 
 class CreateDoubleElminationSerializer(serializers.Serializer):
@@ -17,7 +19,7 @@ class CreateDoubleElminationSerializer(serializers.Serializer):
 
 @api_view(["POST"])
 @permission_classes([IsStaff])
-def gen_double_elim(request):
+def gen_double_elim(request: Request) -> Response:
     serializer = CreateDoubleElminationSerializer(data=request.data)
 
     if serializer.is_valid():

@@ -14,7 +14,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_model, invalidate_obj
-from app.models import CustomUser, PositionsModel, Tournament
+from app.models import CustomUser, PositionsModel
 from common.game import GameType
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
@@ -41,6 +41,7 @@ from tests.data.game_org_mmr import (
 )
 from tests.data.models import TestUser
 from tests.populate.utils import ensure_org_user
+from tournament.models import Tournament
 
 _APPROVE_RANK_DATE = date(2026, 1, 15)
 

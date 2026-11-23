@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { FieldNamesMarkedBoolean } from 'react-hook-form';
 import { z } from 'zod';
 import { updateOrgUser } from '~/components/api/api';
@@ -61,6 +62,8 @@ export type EditUserScope =
       organization?: OrganizationType;
       orgId?: number;
       gameType?: GameTypeValue;
+      /** Set when editing a player of this tournament; lets its league staff edit org MMR. */
+      tournamentId?: number;
     }
   | { kind: 'global' };
 
@@ -307,6 +310,7 @@ export async function dispatchPatch(
         orgUserPk,
         toOrgUserPatch(payload),
         scope.gameType ?? GAME_TYPE.DOTA2,
+        ...(scope.tournamentId != null ? [scope.tournamentId] : []),
       ),
     );
   }
@@ -327,22 +331,64 @@ export function scopeToContext(
   return undefined;
 }
 
-export function useScopedEditPermission(scope: EditUserScope): boolean {
+/** `full`: every field; `mmr`: org MMR only (league staff in their tournament). */
+export type EditMode = 'full' | 'mmr' | null;
+
+export function useScopedEditMode(scope: EditUserScope): EditMode {
   const orgStaff = useIsOrganizationStaff(
     scope.kind === 'org' ? scope.organization : null,
   );
   const currentUser = useUserStore((s) => s.currentUser);
   const superuser = useIsSuperuser();
-  if (scope.kind === 'org') return orgStaff;
+  if (scope.kind === 'org') return orgStaff ? 'full' : null;
   if (scope.kind === 'league') {
-    // Saves go through the parent org's OrgUser endpoint, gated on org staff.
+    // Saves go through the parent org's OrgUser endpoint, gated on org staff;
+    // with a tournament, its league staff may set org MMR.
     const orgId = scopeToContext(scope)?.orgId;
-    return (
+    if (
       superuser ||
       (orgId != null &&
         (!!currentUser?.admin_organization_ids?.includes(orgId) ||
           !!currentUser?.staff_organization_ids?.includes(orgId)))
-    );
+    ) {
+      return 'full';
+    }
+    const leaguePk = scope.league.pk;
+    if (
+      scope.tournamentId != null &&
+      leaguePk != null &&
+      (!!currentUser?.admin_league_ids?.includes(leaguePk) ||
+        !!currentUser?.staff_league_ids?.includes(leaguePk))
+    ) {
+      return 'mmr';
+    }
+    return null;
   }
-  return superuser;
+  return superuser ? 'full' : null;
+}
+
+export function useScopedEditPermission(scope: EditUserScope): boolean {
+  return useScopedEditMode(scope) !== null;
+}
+
+/** Adds the store tournament to a league scope when the player is in it. */
+export function useTournamentEditScope(
+  scope: EditUserScope,
+  userPk: number | null | undefined,
+): EditUserScope {
+  const tournament = useUserStore((s) => s.tournament);
+  return useMemo(() => {
+    if (
+      scope.kind !== 'league' ||
+      scope.tournamentId != null ||
+      tournament?.pk == null ||
+      tournament.league_pk == null ||
+      tournament.league_pk !== scope.league.pk ||
+      userPk == null ||
+      !tournament.users?.some((u) => u.pk === userPk)
+    ) {
+      return scope;
+    }
+    return { ...scope, tournamentId: tournament.pk };
+  }, [scope, tournament, userPk]);
 }

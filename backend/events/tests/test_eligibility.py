@@ -6,7 +6,7 @@ from django.test import override_settings
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, Tournament
+from app.models import CustomUser, GameType
 from events.constants import EventState, SignupStatus
 from events.discord.providers.dota import _check_dota_profile_complete
 from events.eligibility import (
@@ -32,6 +32,7 @@ from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
+from tournament.models import Tournament
 
 SCREENSHOT_CODES = {Unmet.RANK_SCREENSHOT_MISSING, Unmet.BATTLECUP_SCREENSHOT_MISSING}
 
