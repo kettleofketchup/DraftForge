@@ -297,7 +297,13 @@ export function UserCandidatePicker({
           {trigger.text}
         </SecondaryButton>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
+      <PopoverContent
+        className="w-80 p-0"
+        align="end"
+        onFocusOutside={
+          openProp === undefined ? undefined : (e) => e.preventDefault()
+        }
+      >
         <Command shouldFilter={false}>
           <CommandInput
             value={query}

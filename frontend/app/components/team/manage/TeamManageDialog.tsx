@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -8,7 +8,9 @@ import { fetchOrganization } from '~/components/api/api';
 import type { OverrideAcknowledgement } from '~/components/api/overridesAPI';
 import {
   isTeamManagementError,
+  RosterUserSchema,
   type ManagedTeam,
+  type RosterUser,
   type TeamAction,
   type TeamActionKind,
 } from '~/components/api/teamManagementAPI';
@@ -19,6 +21,7 @@ import {
   DIALOG_SCREEN_CSS,
   DIALOG_SCREEN_SCROLL_CSS,
 } from '~/components/reusable/modal';
+import { TeamStatusBadge } from '~/components/team/TeamStatusBadge';
 import { Alert, AlertDescription } from '~/components/ui/alert';
 import {
   Dialog,
@@ -34,15 +37,18 @@ import { cn } from '~/lib/utils';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 import { AddStandinPicker } from './AddStandinPicker';
+import { teamCandidateRows } from './candidateStatus';
 import type { PendingTeamAction } from './pendingTeamAction';
 import { resolveLogUser } from './resolveLogUser';
-import { addStandinRequest } from './teamActionCopy';
+import { addStandinRequest, replaceCaptainRequest } from './teamActionCopy';
 import {
   TeamActionReasonDialog,
   type TeamActionReasonValues,
 } from './TeamActionReasonDialog';
 import { TeamHistoryTable } from './TeamHistoryTable';
+import { TeamPlacementControl } from './TeamPlacementControl';
 import { TeamRosterPanel } from './TeamRosterPanel';
+import { UserCandidatePicker } from './UserCandidatePicker';
 import {
   teamManageKeys,
   useManagedTeam,
@@ -136,8 +142,18 @@ export function TeamManageDialog({
   const tournamentUsers = useUserStore((s) =>
     s.tournament?.pk === tournamentPk ? s.tournament?.users : undefined,
   );
+  const candidateUsers = useMemo(
+    () =>
+      (tournamentUsers ?? []).flatMap((u): RosterUser[] => {
+        const parsed = RosterUserSchema.safeParse(u);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    [tournamentUsers],
+  );
   const [request, setRequest] = useState<PendingTeamAction | null>(null);
   const [reasonOpen, setReasonOpen] = useState(false);
+  const [captainPickerOpen, setCaptainPickerOpen] = useState(false);
+  const openCaptainPicker = useCallback(() => setCaptainPickerOpen(true), []);
   const [actionReason, setActionReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const lastReasons = useRef<Partial<Record<TeamActionKind, string>>>({});
@@ -265,6 +281,7 @@ export function TeamManageDialog({
   }, []);
 
   const team = managed.data;
+  const placementTournamentPk = team?.tournament?.pk ?? tournamentPk;
 
   const resolveUser = useCallback(
     (pk: number) =>
@@ -302,9 +319,22 @@ export function TeamManageDialog({
           className={DIALOG_SCREEN_CSS}
         >
           <DialogHeader>
-            <DialogTitle>
-              {team ? `Manage ${team.name}` : 'Manage team'}
-            </DialogTitle>
+            <div
+              className="flex flex-wrap items-center gap-2"
+              data-testid="team-manage-title-row"
+            >
+              <DialogTitle>
+                {team ? `Manage ${team.name}` : 'Manage team'}
+              </DialogTitle>
+              {team ? <TeamStatusBadge placement={team.placement} /> : null}
+              {team?.can_manage_team && placementTournamentPk != null ? (
+                <TeamPlacementControl
+                  tournamentId={placementTournamentPk}
+                  teamId={team.pk}
+                  placement={team.placement}
+                />
+              ) : null}
+            </div>
             <DialogDescription>
               Every change needs a reason and is recorded in the team history.
             </DialogDescription>
@@ -337,17 +367,39 @@ export function TeamManageDialog({
                       pending={pending}
                       error={error}
                       onRequestAction={requestAction}
+                      onReplaceCaptain={openCaptainPicker}
                       addStandinSlot={
-                        <AddStandinPicker
-                          organization={organization ?? null}
-                          leaguePk={leaguePk}
-                          excludePks={rosterPks(team)}
-                          otherTeamPks={team.other_team_user_pks ?? []}
-                          disabled={pending}
-                          onPick={(user) =>
-                            requestAction(addStandinRequest(team, user))
-                          }
-                        />
+                        <div className="flex flex-wrap gap-2">
+                          <AddStandinPicker
+                            organization={organization ?? null}
+                            leaguePk={leaguePk}
+                            excludePks={rosterPks(team)}
+                            otherTeamPks={team.other_team_user_pks ?? []}
+                            otherTeams={team.other_teams}
+                            disabled={pending}
+                            onPick={(user) =>
+                              requestAction(addStandinRequest(team, user))
+                            }
+                          />
+                          <UserCandidatePicker
+                            mode="captain"
+                            testIdPrefix="team-captain"
+                            triggerTestId="team-replace-captain-trigger"
+                            organization={organization ?? null}
+                            leaguePk={leaguePk}
+                            excludePks={rosterPks(team)}
+                            otherTeamPks={team.other_team_user_pks ?? []}
+                            otherTeams={team.other_teams}
+                            teamRows={teamCandidateRows(team)}
+                            tournamentUsers={candidateUsers}
+                            open={captainPickerOpen}
+                            onOpenChange={setCaptainPickerOpen}
+                            disabled={pending}
+                            onPick={(user) =>
+                              requestAction(replaceCaptainRequest(team, user))
+                            }
+                          />
+                        </div>
                       }
                     />
                   ) : managed.isError && managedStatus !== 404 ? (

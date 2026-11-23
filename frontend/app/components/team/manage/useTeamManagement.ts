@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { fetchOrganization } from '~/components/api/api';
+import { setTeamPlacement } from '~/components/api/bracketAPI';
 import {
   fetchManagedTeam,
   fetchTeamHistory,
@@ -81,6 +82,22 @@ export function useTeamActionMutation(
         queryKey: teamManageKeys.history(teamId),
       });
       log.info('Team action succeeded', { teamId, kind: action.kind });
+    },
+  });
+}
+
+/** Bracket placement (null = back in the tournament); not a team log action. */
+export function useSetTeamPlacement(teamId: number, tournamentId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (placement: number | null) =>
+      setTeamPlacement(tournamentId, teamId, placement),
+    onSuccess: ({ placement }) => {
+      queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
+      queryClient.invalidateQueries({
+        queryKey: teamManageKeys.managed(teamId),
+      });
+      log.info('Team placement set', { teamId, placement });
     },
   });
 }

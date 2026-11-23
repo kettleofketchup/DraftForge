@@ -554,6 +554,33 @@ describe('roster rows', () => {
     ).toBeTruthy();
   });
 
+  it('"Replace captain…" on the captain row opens the captain picker', () => {
+    const onReplaceCaptain = vi.fn();
+    const spy = renderPanel(managedTeam, { onReplaceCaptain });
+    openRowMenu(people.captain.pk);
+    fireEvent.click(
+      screen.getByTestId(`team-roster-replace-captain-${people.captain.pk}`),
+    );
+    expect(onReplaceCaptain).toHaveBeenCalledTimes(1);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('offers "Replace captain…" on the captain row only', () => {
+    renderPanel(managedTeam, { onReplaceCaptain: vi.fn() });
+    openRowMenu(people.member.pk);
+    expect(
+      screen.queryByRole('menuitem', { name: 'Replace captain…' }),
+    ).toBeNull();
+  });
+
+  it('has no "Replace captain…" without a picker to open', () => {
+    renderPanel(managedTeam);
+    openRowMenu(people.captain.pk);
+    expect(
+      screen.queryByRole('menuitem', { name: 'Replace captain…' }),
+    ).toBeNull();
+  });
+
   it('renders the add stand-in slot in the table toolbar', () => {
     renderPanel(managedTeam, { addStandinSlot: <span>picker slot</span> });
     expect(
