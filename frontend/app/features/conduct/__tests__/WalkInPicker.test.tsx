@@ -9,21 +9,12 @@ import {
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { searchUsers, type SearchUserResult } from '~/components/api/api';
-import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { WalkInPicker } from '../WalkInPicker';
 
 vi.mock('~/components/api/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/components/api/api')>()),
   searchUsers: vi.fn(),
 }));
-
-const access = makeOrgFeatureAccess({
-  settled: true,
-  viewerPk: 11,
-  canViewConduct: true,
-  canViewConductDetails: true,
-  canManageConduct: true,
-});
 
 function user(
   pk: number,
@@ -44,8 +35,6 @@ function renderPicker(excludeUserPks: ReadonlySet<number> = new Set()) {
         open
         onOpenChange={vi.fn()}
         orgId={1}
-        eventId={7}
-        access={access}
         excludeUserPks={excludeUserPks}
         onPick={onPick}
       />
@@ -82,7 +71,7 @@ describe('WalkInPicker', () => {
 
     type('abc');
     await waitFor(() => expect(searchUsers).toHaveBeenCalledTimes(1));
-    expect(searchUsers).toHaveBeenCalledWith('abc', 1);
+    expect(searchUsers).toHaveBeenCalledWith('abc', 1, undefined);
     expect(screen.queryByTestId('attendance-walkin-hint')).toBeNull();
   });
 

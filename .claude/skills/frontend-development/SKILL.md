@@ -282,7 +282,9 @@ import { UserAvatar } from "~/components/user/UserAvatar";
 <span>{DisplayName(player)}</span>
 ```
 
-**[📖 Complete Guide: resources/users.md](resources/users.md)**
+Searching for people uses `useFilteredUsers` / `useUserSearch` and `<UserPicker>`, never a hand-rolled `username.toLowerCase().includes(q)`.
+
+**[📖 Complete Guide: the `users` skill](../users/SKILL.md)**
 
 ---
 
@@ -313,7 +315,7 @@ import { UserAvatar } from "~/components/user/UserAvatar";
 | Optimize performance | [performance.md](resources/performance.md) |
 | TypeScript types | [typescript-standards.md](resources/typescript-standards.md) |
 | Forms/Auth/DataGrid | [common-patterns.md](resources/common-patterns.md) |
-| Show a person's name or avatar | [users.md](resources/users.md) |
+| Show, search for or pick a person | [`users` skill](../users/SKILL.md) |
 | See full examples | [complete-examples.md](resources/complete-examples.md) |
 
 ---

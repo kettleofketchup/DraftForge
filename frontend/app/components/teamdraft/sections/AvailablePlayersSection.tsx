@@ -17,6 +17,7 @@ import {
 } from '~/features/league-stats/filters';
 import { useLeaguePlayerSummaries } from '~/features/league-stats/queries';
 import type { UserType } from '~/index';
+import { filterUsers } from '~/lib/userSearch';
 import { cn } from '~/lib/utils';
 import { selectPositions } from '~/store/selectPositions';
 import { useUserCacheStore } from '~/store/userCacheStore';
@@ -261,14 +262,7 @@ export const AvailablePlayersSection = memo(() => {
     let players = availablePlayers;
 
     // Search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      players = players.filter(
-        (user) =>
-          (user.username || '').toLowerCase().includes(query) ||
-          (user.nickname || '').toLowerCase().includes(query),
-      );
-    }
+    players = filterUsers(players, searchQuery);
 
     // Position filter
     if (positionFilter !== 'all') {
