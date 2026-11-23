@@ -7,7 +7,7 @@ root := clean(source_directory() / "../..")
 just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
 registry := "ghcr.io/kettleofketchup/draftforge"
 
-# Build backend (runtime) and backend-dev (runtime-dev); --push, --release (version tag on the prod image only)
+# Build backend (runtime) and backend-dev (runtime-dev); --push, --release (version tag on the prod image only), --no-cache, --mode=trusted|pr --pr=<n>
 [group('docker::backend')]
 build *flags:
     #!/usr/bin/env bash
@@ -21,7 +21,7 @@ build *flags:
     {{just}} docker::buildx backend backend runtime backend/Dockerfile . "$@"
     {{just}} docker::backend::build-dev ${dev_flags[@]+"${dev_flags[@]}"}
 
-# Build the dev/test backend image (runtime-dev, includes the poetry dev group); --push
+# Build the dev/test backend image (runtime-dev, includes the poetry dev group); --push, --mode=trusted|pr --pr=<n>
 [group('docker::backend')]
 build-dev *flags:
     {{just}} docker::buildx backend backend-dev runtime-dev backend/Dockerfile . "$@"
@@ -35,6 +35,11 @@ push:
 [group('docker::backend')]
 pull:
     {{just}} docker::pull-image backend backend
+    {{just}} docker::pull-image backend backend-dev
+
+# Pull backend-dev by content hash (the image the test stack runs)
+[group('docker::backend')]
+pull-dev:
     {{just}} docker::pull-image backend backend-dev
 
 # Run the backend image interactively

@@ -16,6 +16,7 @@ from events.models import Event, EventSignup
 from events.schemas import EventSignupSchema
 from events.serializers import EventSignupSerializer
 from events.services import cancel_signup, process_rsvp
+from events.tests.actors import SYSTEM
 from org.models import Organization
 from tests.cache import flush_run_cache
 
@@ -59,8 +60,8 @@ class SignupLineRankApiTests(TestCase):
 
     def _filled_event(self) -> tuple[Event, list[EventSignup], EventSignup]:
         event = self._event()
-        signups = [process_rsvp(event, u) for u in self.users[:5]]
-        cancelled = cancel_signup(signups[1])
+        signups = [process_rsvp(event, u, actor=SYSTEM) for u in self.users[:5]]
+        cancelled = cancel_signup(signups[1], actor=SYSTEM)
         return event, signups, cancelled
 
     def test_line_rank_main_and_waitlisted(self) -> None:
@@ -78,7 +79,7 @@ class SignupLineRankApiTests(TestCase):
 
     def test_dropped_keeps_seq_without_rank(self) -> None:
         event = self._event(max_players=10)
-        signups = [process_rsvp(event, u) for u in self.users[:3]]
+        signups = [process_rsvp(event, u, actor=SYSTEM) for u in self.users[:3]]
         dropped = signups[1]
         seq = dropped.line_seq
         dropped.status = SignupStatus.DROPPED
@@ -100,8 +101,8 @@ class SignupLineRankApiTests(TestCase):
     def test_line_rank_per_event(self) -> None:
         first = self._event(name="First")
         second = self._event(name="Second")
-        a = [process_rsvp(first, u) for u in self.users[:2]]
-        b = [process_rsvp(second, u) for u in self.users[2:5]]
+        a = [process_rsvp(first, u, actor=SYSTEM) for u in self.users[:2]]
+        b = [process_rsvp(second, u, actor=SYSTEM) for u in self.users[2:5]]
         self.assertEqual(self._ranks(first), {a[0].pk: 1, a[1].pk: 2})
         self.assertEqual(self._ranks(second), {b[0].pk: 1, b[1].pk: 2, b[2].pk: 3})
         combined = {row["id"]: row["line_rank"] for row in self._list()}
@@ -128,7 +129,7 @@ class SignupLineRankApiTests(TestCase):
         for i in range(3):
             event = self._event(name=f"Q{i}")
             for u in self.users[2 * i : 2 * i + 2]:
-                process_rsvp(event, u)
+                process_rsvp(event, u, actor=SYSTEM)
         with_rank = self._count_list_queries()
         with (
             mock.patch.object(
@@ -157,7 +158,7 @@ class SignupLineRankApiTests(TestCase):
 
     def test_detail_routes_rank(self) -> None:
         event = self._event(max_players=10)
-        signups = [process_rsvp(event, u) for u in self.users[:4]]
+        signups = [process_rsvp(event, u, actor=SYSTEM) for u in self.users[:4]]
         third = signups[2]
         client = APIClient()
         response = client.get(reverse("event-signup-detail", args=[third.pk]))
@@ -186,7 +187,7 @@ class SignupLineRankApiTests(TestCase):
 
     def test_new_fields_present(self) -> None:
         event = self._event()
-        process_rsvp(event, self.users[0])
+        process_rsvp(event, self.users[0], actor=SYSTEM)
         row = self._list(event)[0]
         for name in NEW_FIELDS:
             self.assertIn(name, row)
@@ -200,7 +201,7 @@ class SignupLineRankApiTests(TestCase):
 
     def test_pydantic_contract(self) -> None:
         event = self._event()
-        signup = process_rsvp(event, self.users[0])
+        signup = process_rsvp(event, self.users[0], actor=SYSTEM)
         request = APIRequestFactory().get("/")
         request.user = AnonymousUser()
         data = EventSignupSerializer(signup, context={"request": request}).data

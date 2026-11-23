@@ -338,7 +338,7 @@ def build_announcement_v2(event: "EmbedEvent") -> dict[str, Any]:
     # Force row break — signup fields go on their own row
     fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
 
-    # Signup lists (fetched via public API, typed as EventSignupData)
+    # Signup lists (fetched via public API, typed as EventSignupSchema)
     all_signups = get_event_signups(event.pk)
 
     # Signed Up
@@ -688,7 +688,7 @@ def build_profile_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
 def build_subscriber_dm_embed(event: "EmbedEvent") -> dict[str, Any]:
     """Build DM embed for subscriber pre-event notification.
 
-    Works with both Django model instances and Pydantic EventTaskData.
+    Works with both Django model instances and Pydantic EventTaskSchema.
     """
     desc = f"**{event.name}** is starting soon!"
     if event.description:

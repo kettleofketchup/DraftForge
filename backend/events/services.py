@@ -25,6 +25,7 @@ from events.constants import (
     Commitment,
     EventState,
     RepeatFrequency,
+    SignupAction,
     SignupOpenMode,
     SignupStatus,
     SignupType,
@@ -45,7 +46,7 @@ from events.eligibility import (
     stamp_eligibility,
     validate_friend_id,
 )
-from events.ledger import SignupActor
+from events.ledger import SignupActor, record_signup_change, snapshot
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -55,6 +56,7 @@ from events.models import (
     EventRepeater,
     EventSignup,
     EventTeam,
+    SignupLedgerEntry,
     TournamentTemplateMixin,
 )
 from events.ready_check_constants import (
@@ -72,7 +74,7 @@ from events.roster import (
     start_phase,
     team_bound_user_pks,
 )
-from events.schemas import DotaModalConfig
+from events.schemas import DotaModalConfig, SignupSnapshot
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
 from events.tasks import delete_discord_scheduled_event
 from lobby.passwords import PasswordMode, generate_password
@@ -206,12 +208,27 @@ def _roster_remove_if_left(signup: EventSignup) -> None:
     remove_user_from_tournament(signup.event, signup.user)
 
 
+def _create_action(
+    existing: EventSignup | None, *, for_staff_placement: bool
+) -> SignupAction:
+    if for_staff_placement:
+        return SignupAction.STAFF_ADDED
+    if existing is None:
+        return SignupAction.SIGNED_UP
+    if existing.status == SignupStatus.TENTATIVE:
+        return SignupAction.SWITCHED_COMMITMENT
+    if existing.first_signed_up_at is not None:
+        return SignupAction.RESIGNED_UP
+    return SignupAction.SIGNED_UP
+
+
 @transaction.atomic
 def _create_signup(
     event: Event,
     user: CustomUser,
     event_team: EventTeam | None = None,
     *,
+    actor: SignupActor,
     for_staff_placement: bool = False,
 ) -> EventSignup:
     """Internal: create a signup with no state check.
@@ -223,8 +240,14 @@ def _create_signup(
     notify hook. Notify handlers may re-query, and reading through a stale cache would
     re-warm it with stale data.
     """
-    existing = EventSignup.objects.filter(event=event, user=user).first()
+    existing = (
+        EventSignup.objects.nocache()
+        .select_related("user__base_profile")
+        .filter(event=event, user=user)
+        .first()
+    )
     carry = _first_fields_carry(existing)
+    before: SignupSnapshot | None = None
     if existing:
         logger.info(
             "signup_existing_found",
@@ -236,6 +259,7 @@ def _create_signup(
             signup_id=existing.id,
         )
         if existing.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+            before = snapshot(existing)
             existing.delete()
             logger.info(
                 "signup_cancelled_deleted",
@@ -245,6 +269,7 @@ def _create_signup(
                 event_id=event.pk,
             )
         elif existing.status == SignupStatus.TENTATIVE:
+            before = snapshot(existing)
             existing.delete()
             logger.info(
                 "signup_tentative_upgraded",
@@ -258,11 +283,13 @@ def _create_signup(
         else:
             raise ValueError("User has already signed up for this event.")
 
+    action = _create_action(existing, for_staff_placement=for_staff_placement)
     signup_type = SignupType.TEAM if event_team else SignupType.USER
     result = evaluate_signup(event, user, for_staff_placement=for_staff_placement)
     eligibility = eligibility_values(result)
 
-    if not has_free_seat(lock_event(event)):
+    locked = lock_event(event)
+    if not has_free_seat(locked):
         max_pos = (
             EventSignup.objects.filter(event=event, status=SignupStatus.WAITLISTED)
             .order_by("-waitlist_position")
@@ -279,6 +306,7 @@ def _create_signup(
             **eligibility,
             **carry,
         )
+        _record_leaf(signup, event=locked, actor=actor, action=action, before=before)
         invalidate_after_commit(event)
         log.info(
             "signup_post_commit_hooks_scheduled",
@@ -301,6 +329,7 @@ def _create_signup(
         **carry,
     )
     _roster_add_if_joins(signup)
+    _record_leaf(signup, event=locked, actor=actor, action=action, before=before)
     invalidate_after_commit(event)
     log.info(
         "signup_post_commit_hooks_scheduled",
@@ -316,7 +345,11 @@ def _create_signup(
 
 
 def process_rsvp(
-    event: Event, user: CustomUser, event_team: EventTeam | None = None
+    event: Event,
+    user: CustomUser,
+    event_team: EventTeam | None = None,
+    *,
+    actor: SignupActor,
 ) -> EventSignup:
     """Public-path signup. Self-serve admission applies (events.admission)."""
     log.info(
@@ -327,7 +360,7 @@ def process_rsvp(
         user_id=user.pk,
     )
     ensure_self_serve(event, user, intent=Commitment.MAIN)
-    signup = _create_signup(event, user, event_team=event_team)
+    signup = _create_signup(event, user, event_team=event_team, actor=actor)
     # Defer signup_created log until the outermost atomic commits — otherwise
     # rollback paths produce a log claiming a signup that doesn't persist.
     transaction.on_commit(
@@ -346,7 +379,7 @@ def process_rsvp(
 
 @transaction.atomic
 def create_tentative_signup(
-    event: Event, user: CustomUser, *, actor: SignupActor | None = None
+    event: Event, user: CustomUser, *, actor: SignupActor
 ) -> EventSignup:
     """Create a TENTATIVE EventSignup, upgrading any active signup to tentative.
 
@@ -357,60 +390,89 @@ def create_tentative_signup(
       - If existing TENTATIVE signup -> raise ValueError (already tentative).
       - If existing DROPPED signup -> raise ValueError; the row is kept.
       - If existing active signup (RSVP/APPROVED/CONFIRMED/PENDING/WAITLISTED)
-        -> cancel it, delete the row, then create a fresh TENTATIVE.
+        -> withdraw it, delete the row, then create a fresh TENTATIVE.
       - If existing CANCELLED/REJECTED row -> delete it, create fresh TENTATIVE.
-      - notify_signup_changed is dispatched once via on_commit
-        (cancel_signup also schedules one when invoked; we skip registering
-        a duplicate in that case).
+      - Records one ledger entry and dispatches notify_signup_changed once.
     """
     ensure_self_serve(event, user, intent=Commitment.MAYBE)
 
-    existing = EventSignup.objects.filter(event=event, user=user).first()
+    existing = (
+        EventSignup.objects.nocache()
+        .select_related("user__base_profile")
+        .filter(event=event, user=user)
+        .first()
+    )
     carry = _first_fields_carry(existing)
-    notify_scheduled_by_cancel = False
+    before: SignupSnapshot | None = None
+    prior_status: str | None = None
+    action = _create_action(existing, for_staff_placement=False)
     if existing:
         if existing.status == SignupStatus.TENTATIVE:
             raise ValueError("Already marked as tentative")
         if existing.status == SignupStatus.DROPPED:
             raise ValueError(DROPPED_SIGNUP_MESSAGE)
+        before = snapshot(existing)
         if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
-            cancel_signup(existing, actor=actor)
-            notify_scheduled_by_cancel = True
+            prior_status = _withdraw(existing, by_member=_by_member(actor))
+            action = SignupAction.SWITCHED_COMMITMENT
         EventSignup.objects.filter(pk=existing.pk).delete()
 
     signup = EventSignup.objects.create(
         event=event, user=user, status=SignupStatus.TENTATIVE, **carry
     )
+    entry = _record_leaf(signup, event=event, actor=actor, action=action, before=before)
+    if prior_status in seat_holding_statuses(event):
+        _promote_from_waitlist(event, cause=entry)
     # invalidate_after_commit is on_commit-aware internally; do NOT wrap.
     invalidate_after_commit(signup, event)
-    if not notify_scheduled_by_cancel:
-        # notify_signup_changed is NOT on_commit-aware; wrap explicitly.
-        transaction.on_commit(lambda: notify_signup_changed(event))
+    # notify_signup_changed is NOT on_commit-aware; wrap explicitly.
+    transaction.on_commit(lambda: notify_signup_changed(event))
     return signup
 
 
 @transaction.atomic
 def decline_signup(
-    event: Event, user: CustomUser, *, actor: SignupActor | None = None
+    event: Event, user: CustomUser, *, actor: SignupActor
 ) -> EventSignup:
     """Record that a user declined an event.
 
-    Cancels an existing active/tentative signup, or creates a CANCELLED row so
+    Withdraws an existing active/tentative signup, or creates a CANCELLED row so
     a user who never signed up still appears in the Declined list.
     Raises ValueError if the user has already declined.
     """
-    existing = EventSignup.objects.filter(event=event, user=user).first()
-    if existing:
-        if existing.status in REMOVED_SIGNUP_STATUSES:
-            raise ValueError("Already declined")
-        return cancel_signup(existing, actor=actor)
-
-    signup = EventSignup.objects.create(
-        event=event, user=user, status=SignupStatus.CANCELLED
+    existing = (
+        EventSignup.objects.nocache()
+        .select_related("event", "user__base_profile")
+        .filter(event=event, user=user)
+        .first()
     )
-    invalidate_after_commit(signup, event)
-    transaction.on_commit(lambda: notify_signup_changed(event))
-    return signup
+    if existing is None:
+        signup = EventSignup.objects.create(
+            event=event, user=user, status=SignupStatus.CANCELLED
+        )
+        _record_leaf(
+            signup, event=event, actor=actor, action=SignupAction.DECLINED, before=None
+        )
+        invalidate_after_commit(signup, event)
+        transaction.on_commit(lambda: notify_signup_changed(event))
+        return signup
+
+    if existing.status in REMOVED_SIGNUP_STATUSES:
+        raise ValueError("Already declined")
+    before = snapshot(existing)
+    prior_status = _withdraw(existing, by_member=_by_member(actor))
+    entry = _record_leaf(
+        existing,
+        event=existing.event,
+        actor=actor,
+        action=SignupAction.DECLINED,
+        before=before,
+    )
+    if prior_status in seat_holding_statuses(existing.event):
+        _promote_from_waitlist(existing.event, cause=entry)
+    invalidate_after_commit(existing, existing.event)
+    transaction.on_commit(lambda: notify_signup_changed(existing.event))
+    return existing
 
 
 def apply_signup_input(
@@ -563,7 +625,11 @@ def apply_signup_input(
 
 
 def staff_add_signup(
-    event: Event, user: CustomUser, event_team: EventTeam | None = None
+    event: Event,
+    user: CustomUser,
+    event_team: EventTeam | None = None,
+    *,
+    actor: SignupActor,
 ) -> EventSignup:
     """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
     if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
@@ -572,7 +638,9 @@ def staff_add_signup(
     # has somewhere to live before they're approved.
     if event.organization_id:
         resolve_or_create_org_user(user, event.organization)
-    return _create_signup(event, user, event_team=event_team, for_staff_placement=True)
+    return _create_signup(
+        event, user, event_team=event_team, actor=actor, for_staff_placement=True
+    )
 
 
 APPROVABLE_STATUSES = [
@@ -582,79 +650,128 @@ APPROVABLE_STATUSES = [
 ]
 
 
+def _reread_signup(signup: EventSignup) -> None:
+    signup.refresh_from_db(
+        from_queryset=EventSignup.objects.nocache().select_related(
+            "event", "user__base_profile"
+        )
+    )
+
+
+def _record_leaf(
+    signup: EventSignup,
+    *,
+    event: Event,
+    actor: SignupActor,
+    action: SignupAction,
+    before: SignupSnapshot | None,
+    extra: dict[str, Any] | None = None,
+) -> SignupLedgerEntry:
+    return record_signup_change(
+        event=event,
+        subject=signup.user,
+        actor=actor,
+        action=action,
+        signup=signup,
+        before=before,
+        after=snapshot(signup, extra=extra),
+    )
+
+
 @transaction.atomic
-def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> EventSignup:
+def approve_signup(
+    signup: EventSignup, mmr_override: int | None = None, *, actor: SignupActor
+) -> EventSignup:
     """Approve a signup, optionally setting the user's MMR."""
+    _reread_signup(signup)
     if signup.status not in APPROVABLE_STATUSES:
         raise ValueError(f"Cannot approve signup in '{signup.status}' status.")
+    before = snapshot(signup)
+    extra: dict[str, Any] | None = None
 
     # Apply MMR override when provided by an admin
     if mmr_override is not None:
         if signup.event.organization_id is None:
             raise ValueError("Cannot set MMR for an event without an organization.")
         org_user = resolve_or_create_org_user(signup.user, signup.event.organization)
-        set_org_mmr(
-            org_user, game_for_event(signup.event), mmr_override, mark_verified=True
-        )
+        game_type = game_for_event(signup.event)
+        set_org_mmr(org_user, game_type, mmr_override, mark_verified=True)
         refresh_unmet_requirements(org_user)
+        extra = {"mmr_override": mmr_override, "game_type": int(game_type)}
 
     signup.status = SignupStatus.APPROVED
     signup.waitlist_position = None
     cleared = clear_eligibility(signup)
     signup.save(update_fields=["status", "waitlist_position", *cleared, "updated_at"])
     _roster_add_if_joins(signup)
+    _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.APPROVED,
+        before=before,
+        extra=extra,
+    )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
 @transaction.atomic
-def reject_signup(signup: EventSignup) -> EventSignup:
+def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Reject a signup."""
+    _reread_signup(signup)
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
+    before = snapshot(signup)
     prior_status = signup.status
     signup.status = SignupStatus.REJECTED
     signup.save(update_fields=["status", "updated_at"])
     _roster_remove_if_left(signup)
+    entry = _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.REJECTED,
+        before=before,
+    )
     if prior_status in seat_holding_statuses(signup.event):
-        _promote_from_waitlist(signup.event)
+        _promote_from_waitlist(signup.event, cause=entry)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
 @transaction.atomic
-def confirm_signup(signup: EventSignup) -> EventSignup:
+def confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Confirm a signup (e.g., during roll call)."""
+    _reread_signup(signup)
     if signup.status != SignupStatus.APPROVED:
         raise ValueError("Only approved signups can be confirmed.")
+    before = snapshot(signup)
     signup.status = SignupStatus.CONFIRMED
     signup.save(update_fields=["status", "updated_at"])
     _roster_add_if_joins(signup)
+    _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.CONFIRMED,
+        before=before,
+    )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
-@transaction.atomic
-def cancel_signup(
-    signup: EventSignup, *, actor: SignupActor | None = None
-) -> EventSignup:
-    """Cancel a signup."""
+def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
     signup.save(update_fields=["status", "updated_at"])
-    standing.on_signup_withdrawn(
-        signup, prior_status=prior_status, by_member=_by_member(actor)
-    )
+    standing.on_signup_withdrawn(signup, prior_status=prior_status, by_member=by_member)
     _roster_remove_if_left(signup)
-    if prior_status in seat_holding_statuses(signup.event):
-        _promote_from_waitlist(signup.event)
-    invalidate_after_commit(signup, signup.event)
-    transaction.on_commit(lambda: notify_signup_changed(signup.event))
     # Log on commit, not on entry — same reason as signup_created in process_rsvp:
     # callers may roll back the outer transaction, in which case the cancellation
     # never persisted.
@@ -669,11 +786,31 @@ def cancel_signup(
             user_id=signup.user_id,
         )
     )
+    return prior_status
+
+
+@transaction.atomic
+def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+    """Cancel a signup."""
+    _reread_signup(signup)
+    before = snapshot(signup)
+    prior_status = _withdraw(signup, by_member=_by_member(actor))
+    entry = _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.WITHDREW,
+        before=before,
+    )
+    if prior_status in seat_holding_statuses(signup.event):
+        _promote_from_waitlist(signup.event, cause=entry)
+    invalidate_after_commit(signup, signup.event)
+    transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
-def _by_member(actor: SignupActor | None) -> bool:
-    return actor is not None and actor.role == ActorRole.MEMBER
+def _by_member(actor: SignupActor) -> bool:
+    return actor.role == ActorRole.MEMBER
 
 
 def _promote_one(
@@ -691,7 +828,9 @@ def _promote_one(
     return signup
 
 
-def _promote_from_waitlist(event: Event) -> list[EventSignup]:
+def _promote_from_waitlist(
+    event: Event, *, cause: SignupLedgerEntry | None
+) -> list[EventSignup]:
     """Promote waitlisted signups into every free seat, in waitlist order as
     reordered by the org's standing tracks."""
     locked = lock_event(event)
@@ -700,37 +839,62 @@ def _promote_from_waitlist(event: Event) -> list[EventSignup]:
         candidates = list(
             EventSignup.objects.nocache()
             .filter(event=locked, status=SignupStatus.WAITLISTED)
-            .select_related("user")
+            .select_related("user__base_profile")
             .order_by("waitlist_position")
         )
         cache = StandingCache()
+        system = SignupActor.system(
+            correlation_id=cause.correlation_id if cause is not None else ""
+        )
         for candidate in standing.promotion_order(locked, candidates, cache=cache):
             if not has_free_seat(locked):
                 break
+            before = snapshot(candidate)
             promoted.append(_promote_one(locked, candidate, cache=cache))
+            record_signup_change(
+                event=locked,
+                subject=candidate.user,
+                actor=system,
+                action=SignupAction.PROMOTED,
+                signup=candidate,
+                before=before,
+                after=snapshot(candidate),
+                caused_by=cause,
+            )
     if promoted:
         invalidate_after_commit(locked)
     return promoted
 
 
 @transaction.atomic
-def unconfirm_signup(signup: EventSignup) -> EventSignup:
+def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Revert a confirmed signup back to approved (e.g., during roll call adjustments)."""
+    _reread_signup(signup)
     if signup.status != SignupStatus.CONFIRMED:
         raise ValueError("Only confirmed signups can be unconfirmed.")
+    before = snapshot(signup)
     signup.status = SignupStatus.APPROVED
     signup.save(update_fields=["status", "updated_at"])
     _roster_remove_if_left(signup)
+    _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.UNCONFIRMED,
+        before=before,
+    )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
 @transaction.atomic
-def demote_to_waitlist(signup: EventSignup) -> EventSignup:
+def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Move an active signup to the end of the waitlist."""
+    _reread_signup(signup)
     if signup.status in (*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED):
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
+    before = snapshot(signup)
     max_pos = (
         EventSignup.objects.filter(
             event=signup.event, status=SignupStatus.WAITLISTED
@@ -741,6 +905,13 @@ def demote_to_waitlist(signup: EventSignup) -> EventSignup:
     signup.waitlist_position = max_pos + 1
     signup.save(update_fields=["status", "waitlist_position", "updated_at"])
     _roster_remove_if_left(signup)
+    _record_leaf(
+        signup,
+        event=signup.event,
+        actor=actor,
+        action=SignupAction.DEMOTED,
+        before=before,
+    )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -748,7 +919,7 @@ def demote_to_waitlist(signup: EventSignup) -> EventSignup:
 
 @transaction.atomic
 def reinstate_signup(
-    signup: EventSignup, *, for_staff_placement: bool = True
+    signup: EventSignup, *, actor: SignupActor, for_staff_placement: bool = True
 ) -> EventSignup:
     """Bring a removed signup back into the active list.
 
@@ -759,12 +930,14 @@ def reinstate_signup(
                       reappears in the Awaiting Confirmation list and admins
                       can re-confirm without leaving the rollcall screen.
     """
+    _reread_signup(signup)
     event = signup.event
     if event.state == "roll_call":
         if signup.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
             raise ValueError(
                 "Only removed or rejected signups can be reinstated during roll call."
             )
+        before = snapshot(signup)
         signup.status = SignupStatus.APPROVED
         signup.waitlist_position = None
         signup.commitment = Commitment.MAIN
@@ -778,6 +951,13 @@ def reinstate_signup(
                 "updated_at",
             ]
         )
+        _record_leaf(
+            signup,
+            event=event,
+            actor=actor,
+            action=SignupAction.REINSTATED,
+            before=before,
+        )
         invalidate_after_commit(signup, event)
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
@@ -786,6 +966,7 @@ def reinstate_signup(
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
         raise ValueError(NOT_ACCEPTING_MESSAGE)
+    before = snapshot(signup)
     locked = lock_event(event)
     result = evaluate_signup(
         locked, signup.user, for_staff_placement=for_staff_placement
@@ -813,6 +994,13 @@ def reinstate_signup(
             *stamped,
             "updated_at",
         ]
+    )
+    _record_leaf(
+        signup,
+        event=locked,
+        actor=actor,
+        action=SignupAction.REINSTATED,
+        before=before,
     )
     invalidate_after_commit(signup, event)
     transaction.on_commit(lambda: notify_signup_changed(event))

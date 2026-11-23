@@ -6,6 +6,7 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, GameType
 from events.models import Event
 from events.services import process_rsvp
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
@@ -43,7 +44,7 @@ class SignupSelfReportedRankTests(EventTestCase):
     ) -> None:
         user = self._player()
         event = self.make_event(game_type=GameType.DEADLOCK)
-        process_rsvp(event, user)
+        process_rsvp(event, user, actor=SYSTEM)
         row = self._row(event, user)
         self.assertIsNone(row["dota_profile"])
         self.assertEqual(row["self_reported_rank"], "Emissary 1")
@@ -55,7 +56,7 @@ class SignupSelfReportedRankTests(EventTestCase):
     ) -> None:
         user = self._player()
         event = self.make_event(game_type=GameType.DOTA2)
-        process_rsvp(event, user)
+        process_rsvp(event, user, actor=SYSTEM)
         row = self._row(event, user)
         self.assertEqual(row["dota_profile"]["rank_medal"], "Legend 3")
         self.assertEqual(row["suggested_mmr"], 3300)
@@ -65,7 +66,7 @@ class SignupSelfReportedRankTests(EventTestCase):
     def test_deadlock_event_without_deadlock_profile(self, _notify: object) -> None:
         user = self.make_user()
         event = self.make_event(game_type=GameType.DEADLOCK)
-        process_rsvp(event, user)
+        process_rsvp(event, user, actor=SYSTEM)
         row = self._row(event, user)
         self.assertIsNone(row["dota_profile"])
         self.assertIsNone(row["self_reported_rank"])

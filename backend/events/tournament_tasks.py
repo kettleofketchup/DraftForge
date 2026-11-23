@@ -9,12 +9,7 @@ from django.conf import settings
 
 from app.internal_client import (
     create_activity_notification_invite,
-    create_herodraft_for_game,
     create_tournament_log,
-    get_auto_herodraft_games,
-    get_match_participants,
-    get_tournament_for_task,
-    get_tournament_participants,
     update_tournament_log,
 )
 from discordbot.utils import sync_send_dm
@@ -25,6 +20,13 @@ from events.discord.tournament_embeds import (
     build_herodraft_link_embed,
 )
 from telemetry.logging import get_logger
+from tournament.internal_client import (
+    create_herodraft_for_game,
+    get_auto_herodraft_games,
+    get_match_participants,
+    get_tournament_for_task,
+    get_tournament_participants,
+)
 
 logger = get_logger(__name__)
 
