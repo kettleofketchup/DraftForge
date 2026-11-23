@@ -263,13 +263,14 @@ def test_reap_allows_gone_owner(
     assert not (_reg(fake_host) / "slot-0").exists()
 
 
-def test_reap_oneoff_from_live_worktree_does_not_block(
+def test_reap_exited_oneoff_from_live_worktree_does_not_block(
     fake_host: FakeHost, make_worktree: MakeWt
 ) -> None:
     me = make_worktree("me")
     fake_host.projects["df-run-0123abcd"] = [
-        owner(project="df-run-0123abcd", wd=me, oneoff=True)
+        owner(project="df-run-0123abcd", wd=me, oneoff=True, running=False)
     ]
+    fake_host.container_active["df-run-0123abcd"] = 1.0
     reap_project("df-run-0123abcd", me, fake_host)
     assert fake_host.compose_calls[0][3] == "df-run-0123abcd"
 

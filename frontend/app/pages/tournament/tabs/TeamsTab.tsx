@@ -6,7 +6,7 @@ import { TeamCard } from '~/components/teamdraft/CompletedTeamDraftView';
 import { DraftModal } from '~/components/teamdraft/draftModal';
 import { CaptainSelectionModal } from '~/components/tournament/captains/captainSelectionModal';
 import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
-import { userMatchesQuery } from '~/lib/userDisplayName';
+import { userMatchesQuery } from '~/lib/userSearch';
 
 import type { UserType } from '~/components/user/types';
 import type { TeamType } from '~/index';

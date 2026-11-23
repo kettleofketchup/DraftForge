@@ -47,9 +47,9 @@ website/
 - Daphne's `ProtocolTypeRouter` automatically routes based on connection protocol
 - Example: `/api/herodraft/<id>/` handles both HTTP GET requests AND WebSocket connections
 
-WebSocket routes live in `backend/app/routing.py` and `backend/draft/routing.py`, combined in `backend/asgi.py`:
+WebSocket routes live in `backend/tournament/routing.py` and `backend/draft/routing.py`, combined in `backend/asgi.py`:
 ```python
-# backend/app/routing.py
+# backend/tournament/routing.py
 websocket_urlpatterns = [
     path("api/tournament/<int:tournament_id>/", TournamentConsumer.as_asgi()),
 ]
@@ -401,6 +401,7 @@ See `docs/development/test-stack-slots.md`.
 - `visual-debugging` - Chrome MCP browser automation for debugging
 - `changelog` - Changelog fragments (`changelog.d/`), the `changelog` CI check and release assembly
 - `release` - Cutting a release with `just version::set X.Y.Z`: preflight, changelog assembly, tag, image CI
+- `users` - Showing and finding people: `DisplayName`, `UserAvatar`, user search (`useUserSearch`, `filterUsers`, `UserPicker`), backend `user_name_q`
 - `api` - Frontend↔backend API binding: axios client, Zod response parsing, TanStack Query hooks, DRF errors, generated Zod from pydantic models (`just py::gen-*`)
 
 ## Demo Video Recording

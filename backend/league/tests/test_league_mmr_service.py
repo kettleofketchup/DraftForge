@@ -2,11 +2,11 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
 from app.models import CustomUser, PositionsModel
-from app.views.csv_import import _update_mmr_for_target
 from league.mmr import merge_league_users, set_league_mmr
 from league.models import League, LeagueLog, LeagueUser
 from org.models import MmrChangeRequest, Organization, OrgLog, OrgUser
 from org.tests.mmr_request_mixin import MmrRequestTestMixin
+from tournament.views.csv_import import _update_mmr_for_target
 from user.tests.test_cacheops_integration import _redis_reachable
 
 
