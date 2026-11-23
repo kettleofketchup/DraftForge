@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 
 class TournamentParticipantSchema(BaseModel):
-    """Validates: get_tournament_participants() (app/views/internal.py)"""
+    """Validates: get_tournament_participants() (tournament/views/internal.py)"""
 
     user_pk: int
     discord_id: str
@@ -21,7 +21,7 @@ class TournamentParticipantSchema(BaseModel):
 
 
 class TournamentTaskSchema(BaseModel):
-    """Validates: get_tournament_for_task() (app/views/internal.py)"""
+    """Validates: get_tournament_for_task() (tournament/views/internal.py)"""
 
     id: int
     name: str

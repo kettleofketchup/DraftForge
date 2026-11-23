@@ -17,6 +17,7 @@ from app.models import (
 )
 from tournament.services.team_management import live_conflicts, replace_captain
 from tournament.tests.test_team_management import TeamManagementFixture, eliminate
+from tournament.views.bracket import calculate_placement
 
 
 class SaveBracketTest(TestCase):
@@ -257,8 +258,6 @@ class CalculatePlacementTest(TestCase):
 
     def test_grand_finals_loser_gets_2nd(self):
         """Loser of grand finals gets 2nd place."""
-        from app.views.bracket import calculate_placement
-
         tournament = Tournament.objects.create(name="Test", date_played=date.today())
         game = Game.objects.create(
             tournament=tournament,
@@ -272,8 +271,6 @@ class CalculatePlacementTest(TestCase):
 
     def test_losers_finals_loser_gets_3rd(self):
         """Loser of losers finals gets 3rd place."""
-        from app.views.bracket import calculate_placement
-
         tournament = Tournament.objects.create(name="Test", date_played=date.today())
         # Create losers bracket with 2 rounds (finals is round 2)
         Game.objects.create(
@@ -294,8 +291,6 @@ class CalculatePlacementTest(TestCase):
 
     def test_losers_semi_loser_gets_4th(self):
         """Loser of losers semi gets 4th place."""
-        from app.views.bracket import calculate_placement
-
         tournament = Tournament.objects.create(name="Test", date_played=date.today())
         # Create losers bracket with 3 rounds
         losers_semi = Game.objects.create(
@@ -322,8 +317,6 @@ class CalculatePlacementTest(TestCase):
 
     def test_winners_bracket_elimination_returns_none(self):
         """Winners bracket games don't set placement (loser goes to losers)."""
-        from app.views.bracket import calculate_placement
-
         tournament = Tournament.objects.create(name="Test", date_played=date.today())
         game = Game.objects.create(
             tournament=tournament,

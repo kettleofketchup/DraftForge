@@ -19,7 +19,6 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.serializers import users_remaining_pks
 from draft.models import (
     Draft,
     DraftEvent,
@@ -44,6 +43,7 @@ from org.models_profiles import PlayerDotaProfile
 from org.settings_constants import StaffOverridePolicy
 from org.settings_service import get_org_settings
 from tests.populate.utils import ensure_org_user
+from tournament.serializers.draft import users_remaining_pks
 from tournament.services import team_management
 from tournament.services.team_management import (
     DEFAULT_MAX_STANDINS,

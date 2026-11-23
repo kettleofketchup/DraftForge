@@ -420,11 +420,12 @@ sequenceDiagram
 
 | File | Purpose |
 |------|---------|
-| `backend/app/serializers.py` | `UserPkField`, slim serializers, `build_users_dict()` |
+| `backend/app/serializers.py` | `UserPkField` |
+| `backend/tournament/serializers/*.py` | Slim serializers; `build_users_dict()` in `users.py` |
 | `backend/org/serializers.py` | `OrgUserSerializer` (org-scoped MMR + `orgUserPk`) |
 | `backend/org/mmr.py` | Per-game org MMR reads, writes and prefetch |
 | `backend/league/serializers.py` | `LeagueUserSerializer` (league-scoped MMR) |
-| `backend/app/views_main.py` | Injects `_users` dict on tournament/draft GET responses |
+| `backend/tournament/views/*.py`, `backend/draft/views/team_api.py` | Inject `_users` dict on tournament/draft GET responses |
 | `backend/draft/consumers/team.py` | Injects `_users` dict on team-draft WebSocket state (via `draft/services/team_state.py`) |
 | `backend/draft/services/team_broadcast.py` | Injects `_users` dict on team-draft broadcast events (via `draft/services/team_state.py`) |
 

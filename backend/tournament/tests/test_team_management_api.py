@@ -33,7 +33,17 @@ from app.models import (
     TeamLogVia,
     Tournament,
 )
-from app.serializers import (
+from app.serializers import UserSerializer
+from draft.models import DraftTeam, HeroDraft
+from draft.serializers.hero import HeroDraftSerializer
+from draft.services.team_state import build_draft_state
+from draft.tests.team_fixtures import mid_draft_fixture
+from events.models import EventTeam
+from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
+from league.models import League
+from org.models import Organization
+from tournament.functions import serialize_tournament
+from tournament.serializers.team import (
     ManagedTeamSerializer,
     TeamActionRequestSerializer,
     TeamDeputyRequestSerializer,
@@ -44,23 +54,13 @@ from app.serializers import (
     TeamSerializerSlim,
     TeamSubInRequestSerializer,
     TeamUserActionRequestSerializer,
-    UserSerializer,
 )
-from app.views_main import TeamView
-from draft.models import DraftTeam, HeroDraft
-from draft.serializers.hero import HeroDraftSerializer
-from draft.services.team_state import build_draft_state
-from draft.tests.team_fixtures import mid_draft_fixture
-from events.models import EventTeam
-from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
-from league.models import League
-from org.models import Organization
-from tournament.functions import serialize_tournament
 from tournament.services import team_management
 from tournament.services.team_audit import log_snapshot_fields
 from tournament.services.team_references import team_references, team_usage
 from tournament.services.team_signals import TeamRosterChange, team_roster_changed
 from tournament.tests.test_team_management import TeamManagementFixture, eliminate
+from tournament.views.team import TeamView
 from user.tests.test_cacheops_integration import _redis_reachable
 
 
