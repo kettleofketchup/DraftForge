@@ -32,6 +32,12 @@ async function usersTabCount(page: Page): Promise<number> {
   return Number((await tab.innerText()).match(/\((\d+)\)/)![1]);
 }
 
+// The Users tab virtualizes its grid, so filter to the card before asserting.
+async function expectMemberCard(page: Page, username: string): Promise<void> {
+  await page.getByPlaceholder('Search members...').fill(username);
+  await expect(page.getByTestId(`usercard-${username}`)).toBeVisible();
+}
+
 async function markDocument(page: Page): Promise<() => Promise<boolean>> {
   await page.evaluate(() => {
     (window as Window & { __sameDocument?: boolean }).__sameDocument = true;
@@ -68,9 +74,8 @@ test.describe('Org features: new members from staff adds @cicd', () => {
       'active',
     );
     const before = await usersTabCount(page);
-    await expect(page.getByTestId(`usercard-${outsider.username}`)).toHaveCount(
-      0,
-    );
+    await page.getByPlaceholder('Search members...').fill(outsider.username);
+    await expect(page.getByText('No matching users found')).toBeVisible();
     const sameDocument = await markDocument(page);
 
     await page.getByTestId('org-settings-button').click();
@@ -92,9 +97,7 @@ test.describe('Org features: new members from staff adds @cicd', () => {
     await expect(page.getByTestId('org-tab-users')).toHaveText(
       `Users (${before + 1})`,
     );
-    await expect(
-      page.getByTestId(`usercard-${outsider.username}`),
-    ).toBeVisible();
+    await expectMemberCard(page, outsider.username);
     expect(await sameDocument()).toBe(true);
   });
 
@@ -128,9 +131,7 @@ test.describe('Org features: new members from staff adds @cicd', () => {
       .click();
     await expect(page).toHaveURL(new RegExp(`/organizations/${orgPk}`));
     await page.getByTestId('org-tab-users').click();
-    await expect(
-      page.getByTestId(`usercard-${outsider.username}`),
-    ).toBeVisible();
+    await expectMemberCard(page, outsider.username);
     expect(await sameDocument()).toBe(true);
   });
 });

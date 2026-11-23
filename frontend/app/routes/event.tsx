@@ -213,7 +213,9 @@ export default function EventPage() {
   const eventOrgPk = event?.organization ?? null;
   const onMemberViewerChange = useCallback(() => {
     if (!eventOrgPk) return;
-    void queryClient.resetQueries({ queryKey: orgUsersQueryKey(eventOrgPk) });
+    // Remove, not reset: this runs before useQuery applies enabled=false, so a
+    // reset would refetch the members list as the new (possibly anonymous) viewer.
+    queryClient.removeQueries({ queryKey: orgUsersQueryKey(eventOrgPk) });
     useUserCacheStore.getState().dropScoped({ orgId: eventOrgPk });
     removeFeatureQueries(queryClient, eventOrgPk);
     queryClient.invalidateQueries({ queryKey: ['event', id] });
@@ -965,9 +967,9 @@ function SignupsTab({
       }
       const resp = await adminAddSignup(eventId!, payload.user_id);
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+      void invalidateConductQueries(queryClient, orgId);
       // Backend adds the user as an OrgUser when an admin signs them up;
       // refetch the org members so the org page shows the new membership.
-      void invalidateConductQueries(queryClient, orgId);
       if (orgId) {
         void queryClient.invalidateQueries({
           queryKey: orgUsersQueryKey(orgId),

@@ -239,7 +239,9 @@ export default function OrganizationDetailPage() {
 
   const onMemberViewerChange = useCallback(() => {
     if (pk) {
-      void queryClient.resetQueries({ queryKey: orgUsersQueryKey(pk) });
+      // Remove, not reset: this runs before useQuery applies enabled=false, so a
+      // reset would refetch the members list as the new (possibly anonymous) viewer.
+      queryClient.removeQueries({ queryKey: orgUsersQueryKey(pk) });
       useUserCacheStore.getState().dropScoped({ orgId: pk });
       removeFeatureQueries(queryClient, pk);
     }
