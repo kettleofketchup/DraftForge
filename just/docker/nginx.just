@@ -7,7 +7,7 @@ root := clean(source_directory() / "../..")
 just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
 registry := "ghcr.io/kettleofketchup/draftforge"
 
-# Build the nginx image; --push, --release (adds the version tag)
+# Build the nginx image; --push, --release (adds the version tag), --no-cache, --mode=trusted|pr --pr=<n>
 [group('docker::nginx')]
 build *flags:
     {{just}} docker::buildx nginx nginx runtime nginx/Dockerfile nginx "$@"
