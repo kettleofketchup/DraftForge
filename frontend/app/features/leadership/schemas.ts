@@ -117,6 +117,25 @@ export const ModerationReviewSchema = z.object({
 });
 export type ModerationReview = z.infer<typeof ModerationReviewSchema>;
 
+// backend/org/leadership/constants.py ReleaseState, plus 'hidden' for the viewer's own snapshot
+export const RELEASE_STATES = [
+  'voided',
+  'open',
+  'short',
+  'pending',
+  'released',
+  'hidden',
+] as const;
+export const ReleaseStateSchema = z.enum(RELEASE_STATES);
+export type ReleaseState = z.infer<typeof ReleaseStateSchema>;
+
+// backend/org/leadership/views.py _released_by
+export const ReleasedBySchema = z.object({
+  pk: z.number(),
+  username: z.string(),
+});
+export type ReleasedBy = z.infer<typeof ReleasedBySchema>;
+
 // backend/org/leadership/views.py leadership_event_reviews (captains[])
 export const EventCaptainReviewsSchema = z.object({
   org_user_id: z.number(),
@@ -125,6 +144,13 @@ export const EventCaptainReviewsSchema = z.object({
   window_closes_at: z.string(),
   voided_at: z.string().nullable(),
   released: z.boolean(),
+  release_state: ReleaseStateSchema,
+  released_at: z.string().nullable(),
+  released_by: ReleasedBySchema.nullable(),
+  auto_release_at: z.string().nullable(),
+  live_reviews: z.number().int().nullable(),
+  release_floor: z.number().int().nullable(),
+  can_release: z.boolean(),
   own_snapshot: z.boolean(),
   reviews: z.array(ModerationReviewSchema).nullable(),
   aggregate: EventAggregateSchema.nullable(),
@@ -134,9 +160,17 @@ export type EventCaptainReviews = z.infer<typeof EventCaptainReviewsSchema>;
 // backend/org/leadership/views.py leadership_event_reviews
 export const EventReviewsSchema = z.object({
   event: z.object({ pk: z.number(), name: z.string() }),
+  require_staff_release: z.boolean(),
   captains: z.array(EventCaptainReviewsSchema),
 });
 export type EventReviews = z.infer<typeof EventReviewsSchema>;
+
+// backend/org/leadership/views.py leadership_event_release
+export const ReleaseResultSchema = z.object({
+  released: z.array(z.number()),
+  skipped: z.array(z.object({ org_user_id: z.number(), code: z.string() })),
+});
+export type ReleaseResult = z.infer<typeof ReleaseResultSchema>;
 
 // backend/org/leadership/constants.py SETTINGS_DEFAULTS
 export const LEADERSHIP_SETTINGS_FIELDS = [
@@ -149,6 +183,8 @@ export const LEADERSHIP_SETTINGS_FIELDS = [
   'half_life_days',
   'max_age_days',
   'leaderboard_public',
+  'require_staff_release',
+  'auto_release_after_hours',
 ] as const;
 
 export const LeadershipSettingsValuesSchema = z.object({
@@ -161,6 +197,8 @@ export const LeadershipSettingsValuesSchema = z.object({
   half_life_days: z.number(),
   max_age_days: z.number(),
   leaderboard_public: z.boolean(),
+  require_staff_release: z.boolean(),
+  auto_release_after_hours: z.number().int().nullable(),
 });
 export type LeadershipSettingsValues = z.infer<
   typeof LeadershipSettingsValuesSchema
@@ -182,6 +220,7 @@ export const LeadershipSettingsSchema = LeadershipSettingsValuesSchema.extend({
   defaults: LeadershipSettingsValuesSchema,
   ranges: z.record(z.string(), z.tuple([z.number(), z.number()])),
   points: z.array(KindPointsSchema),
+  moderator_count: z.number().int(),
 });
 export type LeadershipSettings = z.infer<typeof LeadershipSettingsSchema>;
 
@@ -213,6 +252,8 @@ export const LeadershipSettingsFormSchema = z
     half_life_days: wholeNumber(7, 730),
     max_age_days: wholeNumber(30, 1825),
     leaderboard_public: z.boolean(),
+    require_staff_release: z.boolean(),
+    auto_release_after_hours: wholeNumber(1, 720).nullable(),
     points: z.record(z.string(), wholeNumber(0, 1000)),
   })
   .refine((values) => values.max_age_days >= values.half_life_days, {

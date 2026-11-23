@@ -32,7 +32,7 @@ vi.mock('../api', () => ({
 
 const ADMIN: OrgFeatureAccess = leadershipFeatureAccess({
   viewerPk: 1,
-  track: { can_manage: true },
+  track: { can_manage: true, can_moderate: true },
 });
 
 function renderSection(access: OrgFeatureAccess = ADMIN) {
@@ -112,7 +112,7 @@ describe('EventLeadershipSection', () => {
     });
     fireEvent.click(screen.getByTestId('leadership-void-confirm'));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'You captained this team. Another admin has to moderate its reviews.',
+      'You captained this team. Another moderator has to moderate its reviews.',
     );
   });
 
@@ -185,7 +185,10 @@ describe('EventLeadershipSection', () => {
 
   it('offers no void or restore on the viewer’s own review', async () => {
     renderSection(
-      leadershipFeatureAccess({ viewerPk: 12, track: { can_manage: true } }),
+      leadershipFeatureAccess({
+        viewerPk: 12,
+        track: { can_manage: true, can_moderate: true },
+      }),
     );
     expect(
       await screen.findByTestId('leadership-own-review-31'),

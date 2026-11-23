@@ -6,7 +6,9 @@ export type RefusalContext =
   | 'moderate'
   | 'unvoid'
   | 'member'
-  | 'trait';
+  | 'trait'
+  | 'release'
+  | 'settings';
 
 // backend/org/leadership/reviews.py ReviewRefused codes and
 // backend/org/feature_errors.py.
@@ -17,7 +19,7 @@ const REFUSALS: Record<string, string> = {
   not_in_pool: "You can't rate this captain.",
   review_moderated: "An organizer removed your review, so it can't be changed.",
   cannot_moderate_own_reviews:
-    'You captained this team. Another admin has to moderate its reviews.',
+    'You captained this team. Another moderator has to moderate its reviews.',
   invalid_scores: 'Score every trait from 1 to 5.',
   reason_required: 'Give a reason.',
   not_moderated: 'Only a review removed by an organizer can be restored.',
@@ -30,7 +32,20 @@ const CONTEXT_REFUSALS: Partial<
   Record<RefusalContext, Record<string, string>>
 > = {
   unvoid: { not_in_pool: "The rater is no longer on this captain's team." },
-  member: { not_permitted: "Only org admins can see other captains' details." },
+  member: { not_permitted: "Only org staff can see other captains' details." },
+  release: {
+    cannot_release_own_reviews:
+      'You captained this team. Another moderator has to release its results.',
+    already_released: 'These results were already released.',
+    window_open: 'The review window is still open.',
+    not_enough_reviews: 'Not enough reviews to release yet.',
+    nothing_to_release: 'Nothing is waiting for release.',
+    release_not_required: 'This org releases results automatically.',
+  },
+  settings: {
+    would_release_own_results:
+      'This change would release your own results. Ask another moderator to release them first.',
+  },
 };
 
 const NOT_FOUND: Record<RefusalContext, string> = {
@@ -40,6 +55,8 @@ const NOT_FOUND: Record<RefusalContext, string> = {
   unvoid: 'That review no longer exists.',
   member: 'That member is not in this organization.',
   trait: 'That trait was already deleted.',
+  release: 'That event or captain is no longer in this organization.',
+  settings: 'Leadership settings are not available here.',
 };
 
 type ResponseLike = { response?: { status?: number; data?: unknown } };

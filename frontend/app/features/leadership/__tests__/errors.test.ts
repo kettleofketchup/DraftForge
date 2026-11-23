@@ -46,7 +46,39 @@ describe('refusalMessage', () => {
       "You can't do that here.",
     );
     expect(refusalMessage(refused(403, 'not_permitted'), 'member')).toBe(
-      "Only org admins can see other captains' details.",
+      "Only org staff can see other captains' details.",
+    );
+  });
+
+  it('words own-review moderation for any moderator', () => {
+    expect(refusalMessage(refused(403, 'cannot_moderate_own_reviews'))).toBe(
+      'You captained this team. Another moderator has to moderate its reviews.',
+    );
+  });
+
+  it('words every release refusal', () => {
+    const cases: [number, string, string][] = [
+      [
+        403,
+        'cannot_release_own_reviews',
+        'You captained this team. Another moderator has to release its results.',
+      ],
+      [409, 'already_released', 'These results were already released.'],
+      [409, 'window_open', 'The review window is still open.'],
+      [409, 'not_enough_reviews', 'Not enough reviews to release yet.'],
+      [409, 'nothing_to_release', 'Nothing is waiting for release.'],
+      [409, 'release_not_required', 'This org releases results automatically.'],
+    ];
+    for (const [status, code, text] of cases) {
+      expect(refusalMessage(refused(status, code), 'release')).toBe(text);
+    }
+  });
+
+  it('words a self-releasing settings change', () => {
+    expect(
+      refusalMessage(refused(409, 'would_release_own_results'), 'settings'),
+    ).toBe(
+      'This change would release your own results. Ask another moderator to release them first.',
     );
   });
 

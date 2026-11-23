@@ -77,6 +77,7 @@ function leadershipTrack(canManage: boolean) {
     can_view_own: true,
     board_open: true,
     can_manage: canManage,
+    can_moderate: canManage,
   };
 }
 

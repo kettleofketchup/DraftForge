@@ -30,6 +30,7 @@ const tracksPayload = [
     can_view_own: true,
     board_open: true,
     can_manage: false,
+    can_moderate: false,
   },
   {
     key: 'conduct',
@@ -47,6 +48,7 @@ const tracksPayload = [
     can_view_own: true,
     board_open: false,
     can_manage: false,
+    can_moderate: false,
   },
 ];
 

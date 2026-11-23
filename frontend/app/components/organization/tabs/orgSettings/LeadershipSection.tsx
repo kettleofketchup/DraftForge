@@ -18,6 +18,7 @@ import {
 import { Form } from '~/components/ui/form';
 import { Skeleton } from '~/components/ui/skeleton';
 import {
+  leadershipAccess,
   LeadershipSettingsFormSchema,
   TraitFormSchema,
   useLeadershipSettings,
@@ -61,7 +62,11 @@ export function useLeadershipSection(
   );
   const access = useOrgFeatureAccess(organization ?? undefined);
   const settingsQuery = useLeadershipSettings(organizationId, access, enabled);
-  const traitsQuery = useLeadershipTraits(organizationId, access, enabled);
+  const traitsQuery = useLeadershipTraits(
+    organizationId,
+    access,
+    enabled && leadershipAccess(access).canManage,
+  );
   const settings = settingsQuery.data;
   const traits = traitsQuery.data;
 

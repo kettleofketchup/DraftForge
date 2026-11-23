@@ -139,7 +139,7 @@ describe('MemberLeadershipPanel', () => {
       own: false,
       access: leadershipFeatureAccess({
         viewerPk: 2,
-        track: { can_manage: true },
+        track: { can_manage: true, can_moderate: true },
       }),
     });
     expect(
@@ -183,7 +183,7 @@ describe('MemberLeadershipPanel', () => {
     renderPanel({
       access: leadershipFeatureAccess({
         viewerPk: 11,
-        track: { can_manage: true },
+        track: { can_manage: true, can_moderate: true },
       }),
     });
     expect(
@@ -272,14 +272,14 @@ describe('MemberLeadershipPanel', () => {
     );
   });
 
-  it('shows the admins-only message on a 403 not_permitted', async () => {
+  it('shows the staff-only message on a 403 not_permitted', async () => {
     vi.mocked(getMemberLeadership).mockRejectedValue({
       response: { status: 403, data: { code: 'not_permitted' } },
     });
     renderPanel({ own: false });
     expect(
       await screen.findByTestId('leadership-member-forbidden'),
-    ).toHaveTextContent("Only org admins can see other captains' details.");
+    ).toHaveTextContent("Only org staff can see other captains' details.");
     await waitFor(() => expect(logger.warn).toHaveBeenCalled());
     expect(logger.error).not.toHaveBeenCalled();
   });
