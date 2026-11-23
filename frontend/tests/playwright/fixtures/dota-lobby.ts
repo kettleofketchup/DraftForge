@@ -366,7 +366,7 @@ export async function closeMatchModal(page: Page): Promise<void> {
 
 /**
  * Click a winner / Unset Winner button on a saved bracket and wait for the
- * match result to persist (issue #466: no bracket-wide Save involved).
+ * match result to persist (no bracket-wide Save involved).
  */
 export async function clickAndPersistMatchResult(
   page: Page,

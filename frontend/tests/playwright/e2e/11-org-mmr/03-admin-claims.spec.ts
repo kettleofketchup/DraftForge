@@ -1,8 +1,6 @@
 /**
  * Tests for Admin Claims Approval Flow
  *
- * Reference: docs/plans/2026-01-31-org-scoped-mmr.md
- *
  * Verifies that organization admins can approve or reject profile claim requests.
  *
  * Test flow:

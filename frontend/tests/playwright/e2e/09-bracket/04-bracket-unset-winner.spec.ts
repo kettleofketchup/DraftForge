@@ -1,10 +1,10 @@
 /**
  * Bracket Unset Winner Tests
  *
- * Covers the full lifecycle that was missed by the original suite:
+ * Covers the full set and unset winner lifecycle:
  *
  * Setting or unsetting a winner in the modal persists that match result on
- * its own (issue #466) — no bracket-wide Save.
+ * its own, with no bracket-wide Save.
  *
  *  1. Sanity: set → Unset Winner button appears → unset.
  *  2. Persistence: set → reload → bracket card shows the winner check, the
@@ -12,7 +12,7 @@
  *     Unset Winner.
  *  3. Unset: set → reload → Unset → reload → bracket card has no winner
  *     check, downstream slots are cleared, modal shows Set Winner again.
- *  4. Stuck-state recovery (issue #235): force the prod scenario where
+ *  4. Stuck-state recovery: force the scenario where
  *     ``status=completed`` but ``winning_team`` no longer matches either
  *     team in the slots. Unset Winner must still be visible and clicking
  *     it must unstick the row.
@@ -20,7 +20,7 @@
  * Uses deterministic match selection via the
  * ``[data-bracket-type][data-round][data-position]`` attributes on each
  * ``bracket-match-node`` rather than iterating + reopening (the close-and-
- * re-click pattern was flaky against React Flow's pan/zoom).
+ * re-click pattern raced React Flow's pan/zoom).
  *
  * The bracket UI exposes ``data-testid="bracket-team-slot-{slot}"`` with
  * ``data-team-status`` of ``winner | loser | pending | empty`` and (when
@@ -92,7 +92,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     const dialog = page.locator('[data-testid="matchStatsModal"]');
     await dialog.locator('[data-testid="dialog-close-button"]').click();
     await expect(dialog).toBeHidden({ timeout: 5000 });
-    // A reload before the URL drops /match/<id> deep-links the dialog open again.
+    // The dialog deep-links via /match/<id>; the next load must not reopen it.
     await expect(page).not.toHaveURL(/\/bracket\/match\//);
   }
 
