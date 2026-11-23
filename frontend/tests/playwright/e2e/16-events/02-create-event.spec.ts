@@ -270,6 +270,41 @@ test.describe('Events - Create Event (@cicd)', () => {
     );
   });
 
+  test('max teams and people per team can be cleared and retyped', async ({
+    page,
+  }) => {
+    await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
+    await page.getByTestId('org-tab-events').click();
+    await page.getByTestId('create-event-btn').click();
+    await openTab(page, 'tournament');
+
+    const maxTeams = page.getByTestId('event-max-teams-input');
+    const unlimited = page.getByTestId('event-unlimited-checkbox');
+    if (await unlimited.isChecked()) await unlimited.uncheck();
+    await expect(maxTeams).toBeEnabled();
+
+    await maxTeams.click();
+    await maxTeams.press('ControlOrMeta+a');
+    await maxTeams.press('Backspace');
+    await expect(maxTeams).toHaveValue('');
+    await expect(maxTeams).toBeEnabled();
+    await expect(unlimited).not.toBeChecked();
+
+    await maxTeams.pressSequentially('16');
+    await expect(maxTeams).toHaveValue('16');
+    await maxTeams.blur();
+    await expect(maxTeams).toHaveValue('16');
+    await expect(unlimited).not.toBeChecked();
+
+    const people = page.getByTestId('event-people-per-team-input');
+    await people.click();
+    await people.press('ControlOrMeta+a');
+    await people.press('Backspace');
+    await expect(people).toHaveValue('');
+    await people.pressSequentially('3');
+    await expect(people).toHaveValue('3');
+  });
+
   test('league combobox: search filters and selects on create', async ({
     page,
   }) => {
