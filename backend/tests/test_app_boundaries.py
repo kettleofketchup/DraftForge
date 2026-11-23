@@ -399,7 +399,7 @@ _TOURNAMENT_SERIALIZER_NAMES = (
     "TournamentsSerializer",
     "TournamentListSerializer",
     "TournamentSerializer",
-    # org/league leftovers, embedded in tournament serializers until this slice
+    # org/league serializers nested in tournament payloads; now in org/ and league/
     "OrganizationsSerializer",
     "LeaguesSerializer",
     "LeagueMinimalSerializer",
