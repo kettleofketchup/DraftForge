@@ -49,11 +49,12 @@ def decode_history_cursor(token: str) -> HistoryCursor:
         occurred_text, pk_text = raw.split("|")
         occurred_at = datetime.fromisoformat(occurred_text)
         pk = int(pk_text)
-    except (binascii.Error, UnicodeDecodeError, ValueError) as exc:
+        if occurred_at.tzinfo is None or not 1 <= pk <= MAX_DB_INT:
+            raise ValueError(CURSOR_MESSAGE)
+        occurred_at = occurred_at.astimezone(UTC)
+    except (binascii.Error, UnicodeDecodeError, ValueError, OverflowError) as exc:
         raise ValueError(CURSOR_MESSAGE) from exc
-    if occurred_at.tzinfo is None or not 1 <= pk <= MAX_DB_INT:
-        raise ValueError(CURSOR_MESSAGE)
-    return HistoryCursor(occurred_at.astimezone(UTC), pk)
+    return HistoryCursor(occurred_at, pk)
 
 
 def history_after_q(cursor: HistoryCursor) -> Q:

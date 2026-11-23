@@ -78,6 +78,8 @@ class HistoryCursorTest(EventTestCase):
             _b64("2026-01-01T00:00:00+00:00|abc"),
             _b64("2026-01-01T00:00:00+00:00|5|6"),
             _b64("not-a-date|5"),
+            _b64("0001-01-01T00:00:00+01:00|5"),
+            _b64("9999-12-31T23:59:59-01:00|5"),
         ]
         for token in bad:
             with self.subTest(token=token), self.assertRaises(ValueError):
