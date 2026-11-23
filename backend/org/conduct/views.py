@@ -14,9 +14,9 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.models import CustomUser
-from app.permissions_tournament import has_event_staff_access
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
+from events.permissions import has_event_staff_access
 from org.conduct.attendance import event_attendance, event_forecast
 from org.conduct.constants import Outcome, expected_statuses
 from org.conduct.gate import get_conduct_settings

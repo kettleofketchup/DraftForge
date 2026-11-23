@@ -36,6 +36,18 @@ describe('buildOrgPageNavOptions', () => {
     expect(values({ ...base, canViewClaims: true })).toContain('claims');
   });
 
+  it('shows the pending claims count on the claims entry', () => {
+    const claims = (pendingClaimsCount?: number) =>
+      buildOrgPageNavOptions({
+        ...base,
+        canViewClaims: true,
+        pendingClaimsCount,
+      }).find((o) => o.value === 'claims')?.label;
+    expect(claims(3)).toBe('Claims (3)');
+    expect(claims(0)).toBe('Claims');
+    expect(claims(undefined)).toBe('Claims');
+  });
+
   it('omits claims for a plain member', () => {
     expect(values(base)).not.toContain('claims');
   });

@@ -9,8 +9,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.permissions_tournament import has_event_staff_access
 from events.models import Event
+from events.permissions import has_event_staff_access
 from opsnotices.models import OPEN_STATES, OpsNotice
 from opsnotices.registry import NoticeCategory
 from opsnotices.serializers import OpsNoticeSerializer

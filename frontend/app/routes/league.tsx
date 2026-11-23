@@ -2,6 +2,7 @@ import { Building2, Loader2, Pencil, Trophy } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { fetchLeague } from '~/components/api/api';
+import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { generateMeta } from '~/lib/seo';
 import type { LeagueSSR } from '~/lib/ssr-types';
 import type { Route } from './+types/league';
@@ -175,10 +176,13 @@ export default function LeaguePage() {
   const leagueUserPks = useLeagueStore((s) => s.leagueUserPks);
   const leagueUsersLoading = useLeagueStore((s) => s.leagueUsersLoading);
   const leagueUsersLeagueId = useLeagueStore((s) => s.leagueUsersLeagueId);
-  const userCountDisplay =
-    leagueUsersLoading || leagueUsersLeagueId !== pk
-      ? '...'
-      : leagueUserPks.length;
+  const userCountDisplay = memberCountDisplay({
+    entityId: pk,
+    loadedForId: leagueUsersLeagueId,
+    loading: leagueUsersLoading,
+    loadedCount: leagueUserPks.length,
+    fallbackCount: league?.users_count,
+  });
 
   const pageNavOptions = useMemo(
     () => [

@@ -61,6 +61,7 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
+import { PendingClaimsBadge, usePendingClaimsCount } from '~/features/claims';
 import { MmrRequestsTab, useMmrPendingCount } from '~/features/mmr-requests';
 import {
   LockedFeaturesPanel,
@@ -87,6 +88,7 @@ import {
   useIsOrganizationOwner,
   useIsOrganizationStaff,
 } from '~/hooks/usePermissions';
+import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { generateMeta } from '~/lib/seo';
 import type { OrganizationSSR } from '~/lib/ssr-types';
 import { queryClient } from '~/root';
@@ -149,7 +151,6 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-// Discord icon component
 const DiscordIcon = ({ className }: { className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -307,6 +308,7 @@ export default function OrganizationDetailPage() {
   const canReviewMmr = isOrgStaff && !!pk;
   const mmrPendingCount =
     useMmrPendingCount({ org: pk ?? 0 }, canReviewMmr).data?.count ?? 0;
+  const pendingClaimsCount = usePendingClaimsCount(pk, !!canViewClaims);
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
@@ -347,8 +349,13 @@ export default function OrganizationDetailPage() {
   const hasBotAccess = botStatus?.has_bot ?? null;
 
   // Page nav options for mobile navbar dropdown
-  const userCountDisplay =
-    orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length;
+  const userCountDisplay = memberCountDisplay({
+    entityId: pk,
+    loadedForId: orgUsersOrgId,
+    loading: orgUsersLoading,
+    loadedCount: orgUserPks.length,
+    fallbackCount: organization?.users_count,
+  });
   const pageNavOptions = useMemo(
     () =>
       buildOrgPageNavOptions({
@@ -361,6 +368,7 @@ export default function OrganizationDetailPage() {
         canViewClaims,
         canReviewMmr,
         mmrPendingCount,
+        pendingClaimsCount,
       }),
     [
       leagues.length,
@@ -372,6 +380,7 @@ export default function OrganizationDetailPage() {
       canViewClaims,
       canReviewMmr,
       mmrPendingCount,
+      pendingClaimsCount,
     ],
   );
 
@@ -509,6 +518,10 @@ export default function OrganizationDetailPage() {
               <TabsTrigger value="claims" data-testid="org-tab-claims">
                 <ClipboardList className="w-4 h-4 mr-2" />
                 Claims
+                <PendingClaimsBadge
+                  count={pendingClaimsCount}
+                  testId="org-tab-claims-pending-count"
+                />
               </TabsTrigger>
             )}
             {canReviewMmr && (
