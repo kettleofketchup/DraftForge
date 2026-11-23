@@ -776,6 +776,90 @@ def set_captain(
     )
 
 
+CaptainSource = Literal["member", "standin", "dropout", "outside"]
+
+
+def _captain_source(team: Team, user: CustomUser) -> CaptainSource:
+    if _is_member(team, user):
+        return "member"
+    if _is_standin(team, user):
+        return "standin"
+    if _is_dropout(team, user):
+        return "dropout"
+    return "outside"
+
+
+def replace_captain(
+    team: Team,
+    user: CustomUser,
+    *,
+    mark_outgoing_dropout: bool = True,
+    actor: CustomUser | None,
+    via: TeamLogVia,
+    reason: str = "",
+    acknowledged_codes: Collection[str] = (),
+) -> TeamChange:
+    def validate(locked: Team) -> list[Violation]:
+        source = _captain_source(locked, user)
+        if user.pk == locked.captain_id and source == "member":
+            raise TeamManagementError(
+                "already_captain", "This player is already the captain."
+            )
+        if user.pk in other_team_user_ids(locked):
+            raise _on_other_team_error(locked, user)
+        if source == "outside":
+            return _eligibility_violations(locked, user)
+        return []
+
+    def mutate(locked: Team) -> dict[str, Any]:
+        old = locked.captain
+        source = _captain_source(locked, user)
+        extras: dict[str, Any] = {}
+        if source != "member":
+            locked.members.add(user)
+            locked.dropin_members.remove(user)
+            locked.left_members.remove(user)
+        if locked.deputy_captain_id == user.pk:
+            locked.deputy_captain = None
+            locked.save(update_fields=["deputy_captain"])
+        if old is not None and old.pk == user.pk:
+            extras.update(_ensure_tournament_user(locked, user))
+        else:
+            extras.update(_change_captain(locked, user, actor=actor))
+
+        outgoing: Literal["none", "kept", "dropped", "not_member"]
+        if old is None or old.pk == user.pk:
+            outgoing = "none"
+        elif not _is_member(locked, old):
+            outgoing = "not_member"
+        elif mark_outgoing_dropout:
+            locked.left_members.add(old)
+            locked.members.remove(old)
+            outgoing = "dropped"
+        else:
+            outgoing = "kept"
+        return {
+            **extras,
+            "replacing_user_id": old.pk if old is not None else None,
+            "new_captain_source": source,
+            "outgoing": outgoing,
+        }
+
+    return _apply(
+        team,
+        TeamLogAction.REPLACE_CAPTAIN,
+        actor=actor,
+        via=via,
+        reason=reason,
+        acknowledged_codes=acknowledged_codes,
+        target_user=lambda locked: user,
+        affected_users=lambda locked: [user, locked.captain],
+        validate=validate,
+        mutate=mutate,
+        touched=("captain",),
+    )
+
+
 def _dropout_mutation(
     team: Team, user: CustomUser, *, actor: CustomUser | None
 ) -> dict[str, Any]:
