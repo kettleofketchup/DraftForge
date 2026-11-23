@@ -13,7 +13,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser, Game, Team
+from app.models import CustomUser
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 from draft.serializers.hero import HeroDraftEventSerializer, HeroDraftSerializer
 from draft.services.hero import (
@@ -28,6 +28,7 @@ from draft.services.hero_chat import reconcile_draft_memberships
 from draft.tasks import hero_tick
 from events.discord.tournament_dispatch import notify_herodraft_created
 from telemetry.logging import get_logger
+from tournament.models import Game, Team
 from tournament.permissions import (
     IsTournamentStaff,
     can_edit_tournament,
@@ -62,6 +63,18 @@ def _user_is_captain_in_draft(
     return _get_draft_team_for_user(draft, user) is not None
 
 
+def _can_manage_game_tournament(user: CustomUser | AnonymousUser, game: Game) -> bool:
+    if game.tournament is None:
+        return bool(user.is_staff or user.is_superuser)
+    return can_edit_tournament(user, game.tournament)
+
+
+def _is_game_captain(user: CustomUser | AnonymousUser, game: Game) -> bool:
+    return user.pk is not None and user.pk in {
+        team.captain_id for team in (game.radiant_team, game.dire_team) if team
+    }
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_herodraft(request: Request, game_pk: int) -> Response:
@@ -76,7 +89,16 @@ def create_herodraft(request: Request, game_pk: int) -> Response:
         400: Game already has a draft or missing teams
         404: Game not found
     """
-    game = get_object_or_404(Game, pk=game_pk)
+    game = get_object_or_404(
+        Game.objects.select_related("tournament__league", "radiant_team", "dire_team"),
+        pk=game_pk,
+    )
+    is_manager = _can_manage_game_tournament(request.user, game)
+    if not is_manager and not _is_game_captain(request.user, game):
+        return Response(
+            {"error": "Only tournament staff or a game captain can start its draft"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     # Check if draft already exists - return existing draft instead of error
     if hasattr(game, "herodraft"):
@@ -86,10 +108,20 @@ def create_herodraft(request: Request, game_pk: int) -> Response:
     # If teams not assigned to game but provided in request, assign them
     radiant_team_id = request.data.get("radiant_team_id")
     dire_team_id = request.data.get("dire_team_id")
+    assigning = (not game.radiant_team and radiant_team_id) or (
+        not game.dire_team and dire_team_id
+    )
+    if assigning and not is_manager:
+        return Response(
+            {"error": "Only tournament staff can assign a game's teams"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     if not game.radiant_team and radiant_team_id:
         try:
-            game.radiant_team = Team.objects.get(pk=radiant_team_id)
+            game.radiant_team = Team.objects.get(
+                pk=radiant_team_id, tournament_id=game.tournament_id
+            )
         except Team.DoesNotExist:
             return Response(
                 {"error": f"Radiant team with id {radiant_team_id} not found"},
@@ -98,7 +130,9 @@ def create_herodraft(request: Request, game_pk: int) -> Response:
 
     if not game.dire_team and dire_team_id:
         try:
-            game.dire_team = Team.objects.get(pk=dire_team_id)
+            game.dire_team = Team.objects.get(
+                pk=dire_team_id, tournament_id=game.tournament_id
+            )
         except Team.DoesNotExist:
             return Response(
                 {"error": f"Dire team with id {dire_team_id} not found"},

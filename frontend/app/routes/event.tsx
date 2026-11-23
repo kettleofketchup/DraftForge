@@ -65,12 +65,12 @@ import { EventStateBadge } from '~/components/events';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
 import { EventAdminActions } from '~/components/events/EventAdminActions';
+import { EventOpsNoticesSlot } from '~/components/events/EventOpsNoticesSlot';
 import { EventSignupModal } from '~/components/events/EventSignupModal';
 import { evaluateSignupGap } from '~/components/events/EventSignupModal/evaluateSignupGap';
 import { EventStaffSection } from '~/components/events/EventStaffCard';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { MySignupActions } from '~/components/events/MySignupActions';
-import { OpsNoticesCard } from '~/components/events/OpsNoticesCard';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
@@ -319,7 +319,6 @@ export default function EventPage() {
     return segments;
   }, [event]);
 
-  // Check if current user already has an active signup
   const mySignup = useMemo(() => {
     if (!signups || !currentUser?.pk) return undefined;
     return signups.find(
@@ -635,7 +634,7 @@ export default function EventPage() {
           </TabsList>
 
           <TabsContent value="details">
-            {isAdmin && <OpsNoticesCard eventId={event.id} />}
+            <EventOpsNoticesSlot event={event} />
             <EventConductSection
               event={event}
               org={eventOrg ?? undefined}

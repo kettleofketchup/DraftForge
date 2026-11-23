@@ -242,6 +242,7 @@ export const eventSchema = z
     user_can_manage_event_staff: z.boolean().default(false),
     // Viewer the user_can_manage* flags were computed for.
     manage_viewer_pk: z.number().int().nullable().optional(),
+    user_is_event_operator: z.boolean().default(false),
     _warning: z.string().optional(),
   })
   .superRefine((val, ctx) => {

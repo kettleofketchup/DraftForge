@@ -10,7 +10,7 @@ from app.auth import InternalServiceUser
 from app.display_names import user_display_name
 from app.models import CustomUser
 from app.permissions import request_user
-from app.serializers import TournamentUserSerializer, _serialize_users_with_mmr
+from app.serializers import TournamentUserSerializer
 from app.user_cache import serialize_users_core
 from common.game import GameType
 from events.capacity import seat_holding_statuses
@@ -22,9 +22,12 @@ from events.models import (
     EventSignup,
     EventTeam,
     OrgEventDefaults,
+    ReadyCheck,
+    ReadyCheckEntry,
     RepeaterSubscription,
 )
 from events.permissions import has_event_staff_access
+from events.ready_check_constants import ReadyCheckEntryState
 from events.ready_check_settings import (
     READY_CHECK_FIELD_KWARGS,
     READY_CHECK_SETTINGS_FIELDS,
@@ -52,6 +55,7 @@ from org.mmr import game_for_event, game_mmrs_prefetch, get_org_mmr, get_org_mmr
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 from org.permissions import can_view_org_members
+from tournament.serializers.users import _serialize_users_with_mmr
 
 # The lobby password is write-only on every events serializer: event and
 # series payloads are cached, public and handed to Celery. Staff and
@@ -353,6 +357,89 @@ class EventStaffUserSerializer(serializers.ModelSerializer):
         return nicks.get(obj.pk)
 
 
+class ReadyCheckEntrySerializer(serializers.ModelSerializer):
+    signup_id = serializers.IntegerField(read_only=True, allow_null=True)
+    user = EventStaffUserSerializer(read_only=True)
+
+    class Meta:
+        model = ReadyCheckEntry
+        fields = [
+            "id",
+            "signup_id",
+            "user",
+            "state",
+            "confirmed_via",
+            "confirmed_at",
+            "nudged_at",
+            "dropped_at",
+        ]
+        read_only_fields = fields
+
+
+class ReadyCheckSerializer(serializers.ModelSerializer):
+    mode = serializers.SerializerMethodField()
+    min_completion_pct = serializers.SerializerMethodField()
+    low_completion_action = serializers.SerializerMethodField()
+    counts = serializers.SerializerMethodField()
+    opened_by = EventStaffUserSerializer(read_only=True, allow_null=True)
+    resolved_by = EventStaffUserSerializer(read_only=True, allow_null=True)
+    entries = ReadyCheckEntrySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ReadyCheck
+        fields = [
+            "id",
+            "phase",
+            "outcome",
+            "mode",
+            "completion_pct",
+            "min_completion_pct",
+            "low_completion_action",
+            "counts",
+            "opened_at",
+            "escalated_at",
+            "chased_at",
+            "closed_at",
+            "cancelled_at",
+            "last_progress_at",
+            "opened_by",
+            "resolved_by",
+            "resolve_reason",
+            "entries",
+        ]
+        read_only_fields = fields
+
+    def get_mode(self, obj: ReadyCheck) -> str:
+        return obj.settings_snapshot["effective_mode"]
+
+    def get_min_completion_pct(self, obj: ReadyCheck) -> int:
+        return int(obj.settings_snapshot["ready_check_min_completion_pct"])
+
+    def get_low_completion_action(self, obj: ReadyCheck) -> str:
+        return obj.settings_snapshot["ready_check_low_completion_action"]
+
+    def get_counts(self, obj: ReadyCheck) -> dict[str, int]:
+        entries = list(obj.entries.all())
+        counts = {"asked": len(entries)}
+        for state in ReadyCheckEntryState:
+            counts[state.value] = sum(1 for e in entries if e.state == state)
+        return counts
+
+
+class ReadyCheckResolveInputSerializer(serializers.Serializer):
+    apply_drops = serializers.BooleanField()
+    keep_signup_ids = serializers.ListField(
+        child=serializers.IntegerField(), allow_empty=True, required=False, default=list
+    )
+    reason = serializers.CharField(
+        max_length=500, allow_blank=False, trim_whitespace=True
+    )
+
+
+class ReadyCheckConfirmInputSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+
+
 class EventSlimSerializer(serializers.ModelSerializer):
     """Lightweight serializer for event list views — only fields needed for cards."""
 
@@ -424,6 +511,7 @@ class EventSerializer(
     manage_viewer_pk = serializers.IntegerField(
         read_only=True, allow_null=True, default=None
     )
+    user_is_event_operator = serializers.BooleanField(read_only=True, default=False)
     host = EventStaffUserSerializer(read_only=True)
     helpers = EventStaffUserSerializer(many=True, read_only=True)
 
@@ -555,6 +643,7 @@ class EventSerializer(
             "user_can_manage",
             "user_can_manage_event_staff",
             "manage_viewer_pk",
+            "user_is_event_operator",
             "is_off_schedule",
         ]
         read_only_fields = [

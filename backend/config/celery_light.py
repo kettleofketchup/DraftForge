@@ -5,7 +5,7 @@ Uses config.settings_celery instead of backend.settings.
 
 import os
 
-from celery import Celery
+from celery import Celery, Task
 from celery.schedules import crontab
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings_celery")
@@ -16,7 +16,7 @@ django.setup()
 
 # Initialize telemetry (structlog + optional OTel tracing).
 # Solo pool has no fork, so init once in the main process.
-from telemetry.config import init_telemetry
+from telemetry.config import init_telemetry  # noqa: E402 - needs django.setup()
 
 init_telemetry()
 
@@ -46,6 +46,10 @@ _beat_schedule = {
     "sweep-auto-herodrafts": {
         "task": "events.tournament_tasks.sweep_auto_herodrafts",
         "schedule": 10.0,
+    },
+    "sweep-stale-discord-leases": {
+        "task": "discordbot.tasks.sweep_stale_discord_leases",
+        "schedule": 60.0,
     },
     "refresh-discord-avatars": {
         "task": "app.tasks.avatar_refresh.refresh_discord_avatars",
@@ -97,5 +101,5 @@ app.conf.beat_schedule = _beat_schedule
 
 
 @app.task(bind=True, ignore_result=True)
-def debug_task(self):
+def debug_task(self: Task) -> None:
     print(f"Request: {self.request!r}")
