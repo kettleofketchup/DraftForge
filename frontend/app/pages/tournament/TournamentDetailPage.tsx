@@ -211,9 +211,11 @@ export const TournamentDetailPage: React.FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showDeleteTournament, setShowDeleteTournament] = useState(false);
   const leagueOrgPk =
-    typeof tournament?.league === 'object'
-      ? (tournament?.league?.organization?.pk ?? null)
-      : null;
+    (typeof tournament?.league === 'object'
+      ? tournament?.league?.organization?.pk
+      : null) ??
+    tournament?.organization_pk ??
+    null;
   const canEdit = canEditTournament(currentUser, {
     leaguePk: tournament?.league_pk,
     leagueOrgPk,

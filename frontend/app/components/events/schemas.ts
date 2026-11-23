@@ -240,6 +240,7 @@ export const eventSchema = z
     helpers: z.array(eventStaffUserSchema).default([]),
     contributions_awarded_at: z.string().nullable().default(null),
     user_can_manage_event_staff: z.boolean().default(false),
+    user_is_event_operator: z.boolean().default(false),
     _warning: z.string().optional(),
   })
   .superRefine((val, ctx) => {

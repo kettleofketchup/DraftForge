@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 PROJECT_PATH: Path = Path(__file__).parent.absolute()
 FRONTEND_PATH: Path = PROJECT_PATH / "frontend"
 BACKEND_PATH: Path = PROJECT_PATH / "backend"
@@ -25,7 +24,7 @@ NGINX_target: str = f"{REGISTRY}/nginx"
 
 BACKEND_DEV_TAG: str = f"{REGISTRY}/backend-dev"
 FRONTEND_DEV_TAG: str = f"{REGISTRY}/frontend-dev"
-FRONTEND_DEV_TARGET: str = f"runtime-dev"
+FRONTEND_DEV_TARGET: str = "runtime-dev"
 CYPRESS_TAG: str = f"{REGISTRY}/cypress"
 TEST_ENV_FILE: Path = DOCKER_PATH / ".env.test"
 
@@ -37,7 +36,7 @@ BACKEND_ENV_FILE: Path = BACKEND_PATH / ".env"
 
 TEST_DB_PATH: Path = BACKEND_PATH / "test.db.sqlite3"
 DEV_DB_PATH: Path = BACKEND_PATH / "dev.db.sqlite3"
-PROD_DB_PATH: Path = BACKEND_PATH / "prod.db.sqlite3"
+PROD_DB_PATH: Path = BACKEND_PATH / "data" / "prod.db.sqlite3"
 
 
 DOCKER_COMPOSE_DEBUG_PATH: Path = DOCKER_PATH / "docker-compose.debug.yaml"

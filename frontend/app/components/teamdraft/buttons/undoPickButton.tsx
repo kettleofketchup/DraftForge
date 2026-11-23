@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { undoLastPick } from '~/components/api/api';
 import { WarningButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import type { TournamentType } from '~/index';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
@@ -17,12 +18,12 @@ export const UndoPickButton: React.FC = () => {
   const setTournament = useUserStore((state) => state.setTournament);
   const setDraft = useUserStore((state) => state.setDraft);
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
-  const isStaff = useUserStore((state) => state.isStaff);
+  const canManage = useCanManageCurrentTournament();
   const [isLoading, setIsLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
   // Only staff can undo picks
-  if (!isStaff()) return null;
+  if (!canManage) return null;
 
   // Only show if the current round has a pick made
   if (!draft?.pk || !curDraftRound?.choice) return null;

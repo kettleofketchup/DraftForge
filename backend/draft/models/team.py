@@ -7,9 +7,10 @@ from django.db.models import QuerySet
 from django.db.utils import IntegrityError
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser
 from org.mmr import game_for_tournament, org_mmr_map
 from telemetry.logging import get_logger
+from tournament.models import Team, Tournament
 
 User = settings.AUTH_USER_MODEL
 
@@ -30,7 +31,7 @@ class TimeoutAction(models.TextChoices):
 
 class Draft(models.Model):
     tournament = models.OneToOneField(
-        "app.Tournament",
+        "tournament.Tournament",
         related_name="draft",
         on_delete=models.CASCADE,
         blank=True,
@@ -957,7 +958,7 @@ class DraftEvent(models.Model):
 
 class DraftOptions(models.Model):
     tournament = models.OneToOneField(
-        "app.Tournament",
+        "tournament.Tournament",
         related_name="draft_options",
         on_delete=models.CASCADE,
     )

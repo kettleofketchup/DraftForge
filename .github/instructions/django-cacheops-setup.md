@@ -37,11 +37,11 @@ CACHEOPS_REDIS = {
 
 CACHEOPS = {
     # Enable caching for your tournament-related models
-    'app.tournament': {'ops': 'all', 'timeout': 60*60},
-    'app.team': {'ops': 'all', 'timeout': 60*60},
+    'tournament.tournament': {'ops': 'all', 'timeout': 60*60},
+    'tournament.team': {'ops': 'all', 'timeout': 60*60},
     'app.customuser': {'ops': 'all', 'timeout': 60*60},
     'draft.draft': {'ops': 'all', 'timeout': 60*60},
-    'app.game': {'ops': 'all', 'timeout': 60*60},
+    'tournament.game': {'ops': 'all', 'timeout': 60*60},
     # ...add more as needed
 }
 

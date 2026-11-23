@@ -8,7 +8,6 @@ from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 from django.utils import timezone
 
-from app.models import Game, Team, Tournament
 from draft.models import DraftTeam, HeroDraft
 from draft.services.hero import build_draft_rounds, get_available_heroes
 from draft.tasks.draft_tick import get_redis_client
@@ -22,6 +21,7 @@ from draft.tasks.hero_tick import (
     start_tick_broadcaster,
     stop_tick_broadcaster,
 )
+from tournament.models import Game, Team, Tournament
 
 User = get_user_model()
 

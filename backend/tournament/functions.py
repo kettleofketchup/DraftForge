@@ -6,15 +6,13 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
 from app.display_names import user_display_name
-from app.models import CustomUser, Team, Tournament
-from app.serializers import (
-    TournamentSerializer,
-    build_users_dict,
-    tournament_organization,
-)
+from app.models import CustomUser
 from org.display_names import guild_nicknames, org_nicknames_public
 from telemetry.logging import get_logger
+from tournament.models import Team, Tournament
 from tournament.permissions import can_edit_tournament
+from tournament.serializers.tournament import TournamentSerializer
+from tournament.serializers.users import build_users_dict, tournament_organization
 from tournament.state import tournament_state_queryset
 
 log = get_logger(__name__)

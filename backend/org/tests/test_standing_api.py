@@ -334,6 +334,32 @@ class StandingReadSurfaceTest(TestCase):
         self.assertTrue(infos[0].board_open)
         self.assertFalse(infos[0].can_manage)
 
+    def test_unmoderated_tracks_never_evaluate_is_staff(self) -> None:
+        def staff_check() -> bool:
+            raise AssertionError("is_staff evaluated")
+
+        roles = standing.ViewerRoles(
+            is_admin=lambda: True,
+            is_staff=staff_check,
+            can_view_members=lambda: True,
+        )
+        with override_tracks(FakeTrack("promo_fake", feature=FeatureKey.PROMOTION)):
+            fake = standing.tracks_for(
+                self.org.pk, viewer=self.member, features={"promotion"}, roles=roles
+            )
+        real = standing.tracks_for(
+            self.org.pk,
+            viewer=self.member,
+            features={"contributions"},
+            roles=roles,
+        )
+        infos = [*fake, *real]
+        self.assertEqual([i.key for i in infos], ["promo_fake", "contribution"])
+        for info in infos:
+            with self.subTest(track=info.key):
+                self.assertFalse(info.can_moderate)
+                self.assertTrue(info.can_manage)
+
     def test_member_standing_drops_hidden_tracks(self) -> None:
         set_org_feature(self.org, FeatureKey.PROMOTION, enabled=True, actor=self.owner)
         set_org_feature(

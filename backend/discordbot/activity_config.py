@@ -15,13 +15,15 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from discordbot import activity_fake
+
 
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def activity_config(request: Request) -> Response:
     enabled = getattr(settings, "DISCORD_ACTIVITY_ENABLED", False)
-    client_id = getattr(settings, "SOCIAL_AUTH_DISCORD_KEY", None) if enabled else None
+    client_id = activity_fake.client_id() if enabled else None
     return Response(
         {"enabled": bool(enabled), "client_id": str(client_id) if client_id else None},
         headers={"Cache-Control": "no-store"},

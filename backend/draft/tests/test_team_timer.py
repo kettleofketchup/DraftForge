@@ -20,7 +20,6 @@ from django.urls import ResolverMatch, re_path, resolve, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory
 
-from app.models import Team
 from backend import asgi
 from discordbot.activity_auth import ActivitySocketMiddleware
 from draft.consumers.team import DraftConsumer
@@ -40,6 +39,7 @@ from draft.tasks.draft_tick import (
 from draft.tests.team_fixtures import TimedDraftFixture
 from draft.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 from tests.test_teamdraft import expire_draft_clock, stale_draft_heartbeat
+from tournament.models import Team
 
 
 class LifecycleHelperTests(TestCase):
@@ -402,7 +402,7 @@ class RouteResolutionTests(TestCase):
             ("draft.consumers.team", "DraftConsumer"),
         )
         tournament = _websocket_route("api/tournament/1/")
-        self.assertEqual(tournament.consumer_class.__module__, "app.consumers")
+        self.assertEqual(tournament.consumer_class.__module__, "tournament.consumers")
 
     def test_api_root_lists_draft_routers(self) -> None:
         response = APIClient().get("/api/", HTTP_ACCEPT="application/json")

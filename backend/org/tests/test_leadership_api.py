@@ -1,4 +1,6 @@
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -20,10 +22,12 @@ from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.leadership.lifecycle import void_event
 from org.leadership.reviews import void_review
+from org.leadership.settings import update_leadership_settings
 from org.leadership.traits import upsert_traits
 from org.leadership.views import CaptainReviewThrottle
 from org.models import Organization, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
+from org.standing import api as standing
 from org.tests.leadership_base import LeadershipTestCase, scores
 
 ROLES = (
@@ -34,10 +38,13 @@ ROLES = (
     "member",
     "outsider",
     "site_admin",
+    "superuser",
     "anon",
 )
-ADMIN_ROLES = frozenset({"owner", "admin", "site_admin"})
+ADMIN_ROLES = frozenset({"owner", "admin", "site_admin", "superuser"})
+MODERATOR_ROLES = ADMIN_ROLES | {"staff"}
 MEMBER_ROLES = frozenset({"promoter", "member"})
+SELF_ROLES = ("owner", "admin", "staff", "site_admin", "superuser")
 
 
 def _dump(response: Response) -> str:
@@ -112,6 +119,7 @@ class PermissionMatrixTest(ApiCase):
                 username=f"ldapi_{role}",
                 password="x",
                 is_staff=role == "site_admin",
+                is_superuser=role == "superuser",
             )
         self.org.owner = self.users["owner"]
         self.org.save()
@@ -163,10 +171,11 @@ class PermissionMatrixTest(ApiCase):
 
     def test_matrix(self) -> None:
         admins = {role: (200, None) for role in ADMIN_ROLES}
+        moderators = {role: (200, None) for role in MODERATOR_ROLES}
         members = {role: (200, None) for role in MEMBER_ROLES}
         self.run_matrix("get", "settings/", admins)
         self.run_matrix("patch", "settings/", admins, data={"review_window_hours": 48})
-        self.run_matrix("get", "traits/", {**admins, **members})
+        self.run_matrix("get", "traits/", {**moderators, **members})
         self.run_matrix(
             "put",
             "traits/",
@@ -195,22 +204,52 @@ class PermissionMatrixTest(ApiCase):
             {role: (403, "not_in_pool") for role in MEMBER_ROLES},
             data={"scores": scores(4)},
         )
-        self.run_matrix("get", f"events/{self.event.pk}/reviews/", admins)
+        self.run_matrix("get", f"events/{self.event.pk}/reviews/", moderators)
         self.run_matrix(
             "post",
             f"reviews/{self.first.pk}/void/",
-            {role: (400, None) for role in ADMIN_ROLES},
+            {role: (400, None) for role in MODERATOR_ROLES},
             data={},
         )
         self.run_matrix(
             "post",
             f"reviews/{self.first.pk}/unvoid/",
-            {role: (409, "not_moderated") for role in ADMIN_ROLES},
+            {role: (409, "not_moderated") for role in MODERATOR_ROLES},
         )
         self.run_matrix(
             "get",
             f"members/{self.member_ou.pk}/",
-            {**admins, "member": (200, None)},
+            {**moderators, "member": (200, None)},
+        )
+
+    def unstamp(self) -> None:
+        EventCaptain.objects.filter(event=self.event).update(
+            released_at=None, released_by=None
+        )
+
+    def test_release_matrix(self) -> None:
+        self.review(self.mates_a[1], self.cap_a, 4)
+        self.expire_window()
+        update_leadership_settings(
+            self.org, actor=self.admin, changes={"require_staff_release": True}
+        )
+        self.unstamp()
+        self.run_matrix(
+            "post",
+            f"events/{self.event.pk}/release/",
+            {role: (200, None) for role in MODERATOR_ROLES},
+            data={},
+            before=self.unstamp,
+        )
+
+    def test_release_matrix_gate_off(self) -> None:
+        self.review(self.mates_a[1], self.cap_a, 4)
+        self.expire_window()
+        self.run_matrix(
+            "post",
+            f"events/{self.event.pk}/release/",
+            {role: (409, "release_not_required") for role in MODERATOR_ROLES},
+            data={},
         )
 
     def test_locked_feature_403(self) -> None:
@@ -234,6 +273,7 @@ class PermissionMatrixTest(ApiCase):
             ("post", f"reviews/{self.first.pk}/void/", {"reason": "x"}),
             ("post", f"reviews/{self.first.pk}/unvoid/", None),
             ("get", f"members/{cap}/", None),
+            ("post", f"events/{self.event.pk}/release/", {}),
         ]
         for role in ("owner", "member", "anon"):
             for method, suffix, data in calls:
@@ -280,6 +320,27 @@ class CrossOrgTest(ApiCase):
             with self.subTest(suffix=suffix):
                 response = method(self.url(suffix), data, format="json")
                 self.assertEqual(response.status_code, 404, response.content)
+
+    def gate_on(self) -> None:
+        OrgLeadershipSettings.objects.update_or_create(
+            organization=self.org, defaults={"require_staff_release": True}
+        )
+
+    def test_release_foreign_captain_404(self) -> None:
+        self.gate_on()
+        res = self.client_for(self.admin).post(
+            self.url(f"events/{self.event.pk}/release/"),
+            {"captains": [self.other.captain.pk]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 404, res.content)
+
+    def test_release_foreign_event_404(self) -> None:
+        self.gate_on()
+        res = self.client_for(self.admin).post(
+            self.url(f"events/{self.other.event.pk}/release/"), {}, format="json"
+        )
+        self.assertEqual(res.status_code, 404, res.content)
 
     def test_pending_filter_ignores_foreign_event(self) -> None:
         res = self.client_for(self.mates_a[0]).get(
@@ -528,8 +589,8 @@ class ModerationApiTest(ApiCase):
                 {"reason": "mine"},
                 format="json",
             )
-            self.assertEqual(res.status_code, 403)
-            self.assertEqual(res.json()["code"], "cannot_moderate_own_reviews")
+            self.assertEqual(res.status_code, 404)
+            self.assertNotIn("code", res.json())
 
     @override_settings(CACHEOPS_ENABLED=False)
     def test_event_reviews_budget_independent_of_review_count(self) -> None:
@@ -543,6 +604,29 @@ class ModerationApiTest(ApiCase):
         for mate in self.mates_b:
             self.review(mate, self.cap_b, 3)
         self.assertEqual(measure(), before)
+
+    def test_gate_off_payload_unchanged_shape(self) -> None:
+        res = self.client_for(self.admin).get(
+            self.url(f"events/{self.event.pk}/reviews/")
+        )
+        self.assertFalse(res.json()["require_staff_release"])
+        entry = self.captains(self.admin)[self.ou(self.cap_a).pk]
+        self.assertEqual(entry["release_state"], "open")
+        self.expire_window()
+        entries = self.captains(self.admin)
+        a = entries[self.ou(self.cap_a).pk]
+        b = entries[self.ou(self.cap_b).pk]
+        self.assertEqual(a["release_state"], "released")
+        self.assertTrue(a["released"])
+        self.assertEqual(b["release_state"], "short")
+        self.assertFalse(b["released"])
+        self.assertEqual((a["live_reviews"], b["live_reviews"]), (2, 0))
+        for entry in (a, b):
+            self.assertEqual(entry["release_floor"], 2)
+            self.assertFalse(entry["can_release"])
+            self.assertIsNone(entry["auto_release_at"])
+            self.assertIsNone(entry["released_at"])
+            self.assertIsNone(entry["released_by"])
 
 
 class MemberApiTest(ApiCase):
@@ -621,6 +705,17 @@ class MemberApiTest(ApiCase):
             staff["points"]["all_time"], own["points"]["all_time"] + rating_points
         )
 
+    def test_org_staff_sees_others_unreleased(self) -> None:
+        staff = self.make_user("ld_org_staff")
+        self.org.staff.add(staff)
+        invalidate_obj(self.org)
+        for mate in self.mates_a[:2]:
+            self.review(mate, self.cap_a, 4)
+        body = self.member_view(staff)
+        self.assertEqual(body["events"][0]["reviews"], 2)
+        self.assertFalse(body["events"][0]["released"])
+        self.assertIsNotNone(body["rating"])
+
     def test_released_aggregate_needs_three_reviews(self) -> None:
         self.review(self.mates_a[0], self.cap_a, 4)
         self.review(self.mates_a[1], self.cap_a, 2)
@@ -695,6 +790,82 @@ class SettingsApiTest(ApiCase):
             },
         )
         self.assertEqual(OrgLeadershipSettings.objects.count(), 0)
+
+    def test_patch_self_release_409(self) -> None:
+        self.run_snapshot()
+        for mate in self.mates_b:
+            self.review(mate, self.cap_b)
+        self.expire_window()
+        self.org.admins.add(self.cap_b)
+        OrgLeadershipSettings.objects.create(
+            organization=self.org, require_staff_release=True
+        )
+        res = self.client_for(self.cap_b).patch(
+            self.url("settings/"), {"require_staff_release": False}, format="json"
+        )
+        self.assertEqual(res.status_code, 409, res.content)
+        self.assertEqual(res.json()["code"], "would_release_own_results")
+        self.assertTrue(
+            OrgLeadershipSettings.objects.nocache()
+            .get(organization=self.org)
+            .require_staff_release
+        )
+
+    def test_get_includes_moderator_count(self) -> None:
+        body = self.client_for(self.admin).get(self.url("settings/")).json()
+        self.assertEqual(body["moderator_count"], 1)
+        self.org.staff.add(self.cap_a)
+        body = self.client_for(self.admin).get(self.url("settings/")).json()
+        self.assertEqual(body["moderator_count"], 2)
+
+    def test_patch_release_fields(self) -> None:
+        res = self.client_for(self.admin).patch(
+            self.url("settings/"),
+            {"require_staff_release": True, "auto_release_after_hours": 48},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertIs(body["require_staff_release"], True)
+        self.assertEqual(body["auto_release_after_hours"], 48)
+
+    def test_patch_hours_null_ok(self) -> None:
+        res = self.client_for(self.admin).patch(
+            self.url("settings/"), {"auto_release_after_hours": None}, format="json"
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertIsNone(res.json()["auto_release_after_hours"])
+
+    def test_patch_hours_bounds(self) -> None:
+        client = self.client_for(self.admin)
+        for hours in (0, 721):
+            with self.subTest(hours=hours):
+                res = client.patch(
+                    self.url("settings/"),
+                    {"auto_release_after_hours": hours},
+                    format="json",
+                )
+                self.assertEqual(res.status_code, 400)
+                errors = res.json()["auto_release_after_hours"]
+                self.assertNotEqual(errors, ["Unknown setting."])
+
+    def test_patch_gate_non_bool_400(self) -> None:
+        res = self.client_for(self.admin).patch(
+            self.url("settings/"), {"require_staff_release": "maybe"}, format="json"
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertNotEqual(res.json()["require_staff_release"], ["Unknown setting."])
+
+    # Characterization: DRF already rejects null on non-nullable fields.
+    def test_patch_null_non_nullable_400(self) -> None:
+        res = self.client_for(self.admin).patch(
+            self.url("settings/"), {"prior_rating": None}, format="json"
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_get_reports_hours_range(self) -> None:
+        body = self.client_for(self.admin).get(self.url("settings/")).json()
+        self.assertEqual(body["ranges"]["auto_release_after_hours"], [1, 720])
 
 
 class TraitsApiTest(ApiCase):
@@ -821,3 +992,408 @@ class LeaderboardTest(ApiCase):
         self.expire_window()
         self.assertEqual(len(self.board(self.admin)["rows"]), 2)
         self.assertEqual({m: measure(m) for m in ("rating", "points")}, before)
+
+
+class GatedApiCase(ApiCase):
+    def release_url(self) -> str:
+        return self.url(f"events/{self.event.pk}/release/")
+
+    def gate_on(self, hours: int | None = None) -> None:
+        OrgLeadershipSettings.objects.update_or_create(
+            organization=self.org,
+            defaults={
+                "require_staff_release": True,
+                "auto_release_after_hours": hours,
+            },
+        )
+
+    def unstamp(self) -> None:
+        EventCaptain.objects.filter(event=self.event).update(
+            released_at=None, released_by=None
+        )
+
+    def event_reviews(self, user: CustomUser) -> Response:
+        res = self.client_for(user).get(self.url(f"events/{self.event.pk}/reviews/"))
+        self.assertEqual(res.status_code, 200, res.content)
+        return res
+
+    def captains(self, user: CustomUser) -> dict[int, dict[str, Any]]:
+        return {
+            c["org_user_id"]: c for c in self.event_reviews(user).json()["captains"]
+        }
+
+
+class ReleaseApiTest(GatedApiCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.close()
+        for mate in self.mates_a[:2]:
+            self.review(mate, self.cap_a, 4)
+        self.gate_on()
+        self.expire_window()
+
+    def test_release_malformed_body_400(self) -> None:
+        client = self.client_for(self.admin)
+        for body in (
+            {"captains": []},
+            {"captains": "x"},
+            {"captains": list(range(1, 66))},
+        ):
+            with self.subTest(body=str(body)[:30]):
+                res = client.post(self.release_url(), body, format="json")
+                self.assertEqual(res.status_code, 400, res.content)
+        self.assertFalse(
+            EventCaptain.objects.filter(released_at__isnull=False).exists()
+        )
+
+    def test_release_view_maps_codes(self) -> None:
+        client = self.client_for(self.admin)
+        own = self.ou(self.cap_a).pk
+        res = client.post(self.release_url(), {"captains": [own]}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json(), {"released": [own], "skipped": []})
+        res = client.post(self.release_url(), {"captains": [own]}, format="json")
+        self.assertEqual(res.status_code, 409, res.content)
+        self.assertEqual(res.json()["code"], "already_released")
+
+    def test_event_wide_response_shape(self) -> None:
+        res = self.client_for(self.admin).post(self.release_url(), {}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(
+            res.json(),
+            {
+                "released": [self.ou(self.cap_a).pk],
+                "skipped": [
+                    {
+                        "org_user_id": self.ou(self.cap_b).pk,
+                        "code": "not_enough_reviews",
+                    }
+                ],
+            },
+        )
+
+
+class ReleasePayloadTest(GatedApiCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.extra: dict[str, CustomUser] = {}
+        teams: list[tuple[CustomUser, list[CustomUser]]] = [
+            (self.cap_a, self.mates_a[:2])
+        ]
+        for name in ("charlie", "delta", "echo"):
+            cap = self.make_user(f"ld_cap_{name}")
+            mates = [self.make_user(f"ld_{name}{i}") for i in range(2)]
+            self.make_team(name.title(), cap, mates)
+            for user in [cap, *mates]:
+                self.admit(user)
+            self.extra[name] = cap
+            teams.append((cap, mates))
+        self.close()
+        for captain, mates in teams:
+            for mate in mates:
+                self.review(mate, captain, 4)
+        self.gate_on(hours=48)
+        self.expire_window()
+        self.now = tz.now()
+        EventCaptain.objects.filter(captain__user=self.extra["charlie"]).update(
+            window_closes_at=self.now + timedelta(hours=1)
+        )
+        EventCaptain.objects.filter(captain__user=self.extra["delta"]).update(
+            released_at=self.now, released_by=self.admin
+        )
+        EventCaptain.objects.filter(captain__user=self.extra["echo"]).update(
+            voided_at=self.now
+        )
+
+    def by_name(self) -> dict[str, dict[str, Any]]:
+        rows = self.captains(self.admin)
+        caps = {"alpha": self.cap_a, "bravo": self.cap_b, **self.extra}
+        return {name: rows[self.ou(user).pk] for name, user in caps.items()}
+
+    def test_payload_release_fields(self) -> None:
+        self.assertTrue(self.event_reviews(self.admin).json()["require_staff_release"])
+        rows = self.by_name()
+        expected = {
+            "alpha": ("pending", True, 2),
+            "bravo": ("short", False, 0),
+            "charlie": ("open", False, 2),
+            "delta": ("released", False, 2),
+            "echo": ("voided", False, 2),
+        }
+        for name, (state, can_release, live) in expected.items():
+            with self.subTest(name=name):
+                row = rows[name]
+                self.assertEqual(row["release_state"], state)
+                self.assertEqual(row["released"], state == "released")
+                self.assertEqual(row["can_release"], can_release)
+                self.assertEqual(row["live_reviews"], live)
+                self.assertEqual(row["release_floor"], 2)
+                self.assertFalse(row["own_snapshot"])
+                if state == "pending":
+                    closes = EventCaptain.objects.get(
+                        event=self.event, captain__user=self.cap_a
+                    ).window_closes_at
+                    self.assertEqual(
+                        row["auto_release_at"],
+                        (closes + timedelta(hours=48))
+                        .isoformat()
+                        .replace("+00:00", "Z"),
+                    )
+                else:
+                    self.assertIsNone(row["auto_release_at"])
+
+    def test_released_by_summary(self) -> None:
+        rows = self.by_name()
+        self.assertEqual(
+            rows["delta"]["released_by"],
+            {"pk": self.admin.pk, "username": self.admin.username},
+        )
+        self.assertIsNotNone(rows["delta"]["released_at"])
+        self.assertIsNone(rows["alpha"]["released_by"])
+        self.assertIsNone(rows["alpha"]["released_at"])
+        EventCaptain.objects.filter(captain__user=self.extra["delta"]).update(
+            released_by=None
+        )
+        self.assertIsNone(self.by_name()["delta"]["released_by"])
+
+    @override_settings(CACHEOPS_ENABLED=False)
+    def test_released_by_budget_flat(self) -> None:
+        def measure() -> int:
+            with CaptureQueriesContext(connection) as ctx:
+                self.captains(self.admin)
+            return len(ctx.captured_queries)
+
+        EventCaptain.objects.filter(captain__user=self.extra["delta"]).update(
+            released_by=None
+        )
+        before = measure()
+        EventCaptain.objects.filter(
+            event=self.event, captain__user__in=[self.cap_a, self.cap_b]
+        ).update(released_at=self.now, released_by=self.make_user("ld_releaser"))
+        EventCaptain.objects.filter(captain__user=self.extra["delta"]).update(
+            released_by=self.admin
+        )
+        self.assertEqual(measure(), before)
+
+
+class SelfModerationTest(GatedApiCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.close()
+        self.own_reviews = [self.review(m, self.cap_a, 4) for m in self.mates_a]
+        for mate in self.mates_b:
+            self.review(mate, self.cap_b, 3)
+        self.gate_on(hours=48)
+        self.expire_window()
+        self.own = self.ou(self.cap_a).pk
+        self.rating_points = self.points(self.cap_a, "captain_rating")
+        self.assertTrue(self.rating_points)
+
+    @contextmanager
+    def as_role(self, role: str) -> Iterator[None]:
+        user = self.cap_a
+        if role == "owner":
+            self.org.owner = user
+            self.org.save()
+        elif role == "admin":
+            self.org.admins.add(user)
+        elif role == "staff":
+            self.org.staff.add(user)
+        elif role == "site_admin":
+            user.is_staff = True
+            user.save()
+        else:
+            user.is_superuser = True
+            user.save()
+        invalidate_obj(self.org)
+        try:
+            with self.subTest(role=role):
+                yield
+        finally:
+            self.org.owner = self.admin
+            self.org.save()
+            self.org.admins.remove(user)
+            self.org.staff.remove(user)
+            user.is_staff = False
+            user.is_superuser = False
+            user.save()
+            invalidate_obj(self.org)
+            self.unstamp()
+
+    def assert_no_raters(self, response: Response) -> None:
+        body = _dump(response)
+        for review in self.own_reviews:
+            rater = review.rater
+            assert rater is not None
+            self.assertNotIn(rater.user.username, body)
+            self.assertNotIn(f'"org_user_pk": {rater.pk}', body)
+            self.assertNotIn(f'"user_pk": {rater.user_id}', body)
+
+    def test_own_row_hides_counts_with_fallback_set(self) -> None:
+        for role in SELF_ROLES:
+            with self.as_role(role):
+                res = self.event_reviews(self.cap_a)
+                self.assert_no_raters(res)
+                rows = {c["org_user_id"]: c for c in res.json()["captains"]}
+                own = rows[self.own]
+                self.assertTrue(own["own_snapshot"])
+                self.assertIsNone(own["reviews"])
+                self.assertIsNone(own["live_reviews"])
+                self.assertIsNone(own["release_floor"])
+                self.assertIsNone(own["auto_release_at"])
+                self.assertIsNone(own["aggregate"])
+                self.assertIsNone(own["released_at"])
+                self.assertIsNone(own["released_by"])
+                self.assertEqual(own["release_state"], "hidden")
+                self.assertFalse(own["released"])
+                self.assertFalse(own["can_release"])
+                other = rows[self.ou(self.cap_b).pk]
+                self.assertEqual(other["release_state"], "pending")
+                self.assertTrue(other["can_release"])
+                self.assertIsNotNone(other["auto_release_at"])
+
+    def test_own_row_after_another_moderator_releases(self) -> None:
+        for role in SELF_ROLES:
+            with self.as_role(role):
+                res = self.client_for(self.admin).post(
+                    self.release_url(), {"captains": [self.own]}, format="json"
+                )
+                self.assertEqual(res.status_code, 200, res.content)
+                res = self.event_reviews(self.cap_a)
+                self.assert_no_raters(res)
+                own = {c["org_user_id"]: c for c in res.json()["captains"]}[self.own]
+                self.assertEqual(own["release_state"], "released")
+                self.assertTrue(own["released"])
+                self.assertIsNotNone(own["aggregate"])
+                self.assertIsNone(own["reviews"])
+                self.assertIsNone(own["live_reviews"])
+                self.assertFalse(own["can_release"])
+
+    def test_own_void_unvoid_matches_not_found(self) -> None:
+        review = self.own_reviews[0]
+        missing = max(r.pk for r in self.own_reviews) + 1000
+        for role in SELF_ROLES:
+            with self.as_role(role):
+                for action in ("void", "unvoid"):
+                    with self.subTest(role=role, action=action):
+                        client = self.client_for(self.cap_a)
+                        own = client.post(
+                            self.url(f"reviews/{review.pk}/{action}/"),
+                            {"reason": "mine"},
+                            format="json",
+                        )
+                        absent = client.post(
+                            self.url(f"reviews/{missing}/{action}/"),
+                            {"reason": "mine"},
+                            format="json",
+                        )
+                        self.assertEqual(absent.status_code, 404, absent.content)
+                        self.assertEqual(own.status_code, 404, own.content)
+                        self.assertEqual(own.json(), absent.json())
+        review.refresh_from_db()
+        self.assertIsNone(review.voided_at)
+
+    def test_own_release_explicit_403(self) -> None:
+        for role in SELF_ROLES:
+            with self.as_role(role):
+                res = self.client_for(self.cap_a).post(
+                    self.release_url(), {"captains": [self.own]}, format="json"
+                )
+                self.assertEqual(res.status_code, 403, res.content)
+                self.assertEqual(res.json()["code"], "cannot_release_own_reviews")
+                self.assertFalse(
+                    EventCaptain.objects.filter(released_at__isnull=False).exists()
+                )
+
+    def test_event_wide_skips_own(self) -> None:
+        for role in SELF_ROLES:
+            with self.as_role(role):
+                res = self.client_for(self.cap_a).post(
+                    self.release_url(), {}, format="json"
+                )
+                self.assertEqual(res.status_code, 200, res.content)
+                self.assertEqual(res.json()["released"], [self.ou(self.cap_b).pk])
+                self.assertIn(
+                    {"org_user_id": self.own, "code": "own_snapshot"},
+                    res.json()["skipped"],
+                )
+                self.assertIsNone(self.snapshot(self.cap_a).released_at)
+
+    def test_member_detail_own_hides_unreleased(self) -> None:
+        staff_view = self.client_for(self.admin).get(self.url(f"members/{self.own}/"))
+        staff_total = staff_view.json()["points"]["all_time"]
+        for role in SELF_ROLES:
+            with self.as_role(role):
+                res = self.client_for(self.cap_a).get(self.url(f"members/{self.own}/"))
+                self.assertEqual(res.status_code, 200, res.content)
+                self.assert_no_raters(res)
+                body = res.json()
+                self.assertIsNone(body["rating"])
+                self.assertEqual(body["reviews"], 0)
+                self.assertEqual(body["events"], [])
+                self.assertEqual(
+                    body["points"]["all_time"], staff_total - self.rating_points
+                )
+
+    def board(self, metric: str) -> Response:
+        res = self.client_for(self.cap_a).get(
+            f"/api/organizations/{self.org.pk}/standing/leadership/leaderboard/?metric={metric}"
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        return res
+
+    def test_leaderboard_own_row_hides_unreleased(self) -> None:
+        for role in SELF_ROLES:
+            with self.as_role(role):
+                rating = self.board("rating")
+                points = self.board("points")
+                for res in (rating, points):
+                    self.assert_no_raters(res)
+                own_rating = rating.json()["own_row"]
+                self.assertIsNone(own_rating["value"])
+                self.assertEqual(own_rating["sample"], 0)
+                self.assertEqual(points.json()["own_row"]["value"], 5 + 10)
+                for row in rating.json()["rows"]:
+                    if row["member"]["user_pk"] == self.cap_a.pk:
+                        self.assertIsNone(row["value"])
+                for row in points.json()["rows"]:
+                    if row["member"]["user_pk"] == self.cap_a.pk:
+                        self.assertEqual(row["value"], 5 + 10)
+
+    def test_member_standing_hides_own_unreleased(self) -> None:
+        captain = self.ou(self.cap_a)
+        for role in SELF_ROLES:
+            with self.as_role(role):
+                found = standing.member_standing(
+                    captain,
+                    viewer=self.cap_a,
+                    roles=standing.viewer_roles(self.org, self.cap_a),
+                )
+                block = found["leadership"]
+                self.assertIsNone(block["rating"])
+                self.assertEqual(block["reviews"], 0)
+                self.assertEqual(block["points"], 5 + 10)
+
+    def test_pending_never_lists_own(self) -> None:
+        self.unstamp()
+        EventCaptain.objects.filter(event=self.event).update(
+            window_closes_at=tz.now() + timedelta(hours=1)
+        )
+        for role in SELF_ROLES:
+            with self.as_role(role):
+                res = self.client_for(self.cap_a).get(self.url("reviews/pending/"))
+                self.assertEqual(res.status_code, 200, res.content)
+                self.assertNotIn(
+                    self.own, [r["captain_org_user_id"] for r in res.json()]
+                )
+                self.assert_no_raters(res)
+
+    def test_mine_never_leaks_own_snapshot(self) -> None:
+        for role in SELF_ROLES:
+            with self.as_role(role):
+                res = self.client_for(self.cap_a).get(self.url("reviews/mine/"))
+                self.assertEqual(res.status_code, 200, res.content)
+                self.assertNotIn(
+                    self.own, [r["captain_org_user_id"] for r in res.json()]
+                )
+                self.assert_no_raters(res)

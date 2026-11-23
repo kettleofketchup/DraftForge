@@ -8,13 +8,14 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from draft.models import DraftTeam, HeroDraft, HeroDraftChatMessage, HeroDraftState
 from draft.serializers.hero import HeroDraftSerializer
 from draft.serializers.hero_ssr import HeroDraftSerializerSSR
 from draft.services.hero import build_draft_rounds, new_herodraft_for_game
 from league.models import League
 from org.models import Organization
+from tournament.models import Game, Team, Tournament
 
 Channel = HeroDraftChatMessage.Channel
 Kind = HeroDraftChatMessage.Kind

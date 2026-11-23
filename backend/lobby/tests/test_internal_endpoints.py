@@ -4,7 +4,6 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import DotaLobbyMode
 from discordbot.models import DiscordTournamentLog
 from lobby import services, states
 from lobby.models import GameLobby
@@ -17,6 +16,8 @@ from lobby.tests.helpers import (
     make_tournament,
     make_user,
 )
+from tournament.choices import DotaLobbyMode
+from tournament.models import Tournament
 
 BASE = "/api/internal/lobbies"
 
@@ -74,8 +75,6 @@ class LobbyInternalApiTests(TestCase):
         self.assertNotEqual(again["body"]["password"], "changed-later")
 
     def test_claim_heals_a_tournament_without_password(self):
-        from app.models import Tournament
-
         Tournament.objects.filter(pk=self.game.tournament_id).update(
             dota_lobby_password=""
         )

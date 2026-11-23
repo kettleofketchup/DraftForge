@@ -3,8 +3,8 @@
 from django.db import transaction
 
 from app.cache_utils import invalidate_after_commit
-from app.models import Game, Tournament
 from telemetry.logging import get_logger
+from tournament.models import Game, Tournament
 
 log = get_logger(__name__)
 
