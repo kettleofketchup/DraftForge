@@ -15,9 +15,10 @@ from typing import List, Literal, Optional
 from django.utils import timezone
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from draft.models import Draft, DraftOptions, DraftRound, TeamDraftState
 from tests.helpers.steam_match import generate_steam_match, reset_match_id_tracker
+from tournament.models import Game, Team, Tournament
 
 log = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from app.models import DotaLobbyLaunch, DotaLobbyMode, GameMode, GameType
+from app.models import GameType
 from lobby import services, states
 from lobby.models import GameLobby
 from lobby.tests.helpers import (
@@ -12,6 +12,7 @@ from lobby.tests.helpers import (
     make_tournament,
     make_user,
 )
+from tournament.choices import DotaLobbyLaunch, DotaLobbyMode, GameMode
 
 
 @lobby_settings

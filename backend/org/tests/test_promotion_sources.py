@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from django.utils import timezone
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
 from org.promotion.recipients import (
@@ -14,6 +14,7 @@ from org.promotion.recipients import (
     in_pool,
 )
 from org.tests.test_promotion_api import PromotionApiBase
+from tournament.models import Tournament
 
 GUILD_ID = "770000000000000001"
 FETCH = "org.promotion.recipients.get_discord_members_data"

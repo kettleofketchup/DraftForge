@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django.db.models import QuerySet
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from events import reopen as reopen_module
 from events.completion import CloseResult, close_event
 from events.constants import EventState
@@ -19,6 +19,7 @@ from events.services import (
 from events.tests.test_completion import CompletionTestBase
 from org.contributions.kinds import ContributionKind
 from org.models import ContributionEntry, Organization, OrgLog
+from tournament.models import Tournament
 
 
 class ReopenTestBase(CompletionTestBase):

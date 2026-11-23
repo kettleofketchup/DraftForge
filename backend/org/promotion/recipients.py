@@ -6,7 +6,7 @@ from django.db.models import Count, OuterRef, Q, QuerySet, Subquery
 from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel, Tournament
+from app.models import CustomUser, PositionsModel
 from discordbot.services.discord_members import (
     DiscordMembersFetchError,
     get_discord_members_data,
@@ -19,6 +19,7 @@ from org.models_promotion import PromoSend
 from org.promotion.render import player_name
 from org.user_search import user_name_q
 from telemetry.logging import get_logger
+from tournament.models import Tournament
 from user.querysets import with_user_profiles
 
 log = get_logger(__name__)

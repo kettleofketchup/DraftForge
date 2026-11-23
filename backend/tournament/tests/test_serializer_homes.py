@@ -3,12 +3,13 @@ from typing import Any
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from draft.models import Draft, DraftRound
 from league.models import League
 from league.serializers import LeagueMinimalSerializer, LeaguesSerializer
 from org.models import Organization
 from org.serializers import OrganizationsSerializer
+from tournament.models import Game, Team, Tournament
 from tournament.serializers.tournament import TournamentSerializer
 
 TEAM_SLIM_KEYS = [

@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Team
+from app.models import CustomUser
 from events.constants import (
     ActorRole,
     EventState,
@@ -36,6 +36,7 @@ from events.ready_check_constants import (
 )
 from events.services import create_tournament_for_event
 from events.tests.base import EventTestCase
+from tournament.models import Team
 
 NOTIFY = "events.discord.dispatch.notify_signup_changed"
 SERVICES_NOTIFY = "events.services.notify_signup_changed"

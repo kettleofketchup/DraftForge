@@ -5,7 +5,6 @@ from unittest import mock
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from app.models import Game
 from lobby import services, states
 from lobby.models import GameLobby, GameLobbyEvent
 from lobby.tests.helpers import (
@@ -16,6 +15,7 @@ from lobby.tests.helpers import (
     make_team,
     post_webhook,
 )
+from tournament.models import Game
 
 
 @lobby_settings
