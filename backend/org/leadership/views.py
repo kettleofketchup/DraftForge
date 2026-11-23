@@ -48,6 +48,7 @@ from org.leadership.serializers import (
 from org.leadership.settings import (
     get_leadership_settings,
     kind_points,
+    moderator_count,
     update_leadership_settings,
 )
 from org.leadership.summary import member_payload, trait_data
@@ -122,7 +123,11 @@ def leadership_settings(request: Request, org_id: int) -> Response:
             )
         except ValueError as exc:
             raise ValidationError({"detail": str(exc)}) from exc
-    return Response(settings_data(row, kind_points(org)))
+        except ReviewRefused as exc:
+            raise _refused(exc) from exc
+    return Response(
+        settings_data(row, kind_points(org), moderator_count=moderator_count(org))
+    )
 
 
 @api_view(["GET", "PUT"])

@@ -696,6 +696,33 @@ class SettingsApiTest(ApiCase):
         )
         self.assertEqual(OrgLeadershipSettings.objects.count(), 0)
 
+    def test_patch_self_release_409(self) -> None:
+        self.run_snapshot()
+        for mate in self.mates_b:
+            self.review(mate, self.cap_b)
+        self.expire_window()
+        self.org.admins.add(self.cap_b)
+        OrgLeadershipSettings.objects.create(
+            organization=self.org, require_staff_release=True
+        )
+        res = self.client_for(self.cap_b).patch(
+            self.url("settings/"), {"require_staff_release": False}, format="json"
+        )
+        self.assertEqual(res.status_code, 409, res.content)
+        self.assertEqual(res.json()["code"], "would_release_own_results")
+        self.assertTrue(
+            OrgLeadershipSettings.objects.nocache()
+            .get(organization=self.org)
+            .require_staff_release
+        )
+
+    def test_get_includes_moderator_count(self) -> None:
+        body = self.client_for(self.admin).get(self.url("settings/")).json()
+        self.assertEqual(body["moderator_count"], 1)
+        self.org.staff.add(self.cap_a)
+        body = self.client_for(self.admin).get(self.url("settings/")).json()
+        self.assertEqual(body["moderator_count"], 2)
+
     def test_patch_release_fields(self) -> None:
         res = self.client_for(self.admin).patch(
             self.url("settings/"),

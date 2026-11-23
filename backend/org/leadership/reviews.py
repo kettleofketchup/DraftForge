@@ -14,6 +14,7 @@ from org.leadership.constants import (
     SCORE_MIN,
     VoidKind,
 )
+from org.leadership.errors import ReviewRefused as ReviewRefused
 from org.leadership.kinds import LeadershipKind
 from org.leadership.rating import captain_rating_points, review_mean
 from org.leadership.settings import get_leadership_settings
@@ -30,14 +31,6 @@ from org.standing import ledger
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
-
-
-class ReviewRefused(Exception):
-    def __init__(self, code: str, status: int, detail: str) -> None:
-        super().__init__(detail)
-        self.code = code
-        self.status = status
-        self.detail = detail
 
 
 def _review_means(snapshot_id: int) -> list[Fraction]:

@@ -17,13 +17,17 @@ POINT_VALUE_MAX = 1000
 
 
 def settings_data(
-    row: OrgLeadershipSettings, points: list[dict[str, Any]]
+    row: OrgLeadershipSettings,
+    points: list[dict[str, Any]],
+    *,
+    moderator_count: int,
 ) -> dict[str, Any]:
     return {
         **{field: getattr(row, field) for field in SETTINGS_DEFAULTS},
         "defaults": dict(SETTINGS_DEFAULTS),
         "ranges": {k: list(v) for k, v in SETTINGS_RANGES.items()},
         "points": points,
+        "moderator_count": moderator_count,
     }
 
 
