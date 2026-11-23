@@ -29,6 +29,7 @@ import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
 import {
   useScopedEditPermission,
+  useTournamentEditScope,
   type EditUserScope,
 } from '~/components/user/userCard/editUserSchema';
 import { useSteamVerification } from '~/features/steam-verification';
@@ -113,7 +114,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     currentLeague,
   ]);
 
-  const canEdit = useScopedEditPermission(editScope);
+  const tournamentScope = useTournamentEditScope(editScope, player.pk);
+  const canEdit = useScopedEditPermission(tournamentScope);
 
   // Fetch full user data for editing (player prop may have partial data from herodraft)
   const [fullUserData, setFullUserData] = useState<UserType | null>(null);

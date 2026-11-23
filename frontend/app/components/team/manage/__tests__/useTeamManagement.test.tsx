@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OrganizationType } from '~/components/organization/schemas';
 import type { TournamentType } from '~/components/tournament/types';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
@@ -15,7 +14,6 @@ const api = vi.hoisted(() => ({
   runTeamAction: vi.fn(),
   fetchTeamHistory: vi.fn(),
 }));
-const orgApi = vi.hoisted(() => ({ fetchOrganization: vi.fn() }));
 const logSpy = vi.hoisted(() => ({
   info: vi.fn(),
   error: vi.fn(),
@@ -29,10 +27,6 @@ vi.mock('~/components/api/teamManagementAPI', async (importOriginal) => ({
     typeof import('~/components/api/teamManagementAPI')
   >()),
   ...api,
-}));
-vi.mock('~/components/api/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('~/components/api/api')>()),
-  ...orgApi,
 }));
 vi.mock('~/lib/logger', () => ({ getLogger: () => logSpy }));
 vi.mock('sonner', () => ({ toast: toastSpy }));
@@ -66,16 +60,6 @@ function setViewer(pk: number | null): void {
     currentUser: new User(
       (pk == null ? {} : { pk, username: 'viewer' }) as UserType,
     ),
-  });
-}
-
-function setTournament(league: unknown, organizationPk: number | null): void {
-  useUserStore.setState({
-    tournament: {
-      pk: TOURNAMENT_PK,
-      league,
-      organization_pk: organizationPk,
-    } as unknown as TournamentType,
   });
 }
 
@@ -319,65 +303,51 @@ describe('useInvalidateOnRosterChange', () => {
 });
 
 describe('useCanEditCurrentTournament', () => {
-  const ORG_PK = 40;
-
   function render() {
     const { wrapper } = setup();
     return renderHook(() => useCanEditCurrentTournament(), { wrapper });
   }
 
-  it('is true for league staff who are not org staff', () => {
-    setViewer(VIEWER_PK);
-    setTournament({ pk: 3, staff_ids: [VIEWER_PK], admin_ids: [] }, null);
+  function setRoles(fields: Partial<UserType>): void {
+    useUserStore.setState({
+      currentUser: new User({
+        pk: VIEWER_PK,
+        username: 'viewer',
+        ...fields,
+      } as UserType),
+    });
+  }
+
+  function setScopedTournament(): void {
+    useUserStore.setState({
+      tournament: {
+        pk: TOURNAMENT_PK,
+        league_pk: 3,
+        organization_pk: 40,
+      } as unknown as TournamentType,
+    });
+  }
+
+  it.each([
+    ['league staff', { staff_league_ids: [3] }],
+    ['a league admin', { admin_league_ids: [3] }],
+    ['org staff', { staff_organization_ids: [40] }],
+    ['an org admin', { admin_organization_ids: [40] }],
+  ])('is true for %s', (_label, fields) => {
+    setRoles(fields);
+    setScopedTournament();
     expect(render().result.current).toBe(true);
   });
 
-  it('is true for a league admin', () => {
-    setViewer(VIEWER_PK);
-    setTournament({ pk: 3, staff_ids: [], admin_ids: [VIEWER_PK] }, null);
-    expect(render().result.current).toBe(true);
-  });
-
-  it('is true for org staff, reading the org without writing orgStore', async () => {
-    setViewer(VIEWER_PK);
-    setTournament({ pk: 3, staff_ids: [], admin_ids: [] }, ORG_PK);
-    orgApi.fetchOrganization.mockResolvedValue({
-      pk: ORG_PK,
-      name: 'Org',
-      admin_ids: [],
-      staff_ids: [VIEWER_PK],
-    } as unknown as OrganizationType);
-    const { useOrgStore } = await import('~/store/orgStore');
-    const setCurrentOrg = vi.spyOn(useOrgStore.getState(), 'setCurrentOrg');
-
-    const { result } = render();
-
-    await waitFor(() => expect(result.current).toBe(true));
-    expect(orgApi.fetchOrganization).toHaveBeenCalledWith(ORG_PK);
-    expect(setCurrentOrg).not.toHaveBeenCalled();
-  });
-
-  it('is false for a plain user', async () => {
-    setViewer(VIEWER_PK);
-    setTournament({ pk: 3, staff_ids: [1], admin_ids: [2] }, ORG_PK);
-    orgApi.fetchOrganization.mockResolvedValue({
-      pk: ORG_PK,
-      name: 'Org',
-      admin_ids: [],
-      staff_ids: [3],
-    } as unknown as OrganizationType);
-
-    const { result } = render();
-
-    await waitFor(() =>
-      expect(orgApi.fetchOrganization).toHaveBeenCalledWith(ORG_PK),
-    );
-    expect(result.current).toBe(false);
+  it('is false for a plain user', () => {
+    setRoles({ staff_league_ids: [1], staff_organization_ids: [2] });
+    setScopedTournament();
+    expect(render().result.current).toBe(false);
   });
 
   it('is false for the default empty user', () => {
     setViewer(null);
-    setTournament({ pk: 3, staff_ids: [VIEWER_PK], admin_ids: [] }, null);
+    setScopedTournament();
     expect(render().result.current).toBe(false);
   });
 });

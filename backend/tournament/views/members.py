@@ -9,9 +9,9 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import Tournament
-from league.permissions import has_league_staff_access
 from org.member_resolution import resolve_member_user
 from tournament.functions import serialize_tournament
+from tournament.permissions import can_edit_tournament
 
 
 @api_view(["POST"])
@@ -22,11 +22,7 @@ def add_tournament_member(request: Request, tournament_id: int) -> Response:
         Tournament.objects.select_related("league__organization"), pk=tournament_id
     )
 
-    # Check access via league staff (includes org staff + league-specific staff)
-    has_access = False
-    if tournament.league:
-        has_access = has_league_staff_access(request.user, tournament.league)
-    if not has_access and not request.user.is_superuser:
+    if not can_edit_tournament(request.user, tournament):
         return Response(
             {"error": "You do not have permission"},
             status=status.HTTP_403_FORBIDDEN,

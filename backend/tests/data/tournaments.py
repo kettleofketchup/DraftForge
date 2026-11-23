@@ -186,6 +186,30 @@ BRACKET_UNSET_WINNER_TOURNAMENT: TestTournament = TestTournament(
 )
 
 # =============================================================================
+# Bracket Placement Tournaments (#843)
+# 4-team brackets, all games pending, for the placement E2E spec.
+# They reuse the unset-winner rosters' users in their own teams.
+# =============================================================================
+
+BRACKET_PLACEMENT_SINGLE_TOURNAMENT: TestTournament = TestTournament(
+    name="bracket:placement Single Tournament",
+    tournament_type="single_elimination",
+    state="in_progress",
+    steam_league_id=DTX_STEAM_LEAGUE_ID,
+    league_name="DTX League",
+    teams=BRACKET_UNSET_WINNER_TEAMS,
+)
+
+BRACKET_PLACEMENT_DOUBLE_TOURNAMENT: TestTournament = TestTournament(
+    name="bracket:placement Double Tournament",
+    tournament_type="double_elimination",
+    state="in_progress",
+    steam_league_id=DTX_STEAM_LEAGUE_ID,
+    league_name="DTX League",
+    teams=BRACKET_UNSET_WINNER_TEAMS,
+)
+
+# =============================================================================
 # CSV Import Tournament
 # Isolated tournament for CSV import E2E tests.
 # Starts empty (no users/teams) - CSV import adds them.
