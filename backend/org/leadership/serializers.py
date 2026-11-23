@@ -104,3 +104,12 @@ class ReviewPutSerializer(serializers.Serializer):
 
 class ReasonSerializer(serializers.Serializer):
     reason = serializers.CharField(max_length=REASON_MAX_LENGTH)
+
+
+class ReleaseBodySerializer(serializers.Serializer):
+    captains = serializers.ListField(
+        child=serializers.IntegerField(),
+        max_length=64,
+        allow_empty=False,
+        required=False,
+    )

@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from django.contrib.auth.models import AnonymousUser
-from django.db.models import Count, Prefetch, Q, QuerySet
+from django.db.models import Prefetch, QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -28,11 +28,23 @@ from rest_framework.throttling import UserRateThrottle
 from app.models import CustomUser
 from events.models import Event
 from org.contributions.serializers import member_summary
-from org.feature_errors import not_permitted, require_feature, require_org_admin
+from org.feature_errors import (
+    not_permitted,
+    require_feature,
+    require_org_admin,
+    require_org_staff,
+)
 from org.features import FeatureKey
-from org.leadership.queries import EventAggregate, captain_events, release_floor
+from org.leadership.queries import EventAggregate, captain_events
+from org.leadership.release import (
+    annotate_live,
+    auto_release_at,
+    release_floor,
+    release_state,
+)
 from org.leadership.reviews import (
     ReviewRefused,
+    release_results,
     submit_review,
     unvoid_review,
     void_review,
@@ -40,6 +52,7 @@ from org.leadership.reviews import (
 )
 from org.leadership.serializers import (
     ReasonSerializer,
+    ReleaseBodySerializer,
     ReviewPutSerializer,
     SettingsUpdateSerializer,
     TraitsPutSerializer,
@@ -66,7 +79,7 @@ from org.models_leadership import (
     EventCaptain,
     OrgLeadershipSettings,
 )
-from org.permissions import can_view_org_members, has_org_admin_access
+from org.permissions import can_view_org_members, has_org_staff_access
 from user.querysets import with_user_profiles
 
 
@@ -94,6 +107,12 @@ def _org(org_id: int) -> Organization:
 def _admin_org(request: Request, org_id: int) -> Organization:
     org = get_object_or_404(Organization, pk=org_id)
     require_org_admin(request.user, org, FeatureKey.LEADERSHIP)
+    return org
+
+
+def _moderator_org(request: Request, org_id: int) -> Organization:
+    org = get_object_or_404(Organization, pk=org_id)
+    require_org_staff(request.user, org, FeatureKey.LEADERSHIP)
     return org
 
 
@@ -146,7 +165,7 @@ def leadership_traits(request: Request, org_id: int) -> Response:
             raise ValidationError({"detail": str(exc)}) from exc
     else:
         org = _org(org_id)
-        if not has_org_admin_access(request.user, org):
+        if not has_org_staff_access(request.user, org):
             _viewer_member(request.user, org)
         traits = effective_traits(org)
     return Response({"traits": [trait_data(t) for t in traits]})
@@ -336,7 +355,7 @@ def leadership_member(request: Request, org_id: int, org_user_id: int) -> Respon
         pk=org_user_id,
     )
     own = org_user.user_id == user.pk
-    staff = has_org_admin_access(user, org)
+    staff = has_org_staff_access(user, org)
     if not (own or staff):
         public = get_leadership_settings(org).leaderboard_public
         if not (public and can_view_org_members(user, org)):
@@ -345,7 +364,7 @@ def leadership_member(request: Request, org_id: int, org_user_id: int) -> Respon
         org_user,
         now=timezone.now(),
         detail=own or staff,
-        staff=staff,
+        staff=staff and not own,
         viewer_user_id=user.pk,
         period_points=True,
     )
@@ -391,21 +410,62 @@ def _own_aggregate(
     return next((r for r in rows if r["event_id"] == snapshot.event_id), None)
 
 
+def _released_by(snap: EventCaptain) -> dict[str, Any] | None:
+    user = snap.released_by
+    return None if user is None else {"pk": user.pk, "username": user.username}
+
+
+def _release_fields(
+    snap: EventCaptain,
+    *,
+    own: bool,
+    floor: int,
+    settings: OrgLeadershipSettings,
+    now: datetime,
+) -> dict[str, Any]:
+    state = release_state(snap, live=snap.live, settings=settings, now=now)
+    released = state == "released"
+    if own:
+        return {
+            "released": released,
+            "release_state": "released" if released else "hidden",
+            "released_at": snap.released_at if released else None,
+            "released_by": _released_by(snap) if released else None,
+            "auto_release_at": None,
+            "live_reviews": None,
+            "release_floor": None,
+            "can_release": False,
+        }
+    pending = state == "pending"
+    return {
+        "released": released,
+        "release_state": state,
+        "released_at": snap.released_at,
+        "released_by": _released_by(snap),
+        "auto_release_at": auto_release_at(snap, settings) if pending else None,
+        "live_reviews": snap.live,
+        "release_floor": floor,
+        "can_release": pending,
+    }
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def leadership_event_reviews(request: Request, org_id: int, event_id: int) -> Response:
-    org = _admin_org(request, org_id)
+    org = _moderator_org(request, org_id)
     event = get_object_or_404(Event.objects.nocache(), pk=event_id, organization=org)
     now = timezone.now()
     settings = get_leadership_settings(org)
     floor = release_floor(settings.rating_min_reviewers)
     snapshots = list(
-        with_user_profiles(
-            EventCaptain.objects.nocache().filter(event=event, organization=org),
-            "captain__user",
-        )
-        .annotate(live=Count("reviews", filter=Q(reviews__voided_at__isnull=True)))
-        .order_by("team_name", "pk")
+        annotate_live(
+            with_user_profiles(
+                EventCaptain.objects.nocache()
+                .filter(event=event, organization=org)
+                .select_related("released_by"),
+                "captain__user",
+            )
+        ).order_by("team_name", "pk")
     )
     others = [s.pk for s in snapshots if s.captain.user_id != request.user.pk]
     by_snapshot: defaultdict[int, list[dict[str, Any]]] = defaultdict(list)
@@ -420,13 +480,6 @@ def leadership_event_reviews(request: Request, org_id: int, event_id: int) -> Re
         aggregate = (
             _own_aggregate(org, snap, now=now, settings=settings) if own else None
         )
-        released = (
-            aggregate is not None
-            if own
-            else snap.voided_at is None
-            and snap.window_closes_at <= now
-            and snap.live >= floor
-        )
         captains.append(
             {
                 "org_user_id": snap.captain_id,
@@ -434,21 +487,48 @@ def leadership_event_reviews(request: Request, org_id: int, event_id: int) -> Re
                 "team_name": snap.team_name,
                 "window_closes_at": snap.window_closes_at,
                 "voided_at": snap.voided_at,
-                "released": released,
+                **_release_fields(
+                    snap, own=own, floor=floor, settings=settings, now=now
+                ),
                 "own_snapshot": own,
                 "reviews": None if own else by_snapshot[snap.pk],
                 "aggregate": aggregate,
             }
         )
     return Response(
-        {"event": {"pk": event.pk, "name": event.name}, "captains": captains}
+        {
+            "event": {"pk": event.pk, "name": event.name},
+            "require_staff_release": settings.require_staff_release,
+            "captains": captains,
+        }
     )
+
+
+@api_view(["POST"])
+@parser_classes([JSONParser])
+@permission_classes([AllowAny])
+def leadership_event_release(request: Request, org_id: int, event_id: int) -> Response:
+    org = _moderator_org(request, org_id)
+    event = get_object_or_404(Event.objects.nocache(), pk=event_id, organization=org)
+    body = ReleaseBodySerializer(data=request.data)
+    body.is_valid(raise_exception=True)
+    try:
+        result = release_results(
+            org,
+            event=event,
+            actor=request.user,
+            captain_ids=body.validated_data.get("captains"),
+            now=timezone.now(),
+        )
+    except ReviewRefused as exc:
+        raise _refused(exc) from exc
+    return Response({"released": result.released, "skipped": result.skipped})
 
 
 def _moderate(
     request: Request, org_id: int, review_pk: int, *, unvoid: bool
 ) -> Response:
-    org = _admin_org(request, org_id)
+    org = _moderator_org(request, org_id)
     try:
         if unvoid:
             review = unvoid_review(
