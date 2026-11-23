@@ -19,7 +19,11 @@ import { API_URL, waitForHydration } from '../fixtures/auth';
 import { BASE_URL } from '../fixtures/base-url';
 import { isCsrfCookie } from '../fixtures/cookies';
 import { waitForDemoReady } from '../fixtures/demo-utils';
-import { getCsrfToken } from '../fixtures/events';
+import {
+  getCsrfToken,
+  getEventsSeedData,
+  loginEventUser,
+} from '../fixtures/events';
 
 const VIDEO_OUTPUT_DIR = 'demo-results/videos/mmr_approval';
 const FINAL_VIDEO_DIR = '../docs/assets/videos';
@@ -143,11 +147,8 @@ test.describe('MMR Approval Demo', () => {
       (window as Window & { playwright?: boolean }).playwright = true;
     });
 
-    // Login as admin (pk=5000)
-    await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 5000 },
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const seed = await getEventsSeedData(context);
+    await loginEventUser(context, 'admin', 'event admin');
 
     const page = await context.newPage();
 
@@ -163,12 +164,12 @@ test.describe('MMR Approval Demo', () => {
       `${API_URL}/events/?open_signups=true`,
       {
         data: {
-          organization: 7, // Events Test Org
+          organization: seed.org_pk,
           name: 'Wednesday Inhouse #42',
           description: 'Weekly inhouse — manual MMR approval required',
           scheduled_at: new Date(Date.now() + 86400000).toISOString(),
           tournament_name: 'Inhouse Tournament',
-          tournament_league: 7, // Events Test League
+          tournament_league: seed.events_league_pk,
           tournament_type: 'single_elimination',
           game_type: 1,
           draft_type: 'shuffle',
@@ -187,33 +188,23 @@ test.describe('MMR Approval Demo', () => {
     const event = await createResp.json();
     const eventId = event.id;
 
-    // RSVP as player 1 (pk=5001, has DotaProfile with Legend 3, screenshot)
-    await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 5001 },
-      headers: { 'Content-Type': 'application/json' },
-    });
+    // RSVP as player 1 (DotaProfile with Legend 3, screenshot)
+    await loginEventUser(context, 'player', 'event player');
     const csrf2 =
       (await context.cookies()).find((c) => isCsrfCookie(c.name))?.value || '';
     await context.request.post(`${API_URL}/events/${eventId}/rsvp/`, {
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf2 },
     });
 
-    // RSVP as player 2 (pk=5002, has DotaProfile with Ancient 1)
-    await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 5002 },
-      headers: { 'Content-Type': 'application/json' },
-    });
+    // RSVP as player 2 (DotaProfile with Ancient 1)
+    await loginEventUser(context, 'player_2', 'event player 2');
     const csrf3 =
       (await context.cookies()).find((c) => isCsrfCookie(c.name))?.value || '';
     await context.request.post(`${API_URL}/events/${eventId}/rsvp/`, {
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf3 },
     });
 
-    // Switch back to admin
-    await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 5000 },
-      headers: { 'Content-Type': 'application/json' },
-    });
+    await loginEventUser(context, 'admin', 'event admin');
 
     // =========================================================================
     // Step 1 — Navigate to event page (video starts here)

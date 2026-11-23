@@ -22,6 +22,7 @@ from tests.data.organizations import EVENTS_ORG
 from tests.data.users import (
     EVENT_ADMIN_USER,
     EVENT_PLAYER_1,
+    EVENT_PLAYER_2,
     EVENT_PLAYER_4,
     EVENT_PLAYER_NO_PROFILE,
 )
@@ -30,6 +31,7 @@ EVENTS_EVENT_NAME = "E2E Signup Event"
 USERS = {
     "admin": EVENT_ADMIN_USER,
     "player": EVENT_PLAYER_1,
+    "player_2": EVENT_PLAYER_2,
     "player_4": EVENT_PLAYER_4,
     "no_profile": EVENT_PLAYER_NO_PROFILE,
 }
