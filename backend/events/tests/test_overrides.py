@@ -407,7 +407,7 @@ class ModuleImportTest(SimpleTestCase):
             "import sys\n"
             "sys.path.insert(0, sys.argv[1])\n"
             "import events.overrides\n"
-            "apps = {'app', 'events', 'org', 'league'}\n"
+            "apps = {'app', 'events', 'org', 'league', 'tournament'}\n"
             "print(sorted(m for m in sys.modules\n"
             "    if m.split('.')[0] in apps and '.models' in m))"
         )

@@ -35,8 +35,8 @@ not be your worktree. Never hardcode `https://localhost`: Playwright code import
 | `just test::slot-release` | Release own slot (stack must be down) |
 | `just test::slot-release --slot N` | Release someone else's idle slot. Pre-checks first (Rules) |
 | `just test::slot-claim N` | Take slot N (owner must have no containers). Pre-checks first (Rules) |
-| `just test::slot-reap <project>` | Remove an orphaned `df*` stack whose worktree is gone. Pre-checks first (Rules) |
-| `just test::slot-reap --stale` | Reap every other slot whose last activity is older than 12h (`DF_SLOT_STALE_HOURS`) |
+| `just test::slot-reap <project>` | Remove an orphaned `df*` stack whose worktree is gone. A `df-run-<hex>` left by a killed `test::run` is reapable once no one-off container runs in it and its creator's lock is free (or, with no lock file, it is over 10 min old). Pre-checks first (Rules) |
+| `just test::slot-reap --stale` | Reap every other slot whose last activity is older than 12h (`DF_SLOT_STALE_HOURS`), plus every orphaned `df-run-<hex>` project |
 | `just test::slots-unit` | pytest for `scripts/slots.py` |
 
 From another directory: `just -f <wt>/justfile -d <wt> <recipe>`.

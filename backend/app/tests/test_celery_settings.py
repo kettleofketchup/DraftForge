@@ -111,6 +111,36 @@ class CelerySettingsBootTest(SimpleTestCase):
         self.assertIn("discordbot.tasks.sweep_stale_discord_leases", registered)
         self.assertEqual(scheduled - registered, set())
 
+    def test_worker_boot_does_not_load_user_or_bracket_models(self) -> None:
+        env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}
+        code = (
+            "import json, sys\n"
+            "from config.celery_light import app\n"
+            "app.loader.import_default_modules()\n"
+            "names = ['user.models', 'bracket.models', 'events.tournament_tasks',"
+            " 'tournament.signals']\n"
+            "print(json.dumps({n: n in sys.modules for n in names}))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=BACKEND_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-3000:])
+        loaded = json.loads(result.stdout.strip().splitlines()[-1])
+        self.assertEqual(
+            loaded,
+            {
+                "user.models": False,
+                "bracket.models": False,
+                "events.tournament_tasks": True,
+                "tournament.signals": True,
+            },
+        )
+
     def test_settings_modules_agree_on_discord_api(self) -> None:
         env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}
         code = (

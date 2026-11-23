@@ -46,6 +46,28 @@ async function pickFirstPlayer(page: Page): Promise<void> {
   }
 }
 
+async function watchTieRoll(viewer: Page): Promise<string> {
+  const popup = viewer.getByTestId('tie-roll-popup');
+  await expect(popup).toBeVisible({ timeout: 15_000 });
+  await expect(popup).toHaveCount(1);
+  await expect(popup).toHaveAttribute('data-pick-number', '2');
+  await expect(popup).toContainText('Tie for pick #2');
+  await expect(popup.locator('[data-testid^="tie-roll-row-"]')).toHaveCount(3);
+  await expect(popup.getByRole('button', { name: /continue/i })).toHaveCount(0);
+  const winnerId = await popup.getAttribute('data-winner-id');
+  expect(winnerId).toBeTruthy();
+  await expect(viewer.getByTestId('tie-roll-result')).toContainText(
+    'picks next',
+    { timeout: 6_000 },
+  );
+  await expect(viewer.getByTestId(`tie-roll-row-${winnerId}`)).toHaveAttribute(
+    'data-winner',
+    'true',
+  );
+  await expect(popup).toHaveCount(0, { timeout: 8_000 });
+  return winnerId!;
+}
+
 test.describe.serial('Shuffle draft - tie roll popup', () => {
   // Two logged-in browsers plus the 5 s dice hold do not fit the default 30 s on a CI runner.
   test.describe.configure({ timeout: 60_000 });
@@ -81,42 +103,12 @@ test.describe.serial('Shuffle draft - tie roll popup', () => {
 
       await pickFirstPlayer(page);
 
-      for (const viewer of [page, spectator]) {
-        const popup = viewer.getByTestId('tie-roll-popup');
-        await expect(popup).toBeVisible({ timeout: 15_000 });
-        await expect(popup).toHaveCount(1);
-        await expect(popup).toHaveAttribute('data-pick-number', '2');
-        await expect(popup).toContainText('Tie for pick #2');
-        await expect(
-          popup.locator('[data-testid^="tie-roll-row-"]'),
-        ).toHaveCount(3);
-        await expect(
-          popup.getByRole('button', { name: /continue/i }),
-        ).toHaveCount(0);
-      }
-
-      const winnerId = await page
-        .getByTestId('tie-roll-popup')
-        .getAttribute('data-winner-id');
-      await expect(spectator.getByTestId('tie-roll-popup')).toHaveAttribute(
-        'data-winner-id',
-        winnerId!,
+      // Each popup closes 5 s after it mounts in its own browser, and the picker's
+      // can mount seconds after the spectator's, so check the viewers concurrently.
+      const [pickerWinner, spectatorWinner] = await Promise.all(
+        [page, spectator].map(watchTieRoll),
       );
-      for (const viewer of [page, spectator]) {
-        await expect(viewer.getByTestId('tie-roll-result')).toContainText(
-          'picks next',
-          { timeout: 6_000 },
-        );
-        await expect(
-          viewer.getByTestId(`tie-roll-row-${winnerId}`),
-        ).toHaveAttribute('data-winner', 'true');
-      }
-
-      for (const viewer of [page, spectator]) {
-        await expect(viewer.getByTestId('tie-roll-popup')).toHaveCount(0, {
-          timeout: 8_000,
-        });
-      }
+      expect(spectatorWinner).toBe(pickerWinner);
       await expect(page.getByRole('dialog').first()).toBeVisible();
     } finally {
       await spectatorCtx.close();
