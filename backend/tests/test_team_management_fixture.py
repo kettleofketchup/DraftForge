@@ -5,6 +5,8 @@ from rest_framework.test import APIClient, APIRequestFactory
 from app.models import Team, Tournament
 from league.models import League
 from tests.helpers.team_management_fixture import (
+    CAPTAIN_TAKEOVER_TOURNAMENT_NAME,
+    TEAM_MANAGEMENT_DELTA_CAPTAIN,
     TEAM_MANAGEMENT_GHOST,
     TEAM_MANAGEMENT_SEARCH_TARGET,
     TEAM_MANAGEMENT_TOURNAMENT_NAME,
@@ -36,7 +38,7 @@ class TeamManagementFixtureTests(TestCase):
         self.assertEqual(tournament.league.steam_league_id, DTX_STEAM_LEAGUE_ID)
         self.assertEqual(
             sorted(tournament.teams.values_list("name", flat=True)),
-            ["TM Alpha", "TM Bravo", "TM Ghost"],
+            ["TM Alpha", "TM Bravo", "TM Delta", "TM Ghost"],
         )
 
     def test_users_are_prefixed_tournament_users(self) -> None:
@@ -75,6 +77,20 @@ class TeamManagementFixtureTests(TestCase):
         self.assertEqual(bravo.members.count(), 5)
         self.assertEqual(bravo.dropin_members.count(), 1)
 
+    def test_delta_is_placed_with_five_members(self) -> None:
+        tournament = self.build()
+        delta = self.team(tournament, "TM Delta")
+        self.assertEqual(delta.placement, 4)
+        self.assertEqual(delta.captain.username, TEAM_MANAGEMENT_DELTA_CAPTAIN)
+        members = set(delta.members.values_list("pk", flat=True))
+        self.assertEqual(len(members), 5)
+        self.assertIn(delta.captain_id, members)
+        self.assertTrue(members <= set(tournament.users.values_list("pk", flat=True)))
+        self.assertEqual(
+            sorted(delta.members.values_list("username", flat=True)),
+            [f"{TEAM_MANAGEMENT_USER_PREFIX}delta_{n}" for n in range(1, 6)],
+        )
+
     def test_search_target_is_tournament_user_on_no_team(self) -> None:
         tournament = self.build()
         target = tournament.users.get(username=TEAM_MANAGEMENT_SEARCH_TARGET)
@@ -93,6 +109,7 @@ class TeamManagementFixtureTests(TestCase):
         self.assertEqual(problems["TM Ghost"], ["captain_not_member"])
         self.assertEqual(problems["TM Alpha"], [])
         self.assertEqual(problems["TM Bravo"], [])
+        self.assertEqual(problems["TM Delta"], [])
 
     def test_missing_dtx_league_raises(self) -> None:
         League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).delete()
@@ -113,5 +130,28 @@ class TeamManagementFixtureTests(TestCase):
         self.assertEqual(resp.data["name"], TEAM_MANAGEMENT_TOURNAMENT_NAME)
         self.assertEqual(
             sorted(team["name"] for team in resp.data["teams"]),
-            ["TM Alpha", "TM Bravo", "TM Ghost"],
+            ["TM Alpha", "TM Bravo", "TM Delta", "TM Ghost"],
+        )
+
+    @override_settings(DEBUG=True, TEST=True, RELEASE=False)
+    def test_captain_takeover_key_is_independent_copy(self) -> None:
+        shared = self.build()
+        path = reverse(
+            "test-reset-tournament", urlconf="tests.urls", args=["captain_takeover"]
+        )
+        match = resolve(path, urlconf="tests.urls")
+        request = APIRequestFactory().post(f"/api/tests{path}")
+        for _ in range(2):
+            resp = match.func(request, **match.kwargs)
+            self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["name"], CAPTAIN_TAKEOVER_TOURNAMENT_NAME)
+        self.assertNotEqual(resp.data["pk"], shared.pk)
+        self.assertEqual(
+            sorted(team["name"] for team in resp.data["teams"]),
+            ["TM Alpha", "TM Bravo", "TM Delta", "TM Ghost"],
+        )
+        self.assertTrue(
+            Tournament.objects.nocache()
+            .filter(pk=shared.pk, name=TEAM_MANAGEMENT_TOURNAMENT_NAME)
+            .exists()
         )

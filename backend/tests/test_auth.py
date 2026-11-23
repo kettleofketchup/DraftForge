@@ -63,7 +63,9 @@ from tests.data.users import (
     USER_CLAIMER,
 )
 from tests.helpers.team_management_fixture import (
+    CAPTAIN_TAKEOVER_TOURNAMENT_NAME,
     TEAM_MANAGEMENT_TOURNAMENT_NAME,
+    populate_captain_takeover_tournament,
     populate_team_management_tournament,
 )
 from tests.helpers.tournament_config import TEST_KEY_TO_NAME, TEST_TOURNAMENTS
@@ -1000,6 +1002,7 @@ def reset_tournament_by_key(request, key: str):
         "shuffle_tie_resolution": populate_shuffle_tie_data,
         "bracket_unset_winner": populate_bracket_unset_winner_tournament,
         "team_management": populate_team_management_tournament,
+        "captain_takeover": populate_captain_takeover_tournament,
     }
 
     def clear_existing_draft_redis(name: str) -> None:
@@ -1017,6 +1020,7 @@ def reset_tournament_by_key(request, key: str):
         "shuffle_tie_resolution": SHUFFLE_TIE_TOURNAMENT.name,
         "bracket_unset_winner": BRACKET_UNSET_WINNER_TOURNAMENT.name,
         "team_management": TEAM_MANAGEMENT_TOURNAMENT_NAME,
+        "captain_takeover": CAPTAIN_TAKEOVER_TOURNAMENT_NAME,
     }
 
     reset_fn = RESET_FUNCTIONS.get(key)
