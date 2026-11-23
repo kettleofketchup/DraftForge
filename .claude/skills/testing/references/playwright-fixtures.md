@@ -87,7 +87,7 @@ can't log a console error into specs that assert on console output (#418).
 - Browsers a spec launches itself (`chromium.launch()`) bypass it; call
   `stubExternalApis(context)` on their contexts if they load the navbar.
 - A spec can override the stub with its own `page.route(GITHUB_API_PATTERN, ...)`, since
-  later routes win (see `e2e/00-external-api-stubs.spec.ts`).
+  later routes win (see `e2e/25-external-api-stubs.spec.ts`).
 
 ## HeroDraft Fixture (`fixtures/herodraft.ts`)
 
@@ -159,7 +159,7 @@ const events = await resp.json();
 
 ## dota_lobby Fixture (`fixtures/dota-lobby.ts`)
 
-For the 18-dota-lobby specs against the simulated dota_lobby (`just test::dota-lobby up`).
+For the 22-dota-lobby specs against the simulated dota_lobby (`just test::dota-lobby up`).
 
 | Function | Endpoint | Purpose |
 |----------|----------|---------|

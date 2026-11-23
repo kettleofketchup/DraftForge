@@ -360,7 +360,7 @@ jobs:
           CI: 'true'
         run: just test::pw::cicd-events --workers=1 --shard=${{ matrix.shard }}/2
 
-      # The 18-dota-lobby specs run against the simulated dota_lobby (profile
+      # The 22-dota-lobby specs run against the simulated dota_lobby (profile
       # dota-lobby, image pinned by DOTA_LOBBY_IMAGE_TAG). With it running,
       # cicd-dota-lobby sets DOTA_LOBBY_SIMULATOR_REQUIRED=1, so a spec that
       # would skip for lack of the simulator fails instead.

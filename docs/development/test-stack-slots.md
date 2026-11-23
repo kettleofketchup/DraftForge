@@ -139,7 +139,7 @@ Steam API; Steam match specs use populated data.
 
 ### Simulated dota_lobby
 
-The dota_lobby integration specs (`e2e/18-dota-lobby/`) run against the real dota_lobby
+The dota_lobby integration specs (`e2e/22-dota-lobby/`) run against the real dota_lobby
 service in simulation mode: simulated bots, players and matches, no Steam logon. It is
 the `dota-lobby` service in `docker-compose.test.yaml`, behind the `dota-lobby` compose
 profile, so `just test::up`, `test::setup` and CI never start or pull it.
@@ -148,7 +148,7 @@ profile, so `just test::up`, `test::setup` and CI never start or pull it.
 # Until a dota_lobby release with simulation mode exists, build it in dota_lobby
 # (`just docker::build`, tag ghcr.io/kettleofketchup/dota_lobby:local) and use that:
 DOTA_LOBBY_IMAGE=ghcr.io/kettleofketchup/dota_lobby:local just test::dota-lobby up
-just test::pw::dota-lobby          # the 18-dota-lobby specs, in order
+just test::pw::dota-lobby          # the 22-dota-lobby specs, in order
 just test::dota-lobby logs         # follow it; also down, restart, ps
 ```
 

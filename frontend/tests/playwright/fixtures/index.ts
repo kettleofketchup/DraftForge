@@ -169,7 +169,7 @@ export {
   type EventInfo,
 } from './events';
 
-// dota_lobby utilities (18-dota-lobby specs, simulated dota_lobby)
+// dota_lobby utilities (22-dota-lobby specs, simulated dota_lobby)
 export {
   SIMULATOR_SKIP_REASON,
   bracketNode,

@@ -34,7 +34,7 @@ testIgnore: **/fixtures/**, **/helpers/**, **/constants.ts, **/*.d.ts
 ### `events-sequential` / `dota-lobby-sequential` / `org-features-sequential` - Shared-State Suites
 
 - `events-sequential` matches `e2e/16-events/`, `dota-lobby-sequential` matches
-  `e2e/18-dota-lobby/`, `org-features-sequential` matches `e2e/19-org-features/`;
+  `e2e/22-dota-lobby/`, `org-features-sequential` matches `e2e/19-org-features/`;
   `chromium` ignores all three directories
 - `fullyParallel: false`, `dependencies: ['chromium']`
 - `dota-lobby-sequential` also sets `workers: 1`: its files share one simulated

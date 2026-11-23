@@ -11,7 +11,7 @@ PK note: Original target was pk=8 but `Auth Matrix Test Org` (from auth-matrix
 branch) occupies that slot. Shifted to 10. If auth-matrix lands separately,
 no remediation needed — PKs are independent.
 
-Used by frontend/tests/playwright/e2e/17-org-delete/ to verify the
+Used by frontend/tests/playwright/e2e/21-org-delete/ to verify the
 permission matrix on the Danger Zone UI.
 """
 
