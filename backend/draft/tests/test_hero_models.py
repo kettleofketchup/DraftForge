@@ -2,8 +2,9 @@ from datetime import date
 
 from django.test import TestCase
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from draft.models import DraftTeam, HeroDraft, HeroDraftRound
+from tournament.models import Game, Team, Tournament
 
 
 class HeroDraftModelTest(TestCase):

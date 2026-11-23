@@ -3,7 +3,6 @@ from unittest import mock
 from django.db.models import Count
 from django.test import TestCase
 
-from app.models import Team, Tournament
 from draft.models import Draft, TeamDraftState
 from league.models import League
 from org.models import Organization
@@ -19,6 +18,7 @@ from tests.populate.league_stats import (
     populate_league_stats_data,
     populate_league_stats_showcase,
 )
+from tournament.models import Team, Tournament
 
 SHOWCASE_STEAM_LEAGUE_ID = 17939
 STRIP_STEAM_LEAGUE_ID = 17938

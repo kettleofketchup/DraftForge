@@ -20,7 +20,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser
 from draft.consumers.team import DraftConsumer
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
 from draft.services import team_broadcast as broadcast
@@ -45,6 +45,7 @@ from events.models import Event
 from league.models import LeagueUser
 from org.models import Organization, OrgUser
 from tournament.functions import serialize_tournament
+from tournament.models import Team, Tournament
 from tournament.serializers.draft import DraftSerializerSlim
 from tournament.serializers.tournament import TournamentSerializer
 from tournament.serializers.users import tournament_organization

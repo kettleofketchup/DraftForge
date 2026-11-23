@@ -9,8 +9,8 @@ import random
 from datetime import datetime, timedelta
 from typing import Optional, Set
 
-from app.models import CustomUser, Team
 from steam.models import Match, PlayerMatchStats
+from tournament.models import Team
 
 # Track used match IDs to ensure uniqueness within a test run
 _used_match_ids: Set[int] = set()

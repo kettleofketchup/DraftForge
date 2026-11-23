@@ -7,8 +7,8 @@ from django.test import TransactionTestCase
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import Team
 from draft.tests.team_fixtures import TimedDraftFixture
+from tournament.models import Team
 from tournament.views import tournament as tournament_views
 from user.tests.test_cacheops_integration import _redis_reachable
 
