@@ -1856,13 +1856,15 @@ TASK_LOG_SOURCES = {
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def fire_event_task(request: Request, event_id: int, task_name: str) -> Response:
-    """Manually fire a scheduled task for an event. Requires org staff access."""
+    """Manually fire a scheduled task for an event. Requires event staff access."""
     try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
+        event = Event.objects.select_related("organization", "tournament_league").get(
+            pk=event_id
+        )
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    if not has_org_staff_access(request.user, event.organization):
+    if not has_event_staff_access(request.user, event):
         return Response(
             {"error": "Staff access required"}, status=status.HTTP_403_FORBIDDEN
         )
