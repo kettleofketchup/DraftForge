@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TrackInfo, TrackKey } from '../schemas';
 import { isStandingTabValue, visibleStandingTabs } from '../visibleTracks';
 
-vi.mock('../panels', () => {
+vi.mock('../panels', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../panels')>();
   const base = {
     sampleLabel: () => null,
     totalUnit: null,
@@ -15,6 +16,7 @@ vi.mock('../panels', () => {
   const panels = {
     contribution: { ...base, tabValue: 'contributions', icon: Award },
     conduct: { ...base, tabValue: 'conduct', icon: ShieldCheck },
+    leadership: actual.TRACK_PANELS.leadership,
   };
   return {
     TRACK_PANELS: panels,
@@ -64,10 +66,18 @@ describe('visibleStandingTabs', () => {
 
   it('drops tracks without a panel set', () => {
     expect(
-      visibleStandingTabs([track('leadership'), track('contribution')]).map(
-        (t) => t.value,
-      ),
+      visibleStandingTabs([
+        track('unregistered' as TrackKey),
+        track('contribution'),
+      ]).map((t) => t.value),
     ).toEqual(['contributions']);
+  });
+
+  it('registers the leadership tab', () => {
+    const tabs = visibleStandingTabs([track('leadership')]);
+    expect(tabs.map((t) => ({ value: t.value, label: t.label }))).toEqual([
+      { value: 'leadership', label: 'Leadership' },
+    ]);
   });
 });
 
@@ -75,6 +85,7 @@ describe('isStandingTabValue', () => {
   it('is true for every registered track tab', () => {
     expect(isStandingTabValue('conduct')).toBe(true);
     expect(isStandingTabValue('contributions')).toBe(true);
+    expect(isStandingTabValue('leadership')).toBe(true);
   });
 
   it('is false for other tabs', () => {

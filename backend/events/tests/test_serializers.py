@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 
 from events.serializers import EventSignupSerializer, EventSlimSerializer
 from events.services import process_rsvp
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 
 # Fields that fire_due_reminders reads off slim payloads from get_events_list.
@@ -37,7 +38,7 @@ class EligibilityReasonsVisibilityTests(EventTestCase):
     def test_reasons_hidden_from_other_members(self, _notify: object) -> None:
         ev = self.make_event(require_steam_id=True)
         owner = self.make_user()
-        process_rsvp(ev, owner)
+        process_rsvp(ev, owner, actor=SYSTEM)
         api = APIClient()
         expected = {
             self.make_user(): [],
@@ -58,7 +59,7 @@ class EligibilityReasonsVisibilityTests(EventTestCase):
         self, _notify: object
     ) -> None:
         ev = self.make_event(require_steam_id=True)
-        signup = process_rsvp(ev, self.make_user())
+        signup = process_rsvp(ev, self.make_user(), actor=SYSTEM)
         self.assertEqual(EventSignupSerializer(signup).data["eligibility_reasons"], [])
         resp = APIClient().get(f"/api/events/signups/?event={ev.pk}")
         body = resp.json()

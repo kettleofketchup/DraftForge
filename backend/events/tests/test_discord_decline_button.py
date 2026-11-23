@@ -7,6 +7,7 @@ from app.models import CustomUser, GameType
 from events.discord.handlers import handle_decline_button
 from events.models import Event, EventSignup, EventState, SignupStatus
 from events.services import decline_signup
+from events.tests.actors import SYSTEM
 from org.models import Organization
 
 
@@ -23,7 +24,7 @@ class DeclineSignupServiceTests(TestCase):
         )
 
     def test_records_decline_without_prior_signup(self) -> None:
-        signup = decline_signup(self.event, self.user)
+        signup = decline_signup(self.event, self.user, actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.CANCELLED)
         self.assertEqual(
             EventSignup.objects.filter(event=self.event, user=self.user).count(), 1
@@ -33,7 +34,7 @@ class DeclineSignupServiceTests(TestCase):
         EventSignup.objects.create(
             event=self.event, user=self.user, status=SignupStatus.RSVP
         )
-        signup = decline_signup(self.event, self.user)
+        signup = decline_signup(self.event, self.user, actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.CANCELLED)
         self.assertEqual(
             EventSignup.objects.filter(event=self.event, user=self.user).count(), 1
@@ -43,7 +44,7 @@ class DeclineSignupServiceTests(TestCase):
         EventSignup.objects.create(
             event=self.event, user=self.user, status=SignupStatus.TENTATIVE
         )
-        signup = decline_signup(self.event, self.user)
+        signup = decline_signup(self.event, self.user, actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.CANCELLED)
 
     def test_rejects_duplicate_decline(self) -> None:
@@ -51,7 +52,7 @@ class DeclineSignupServiceTests(TestCase):
             event=self.event, user=self.user, status=SignupStatus.CANCELLED
         )
         with self.assertRaises(ValueError):
-            decline_signup(self.event, self.user)
+            decline_signup(self.event, self.user, actor=SYSTEM)
 
 
 class HandleDeclineButtonTests(TestCase):

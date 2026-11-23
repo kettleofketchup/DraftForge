@@ -112,6 +112,12 @@ class EventSignupAdmin(admin.ModelAdmin):
         "signed_up_at",
     ]
     readonly_fields = [
+        "status",
+        "user",
+        "event",
+        "event_team",
+        "signup_type",
+        "waitlist_position",
         "signed_up_at",
         "line_seq",
         "commitment",
@@ -121,6 +127,9 @@ class EventSignupAdmin(admin.ModelAdmin):
         "first_rsvp_class",
     ]
     list_filter = ["status", "signup_type"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
 
 
 class _ReadOnlyFieldsAdmin(admin.ModelAdmin):

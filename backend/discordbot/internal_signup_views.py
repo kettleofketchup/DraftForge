@@ -20,6 +20,8 @@ Do NOT inline business logic here. Game-agnostic dispatch lives in
 ``events/discord/providers/<game>.py``.
 """
 
+import re
+
 from pydantic import ValidationError
 from rest_framework import status
 from rest_framework.decorators import (
@@ -29,6 +31,7 @@ from rest_framework.decorators import (
 )
 from rest_framework.request import Request
 from rest_framework.response import Response
+from structlog.contextvars import bind_contextvars
 
 from app.auth import InternalServiceAuth, IsInternalService
 from discordbot.bot_handlers import (
@@ -79,6 +82,20 @@ log = get_logger(__name__)
 _auth = [InternalServiceAuth]
 _perm = [IsInternalService]
 
+_INTERACTION_ID_RE = re.compile(r"^\d{1,20}$", re.ASCII)
+
+
+def _bind_interaction(request: Request) -> None:
+    value = request.headers.get("X-Discord-Interaction-ID")
+    if value is None:
+        return
+    if _INTERACTION_ID_RE.fullmatch(value):
+        bind_contextvars(interaction_id=value)
+        return
+    log.debug(
+        "internal_interaction_id_rejected", system="discord", subsystem="dispatch"
+    )
+
 
 def _bad_request(exc: ValidationError) -> Response:
     """Render a pydantic ValidationError as a 400 JSON response."""
@@ -93,6 +110,7 @@ def _bad_request(exc: ValidationError) -> Response:
 @permission_classes(_perm)
 def signup_button(request: Request) -> Response:
     """Wrap handle_signup_button. Body: event_id, discord_user_id, discord_username?."""
+    _bind_interaction(request)
     try:
         body = SignupButtonRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -116,6 +134,7 @@ def signup_button(request: Request) -> Response:
 @permission_classes(_perm)
 def signup_modal_submit(request: Request) -> Response:
     """Wrap handle_signup_modal_submit. Body: event_id, discord_user_id, game_type, values."""
+    _bind_interaction(request)
     try:
         body = SignupModalSubmitRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -162,6 +181,7 @@ def rank_status_select(request: Request) -> Response:
 @permission_classes(_perm)
 def rank_medal_select(request: Request) -> Response:
     """Wrap handle_rank_medal_select. Body: event_id, discord_user_id, medal."""
+    _bind_interaction(request)
     try:
         body = RankMedalSelectRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -185,6 +205,7 @@ def rank_medal_select(request: Request) -> Response:
 @permission_classes(_perm)
 def battle_cup_submit(request: Request) -> Response:
     """Wrap handle_battle_cup_submit. Body: event_id, discord_user_id, tier."""
+    _bind_interaction(request)
     try:
         body = BattleCupSubmitRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -208,6 +229,7 @@ def battle_cup_submit(request: Request) -> Response:
 @permission_classes(_perm)
 def screenshot_upload(request: Request) -> Response:
     """Wrap handle_screenshot_upload. Body: event_id, discord_user_id, screenshot_type, attachment_url."""
+    _bind_interaction(request)
     try:
         body = ScreenshotUploadRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -254,6 +276,7 @@ def notify_button(request: Request) -> Response:
 @permission_classes(_perm)
 def decline_button(request: Request) -> Response:
     """Wrap handle_decline_button. Body: event_id, discord_user_id, discord_username?."""
+    _bind_interaction(request)
     try:
         body = DeclineButtonRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -277,6 +300,7 @@ def decline_button(request: Request) -> Response:
 @permission_classes(_perm)
 def tentative_button(request: Request) -> Response:
     """Wrap handle_tentative_button. Body: event_id, discord_user_id, discord_username?."""
+    _bind_interaction(request)
     try:
         body = TentativeButtonRequest.model_validate(request.data)
     except ValidationError as exc:
