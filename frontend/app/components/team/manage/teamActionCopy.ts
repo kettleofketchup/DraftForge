@@ -2,11 +2,14 @@ import type {
   ManagedTeam,
   RosterUser,
 } from '~/components/api/teamManagementAPI';
+import { teamStatus } from '~/components/team/teamStatus';
 import { DisplayName } from '~/components/user/avatar';
 import type { PendingTeamAction } from './pendingTeamAction';
 
 export const CAPTAIN_CHANGE_WARNING =
   'Ready and connected state resets for any live hero draft this team is in.';
+
+export const CAPTAIN_SUCCESSION_WARNING = `${CAPTAIN_CHANGE_WARNING} The new captain is picked automatically (highest MMR). To choose who captains, use Replace captain.`;
 
 const isOn = (list: RosterUser[], user: RosterUser): boolean =>
   list.some((u) => u.pk === user.pk);
@@ -96,7 +99,7 @@ export function markDropoutRequest(
     summary: `Mark ${DisplayName(user)} as a dropout of ${team.name}.`,
     confirmText: 'Mark dropout',
     destructive: true,
-    ...(isCaptain ? { warning: CAPTAIN_CHANGE_WARNING } : {}),
+    ...(isCaptain ? { warning: CAPTAIN_SUCCESSION_WARNING } : {}),
   };
 }
 
@@ -139,7 +142,7 @@ export function subInRequest(
       ? {
           replacingCaptain: {
             pk: team.captain.pk,
-            warning: CAPTAIN_CHANGE_WARNING,
+            warning: CAPTAIN_SUCCESSION_WARNING,
           },
         }
       : {}),
@@ -155,5 +158,53 @@ export function addStandinRequest(
     title: 'Add stand-in?',
     summary: `Add ${DisplayName(user)} as a stand-in for ${team.name}.`,
     confirmText: 'Add stand-in',
+  };
+}
+
+function placedTeamOf(team: ManagedTeam, user: RosterUser) {
+  return team.other_teams?.find(
+    (t) =>
+      t.placement != null &&
+      (t.member_pks.includes(user.pk) || t.dropin_pks.includes(user.pk)),
+  );
+}
+
+const onThisTeam = (team: ManagedTeam, user: RosterUser): boolean =>
+  isOn(team.members, user) ||
+  isOn(team.dropin_members, user) ||
+  isOn(team.left_members, user);
+
+export function replaceCaptainRequest(
+  team: ManagedTeam,
+  user: RosterUser,
+): PendingTeamAction {
+  const lines = [`${DisplayName(user)} becomes captain of ${team.name}.`];
+  const placed = placedTeamOf(team, user);
+  if (placed) {
+    const status =
+      teamStatus(placed.placement) === 'winner' ? 'winner' : 'eliminated';
+    lines.push(
+      `They stay listed on ${placed.name} (${status}); that team is not changed.`,
+    );
+  }
+  if (
+    team.tournament &&
+    !team.tournament.users.includes(user.pk) &&
+    !onThisTeam(team, user)
+  ) {
+    lines.push("They join the tournament's players.");
+  }
+  const outgoing =
+    team.captain && team.captain.pk !== user.pk && isMember(team, team.captain)
+      ? team.captain
+      : null;
+  return {
+    action: { kind: 'replace_captain', user },
+    title: 'Replace captain?',
+    summary: lines.join(' '),
+    confirmText: 'Replace captain',
+    destructive: false,
+    warning: CAPTAIN_CHANGE_WARNING,
+    ...(outgoing ? { outgoingDropout: { name: DisplayName(outgoing) } } : {}),
   };
 }

@@ -87,6 +87,16 @@ function withReplacing(
   return { ...action, replacing };
 }
 
+function withOutgoingDropout(
+  action: TeamAction,
+  markOutgoingDropout: boolean | undefined,
+): TeamAction {
+  if (action.kind !== 'replace_captain' || markOutgoingDropout === undefined) {
+    return action;
+  }
+  return { ...action, markOutgoingDropout };
+}
+
 /**
  * Radix wraps viewport content in a `display: table` div, which defeats
  * `table-fixed`; the inner `p-1` keeps focus rings inside the viewport clip.
@@ -268,7 +278,10 @@ export function TeamManageDialog({
 
   const submit = (values: TeamActionReasonValues): Promise<void> => {
     if (!request || !team) return Promise.resolve();
-    const action = withReplacing(request.action, team, values.replacing_id);
+    const action = withOutgoingDropout(
+      withReplacing(request.action, team, values.replacing_id),
+      values.mark_outgoing_dropout,
+    );
     lastReasons.current[action.kind] = values.reason;
     pendingRef.current = { action, reason: values.reason };
     setActionReason(values.reason);
@@ -393,6 +406,7 @@ export function TeamManageDialog({
           defaultReason={lastReasons.current[request.action.kind] ?? ''}
           replacingOptions={request.withReplacing ? team?.members : undefined}
           replacingCaptain={request.replacingCaptain}
+          outgoingDropout={request.outgoingDropout}
           pending={pending}
           onSubmit={submit}
         />
