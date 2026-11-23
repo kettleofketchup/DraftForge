@@ -133,10 +133,8 @@ test.describe('Events - series views stay in sync (@cicd)', () => {
 
     await strip.getByText(series.name).click();
     await expect(page).toHaveURL(new RegExp(`/event-series/${series.id}$`));
-    await page.getByRole('button', { name: 'Subscribe', exact: true }).click();
-    await expect(
-      page.getByRole('button', { name: 'Unsubscribe', exact: true }),
-    ).toBeVisible();
+    await page.getByTestId('subscribe-series-btn').click();
+    await expect(page.getByTestId('unsubscribe-series-btn')).toBeVisible();
 
     await page.goBack();
     await expect(

@@ -242,6 +242,7 @@ export default function SeriesPage() {
                   })
                 }
                 disabled={unsubscribeMutation.isPending}
+                data-testid="unsubscribe-series-btn"
               >
                 <BellOff className="h-4 w-4 mr-1" />
                 Unsubscribe
@@ -256,6 +257,7 @@ export default function SeriesPage() {
                   })
                 }
                 disabled={subscribeMutation.isPending}
+                data-testid="subscribe-series-btn"
               >
                 <Bell className="h-4 w-4 mr-1" />
                 Subscribe
