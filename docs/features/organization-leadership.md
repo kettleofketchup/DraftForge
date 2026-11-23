@@ -56,7 +56,11 @@ Each review is reduced to its average across traits, so every rater counts equal
 The captain rating points for the event are the average of those, scaled to the org's
 maximum. They are only awarded once enough teammates have reviewed (2 by default) and
 are recalculated on every submit, edit or withdrawal while the window is open. After
-the window closes they are frozen.
+the window closes they are frozen. They count toward totals and the points leaderboard
+only once the event's results are [released](#anonymity), at the same moment as the
+rating; captaining, placement and draft points count straight away. Raising the
+minimum reviews after an event has closed hides an event below the new minimum, its
+rating and its captain rating points together.
 
 !!! info "Formula"
     `points = round(max_points × (event_average − 1) / 4)`, where `event_average` is
@@ -78,11 +82,15 @@ Leaderboard metrics: **Rating** (overall), **Points** (per period) and one
 
 ## Anonymity
 
-Nothing derived from an event's reviews is shown to anyone but org admins until the
-window has closed **and** the event has at least the minimum number of reviews. All of
-an event's reviews then count at once, so a captain cannot work out a single review by
-watching the numbers move. Per-event trait averages are shown to the captain only for
-events with at least 3 reviews.
+**Moderators** are the org owner, org admins, org staff and site staff.
+
+Nothing derived from an event's reviews is shown to anyone but moderators until the
+event's results are **released**: the window has closed, the event has at least the
+minimum number of reviews, it was not voided by a reopen and, when the org
+[requires staff release](#release-gate), a moderator has released it or its
+auto-release time has passed. All of an event's reviews then count at once, so a
+captain cannot work out a single review by watching the numbers move. Per-event trait
+averages are shown to the captain only for events with at least 3 reviews.
 
 Released numbers also stay put when a rater leaves. If a rater deletes their account, or
 a merge makes one of two reviews by the same person redundant, after the window has
@@ -95,10 +103,15 @@ the captain rating recalculated as usual.
   public, but no per-event detail.
 - **Raters** see their own scores, before and after the window closes, and whether a
   review was withdrawn, voided by a reopen or voided by staff. Never anyone else's.
-- **Org admins** see every review with its rater and live, unreleased values, for
-  abuse handling. Reviews of themselves are left out entirely: on their own captain
-  entries the moderation list returns no reviews (no scores, times, ids or raters) and
-  only the released aggregate, the same as any other captain sees.
+- **Moderators** see every review of other captains with its rater and live,
+  unreleased values, for abuse handling. A moderator who also rated a captain sees
+  that captain's other raters too; that is by design.
+- **Nobody sees reviews of themselves**, whatever their role, site staff and
+  superusers included. On their own captain entries the moderation list returns no
+  reviews (no scores, times, ids or raters), no review count, minimum or auto-release
+  time, a state of only `released` or `hidden`, and the released aggregate, the same
+  as any other captain sees. Their own member panel and leaderboard row show released
+  results only.
 
 !!! warning "Two-review events"
     With exactly two released reviews, a rater who tells the captain their own scores
@@ -106,9 +119,9 @@ the captain rating recalculated as usual.
 
 ## Moderation
 
-Org admins can void a review with a reason (1–500 characters). A voided review stops
+Moderators can void a review with a reason (1–500 characters). A voided review stops
 counting, and if the window has already closed the captain rating points are
-recalculated anyway. The rater cannot undo a staff void by submitting again; an admin
+recalculated anyway. The rater cannot undo a staff void by submitting again; a moderator
 can restore it. A review carries one `void_kind`: `withdrawn` (the rater withdrew it),
 `lifecycle` (the event was reopened or cancelled) or `moderated` (staff). Raters can
 resubmit over the first two, never over `moderated`. Restoring puts a review back the
@@ -117,9 +130,78 @@ voided (including a review voided by staff and then by a reopen), goes back to
 `withdrawn` or `lifecycle` and does not count again until its rater resubmits. A live
 review is restored only while its rater is still in the captain's rater pool
 (`409 not_in_pool` otherwise). When a merge leaves two reviews by the same person, a
-staff-voided one always wins. An admin cannot
-moderate reviews of themselves: another admin has to act. Every void and restore is
-written to the organization log with the points before and after.
+staff-voided one always wins. Nobody moderates reviews of themselves, whatever their
+role, and another moderator has to act. Voiding or restoring a review of oneself
+returns the same `404` as a review that does not exist, so its existence is not
+revealed; releasing one's own captain entry is refused with
+`403 cannot_release_own_reviews`. Every void and restore is written to the organization log with
+the points before and after, and every release with the captains it released.
+
+## Release gate
+
+By default an event's results are released on their own once the window closes with
+enough reviews. An org can put a person in between with two settings:
+
+- **Require staff release**: closed events with enough reviews wait as **Pending
+  release** until a moderator releases them. A release can cover every pending captain
+  of an event or only listed captains; it records when and by whom
+  (`released_at`, `released_by`) and cannot be undone. Reopening the event and
+  completing it again clears the release along with the old window.
+- **Auto-release after (hours)**: an optional fallback, 1 to 720 hours, empty for
+  never. A pending result counts as released once `window closes + hours` has passed
+  (inclusive). It is worked out whenever results are read, so nothing is written and
+  no scheduled task runs; the moderation screen shows the time on pending captains.
+  It applies only while staff release is required.
+
+The rating, the per-trait figures and the captain rating points of an event appear
+together at release. A moderator cannot release their own results: releasing a list
+that includes them is refused, and releasing a whole event skips them. Their results
+wait for another moderator, site staff or the fallback.
+
+Changing these settings, or the minimum reviews, moves results in or out of the
+released set:
+
+| Change | Effect |
+|---|---|
+| Turn staff release on | Everything already public stays public: it is stamped as released, with no `released_by` |
+| Lengthen or clear the hours while it is on | Results the fallback already released stay released (stamped the same way) |
+| Shorten or set the hours | Pending results past the new time are released at once |
+| Turn staff release off | Every waiting result is released at once; the settings screen warns first |
+| Raise the minimum reviews | Results below the new minimum are hidden, released or not |
+
+When staff release was on before the change, a change that would release the saving
+admin's own results, now or later, is refused with `409 would_release_own_results` and
+nothing is saved; another admin can make the same change. That covers turning staff
+release off, setting the hours where there were none, shortening them, and lowering
+the minimum reviews, whenever the admin has a captain entry in the org that is not
+voided and not yet released, whether its window is still open or it is pending. A
+change that would release one of their results at once is refused the same way. The organization log entry
+for a settings change that touches these fields carries `release_stamped` (results
+stamped as released) and `release_unlocked` (results newly public).
+
+In an org with a single moderator who also captains, that moderator's results can only
+be released by site staff or the fallback. The settings screen warns about this when
+staff release is on and no fallback is set, naming the case when the org has only one
+moderator.
+
+### Known limitations
+
+- **Counting reviews of yourself.** Void and restore check the review's org (`404`),
+  then whether it is about you (`403`), then its state. A moderator who tries review
+  ids in turn can count the reviews about themselves, live or withdrawn, before
+  release. Answering `404` for these would contradict the clear `403` refusal and
+  needs a product decision.
+- **Inferring "short".** The own moderation entry hides counts, but a moderator can
+  still guess that their results are short of reviews when every other captain was
+  released and theirs stays hidden, or when the fallback time they can read in the
+  settings has passed.
+- **Merged accounts.** When a merge folds two members' snapshots together, reviews
+  from the other closed window come along; they are reviews of the same person, so
+  nothing about anyone else leaks.
+- **Reviews a moderator wrote.** The moderation screen hides **Void** on a review the
+  moderator wrote as a teammate, but the API does not refuse it.
+- There is no list of results waiting for release across events; each event page
+  shows its own.
 
 ## Settings
 
@@ -134,6 +216,8 @@ written to the organization log with the points before and after.
 | Half-life (days) | 180 | 7–730 |
 | Max age (days) | 730 | 30–1825 |
 | Public leaderboard | off | |
+| Require staff release | off | |
+| Auto-release after (hours) | empty (never) | 1–720 |
 
 The max age must stay at least the half-life. The minimum reviews for points can never
 go below 2.
@@ -151,7 +235,7 @@ Selecting a row opens that member's panel:
 
 - the overall rating, with a **New** badge while the captain has fewer released
   reviews than the org's "Reviews to be ranked";
-- "No released ratings yet" until a review window closes with enough reviews;
+- "No released ratings yet" until an event's results are released;
 - **Points all time** and **Points this month**;
 - one bar per trait with a released rating; a trait with no released rating says
   **Not released** and draws no bar;
@@ -162,33 +246,34 @@ Selecting a row opens that member's panel:
 Which events are listed depends on who is looking:
 
 - a captain viewing their own panel sees released events only;
-- an org admin viewing another captain also sees events still inside their window
-  or without the minimum number of reviews, marked **Not released**. For an admin
-  the headline rating, review count and trait bars include those unreleased
-  reviews; the panel labels the count "(includes unreleased)" and says the figures
-  are visible to admins only.
+- a moderator viewing another captain also sees events still inside their window,
+  without the minimum number of reviews or waiting for release, marked **Not
+  released**. For a moderator the headline rating, review count and trait bars
+  include those unreleased reviews; the panel labels the count "(includes
+  unreleased)" and says the figures are visible to moderators only. A moderator
+  viewing their own panel gets the captain's view.
 
 The points totals count captaining, placement and draft points from every event,
-including events that are still in their review window or did not get enough
-reviews. A captain's own list leaves those events out, so it does not add up to the
-totals; the panel says so under the totals.
+including events that are still in their review window, did not get enough reviews
+or are waiting for release; captain rating points count only once released. A
+captain's own list leaves those events out, so it does not add up to the totals; the
+panel says so under the totals.
 
 Who can open which panel:
 
 - every member can open their own;
-- org admins can open anyone's;
+- moderators can open anyone's;
 - other members can open other captains only when the leaderboard is public.
 
-Any row on a visible board can be clicked; when the backend refuses the panel (for
-example, org staff who are not admins on a private board) it shows "Only org admins
-can see other captains' details."
+Any row on a visible board can be clicked; when the backend refuses the panel it
+shows "Only org staff can see other captains' details."
 
 A captain's own panel shows aggregates only: their rating, per-trait averages for
 released events with at least 3 reviews, and their points. It never shows who rated
 them or any single review. A note at the top says who else can see it: only the
-captain and org admins on a private board, or, when the leaderboard is public, every
-member for the rating and points (the per-event detail stays with the captain and
-admins).
+captain and moderators on a private board, or, when the leaderboard is public,
+every member for the rating and points (the per-event detail stays with the captain
+and moderators).
 
 ### Rate your captain
 
@@ -211,16 +296,26 @@ after a reopen, or removed by an organizer. It never shows anyone else's review.
 
 ### Moderation on the event page
 
-Org admins see a **Captain reviews** section on the event page's Details tab for
+Moderators see a **Captain reviews** section on the event page's Details tab for
 any event with captain snapshots, including an event reopened after its reviews were
-voided. For each captain it shows whether the rating is released and a table of the
-reviews with the rater, the scores and the status. If the reviews fail to load, the
-section says so instead of disappearing.
+voided. For each captain it shows a release badge (**Released**, **Pending release**,
+**Window open**, **Not enough reviews** or **Voided**), the live review count against
+the minimum, and a table of the reviews with the rater, the scores and the status. A
+pending captain shows its auto-release time when a fallback is set; a released one
+shows who released it and when. If the reviews fail to load, the section says so
+instead of disappearing.
+
+When the org requires staff release, **Release all pending (n)** releases every
+pending captain of the event except the moderator's own, and **Release** on a captain
+releases only that one. Both ask for confirmation, listing the captains, because a
+release cannot be undone. A refusal is shown as a toast.
 **Void** asks for a reason (1 to 500 characters) and marks the review "Voided by
-staff" with the reason under the rater; **Restore** puts it back. On teams the admin
-captained, the section shows only the released aggregate and the note "Another admin
-has to moderate its reviews", with no reviews and no actions. A review the admin
-wrote as a teammate shows "Your review" in place of **Void** and **Restore**.
+staff" with the reason under the rater; **Restore** puts it back. On teams the
+moderator captained, the section shows only a **Released** or **Hidden** badge, the
+released aggregate and the note "You captained this team. Another org moderator, or
+site staff, has to release it. Your results show here once released.", with no
+reviews, counts or actions. A review the moderator wrote as a teammate shows "Your
+review" in place of **Void** and **Restore**.
 
 ### Settings
 
@@ -231,6 +326,12 @@ Org admins edit Leadership under **Settings → Leadership**:
 - the captain rating maximum and the points per kind (captained, placements, draft
   completed). Each field shows a **Default** badge and a reset button that restores
   the default;
+- **Release**: **Require staff release** and **Auto-release after (hours)** (empty for
+  no fallback; disabled while staff release is off). The screen warns when a saved
+  "on" is being turned off ("Turning this off releases every result that is
+  waiting.") and when staff release is on with no fallback, naming the sole-moderator
+  case. A save refused with `would_release_own_results` shows the reason under the
+  group instead of a toast;
 - the trait list: add a trait, rename it, move it up or down, and switch it active or
   inactive. At least one trait stays active, and at most 8 can be. **Delete** asks
   for confirmation on a saved trait; a trait added since the last save is simply
@@ -253,18 +354,41 @@ All endpoints live under `api/organizations/<org_id>/leadership/` and answer
 | `GET reviews/mine/` | member | Your own reviews in this org, open and closed windows, with `void_kind`; no aggregates |
 | `PUT events/<event_id>/captains/<org_user_id>/review/` | rater | Submit or replace your review: `{"scores": {"<trait>": 1-5}}` |
 | `DELETE events/<event_id>/captains/<org_user_id>/review/` | rater | Withdraw your review |
-| `GET members/<org_user_id>/` | self, admin; members when public | Rating summary; history for self and admins |
-| `GET events/<event_id>/reviews/` | admin | Every review with its rater, except reviews of yourself |
-| `POST reviews/<pk>/void/` | admin | Void a review: `{"reason": "..."}` |
-| `POST reviews/<pk>/unvoid/` | admin | Restore a staff-voided review (no body) |
-| `GET traits/`, `PUT traits/` | member / admin | List or upsert traits |
+| `GET members/<org_user_id>/` | self, moderator; members when public | Rating summary; history for self and moderators. Unreleased events only for a moderator viewing someone else |
+| `GET events/<event_id>/reviews/` | moderator | Every review with its rater and the release fields below, except reviews of yourself |
+| `POST events/<event_id>/release/` | moderator | Release results: `{"captains": [org_user_id, ...]}` (optional, 1–64 ids) or `{}` for every pending captain |
+| `POST reviews/<pk>/void/` | moderator | Void a review: `{"reason": "..."}` |
+| `POST reviews/<pk>/unvoid/` | moderator | Restore a staff-voided review (no body) |
+| `GET traits/`, `PUT traits/` | member or moderator / admin | List or upsert traits |
 | `DELETE traits/<key>/` | admin | `409 trait_in_use` once scored |
-| `GET/PATCH settings/` | admin | Every setting plus `defaults`, `ranges` and `points` (one entry per fixed kind). PATCH takes any subset of the settings and `points: {"<kind>": int or null}` (`null` restores the default); unknown keys and out-of-range values are `400` |
+| `GET/PATCH settings/` | admin | Every setting plus `defaults`, `ranges`, `points` (one entry per fixed kind) and `moderator_count`. PATCH takes any subset of the settings and `points: {"<kind>": int or null}` (`null` restores the default); unknown keys and out-of-range values are `400` |
+
+**Who**: *moderator* is the org owner, an org admin, org staff or site staff
+(`has_org_staff_access`); *admin* is the owner, an org admin or site staff
+(`has_org_admin_access`).
+
+The moderation response carries `require_staff_release` and, per captain,
+`release_state` (`voided`, `open`, `short`, `pending` or `released`), `released_at`,
+`released_by` (`{pk, username}`, or `null` for auto-release and settings stamps),
+`auto_release_at` (only on a pending captain with a fallback set), `live_reviews`,
+`release_floor` and `can_release` (only when pending). On your own captain entry the
+state is `released` or `hidden`, the counts, floor and auto-release time are `null`,
+`can_release` is false and `reviews` is `null`.
+
+A release answers `200 {"released": [org_user_id, ...], "skipped": [{"org_user_id",
+"code"}]}`. A list of captains is all or nothing: the first refusal in the order own,
+voided, window open, too few reviews, already released is returned and nothing is
+released. Without a list, those captains are skipped with the codes `own_snapshot`,
+`voided`, `window_open`, `not_enough_reviews` or `already_released`.
 
 Refusals carry a `code`: `review_window_closed` (409), `snapshot_voided` (409, the event
 was reopened or cancelled), `not_in_pool` (403), `review_moderated` (403),
-`cannot_moderate_own_reviews` (403), `invalid_scores` (400), `reason_required` (400),
-`not_moderated` (409, restoring a review staff did not void), `trait_in_use` (409) and
+`invalid_scores` (400), `reason_required` (400),
+`not_moderated` (409, restoring a review staff did not void), `trait_in_use` (409),
+`not_permitted` (403, not a moderator), `cannot_release_own_reviews` (403),
+`release_not_required` (409, the org does not require staff release),
+`already_released` (409), `window_open` (409), `not_enough_reviews` (409),
+`nothing_to_release` (409), `would_release_own_results` (409, settings) and
 `not_found` (404). Any id from another organization is `404`, for admins too. Review
 submits and withdrawals are limited to 30 a minute per user.
 
@@ -279,3 +403,9 @@ viewer's membership.
 Leadership logs with `system="org", subsystem="leadership"`. Rater ids appear only at
 debug level (`captain_review_rater`); info lines carry the review, snapshot and event
 ids.
+
+A release logs `leadership_results_released` after commit with `org_id`, `event_id`,
+`actor_id`, `captain_org_user_ids` and `count`, and writes an organization log entry
+`release_captain_reviews` with the event and captains. `leadership_settings_updated`
+carries `release_stamped` and `release_unlocked` when a release-related setting
+changed.

@@ -137,6 +137,7 @@ await visitAndWait(page, '/organizations/3/');  // Fragile!
 | Tournament | 900-906 | Tournament discovery (live, future, past and stale rows; 2099 / 2020 dates). 906 belongs to org 32 and its source event "Discovery Open Signups Event" (keyed by name, pk auto-assigned) is SIGNUPS_OPEN |
 | Org / League | 50 (steam=17944) | Per-game org MMR ("Game MMR Org" / "Game MMR League"). Created by the last step of `populate_all` |
 | Users | 8000-8007 | Per-game org MMR: 8000-8004 read-only display, 8005 owned by `04-game-org-mmr` (b), 8006 by (a) (edit user), 8007 approve user (Deadlock rank "Phantom 4 (e2e)") |
+| Tournament | 950 | Discord Activity bracket ("Activity Bracket Test", DTX League, match ids 9000000601+). Created by the last `populate_all` step; `create_dyn_tournaments` skips it (`OWN_STEP_CONFIG_PKS`) |
 | Org / League | by name | dota_lobby: "Lobby Test Org" / "Lobby Test League" (steam=17940, the simulator's bots administer it). Created after every fixed-pk step in `populate_all` except tournament discovery, which runs last; pks auto-assigned |
 
 When adding new features, pick the next available 1000-increment PK range.

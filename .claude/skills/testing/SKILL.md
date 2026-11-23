@@ -33,9 +33,9 @@ See [references/feature-isolation.md](references/feature-isolation.md) for the f
 
 ```bash
 # Backend (Docker; test::run passes --entrypoint "" to bypass daphne)
-just test::run 'python manage.py test app.tests.test_csv_import -v 2'
+just test::run 'python manage.py test tournament.tests.test_csv_import -v 2'
 # Same thing through the slot-aware compose wrapper (never raw docker compose)
-just test::compose run --rm --entrypoint "" backend python manage.py test app.tests.test_csv_import -v 2
+just test::compose run --rm --entrypoint "" backend python manage.py test tournament.tests.test_csv_import -v 2
 # Whole backend suite, exactly what CI runs (no labels = discover all of backend/)
 just test::run 'python manage.py test -v 2'
 # CI discovers new modules automatically; write TestCase/SimpleTestCase classes,
@@ -119,6 +119,7 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | League | Discovery Home / Away / Open League | 30 / 31 / 32 | 17950 / 17951 / 17952 |
 | Tournament | Discovery tournaments (906 has open signups, org 32) | 900-906 | - |
 | Org / League | Game MMR Org / Game MMR League (per-game org MMR) | 50 | 17944 |
+| Tournament | Activity Bracket Test (Discord Activity bracket, DTX League, 2 of 6 games done) | 950 | - |
 
 | User | PK | Role | Login fixture |
 |------|----|------|--------------|

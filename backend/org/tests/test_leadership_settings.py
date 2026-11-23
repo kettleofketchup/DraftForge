@@ -82,6 +82,57 @@ class LeadershipSettingsServiceTest(LeadershipTestCase):
             OrgLog.objects.filter(action="update_leadership_settings").exists()
         )
 
+    def test_defaults_include_release_gate(self) -> None:
+        row = get_leadership_settings(self.org)
+        self.assertIs(row.require_staff_release, False)
+        self.assertIsNone(row.auto_release_after_hours)
+
+    def test_validate_accepts_null_hours(self) -> None:
+        update_leadership_settings(
+            self.org, actor=self.admin, changes={"auto_release_after_hours": None}
+        )
+
+    def test_validate_accepts_valid_release_values(self) -> None:
+        for hours in (1, 720):
+            with self.subTest(hours=hours):
+                update_leadership_settings(
+                    self.org,
+                    actor=self.admin,
+                    changes={
+                        "require_staff_release": True,
+                        "auto_release_after_hours": hours,
+                    },
+                )
+                row = OrgLeadershipSettings.objects.nocache().get(organization=self.org)
+                self.assertIs(row.require_staff_release, True)
+                self.assertEqual(row.auto_release_after_hours, hours)
+
+    def test_validate_rejects_out_of_range_hours(self) -> None:
+        for hours in (0, 721):
+            with (
+                self.subTest(hours=hours),
+                self.assertRaisesRegex(ValueError, "between 1 and 720"),
+            ):
+                update_leadership_settings(
+                    self.org,
+                    actor=self.admin,
+                    changes={"auto_release_after_hours": hours},
+                )
+
+    def test_validate_rejects_null_on_non_nullable(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot be null"):
+            update_leadership_settings(
+                self.org, actor=self.admin, changes={"review_window_hours": None}
+            )
+
+    def test_validate_rejects_non_bool_gate(self) -> None:
+        for changes in ({"require_staff_release": 1}, {"leaderboard_public": "yes"}):
+            with (
+                self.subTest(changes=changes),
+                self.assertRaisesRegex(ValueError, "must be true or false"),
+            ):
+                update_leadership_settings(self.org, actor=self.admin, changes=changes)
+
     def test_max_age_below_half_life_rejected(self) -> None:
         with self.assertRaises(ValueError):
             update_leadership_settings(
