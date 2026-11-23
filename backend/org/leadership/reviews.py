@@ -280,6 +280,7 @@ def _lock_review(
     snapshot_id = (
         CaptainReview.objects.nocache()
         .filter(pk=review_id, event_captain__organization=org)
+        .exclude(event_captain__captain__user_id=actor.pk)
         .values_list("event_captain_id", flat=True)
         .first()
     )
@@ -291,12 +292,6 @@ def _lock_review(
         .select_related("event", "captain")
         .get(pk=snapshot_id)
     )
-    if ec.captain.user_id == actor.pk:
-        raise ReviewRefused(
-            "cannot_moderate_own_reviews",
-            403,
-            "Another moderator has to moderate reviews of you.",
-        )
     review = CaptainReview.objects.nocache().get(pk=review_id)
     return review, ec
 

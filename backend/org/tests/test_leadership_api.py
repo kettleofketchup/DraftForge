@@ -589,8 +589,8 @@ class ModerationApiTest(ApiCase):
                 {"reason": "mine"},
                 format="json",
             )
-            self.assertEqual(res.status_code, 403)
-            self.assertEqual(res.json()["code"], "cannot_moderate_own_reviews")
+            self.assertEqual(res.status_code, 404)
+            self.assertNotIn("code", res.json())
 
     @override_settings(CACHEOPS_ENABLED=False)
     def test_event_reviews_budget_independent_of_review_count(self) -> None:
@@ -1269,31 +1269,29 @@ class SelfModerationTest(GatedApiCase):
                 self.assertIsNone(own["live_reviews"])
                 self.assertFalse(own["can_release"])
 
-    def test_own_void_unvoid_403(self) -> None:
+    def test_own_void_unvoid_matches_not_found(self) -> None:
         review = self.own_reviews[0]
+        missing = max(r.pk for r in self.own_reviews) + 1000
         for role in SELF_ROLES:
             with self.as_role(role):
                 for action in ("void", "unvoid"):
-                    res = self.client_for(self.cap_a).post(
-                        self.url(f"reviews/{review.pk}/{action}/"),
-                        {"reason": "mine"},
-                        format="json",
-                    )
-                    self.assertEqual(res.status_code, 403, res.content)
-                    self.assertEqual(res.json()["code"], "cannot_moderate_own_reviews")
+                    with self.subTest(role=role, action=action):
+                        client = self.client_for(self.cap_a)
+                        own = client.post(
+                            self.url(f"reviews/{review.pk}/{action}/"),
+                            {"reason": "mine"},
+                            format="json",
+                        )
+                        absent = client.post(
+                            self.url(f"reviews/{missing}/{action}/"),
+                            {"reason": "mine"},
+                            format="json",
+                        )
+                        self.assertEqual(absent.status_code, 404, absent.content)
+                        self.assertEqual(own.status_code, 404, own.content)
+                        self.assertEqual(own.json(), absent.json())
         review.refresh_from_db()
         self.assertIsNone(review.voided_at)
-
-    def test_nonexistent_review_404(self) -> None:
-        missing = max(r.pk for r in self.own_reviews) + 1000
-        with self.as_role("admin"):
-            for action in ("void", "unvoid"):
-                res = self.client_for(self.cap_a).post(
-                    self.url(f"reviews/{missing}/{action}/"),
-                    {"reason": "x"},
-                    format="json",
-                )
-                self.assertEqual(res.status_code, 404, res.content)
 
     def test_own_release_explicit_403(self) -> None:
         for role in SELF_ROLES:

@@ -18,8 +18,6 @@ const REFUSALS: Record<string, string> = {
     'Reviews for this event were closed because the event was reopened or cancelled.',
   not_in_pool: "You can't rate this captain.",
   review_moderated: "An organizer removed your review, so it can't be changed.",
-  cannot_moderate_own_reviews:
-    'You captained this team. Another moderator has to moderate its reviews.',
   invalid_scores: 'Score every trait from 1 to 5.',
   reason_required: 'Give a reason.',
   not_moderated: 'Only a review removed by an organizer can be restored.',

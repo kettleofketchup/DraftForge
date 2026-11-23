@@ -131,9 +131,10 @@ voided (including a review voided by staff and then by a reopen), goes back to
 review is restored only while its rater is still in the captain's rater pool
 (`409 not_in_pool` otherwise). When a merge leaves two reviews by the same person, a
 staff-voided one always wins. Nobody moderates reviews of themselves, whatever their
-role: voiding, restoring or releasing on one's own captain entry is refused
-(`403 cannot_moderate_own_reviews` or `cannot_release_own_reviews`) and another
-moderator has to act. Every void and restore is written to the organization log with
+role, and another moderator has to act. Voiding or restoring a review of oneself
+returns the same `404` as a review that does not exist, so its existence is not
+revealed; releasing one's own captain entry is refused with
+`403 cannot_release_own_reviews`. Every void and restore is written to the organization log with
 the points before and after, and every release with the captains it released.
 
 ## Release gate
@@ -382,7 +383,7 @@ released. Without a list, those captains are skipped with the codes `own_snapsho
 
 Refusals carry a `code`: `review_window_closed` (409), `snapshot_voided` (409, the event
 was reopened or cancelled), `not_in_pool` (403), `review_moderated` (403),
-`cannot_moderate_own_reviews` (403), `invalid_scores` (400), `reason_required` (400),
+`invalid_scores` (400), `reason_required` (400),
 `not_moderated` (409, restoring a review staff did not void), `trait_in_use` (409),
 `not_permitted` (403, not a moderator), `cannot_release_own_reviews` (403),
 `release_not_required` (409, the org does not require staff release),

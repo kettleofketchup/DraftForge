@@ -335,7 +335,7 @@ class ModerationTest(ReviewTestCase):
         void_event(self.event, now=tz.now())
         self.refused("snapshot_voided", lambda: self.unvoid(review))
 
-    def test_admin_cannot_moderate_own_reviews(self) -> None:
+    def test_admin_own_reviews_look_missing(self) -> None:
         event, tournament = self.make_event("Admin Cup")
         mate = self.make_user("ld_admin_mate")
         self.make_team("Admins", self.admin, [mate], tournament=tournament)
@@ -343,12 +343,12 @@ class ModerationTest(ReviewTestCase):
         self.admit(mate, event)
         self.run_snapshot(event)
         review = self.review(mate, self.admin, 5, event=event)
-        exc = self.refused("cannot_moderate_own_reviews", lambda: self.void(review))
-        self.assertEqual(exc.status, 403)
+        exc = self.refused("not_found", lambda: self.void(review))
+        self.assertEqual(exc.status, 404)
         other = self.make_user("ld_admin_two")
         self.org.admins.add(other)
         self.void(review, other)
-        self.refused("cannot_moderate_own_reviews", lambda: self.unvoid(review))
+        self.refused("not_found", lambda: self.unvoid(review))
         self.unvoid(review, other)
 
     def test_org_staff_can_void_others(self) -> None:
@@ -383,20 +383,13 @@ class ModerationTest(ReviewTestCase):
         for name, captain in captains.items():
             with self.subTest(name):
                 review = self.review(mates[name], captain, 5, event=event)
-                exc = self.refused(
-                    "cannot_moderate_own_reviews", lambda: self.void(review, captain)
-                )
-                self.assertEqual(exc.status, 403)
-                self.assertEqual(
-                    exc.detail, "Another moderator has to moderate reviews of you."
-                )
+                exc = self.refused("not_found", lambda: self.void(review, captain))
+                self.assertEqual(exc.status, 404)
+                self.assertEqual(exc.detail, "Review not found.")
                 CaptainReview.objects.filter(pk=review.pk).update(
                     voided_at=tz.now(), void_kind="moderated"
                 )
-                self.refused(
-                    "cannot_moderate_own_reviews",
-                    lambda: self.unvoid(review, captain),
-                )
+                self.refused("not_found", lambda: self.unvoid(review, captain))
 
     def test_non_admin_cannot_moderate(self) -> None:
         review = self.review(self.mates_a[0], self.cap_a, 5)

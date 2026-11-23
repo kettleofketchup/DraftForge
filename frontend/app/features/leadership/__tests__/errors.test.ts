@@ -50,12 +50,6 @@ describe('refusalMessage', () => {
     );
   });
 
-  it('words own-review moderation for any moderator', () => {
-    expect(refusalMessage(refused(403, 'cannot_moderate_own_reviews'))).toBe(
-      'You captained this team. Another moderator has to moderate its reviews.',
-    );
-  });
-
   it('words every release refusal', () => {
     const cases: [number, string, string][] = [
       [

@@ -119,9 +119,7 @@ describe('EventLeadershipSection', () => {
   });
 
   it('keeps the dialog open with the refusal on a failed void', async () => {
-    vi.mocked(voidReview).mockRejectedValue(
-      refusal(409, 'cannot_moderate_own_reviews'),
-    );
+    vi.mocked(voidReview).mockRejectedValue(refusal(409, 'snapshot_voided'));
     renderSection();
     fireEvent.click(await screen.findByTestId('leadership-void-31'));
     fireEvent.change(screen.getByTestId('leadership-void-reason'), {
@@ -129,7 +127,7 @@ describe('EventLeadershipSection', () => {
     });
     fireEvent.click(screen.getByTestId('leadership-void-confirm'));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'You captained this team. Another moderator has to moderate its reviews.',
+      'Reviews for this event were closed because the event was reopened or cancelled.',
     );
   });
 

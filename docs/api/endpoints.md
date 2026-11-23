@@ -732,13 +732,14 @@ All under `/api/organizations/{id}/leadership/`, all gated on Leadership. Guide 
 full endpoint table: [Organization Leadership](../features/organization-leadership.md#api).
 Every lookup is scoped to the URL's org (`404` otherwise). Refusals carry
 `{code, detail}`: `review_window_closed` (409), `snapshot_voided` (409), `not_in_pool` (403), `review_moderated`
-(403), `cannot_moderate_own_reviews` (403), `invalid_scores` (400), `reason_required`
+(403), `invalid_scores` (400), `reason_required`
 (400), `not_moderated` (409), `trait_in_use` (409), `not_permitted` (403),
 `cannot_release_own_reviews` (403), `release_not_required` (409), `already_released`
 (409), `window_open` (409), `not_enough_reviews` (409), `nothing_to_release` (409),
 `would_release_own_results` (409, settings PATCH), `not_found` (404). Event reviews, void, restore and
 release are open to org staff and above (`has_org_staff_access`); settings and trait
-writes stay with org admins. Nobody moderates or releases their own captain entry.
+writes stay with org admins. Nobody moderates or releases their own captain entry:
+void and restore on a review of yourself return the same `404` as a missing review.
 
 Raters read their own reviews, open and closed, from `reviews/mine/`. While the feature
 is unlocked, `GET /api/events/{id}/` adds `can_review_captains` and
