@@ -35,7 +35,7 @@ const tournament = (o?: ReturnType<typeof options>) =>
 
 const seed = (staff: boolean, o?: ReturnType<typeof options>) =>
   useUserStore.setState({
-    isStaff: () => staff,
+    currentUser: { pk: 1, is_staff: staff } as never,
     tournament: tournament(o),
     draft: undefined as never,
   });

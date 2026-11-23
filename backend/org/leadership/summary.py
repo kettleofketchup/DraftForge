@@ -47,8 +47,10 @@ def member_payload(
     now: datetime,
     detail: bool,
     staff: bool,
+    viewer_user_id: int | None,
     period_points: bool = False,
 ) -> dict[str, Any]:
+    staff = staff and org_user.user_id != viewer_user_id
     org_id = org_user.organization_id
     settings = get_leadership_settings(org_id)
     traits = effective_traits(org_id)
@@ -60,7 +62,9 @@ def member_payload(
         include_unreleased=staff,
         captain_ids=[org_user.pk],
     ).get(org_user.pk)
-    points = member_points(org_user, now=now, include_unreleased=staff)
+    points = member_points(
+        org_user, now=now, settings=settings, include_unreleased=staff
+    )
     payload: dict[str, Any] = {
         "member": member_summary(org_user),
         **rating_data(rating, traits),

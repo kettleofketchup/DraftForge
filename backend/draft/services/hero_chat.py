@@ -15,7 +15,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from app.models import CustomUser, Team
+from app.models import CustomUser
 from app.redis_client import get_redis_client
 from app.redis_keys import namespaced_key
 from draft.models import (
@@ -27,6 +27,7 @@ from draft.models import (
 )
 from draft.services.heroes import get_available_heroes
 from telemetry.logging import get_logger
+from tournament.models import Team
 
 log = get_logger(__name__)
 

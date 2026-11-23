@@ -11,13 +11,7 @@ from django.db import transaction
 from django.db.models import Q
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import (
-    CustomUser,
-    Team,
-    TeamLog,
-    TeamLogAction,
-    TeamLogVia,
-)
+from app.models import CustomUser
 from draft.models import (
     Draft,
     DraftRound,
@@ -41,6 +35,8 @@ from league.models import LeagueUser
 from org.models import OrgSettings, OrgUser
 from org.settings_service import get_org_settings
 from telemetry.logging import get_logger
+from tournament.models import Team, TeamLog
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.services.team_audit import (
     log_snapshot_fields,
     roster_snapshot,

@@ -152,9 +152,15 @@ class SearchUsersTest(TestCase):
         )
         self.assertEqual(resp.status_code, 403)
 
-    def test_short_query_returns_400(self):
-        resp = self.client.get("/api/users/search/", {"q": "ab"})
+    def test_short_query_returns_400(self) -> None:
+        resp = self.client.get("/api/users/search/", {"q": "a"})
         self.assertEqual(resp.status_code, 400)
+
+    def test_two_char_query_finds_user(self) -> None:
+        CustomUser.objects.create_user(username="qz", password="test")
+        resp = self.client.get("/api/users/search/", {"q": "qz"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("qz", [u["username"] for u in resp.data])
 
     def test_max_20_results(self):
         for i in range(25):

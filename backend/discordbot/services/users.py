@@ -222,9 +222,9 @@ def search_discord_members(request: Request) -> JsonResponse:
     if not org_id:
         return JsonResponse({"error": "org_id is required"}, status=400)
 
-    if len(query) < 3:
+    if len(query) < 2:
         return JsonResponse(
-            {"error": "Search query must be at least 3 characters"}, status=400
+            {"error": "Search query must be at least 2 characters"}, status=400
         )
 
     try:

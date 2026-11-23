@@ -1,1 +1,1 @@
-0114_copy_profile_friend_ids
+0115_move_tournament_models_to_tournament
