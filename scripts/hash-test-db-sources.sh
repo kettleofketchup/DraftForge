@@ -45,6 +45,7 @@ populate_imports=(
     backend/tests/dota_lobby_sim.py
     backend/tests/helpers/steam_match.py
     backend/tests/test_auth.py
+    backend/tournament/choices.py
 )
 
 files=$({
