@@ -35,6 +35,7 @@ class TrackBase(abc.ABC):
     metrics: ClassVar[tuple[Metric, ...]]
     reopen_reset_fields: ClassVar[tuple[str, ...]] = ()
     output_keys: ClassVar[Mapping[HookName, OutputKeys]] = {}
+    moderated: ClassVar[bool] = False
 
     def on_event_closed(
         self,
@@ -145,4 +146,5 @@ class TrackBase(abc.ABC):
             can_view_own=access.can_view_own,
             board_open=access.board_open,
             can_manage=roles.is_admin,
+            can_moderate=self.moderated and roles.is_staff,
         )

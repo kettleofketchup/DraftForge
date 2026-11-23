@@ -90,6 +90,10 @@ The response carries `created_count` plus a message that distinguishes "no new e
 
 While a series is paused, realign is skipped entirely rather than run against a schedule that generates nothing — otherwise it would simply delete the series' remaining events.
 
+### Deleting a Series
+
+Deleting a series (`events.services.teardown_event_repeater`) also deletes its `upcoming`, `signups_open` and `roll_call` events, with their Discord scheduled events and tournaments. Its `in_progress`, `completed` and `cancelled` events are kept and lose their link to the series.
+
 ### Discord Integration
 
 | Feature | Description |

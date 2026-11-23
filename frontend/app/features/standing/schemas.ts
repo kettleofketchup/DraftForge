@@ -25,6 +25,7 @@ export const TrackInfoSchema = z.object({
   can_view_own: z.boolean(),
   board_open: z.boolean(),
   can_manage: z.boolean(),
+  can_moderate: z.boolean(),
 });
 export type TrackInfo = z.infer<typeof TrackInfoSchema>;
 

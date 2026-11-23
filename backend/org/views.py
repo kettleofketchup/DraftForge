@@ -57,11 +57,9 @@ class ClaimRequestViewSet(
         """Filter to requests for organizations the user is staff of."""
         user = self.request.user
 
-        # Site admins can see all
         if user.is_superuser:
             return ProfileClaimRequest.objects.all()
 
-        # Org admins + staff see requests for their organizations
         admin_org_ids = set(user.admin_organizations.values_list("pk", flat=True))
         staff_org_ids = set(user.staff_organizations.values_list("pk", flat=True))
         org_ids = admin_org_ids | staff_org_ids
@@ -71,12 +69,10 @@ class ClaimRequestViewSet(
         """List claim requests, optionally filtered by status."""
         queryset = self.get_queryset()
 
-        # Filter by status if provided
         status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
 
-        # Filter by organization if provided
         org_id = request.query_params.get("organization")
         if org_id:
             queryset = queryset.filter(organization_id=org_id)
@@ -103,32 +99,30 @@ class ClaimRequestViewSet(
         claimer = claim_request.claimer
         target_user = claim_request.target_user
 
-        # Verify target still meets requirements
-        if target_user.discordId:
-            claim_request.status = ProfileClaimRequest.Status.REJECTED
-            claim_request.rejection_reason = (
-                "Target profile now has a Discord account linked"
+        if target_user is None or target_user.discordId:
+            reason = (
+                "Target profile no longer exists"
+                if target_user is None
+                else "Target profile now has a Discord account linked"
             )
-            claim_request.reviewed_by = request.user
-            claim_request.reviewed_at = timezone.now()
-            claim_request.save()
-            return Response(
-                {"error": "Target profile now has a Discord account linked"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            if not self._mark_reviewed(
+                claim_request,
+                ProfileClaimRequest.Status.REJECTED,
+                request.user,
+                rejection_reason=reason,
+            ):
+                return self._already_reviewed()
+            return Response({"error": reason}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
-            # Store target info before merge (target_user will be deleted)
+            if not self._mark_reviewed(
+                claim_request, ProfileClaimRequest.Status.APPROVED, request.user
+            ):
+                return self._already_reviewed()
+
             target_pk = target_user.pk
             target_steamid = target_user.steamid
 
-            # Update the claim request BEFORE merge (target_user will be deleted by merge)
-            claim_request.status = ProfileClaimRequest.Status.APPROVED
-            claim_request.reviewed_by = request.user
-            claim_request.reviewed_at = timezone.now()
-            claim_request.save()
-
-            # Perform the merge (this deletes target_user)
             self._merge_profiles(
                 claimer,
                 target_user,
@@ -140,15 +134,14 @@ class ClaimRequestViewSet(
                 ),
             )
 
-            # Log the action
             OrgLog.objects.create(
                 organization=claim_request.organization,
                 actor=request.user,
                 action="approve_claim",
                 target_user=claimer,
                 details={
-                    "merged_profile_id": target_user.pk,
-                    "merged_steamid": target_user.steamid,
+                    "merged_profile_id": target_pk,
+                    "merged_steamid": target_steamid,
                 },
             )
 
@@ -179,20 +172,21 @@ class ClaimRequestViewSet(
 
         reason = request.data.get("reason", "")
 
-        claim_request.status = ProfileClaimRequest.Status.REJECTED
-        claim_request.rejection_reason = reason
-        claim_request.reviewed_by = request.user
-        claim_request.reviewed_at = timezone.now()
-        claim_request.save()
+        if not self._mark_reviewed(
+            claim_request,
+            ProfileClaimRequest.Status.REJECTED,
+            request.user,
+            rejection_reason=reason,
+        ):
+            return self._already_reviewed()
 
-        # Log the action
         OrgLog.objects.create(
             organization=claim_request.organization,
             actor=request.user,
             action="reject_claim",
             target_user=claim_request.claimer,
             details={
-                "target_profile_id": claim_request.target_user.pk,
+                "target_profile_id": claim_request.target_user_id,
                 "reason": reason,
             },
         )
@@ -200,6 +194,36 @@ class ClaimRequestViewSet(
         return Response(
             {"message": "Claim request rejected."},
             status=status.HTTP_200_OK,
+        )
+
+    @staticmethod
+    def _mark_reviewed(
+        claim_request: ProfileClaimRequest,
+        new_status: ProfileClaimRequest.Status,
+        reviewer: CustomUser,
+        rejection_reason: str | None = None,
+    ) -> bool:
+        fields: dict[str, Any] = {
+            "status": new_status,
+            "reviewed_by": reviewer,
+            "reviewed_at": timezone.now(),
+        }
+        if rejection_reason is not None:
+            fields["rejection_reason"] = rejection_reason
+        updated = ProfileClaimRequest.objects.filter(
+            pk=claim_request.pk, status=ProfileClaimRequest.Status.PENDING
+        ).update(**fields)
+        if not updated:
+            return False
+        for name, value in fields.items():
+            setattr(claim_request, name, value)
+        return True
+
+    @staticmethod
+    def _already_reviewed() -> Response:
+        return Response(
+            {"error": "Request was already reviewed"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     def _merge_profiles(
@@ -215,13 +239,11 @@ class ClaimRequestViewSet(
         """
         stub_steam_id = target_user.steam_account_id
 
-        # Copy other fields from target if claimer doesn't have them
         if target_user.nickname and not claimer.nickname:
             claimer.nickname = target_user.nickname
         if target_user.avatar and not claimer.avatar:
             claimer.avatar = target_user.avatar
 
-        # Copy positions if target has them and claimer doesn't
         if target_user.positions and not claimer.positions:
             positions_data = {
                 "carry": target_user.positions.carry,
@@ -309,8 +331,7 @@ class ClaimRequestViewSet(
         # Draft rounds captained
         DraftRound.objects.filter(captain=target_user).update(captain=claimer)
 
-        # HeroDraft events - HeroDraftEvent doesn't have actor, events are tied to draft_team
-        # Skip this - events are associated with teams, not users directly
+        # HeroDraftEvent is tied to draft_team, not a user; nothing to move
 
         # League ratings
         for rating in LeagueRating.objects.filter(player=target_user):
@@ -337,7 +358,6 @@ class ClaimRequestViewSet(
                 user=claimer, league_id=stats.league_id
             ).first()
             if existing:
-                # Merge stats
                 existing.games_played += stats.games_played
                 existing.wins += stats.wins
                 existing.losses += stats.losses
@@ -368,7 +388,7 @@ class ClaimRequestViewSet(
             org.promoters.remove(target_user)
             invalidate_after_commit(org)
 
-        # Clear steam_account_id from target before saving claimer (to avoid UNIQUE constraint)
+        # Free the unique steam_account_id before claimer.save() takes it
         target_user.steam_account_id = None
         target_user.steamid = None
         target_user.save(update_fields=["steam_account_id", "steamid"])
@@ -379,7 +399,6 @@ class ClaimRequestViewSet(
             else None
         )
 
-        # Save claimer and delete target
         claimer.save()
         if verify_grant is not None:
             log_steam_verification_change(

@@ -31,7 +31,9 @@ import {
   DeleteOrganizationDangerZone,
   useOrganization,
 } from '~/components/organization';
+import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
 import { useOrgSettingsParam } from '~/components/organization/hooks/useOrgSettingsParam';
+import { orgUsersQueryKey } from '~/components/organization/hooks/useOrgUsersQuery';
 import { OrganizationHeaderTitle } from '~/components/organization/OrganizationHeaderTitle';
 import { buildOrgPageNavOptions } from '~/components/organization/orgPageNavOptions';
 import { OrgSettingsDialog } from '~/components/organization/OrgSettingsDialog';
@@ -229,15 +231,13 @@ export default function OrganizationDetailPage() {
   const { data: repeaters = [], isLoading: repeatersLoading } =
     useEventRepeaters(pk ? { organization: pk } : undefined);
 
-  // Org users from store (pk array) + cache resolution
-  const { orgUserPks, orgUsersLoading, orgUsersOrgId, getOrgUsers } =
-    useOrgStore();
-  const orgUsers = useOrgUsers(pk ?? 0);
   const currentOrg = useOrgStore((s) => s.currentOrg);
 
   const onMemberViewerChange = useCallback(() => {
-    useOrgStore.getState().clearOrgUsers();
     if (pk) {
+      // Remove, not reset: this runs before useQuery applies enabled=false, so a
+      // reset would refetch the members list as the new (possibly anonymous) viewer.
+      queryClient.removeQueries({ queryKey: orgUsersQueryKey(pk) });
       useUserCacheStore.getState().dropScoped({ orgId: pk });
       removeFeatureQueries(queryClient, pk);
     }
@@ -246,18 +246,14 @@ export default function OrganizationDetailPage() {
   const { canView: canViewMembers, settled: memberAccessSettled } =
     useMemberAccess(organization, onMemberViewerChange);
 
-  useEffect(() => {
-    if (activeTab === 'users' && pk && memberAccessSettled && canViewMembers) {
-      getOrgUsers(pk);
-    }
-  }, [
-    activeTab,
-    pk,
-    memberAccessSettled,
-    canViewMembers,
-    getOrgUsers,
-    orgUsersOrgId,
-  ]);
+  const orgUsersEnabled =
+    activeTab === 'users' && memberAccessSettled && !!canViewMembers;
+  const {
+    users: orgUsers,
+    pks: orgUserPks,
+    isLoading: orgUsersLoading,
+    isLoaded: orgUsersLoaded,
+  } = useOrgUsers(pk ?? 0, { enabled: orgUsersEnabled });
 
   useEffect(() => {
     if (memberAccessSettled && !canViewMembers && activeTab === 'users') {
@@ -306,15 +302,19 @@ export default function OrganizationDetailPage() {
     async (payload: AddMemberPayload) => {
       if (!pk) throw new Error('No organization');
       const user = await addOrgMember(pk, payload);
-      // Optimistic update: upsert into cache + append pk
       useUserCacheStore.getState().upsert(user, { orgId: pk });
-      const { orgUserPks } = useOrgStore.getState();
-      if (user.pk != null) {
-        useOrgStore.setState({ orgUserPks: [...orgUserPks, user.pk] });
+      const addedPk = user.pk;
+      if (addedPk != null) {
+        queryClient.setQueryData<number[]>(orgUsersQueryKey(pk), (old) =>
+          old && !old.includes(addedPk) ? [...old, addedPk] : old,
+        );
       }
+      void queryClient.invalidateQueries({
+        queryKey: organizationQueryKey(pk),
+      });
       return user;
     },
-    [pk],
+    [pk, queryClient],
   );
 
   const addedPkSet = useMemo(() => new Set(orgUserPks), [orgUserPks]);
@@ -335,7 +335,7 @@ export default function OrganizationDetailPage() {
   // Page nav options for mobile navbar dropdown
   const userCountDisplay = memberCountDisplay({
     entityId: pk,
-    loadedForId: orgUsersOrgId,
+    loadedForId: orgUsersEnabled && orgUsersLoaded ? pk : null,
     loading: orgUsersLoading,
     loadedCount: orgUserPks.length,
     fallbackCount: organization?.users_count,
@@ -747,9 +747,9 @@ export default function OrganizationDetailPage() {
           onOpenChange={setShowCSVImport}
           entityContext={{ orgId: pk }}
           onComplete={() => {
-            const { clearOrgUsers, getOrgUsers } = useOrgStore.getState();
-            clearOrgUsers();
-            getOrgUsers(pk!);
+            void queryClient.invalidateQueries({
+              queryKey: organizationQueryKey(pk),
+            });
           }}
         />
       )}
