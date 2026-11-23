@@ -136,6 +136,10 @@ import {
   type ConductMemberLookup,
 } from '~/features/conduct';
 import {
+  EventLeadershipBanner,
+  EventLeadershipSection,
+} from '~/features/leadership';
+import {
   invalidateConductQueries,
   removeFeatureQueries,
   useOrgFeatureAccess,
@@ -616,6 +620,8 @@ export default function EventPage() {
         )}
       </div>
 
+      <EventLeadershipBanner event={event} access={eventOrgAccess} />
+
       <div>
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           {/* Below md the PageNavBar dropdown drives tab switching. */}
@@ -651,6 +657,7 @@ export default function EventPage() {
               org={eventOrg ?? undefined}
               access={eventOrgAccess}
             />
+            <EventLeadershipSection event={event} access={eventOrgAccess} />
             <DetailsTab
               event={event}
               signedIn={!!currentUser?.pk}
@@ -851,7 +858,7 @@ function DetailsTab({
           />
           <Stat
             label="Teams"
-            value={`${event.number_of_teams} × ${event.people_per_team}`}
+            value={`${event.number_of_teams ?? 'No limit'} × ${event.people_per_team}`}
           />
           <Stat
             label="Game"

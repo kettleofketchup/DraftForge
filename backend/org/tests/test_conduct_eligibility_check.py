@@ -22,9 +22,9 @@ from events.eligibility.store import (
     refresh_org_eligibility,
     refresh_unmet_requirements,
 )
-from events.ledger import SignupActor
 from events.models import EventSignup
 from events.services import staff_add_signup
+from events.tests.actors import SYSTEM
 from org.conduct.constants import Outcome
 from org.conduct.gate import conduct_gate
 from org.feature_keys import FeatureKey
@@ -208,7 +208,7 @@ class ConductCheckTest(ConductTestCase):
     def test_staff_add_lands_in_pending_approval(self) -> None:
         self.enable(block_enabled=True)
         event = self.make_event(auto_approve=True)
-        signup = staff_add_signup(event, self.flagged(), actor=SignupActor.system())
+        signup = staff_add_signup(event, self.flagged(), actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.PENDING_APPROVAL)
         self.assertEqual(signup.unmet_requirements, [CODE])
 

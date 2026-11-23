@@ -955,7 +955,7 @@ class CloseTests(LifecycleTestCase):
         event, signups = self._setup(AUTO, 7, 10)
         demoted = signups[9]
         with self.captureOnCommitCallbacks(execute=True):
-            demote_to_waitlist(demoted)
+            demote_to_waitlist(demoted, actor=self.staff_actor)
         result = self._close(event)
         assert result.check is not None
         self.assertEqual(result.check.completion_pct, 77)
@@ -1031,8 +1031,14 @@ class PromotionTests(LifecycleTestCase):
         late_entry = self._entry(check, late)
         self.assertEqual(late_entry.state, ReadyCheckEntryState.PENDING)
         promoted = self._rows(SignupAction.PROMOTED, event)
-        self.assertEqual({r.signup_id for r in promoted}, {fill.pk, late.pk})
+        self.assertEqual(
+            sorted(r.signup_id for r in promoted), sorted([fill.pk, late.pk])
+        )
         self.assertTrue(all(r.actor_user == self.helper for r in promoted))
+        for row in promoted:
+            assert row.caused_by is not None
+            self.assertEqual(row.caused_by.action, SignupAction.DROPPED)
+            self.assertEqual(row.correlation_id, f"rc{check.pk}:close")
         asked = [
             r
             for r in self._rows(SignupAction.READY_CHECK_ASKED, event)

@@ -1,14 +1,14 @@
 import inspect
 from collections.abc import Callable
 from typing import Any
-from unittest.mock import patch
 
-from events import services
-from events.constants import ActorRole, SignupMeans, SignupStatus
+from django.db import transaction
+
+from events.constants import ActorRole, SignupAction, SignupMeans, SignupStatus
 from events.ledger import SignupActor
+from events.models import SignupLedgerEntry
 from events.services import (
     _promote_from_waitlist,
-    _promote_one,
     _staff_or_system_actor,
     approve_signup,
     cancel_signup,
@@ -18,6 +18,7 @@ from events.services import (
     staff_add_signup,
     unconfirm_signup,
 )
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 
 ACTOR_REQUIRED: list[Callable[..., Any]] = [
@@ -26,8 +27,6 @@ ACTOR_REQUIRED: list[Callable[..., Any]] = [
     staff_add_signup,
     unconfirm_signup,
     reinstate_signup,
-    _promote_from_waitlist,
-    _promote_one,
 ]
 
 
@@ -40,6 +39,13 @@ class SignupActorSignatureTests(EventTestCase):
                 assert param is not None
                 self.assertEqual(param.kind, inspect.Parameter.KEYWORD_ONLY)
                 self.assertIs(param.default, inspect.Parameter.empty)
+
+    def test_promotion_takes_required_cause_and_optional_actor(self) -> None:
+        params = inspect.signature(_promote_from_waitlist).parameters
+        self.assertEqual(params["cause"].kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertIs(params["cause"].default, inspect.Parameter.empty)
+        self.assertEqual(params["actor"].kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertIsNone(params["actor"].default)
 
 
 class StaffOrSystemActorTests(EventTestCase):
@@ -55,47 +61,49 @@ class StaffOrSystemActorTests(EventTestCase):
 
 
 class PromotionActorTests(EventTestCase):
-    def test_promotion_receives_cancel_actor(self) -> None:
+    def _promoted(self, signup_id: int) -> list[SignupLedgerEntry]:
+        return list(
+            SignupLedgerEntry.objects.filter(
+                signup_id=signup_id, action=SignupAction.PROMOTED
+            )
+        )
+
+    def test_cancel_promotion_is_one_system_row_caused_by_the_withdrawal(
+        self,
+    ) -> None:
         event = self.make_event(max_players=1)
         seated, waiting = self.make_user(), self.make_user()
-        seated_signup = process_rsvp(event, seated)
-        waiting_signup = process_rsvp(event, waiting)
+        seated_signup = process_rsvp(event, seated, actor=SYSTEM)
+        waiting_signup = process_rsvp(event, waiting, actor=SYSTEM)
         self.assertEqual(waiting_signup.status, SignupStatus.WAITLISTED)
         actor = SignupActor(user=seated, role=ActorRole.MEMBER, means=SignupMeans.WEB)
 
-        with patch.object(
-            services, "_promote_one", wraps=services._promote_one
-        ) as promote:
-            cancel_signup(seated_signup, actor=actor)
+        cancel_signup(seated_signup, actor=actor)
 
-        promote.assert_called_once()
-        self.assertEqual(promote.call_args.kwargs["actor"], actor)
         waiting_signup.refresh_from_db()
         self.assertEqual(waiting_signup.status, SignupStatus.APPROVED)
+        withdrew = SignupLedgerEntry.objects.get(
+            signup=seated_signup, action=SignupAction.WITHDREW
+        )
+        promoted = self._promoted(waiting_signup.pk)
+        self.assertEqual(len(promoted), 1)
+        self.assertEqual(promoted[0].actor_role, ActorRole.SYSTEM)
+        self.assertEqual(promoted[0].caused_by_id, withdrew.pk)
 
-    def test_promotion_without_cancel_actor_is_system(self) -> None:
-        event = self.make_event(max_players=1)
-        seated, waiting = self.make_user(), self.make_user()
-        seated_signup = process_rsvp(event, seated)
-        process_rsvp(event, waiting)
-
-        with patch.object(
-            services, "_promote_one", wraps=services._promote_one
-        ) as promote:
-            cancel_signup(seated_signup)
-
-        self.assertEqual(promote.call_args.kwargs["actor"], SignupActor.system())
-
-    def test_promotion_receives_reject_actor(self) -> None:
+    def test_actor_overrides_the_system_promoter(self) -> None:
         event = self.make_event(max_players=1)
         seated, waiting, staff = self.make_user(), self.make_user(), self.make_user()
-        seated_signup = process_rsvp(event, seated)
-        process_rsvp(event, waiting)
+        seated_signup = process_rsvp(event, seated, actor=SYSTEM)
+        waiting_signup = process_rsvp(event, waiting, actor=SYSTEM)
         actor = _staff_or_system_actor(staff)
+        seated_signup.status = SignupStatus.CANCELLED
+        seated_signup.save(update_fields=["status"])
 
-        with patch.object(
-            services, "_promote_one", wraps=services._promote_one
-        ) as promote:
-            reject_signup(seated_signup, actor=actor)
+        with transaction.atomic():
+            promoted = _promote_from_waitlist(event, cause=None, actor=actor)
 
-        self.assertEqual(promote.call_args.kwargs["actor"], actor)
+        self.assertEqual([s.pk for s in promoted], [waiting_signup.pk])
+        rows = self._promoted(waiting_signup.pk)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].actor_user, staff)
+        self.assertEqual(rows[0].actor_role, ActorRole.STAFF)

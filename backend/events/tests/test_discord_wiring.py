@@ -1,8 +1,8 @@
 from unittest.mock import patch
 
 from events.constants import EventState
-from events.ledger import SignupActor
 from events.services import approve_signup, cancel_signup, confirm_signup, process_rsvp
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 
 
@@ -21,7 +21,7 @@ class ServiceDispatchTest(EventTestCase):
     @patch("events.services.notify_signup_changed")
     def test_process_rsvp_dispatches_signup_changed(self, mock_notify):
         with self.captureOnCommitCallbacks(execute=True):
-            process_rsvp(self.event, self.user)
+            process_rsvp(self.event, self.user, actor=SYSTEM)
         mock_notify.assert_called_once_with(self.event)
 
     @patch("events.services.notify_signup_changed")
@@ -29,19 +29,19 @@ class ServiceDispatchTest(EventTestCase):
         self.event.auto_approve = False
         self.event.save()
         with self.captureOnCommitCallbacks(execute=True):
-            signup = process_rsvp(self.event, self.user)
+            signup = process_rsvp(self.event, self.user, actor=SYSTEM)
         mock_notify.reset_mock()
         with self.captureOnCommitCallbacks(execute=True):
-            approve_signup(signup, actor=SignupActor.system())
+            approve_signup(signup, actor=SYSTEM)
         mock_notify.assert_called_once()
 
     @patch("events.services.notify_signup_changed")
     def test_cancel_signup_dispatches_signup_changed(self, mock_notify):
         with self.captureOnCommitCallbacks(execute=True):
-            signup = process_rsvp(self.event, self.user)
+            signup = process_rsvp(self.event, self.user, actor=SYSTEM)
         mock_notify.reset_mock()
         with self.captureOnCommitCallbacks(execute=True):
-            cancel_signup(signup)
+            cancel_signup(signup, actor=SYSTEM)
         mock_notify.assert_called_once()
 
     @patch("events.services.notify_signup_changed")
@@ -54,8 +54,8 @@ class ServiceDispatchTest(EventTestCase):
         self.event.require_profile_complete = False
         self.event.save()
         with self.captureOnCommitCallbacks(execute=True):
-            signup = process_rsvp(self.event, self.user)
+            signup = process_rsvp(self.event, self.user, actor=SYSTEM)
         mock_notify.reset_mock()
         with self.captureOnCommitCallbacks(execute=True):
-            confirm_signup(signup)
+            confirm_signup(signup, actor=SYSTEM)
         mock_notify.assert_called_once()

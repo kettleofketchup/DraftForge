@@ -13,7 +13,6 @@ from app.cache_utils import invalidate_after_commit
 from events.capacity import free_seats
 from events.constants import EventState, SignupStatus
 from events.discord.dispatch import notify_signup_changed
-from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from events.services import _promote_from_waitlist
 from telemetry.logging import get_logger
@@ -52,9 +51,7 @@ class Command(BaseCommand):
                 if dry_run:
                     count = _would_promote(event)
                 else:
-                    count = len(
-                        _promote_from_waitlist(event, actor=SignupActor.system())
-                    )
+                    count = len(_promote_from_waitlist(event, cause=None))
                     invalidate_after_commit(event)
                     if count:
                         transaction.on_commit(lambda e=event: notify_signup_changed(e))

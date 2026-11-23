@@ -19,7 +19,6 @@ from events.constants import EventState, SignupStatus
 from events.discord.handlers import handle_signup_button
 from events.discord.reactions import handle_reaction_signup
 from events.eligibility import Unmet, evaluate_signup, refresh_unmet_requirements
-from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from events.services import (
     _promote_from_waitlist,
@@ -28,6 +27,7 @@ from events.services import (
     process_rsvp,
     staff_add_signup,
 )
+from events.tests.actors import SYSTEM
 from org.conduct.constants import CONDUCT_BLOCK_MESSAGE, Outcome, Tier
 from org.conduct.enforcement import (
     defer_back_of_line,
@@ -290,7 +290,7 @@ class EnforcementHooksTest(ConductTestCase):
         event = self.make_event()
 
         with self.assertRaisesMessage(ValueError, CONDUCT_BLOCK_MESSAGE):
-            create_tentative_signup(event, user)
+            create_tentative_signup(event, user, actor=SYSTEM)
 
         self.assertFalse(EventSignup.objects.filter(event=event).exists())
 
@@ -298,7 +298,7 @@ class EnforcementHooksTest(ConductTestCase):
         self.enable(block_enabled=True)
         event = self.make_event()
 
-        signup = process_rsvp(event, self.make_user())
+        signup = process_rsvp(event, self.make_user(), actor=SYSTEM)
 
         self.assertEqual(signup.status, SignupStatus.APPROVED)
         self.assertEqual(signup.unmet_requirements, [])
@@ -307,7 +307,7 @@ class EnforcementHooksTest(ConductTestCase):
         user = self.blocked_member()
         event = self.make_event()
 
-        signup = staff_add_signup(event, user, actor=SignupActor.system())
+        signup = staff_add_signup(event, user, actor=SYSTEM)
 
         self.assertEqual(signup.unmet_requirements, [CODE])
         self.assertEqual(signup.status, SignupStatus.PENDING_APPROVAL)
@@ -372,8 +372,8 @@ class EnforcementHooksTest(ConductTestCase):
         self.no_shows(flagged, 4)
         event = self.make_event(auto_approve=True)
 
-        held = process_rsvp(event, flagged)
-        clean = process_rsvp(event, self.make_user())
+        held = process_rsvp(event, flagged, actor=SYSTEM)
+        clean = process_rsvp(event, self.make_user(), actor=SYSTEM)
 
         held = EventSignup.objects.nocache().get(pk=held.pk)
         self.assertEqual(held.status, SignupStatus.PENDING_APPROVAL)
@@ -645,7 +645,7 @@ class QueryBudgetTest(ConductTestCase):
         user = self.make_user()
 
         self.assert_budget(
-            lambda: process_rsvp(event, user),
+            lambda: process_rsvp(event, user, actor=SYSTEM),
             lambda: self._signups(event),
             gates_built=2,
         )
@@ -661,7 +661,7 @@ class QueryBudgetTest(ConductTestCase):
             )
 
         self.assert_budget(
-            lambda: _promote_from_waitlist(event, actor=SignupActor.system()),
+            lambda: _promote_from_waitlist(event, cause=None),
             lambda: self._signups(event),
             gates_built=1,
         )
@@ -683,7 +683,7 @@ class QueryBudgetTest(ConductTestCase):
             )
 
         with CaptureQueriesContext(connection) as ctx:
-            promoted = _promote_from_waitlist(event, actor=SignupActor.system())
+            promoted = _promote_from_waitlist(event, cause=None)
 
         self.assertEqual(len(promoted), 2)
         score_queries = [
@@ -734,9 +734,12 @@ class BackOfLineTest(ConductTestCase):
         self, *, max_players: int = 1, **overrides: object
     ) -> tuple[Event, list[EventSignup], EventSignup, EventSignup]:
         event = self.make_event(max_players=max_players, **overrides)
-        seated = [process_rsvp(event, self.make_user()) for _ in range(max_players)]
-        flagged = process_rsvp(event, self.flagged_member())
-        clean = process_rsvp(event, self.make_user())
+        seated = [
+            process_rsvp(event, self.make_user(), actor=SYSTEM)
+            for _ in range(max_players)
+        ]
+        flagged = process_rsvp(event, self.flagged_member(), actor=SYSTEM)
+        clean = process_rsvp(event, self.make_user(), actor=SYSTEM)
         for signup in (flagged, clean):
             self.assertEqual(signup.status, SignupStatus.WAITLISTED)
         return event, seated, flagged, clean
@@ -748,7 +751,7 @@ class BackOfLineTest(ConductTestCase):
         self.enable(back_of_line_enabled=True)
         _event, seated, flagged, clean = self.full_event_with_line()
 
-        cancel_signup(seated[0])
+        cancel_signup(seated[0], actor=SYSTEM)
 
         self.assertEqual(self.reload(clean).status, SignupStatus.APPROVED)
         self.assertEqual(self.reload(flagged).status, SignupStatus.WAITLISTED)
@@ -757,7 +760,7 @@ class BackOfLineTest(ConductTestCase):
         self.enable(back_of_line_enabled=True)
         event = self.make_event(max_players=2)
 
-        signup = process_rsvp(event, self.flagged_member())
+        signup = process_rsvp(event, self.flagged_member(), actor=SYSTEM)
 
         self.assertEqual(signup.status, SignupStatus.APPROVED)
         self.assertIsNone(signup.waitlist_position)
@@ -777,7 +780,7 @@ class BackOfLineTest(ConductTestCase):
     def test_disabled_uses_plain_order(self) -> None:
         _event, seated, flagged, clean = self.full_event_with_line()
 
-        cancel_signup(seated[0])
+        cancel_signup(seated[0], actor=SYSTEM)
 
         self.assertEqual(self.reload(flagged).status, SignupStatus.APPROVED)
         self.assertEqual(self.reload(clean).status, SignupStatus.WAITLISTED)
@@ -792,7 +795,7 @@ class BackOfLineTest(ConductTestCase):
         )
         _event, seated, flagged, clean = self.full_event_with_line()
 
-        cancel_signup(seated[0])
+        cancel_signup(seated[0], actor=SYSTEM)
 
         flagged = self.reload(flagged)
         self.assertEqual(flagged.status, SignupStatus.PENDING_APPROVAL)
@@ -802,7 +805,7 @@ class BackOfLineTest(ConductTestCase):
     def test_block_tier_promoted_to_pending_with_code(self) -> None:
         self.enable(block_enabled=True, back_of_line_enabled=True)
         event = self.make_event(max_players=2, auto_approve=True)
-        seated = [process_rsvp(event, self.make_user()) for _ in range(2)]
+        seated = [process_rsvp(event, self.make_user(), actor=SYSTEM) for _ in range(2)]
         blocked, clean = (
             EventSignup.objects.create(
                 event=event,
@@ -817,12 +820,12 @@ class BackOfLineTest(ConductTestCase):
         tiers = _tiers(conduct_gate(self.org.pk), [blocked.user_id])
         self.assertEqual(tiers[blocked.user_id], Tier.BLOCK)
 
-        cancel_signup(seated[0])
+        cancel_signup(seated[0], actor=SYSTEM)
 
         self.assertEqual(self.reload(clean).status, SignupStatus.APPROVED)
         self.assertEqual(self.reload(blocked).status, SignupStatus.WAITLISTED)
 
-        cancel_signup(seated[1])
+        cancel_signup(seated[1], actor=SYSTEM)
         blocked = self.reload(blocked)
 
         self.assertEqual(blocked.status, SignupStatus.PENDING_APPROVAL)
@@ -839,12 +842,12 @@ class BackOfLineTest(ConductTestCase):
             max_players=2, tournament=tournament
         )
 
-        cancel_signup(seated[0])
+        cancel_signup(seated[0], actor=SYSTEM)
         clean = self.reload(clean)
         self.assertEqual(clean.status, SignupStatus.APPROVED)
         self.assertEqual(self.reload(flagged).status, SignupStatus.WAITLISTED)
 
-        cancel_signup(seated[1])
+        cancel_signup(seated[1], actor=SYSTEM)
         flagged = self.reload(flagged)
 
         self.assertEqual(flagged.status, SignupStatus.PENDING_APPROVAL)

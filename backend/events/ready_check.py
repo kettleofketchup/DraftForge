@@ -19,7 +19,14 @@ from events.ledger import (
     record_signup_change,
     snapshot,
 )
-from events.models import Event, EventSignup, ReadyCheck, ReadyCheckEntry, RollCallMode
+from events.models import (
+    Event,
+    EventSignup,
+    ReadyCheck,
+    ReadyCheckEntry,
+    RollCallMode,
+    SignupLedgerEntry,
+)
 from events.ready_check_constants import (
     ReadyCheckConfirmVia,
     ReadyCheckEntryState,
@@ -640,6 +647,7 @@ def _drop(
     now = tz.now()
     dropped_user_ids: list[int] = []
     dropped_signups: list[EventSignup] = []
+    first_drop: SignupLedgerEntry | None = None
     for entry in entries:
         signup = entry.signup
         if signup is None:
@@ -661,7 +669,7 @@ def _drop(
         entry.state = ReadyCheckEntryState.DROPPED
         entry.dropped_at = now
         _roster_remove_if_left(signup)
-        record_signup_change(
+        row = record_signup_change(
             event=locked,
             subject=entry.user,
             actor=actor,
@@ -672,6 +680,7 @@ def _drop(
             reason=reason,
             correlation_id=correlation_id,
         )
+        first_drop = first_drop or row
         dropped_user_ids.append(entry.user_id)
         dropped_signups.append(signup)
     promoted_signup_ids: list[int] = []
@@ -679,7 +688,7 @@ def _drop(
         promoted_signup_ids = [
             promoted.pk
             for promoted in _promote_from_waitlist(
-                locked, actor=actor, correlation_id=correlation_id
+                locked, cause=first_drop, actor=actor
             )
         ]
     if dropped_signups:
@@ -981,16 +990,9 @@ def staff_confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSig
     if check is not None and check.phase == ReadyCheckPhase.CLOSED:
         _confirm_after_close(locked, check, signup, actor=actor)
         return signup
-    before = snapshot(signup)
-    confirm_signup(signup)
-    record_signup_change(
-        event=locked,
-        subject=signup.user,
+    confirm_signup(
+        signup,
         actor=actor,
-        action=SignupAction.CONFIRMED,
-        signup=signup,
-        before=before,
-        after=snapshot(signup),
         reason="staff_confirmed",
         correlation_id=f"rc{check.pk}:confirm" if check is not None else "",
     )
@@ -1000,16 +1002,9 @@ def staff_confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSig
 def _confirm_after_close(
     locked: Event, check: ReadyCheck, signup: EventSignup, *, actor: SignupActor
 ) -> None:
-    before = snapshot(signup)
-    confirm_signup(signup)
-    record_signup_change(
-        event=locked,
-        subject=signup.user,
+    confirm_signup(
+        signup,
         actor=actor,
-        action=SignupAction.CONFIRMED,
-        signup=signup,
-        before=before,
-        after=snapshot(signup),
         reason="staff_confirmed",
         rules_overridden=["ready_check_closed"],
         correlation_id=f"rc{check.pk}:confirm",

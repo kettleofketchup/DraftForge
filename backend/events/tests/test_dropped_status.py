@@ -13,7 +13,6 @@ from events.constants import EventState, SignupStatus
 from events.discord._shared import _existing_active_signup
 from events.discord.embeds import build_announcement_embeds, build_announcement_v2
 from events.discord.handlers import handle_signup_button
-from events.ledger import SignupActor
 from events.models import Event, EventSignup, ReadyCheck, ReadyCheckEntry
 from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE, ReadyCheckEntryState
 from events.services import (
@@ -26,6 +25,7 @@ from events.services import (
     process_rsvp,
     reject_signup,
 )
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.promotion.recipients import candidates
@@ -81,12 +81,14 @@ class DroppedStatusTests(EventTestCase):
     def test_mutations_on_dropped_raise(self) -> None:
         signup = self._dropped()
         calls: dict[str, Callable[[], Any]] = {
-            "cancel": lambda: cancel_signup(signup),
-            "reject": lambda: reject_signup(signup, actor=SignupActor.system()),
-            "demote": lambda: demote_to_waitlist(signup),
-            "decline": lambda: decline_signup(self.dropped_event, self.player),
+            "cancel": lambda: cancel_signup(signup, actor=SYSTEM),
+            "reject": lambda: reject_signup(signup, actor=SYSTEM),
+            "demote": lambda: demote_to_waitlist(signup, actor=SYSTEM),
+            "decline": lambda: decline_signup(
+                self.dropped_event, self.player, actor=SYSTEM
+            ),
             "tentative": lambda: create_tentative_signup(
-                self.dropped_event, self.player
+                self.dropped_event, self.player, actor=SYSTEM
             ),
         }
         for name, call in calls.items():
@@ -104,13 +106,13 @@ class DroppedStatusTests(EventTestCase):
         self._dropped()
 
         with self.assertRaisesMessage(ValueError, DROPPED_SIGNUP_MESSAGE):
-            create_tentative_signup(self.dropped_event, self.player)
+            create_tentative_signup(self.dropped_event, self.player, actor=SYSTEM)
 
     def test_resignup_rejected_and_row_kept(self) -> None:
         signup = self._dropped()
 
         with self.assertRaisesMessage(ValueError, DROPPED_SIGNUP_MESSAGE):
-            process_rsvp(self.dropped_event, self.player)
+            process_rsvp(self.dropped_event, self.player, actor=SYSTEM)
 
         rows = EventSignup.objects.filter(event=self.dropped_event, user=self.player)
         self.assertEqual(
@@ -128,7 +130,7 @@ class DroppedStatusTests(EventTestCase):
         for attempt in (process_rsvp, create_tentative_signup):
             with self.subTest(attempt.__name__):
                 with self.assertRaises(ValueError):
-                    attempt(self.dropped_event, self.player)
+                    attempt(self.dropped_event, self.player, actor=SYSTEM)
                 entry.refresh_from_db()
                 self.assertEqual(entry.state, ReadyCheckEntryState.DROPPED)
                 self.assertEqual(entry.signup_id, signup.pk)

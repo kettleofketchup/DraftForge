@@ -17,7 +17,6 @@ from events.capacity import (
     with_signup_counts,
 )
 from events.constants import EventState, SignupStatus
-from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from events.schemas import EventTaskSchema
 from events.serializers import EventSignupSerializer
@@ -28,6 +27,7 @@ from events.services import (
     process_rsvp,
 )
 from events.tasks import _sync_discord_event_signups_impl
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from events.views import EventSignupViewSet
 from org.models import Organization
@@ -47,19 +47,21 @@ class SeatCapacityTests(EventTestCase):
     def test_tentative_does_not_take_a_seat(self) -> None:
         event = self.make_event(max_players=2)
         a, b, c = self.make_user(), self.make_user(), self.make_user()
-        create_tentative_signup(event, a)
-        process_rsvp(event, b)
-        self.assertEqual(process_rsvp(event, c).status, SignupStatus.APPROVED)
+        create_tentative_signup(event, a, actor=SYSTEM)
+        process_rsvp(event, b, actor=SYSTEM)
+        self.assertEqual(
+            process_rsvp(event, c, actor=SYSTEM).status, SignupStatus.APPROVED
+        )
 
     def test_cancel_promotes_past_tentative(self) -> None:
         event = self.make_event(max_players=1)
         a, b, c = self.make_user(), self.make_user(), self.make_user()
-        b_signup = process_rsvp(event, b)
-        c_signup = process_rsvp(event, c)
+        b_signup = process_rsvp(event, b, actor=SYSTEM)
+        c_signup = process_rsvp(event, c, actor=SYSTEM)
         self.assertEqual(c_signup.status, SignupStatus.WAITLISTED)
-        create_tentative_signup(event, a)
+        create_tentative_signup(event, a, actor=SYSTEM)
 
-        cancel_signup(b_signup)
+        cancel_signup(b_signup, actor=SYSTEM)
 
         c_signup.refresh_from_db()
         self.assertEqual(c_signup.status, SignupStatus.APPROVED)
@@ -68,18 +70,20 @@ class SeatCapacityTests(EventTestCase):
     def test_tentative_upgrade_when_full_waitlists(self) -> None:
         event = self.make_event(max_players=1)
         a, b = self.make_user(), self.make_user()
-        process_rsvp(event, b)
-        create_tentative_signup(event, a)
-        self.assertEqual(process_rsvp(event, a).status, SignupStatus.WAITLISTED)
+        process_rsvp(event, b, actor=SYSTEM)
+        create_tentative_signup(event, a, actor=SYSTEM)
+        self.assertEqual(
+            process_rsvp(event, a, actor=SYSTEM).status, SignupStatus.WAITLISTED
+        )
 
     def test_cancel_tentative_promotes_nobody(self) -> None:
         event = self.make_event(max_players=2)
         a, b, c = self.make_user(), self.make_user(), self.make_user()
-        process_rsvp(event, b)
-        a_signup = create_tentative_signup(event, a)
+        process_rsvp(event, b, actor=SYSTEM)
+        a_signup = create_tentative_signup(event, a, actor=SYSTEM)
         c_signup = self._waitlist(event, c, 1)
 
-        cancel_signup(a_signup)
+        cancel_signup(a_signup, actor=SYSTEM)
 
         c_signup.refresh_from_db()
         self.assertEqual(c_signup.status, SignupStatus.WAITLISTED)
@@ -87,13 +91,13 @@ class SeatCapacityTests(EventTestCase):
     def test_one_cancel_fills_every_free_seat(self) -> None:
         event = self.make_event(max_players=1)
         b, c, d = self.make_user(), self.make_user(), self.make_user()
-        b_signup = process_rsvp(event, b)
+        b_signup = process_rsvp(event, b, actor=SYSTEM)
         c_signup = self._waitlist(event, c, 1)
         d_signup = self._waitlist(event, d, 2)
         Event.objects.filter(pk=event.pk).update(max_players=3)
         self.assertEqual(b_signup.event.max_players, 1)
 
-        cancel_signup(b_signup)
+        cancel_signup(b_signup, actor=SYSTEM)
 
         c_signup.refresh_from_db()
         d_signup.refresh_from_db()
@@ -103,12 +107,12 @@ class SeatCapacityTests(EventTestCase):
     def test_lowered_max_players_promotes_nobody(self) -> None:
         event = self.make_event(max_players=3)
         users = [self.make_user() for _ in range(4)]
-        signups = [process_rsvp(event, u) for u in users[:3]]
+        signups = [process_rsvp(event, u, actor=SYSTEM) for u in users[:3]]
         waitlisted = self._waitlist(event, users[3], 1)
         Event.objects.filter(pk=event.pk).update(max_players=1)
         self.assertEqual(signups[0].event.max_players, 3)
 
-        cancel_signup(signups[0])
+        cancel_signup(signups[0], actor=SYSTEM)
 
         waitlisted.refresh_from_db()
         self.assertEqual(waitlisted.status, SignupStatus.WAITLISTED)
@@ -128,7 +132,7 @@ class SeatCapacityTests(EventTestCase):
         self.assertIsNone(free_seats(self.make_event(max_players=None)))
 
         event = self.make_event(max_players=2)
-        process_rsvp(event, self.make_user())
+        process_rsvp(event, self.make_user(), actor=SYSTEM)
         self.assertEqual(free_seats(event), 1)
 
         overfull = self.make_event(max_players=1)
@@ -235,7 +239,7 @@ class PromoteRequiresAtomicTests(TransactionTestCase):
 
     def test_promote_requires_atomic(self) -> None:
         with self.assertRaises(AssertionError):
-            _promote_from_waitlist(self.event, actor=SignupActor.system())
+            _promote_from_waitlist(self.event, cause=None)
 
 
 NOTIFY_PATH = (
