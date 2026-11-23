@@ -72,7 +72,10 @@ count) from the same aggregation as `points`.
 A track implements `access(org_id, *, viewer, roles) -> TrackAccess` (`can_view_rows`,
 `can_view_own`, `allowed`, `board_open`) and
 `member_standing(org_user, *, viewer, roles, now)`. `track_info()` is built on the base
-class from `access()` plus `roles.is_admin` for `can_manage`. A track reads only the
+class from `access()` plus `roles.is_admin` for `can_manage` and
+`moderated and roles.is_staff` for `can_moderate`. `TrackBase.moderated` is `False`, so
+other tracks never read `is_staff` for it; leadership sets it to `True` and its
+moderation screen and release actions follow `can_moderate`. A track reads only the
 roles it needs, so contribution's leaderboard costs the same single member-list query
 it always has. Contribution's `member_standing` returns `totals` and `monthly` for the
 member themselves or a viewer who can see the member list, in two queries.
@@ -245,6 +248,14 @@ entry point in a fresh interpreter).
 `captain_rating` is upserted through `ledger.upsert_event_entry` on every review submit,
 edit, withdrawal and staff void or restore. Reopen, cancel and delete cost one extra
 query (an `EventCaptain` id read) when the event has no snapshots.
+
+Whether an event's results are released is decided only in `org/leadership/release.py`:
+`release_q` (the queryset form, over a `live` review-count annotation) and
+`release_state` / `is_released` (the Python form) are built from the same inputs, the
+window, voiding, the reviewer floor and the org's [release gate](../features/organization-leadership.md#release-gate).
+The rating board, the points ledger filter (`captain_rating` rows only), the member
+panel and the moderation payload all go through it, so a captain's rating and rating
+points appear together.
 
 With Leadership unlocked, its `track_info` in org detail and `standing/tracks/` costs
 three reads: the cached settings row, the viewer's membership and the trait list behind

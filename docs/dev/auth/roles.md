@@ -244,12 +244,14 @@ The event page shows the forecast, badges and Attendance panel when the event pa
 | Action | Who | Switch |
 | ------ | --- | ------ |
 | Edit leadership settings, point values and traits; delete an unscored trait | org owner, admin | Leadership |
-| List traits, see own pending and past reviews (`reviews/mine/`) | org members | Leadership |
+| List traits | org members, org staff and above | Leadership |
+| See own pending and past reviews (`reviews/mine/`) | org members | Leadership |
 | Submit, edit or withdraw a captain review | teammates in the captain's rater pool, while the window is open | Leadership |
 | Leadership leaderboard rows | org staff and above, or members who pass `can_view_org_members` when the board is public; members always get their own row | Leadership |
-| A captain's rating summary | the captain, org admins, or members when the board is public | Leadership |
-| A captain's per-event history | the captain (released events only) and org admins | Leadership |
-| See raters, void and restore reviews | org owner, admin, except on reviews of themselves | Leadership |
+| A captain's rating summary | the captain, org staff and above, or members when the board is public | Leadership |
+| A captain's per-event history | the captain (released events only) and org staff and above (unreleased events too, never for their own) | Leadership |
+| See raters, void and restore reviews | org owner, admin, staff, site staff, except on reviews of themselves | Leadership |
+| Release captain review results (when the org requires staff release) | org owner, admin, staff, site staff, except their own results | Leadership |
 
 ## Adding a New Gate
 
