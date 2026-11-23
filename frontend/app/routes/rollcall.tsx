@@ -52,6 +52,7 @@ import {
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
 import { canRestoreSignup } from '~/components/events/signupPartitions';
+import { startTournamentErrorMessage } from '~/components/events/startTournamentError';
 import { toGameType } from '~/components/game/constants';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
@@ -660,9 +661,9 @@ export default function RollCallPage() {
             } else {
               navigate(`/events/${eventId}`);
             }
-          } catch {
+          } catch (err) {
             setIsNavigating(false);
-            toast.error('Failed to start tournament');
+            toast.error(startTournamentErrorMessage(err));
           }
         }}
         confirmTestId="rollcall-start-dialog-confirm"
