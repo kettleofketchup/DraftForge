@@ -1,5 +1,5 @@
 /**
- * Staff sign-up history (#497): the History tab, its member/action filters,
+ * Staff sign-up history: the History tab, its member/action filters,
  * the per-row history Sheet, staff-only access and phone layout.
  *
  * Uses the isolated "Signup History Org" data (backend

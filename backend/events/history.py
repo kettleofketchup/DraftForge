@@ -1,4 +1,4 @@
-"""Keyset cursor and queryset for the staff signup history (#497)."""
+"""Keyset cursor and queryset for the staff signup history."""
 
 import binascii
 from base64 import urlsafe_b64decode, urlsafe_b64encode
