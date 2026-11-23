@@ -10,7 +10,7 @@ from uuid import uuid4
 from django.db import transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -41,7 +41,9 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
-class ClaimRequestViewSet(viewsets.ModelViewSet):
+class ClaimRequestViewSet(
+    mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+):
     """
     ViewSet for managing profile claim requests.
 

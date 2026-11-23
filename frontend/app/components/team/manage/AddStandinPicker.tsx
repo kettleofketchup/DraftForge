@@ -27,7 +27,7 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 
-const MIN_QUERY_LENGTH = 3;
+const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 300;
 
 export interface AddStandinPickerProps {
@@ -144,7 +144,9 @@ export function AddStandinPicker({
   const settled = ready && term === query.trim();
   let body: ReactNode;
   if (!ready) {
-    body = <Status>Type at least 3 characters to search.</Status>;
+    body = (
+      <Status>{`Type at least ${MIN_QUERY_LENGTH} characters to search.`}</Status>
+    );
   } else if (search.isError) {
     body = <Status>Search unavailable</Status>;
   } else if (!settled || search.isPending) {

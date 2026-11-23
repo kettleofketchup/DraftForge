@@ -43,7 +43,7 @@ export async function closeAddUserModal(page: Page): Promise<void> {
  * Assumes the modal is already open.
  *
  * @param page - Playwright page
- * @param query - Search query (min 3 chars)
+ * @param query - Search query (min 2 chars)
  */
 export async function searchUser(page: Page, query: string): Promise<void> {
   const searchInput = page.locator('[data-testid="add-user-search"]');
