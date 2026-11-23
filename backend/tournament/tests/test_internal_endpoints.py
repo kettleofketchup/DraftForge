@@ -3,7 +3,8 @@ from datetime import date
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser
+from tournament.models import Team, Tournament
 
 TOKEN = "test-internal-token"
 HEADERS = {"HTTP_X_INTERNAL_TOKEN": TOKEN}

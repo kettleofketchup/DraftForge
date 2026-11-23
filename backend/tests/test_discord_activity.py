@@ -13,7 +13,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser, Game, Tournament
+from app.models import CustomUser
 from common.utils import isTestEnvironment
 from discordbot.activity_fake import fake_code, register_instance
 from discordbot.activity_intent import intent_key
@@ -24,6 +24,7 @@ from telemetry.logging import get_logger
 from tests.data.tournaments import ACTIVITY_BRACKET_CONFIG
 from tests.data.users import ADMIN_USER
 from tests.test_herodraft import _setup_draft_state
+from tournament.models import Game, Tournament
 
 log = get_logger(__name__)
 

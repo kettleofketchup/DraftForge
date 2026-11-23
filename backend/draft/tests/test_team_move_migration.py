@@ -7,9 +7,10 @@ from django.db.migrations.loader import MigrationLoader
 from django.test import TransactionTestCase
 from django.utils import timezone
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from discordbot.models import DraftActivityChannel
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound
+from tournament.models import Tournament
 
 TEAM_MODELS = ("draft", "draftround", "draftevent", "draftoptions")
 TEAM_TABLES = ("app_draft", "app_draftround", "app_draftevent", "app_draftoptions")

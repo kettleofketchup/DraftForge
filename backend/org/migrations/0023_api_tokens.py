@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('org', '0021_leadership_release_gate'),
+        ('org', '0022_retarget_tournament_models'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

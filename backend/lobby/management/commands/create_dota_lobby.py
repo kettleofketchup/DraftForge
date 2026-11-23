@@ -3,8 +3,8 @@
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db import transaction
 
-from app.models import Game
 from lobby import services
+from tournament.models import Game
 
 
 class Command(BaseCommand):

@@ -6,7 +6,7 @@ Used by frontend/tests/playwright/e2e/03-tournaments/04-discovery.spec.ts.
 """
 
 from app.cache_utils import invalidate_obj
-from app.models import CustomUser, PositionsModel, Tournament
+from app.models import CustomUser, PositionsModel
 from events.constants import EventState
 from events.models import Event
 from league.models import League
@@ -25,6 +25,7 @@ from tests.data.tournament_discovery import (
     DISCOVERY_TOURNAMENTS,
 )
 from tests.populate.utils import ensure_org_user
+from tournament.models import Tournament
 
 
 def _get_or_create_user(user_data: TestUser, force: bool) -> CustomUser:
