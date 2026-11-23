@@ -501,4 +501,8 @@ urlpatterns += [
     path("api/internal/ops-notices/", include("opsnotices.internal_urls")),
 ]
 
+urlpatterns += [
+    path("api/internal/mmr-requests/", include("org.mmr_requests.internal_urls")),
+]
+
 urlpatterns += [path("", include("opsnotices.urls"))]

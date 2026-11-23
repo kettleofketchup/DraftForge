@@ -5,7 +5,7 @@ Uses config.settings_celery instead of backend.settings.
 
 import os
 
-from celery import Celery
+from celery import Celery, Task
 from celery.schedules import crontab
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings_celery")
@@ -16,7 +16,7 @@ django.setup()
 
 # Initialize telemetry (structlog + optional OTel tracing).
 # Solo pool has no fork, so init once in the main process.
-from telemetry.config import init_telemetry
+from telemetry.config import init_telemetry  # noqa: E402
 
 init_telemetry()
 
@@ -62,6 +62,10 @@ _beat_schedule = {
         "task": "app.tasks.avatar_refresh.refresh_avatars_batched",
         "schedule": crontab(hour=4, minute=15),
     },
+    "purge-mmr-screenshots-nightly": {
+        "task": "org.tasks.purge_expired_mmr_screenshots",
+        "schedule": crontab(hour=3, minute=30),
+    },
     "sync-active-org-discord-names": {
         "task": "app.tasks.discord_name_sync.sync_active_org_discord_names",
         "schedule": 1800.0,
@@ -97,5 +101,5 @@ app.conf.beat_schedule = _beat_schedule
 
 
 @app.task(bind=True, ignore_result=True)
-def debug_task(self):
+def debug_task(self: Task) -> None:
     print(f"Request: {self.request!r}")

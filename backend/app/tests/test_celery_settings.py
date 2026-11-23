@@ -51,6 +51,24 @@ class CelerySettingsBootTest(SimpleTestCase):
         )
         self.assertIn("app.tasks.discord_name_sync.sync_org_discord_names", names)
 
+    def test_worker_registers_mmr_screenshot_purge_task(self) -> None:
+        env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}
+        code = (
+            "from config.celery_light import app\n"
+            "app.loader.import_default_modules()\n"
+            "print('org.tasks.purge_expired_mmr_screenshots' in app.tasks)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=BACKEND_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-3000:])
+        self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
+
     def test_settings_modules_agree_on_discord_api(self) -> None:
         env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}
         code = (

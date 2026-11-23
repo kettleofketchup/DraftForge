@@ -18,6 +18,7 @@ Modules:
     users         avatars, batched avatar refresh, Discord name sync
     tournaments   tournament/game reads, hero-draft creation
     ops_notices   emit/resolve operations notices
+    mmr_requests  nightly MMR screenshot retention purge
 
 Call sites use the re-exports below (``internal_client.get_event(...)``). Tests that
 stub HTTP patch ``app.internal_client.transport.post`` (or ``get``/``patch``); tests
@@ -63,6 +64,7 @@ from app.internal_client.events import (
     get_repeater_subscribers,
     transition_event_state,
 )
+from app.internal_client.mmr_requests import purge_mmr_screenshots
 from app.internal_client.ops_notices import (
     OpsNoticeTransientError,
     emit_ops_notice,
@@ -140,6 +142,7 @@ __all__ = [
     "list_discord_guild_ids",
     "list_discord_linked_users",
     "list_discord_name_sync_targets",
+    "purge_mmr_screenshots",
     "recalculate_user_mmr",
     "resolve_ops_notice",
     "search_message_logs",

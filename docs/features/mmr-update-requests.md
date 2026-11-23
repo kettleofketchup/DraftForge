@@ -88,7 +88,8 @@ pending count.
 
 Filter by Pending (default), Approved, Rejected, Superseded, Cancelled or All. Each card
 shows the member, the target, current and requested values, the screenshot (click to
-enlarge) and the note. A change of 20% or more is highlighted.
+enlarge) and the note. Screenshots of decided requests are removed after 7 days; the card
+then says "Screenshot removed after N days". A change of 20% or more is highlighted.
 
 ### Approve, adjust, reject
 
@@ -174,12 +175,32 @@ with `setfacl -R -m u:100999:rwX -m d:u:100999:rwX backend/media`.
 A stored screenshot is at most 8 MB and usually 0.5 to 3 MB, so about 500 fit in a
 gigabyte. Uploads are refused with "storage full" (HTTP 507) when the volume holding
 `MEDIA_ROOT` has less than 512 MB free. Cancelling a request or deleting its membership
-deletes its file; approved and rejected requests keep theirs for the audit trail.
+deletes its file. Approved, rejected and superseded requests (including staff-set rows)
+keep theirs for 7 days after the decision; see [Screenshot retention](#screenshot-retention).
 
 The free-space floor protects compose hosts and the prod volume. It does not apply to
 helm previews: there `/data` is an `emptyDir` with `sizeLimit: 1Gi`, the free-space
 check reads the node's disk, and the kubelet evicts the pod before the floor is reached.
 Previews are ephemeral, so this is accepted.
+
+### Screenshot retention
+
+A nightly Celery Beat task (`purge-mmr-screenshots-nightly`, 03:30 UTC) deletes the
+screenshot file of every approved, rejected or superseded request decided more than
+`MMR_SCREENSHOT_RETENTION_DAYS` days ago (default `7`, set in the backend environment).
+Pending requests are never touched. The request row stays as the audit record: its
+values, reviewer, dates and rejection reason are kept, and `screenshot_purged_at`
+records when the file went. Staff cards then show "Screenshot removed after N days".
+
+The task runs on the worker and calls `POST /api/internal/mmr-requests/purge-screenshots/`,
+which clears the rows in batches of 500 and deletes the files once each batch commits.
+It is safe to run again and ignores files that are already gone. Each run logs
+`mmr_screenshots_purged` (`system=org`, `subsystem=mmr_requests`) with the `purged`
+count. To purge now, from the backend container:
+
+```bash
+python manage.py shell -c "from org.mmr_requests.retention import purge_expired_screenshots; print(purge_expired_screenshots())"
+```
 
 ### Body size limits
 
@@ -201,7 +222,9 @@ breaks.
 - Screenshots are only streamed by `GET /api/mmr-requests/<id>/screenshot/`, which
   returns 404 to anyone other than the requesting member and the staff who can review
   that request. Responses are `private, no-store`, `nosniff` and sandboxed.
-- API payloads never contain the file path, only `has_screenshot` and that URL.
+- API payloads never contain the file path, only `has_screenshot`, that URL and
+  `screenshot_purged_at`.
+- Screenshots of decided requests are deleted after the retention window above.
 
 ---
 
