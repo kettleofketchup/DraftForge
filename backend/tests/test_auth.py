@@ -37,7 +37,6 @@ from events.models import (
     EventRepeater,
     EventSignup,
     RepeaterSubscription,
-    SignupLedgerEntry,
 )
 from events.services import generate_events_for_repeater, process_rsvp
 from events.tasks import sync_discord_events
@@ -76,7 +75,11 @@ from tests.helpers.team_management_fixture import (
 from tests.helpers.tournament_config import TEST_KEY_TO_NAME, TEST_TOURNAMENTS
 from tests.populate.bracket import populate_bracket_unset_winner_tournament
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
-from tests.populate.utils import ensure_org_user
+from tests.populate.utils import (
+    delete_event_signups,
+    delete_events,
+    ensure_org_user,
+)
 from tests.test_events_discord import discord_auth_failure
 from tests.test_teamdraft import clear_teamdraft_redis
 
@@ -1397,8 +1400,7 @@ def reset_events_data(request):
             old_tournament.delete()
         else:
             signup_event.save()
-        SignupLedgerEntry.objects.filter(event=signup_event).purge()
-        EventSignup.objects.filter(event=signup_event).delete()
+        delete_event_signups(signup_event)
         invalidate_obj(signup_event)
         reset_count += 1
     except Event.DoesNotExist:
@@ -1413,8 +1415,7 @@ def reset_events_data(request):
         DiscordEvent.objects.filter(event=event).delete()
         if event.tournament:
             event.tournament.delete()
-        SignupLedgerEntry.objects.filter(event=event).purge()
-        event.delete()
+        delete_events(Event.objects.filter(pk=event.pk))
         deleted_generated += 1
 
     return Response(
@@ -1439,8 +1440,6 @@ def reset_events_demo(request):
 
     EVENTS_ORG_NAME = "Events Test Org"
 
-    SignupLedgerEntry.objects.filter(event__organization__name=EVENTS_ORG_NAME).purge()
-
     # Delete all signups
     signups_deleted = EventSignup.objects.filter(
         event__organization__name=EVENTS_ORG_NAME
@@ -1453,9 +1452,9 @@ def reset_events_demo(request):
     tournaments_deleted = Tournament.objects.filter(pk__in=tournament_pks).delete()[0]
 
     # Delete all events
-    events_deleted = Event.objects.filter(organization__name=EVENTS_ORG_NAME).delete()[
-        0
-    ]
+    events_deleted = delete_events(
+        Event.objects.filter(organization__name=EVENTS_ORG_NAME)
+    )
 
     # Delete all subscriptions
     RepeaterSubscription.objects.filter(

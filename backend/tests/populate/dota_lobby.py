@@ -65,7 +65,7 @@ from tests.data.dota_lobby import (
 )
 from tests.data.models import TestUser
 from tests.dota_lobby_sim import SimulatorUnavailable, simulator_request
-from tests.populate.utils import ensure_league_user, ensure_org_user
+from tests.populate.utils import delete_events, ensure_league_user, ensure_org_user
 
 # The reason the reset writes on the lobby rows it ends.
 RESET_REASON = "test_reset"
@@ -153,7 +153,7 @@ def _create_bracket(
 def _delete_existing(org: Organization) -> None:
     # The tournaments go with their teams, games and lobby rows.
     Tournament.objects.filter(name__in=LOBBY_TOURNAMENT_NAMES).delete()
-    Event.objects.filter(organization=org).delete()
+    delete_events(Event.objects.filter(organization=org))
     EventRepeater.objects.filter(organization=org).delete()
 
 

@@ -83,7 +83,11 @@ from tests.data.org_features import (
     ORG_FEATURES_USERS,
     PRIVATE_FEATURES_ORG,
 )
-from tests.populate.utils import delete_ledger_for_users, ensure_org_user
+from tests.populate.utils import (
+    delete_events,
+    delete_ledger_for_users,
+    ensure_org_user,
+)
 
 # (org pk, owner, admins, staff, promoters)
 _ROLES: list[tuple[int, TestUser, list[TestUser], list[TestUser], list[TestUser]]] = [
@@ -430,7 +434,7 @@ def _rebuild() -> list[Organization]:
     ContributionEntry.objects.nocache().filter(organization__in=org_pks).delete()
     PromoSend.objects.nocache().filter(organization__in=org_pks).delete()
     ContributionPointValue.objects.nocache().filter(organization__in=org_pks).delete()
-    Event.objects.nocache().filter(organization__in=org_pks).delete()
+    delete_events(Event.objects.nocache().filter(organization__in=org_pks))
     Tournament.objects.nocache().filter(league__organization__in=org_pks).exclude(
         pk__in=[pk for pk, _, _, _ in ORG_FEATURES_TOURNAMENTS]
     ).delete()
