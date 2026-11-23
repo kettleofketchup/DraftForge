@@ -1,31 +1,20 @@
-import { useCallback, useEffect, useRef } from 'react';
-import { useUserStore } from '~/store/userStore';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
+import { getOrganizations } from '~/components/api/api';
 
-// Shared across all hook instances — prevents duplicate fetches
-let fetchPromise: Promise<void> | null = null;
+export const organizationsQueryKey = ['organizations'] as const;
 
 export function useOrganizations() {
-  const organizations = useUserStore((state) => state.organizations);
-  const getOrganizations = useUserStore((state) => state.getOrganizations);
-  const fetched = useRef(false);
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: organizationsQueryKey,
+    queryFn: getOrganizations,
+  });
 
-  const refetch = useCallback(async () => {
-    fetchPromise = null;
-    await getOrganizations();
-  }, [getOrganizations]);
+  const refetch = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: organizationsQueryKey }),
+    [queryClient],
+  );
 
-  useEffect(() => {
-    if (organizations.length > 0 || fetched.current) return;
-    fetched.current = true;
-
-    if (!fetchPromise) {
-      fetchPromise = getOrganizations();
-    }
-  }, [organizations.length, getOrganizations]);
-
-  return {
-    organizations,
-    isLoading: organizations.length === 0 && !fetched.current,
-    refetch,
-  };
+  return { organizations: data ?? [], isLoading, refetch };
 }
