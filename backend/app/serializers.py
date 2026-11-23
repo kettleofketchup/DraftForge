@@ -20,6 +20,7 @@ from events.overrides import (
     OverrideReasonRequired,
     OverrideRequestSerializer,
 )
+from league.mmr_sync import league_mmr_seeds
 from league.models import League, LeagueUser
 from org.mmr import LEAGUE_GAME, game_for_tournament, game_mmrs_prefetch, org_mmr_map
 from org.models import Organization, OrgUser
@@ -1408,14 +1409,16 @@ class TournamentSerializer(serializers.ModelSerializer):
                         )
 
                         # Create missing LeagueUsers in bulk
-                        league_mmrs = org_mmr_map(
-                            org.pk,
-                            [
-                                u.pk
-                                for u in added_users
-                                if u.pk not in existing_league_users
-                            ],
-                            LEAGUE_GAME,
+                        league_mmrs = league_mmr_seeds(
+                            org_mmr_map(
+                                org.pk,
+                                [
+                                    u.pk
+                                    for u in added_users
+                                    if u.pk not in existing_league_users
+                                ],
+                                LEAGUE_GAME,
+                            )
                         )
                         new_league_users = []
                         for user in added_users:

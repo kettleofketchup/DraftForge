@@ -3,6 +3,7 @@ from django.db.models import Sum
 from app.models import CustomUser
 from steam.functions.mmr_calculation import (
     calculate_mmr_adjustment,
+    recompute_league_mmrs_for_users,
     update_user_league_mmr,
 )
 from steam.models import LeaguePlayerStats, PlayerMatchStats
@@ -16,7 +17,7 @@ def player_won(player_slot: int, radiant_win: bool) -> bool:
 
 
 def update_player_league_stats(
-    user: CustomUser, league_id: int
+    user: CustomUser, league_id: int, *, recompute_league_mmr: bool = True
 ) -> LeaguePlayerStats | None:
     """
     Recalculate a player's aggregated stats for a specific league.
@@ -81,8 +82,8 @@ def update_player_league_stats(
     stats.mmr_adjustment = calculate_mmr_adjustment(stats)
     stats.save()
 
-    # Update user's league_mmr
-    update_user_league_mmr(user)
+    if recompute_league_mmr:
+        update_user_league_mmr(user)
 
     logger.info(
         "league_stats_updated",
@@ -111,14 +112,16 @@ def update_all_league_stats_for_league(league_id: int) -> int:
         .distinct()
     )
 
-    updated_count = 0
+    updated_ids: list[int] = []
     for user_id in user_ids:
         try:
             user = CustomUser.objects.get(pk=user_id)
-            update_player_league_stats(user, league_id)
-            updated_count += 1
         except CustomUser.DoesNotExist:
             continue
+        update_player_league_stats(user, league_id, recompute_league_mmr=False)
+        updated_ids.append(user.pk)
+    recompute_league_mmrs_for_users(updated_ids)
+    updated_count = len(updated_ids)
 
     logger.info(
         "league_stats_bulk_updated",

@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
 from app.serializers import TournamentUserSerializer
+from league.mmr_sync import league_mmr_seeds
 from league.models import League, LeagueLog, LeagueUser
 from league.permissions import has_league_admin_access
 from org.member_resolution import member_nick, resolve_member_user
@@ -229,7 +230,9 @@ def add_league_member(request: Request, league_id: int) -> Response:
                 user=user,
                 org_user=org_user,
                 league=league,
-                mmr=org_mmr_for(league.organization_id, user.pk, LEAGUE_GAME),
+                mmr=league_mmr_seeds(
+                    {user.pk: org_mmr_for(league.organization_id, user.pk, LEAGUE_GAME)}
+                )[user.pk],
             )
             invalidate_after_commit(user)
     except IntegrityError:

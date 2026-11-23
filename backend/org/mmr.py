@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from typing import TYPE_CHECKING
 
 from django.apps import apps
@@ -327,7 +327,11 @@ def merge_org_mmrs(loser: OrgUser, keeper: OrgUser) -> None:
 
 
 def bulk_set_org_mmrs(
-    organization_id: int, game_type: int, values: dict[int, int | None]
+    organization_id: int,
+    game_type: int,
+    values: dict[int, int | None],
+    *,
+    keep_league_user_ids: Collection[int] = (),
 ) -> None:
     validate_org_mmr(game_type, None)
     for user_id, value in values.items():
@@ -381,7 +385,8 @@ def bulk_set_org_mmrs(
         )
         if game_type == LEAGUE_GAME:
             sync_league_mmrs_from_org(
-                {by_user[uid].pk: value or 0 for uid, value in values.items()}
+                {by_user[uid].pk: value or 0 for uid, value in values.items()},
+                exclude_league_user_ids=keep_league_user_ids,
             )
         user_ids = list(by_user)
 

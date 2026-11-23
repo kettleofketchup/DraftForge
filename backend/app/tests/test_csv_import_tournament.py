@@ -12,6 +12,7 @@ from league.models import League, LeagueUser
 from org import mmr as org_mmr
 from org.mmr import org_mmr_for
 from org.models import Organization, OrgUser, OrgUserGameMmr
+from steam.models import LeaguePlayerStats
 from tests.populate.utils import ensure_org_user
 
 
@@ -391,6 +392,32 @@ class TournamentCSVImportDotaRowTest(TestCase):
         self.assertEqual(
             LeagueUser.objects.get(user=self.user, league=self.league).mmr, 6500
         )
+
+    def adjust(self, user: CustomUser, adjustment: int) -> None:
+        LeaguePlayerStats.objects.create(
+            user=user, league_id=77001, games_played=10, mmr_adjustment=adjustment
+        )
+
+    def test_org_target_league_mmr_adds_adjustment(self) -> None:
+        self.adjust(self.user, 150)
+        self.post(6500, update_mmr=True, mmr_target="organization")
+        self.assertEqual(self.dota_row(), 6500)
+        self.assertEqual(self.snapshot(self.user), 6650)
+
+    def test_league_target_explicit_value_ignores_adjustment(self) -> None:
+        self.adjust(self.user, 150)
+        LeagueUser.objects.create(
+            user=self.user, league=self.league, org_user=self.org_user, mmr=1100
+        )
+        self.post(6500, update_mmr=True, mmr_target="league")
+        self.assertEqual(self.snapshot(self.user), 6500)
+
+    def test_league_target_explicit_value_without_league_row_ignores_adjustment(
+        self,
+    ) -> None:
+        self.adjust(self.user, 150)
+        self.post(6500, update_mmr=True, mmr_target="league")
+        self.assertEqual(self.snapshot(self.user), 6500)
 
     def test_new_member_league_snapshot_seeded_without_update_mmr(self) -> None:
         resp = self.client.post(

@@ -2,7 +2,7 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
 from app.models import CustomUser, PositionsModel
-from app.views.csv_import import _resync_league_snapshots, _update_mmr_for_target
+from app.views.csv_import import _update_mmr_for_target
 from league.mmr import merge_league_users, set_league_mmr
 from league.models import League, LeagueLog, LeagueUser
 from org.models import MmrChangeRequest, Organization, OrgLog, OrgUser
@@ -169,15 +169,6 @@ class SetLeagueMmrTests(LeagueMmrFixture, MmrRequestTestMixin, TestCase):
 
         row = self.fresh()
         self.assertEqual(row.mmr, 4321)
-        self.assertIsNone(row.mmr_verified_at)
-        self.assertIsNone(row.mmr_verified_by_id)
-
-    def test_resync_league_snapshots_clears_marker(self) -> None:
-        self.stamp()
-        _resync_league_snapshots(self.league, {self.member.pk: 5555})
-
-        row = self.fresh()
-        self.assertEqual(row.mmr, 5555)
         self.assertIsNone(row.mmr_verified_at)
         self.assertIsNone(row.mmr_verified_by_id)
 

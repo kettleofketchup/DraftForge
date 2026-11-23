@@ -35,6 +35,7 @@ from app.services.team_signals import (
 )
 from app.services.team_signals import team_roster_changed as team_roster_changed
 from app.services.tournament_completion import sync_tournament_completion
+from league.mmr_sync import league_mmr_seeds
 from league.models import LeagueUser
 from org.mmr import LEAGUE_GAME, org_mmr_map
 from org.models import OrgUser
@@ -275,7 +276,9 @@ def handle_tournament_user_addition(
             "user_id", flat=True
         )
     )
-    league_mmrs = org_mmr_map(org.pk, set(added_pks or ()) - seeded, LEAGUE_GAME)
+    league_mmrs = league_mmr_seeds(
+        org_mmr_map(org.pk, set(added_pks or ()) - seeded, LEAGUE_GAME)
+    )
 
     for user in added_users:
         # Step 1: Create OrgUser if it doesn't exist
