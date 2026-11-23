@@ -15,30 +15,34 @@ const ERROR_MESSAGES: Record<DiscordConnectError, string> = {
     "The DraftForge bot couldn't see that server. Add the bot and try again.",
 };
 
-/** Toast the `?discord=connected|error&reason=` result the install callback appends. */
-export function useDiscordConnectResult(orgId: number | undefined): void {
+/**
+ * Toast the `?discord=connected|error&reason=` result the install callback appends.
+ * The callback is a full page load, so the toast waits a task for the Toaster to subscribe.
+ */
+export function useDiscordConnectResult(orgId?: number): void {
   const [searchParams, setSearchParams] = useLatestSearchParams();
   const queryClient = useQueryClient();
   const result = searchParams.get('discord');
   const reason = searchParams.get('reason');
 
   useEffect(() => {
-    if (!result || orgId == null) return;
+    if (!result) return;
     if (result === 'connected') {
-      toast.success('Discord server connected');
-      void queryClient.invalidateQueries({
-        queryKey: organizationQueryKey(orgId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: discordConnectKeys.botStatus(orgId),
-      });
+      setTimeout(() => toast.success('Discord server connected'), 0);
+      if (orgId != null) {
+        void queryClient.invalidateQueries({
+          queryKey: organizationQueryKey(orgId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: discordConnectKeys.botStatus(orgId),
+        });
+      }
     } else {
       const parsed = DiscordConnectErrorSchema.safeParse(reason);
-      toast.error(
-        parsed.success
-          ? ERROR_MESSAGES[parsed.data]
-          : 'Could not connect Discord.',
-      );
+      const message = parsed.success
+        ? ERROR_MESSAGES[parsed.data]
+        : 'Could not connect Discord.';
+      setTimeout(() => toast.error(message), 0);
     }
     setSearchParams(
       (prev) => {

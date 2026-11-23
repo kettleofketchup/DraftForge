@@ -8,6 +8,7 @@ import {
 import type { OrganizationType } from '~/components/organization/schemas';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
+import { useDiscordConnectResult } from '~/features/discord-connect';
 import { useIsLoggedIn } from '~/hooks/usePermissions';
 import { generateMeta } from '~/lib/seo';
 import { useUserStore } from '~/store/userStore';
@@ -83,6 +84,7 @@ export default function OrganizationsPage() {
   const hasHydrated = useUserStore((state) => state.hasHydrated);
   const isLoggedIn = useIsLoggedIn();
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  useDiscordConnectResult();
 
   // Read cached organizations after mount to avoid hydration mismatch
   const [mounted, setMounted] = useState(false);

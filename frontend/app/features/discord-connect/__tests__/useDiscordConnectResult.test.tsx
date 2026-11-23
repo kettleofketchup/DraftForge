@@ -17,6 +17,12 @@ function Page() {
   return null;
 }
 
+function ListPage() {
+  useDiscordConnectResult();
+  search = useLocation().search;
+  return null;
+}
+
 function renderAt(url: string) {
   const qc = new QueryClient();
   const invalidate = vi.spyOn(qc, 'invalidateQueries');
@@ -45,8 +51,10 @@ describe('useDiscordConnectResult', () => {
       '/organizations/4?settings=discord&discord=connected',
     );
 
-    await waitFor(() => expect(search).toBe('?settings=discord'));
-    expect(toast.success).toHaveBeenCalledWith('Discord server connected');
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('Discord server connected'),
+    );
+    expect(search).toBe('?settings=discord');
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: organizationQueryKey(4),
     });
@@ -60,16 +68,40 @@ describe('useDiscordConnectResult', () => {
       '/organizations/4?settings=discord&discord=error&reason=bot_missing',
     );
 
-    await waitFor(() => expect(search).toBe('?settings=discord'));
-    expect(toast.error).toHaveBeenCalledWith(
-      expect.stringContaining("couldn't see that server"),
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("couldn't see that server"),
+      ),
     );
+    expect(search).toBe('?settings=discord');
   });
 
   it('falls back for an unknown reason', async () => {
     renderAt('/organizations/4?discord=error&reason=nope');
 
-    await waitFor(() => expect(search).toBe(''));
-    expect(toast.error).toHaveBeenCalledWith('Could not connect Discord.');
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Could not connect Discord.'),
+    );
+    expect(search).toBe('');
+  });
+
+  it('reports an expired link without an org', async () => {
+    const qc = new QueryClient();
+    const router = createMemoryRouter(
+      [{ path: '/organizations', Component: ListPage }],
+      { initialEntries: ['/organizations?discord=error&reason=expired'] },
+    );
+    render(
+      <QueryClientProvider client={qc}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining('link expired'),
+      ),
+    );
+    expect(search).toBe('');
   });
 });
