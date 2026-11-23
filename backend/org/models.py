@@ -122,7 +122,7 @@ class OrgUser(models.Model):
     guild_nickname = models.TextField(null=True, blank=True)
     joined_at = models.DateTimeField(auto_now_add=True)
 
-    # MMR verification (moved from CustomUser)
+    # MMR verification
     has_active_dota_mmr = models.BooleanField(default=False)
     dota_mmr_last_verified = models.DateTimeField(null=True, blank=True)
 
