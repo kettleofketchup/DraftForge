@@ -3,6 +3,7 @@ import type {
   DiscordSearchResult,
   SearchUserResult,
 } from '~/components/api/api';
+import { userSearchKeys } from '~/hooks/useUserSearch';
 
 export interface SearchedUser {
   pk: number;
@@ -19,7 +20,7 @@ export function findSearchedUser(
   pk: number,
 ): SearchedUser | null {
   for (const [, results] of queryClient.getQueriesData<SearchUserResult[]>({
-    queryKey: ['userSearch'],
+    queryKey: userSearchKeys.all,
   })) {
     const match = results?.find((u) => u.pk === pk);
     if (match) {
@@ -32,7 +33,7 @@ export function findSearchedUser(
     }
   }
   for (const [, results] of queryClient.getQueriesData<DiscordSearchResult[]>({
-    queryKey: ['discordSearch'],
+    queryKey: userSearchKeys.discordAll,
   })) {
     const member = results?.find((m) => m.site_user_pk === pk);
     if (member) {

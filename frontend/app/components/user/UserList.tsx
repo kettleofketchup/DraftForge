@@ -5,13 +5,12 @@
  * Used by /users page and organization Users tab.
  */
 
-import { Loader2, Search, Users, X } from 'lucide-react';
-import { memo, useEffect, useMemo, useState } from 'react';
-import { Input } from '~/components/ui/input';
+import { Loader2, Users } from 'lucide-react';
+import { memo, useEffect, useState } from 'react';
+import { UserSearchInput } from '~/components/user/search';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
-import { useDebouncedValue } from '~/hooks/useDebouncedValue';
-import { userMatchesQuery } from '~/lib/userDisplayName';
+import { useFilteredUsers } from '~/hooks/useUserSearch';
 import {
   VirtualizedUserGrid,
   type ColumnBreakpoints,
@@ -195,15 +194,9 @@ export function UserList({
 
   // Use external query if provided, otherwise use internal
   const searchQuery = externalSearchQuery || internalQuery;
-  const debouncedQuery = useDebouncedValue(searchQuery, 300);
-
-  // Filter users with debounced query
-  const filteredUsers = useMemo(() => {
-    if (debouncedQuery === '') return users;
-    return users.filter((person) =>
-      userMatchesQuery(person, debouncedQuery, { orgId: organizationId }),
-    );
-  }, [users, debouncedQuery, organizationId]);
+  const filteredUsers = useFilteredUsers(users, searchQuery, {
+    orgId: organizationId,
+  });
 
   // Loading state - show skeleton
   if (isLoading && users.length === 0) {
@@ -220,25 +213,12 @@ export function UserList({
     return (
       <>
         {showSearch && (
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder={searchPlaceholder}
-              value={internalQuery}
-              onChange={(e) => setInternalQuery(e.target.value)}
-              className="pl-9 pr-9"
-            />
-            {internalQuery && (
-              <button
-                type="button"
-                onClick={() => setInternalQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+          <UserSearchInput
+            value={internalQuery}
+            onChange={setInternalQuery}
+            placeholder={searchPlaceholder}
+            className="mb-4"
+          />
         )}
         <EmptyUsers message="No matching users found" />
       </>
@@ -252,25 +232,11 @@ export function UserList({
         // ScrollArea viewport in root.tsx). bg-background paints over
         // virtualized cards as they scroll under the bar.
         <div className="sticky top-0 z-20 bg-background pb-3 mb-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder={searchPlaceholder}
-              value={internalQuery}
-              onChange={(e) => setInternalQuery(e.target.value)}
-              className="pl-9 pr-9"
-            />
-            {internalQuery && (
-              <button
-                type="button"
-                onClick={() => setInternalQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+          <UserSearchInput
+            value={internalQuery}
+            onChange={setInternalQuery}
+            placeholder={searchPlaceholder}
+          />
         </div>
       )}
       <VirtualizedUserGrid

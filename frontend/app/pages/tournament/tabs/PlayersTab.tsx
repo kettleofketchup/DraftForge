@@ -8,7 +8,7 @@ import { PrimaryButton } from '~/components/ui/buttons';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
-import { SearchUserDropdown } from '~/components/user/searchUser';
+import { UserSearchInput } from '~/components/user/search';
 import type { UserType } from '~/components/user/types';
 import { useTournamentUsers } from '~/hooks/useTournamentUsers';
 import { hydrateTournament } from '~/lib/hydrateTournament';
@@ -89,13 +89,12 @@ export const PlayersTab: React.FC = memo(() => {
 
       <div className="flex flex-col-reverse md:flex-row gap-3 items-stretch md:items-start pt-5">
         <div className="flex flex-1">
-          <SearchUserDropdown
-            users={tournamentUsers}
-            query={query}
-            setQuery={(val) =>
-              typeof val === 'string' ? setQuery(val) : setQuery(val(''))
-            }
-            data-testid="playerSearchDropdown"
+          <UserSearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search for users"
+            className="w-full"
+            data-testid="userSearchInput"
           />
         </div>
         {canEdit && (

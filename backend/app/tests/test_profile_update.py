@@ -17,7 +17,9 @@ LOOKUP_ON = override_settings(
 )
 
 
-def _make_user(username: str, steam_account_id: int | None = None) -> CustomUser:
+def _make_profile_user(
+    username: str, steam_account_id: int | None = None
+) -> CustomUser:
     return CustomUser.objects.create(
         username=username,
         positions=PositionsModel.objects.create(),
@@ -29,8 +31,8 @@ def _make_user(username: str, steam_account_id: int | None = None) -> CustomUser
 class ProfileUpdateFriendIdTests(APITestCase):
     def setUp(self) -> None:
         cache.clear()
-        self.user = _make_user("pu-user")
-        self.staff = _make_user("pu-staff")
+        self.user = _make_profile_user("pu-user")
+        self.staff = _make_profile_user("pu-staff")
         self.client = APIClient()
         self.client.force_authenticate(self.user)
 
@@ -59,7 +61,7 @@ class ProfileUpdateFriendIdTests(APITestCase):
         self.assertIsNone(self._reload().steam_account_id)
 
     def test_duplicate_409(self) -> None:
-        _make_user("pu-other", steam_account_id=515151)
+        _make_profile_user("pu-other", steam_account_id=515151)
         with patch(ENSURE) as ensure:
             resp = self._post(515151)
         self.assertEqual(resp.status_code, 409)
@@ -69,7 +71,7 @@ class ProfileUpdateFriendIdTests(APITestCase):
         ensure.assert_not_called()
 
     def test_integrity_error_409(self) -> None:
-        other = _make_user("pu-racer")
+        other = _make_profile_user("pu-racer")
 
         def claim_first(*_args: object, **_kwargs: object) -> bool:
             CustomUser.objects.filter(pk=other.pk).update(steam_account_id=525252)
@@ -159,7 +161,7 @@ class ProfileUpdateLookupOutsideAtomicTest(TransactionTestCase):
         cache.clear()
 
     def test_lookup_runs_outside_atomic(self) -> None:
-        user = _make_user("pu-atomic")
+        user = _make_profile_user("pu-atomic")
         client = APIClient()
         client.force_authenticate(user)
         seen: list[bool] = []

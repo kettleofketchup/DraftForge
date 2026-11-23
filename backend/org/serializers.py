@@ -25,6 +25,18 @@ def _known_timezones() -> frozenset[str]:
     return frozenset(available_timezones())
 
 
+class OrganizationsSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for organization list view."""
+
+    league_count = serializers.IntegerField(read_only=True)
+    users_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Organization
+        fields = ("pk", "name", "logo", "league_count", "users_count", "created_at")
+        read_only_fields = ("pk", "league_count", "users_count", "created_at")
+
+
 class OrganizationSerializer(serializers.ModelSerializer):
     # Roles change only through the admin_team endpoints.
     owner = TournamentUserSerializer(read_only=True)

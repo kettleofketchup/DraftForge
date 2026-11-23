@@ -1,6 +1,6 @@
 from django.urls import path
 
-from app.views.bracket import (
+from tournament.views.bracket import (
     advance_winner,
     generate_bracket,
     get_bracket,

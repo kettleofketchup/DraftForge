@@ -10,7 +10,7 @@ from django.utils.text import capfirst
 from org.promotion.services import release_earning_sends
 from org.standing import api as standing
 
-from .models import CustomUser, TeamLog
+from .models import CustomUser
 
 
 class CustomUserAdmin(admin.ModelAdmin):
@@ -64,33 +64,4 @@ class CustomUserAdmin(admin.ModelAdmin):
             super().delete_queryset(request, queryset)
 
 
-class TeamLogAdmin(admin.ModelAdmin):
-    list_display = (
-        "created_at",
-        "team_name",
-        "team_snapshot_id",
-        "action",
-        "via",
-        "actor",
-        "target_user",
-    )
-    list_select_related = ("actor", "target_user", "team")
-    list_filter = ("action", "via")
-    search_fields = ("team_name", "reason")
-
-    def has_add_permission(self, request: HttpRequest) -> bool:
-        return False
-
-    def has_change_permission(
-        self, request: HttpRequest, obj: TeamLog | None = None
-    ) -> bool:
-        return False
-
-    def has_delete_permission(
-        self, request: HttpRequest, obj: TeamLog | None = None
-    ) -> bool:
-        return False
-
-
 admin.site.register(CustomUser, CustomUserAdmin)
-admin.site.register(TeamLog, TeamLogAdmin)
