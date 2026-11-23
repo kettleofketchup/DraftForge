@@ -1,7 +1,7 @@
 """Discord voice presence for events: watched channels, presence rows and voice confirms."""
 
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -17,16 +17,24 @@ from app.redis_client import get_redis_client
 from app.redis_keys import namespaced_key
 from events.constants import EventState, VoicePresenceSource
 from events.ledger import SignupActor
-from events.models import Event, EventSignup, EventVoicePresence, SignupLedgerEntry
+from events.models import (
+    Event,
+    EventSignup,
+    EventVoicePresence,
+    ReadyCheck,
+    SignupLedgerEntry,
+)
 from events.ready_check import (
     ConfirmResult,
     confirm_ready,
     live_ready_check,
     lock_event,
+    trusted_present_user_ids,
 )
 from events.ready_check_constants import (
     PRESENCE_FRESH,
     ReadyCheckConfirmVia,
+    ReadyCheckEntryState,
     ReadyCheckPhase,
 )
 from events.ready_check_core import ACCEPTING_PHASES
@@ -41,6 +49,7 @@ __all__ = [
     "WATCH_LOOKAHEAD",
     "WATCH_LOOKBEHIND",
     "WatchedChannel",
+    "apply_voice_snapshot",
     "apply_voice_state",
     "touch_feed_heartbeat",
     "voice_feed_age_seconds",
@@ -215,6 +224,18 @@ def _apply_presence(
     return transition
 
 
+def _voice_confirm_check(event: Event) -> ReadyCheck | None:
+    check = live_ready_check(event)
+    if (
+        check is None
+        or check.phase not in ACCEPTING_PHASES
+        or check.settings_snapshot.get("voice_presence_confirms") is not True
+        or not event.voice_presence_confirms
+    ):
+        return None
+    return check
+
+
 def _maybe_confirm(
     locked: Event,
     user: CustomUser,
@@ -222,13 +243,8 @@ def _maybe_confirm(
     actor: SignupActor,
     caused_by: SignupLedgerEntry | None = None,
 ) -> ConfirmResult | None:
-    check = live_ready_check(locked)
-    if (
-        check is None
-        or check.phase not in ACCEPTING_PHASES
-        or check.settings_snapshot.get("voice_presence_confirms") is not True
-        or not locked.voice_presence_confirms
-    ):
+    check = _voice_confirm_check(locked)
+    if check is None:
         return None
     result = confirm_ready(
         locked,
@@ -320,4 +336,194 @@ def apply_voice_state(
         confirmed=outcome.confirmed,
         not_signed_up=outcome.not_signed_up,
     )
+    return outcome
+
+
+def _trusted_rows(event: Event, now: datetime) -> QuerySet[EventVoicePresence]:
+    return EventVoicePresence.objects.filter(
+        event=event,
+        present=True,
+        source=VoicePresenceSource.FEED,
+        last_seen_at__gte=now - PRESENCE_FRESH,
+    )
+
+
+def _reconcile_has_work(event: Event, now: datetime) -> bool:
+    check = _voice_confirm_check(event)
+    if check is None:
+        return False
+    return check.entries.filter(
+        state=ReadyCheckEntryState.PENDING,
+        user_id__in=_trusted_rows(event, now).values("user_id"),
+    ).exists()
+
+
+def _reconcile_pending(locked: Event, now: datetime) -> int:
+    check = _voice_confirm_check(locked)
+    if check is None:
+        return 0
+    trusted = trusted_present_user_ids(locked, now)
+    if not trusted:
+        return 0
+    entries = (
+        check.entries.filter(state=ReadyCheckEntryState.PENDING, user_id__in=trusted)
+        .select_related("user")
+        .order_by("pk")
+    )
+    confirmed = 0
+    for entry in entries:
+        result = confirm_ready(
+            locked,
+            entry.user,
+            via=ReadyCheckConfirmVia.VOICE,
+            actor=SignupActor.voice(entry.user),
+        )
+        if result == ConfirmResult.CONFIRMED:
+            confirmed += 1
+    return confirmed
+
+
+def _recent(at: datetime | None, cutoff: datetime) -> bool:
+    return at is not None and at >= cutoff
+
+
+def _snapshot_target(
+    row: EventVoicePresence | None, listed: bool, cutoff: datetime
+) -> bool | None:
+    """Presence the snapshot should apply to a row, or None to leave it alone."""
+    if row is None:
+        return True if listed else None
+    if row.source == VoicePresenceSource.MANUAL or row.present == listed:
+        return None
+    if _recent(row.last_joined_at, cutoff) or _recent(row.last_left_at, cutoff):
+        return None
+    return listed
+
+
+def _snapshot_event(
+    event: Event,
+    listed_ids: set[int],
+    users: dict[int, CustomUser],
+    now: datetime,
+    outcome: PresenceOutcome,
+) -> None:
+    signed = set(
+        EventSignup.objects.nocache()
+        .filter(event=event, user_id__in=listed_ids)
+        .values_list("user_id", flat=True)
+    )
+    outcome.not_signed_up += len(listed_ids - signed)
+    outcome.events += 1
+    cutoff = now - SNAPSHOT_GRACE
+    rows = {
+        row.user_id: row
+        for row in EventVoicePresence.objects.filter(event=event).filter(
+            Q(user_id__in=signed) | Q(present=True)
+        )
+    }
+    changes: dict[int, bool] = {}
+    seen: list[int] = []
+    for user_id in signed | rows.keys():
+        row = rows.get(user_id)
+        listed = user_id in signed
+        target = _snapshot_target(row, listed, cutoff)
+        if target is not None:
+            changes[user_id] = target
+        elif row is not None and listed and row.present:
+            seen.append(row.pk)
+    if seen:
+        EventVoicePresence.objects.filter(pk__in=seen).update(last_seen_at=now)
+    if not changes and not _reconcile_has_work(event, now):
+        return
+    with transaction.atomic():
+        locked = lock_event(event)
+        fresh = {
+            row.user_id: row
+            for row in EventVoicePresence.objects.filter(
+                event=locked, user_id__in=changes.keys()
+            )
+        }
+        for user_id in sorted(changes):
+            listed = changes[user_id]
+            if _snapshot_target(fresh.get(user_id), listed, cutoff) is None:
+                continue
+            user = users.get(user_id) or CustomUser.objects.nocache().get(pk=user_id)
+            transition = _apply_presence(locked, user, listed, now, from_gateway=False)
+            if transition == Transition.JOINED:
+                outcome.joined += 1
+            elif transition == Transition.LEFT:
+                outcome.left += 1
+        outcome.confirmed += _reconcile_pending(locked, now)
+
+
+def apply_voice_snapshot(
+    *,
+    guild_id: str,
+    channels: Mapping[str, Sequence[str]],
+    missing_channel_ids: Sequence[str] = (),
+) -> PresenceOutcome:
+    outcome = PresenceOutcome()
+    now = tz.now()
+    missing = set(missing_channel_ids)
+    listed = {
+        channel: set(members)
+        for channel, members in channels.items()
+        if channel not in missing
+    }
+    discord_ids = set().union(*listed.values()) if listed else set()
+    by_discord = {
+        user.discordId: user
+        for user in CustomUser.objects.nocache().filter(discordId__in=discord_ids)
+    }
+    outcome.unknown_users = len(discord_ids - by_discord.keys())
+    users = {user.pk: user for user in by_discord.values()}
+    blocks: dict[str, list[Event]] = {}
+    unseen: set[str] = set()
+    for event in (
+        watched_events(now)
+        .filter(organization__discord_server_id=guild_id)
+        .order_by("pk")
+    ):
+        channel = event.event_voice_channel_id
+        if channel in listed:
+            blocks.setdefault(channel, []).append(event)
+        else:
+            unseen.add(channel)
+    for channel in sorted(unseen):
+        log.warning(
+            "voice_presence_channel_missing",
+            **_LOG,
+            guild_id=guild_id,
+            channel_id=channel,
+        )
+    visible: list[str] = []
+    failure: Exception | None = None
+    for channel, events in blocks.items():
+        listed_ids = {
+            by_discord[member].pk for member in listed[channel] if member in by_discord
+        }
+        try:
+            for event in events:
+                _snapshot_event(event, listed_ids, users, now, outcome)
+        except Exception as exc:
+            failure = failure or exc
+            continue
+        visible.append(channel)
+    touch_feed_heartbeat(guild_id, visible)
+    log.info(
+        "voice_snapshot_applied",
+        **_LOG,
+        guild_id=guild_id,
+        channels=len(blocks),
+        visible=len(visible),
+        missing=len(unseen),
+        events=outcome.events,
+        joined=outcome.joined,
+        left=outcome.left,
+        confirmed=outcome.confirmed,
+        unknown_users=outcome.unknown_users,
+        not_signed_up=outcome.not_signed_up,
+    )
+    if failure is not None:
+        raise failure
     return outcome

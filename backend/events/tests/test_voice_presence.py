@@ -1,13 +1,17 @@
 from datetime import datetime, timedelta
 from itertools import count
+from typing import Any
 from unittest import mock
 
+from django.db import transaction
 from django.utils import timezone as tz
 from structlog.testing import capture_logs
 
 from app.models import CustomUser
 from app.redis_client import set_client_for_tests
 from app.redis_keys import namespaced_key
+from events import voice_presence
+from events.capacity import lock_event
 from events.constants import (
     ActorRole,
     EventState,
@@ -22,6 +26,7 @@ from events.models import (
     EventVoicePresence,
     ReadyCheck,
     RollCallMode,
+    SignupLedgerEntry,
 )
 from events.ready_check_constants import (
     ReadyCheckConfirmVia,
@@ -33,8 +38,14 @@ from events.tests.test_ready_check_service import ReadyCheckServiceTestCase
 from events.tests.test_signup_post_lock import BrokenRedis, FakeRedis
 from events.voice_presence import (
     FEED_HEARTBEAT_TTL_SECONDS,
+    PRESENCE_FRESH,
+    SNAPSHOT_GRACE,
     PresenceOutcome,
+    Transition,
     WatchedChannel,
+    _reconcile_has_work,
+    _reconcile_pending,
+    apply_voice_snapshot,
     apply_voice_state,
     touch_feed_heartbeat,
     voice_feed_age_seconds,
@@ -500,3 +511,346 @@ class VoiceConfirmTests(VoiceStateTestCase):
             self._entry_state(off_check, user), ReadyCheckEntryState.PENDING
         )
         self.assertEqual(outcome.confirmed, 1)
+
+
+class VoiceSnapshotTestCase(VoiceStateTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.redis = FakeRedis()
+        set_client_for_tests(self.redis)
+        self.addCleanup(set_client_for_tests, None)
+
+    def _snap(
+        self,
+        channels: dict[str, list[CustomUser | str]],
+        missing: tuple[str, ...] = (),
+    ) -> PresenceOutcome:
+        payload = {
+            channel: [
+                member if isinstance(member, str) else str(member.discordId)
+                for member in members
+            ]
+            for channel, members in channels.items()
+        }
+        with self.captureOnCommitCallbacks(execute=True):
+            return apply_voice_snapshot(
+                guild_id=GUILD, channels=payload, missing_channel_ids=missing
+            )
+
+    def _feed_row(
+        self, event: Event, user: CustomUser, *, present: bool, age: timedelta
+    ) -> EventVoicePresence:
+        at = tz.now() - age
+        return EventVoicePresence.objects.create(
+            event=event,
+            user=user,
+            guild_id=GUILD,
+            channel_id=event.event_voice_channel_id,
+            present=present,
+            source=VoicePresenceSource.FEED,
+            first_joined_at=at,
+            last_joined_at=at,
+            last_left_at=None if present else at,
+            last_seen_at=at,
+        )
+
+    def _age(self, event: Event, user: CustomUser, age: timedelta) -> None:
+        at = tz.now() - age
+        row = self._row(event, user)
+        EventVoicePresence.objects.filter(pk=row.pk).update(
+            last_joined_at=at if row.last_joined_at else None,
+            last_left_at=at if row.last_left_at else None,
+            last_seen_at=at if row.last_seen_at else None,
+        )
+
+
+class VoiceSnapshotTests(VoiceSnapshotTestCase):
+    def test_snapshot_marks_members_present(self) -> None:
+        event = self._event()
+        user = self._member(event)
+        stranger = self._linked()
+        outcome = self._snap({CHANNEL: [user, user, stranger, "399999999999999999"]})
+        row = self._row(event, user)
+        self.assertTrue(row.present)
+        self.assertEqual(row.source, VoicePresenceSource.FEED)
+        self.assertIsNotNone(row.first_joined_at)
+        self.assertEqual(row.channel_id, CHANNEL)
+        self.assertEqual(outcome.joined, 1)
+        self.assertEqual(outcome.unknown_users, 1)
+        self.assertEqual(outcome.not_signed_up, 1)
+        self.assertFalse(EventVoicePresence.objects.filter(user=stranger).exists())
+
+    def test_snapshot_clears_stale_presence(self) -> None:
+        event = self._event()
+        user = self._member(event)
+        self._feed_row(event, user, present=True, age=timedelta(minutes=2))
+        outcome = self._snap({CHANNEL: []})
+        row = self._row(event, user)
+        self.assertFalse(row.present)
+        self.assertIsNotNone(row.last_left_at)
+        self.assertEqual(outcome.left, 1)
+
+    def test_snapshot_keeps_manual_pin(self) -> None:
+        event = self._event()
+        pinned_in = self._member(event)
+        pinned_out = self._member(event)
+        for user, present in ((pinned_in, True), (pinned_out, False)):
+            EventVoicePresence.objects.create(
+                event=event,
+                user=user,
+                channel_id=CHANNEL,
+                present=present,
+                source=VoicePresenceSource.MANUAL,
+            )
+        outcome = self._snap({CHANNEL: [pinned_out]})
+        self.assertTrue(self._row(event, pinned_in).present)
+        self.assertFalse(self._row(event, pinned_out).present)
+        self.assertEqual(self._row(event, pinned_in).source, "manual")
+        self.assertEqual((outcome.joined, outcome.left), (0, 0))
+
+    def test_missing_or_omitted_channel_not_cleared(self) -> None:
+        missing = self._event()
+        omitted = self._event(channel=OTHER_CHANNEL)
+        user = self._member(missing, omitted)
+        self._feed_row(missing, user, present=True, age=timedelta(minutes=2))
+        self._feed_row(omitted, user, present=True, age=timedelta(minutes=2))
+        with capture_logs() as logs:
+            outcome = self._snap({}, missing=(CHANNEL,))
+        self.assertTrue(self._row(missing, user).present)
+        self.assertTrue(self._row(omitted, user).present)
+        self.assertEqual(outcome.left, 0)
+        warnings = [
+            entry
+            for entry in logs
+            if entry["event"] == "voice_presence_channel_missing"
+        ]
+        self.assertEqual(len(warnings), 2)
+        self.assertTrue(all(entry["log_level"] == "warning" for entry in warnings))
+
+    def test_snapshot_does_not_undo_recent_gateway_leave(self) -> None:
+        event = self._event(voice_presence_confirms=True)
+        user = self._member(event)
+        check = self._open(event).check
+        self._feed_row(event, user, present=True, age=timedelta(minutes=2))
+        joined_at = self._row(event, user).last_joined_at
+        self._state(CHANNEL, None, user)
+        outcome = self._snap({CHANNEL: [user]})
+        row = self._row(event, user)
+        self.assertFalse(row.present)
+        self.assertEqual(row.last_joined_at, joined_at)
+        self.assertEqual(
+            check.entries.get(user=user).state, ReadyCheckEntryState.PENDING
+        )
+        self.assertEqual((outcome.joined, outcome.confirmed), (0, 0))
+
+    def test_snapshot_does_not_undo_recent_gateway_join(self) -> None:
+        event = self._event()
+        user = self._member(event)
+        self._state(None, CHANNEL, user)
+        outcome = self._snap({CHANNEL: []})
+        self.assertTrue(self._row(event, user).present)
+        self.assertEqual(outcome.left, 0)
+
+    def test_snapshot_heals_when_no_recent_transition(self) -> None:
+        event = self._event()
+        user = self._member(event)
+        self._feed_row(event, user, present=False, age=timedelta(minutes=2))
+        outcome = self._snap({CHANNEL: [user]})
+        row = self._row(event, user)
+        self.assertTrue(row.present)
+        self.assertEqual(outcome.joined, 1)
+        self.assertGreater(SNAPSHOT_GRACE, timedelta(0))
+
+    def test_snapshot_clear_after_confirm_stays_confirmed(self) -> None:
+        event = self._event(voice_presence_confirms=True)
+        user = self._member(event)
+        check = self._open(event).check
+        self._state(None, CHANNEL, user)
+        self.assertEqual(
+            check.entries.get(user=user).state, ReadyCheckEntryState.CONFIRMED
+        )
+        self._age(event, user, SNAPSHOT_GRACE + timedelta(seconds=30))
+        ledger_before = list(
+            SignupLedgerEntry.objects.filter(
+                event=event, subject_user=user
+            ).values_list("pk", flat=True)
+        )
+        self.assertTrue(ledger_before)
+        outcome = self._snap({CHANNEL: []})
+        self.assertFalse(self._row(event, user).present)
+        self.assertEqual(outcome.left, 1)
+        self.assertEqual(
+            check.entries.get(user=user).state, ReadyCheckEntryState.CONFIRMED
+        )
+        self.assertEqual(
+            EventSignup.objects.get(event=event, user=user).status,
+            SignupStatus.CONFIRMED,
+        )
+        self.assertEqual(self._rows(SignupAction.UNCONFIRMED, event), [])
+        self.assertEqual(
+            list(
+                SignupLedgerEntry.objects.filter(
+                    event=event, subject_user=user
+                ).values_list("pk", flat=True)
+            ),
+            ledger_before,
+        )
+
+    def test_steady_state_takes_no_lock(self) -> None:
+        event = self._event()
+        user = self._member(event)
+        self._feed_row(event, user, present=True, age=timedelta(minutes=2))
+        seen_before = self._row(event, user).last_seen_at
+        assert seen_before is not None
+        with mock.patch("events.voice_presence.lock_event", wraps=lock_event) as locked:
+            outcome = self._snap({CHANNEL: [user]})
+        locked.assert_not_called()
+        last_seen = self._row(event, user).last_seen_at
+        assert last_seen is not None
+        self.assertGreater(last_seen, seen_before)
+        self.assertEqual((outcome.joined, outcome.left, outcome.events), (0, 0, 1))
+
+
+class VoiceSnapshotHeartbeatTests(VoiceSnapshotTestCase):
+    def _keys(self) -> set[str]:
+        return set(self.redis.data)
+
+    def test_heartbeat_written_for_visible_channels_after_apply(self) -> None:
+        event = self._event()
+        user = self._member(event)
+        seen: list[bool] = []
+
+        def record(guild_id: str, channel_ids: list[str]) -> None:
+            seen.append(
+                EventVoicePresence.objects.filter(
+                    event=event, user=user, present=True
+                ).exists()
+            )
+            touch_feed_heartbeat(guild_id, channel_ids)
+
+        with mock.patch(
+            "events.voice_presence.touch_feed_heartbeat", side_effect=record
+        ):
+            self._snap({CHANNEL: [user]})
+        self.assertEqual(seen, [True])
+        self.assertEqual(
+            self._keys(),
+            {
+                namespaced_key(f"voice_feed:{GUILD}"),
+                namespaced_key(f"voice_feed:{GUILD}:{CHANNEL}"),
+            },
+        )
+
+    def test_only_missing_channels_writes_no_key(self) -> None:
+        self._event()
+        self._snap({}, missing=(CHANNEL,))
+        self.assertEqual(self.redis.data, {})
+
+    def test_missing_channel_has_no_channel_key_but_guild_key_from_other(
+        self,
+    ) -> None:
+        self._event()
+        self._event(channel=OTHER_CHANNEL)
+        self._snap({OTHER_CHANNEL: [], CHANNEL: []}, missing=(CHANNEL,))
+        self.assertEqual(
+            self._keys(),
+            {
+                namespaced_key(f"voice_feed:{GUILD}"),
+                namespaced_key(f"voice_feed:{GUILD}:{OTHER_CHANNEL}"),
+            },
+        )
+
+    def test_unwatched_listed_channel_gets_no_key(self) -> None:
+        self._event()
+        self._snap({CHANNEL: [], "100000000000000999": []})
+        self.assertNotIn(
+            namespaced_key(f"voice_feed:{GUILD}:100000000000000999"), self._keys()
+        )
+
+    def test_raising_block_leaves_its_channel_key_unset(self) -> None:
+        bad = self._event()
+        good = self._event(channel=OTHER_CHANNEL)
+        user = self._member(bad, good)
+        real = voice_presence._apply_presence
+
+        def explode(event: Event, *args: Any, **kwargs: Any) -> Transition:
+            if event.pk == bad.pk:
+                raise RuntimeError("boom")
+            return real(event, *args, **kwargs)
+
+        with (
+            mock.patch("events.voice_presence._apply_presence", side_effect=explode),
+            self.assertRaises(RuntimeError),
+        ):
+            self._snap({CHANNEL: [user], OTHER_CHANNEL: [user]})
+        self.assertTrue(self._row(good, user).present)
+        self.assertFalse(
+            EventVoicePresence.objects.filter(event=bad, user=user).exists()
+        )
+        self.assertEqual(
+            self._keys(),
+            {
+                namespaced_key(f"voice_feed:{GUILD}"),
+                namespaced_key(f"voice_feed:{GUILD}:{OTHER_CHANNEL}"),
+            },
+        )
+
+
+class VoiceReconcileTests(VoiceSnapshotTestCase):
+    def _reconcile(self, event: Event) -> int:
+        with self.captureOnCommitCallbacks(execute=True), transaction.atomic():
+            return _reconcile_pending(lock_event(event), tz.now())
+
+    def test_reconcile_confirms_present_pending_member(self) -> None:
+        event = self._event(voice_presence_confirms=True)
+        user = self._member(event)
+        check = self._open(event).check
+        self._feed_row(event, user, present=True, age=timedelta(seconds=40))
+        self.assertTrue(_reconcile_has_work(event, tz.now()))
+        outcome = self._snap({CHANNEL: [user]})
+        entry = check.entries.get(user=user)
+        self.assertEqual(entry.state, ReadyCheckEntryState.CONFIRMED)
+        self.assertEqual(entry.confirmed_via, ReadyCheckConfirmVia.VOICE)
+        (row,) = self._rows(SignupAction.CONFIRMED, event)
+        self.assertEqual(row.means, SignupMeans.DISCORD_VOICE)
+        self.assertEqual(outcome.confirmed, 1)
+
+    def test_reconcile_ignores_manual_and_stale_rows(self) -> None:
+        event = self._event(voice_presence_confirms=True)
+        manual = self._member(event)
+        stale = self._member(event)
+        check = self._open(event).check
+        EventVoicePresence.objects.create(
+            event=event,
+            user=manual,
+            channel_id=CHANNEL,
+            present=True,
+            source=VoicePresenceSource.MANUAL,
+            last_seen_at=tz.now(),
+        )
+        self._feed_row(
+            event, stale, present=True, age=PRESENCE_FRESH + timedelta(seconds=5)
+        )
+        self.assertFalse(_reconcile_has_work(event, tz.now()))
+        self.assertEqual(self._reconcile(event), 0)
+        for user in (manual, stale):
+            self.assertEqual(
+                check.entries.get(user=user).state, ReadyCheckEntryState.PENDING
+            )
+
+    def test_reconcile_requires_both_flags(self) -> None:
+        cases = (("snapshot_off", False, True), ("live_off", True, False))
+        for name, at_open, live in cases:
+            with self.subTest(name):
+                event = self._event(voice_presence_confirms=at_open)
+                user = self._member(event)
+                check = self._open(event).check
+                Event.objects.filter(pk=event.pk).update(voice_presence_confirms=live)
+                self._feed_row(event, user, present=True, age=timedelta(seconds=40))
+                event.refresh_from_db()
+                self.assertFalse(_reconcile_has_work(event, tz.now()))
+                self.assertEqual(self._reconcile(event), 0)
+                self.assertEqual(
+                    check.entries.get(user=user).state,
+                    ReadyCheckEntryState.PENDING,
+                )
