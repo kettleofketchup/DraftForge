@@ -1,5 +1,6 @@
 import { useWatch, type Control, type FieldValues } from 'react-hook-form';
 import type { z } from 'zod';
+import { IntegerInput } from '~/components/patterns/IntegerInput';
 import {
   FormControl,
   FormDescription,
@@ -473,13 +474,13 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
                 <FormItem>
                   <FormLabel>Hours before event</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
+                    <IntegerInput
                       min={1}
-                      {...field}
-                      onChange={(e) =>
-                        field.onChange(parseInt(e.target.value, 10) || 24)
-                      }
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value}
+                      onValueChange={(v) => v != null && field.onChange(v)}
                     />
                   </FormControl>
                   <FormDescription>
