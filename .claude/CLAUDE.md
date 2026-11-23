@@ -47,9 +47,9 @@ website/
 - Daphne's `ProtocolTypeRouter` automatically routes based on connection protocol
 - Example: `/api/herodraft/<id>/` handles both HTTP GET requests AND WebSocket connections
 
-WebSocket routes live in `backend/app/routing.py` and `backend/draft/routing.py`, combined in `backend/asgi.py`:
+WebSocket routes live in `backend/tournament/routing.py` and `backend/draft/routing.py`, combined in `backend/asgi.py`:
 ```python
-# backend/app/routing.py
+# backend/tournament/routing.py
 websocket_urlpatterns = [
     path("api/tournament/<int:tournament_id>/", TournamentConsumer.as_asgi()),
 ]
