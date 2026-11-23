@@ -264,6 +264,28 @@ class SignupLedgerEntrySerializerTest(EventTestCase):
         self.assertEqual(log_entry["subsystem"], "ledger")
         self.assertEqual(log_entry["entry_id"], entry.pk)
 
+    def test_malformed_rules_overridden_is_empty_and_logged(self) -> None:
+        for raw in ({"rule": "x"}, "max_players", [1, "x"], [{"a": 1}]):
+            with self.subTest(raw=raw):
+                entry = self._raw_entry(rules_overridden=raw)
+                with capture_logs() as logs:
+                    data = self._serialize(entry)
+                self.assertEqual(data["rules_overridden"], [])
+                [log_entry] = [
+                    e for e in logs if e["event"] == "signup_history_rules_invalid"
+                ]
+                self.assertEqual(log_entry["log_level"], "warning")
+                self.assertEqual(log_entry["system"], "events")
+                self.assertEqual(log_entry["subsystem"], "ledger")
+                self.assertEqual(log_entry["entry_id"], entry.pk)
+
+    def test_rules_overridden_strings_pass_through(self) -> None:
+        entry = self._raw_entry(rules_overridden=["max_players", "min_mmr"])
+        with capture_logs() as logs:
+            data = self._serialize(entry)
+        self.assertEqual(data["rules_overridden"], ["max_players", "min_mmr"])
+        self.assertEqual(logs, [])
+
 
 class ReduceHistorySnapshotTest(EventTestCase):
     def test_none_passthrough(self) -> None:

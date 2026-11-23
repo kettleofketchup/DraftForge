@@ -103,3 +103,16 @@ def reduce_history_snapshot(value: Any, *, entry_id: int) -> dict[str, Any] | No
         return None
     data["extra"] = {k: v for k, v in data["extra"].items() if k in HISTORY_EXTRA_KEYS}
     return data
+
+
+def reduce_history_rules(value: Any, *, entry_id: int) -> list[str]:
+    """``rules_overridden`` as a list of strings; any other shape becomes ``[]``."""
+    if isinstance(value, list) and all(isinstance(rule, str) for rule in value):
+        return value
+    log.warning(
+        "signup_history_rules_invalid",
+        system="events",
+        subsystem="ledger",
+        entry_id=entry_id,
+    )
+    return []

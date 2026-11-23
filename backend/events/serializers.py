@@ -15,7 +15,7 @@ from app.user_cache import serialize_users_core
 from common.game import GameType
 from events.capacity import seat_holding_statuses
 from events.constants import LINE_EXCLUDED_STATUSES, EventState, SignupOpenMode
-from events.history import reduce_history_snapshot
+from events.history import reduce_history_rules, reduce_history_snapshot
 from events.mmr_suggestions import suggest_mmr
 from events.models import (
     Event,
@@ -417,8 +417,8 @@ class SignupLedgerEntrySerializer(serializers.Serializer):
     def get_after(self, obj: SignupLedgerEntry) -> dict[str, Any] | None:
         return reduce_history_snapshot(obj.after, entry_id=obj.pk)
 
-    def get_rules_overridden(self, obj: SignupLedgerEntry) -> list[Any]:
-        return list(obj.rules_overridden or [])
+    def get_rules_overridden(self, obj: SignupLedgerEntry) -> list[str]:
+        return reduce_history_rules(obj.rules_overridden, entry_id=obj.pk)
 
     def get_caused_by(self, obj: SignupLedgerEntry) -> int | None:
         return obj.caused_by_id
