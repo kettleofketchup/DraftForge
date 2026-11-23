@@ -89,8 +89,8 @@ event's results are **released**: the window has closed, the event has at least 
 minimum number of reviews, it was not voided by a reopen and, when the org
 [requires staff release](#release-gate), a moderator has released it or its
 auto-release time has passed. All of an event's reviews then count at once, so a
-captain cannot work out a single review by watching the numbers move. Per-event trait averages are shown to the captain only for
-events with at least 3 reviews.
+captain cannot work out a single review by watching the numbers move. Per-event trait
+averages are shown to the captain only for events with at least 3 reviews.
 
 Released numbers also stay put when a rater leaves. If a rater deletes their account, or
 a merge makes one of two reviews by the same person redundant, after the window has
@@ -251,8 +251,9 @@ Which events are listed depends on who is looking:
 
 The points totals count captaining, placement and draft points from every event,
 including events that are still in their review window, did not get enough reviews
-or are waiting for release; captain rating points count only once released. A captain's own list leaves those events out, so it does not add up to the
-totals; the panel says so under the totals.
+or are waiting for release; captain rating points count only once released. A
+captain's own list leaves those events out, so it does not add up to the totals; the
+panel says so under the totals.
 
 Who can open which panel:
 

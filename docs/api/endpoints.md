@@ -736,18 +736,20 @@ Every lookup is scoped to the URL's org (`404` otherwise). Refusals carry
 (400), `not_moderated` (409), `trait_in_use` (409), `not_permitted` (403),
 `cannot_release_own_reviews` (403), `release_not_required` (409), `already_released`
 (409), `window_open` (409), `not_enough_reviews` (409), `nothing_to_release` (409),
-`would_release_own_results` (409), `not_found` (404). Event reviews, void, restore and
+`would_release_own_results` (409, settings PATCH), `not_found` (404). Event reviews, void, restore and
 release are open to org staff and above (`has_org_staff_access`); settings and trait
 writes stay with org admins. Nobody moderates or releases their own captain entry.
 
+Raters read their own reviews, open and closed, from `reviews/mine/`. While the feature
+is unlocked, `GET /api/events/{id}/` adds `can_review_captains` and
+`pending_captain_reviews` (captains the signed-in member can still rate on that event);
+they are computed per viewer after the cached payload. Review `PUT`/`DELETE` are
+throttled per user. Leaderboards (`rating`, `points`, `rating.<trait>`) go through the
+[standing endpoints](#organization-standing).
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/organizations/{id}/leadership/events/{event_id}/release/` | Release an event's captain review results when the org requires staff release. Body `{"captains": [org_user_id, ...]}` (1–64 ids, all or nothing) or `{}` (every pending captain except your own). `200 {"released": [ids], "skipped": [{"org_user_id", "code"}]}`; `400` malformed body, `403 not_permitted` / `cannot_release_own_reviews`, `404` event or captain not in the org, `409 release_not_required` / `already_released` / `window_open` / `not_enough_reviews` / `snapshot_voided` / `nothing_to_release` |
- Raters read
-their own reviews, open and closed, from `reviews/mine/`. While the feature is unlocked, `GET /api/events/{id}/`
-adds `can_review_captains` and `pending_captain_reviews` (captains the signed-in member
-can still rate on that event); they are computed per viewer after the cached payload. Review `PUT`/`DELETE` are throttled per user. Leaderboards (`rating`, `points`,
-`rating.<trait>`) go through the [standing endpoints](#organization-standing).
+| POST | `/api/organizations/{id}/leadership/events/{event_id}/release/` | Release an event's captain review results when the org requires staff release. Body `{"captains": [org_user_id, ...]}` (1–64 ids, all or nothing) or `{}` (every pending captain except your own). `200 {"released": [ids], "skipped": [{"org_user_id", "code"}]}` (skip codes: `own_snapshot`, `voided`, `window_open`, `not_enough_reviews`, `already_released`); `400` malformed body, `403 not_permitted` / `cannot_release_own_reviews`, `404` event or captain not in the org, `409 release_not_required` / `already_released` / `window_open` / `not_enough_reviews` / `snapshot_voided` / `nothing_to_release` |
 
 ### Internal
 
