@@ -77,8 +77,9 @@ import { useConfirmForceReset } from './hooks/useConfirmForceReset';
 import { useDraftLive } from './hooks/useDraftLive';
 import { useDraftResetSummary } from './hooks/useDraftResetSummary';
 import { isCaptainOf } from './isCaptainOf';
+import { LiveTieRollPopup } from './LiveTieRollPopup';
 import { DraftRoundIndicator, LiveAutoButtons } from './liveView';
-import { TieRollPopup, tieRollKey } from './TieRollPopup';
+import { tieRollKey } from './TieRollPopup';
 import { LiveDraftClockBar } from './timer/DraftClockBar';
 import { LiveDraftPauseOverlay } from './timer/DraftPauseOverlay';
 import { useTeamDraftTimerProps } from './timer/useTeamDraftTimerProps';
@@ -343,7 +344,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     }
   }, [wsDraftState, handleDraftStateUpdate]);
 
-  // Show TieResolutionOverlay when pendingTieResolution is set in the WS store.
+  // Show the tie roll popup when pendingTieResolution is set in the WS store.
   // Set from two paths: HTTP response (choosePlayerHook) and live WS draft_event.
   // NOT set from initial_events, so historical tie_rolls don't re-trigger on remount.
   useEffect(() => {
@@ -875,7 +876,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
         </div>
 
         {tieResolution && (
-          <TieRollPopup
+          <LiveTieRollPopup
             key={tieRollKey(tieResolution)}
             tie={tieResolution}
             teams={(tournament?.teams ?? []).map((t) => ({

@@ -31,6 +31,7 @@ from common.utils import isTestEnvironment
 from discordbot.models import DiscordEvent, DiscordEventLog
 from draft.models import Draft
 from events.constants import EventState
+from events.ledger import SignupActor
 from events.models import Event, EventRepeater, EventSignup, RepeaterSubscription
 from events.services import generate_events_for_repeater, process_rsvp
 from events.tasks import sync_discord_events
@@ -1482,7 +1483,7 @@ def bulk_rsvp_for_event(request, event_pk):
     for pk in user_pks:
         try:
             user = CustomUser.objects.get(pk=pk)
-            signup = process_rsvp(event, user)
+            signup = process_rsvp(event, user, actor=SignupActor.system())
             results.append({"user_pk": pk, "status": signup.status})
         except (CustomUser.DoesNotExist, ValueError) as e:
             results.append({"user_pk": pk, "error": str(e)})

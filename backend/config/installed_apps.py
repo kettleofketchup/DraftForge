@@ -21,6 +21,7 @@ shared subset here.
 MODEL_APPS: list[str] = [
     "draft.apps.DraftConfig",
     "app",
+    "tournament.apps.TournamentConfig",
     "events",
     "discordbot",
     "steam",

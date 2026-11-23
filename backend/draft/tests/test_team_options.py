@@ -9,7 +9,6 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.management.commands import import_prod_tournament, sync_prod_tournaments
 from app.models import Team, Tournament
 from app.serializers import DraftSerializerSlim, TournamentSerializer
 from draft.models import (
@@ -26,6 +25,7 @@ from league.models import League
 from org.models import Organization
 from tests.data.users import REGULAR_USER
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, TestTournamentConfig
+from tournament.management.commands import import_prod_tournament, sync_prod_tournaments
 
 User = get_user_model()
 

@@ -3,8 +3,8 @@ from typing import Literal
 from django.db.models import QuerySet
 
 from app.models import CustomUser, Team, Tournament
-from app.permissions_tournament import can_edit_tournament
 from draft.models import Draft, HeroDraft
+from tournament.permissions import can_edit_tournament
 
 Role = Literal["captain", "player", "staff", "spectator"]
 DraftKind = Literal["hero", "team"]

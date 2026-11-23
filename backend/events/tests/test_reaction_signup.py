@@ -1,13 +1,9 @@
 """Tests for Discord reaction → EventSignup flow."""
 
-from unittest.mock import patch
-
-from django.test import TestCase
-
 from discordbot.models import DiscordMessageLog
-from events.constants import EventState, SignupStatus
+from events.constants import EventState, SignupAction, SignupMeans, SignupStatus
 from events.discord import handle_reaction_cancel, handle_reaction_signup
-from events.models import EventSignup
+from events.models import EventSignup, SignupLedgerEntry
 from events.tests.base import EventTestCase
 
 
@@ -105,6 +101,16 @@ class HandleReactionCancelTest(EventTestCase):
 
         signup = EventSignup.objects.get(event=self.event, user=self.user)
         self.assertEqual(signup.status, SignupStatus.CANCELLED)
+
+        entries = SignupLedgerEntry.objects.filter(event=self.event).exclude(
+            action=SignupAction.BACKFILLED
+        )
+        self.assertEqual(entries.count(), 2)
+        for entry in entries:
+            self.assertEqual(entry.means, SignupMeans.DISCORD_REACTION)
+            self.assertEqual(
+                entry.correlation_id, "reaction:999888777:100000000000000001"
+            )
 
     def test_skips_when_no_signup_exists(self):
         success, detail = handle_reaction_cancel("999888777", "100000000000000001")

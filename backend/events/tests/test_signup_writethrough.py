@@ -15,6 +15,7 @@ from events.eligibility import claim_friend_id
 from events.models import Event, EventSignup
 from events.schemas import SignupInputPatch
 from events.services import _create_signup, apply_signup_input, process_rsvp
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.membership import resolve_or_create_org_user
 from org.mmr import org_mmr_for, set_org_mmr
@@ -57,7 +58,7 @@ class SignupWritethroughTest(TestCase):
         profile.pos_4 = pos_4
         profile.pos_5 = pos_5
         profile.save()
-        signup = _create_signup(self.event, self.user)
+        signup = _create_signup(self.event, self.user, actor=SYSTEM)
         signup.refresh_from_db()
         self.user.refresh_from_db()
         return signup
@@ -129,7 +130,7 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
                         event=self.event,
                         patch=SignupInputPatch(steam_account_id="56565"),
                     )
-                    _create_signup(self.event, self.user)
+                    _create_signup(self.event, self.user, actor=SYSTEM)
 
         self.assertFalse(
             EventSignup.objects.filter(event=self.event, user=self.user).exists()
@@ -248,5 +249,5 @@ class SignupInputFriendIdTest(EventTestCase):
             event=ev,
             patch=SignupInputPatch(steam_account_id="535353"),
         )
-        signup = process_rsvp(ev, user)
+        signup = process_rsvp(ev, user, actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.APPROVED)

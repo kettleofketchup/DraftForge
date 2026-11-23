@@ -5,7 +5,7 @@ from typing import Any
 from rest_framework import permissions
 from rest_framework.request import Request
 
-from app.permissions_tournament import can_edit_tournament
+from tournament.permissions import can_edit_tournament
 
 
 class CanEditDraft(permissions.BasePermission):

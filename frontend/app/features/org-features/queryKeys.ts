@@ -1,4 +1,5 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
+import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
 import type { TrackKey } from '~/features/standing/schemas';
 
 type ViewerPk = number | null;
@@ -8,6 +9,7 @@ const CONTRIBUTIONS = 'org-contributions';
 const PROMOTION = 'org-promotion';
 const STANDING = 'org-standing';
 const CONDUCT = 'org-conduct';
+const LEADERSHIP = 'org-leadership';
 
 export const contributionsKeys = {
   all: (orgId: number, viewerPk: ViewerPk) =>
@@ -94,6 +96,23 @@ export const conductKeys = {
     [...conductKeys.event(orgId, viewerPk, eventId), 'forecast'] as const,
 };
 
+export const leadershipKeys = {
+  all: (orgId: number, viewerPk: ViewerPk) =>
+    [LEADERSHIP, orgId, viewerPk] as const,
+  member: (orgId: number, viewerPk: ViewerPk, orgUserPk: number) =>
+    [...leadershipKeys.all(orgId, viewerPk), 'member', orgUserPk] as const,
+  pending: (orgId: number, viewerPk: ViewerPk, eventId: number | null) =>
+    [...leadershipKeys.all(orgId, viewerPk), 'pending', eventId] as const,
+  mine: (orgId: number, viewerPk: ViewerPk) =>
+    [...leadershipKeys.all(orgId, viewerPk), 'mine'] as const,
+  eventReviews: (orgId: number, viewerPk: ViewerPk, eventId: number) =>
+    [...leadershipKeys.all(orgId, viewerPk), 'event-reviews', eventId] as const,
+  settings: (orgId: number, viewerPk: ViewerPk) =>
+    [...leadershipKeys.all(orgId, viewerPk), 'settings'] as const,
+  traits: (orgId: number, viewerPk: ViewerPk) =>
+    [...leadershipKeys.all(orgId, viewerPk), 'traits'] as const,
+};
+
 export async function invalidateContributionQueries(
   queryClient: QueryClient,
   orgId: number,
@@ -150,6 +169,37 @@ export async function invalidateConductQueries(
   ]);
 }
 
+export async function invalidateLeadershipQueries(
+  queryClient: QueryClient,
+  orgId: number,
+  options: { except?: QueryKey; eventId?: number; org?: boolean } = {},
+): Promise<void> {
+  const { except, eventId, org } = options;
+  const pending: Promise<void>[] = [
+    queryClient.invalidateQueries({
+      queryKey: [LEADERSHIP, orgId],
+      predicate: except
+        ? (query) => !startsWith(query.queryKey, except)
+        : undefined,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: [STANDING, orgId],
+      predicate: (query) => query.queryKey[3] === 'leadership',
+    }),
+  ];
+  if (eventId != null) {
+    pending.push(
+      queryClient.invalidateQueries({ queryKey: ['event', eventId] }),
+    );
+  }
+  if (org) {
+    pending.push(
+      queryClient.invalidateQueries({ queryKey: organizationQueryKey(orgId) }),
+    );
+  }
+  await Promise.all(pending);
+}
+
 export const orgFeaturesKey = (orgId: number) =>
   ['org-features', orgId] as const;
 
@@ -161,5 +211,6 @@ export function removeFeatureQueries(
   queryClient.removeQueries({ queryKey: [PROMOTION, orgId] });
   queryClient.removeQueries({ queryKey: [STANDING, orgId] });
   queryClient.removeQueries({ queryKey: [CONDUCT, orgId] });
+  queryClient.removeQueries({ queryKey: [LEADERSHIP, orgId] });
   queryClient.removeQueries({ queryKey: orgFeaturesKey(orgId) });
 }
