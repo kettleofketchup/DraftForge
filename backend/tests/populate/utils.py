@@ -5,7 +5,8 @@ Utility functions for test database population.
 import os
 import random
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Final
 
 import redis
@@ -187,6 +188,25 @@ def ensure_org_user(
                 org_user=org_user, game_type=game_type
             ).delete()
     return org_user
+
+
+@contextmanager
+def without_task_publishing() -> Iterator[None]:
+    """Send task publishes to an in-memory broker that nothing consumes.
+
+    Populate seeds rows; signals it trips (an org's Discord server id, say)
+    must not queue jobs on a real broker, which the host often cannot reach.
+    CELERY_BROKER_WRITE_URL outranks every other broker setting.
+    """
+    saved = os.environ.get("CELERY_BROKER_WRITE_URL")
+    os.environ["CELERY_BROKER_WRITE_URL"] = "memory://"
+    try:
+        yield
+    finally:
+        if saved is None:
+            del os.environ["CELERY_BROKER_WRITE_URL"]
+        else:
+            os.environ["CELERY_BROKER_WRITE_URL"] = saved
 
 
 def delete_ledger_for_users(pks: Iterable[int]) -> None:
