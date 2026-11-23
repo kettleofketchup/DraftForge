@@ -9,7 +9,6 @@ import {
   get_dtx_members,
   getGames,
   getLeagues,
-  getOrganizations,
   getTeams,
   getTournaments,
   getTournamentsBasic,
@@ -97,13 +96,9 @@ interface UserState {
   setAutoRefreshDraft: (refresh: (() => Promise<void>) | null) => void;
 
   // Organizations
-  organizations: OrganizationType[];
   organization: OrganizationType | null;
   organizationPk: number | null; // Track which org is loaded
-  organizationsLoaded: boolean; // Track if orgs list is loaded
-  setOrganizations: (orgs: OrganizationType[]) => void;
   setOrganization: (org: OrganizationType | null) => void;
-  getOrganizations: () => Promise<void>;
   getOrganization: (pk: number, force?: boolean) => Promise<void>;
 
   // Leagues
@@ -418,28 +413,10 @@ export const useUserStore = create<UserState>()(
       clearUserAPIError: () => set({ userAPIError: null }),
 
       // Organizations
-      organizations: [] as OrganizationType[],
       organization: null,
       organizationPk: null,
-      organizationsLoaded: false,
-      setOrganizations: (orgs) =>
-        set({ organizations: orgs, organizationsLoaded: true }),
       setOrganization: (org) =>
         set({ organization: org, organizationPk: org?.pk ?? null }),
-      getOrganizations: async () => {
-        // Skip if already loaded
-        if (get().organizationsLoaded && get().organizations.length > 0) {
-          log.debug('Organizations already loaded, skipping fetch');
-          return;
-        }
-        try {
-          const response = await getOrganizations();
-          set({ organizations: response, organizationsLoaded: true });
-          log.debug('Organizations fetched successfully:', response);
-        } catch (error) {
-          log.error('Error fetching organizations:', error);
-        }
-      },
       getOrganization: async (pk: number, force = false) => {
         // Skip if already loaded for this pk (unless forced)
         if (!force && get().organizationPk === pk && get().organization) {

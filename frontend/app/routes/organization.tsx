@@ -37,6 +37,7 @@ import {
   useOrganization,
 } from '~/components/organization';
 import { useOrgSettingsParam } from '~/components/organization/hooks/useOrgSettingsParam';
+import { OrganizationHeaderTitle } from '~/components/organization/OrganizationHeaderTitle';
 import { buildOrgPageNavOptions } from '~/components/organization/orgPageNavOptions';
 import { OrgSettingsDialog } from '~/components/organization/OrgSettingsDialog';
 import { useOrgSettingsAccess } from '~/components/organization/tabs/orgSettings/useOrgSettingsAccess';
@@ -431,19 +432,21 @@ export default function OrganizationDetailPage() {
 
             {/* Organization Info */}
             <div className="flex-1">
-              <div className="flex items-start justify-between mb-2">
-                <h1 className="text-3xl font-bold">{organization.name}</h1>
-                {settingsAccess.canOpen && (
-                  <SecondaryButton
-                    size="sm"
-                    data-testid="org-settings-button"
-                    onClick={() => settingsParam.openSettings()}
-                  >
-                    <Settings className="h-4 w-4" />
-                    Org Settings
-                  </SecondaryButton>
-                )}
-              </div>
+              <OrganizationHeaderTitle
+                name={organization.name}
+                action={
+                  settingsAccess.canOpen && (
+                    <SecondaryButton
+                      size="sm"
+                      data-testid="org-settings-button"
+                      onClick={() => settingsParam.openSettings()}
+                    >
+                      <Settings className="h-4 w-4" />
+                      Org Settings
+                    </SecondaryButton>
+                  )
+                }
+              />
 
               {/* Discord Link + Bot Status */}
               <div className="flex flex-wrap items-center gap-3 mb-4">

@@ -1,5 +1,5 @@
 import { Building2, Plus } from 'lucide-react';
-import { memo, useEffect, useState } from 'react';
+import { memo, useState } from 'react';
 import {
   CreateOrganizationModal,
   OrganizationCard,
@@ -10,7 +10,6 @@ import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { useIsLoggedIn } from '~/hooks/usePermissions';
 import { generateMeta } from '~/lib/seo';
-import { useUserStore } from '~/store/userStore';
 
 export function meta() {
   return generateMeta({
@@ -64,45 +63,11 @@ const OrganizationCardWrapper = memo(
   },
 );
 
-// Try to get cached organizations from sessionStorage (client-side only)
-const getCachedOrganizations = (): OrganizationType[] => {
-  try {
-    const stored = sessionStorage.getItem('dtx-storage');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return parsed?.state?.organizations || [];
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return [];
-};
-
 export default function OrganizationsPage() {
-  const { organizations: storeOrganizations, isLoading } = useOrganizations();
-  const hasHydrated = useUserStore((state) => state.hasHydrated);
+  const { organizations, isLoading } = useOrganizations();
   const isLoggedIn = useIsLoggedIn();
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
-  // Read cached organizations after mount to avoid hydration mismatch
-  const [mounted, setMounted] = useState(false);
-  const [cachedOrganizations, setCachedOrganizations] = useState<
-    OrganizationType[]
-  >([]);
-
-  useEffect(() => {
-    setMounted(true);
-    setCachedOrganizations(getCachedOrganizations());
-  }, []);
-
-  // Use cached organizations after mount, then switch to store after hydration
-  const organizations = hasHydrated
-    ? storeOrganizations
-    : mounted && cachedOrganizations.length > 0
-      ? cachedOrganizations
-      : storeOrganizations;
-
-  // Render the organization grid content based on state
   const renderOrganizationGrid = () => {
     // If we have organizations, show them immediately
     if (organizations.length > 0) {
@@ -115,12 +80,10 @@ export default function OrganizationsPage() {
       );
     }
 
-    // No organizations yet - show skeleton while loading
-    if (!mounted || !hasHydrated || isLoading) {
+    if (isLoading) {
       return <OrganizationGridSkeleton count={6} />;
     }
 
-    // Hydrated but no organizations
     return <EmptyOrganizations />;
   };
 

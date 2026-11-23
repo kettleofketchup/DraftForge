@@ -75,10 +75,15 @@ class UserSerializerDiscordNamesTest(TestCase):
 class NoSerializerEmitsCustomUserGuildNicknameTest(TestCase):
     def test_no_serializer_emits_customuser_guildnickname(self) -> None:
         offenders: list[str] = []
-        for path in BACKEND_DIR.rglob("serializers*.py"):
-            parts = set(path.parts)
-            if "tests" in parts or "migrations" in parts or ".venv" in parts:
-                continue
+        scanned = _serializer_sources()
+        self.assertTrue(
+            {
+                BACKEND_DIR / "tournament" / "serializers" / "users.py",
+                BACKEND_DIR / "draft" / "serializers" / "team.py",
+            }
+            <= scanned
+        )
+        for path in sorted(scanned):
             text = path.read_text()
             if 'source="user.guildNickname"' in text:
                 offenders.append(f"{path}: source=user.guildNickname")
@@ -90,6 +95,19 @@ class NoSerializerEmitsCustomUserGuildNicknameTest(TestCase):
                 if _in_customuser_meta(text, match.start()):
                     offenders.append(f"{path}:{line}")
         self.assertEqual(offenders, [])
+
+
+def _serializer_sources() -> set[Path]:
+    candidates = {
+        *BACKEND_DIR.rglob("serializers*.py"),
+        *BACKEND_DIR.rglob("serializers/*.py"),
+    }
+    return {
+        path
+        for path in candidates
+        if not {"tests", "migrations", ".venv"}
+        & set(path.relative_to(BACKEND_DIR).parts)
+    }
 
 
 def _in_customuser_meta(text: str, pos: int) -> bool:

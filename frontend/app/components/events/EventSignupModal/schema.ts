@@ -74,7 +74,7 @@ export function buildSignupPatchSchema(
     // Positions: priority dict matching User.positions (PositionsModel) shape
     // — each role rated 0..5 where 0 = "don't show this role" and 1..5 ranks
     // willingness (Favorite → Least Favorite). Mirrors the edit-profile
-    // PositionForm so users don't relearn the UI per event.
+    // PositionFormFields so users don't relearn the UI per event.
     // Required when the user hasn't picked positions yet (all zeros).
     const positionDict = z.object({
       carry: z.number().int().min(0).max(5),

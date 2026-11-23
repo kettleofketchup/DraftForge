@@ -6,20 +6,10 @@ from rest_framework import routers
 from app import views_main as app_views
 from app.functions.user import profile_update
 from app.views import (
-    GameCreateView,
-    GameView,
-    TeamCreateView,
-    TeamView,
-    TournamentCreateView,
-    TournamentListView,
-    TournamentsBasicView,
-    TournamentView,
     UserCreateView,
     UserView,
     current_user,
 )
-from app.views.admin_team import add_tournament_member, search_users
-from app.views.csv_import import import_csv_org, import_csv_tournament
 from app.views.internal import (
     auto_close_event,
     check_message_log_exists,
@@ -37,12 +27,9 @@ from app.views.internal import (
     get_discord_event_state,
     get_due_scheduled_events,
     get_event_for_task,
-    get_match_participants,
     get_or_create_discord_event,
     get_repeater_subscribers,
     get_sync_discord_state,
-    get_tournament_for_task,
-    get_tournament_participants,
     list_users_for_avatar_check,
     search_message_logs,
     sweep_stale_discord_leases,
@@ -53,7 +40,8 @@ from app.views.internal import (
     update_tournament_log,
     update_user_avatar,
 )
-from app.views.ssr import EventSSRView, TournamentSSRView, UserSSRView
+from app.views.ssr import EventSSRView, UserSSRView
+from app.views.user_search import search_users
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from draft.views.team_api import DraftRoundView, DraftView
@@ -100,6 +88,22 @@ from steam.views_internal import (
 )
 from telemetry.logging import get_logger
 from tournament.functions import create_team_from_captain
+from tournament.ssr import TournamentSSRView
+from tournament.views.csv_import import import_csv_org, import_csv_tournament
+from tournament.views.game import GameCreateView, GameView
+from tournament.views.internal import (
+    get_match_participants,
+    get_tournament_for_task,
+    get_tournament_participants,
+)
+from tournament.views.members import add_tournament_member
+from tournament.views.team import TeamCreateView, TeamView
+from tournament.views.tournament import (
+    TournamentCreateView,
+    TournamentListView,
+    TournamentsBasicView,
+    TournamentView,
+)
 from user.internal.avatar import (
     bulk_update_user_avatars,
     list_discord_guild_ids,
