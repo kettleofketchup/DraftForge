@@ -8,9 +8,11 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 from django.http import HttpRequest
 from django.utils import timezone as tz
+from structlog.contextvars import get_contextvars
 
 from events.constants import ActorRole, SignupAction, SignupMeans
 from events.models import Event, EventSignup, SignupLedgerEntry
+from events.permissions import has_event_staff_access
 from events.schemas import SignupSnapshot
 from telemetry.logging import get_logger
 
@@ -23,6 +25,7 @@ __all__ = [
     "SignupAction",
     "SignupActor",
     "SignupMeans",
+    "current_interaction_id",
     "event_snapshot",
     "record_signup_change",
     "snapshot",
@@ -33,16 +36,31 @@ log = get_logger(__name__)
 
 PLACEMENT_ACTIONS: frozenset[str] = frozenset()
 
+CORRELATION_ID_MAX_LENGTH = 64
+
+
+def current_interaction_id() -> str:
+    return str(get_contextvars().get("interaction_id") or "")[
+        :CORRELATION_ID_MAX_LENGTH
+    ]
+
 
 @dataclass(frozen=True)
 class SignupActor:
     user: CustomUser | None
     role: ActorRole
     means: SignupMeans
+    correlation_id: str = ""
+    staff_power: bool = False
 
     @classmethod
-    def system(cls) -> SignupActor:
-        return cls(user=None, role=ActorRole.SYSTEM, means=SignupMeans.SYSTEM)
+    def system(cls, *, correlation_id: str = "") -> SignupActor:
+        return cls(
+            user=None,
+            role=ActorRole.SYSTEM,
+            means=SignupMeans.SYSTEM,
+            correlation_id=correlation_id,
+        )
 
     @classmethod
     def from_request(
@@ -60,8 +78,37 @@ class SignupActor:
         *,
         means: SignupMeans = SignupMeans.DISCORD_BUTTON,
         role: ActorRole = ActorRole.MEMBER,
+        correlation_id: str | None = None,
     ) -> SignupActor:
-        return cls(user=user, role=role, means=means)
+        return cls(
+            user=user,
+            role=role,
+            means=means,
+            correlation_id=(
+                current_interaction_id() if correlation_id is None else correlation_id
+            ),
+        )
+
+    @classmethod
+    def for_request_on(
+        cls,
+        request: HttpRequest,
+        subject: CustomUser,
+        event: Event,
+        *,
+        staff_only: bool = False,
+    ) -> SignupActor:
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            return cls(user=None, role=ActorRole.MEMBER, means=SignupMeans.WEB)
+        is_self = user.pk == subject.pk
+        is_staff = has_event_staff_access(user, event)
+        return cls(
+            user=user,
+            role=ActorRole.STAFF if is_staff and not is_self else ActorRole.MEMBER,
+            means=SignupMeans.WEB,
+            staff_power=staff_only and is_staff and is_self,
+        )
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -126,6 +173,8 @@ def record_signup_change(
     correlation_id: str = "",
     occurred_at: datetime | None = None,
 ) -> SignupLedgerEntry:
+    if actor.staff_power and after is not None:
+        after = after.model_copy(update={"extra": {**after.extra, "staff_power": True}})
     entry = SignupLedgerEntry.objects.create(
         event=event,
         organization_id=event.organization_id,
@@ -144,7 +193,7 @@ def record_signup_change(
         reason=reason,
         rules_overridden=list(rules_overridden),
         caused_by=caused_by,
-        correlation_id=correlation_id,
+        correlation_id=correlation_id or actor.correlation_id,
         occurred_at=occurred_at if occurred_at is not None else tz.now(),
     )
     fields: dict[str, Any] = {

@@ -92,6 +92,7 @@ export function TrackTab({
   const Detail = panel.Detail;
   const Admin = panel.Admin;
   const HeaderExtra = panel.HeaderExtra;
+  const Banner = panel.Banner;
 
   return (
     <div className="flex flex-col gap-4" data-testid={`${prefix}-tab`}>
@@ -138,6 +139,8 @@ export function TrackTab({
           This organization keeps its {track.label} ranking private.
         </p>
       )}
+
+      {Banner && <Banner orgId={orgId} timeZone={timeZone} access={access} />}
 
       {isLoading && (
         <div className="py-6 text-center text-muted-foreground">

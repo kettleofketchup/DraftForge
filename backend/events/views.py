@@ -50,7 +50,7 @@ from draft.models import Draft, HeroDraft
 from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
-from events.constants import ActorRole, Commitment, EventState
+from events.constants import Commitment, EventState
 from events.discord import notify_create_discord_event, notify_signup_changed
 from events.eligibility import (
     EligibilityResult,
@@ -958,7 +958,9 @@ class EventViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 apply_signup_input(org_user=org_user, event=event, patch=patch)
                 if intent == "rsvp":
-                    signup = process_rsvp(event, request.user)
+                    signup = process_rsvp(
+                        event, request.user, actor=SignupActor.from_request(request)
+                    )
                 else:
                     signup = create_tentative_signup(
                         event, request.user, actor=SignupActor.from_request(request)
@@ -1018,7 +1020,11 @@ class EventViewSet(viewsets.ModelViewSet):
                 {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
             )
         try:
-            signup = staff_add_signup(event, user)
+            signup = staff_add_signup(
+                event,
+                user,
+                actor=SignupActor.for_request_on(request, user, event, staff_only=True),
+            )
             return Response(
                 EventSignupSerializer(signup, context={"request": request}).data,
                 status=status.HTTP_201_CREATED,
@@ -1292,7 +1298,13 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                     )
 
         try:
-            result = approve_signup(signup, mmr_override=mmr_override)
+            result = approve_signup(
+                signup,
+                mmr_override=mmr_override,
+                actor=SignupActor.for_request_on(
+                    request, signup.user, signup.event, staff_only=True
+                ),
+            )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1333,7 +1345,13 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             return Response(
                 EventSignupSerializer(
-                    reject_signup(signup), context={"request": request}
+                    reject_signup(
+                        signup,
+                        actor=SignupActor.for_request_on(
+                            request, signup.user, signup.event, staff_only=True
+                        ),
+                    ),
+                    context={"request": request},
                 ).data
             )
         except ValueError as e:
@@ -1347,7 +1365,13 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             return Response(
                 EventSignupSerializer(
-                    confirm_signup(signup), context={"request": request}
+                    confirm_signup(
+                        signup,
+                        actor=SignupActor.for_request_on(
+                            request, signup.user, signup.event, staff_only=True
+                        ),
+                    ),
+                    context={"request": request},
                 ).data
             )
         except ValueError as e:
@@ -1359,9 +1383,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         is_staff_action = signup.user_id != request.user.pk
         if is_staff_action and not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
-        actor = SignupActor.from_request(
-            request, role=ActorRole.STAFF if is_staff_action else ActorRole.MEMBER
-        )
+        actor = SignupActor.for_request_on(request, signup.user, signup.event)
         try:
             return Response(
                 EventSignupSerializer(
@@ -1380,7 +1402,13 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             return Response(
                 EventSignupSerializer(
-                    unconfirm_signup(signup), context={"request": request}
+                    unconfirm_signup(
+                        signup,
+                        actor=SignupActor.for_request_on(
+                            request, signup.user, signup.event, staff_only=True
+                        ),
+                    ),
+                    context={"request": request},
                 ).data
             )
         except ValueError as e:
@@ -1395,7 +1423,13 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             return Response(
                 EventSignupSerializer(
-                    demote_to_waitlist(signup), context={"request": request}
+                    demote_to_waitlist(
+                        signup,
+                        actor=SignupActor.for_request_on(
+                            request, signup.user, signup.event, staff_only=True
+                        ),
+                    ),
+                    context={"request": request},
                 ).data
             )
         except ValueError as e:
@@ -1416,7 +1450,13 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                 ensure_self_serve(signup.event, request.user)
             return Response(
                 EventSignupSerializer(
-                    reinstate_signup(signup, for_staff_placement=is_staff),
+                    reinstate_signup(
+                        signup,
+                        actor=SignupActor.for_request_on(
+                            request, signup.user, signup.event, staff_only=is_staff
+                        ),
+                        for_staff_placement=is_staff,
+                    ),
                     context={"request": request},
                 ).data
             )

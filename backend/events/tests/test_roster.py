@@ -30,6 +30,7 @@ from events.services import (
     sync_future_events,
     unconfirm_signup,
 )
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from tournament.models import Game, Team, Tournament
 
@@ -114,14 +115,14 @@ class RosterRuleTests(RosterTestCase):
         event = self._event(state=EventState.ROLL_CALL)
         user = self.make_user()
         signup = self._signup(event, user, SignupStatus.RSVP)
-        approve_signup(signup)
+        approve_signup(signup, actor=SYSTEM)
         self.assertNotIn(user.pk, self._roster(event))
 
     def test_approve_in_signups_flag_off_added(self, *_mocks: MagicMock) -> None:
         event = self._event(state=EventState.SIGNUPS_OPEN)
         user = self.make_user()
         signup = self._signup(event, user, SignupStatus.RSVP)
-        approve_signup(signup)
+        approve_signup(signup, actor=SYSTEM)
         self.assertIn(user.pk, self._roster(event))
 
     def test_staff_add_auto_approve_in_roll_call_not_added(
@@ -129,7 +130,7 @@ class RosterRuleTests(RosterTestCase):
     ) -> None:
         event = self._event(state=EventState.ROLL_CALL)
         user = self.make_user()
-        signup = staff_add_signup(event, user)
+        signup = staff_add_signup(event, user, actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.APPROVED)
         self.assertNotIn(user.pk, self._roster(event))
 
@@ -141,7 +142,7 @@ class RosterRuleTests(RosterTestCase):
         waiting_signup = self._signup(
             event, waiting, SignupStatus.WAITLISTED, waitlist_position=1
         )
-        cancel_signup(seated_signup)
+        cancel_signup(seated_signup, actor=SYSTEM)
         waiting_signup.refresh_from_db()
         self.assertEqual(waiting_signup.status, SignupStatus.APPROVED)
         self.assertNotIn(waiting.pk, self._roster(event))
@@ -153,7 +154,7 @@ class RosterRuleTests(RosterTestCase):
         user = self.make_user()
         signup = self._signup(event, user, SignupStatus.CONFIRMED)
         event.tournament.users.add(user)
-        unconfirm_signup(signup)
+        unconfirm_signup(signup, actor=SYSTEM)
         self.assertIn(user.pk, self._roster(event))
 
     def test_unconfirm_in_roll_call_removes_player(self, *_mocks: MagicMock) -> None:
@@ -161,14 +162,14 @@ class RosterRuleTests(RosterTestCase):
         user = self.make_user()
         signup = self._signup(event, user, SignupStatus.CONFIRMED)
         event.tournament.users.add(user)
-        unconfirm_signup(signup)
+        unconfirm_signup(signup, actor=SYSTEM)
         self.assertNotIn(user.pk, self._roster(event))
 
     def test_confirm_adds(self, *_mocks: MagicMock) -> None:
         event = self._event(state=EventState.ROLL_CALL, roll_call_enabled=True)
         user = self.make_user()
         signup = self._signup(event, user, SignupStatus.APPROVED)
-        confirm_signup(signup)
+        confirm_signup(signup, actor=SYSTEM)
         self.assertIn(user.pk, self._roster(event))
 
     def test_approve_in_roll_call_keeps_team_member(self, *_mocks: MagicMock) -> None:
@@ -177,9 +178,12 @@ class RosterRuleTests(RosterTestCase):
         team, game = self._team(event, [captain, member, waiting])
         before = self._team_state(team)
 
-        reinstate_signup(self._signup(event, member, SignupStatus.CANCELLED))
+        reinstate_signup(
+            self._signup(event, member, SignupStatus.CANCELLED), actor=SYSTEM
+        )
         approve_signup(
-            self._signup(event, waiting, SignupStatus.WAITLISTED, waitlist_position=1)
+            self._signup(event, waiting, SignupStatus.WAITLISTED, waitlist_position=1),
+            actor=SYSTEM,
         )
 
         self.assertEqual(self._team_state(team), before)
@@ -206,7 +210,7 @@ class RosterRuleTests(RosterTestCase):
                 event = self._event(state=state)
                 captain, member = self.make_user(), self.make_user()
                 team, _game = self._team(event, [captain, member])
-                action(self._signup(event, member, status))
+                action(self._signup(event, member, status), actor=SYSTEM)
                 self.assertNotIn(member.pk, self._roster(event))
                 self.assertNotIn(member.pk, self._team_state(team)[2])
 
@@ -214,7 +218,9 @@ class RosterRuleTests(RosterTestCase):
         event = self._event(state=EventState.SIGNUPS_OPEN)
         captain, member = self.make_user(), self.make_user()
         self._team(event, [captain, member])
-        reject_signup(self._signup(event, captain, SignupStatus.CONFIRMED))
+        reject_signup(
+            self._signup(event, captain, SignupStatus.CONFIRMED), actor=SYSTEM
+        )
         self.assertNotIn(captain.pk, self._roster(event))
 
     def test_cancel_outside_team_removes(self, *_mocks: MagicMock) -> None:
@@ -222,7 +228,7 @@ class RosterRuleTests(RosterTestCase):
         user = self.make_user()
         signup = self._signup(event, user, SignupStatus.APPROVED)
         event.tournament.users.add(user)
-        cancel_signup(signup)
+        cancel_signup(signup, actor=SYSTEM)
         self.assertNotIn(user.pk, self._roster(event))
 
 

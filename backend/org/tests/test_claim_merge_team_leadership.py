@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from app.models import CustomUser, PositionsModel
+from events.tests.actors import SYSTEM
 from org.views import ClaimRequestViewSet
 from tournament.models import Team, Tournament
 from tournament.services.team_leadership import teams_with_leadership_problems
@@ -36,7 +37,7 @@ class ClaimMergeTeamLeadershipTests(TestCase):
         self.team.members.set([self.target, self.other])
 
     def _merge(self) -> None:
-        ClaimRequestViewSet()._merge_profiles(self.claimer, self.target)
+        ClaimRequestViewSet()._merge_profiles(self.claimer, self.target, actor=SYSTEM)
         self.team.refresh_from_db()
 
     def test_claimer_inherits_captaincy(self) -> None:
