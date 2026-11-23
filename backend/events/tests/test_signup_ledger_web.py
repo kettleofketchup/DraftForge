@@ -195,6 +195,38 @@ class SignupLedgerWebTests(EventTestCase):
         self.assertEqual(log.details["mmr"], 4200)
         self.assertEqual(log.details["event_id"], event.pk)
 
+    def test_approve_rolls_back_when_mmr_audit_write_fails(self, _notify: Any) -> None:
+        event = self.make_event()
+        signup = EventSignup.objects.create(
+            event=event, user=self.user, status=SignupStatus.RSVP
+        )
+        self.client.force_authenticate(self.admin)
+        url = reverse("event-signup-approve", args=[signup.pk])
+        with (
+            patch("events.views.OrgLog.objects.create", side_effect=RuntimeError),
+            self.assertRaises(RuntimeError),
+        ):
+            self.client.post(url, {"mmr": 4200}, format="json")
+        signup.refresh_from_db()
+        self.assertEqual(signup.status, SignupStatus.RSVP)
+        self.assertEqual(self._entries(event), [])
+
+    def test_failed_approve_writes_no_mmr_audit(self, _notify: Any) -> None:
+        event = self.make_event()
+        signup = EventSignup.objects.create(
+            event=event, user=self.user, status=SignupStatus.RSVP
+        )
+        self.client.force_authenticate(self.admin)
+        url = reverse("event-signup-approve", args=[signup.pk])
+        with patch(
+            "events.services._record_leaf", side_effect=ValueError("ledger refused")
+        ):
+            response = self.client.post(url, {"mmr": 4200}, format="json")
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertFalse(OrgLog.objects.filter(action="set_mmr").exists())
+        signup.refresh_from_db()
+        self.assertEqual(signup.status, SignupStatus.RSVP)
+
     def test_response_shape_unchanged(self, _notify: Any) -> None:
         for endpoint, start, _action, _staff_only in STAFF_ENDPOINTS:
             with self.subTest(endpoint=endpoint):
