@@ -1,15 +1,29 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrgFeatureAccess } from '~/features/org-features';
-import { getEventReviews, getTraits, unvoidReview, voidReview } from '../api';
+import {
+  getEventReviews,
+  getTraits,
+  releaseResults,
+  unvoidReview,
+  voidReview,
+} from '../api';
 import { EventLeadershipSection } from '../EventLeadershipSection';
 import {
+  CAPTAIN,
   eventReviews,
   leadershipFeatureAccess,
+  moderationCaptain,
   moderationReview,
   traits,
 } from './fixtures';
@@ -28,6 +42,7 @@ vi.mock('../api', () => ({
   getTraits: vi.fn(),
   voidReview: vi.fn(),
   unvoidReview: vi.fn(),
+  releaseResults: vi.fn(),
 }));
 
 const ADMIN: OrgFeatureAccess = leadershipFeatureAccess({
@@ -65,7 +80,9 @@ afterEach(() => {
   vi.mocked(getTraits).mockReset();
   vi.mocked(voidReview).mockReset();
   vi.mocked(unvoidReview).mockReset();
+  vi.mocked(releaseResults).mockReset();
   vi.mocked(toast.error).mockReset();
+  vi.mocked(toast.success).mockReset();
 });
 
 describe('EventLeadershipSection', () => {
@@ -75,7 +92,7 @@ describe('EventLeadershipSection', () => {
       await screen.findByTestId('leadership-moderation-7'),
     ).toBeInTheDocument();
     expect(screen.getByTestId('leadership-moderation')).toHaveTextContent(
-      'Admins only. Raters are never shown to captains.',
+      'Moderators only. Raters are never shown to captains.',
     );
     expect((await screen.findAllByText('Composure: 5')).length).toBeGreaterThan(
       0,
@@ -167,7 +184,7 @@ describe('EventLeadershipSection', () => {
     );
   });
 
-  it('is hidden for non-admins', () => {
+  it('is hidden for plain members', () => {
     const { container } = renderSection(
       leadershipFeatureAccess({ viewerPk: 1 }),
     );
@@ -204,5 +221,110 @@ describe('EventLeadershipSection', () => {
     await waitFor(() => expect(getEventReviews).toHaveBeenCalled());
     await waitFor(() => expect(getTraits).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders for org staff who cannot manage settings', async () => {
+    renderSection(
+      leadershipFeatureAccess({
+        viewerPk: 1,
+        track: { can_manage: false, can_moderate: true },
+      }),
+    );
+    expect(
+      await screen.findByTestId('leadership-moderation-7'),
+    ).toBeInTheDocument();
+  });
+
+  it('hides Release all with the gate off', async () => {
+    renderSection();
+    await screen.findByTestId('leadership-moderation-7');
+    expect(screen.queryByTestId('leadership-release-all')).toBeNull();
+  });
+
+  describe('release', () => {
+    const BOB = { ...CAPTAIN, org_user_pk: 9, user_pk: 13, username: 'carol' };
+    const gated = () =>
+      eventReviews({
+        require_staff_release: true,
+        captains: [
+          moderationCaptain({
+            release_state: 'pending',
+            released: false,
+            can_release: true,
+          }),
+          moderationCaptain({
+            org_user_id: 9,
+            captain: BOB,
+            team_name: 'Team carol',
+            release_state: 'pending',
+            released: false,
+            can_release: true,
+          }),
+          moderationCaptain({
+            org_user_id: 10,
+            captain: { ...CAPTAIN, org_user_pk: 10, username: 'erin' },
+            team_name: 'Team erin',
+            release_state: 'open',
+            released: false,
+          }),
+        ],
+      });
+
+    beforeEach(() => {
+      vi.mocked(getEventReviews).mockResolvedValue(gated());
+    });
+
+    it('releases every pending captain event-wide', async () => {
+      vi.mocked(releaseResults).mockResolvedValue({
+        released: [7, 9],
+        skipped: [],
+      });
+      renderSection();
+      const button = await screen.findByTestId('leadership-release-all');
+      expect(button).toHaveTextContent('Release all pending (2)');
+      fireEvent.click(button);
+      const dialog = screen.getByTestId('leadership-release-dialog');
+      expect(dialog).toHaveTextContent('Team alice');
+      expect(dialog).toHaveTextContent('Team carol');
+      expect(dialog).not.toHaveTextContent('Team erin');
+      fireEvent.click(within(dialog).getByTestId('leadership-release-confirm'));
+      await waitFor(() =>
+        expect(releaseResults).toHaveBeenCalledWith(3, 5, undefined),
+      );
+      await waitFor(() =>
+        expect(screen.queryByTestId('leadership-release-dialog')).toBeNull(),
+      );
+      expect(toast.success).toHaveBeenCalled();
+    });
+
+    it('releases one captain', async () => {
+      vi.mocked(releaseResults).mockResolvedValue({
+        released: [9],
+        skipped: [],
+      });
+      renderSection();
+      fireEvent.click(await screen.findByTestId('leadership-release-9'));
+      const dialog = screen.getByTestId('leadership-release-dialog');
+      expect(dialog).toHaveTextContent('Team carol');
+      expect(dialog).not.toHaveTextContent('Team alice');
+      fireEvent.click(within(dialog).getByTestId('leadership-release-confirm'));
+      await waitFor(() =>
+        expect(releaseResults).toHaveBeenCalledWith(3, 5, [9]),
+      );
+    });
+
+    it('shows the refusal on a double release', async () => {
+      vi.mocked(releaseResults).mockRejectedValue(
+        refusal(409, 'already_released'),
+      );
+      renderSection();
+      fireEvent.click(await screen.findByTestId('leadership-release-7'));
+      fireEvent.click(screen.getByTestId('leadership-release-confirm'));
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          'These results were already released.',
+        ),
+      );
+    });
   });
 });

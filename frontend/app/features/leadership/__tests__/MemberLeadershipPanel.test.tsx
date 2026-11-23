@@ -121,7 +121,7 @@ describe('MemberLeadershipPanel', () => {
     expect(row).not.toHaveTextContent('Communication');
   });
 
-  it('marks unreleased events for admins', async () => {
+  it('marks unreleased events for moderators', async () => {
     vi.mocked(getMemberLeadership).mockResolvedValue(
       memberLeadership({
         events: [
@@ -146,7 +146,7 @@ describe('MemberLeadershipPanel', () => {
       await screen.findByTestId('leadership-member-event-5-unreleased'),
     ).toHaveTextContent('Not released');
     expect(screen.getByTestId('leadership-member-event-5')).toHaveTextContent(
-      'Only admins see this until the window closes with enough reviews.',
+      'Only moderators see this until the results are released.',
     );
     expect(
       screen.queryByTestId('leadership-member-own-note'),
@@ -159,7 +159,7 @@ describe('MemberLeadershipPanel', () => {
     );
   });
 
-  it('tells a captain on a private board that only admins see it', async () => {
+  it('tells a captain on a private board that only moderators see it', async () => {
     vi.mocked(getMemberLeadership).mockResolvedValue(memberLeadership());
     renderPanel({
       access: leadershipFeatureAccess({
@@ -169,7 +169,7 @@ describe('MemberLeadershipPanel', () => {
     });
     expect(
       await screen.findByTestId('leadership-member-own-note'),
-    ).toHaveTextContent('Only you and org admins see this.');
+    ).toHaveTextContent('Only you and moderators see this.');
     expect(
       screen.queryByTestId('leadership-member-staff-note'),
     ).not.toBeInTheDocument();
@@ -188,7 +188,7 @@ describe('MemberLeadershipPanel', () => {
     });
     expect(
       await screen.findByTestId('leadership-member-own-note'),
-    ).toHaveTextContent('Only you and org admins see this.');
+    ).toHaveTextContent('Only you and moderators see this.');
     expect(screen.getByTestId('leadership-member-reviews')).toHaveTextContent(
       '6 released reviews',
     );
@@ -211,7 +211,9 @@ describe('MemberLeadershipPanel', () => {
     expect(screen.getByText(/Not enough released reviews/)).toBeInTheDocument();
     expect(
       screen.getByTestId('leadership-member-unreleased'),
-    ).toHaveTextContent('No released ratings yet.');
+    ).toHaveTextContent(
+      'No released ratings yet. Ratings appear once a review window closes with enough reviews and the results are released.',
+    );
     expect(screen.getByTestId('leadership-member-rating')).toHaveTextContent(
       '—',
     );
@@ -232,6 +234,47 @@ describe('MemberLeadershipPanel', () => {
     );
     expect(trait).toHaveTextContent('Not released');
     expect(trait.querySelector('[role="progressbar"]')).toBeNull();
+  });
+
+  it('gives org staff the moderator view of another captain', async () => {
+    vi.mocked(getMemberLeadership).mockResolvedValue(memberLeadership());
+    renderPanel({
+      own: false,
+      access: leadershipFeatureAccess({
+        viewerPk: 2,
+        track: { can_manage: false, can_moderate: true },
+      }),
+    });
+    expect(
+      await screen.findByTestId('leadership-member-staff-note'),
+    ).toHaveTextContent(
+      'Includes unreleased reviews, visible to moderators only.',
+    );
+    expect(screen.getByTestId('leadership-member-reviews')).toHaveTextContent(
+      '6 reviews (includes unreleased)',
+    );
+    expect(getLeadershipSettings).not.toHaveBeenCalled();
+  });
+
+  it('gives a moderator the released view of their own panel', async () => {
+    vi.mocked(getMemberLeadership).mockResolvedValue(memberLeadership());
+    renderPanel({
+      access: leadershipFeatureAccess({
+        viewerPk: 11,
+        track: { can_manage: false, can_moderate: true },
+      }),
+    });
+    expect(
+      await screen.findByTestId('leadership-member-own-note'),
+    ).toHaveTextContent(
+      'Members can see your rating and points; only you and moderators see the per-event detail.',
+    );
+    expect(
+      screen.queryByTestId('leadership-member-staff-note'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('leadership-member-reviews')).toHaveTextContent(
+      '6 released reviews',
+    );
   });
 
   it('renders no events block for another member', async () => {
@@ -268,7 +311,7 @@ describe('MemberLeadershipPanel', () => {
     expect(
       screen.getByTestId('leadership-member-points-note'),
     ).toHaveTextContent(
-      'Totals include events still in their review window or without enough reviews.',
+      'Totals include events still in their review window, without enough reviews, or waiting for release.',
     );
   });
 
