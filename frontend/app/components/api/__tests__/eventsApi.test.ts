@@ -62,6 +62,7 @@ const listItem = {
   voice_presence_confirms: false,
   user_can_manage: true,
   user_can_manage_event_staff: false,
+  manage_viewer_pk: 7,
 };
 
 const detail = {

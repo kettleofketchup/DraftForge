@@ -369,6 +369,7 @@ export const eventResponseSchema = z.object({
   dota_lobby_password_mode: z.enum(['random', 'fixed']),
   user_can_manage: z.boolean(),
   user_can_manage_event_staff: z.boolean(),
+  manage_viewer_pk: z.number().int().nullable(),
   is_off_schedule: z.boolean(),
   can_review_captains: z.boolean().optional(),
   pending_captain_reviews: z.number().int().optional(),
@@ -426,6 +427,7 @@ export const eventListItemSchema = eventResponseSchema
   .extend({
     user_can_manage: z.boolean().optional(),
     user_can_manage_event_staff: z.boolean().optional(),
+    manage_viewer_pk: z.number().int().nullable().optional(),
   });
 
 export type EventListItem = z.infer<typeof eventListItemSchema>;
