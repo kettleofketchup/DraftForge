@@ -46,6 +46,7 @@ from .test_dota_lobby import (
     reset_dota_lobby,
     seed_dota_lobby_row,
 )
+from .test_events_data import events_data
 from .test_events_discord import (
     discord_status,
     send_test_notification,
@@ -270,6 +271,7 @@ urlpatterns = [
         seed_discord_members,
         name="test-seed-discord-members",
     ),
+    path("events/data/", events_data, name="test-events-data"),
     # Events reset (preserves fixtures for E2E tests)
     path(
         "events/reset/",
