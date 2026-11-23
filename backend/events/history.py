@@ -78,9 +78,11 @@ def signup_history_queryset(
         qs = qs.filter(subject_user_id=user_id)
     if action is not None:
         qs = qs.filter(action=action)
-    return qs.select_related(
-        "subject_user__base_profile", "actor_user__base_profile"
-    ).order_by("-occurred_at", "-pk")
+    return (
+        qs.select_related("subject_user__base_profile", "actor_user__base_profile")
+        .nocache()
+        .order_by("-occurred_at", "-pk")
+    )
 
 
 def reduce_history_snapshot(value: Any, *, entry_id: int) -> dict[str, Any] | None:
