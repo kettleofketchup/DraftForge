@@ -16,7 +16,7 @@ from tournament.schemas import (
 
 
 class TournamentTaskSchemaDriftTest(TestCase):
-    """Verify Tournament model output validates against TournamentTaskSchema schema."""
+    """Verify Tournament model output validates against TournamentTaskSchema."""
 
     def test_tournament_validates(self):
         t = Tournament.objects.create(
@@ -52,8 +52,6 @@ class TournamentTaskSchemaDriftTest(TestCase):
 
 
 class GameWithoutHeroDraftSchemaDriftTest(TestCase):
-    """Verify GameWithoutHeroDraftSchema schema validates correctly."""
-
     def test_game_without_herodraft_validates(self):
         data = {
             "id": 1,
@@ -70,8 +68,6 @@ class GameWithoutHeroDraftSchemaDriftTest(TestCase):
 
 
 class TournamentParticipantSchemaDriftTest(TestCase):
-    """Verify TournamentParticipantSchema schema validates correctly."""
-
     def test_participant_validates(self):
         data = {"user_pk": 1, "discord_id": "123456789", "username": "player1"}
         parsed = TournamentParticipantSchema.model_validate(data)
