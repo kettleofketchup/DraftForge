@@ -195,7 +195,8 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         // Always headless — visible browsers steal user focus during local
-        // runs. For visual debugging, open `test-results/latest/artifacts/.../trace.zip` via
+        // runs. For visual debugging, open
+        // `test-results/latest/artifacts/.../trace.zip` via
         // `npx playwright show-trace` instead.
         headless: true,
         launchOptions: {
