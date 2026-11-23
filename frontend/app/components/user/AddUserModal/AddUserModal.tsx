@@ -38,7 +38,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const [manualQuery, setManualQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  // Reset manual query when input changes
   useEffect(() => {
     setManualQuery('');
   }, [query]);
@@ -65,7 +64,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     enabled: open && searchTerm.length >= 1,
   });
 
-  // Discord member search via react-query
   const discordQuery = useQuery({
     queryKey: ['discordSearch', searchTerm, entityContext.orgId],
     queryFn: () => searchDiscordMembers(entityContext.orgId!, searchTerm),
@@ -101,7 +99,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     try {
       const result = await refreshDiscordMembers(entityContext.orgId);
       toast.success(`Refreshed ${result.count} Discord members`);
-      // Invalidate Discord search query to re-fetch
       queryClient.invalidateQueries({ queryKey: ['discordSearch'] });
     } catch (err: unknown) {
       const message =
