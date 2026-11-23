@@ -1,8 +1,16 @@
 name: Deploy Docs
 
+# mkdocs reads only docs/ (snippets base_path is docs) and mkdocs.yml; its toolchain comes
+# from pyproject.toml and poetry.lock. workflow_dispatch redeploys on demand.
 on:
   push:
     branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'pyproject.toml'
+      - 'poetry.lock'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:

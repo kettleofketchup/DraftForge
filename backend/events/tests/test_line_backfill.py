@@ -13,6 +13,7 @@ from events.constants import EventState, SignupAction, SignupStatus
 from events.line_backfill import BackfillResult, backfill_signup_line
 from events.models import Event, EventSignup, SignupLedgerEntry
 from events.services import process_rsvp
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from user.models import BaseUserProfile
 
@@ -134,7 +135,7 @@ class LineBackfillTests(LineBackfillBase):
     def test_rerun_skips_signups_created_after_backfill(self) -> None:
         self.signup(self.players[0])
         backfill_signup_line(apps)
-        fresh = process_rsvp(self.event, self.players[1])
+        fresh = process_rsvp(self.event, self.players[1], actor=SYSTEM)
 
         result = backfill_signup_line(apps)
 

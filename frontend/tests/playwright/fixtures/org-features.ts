@@ -55,6 +55,12 @@ export interface OrgFeaturesTestData {
     new_member_org_user_pk: number;
     completed_event_member_org_user_pk: number;
   };
+  leadership: {
+    event_pk: number;
+    released_captain_org_user_pk: number;
+    open_captain_org_user_pk: number;
+    pending_rater_role: OrgFeaturesRole;
+  };
 }
 
 async function json<T>(resp: APIResponse, what: string): Promise<T> {

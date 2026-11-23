@@ -9,6 +9,7 @@ from app.models import CustomUser, PositionsModel
 from events.constants import EventState
 from events.models import Event
 from events.services import staff_add_signup
+from events.tests.actors import SYSTEM
 from org.models import Organization
 
 
@@ -43,7 +44,7 @@ class StaffAddSignupRaceTest(TransactionTestCase):
                 # Both threads block here until both have arrived, so the inserts
                 # race on the unique_event_user_signup constraint.
                 barrier.wait(timeout=5)
-                staff_add_signup(self.event, self.user)
+                staff_add_signup(self.event, self.user, actor=SYSTEM)
                 with lock:
                     results["success"] += 1
             except Exception:

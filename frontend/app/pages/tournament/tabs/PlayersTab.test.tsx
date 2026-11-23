@@ -73,3 +73,35 @@ describe('PlayersTab org/league context', () => {
     });
   });
 });
+
+describe('PlayersTab add-player controls', () => {
+  beforeEach(() => {
+    useOrgStore.setState({ currentOrg: null });
+    useLeagueStore.setState({
+      currentLeague: {
+        pk: 8,
+        name: 'League',
+        organization: { pk: 5, name: 'Org' },
+      } as LeagueType,
+    });
+    useUserStore.setState({
+      tournament: { pk: 1, organization_pk: 5, league_pk: 8, users: [] },
+    } as never);
+  });
+
+  it('shows Add Player to staff of the league org', () => {
+    useUserStore.setState({
+      currentUser: { pk: 2, username: 'staff', staff_organization_ids: [5] },
+    } as never);
+    const { queryByTestId } = renderTab();
+    expect(queryByTestId('tournamentAddPlayerBtn')).not.toBeNull();
+  });
+
+  it('hides Add Player from staff of another org', () => {
+    useUserStore.setState({
+      currentUser: { pk: 2, username: 'other', staff_organization_ids: [6] },
+    } as never);
+    const { queryByTestId } = renderTab();
+    expect(queryByTestId('tournamentAddPlayerBtn')).toBeNull();
+  });
+});
