@@ -26,7 +26,10 @@ import { hasAnyPosition } from '~/components/user/positions/hasAnyPosition';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
-import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
+import {
+  useScopedEditPermission,
+  type EditUserScope,
+} from '~/components/user/userCard/editUserSchema';
 import { useGameType } from '~/hooks/useGameType';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
@@ -56,7 +59,6 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const navigate = useNavigate();
   const currentUser = useUserStore((state) => state.currentUser);
   const setCurrentUser = useUserStore((state) => state.setCurrentUser);
-  const canEdit = currentUser?.is_staff || currentUser?.is_superuser;
 
   const { playerModalState } = useSharedPopover();
   const ctx = playerModalState.context;
@@ -98,6 +100,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     currentOrg,
     currentLeague,
   ]);
+
+  const canEdit = useScopedEditPermission(editScope);
 
   // Fetch full user data for editing (player prop may have partial data from herodraft)
   const [fullUserData, setFullUserData] = useState<UserType | null>(null);
