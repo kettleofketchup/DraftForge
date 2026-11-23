@@ -1,7 +1,17 @@
+import datetime
+import os
+from datetime import date
+from unittest.mock import patch
+
 from django.test import LiveServerTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 
+from app.internal_client import create_message_log, transport
+from app.models import CustomUser
+from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
+from events.models import Event, EventRepeater
 from org.models import Organization
+from tournament.models import Game, Team, Tournament
 
 TOKEN = "test-internal-token"
 HEADERS = {"HTTP_X_INTERNAL_TOKEN": TOKEN}
@@ -63,9 +73,6 @@ class DiscordMessageLogEndpointTest(TestCase):
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
 class DiscordEventEndpointTest(TestCase):
     def _make_discord_event(self):
-        from discordbot.models import DiscordEvent
-        from events.models import Event
-
         org = Organization.objects.create(name="Internal EP Test Org")
         event = Event.objects.create(
             organization=org,
@@ -76,8 +83,6 @@ class DiscordEventEndpointTest(TestCase):
         return DiscordEvent.objects.create(event=event, guild_id="111")
 
     def test_get_or_create_new(self):
-        from events.models import Event
-
         org = Organization.objects.create(name="GOC Test Org")
         event = Event.objects.create(
             organization=org,
@@ -179,8 +184,6 @@ class DiscordEventEndpointTest(TestCase):
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
 class SignupMessageEndpointTest(TestCase):
     def test_create_signup_message(self):
-        from events.models import Event
-
         org = Organization.objects.create(name="Signup Msg Test Org")
         event = Event.objects.create(
             organization=org,
@@ -204,9 +207,6 @@ class SignupMessageEndpointTest(TestCase):
         self.assertTrue(resp.json()["created"])
 
     def test_update_existing_signup_message(self):
-        from discordbot.models import DiscordEventMsgSignup
-        from events.models import Event
-
         org = Organization.objects.create(name="Signup Update Org")
         event = Event.objects.create(
             organization=org,
@@ -246,8 +246,6 @@ class SignupMessageEndpointTest(TestCase):
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
 class EventStateTransitionEndpointTest(TestCase):
     def test_transition_state(self):
-        from events.models import Event
-
         org = Organization.objects.create(name="Transition Test Org")
         event = Event.objects.create(
             organization=org,
@@ -266,8 +264,6 @@ class EventStateTransitionEndpointTest(TestCase):
         self.assertEqual(resp.json()["state"], "signups_open")
 
     def test_transition_from_closed_state_returns_400(self) -> None:
-        from events.models import Event
-
         org = Organization.objects.create(name="Closed Transition Org")
         event = Event.objects.create(
             organization=org,
@@ -287,8 +283,6 @@ class EventStateTransitionEndpointTest(TestCase):
         self.assertEqual(event.state, "cancelled")
 
     def test_transition_missing_state(self):
-        from events.models import Event
-
         org = Organization.objects.create(name="Missing State Org")
         event = Event.objects.create(
             organization=org,
@@ -309,8 +303,6 @@ class EventStateTransitionEndpointTest(TestCase):
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
 class RepeaterEndpointTest(TestCase):
     def setUp(self):
-        from app.models import CustomUser
-
         self.org = Organization.objects.create(name="Repeater Test Org")
         self.admin = CustomUser.objects.create_user(
             username="repeater_admin", password="pass"
@@ -319,8 +311,6 @@ class RepeaterEndpointTest(TestCase):
         self.client.credentials(**HEADERS)
 
     def test_get_active_repeaters(self):
-        from events.models import EventRepeater
-
         EventRepeater.objects.create(
             organization=self.org,
             name="Weekly Inhouse",
@@ -351,10 +341,6 @@ class RepeaterEndpointTest(TestCase):
         self.assertIn("pk", data[0])
 
     def test_generate_events_for_repeater(self):
-        import datetime
-
-        from events.models import EventRepeater
-
         repeater = EventRepeater.objects.create(
             organization=self.org,
             name="Generate Test",
@@ -381,12 +367,6 @@ class InternalClientIntegrationTest(LiveServerTestCase):
     """Real HTTP integration: internal_client -> actual HTTP -> endpoint -> DB."""
 
     def test_create_message_log_full_chain(self):
-        import os
-        from unittest.mock import patch
-
-        from app.internal_client import create_message_log, transport
-        from discordbot.models import DiscordMessageLog
-
         old_url = transport.INTERNAL_API_URL
         transport.INTERNAL_API_URL = f"{self.live_server_url}/api/internal"
         try:
@@ -418,11 +398,6 @@ class AutoHeroDraftGamesEndpointTest(TestCase):
     URL = "/api/internal/tournaments/auto-herodraft-games/"
 
     def setUp(self) -> None:
-        from datetime import date
-
-        from app.models import CustomUser
-        from tournament.models import Game, Team, Tournament
-
         self.client = APIClient()
         self.client.credentials(**HEADERS)
         self.n = 0
