@@ -17,7 +17,7 @@ from org.leadership.constants import (
 )
 from org.leadership.errors import ReviewRefused
 from org.leadership.kinds import DEFAULT_POINTS, RATED_KINDS
-from org.leadership.release import released_snapshots
+from org.leadership.release import release_floor, released_snapshots
 from org.models import ContributionPointValue, Organization, OrgLog
 from org.models_leadership import EventCaptain, OrgLeadershipSettings
 from org.standing import ledger
@@ -154,6 +154,42 @@ def _released_ids(
     )
 
 
+def _loosens_gate(old: OrgLeadershipSettings, new: OrgLeadershipSettings) -> bool:
+    if not new.require_staff_release:
+        return True
+    old_hours = old.auto_release_after_hours
+    new_hours = new.auto_release_after_hours
+    if new_hours is not None and (old_hours is None or new_hours < old_hours):
+        return True
+    return release_floor(new.rating_min_reviewers) < release_floor(
+        old.rating_min_reviewers
+    )
+
+
+def _refuses_self_release(
+    org: Organization,
+    *,
+    actor: CustomUser,
+    old: OrgLeadershipSettings,
+    new: OrgLeadershipSettings,
+    before: set[int],
+    unlocked: set[int],
+) -> bool:
+    if not old.require_staff_release:
+        return False
+    own = EventCaptain.objects.nocache().filter(
+        organization_id=org.pk, captain__user_id=actor.pk
+    )
+    if own.filter(pk__in=unlocked).exists():
+        return True
+    return (
+        _loosens_gate(old, new)
+        and own.filter(voided_at__isnull=True, released_at__isnull=True)
+        .exclude(pk__in=before)
+        .exists()
+    )
+
+
 def _apply_gate_change(
     org: Organization,
     *,
@@ -165,11 +201,8 @@ def _apply_gate_change(
     before = _released_ids(org, old, now)
     after = _released_ids(org, new, now)
     unlocked = after - before
-    if (
-        old.require_staff_release
-        and EventCaptain.objects.nocache()
-        .filter(pk__in=unlocked, captain__user_id=actor.pk)
-        .exists()
+    if _refuses_self_release(
+        org, actor=actor, old=old, new=new, before=before, unlocked=unlocked
     ):
         raise ReviewRefused(
             "would_release_own_results",

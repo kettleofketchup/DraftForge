@@ -168,10 +168,13 @@ released set:
 | Turn staff release off | Every waiting result is released at once; the settings screen warns first |
 | Raise the minimum reviews | Results below the new minimum are hidden, released or not |
 
-When staff release was on before the change, a change that would newly release the
-saving admin's own pending results (turning it off, shortening or setting the hours,
-lowering the minimum reviews) is refused with `409 would_release_own_results` and
-nothing is saved; another admin can make the same change. The organization log entry
+When staff release was on before the change, a change that would release the saving
+admin's own results, now or later, is refused with `409 would_release_own_results` and
+nothing is saved; another admin can make the same change. That covers turning staff
+release off, setting the hours where there were none, shortening them, and lowering
+the minimum reviews, whenever the admin has a captain entry in the org that is not
+voided and not yet released, whether its window is still open or it is pending. A
+change that would release one of their results at once is refused the same way. The organization log entry
 for a settings change that touches these fields carries `release_stamped` (results
 stamped as released) and `release_unlocked` (results newly public).
 

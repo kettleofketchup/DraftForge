@@ -307,24 +307,27 @@ class SettingsGateTest(LeadershipTestCase):
         self.assertNotIn(cap, self.rated())
 
     def test_self_release_refused(self) -> None:
-        cases: list[tuple[str, dict[str, Any], float, dict[str, object]]] = [
+        cases: list[tuple[str, dict[str, Any], float, dict[str, object], bool]] = [
             (
                 "gate_off",
                 {"require_staff_release": True, "auto_release_after_hours": None},
                 1,
                 {"require_staff_release": False},
+                True,
             ),
             (
                 "hours_shortened",
                 {"require_staff_release": True, "auto_release_after_hours": 720},
                 30,
                 {"auto_release_after_hours": 24},
+                True,
             ),
             (
                 "hours_set",
                 {"require_staff_release": True, "auto_release_after_hours": None},
                 30,
                 {"auto_release_after_hours": 24},
+                True,
             ),
             (
                 "floor_lowered",
@@ -335,9 +338,24 @@ class SettingsGateTest(LeadershipTestCase):
                 },
                 30,
                 {"rating_min_reviewers": 2},
+                True,
+            ),
+            (
+                "hours_set_releases_later",
+                {"require_staff_release": True, "auto_release_after_hours": None},
+                0.5,
+                {"auto_release_after_hours": 1},
+                False,
+            ),
+            (
+                "gate_off_window_open",
+                {"require_staff_release": True, "auto_release_after_hours": None},
+                -24,
+                {"require_staff_release": False},
+                False,
             ),
         ]
-        for name, initial, hours_ago, changes in cases:
+        for name, initial, hours_ago, changes, released_now in cases:
             with self.subTest(name):
                 self.configure(
                     **{
@@ -359,7 +377,44 @@ class SettingsGateTest(LeadershipTestCase):
                 self.assertIsNone(self.fresh(self.snap_b).released_at)
                 self.assertFalse(OrgLog.objects.filter(organization=self.org).exists())
                 self.update(self.admin, **changes)
-                self.assertIn(self.ou(self.cap_b).pk, self.rated())
+                if released_now:
+                    self.assertIn(self.ou(self.cap_b).pk, self.rated())
+
+    def test_loosening_allowed_without_own_unreleased(self) -> None:
+        cases: list[tuple[str, dict[str, Any], dict[str, object], str]] = [
+            ("gate_off", {}, {"require_staff_release": False}, "released_at"),
+            ("hours_set", {}, {"auto_release_after_hours": 1}, "released_at"),
+            (
+                "hours_shortened",
+                {"auto_release_after_hours": 720},
+                {"auto_release_after_hours": 24},
+                "released_at",
+            ),
+            (
+                "floor_lowered",
+                {"rating_min_reviewers": 3},
+                {"rating_min_reviewers": 2},
+                "voided_at",
+            ),
+        ]
+        for name, initial, changes, own_stamp in cases:
+            with self.subTest(name):
+                self.configure(
+                    **{
+                        "require_staff_release": True,
+                        "auto_release_after_hours": None,
+                        "rating_min_reviewers": 2,
+                        **initial,
+                    }
+                )
+                self.close_window(self.snap_a, 0.5)
+                self.close_window(self.snap_b, 0.5)
+                EventCaptain.objects.filter(pk=self.snap_b.pk).update(
+                    **{own_stamp: tz.now()}
+                )
+                row = self.update(self.cap_b, **changes)
+                for field, value in changes.items():
+                    self.assertEqual(getattr(row, field), value)
 
     def test_floor_change_with_gate_off_not_refused(self) -> None:
         self.configure(rating_min_reviewers=3)
