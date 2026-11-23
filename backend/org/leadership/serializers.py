@@ -32,6 +32,13 @@ def _int_field(name: str) -> serializers.IntegerField:
     return serializers.IntegerField(required=False, min_value=low, max_value=high)
 
 
+def _nullable_int_field(name: str) -> serializers.IntegerField:
+    low, high = SETTINGS_RANGES[name]
+    return serializers.IntegerField(
+        required=False, allow_null=True, min_value=low, max_value=high
+    )
+
+
 def _float_field(name: str) -> serializers.FloatField:
     low, high = SETTINGS_RANGES[name]
     return serializers.FloatField(required=False, min_value=low, max_value=high)
@@ -47,6 +54,8 @@ class SettingsUpdateSerializer(serializers.Serializer):
     half_life_days = _int_field("half_life_days")
     max_age_days = _int_field("max_age_days")
     leaderboard_public = serializers.BooleanField(required=False)
+    require_staff_release = serializers.BooleanField(required=False)
+    auto_release_after_hours = _nullable_int_field("auto_release_after_hours")
     points = serializers.DictField(
         child=serializers.IntegerField(
             min_value=0, max_value=POINT_VALUE_MAX, allow_null=True

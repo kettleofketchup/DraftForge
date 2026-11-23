@@ -177,6 +177,7 @@ class OrgLog(models.Model):
         ("void_attendance", "Void Attendance"),
         ("void_captain_review", "Void Captain Review"),
         ("unvoid_captain_review", "Unvoid Captain Review"),
+        ("release_captain_reviews", "Release Captain Reviews"),
         ("update_leadership_settings", "Update Leadership Settings"),
         ("update_captain_traits", "Update Captain Traits"),
         ("delete_user_leadership", "Delete User Leadership"),

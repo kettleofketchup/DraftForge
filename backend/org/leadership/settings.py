@@ -5,7 +5,12 @@ from django.db import transaction
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
-from org.leadership.constants import EDITABLE_SETTINGS_FIELDS, SETTINGS_RANGES
+from org.leadership.constants import (
+    BOOL_SETTINGS,
+    EDITABLE_SETTINGS_FIELDS,
+    NULLABLE_SETTINGS,
+    SETTINGS_RANGES,
+)
 from org.leadership.kinds import DEFAULT_POINTS, RATED_KINDS
 from org.models import ContributionPointValue, Organization, OrgLog
 from org.models_leadership import OrgLeadershipSettings
@@ -64,6 +69,14 @@ def _validate_changes(changes: Mapping[str, object]) -> None:
     if unknown:
         raise ValueError(f"Unknown setting(s): {', '.join(sorted(unknown))}")
     for field, value in changes.items():
+        if value is None:
+            if field in NULLABLE_SETTINGS:
+                continue
+            raise ValueError(f"{field} cannot be null.")
+        if field in BOOL_SETTINGS:
+            if not isinstance(value, bool):
+                raise ValueError(f"{field} must be true or false.")
+            continue
         bounds = SETTINGS_RANGES.get(field)
         if bounds is None:
             continue

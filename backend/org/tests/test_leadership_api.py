@@ -696,6 +696,55 @@ class SettingsApiTest(ApiCase):
         )
         self.assertEqual(OrgLeadershipSettings.objects.count(), 0)
 
+    def test_patch_release_fields(self) -> None:
+        res = self.client_for(self.admin).patch(
+            self.url("settings/"),
+            {"require_staff_release": True, "auto_release_after_hours": 48},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertIs(body["require_staff_release"], True)
+        self.assertEqual(body["auto_release_after_hours"], 48)
+
+    def test_patch_hours_null_ok(self) -> None:
+        res = self.client_for(self.admin).patch(
+            self.url("settings/"), {"auto_release_after_hours": None}, format="json"
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertIsNone(res.json()["auto_release_after_hours"])
+
+    def test_patch_hours_bounds(self) -> None:
+        client = self.client_for(self.admin)
+        for hours in (0, 721):
+            with self.subTest(hours=hours):
+                res = client.patch(
+                    self.url("settings/"),
+                    {"auto_release_after_hours": hours},
+                    format="json",
+                )
+                self.assertEqual(res.status_code, 400)
+                errors = res.json()["auto_release_after_hours"]
+                self.assertNotEqual(errors, ["Unknown setting."])
+
+    def test_patch_gate_non_bool_400(self) -> None:
+        res = self.client_for(self.admin).patch(
+            self.url("settings/"), {"require_staff_release": "maybe"}, format="json"
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertNotEqual(res.json()["require_staff_release"], ["Unknown setting."])
+
+    # Characterization: DRF already rejects null on non-nullable fields.
+    def test_patch_null_non_nullable_400(self) -> None:
+        res = self.client_for(self.admin).patch(
+            self.url("settings/"), {"prior_rating": None}, format="json"
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_get_reports_hours_range(self) -> None:
+        body = self.client_for(self.admin).get(self.url("settings/")).json()
+        self.assertEqual(body["ranges"]["auto_release_after_hours"], [1, 720])
+
 
 class TraitsApiTest(ApiCase):
     def test_list_defaults_and_upsert(self) -> None:
