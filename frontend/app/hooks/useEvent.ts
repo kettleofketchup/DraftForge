@@ -358,7 +358,7 @@ export function useUpdateEventMutation(eventId: number) {
   });
 }
 
-/** Signup management mutations (approve, reject, confirm, cancel). */
+/** Mutation key shared by the staff signup actions (approve, reject, confirm, cancel). */
 export const signupActionKey = (eventId: number) =>
   ['signup-action', eventId] as const;
 
