@@ -46,10 +46,8 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     await page.getByTestId('org-tab-events').click();
 
-    // Use data-testid per the project's testing skill: getByRole with text
-    // matching is fragile on the org page where "Events" is a substring of
-    // multiple headings (h1 "Events Test Org", h3 "Events (N)", h3 "Repeating
-    // Events (N)").
+    // Not getByRole: "Events" also matches h1 "Events Test Org" and h3s
+    // "Events (N)" / "Repeating Events (N)".
     await expect(page.getByTestId('org-events-heading')).toBeVisible();
     await expect(page.getByTestId('create-event-btn')).toBeVisible();
   });
@@ -73,24 +71,20 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByTestId('org-tab-events').click();
     await page.getByTestId('create-event-btn').click();
 
-    // Modal should appear with title
     await expect(
       page.getByRole('heading', { name: 'Create Event' }),
     ).toBeVisible();
 
-    // Core fields visible
     await expect(page.getByTestId('event-name-input')).toBeVisible();
     await expect(page.getByTestId('event-scheduled-input')).toBeVisible();
     await openTab(page, 'tournament');
     await expect(page.getByTestId('event-tournament-name-input')).toBeVisible();
     await openTab(page, 'event');
 
-    // Recurring checkbox visible but unchecked
     const recurringCheckbox = page.getByTestId('event-recurring-checkbox');
     await expect(recurringCheckbox).toBeVisible();
     await expect(recurringCheckbox).not.toBeChecked();
 
-    // Recurring-only fields should NOT be visible
     await expect(page.getByTestId('event-frequency-select')).not.toBeVisible();
     await expect(page.getByTestId('event-day-select')).not.toBeVisible();
   });
@@ -136,19 +130,17 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     await page.getByTestId('event-recurring-checkbox').check();
 
-    // Title should change
     await expect(
       page.getByRole('heading', { name: 'Create Recurring Event' }),
     ).toBeVisible();
 
-    // Recurring fields should now be visible
     await expect(page.getByTestId('event-frequency-select')).toBeVisible();
     await expect(page.getByTestId('event-day-select')).toBeVisible();
     await expect(page.getByTestId('event-time-input')).toBeVisible();
     await expect(page.getByTestId('event-starts-input')).toBeVisible();
     await expect(page.getByTestId('event-generate-days-input')).toBeVisible();
 
-    // Scheduled Date & Time should NOT be visible (only for one-off events)
+    // Scheduled Date & Time is one-off only.
     await expect(page.getByTestId('event-scheduled-input')).not.toBeVisible();
   });
 
@@ -158,20 +150,17 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByTestId('org-tab-events').click();
     await page.getByTestId('create-event-btn').click();
 
-    // Fill out form
     await page.getByTestId('event-name-input').fill('E2E One-Off Test');
     await openTab(page, 'tournament');
     await page
       .getByTestId('event-tournament-name-input')
       .fill('E2E Tournament');
 
-    // Select league
     await page.getByTestId('event-league-select').click();
     await page
       .getByRole('option', { name: 'Events Test League', exact: true })
       .click();
 
-    // Set scheduled date (tomorrow)
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const dateStr = tomorrow.toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
@@ -180,7 +169,6 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     await page.getByTestId('form-dialog-submit').click();
 
-    // Modal should close and event should appear in list
     await expect(
       page.getByRole('heading', { name: 'Create Event' }),
     ).not.toBeVisible({ timeout: 10000 });
@@ -206,11 +194,9 @@ test.describe('Events - Create Event (@cicd)', () => {
       .getByRole('option', { name: 'Events Test League', exact: true })
       .click();
 
-    // Select Double Elimination bracket type
     await page.getByTestId('event-bracket-select').click();
     await page.getByRole('option', { name: 'Double Elimination' }).click();
 
-    // Set scheduled date
     await openTab(page, 'event');
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -220,7 +206,6 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     await page.getByTestId('form-dialog-submit').click();
 
-    // Verify event created with correct tournament_type via API
     await expect(
       page.getByRole('heading', { name: 'Create Event' }),
     ).not.toBeVisible({ timeout: 10000 });
@@ -246,25 +231,20 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     await openTab(page, 'tournament');
 
-    // Default should be 5 (Dota 2)
     await expect(page.getByTestId('event-people-per-team-input')).toHaveValue(
       '5',
     );
 
-    // Switch to Deadlock
     await page.getByTestId('event-game-select').click();
     await page.getByRole('option', { name: 'Deadlock' }).click();
 
-    // People per team should auto-update to 6
     await expect(page.getByTestId('event-people-per-team-input')).toHaveValue(
       '6',
     );
 
-    // Switch back to Dota 2
     await page.getByTestId('event-game-select').click();
     await page.getByRole('option', { name: 'Dota 2' }).click();
 
-    // Should reset to 5
     await expect(page.getByTestId('event-people-per-team-input')).toHaveValue(
       '5',
     );
@@ -317,13 +297,10 @@ test.describe('Events - Create Event (@cicd)', () => {
     const trigger = page.getByTestId('event-league-select');
     await trigger.click();
 
-    // Type into the cmdk search input — first 3 chars of the seeded league name
     await page.getByTestId('event-league-search').fill('Eve');
 
-    // Pick the seeded events league via its preserved per-item data-testid
     await page.getByTestId(`event-league-option-${eventInfo.leaguePk}`).click();
 
-    // Trigger should now show the selected league name
     await expect(trigger).toContainText('Events Test League');
   });
 
@@ -334,21 +311,17 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByTestId('org-tab-events').click();
     await page.getByTestId('create-event-btn').click();
 
-    // Pick a league
     await openTab(page, 'tournament');
     await page.getByTestId('event-league-select').click();
     await page.getByTestId(`event-league-option-${eventInfo.leaguePk}`).click();
 
-    // Reopen and clear
     await page.getByTestId('event-league-select').click();
     await page.getByTestId('event-league-clear').click();
 
-    // Trigger should show the placeholder again
     await expect(page.getByTestId('event-league-select')).toContainText(
       /select league/i,
     );
 
-    // Fill the rest of the required fields (mirroring the one-off-event test)
     await page
       .getByTestId('event-tournament-name-input')
       .fill('E2E Tournament');
@@ -360,7 +333,6 @@ test.describe('Events - Create Event (@cicd)', () => {
       .getByTestId('event-scheduled-input')
       .fill(tomorrow.toISOString().slice(0, 16));
 
-    // Capture the POST payload as the form submits
     const createReqPromise = page.waitForRequest(
       (req) => req.url().includes('/api/events') && req.method() === 'POST',
     );
@@ -397,7 +369,6 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByTestId('event-league-clear').click();
     await expect(trigger).toContainText(/select league/i);
 
-    // Picking a real league still works
     await trigger.click();
     await page.getByTestId(`event-league-option-${eventInfo.leaguePk}`).click();
     await expect(trigger).toContainText('Events Test League');
@@ -411,27 +382,23 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByTestId('org-tab-events').click();
     await page.getByTestId('create-event-btn').click();
 
-    // Fill basic fields
     await page.getByTestId('event-name-input').fill('E2E Weekly Recurring');
     await openTab(page, 'tournament');
     await page
       .getByTestId('event-tournament-name-input')
       .fill('E2E Recurring Tourney');
 
-    // Select league
     await page.getByTestId('event-league-select').click();
     await page
       .getByRole('option', { name: 'Events Test League', exact: true })
       .click();
 
-    // Toggle recurring
     await openTab(page, 'event');
     await page.getByTestId('event-recurring-checkbox').check();
     await expect(
       page.getByRole('heading', { name: 'Create Recurring Event' }),
     ).toBeVisible();
 
-    // Fill recurring fields
     await page.getByTestId('event-frequency-select').click();
     await page.getByRole('option', { name: 'Weekly' }).click();
 
@@ -440,18 +407,15 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     await page.getByTestId('event-time-input').fill('19:00');
 
-    // Set start date
     const today = new Date().toISOString().slice(0, 10);
     await page.getByTestId('event-starts-input').fill(today);
 
     await page.getByTestId('form-dialog-submit').click();
 
-    // Modal should close with success
     await expect(
       page.getByRole('heading', { name: 'Create Recurring Event' }),
     ).not.toBeVisible({ timeout: 10000 });
 
-    // Verify via API that the repeater was created
     const resp = await page.request.get(
       `${API_URL}/events/repeaters/?organization=${eventInfo.orgPk}`,
     );
