@@ -75,14 +75,26 @@ function setViewer(siteAdmin: boolean) {
   });
 }
 
-function renderPanel(a = access) {
+function renderPanel(a = access, onOuterSubmit?: () => void) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  const panel = <ApiAccessPanel orgId={ORG} access={a} />;
   return render(
     <QueryClientProvider client={qc}>
       <TooltipProvider>
-        <ApiAccessPanel orgId={ORG} access={a} />
+        {onOuterSubmit ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onOuterSubmit();
+            }}
+          >
+            {panel}
+          </form>
+        ) : (
+          panel
+        )}
       </TooltipProvider>
     </QueryClientProvider>,
   );
@@ -163,6 +175,33 @@ describe('ApiAccessPanel', () => {
       }),
     );
     expect(toast.success).toHaveBeenCalledWith('Rate limits saved');
+  });
+
+  it('saves limits without submitting the enclosing settings form', async () => {
+    setViewer(true);
+    vi.mocked(putApiLimits).mockResolvedValue({
+      per_minute: 25,
+      per_day: 5000,
+    });
+    const outerSubmit = vi.fn();
+    renderPanel(access, outerSubmit);
+    const input = await screen.findByTestId('api-limits-per_minute');
+    fireEvent.change(input, { target: { value: '25' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() =>
+      expect(putApiLimits).toHaveBeenCalledWith(ORG, {
+        per_minute: 25,
+        per_day: 5000,
+      }),
+    );
+    fireEvent.click(screen.getByTestId('api-limits-save'));
+    expect(outerSubmit).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByTestId('api-limits-form')
+        .closest('form')
+        ?.querySelector('form'),
+    ).toBeNull();
   });
 
   it('rejects out-of-range limits before calling the API', async () => {

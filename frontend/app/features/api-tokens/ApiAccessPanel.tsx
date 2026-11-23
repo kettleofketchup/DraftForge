@@ -392,9 +392,15 @@ function LimitsForm({ orgId, access, limits }: LimitsFormProps) {
 
   return (
     <Form {...form}>
-      <form
-        onSubmit={submit}
-        noValidate
+      <div
+        role="group"
+        aria-label="Rate limits"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
+            e.preventDefault();
+            void submit();
+          }
+        }}
         className="flex flex-col gap-4 sm:max-w-sm"
         data-testid="api-limits-form"
       >
@@ -441,14 +447,15 @@ function LimitsForm({ orgId, access, limits }: LimitsFormProps) {
         ))}
         <div>
           <SecondaryButton
-            type="submit"
+            type="button"
+            onClick={() => void submit()}
             disabled={save.isPending || !form.formState.isDirty}
             data-testid="api-limits-save"
           >
             {save.isPending ? 'Saving...' : 'Save limits'}
           </SecondaryButton>
         </div>
-      </form>
+      </div>
     </Form>
   );
 }
