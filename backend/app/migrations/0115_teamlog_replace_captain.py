@@ -29,6 +29,7 @@ class Migration(migrations.Migration):
                     ("team_deleted", "Team Deleted"),
                     ("materialize", "Materialize"),
                     ("replace_captain", "Replace Captain"),
+                    ("set_placement", "Set Placement"),
                 ],
                 max_length=32,
             ),

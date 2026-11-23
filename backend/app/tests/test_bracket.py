@@ -6,7 +6,15 @@ from django.test import TestCase
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Game, Team, TeamLogVia, Tournament
+from app.models import (
+    CustomUser,
+    Game,
+    Team,
+    TeamLog,
+    TeamLogAction,
+    TeamLogVia,
+    Tournament,
+)
 from app.services.team_management import live_conflicts, replace_captain
 from app.tests.test_team_management import TeamManagementFixture, eliminate
 
@@ -480,6 +488,49 @@ class ManualPlacementOverrideTest(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.team.refresh_from_db()
+        self.assertIsNone(self.team.placement)
+
+    def test_set_placement_writes_team_log_with_reason(self) -> None:
+        response = self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{self.team.pk}/placement/",
+            {"placement": 4, "reason": "  lost the lower final  "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        row = TeamLog.objects.get(team=self.team)
+        self.assertEqual(row.action, TeamLogAction.SET_PLACEMENT)
+        self.assertEqual(row.actor, self.admin)
+        self.assertEqual(row.via, TeamLogVia.WEB)
+        self.assertEqual(row.reason, "lost the lower final")
+        self.assertEqual(
+            row.details,
+            {"before": {"placement": None}, "after": {"placement": 4}},
+        )
+
+    def test_unchanged_placement_writes_no_team_log(self) -> None:
+        self.team.placement = 2
+        self.team.save()
+
+        response = self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{self.team.pk}/placement/",
+            {"placement": 2, "reason": "same"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(TeamLog.objects.filter(team=self.team).exists())
+
+    def test_non_text_reason_rejected(self) -> None:
+        response = self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{self.team.pk}/placement/",
+            {"placement": 3, "reason": 5},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "invalid_reason")
         self.team.refresh_from_db()
         self.assertIsNone(self.team.placement)
 

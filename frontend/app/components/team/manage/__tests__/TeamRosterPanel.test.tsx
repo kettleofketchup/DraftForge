@@ -6,7 +6,7 @@ import type { ManagedTeam } from '~/components/api/teamManagementAPI';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
 import { LeadershipProblemsBanner } from '../LeadershipProblemsBanner';
-import { CAPTAIN_SUCCESSION_WARNING } from '../teamActionCopy';
+import { captainSuccessionWarning } from '../teamActionCopy';
 import { TeamRosterPanel, type PendingTeamAction } from '../TeamRosterPanel';
 import {
   ghostCaptainDropoutTeam,
@@ -487,7 +487,7 @@ describe('roster rows', () => {
       summary: `Mark ${name(people.captain)} as a dropout of ${managedTeam.name}.`,
       confirmText: 'Mark dropout',
       destructive: true,
-      warning: CAPTAIN_SUCCESSION_WARNING,
+      warning: captainSuccessionWarning(managedTeam, people.captain.pk),
     });
   });
 
@@ -525,7 +525,7 @@ describe('roster rows', () => {
       withReplacing: true,
       replacingCaptain: {
         pk: managedTeam.captain!.pk,
-        warning: CAPTAIN_SUCCESSION_WARNING,
+        warning: captainSuccessionWarning(managedTeam, people.captain.pk),
       },
     });
   });

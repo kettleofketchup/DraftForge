@@ -13,6 +13,7 @@ const ACTION_LABELS: Record<string, string> = {
   team_deleted: 'Team deleted',
   materialize: 'Materialized',
   replace_captain: 'Replace captain',
+  set_placement: 'Set placement',
 };
 
 const VIA_LABELS: Record<string, string> = {

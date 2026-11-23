@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TeamPlacementControl } from '../TeamPlacementControl';
+import { placementEffect, TeamPlacementControl } from '../TeamPlacementControl';
 import { teamManageKeys } from '../useTeamManagement';
 import { axiosError, invalidatedKeys, stubRadix } from './manageDialogHarness';
 
@@ -27,6 +27,8 @@ vi.mock('~/lib/logger', () => ({ getLogger: () => logger }));
 
 const TOURNAMENT = 11;
 const TEAM = 22;
+const TEAM_NAME = 'TM Delta';
+const REASON = 'lost the lower final';
 const PATH = `/bracket/tournaments/${TOURNAMENT}/teams/${TEAM}/placement/`;
 
 beforeAll(stubRadix);
@@ -46,6 +48,7 @@ function renderControl(placement: number | null) {
       <TeamPlacementControl
         tournamentId={TOURNAMENT}
         teamId={TEAM}
+        teamName={TEAM_NAME}
         placement={placement}
       />
     </QueryClientProvider>,
@@ -59,6 +62,11 @@ const save = () => screen.getByTestId('team-placement-save');
 const clear = () => screen.getByTestId('team-placement-clear');
 const type = (value: string) =>
   fireEvent.change(input(), { target: { value } });
+const confirm = () => screen.getByTestId('team-placement-confirm');
+const giveReason = (value = REASON) =>
+  fireEvent.change(screen.getByTestId('team-placement-reason'), {
+    target: { value },
+  });
 
 describe('TeamPlacementControl', () => {
   it('Save PATCHes the placement and refreshes the team and tournament', async () => {
@@ -68,14 +76,25 @@ describe('TeamPlacementControl', () => {
     const { invalidate } = renderControl(null);
     type('3');
     fireEvent.click(save());
+    expect(axiosMock.patch).not.toHaveBeenCalled();
+    expect(screen.getByTestId('team-placement-confirm-text')).toHaveTextContent(
+      `Mark ${TEAM_NAME} eliminated (3rd)? It leaves the tournament and its players become free to join other teams.`,
+    );
+    expect(confirm()).toBeDisabled();
+    giveReason();
+    fireEvent.click(confirm());
     await waitFor(() =>
-      expect(axiosMock.patch).toHaveBeenCalledWith(PATH, { placement: 3 }),
+      expect(axiosMock.patch).toHaveBeenCalledWith(PATH, {
+        placement: 3,
+        reason: REASON,
+      }),
     );
     await waitFor(() =>
       expect(invalidatedKeys(invalidate)).toEqual(
         expect.arrayContaining([
           ['tournament', TOURNAMENT],
           teamManageKeys.managed(TEAM),
+          teamManageKeys.history(TEAM),
         ]),
       ),
     );
@@ -95,9 +114,41 @@ describe('TeamPlacementControl', () => {
     });
     renderControl(2);
     fireEvent.click(clear());
-    await waitFor(() =>
-      expect(axiosMock.patch).toHaveBeenCalledWith(PATH, { placement: null }),
+    expect(screen.getByTestId('team-placement-confirm-text')).toHaveTextContent(
+      `Put ${TEAM_NAME} back in the tournament?`,
     );
+    giveReason();
+    fireEvent.click(confirm());
+    await waitFor(() =>
+      expect(axiosMock.patch).toHaveBeenCalledWith(PATH, {
+        placement: null,
+        reason: REASON,
+      }),
+    );
+  });
+
+  it('Back returns to the placement form without saving', () => {
+    renderControl(null);
+    type('4');
+    fireEvent.click(save());
+    fireEvent.click(screen.getByTestId('team-placement-back'));
+    expect(input()).toHaveValue(4);
+    expect(axiosMock.patch).not.toHaveBeenCalled();
+  });
+
+  it('needs a reason of at least 3 characters', () => {
+    renderControl(null);
+    type('4');
+    fireEvent.click(save());
+    giveReason('  ab ');
+    expect(confirm()).toBeDisabled();
+    giveReason('abc');
+    expect(confirm()).not.toBeDisabled();
+  });
+
+  it('disables Save when the placement is unchanged', () => {
+    renderControl(4);
+    expect(save()).toBeDisabled();
   });
 
   it('disables Clear on a team that is still in the tournament', () => {
@@ -130,6 +181,8 @@ describe('TeamPlacementControl', () => {
     );
     renderControl(2);
     fireEvent.click(clear());
+    giveReason();
+    fireEvent.click(confirm());
     expect(await screen.findByTestId('team-placement-error')).toHaveTextContent(
       error,
     );
@@ -138,7 +191,7 @@ describe('TeamPlacementControl', () => {
       status: 409,
       code: 'roster_conflict',
     });
-    expect(input()).toBeTruthy();
+    expect(confirm()).toBeTruthy();
   });
 
   it('shows a 403 message inline', async () => {
@@ -150,8 +203,25 @@ describe('TeamPlacementControl', () => {
     renderControl(null);
     type('2');
     fireEvent.click(save());
+    giveReason();
+    fireEvent.click(confirm());
     expect(await screen.findByTestId('team-placement-error')).toHaveTextContent(
       'You do not have permission to modify this tournament.',
     );
+  });
+});
+
+describe('placementEffect', () => {
+  it('names the winner', () => {
+    expect(placementEffect('A', null, 1).question).toBe(
+      'Mark A the winner (1st)? It leaves the tournament and its players become free to join other teams.',
+    );
+  });
+
+  it('describes a change between placements', () => {
+    expect(placementEffect('A', 4, 3)).toEqual({
+      question: "Change A's placement from 4th to 3rd?",
+      confirmText: 'Change placement',
+    });
   });
 });

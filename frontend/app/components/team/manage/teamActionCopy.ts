@@ -9,13 +9,24 @@ import type { PendingTeamAction } from './pendingTeamAction';
 export const CAPTAIN_CHANGE_WARNING =
   'Ready and connected state resets for any live hero draft this team is in.';
 
-export const CAPTAIN_SUCCESSION_WARNING = `${CAPTAIN_CHANGE_WARNING} The new captain is picked automatically (highest MMR). To choose who captains, use Replace captain.`;
-
 const isOn = (list: RosterUser[], user: RosterUser): boolean =>
   list.some((u) => u.pk === user.pk);
 
 export const isMember = (team: ManagedTeam, user: RosterUser): boolean =>
   isOn(team.members, user);
+
+/** Mirrors successor_after_removal: the deputy first, else highest MMR. */
+export function captainSuccessionWarning(
+  team: ManagedTeam,
+  removedPk: number,
+): string {
+  const deputy = team.deputy_captain;
+  const successor =
+    deputy && deputy.pk !== removedPk && isMember(team, deputy)
+      ? `${DisplayName(deputy)} (deputy) becomes captain and the deputy slot is left empty.`
+      : 'With no deputy, the remaining member with the highest MMR becomes captain.';
+  return `${CAPTAIN_CHANGE_WARNING} ${successor} To choose who captains, use Replace captain.`;
+}
 
 export function reseatCaptainSummary(
   team: ManagedTeam,
@@ -99,7 +110,7 @@ export function markDropoutRequest(
     summary: `Mark ${DisplayName(user)} as a dropout of ${team.name}.`,
     confirmText: 'Mark dropout',
     destructive: true,
-    ...(isCaptain ? { warning: CAPTAIN_SUCCESSION_WARNING } : {}),
+    ...(isCaptain ? { warning: captainSuccessionWarning(team, user.pk) } : {}),
   };
 }
 
@@ -142,7 +153,7 @@ export function subInRequest(
       ? {
           replacingCaptain: {
             pk: team.captain.pk,
-            warning: CAPTAIN_SUCCESSION_WARNING,
+            warning: captainSuccessionWarning(team, team.captain.pk),
           },
         }
       : {}),

@@ -1082,6 +1082,7 @@ class TeamLogAction(models.TextChoices):
     TEAM_DELETED = "team_deleted", "Team Deleted"
     MATERIALIZE = "materialize", "Materialize"
     REPLACE_CAPTAIN = "replace_captain", "Replace Captain"
+    SET_PLACEMENT = "set_placement", "Set Placement"
 
 
 class TeamLog(models.Model):

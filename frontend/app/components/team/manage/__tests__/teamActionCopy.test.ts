@@ -7,13 +7,18 @@ import type {
 import { DisplayName } from '~/components/user/avatar';
 import {
   CAPTAIN_CHANGE_WARNING,
-  CAPTAIN_SUCCESSION_WARNING,
+  captainSuccessionWarning,
   markDropoutRequest,
   replaceCaptainRequest,
   setCaptainRequest,
   subInRequest,
 } from '../teamActionCopy';
-import { ghostCaptainTeam, managedTeam, people } from './fixtures';
+import {
+  ghostCaptainTeam,
+  managedTeam,
+  people,
+  singleMemberTeam,
+} from './fixtures';
 
 const HINT = 'use Replace captain';
 
@@ -33,10 +38,33 @@ const withTournamentUsers = (
     ? { ...team, tournament: { ...team.tournament, users } }
     : team;
 
-describe('CAPTAIN_SUCCESSION_WARNING', () => {
-  it('extends the captain change warning with the Replace captain hint', () => {
-    expect(CAPTAIN_SUCCESSION_WARNING).toBe(
-      `${CAPTAIN_CHANGE_WARNING} The new captain is picked automatically (highest MMR). To choose who captains, use Replace captain.`,
+describe('captainSuccessionWarning', () => {
+  it('names the deputy, who successor_after_removal promotes first', () => {
+    expect(managedTeam.deputy_captain?.pk).toBe(people.deputy.pk);
+    expect(captainSuccessionWarning(managedTeam, people.captain.pk)).toBe(
+      `${CAPTAIN_CHANGE_WARNING} ${DisplayName(people.deputy)} (deputy) becomes captain and the deputy slot is left empty. To choose who captains, use Replace captain.`,
+    );
+  });
+
+  it('falls back to highest MMR without a deputy', () => {
+    expect(captainSuccessionWarning(singleMemberTeam, people.captain.pk)).toBe(
+      `${CAPTAIN_CHANGE_WARNING} With no deputy, the remaining member with the highest MMR becomes captain. To choose who captains, use Replace captain.`,
+    );
+  });
+
+  it('does not name a deputy who is not a member', () => {
+    const team: ManagedTeam = {
+      ...managedTeam,
+      deputy_captain: people.outsider,
+    };
+    expect(captainSuccessionWarning(team, people.captain.pk)).toContain(
+      'highest MMR',
+    );
+  });
+
+  it('does not name a deputy who is the one leaving', () => {
+    expect(captainSuccessionWarning(managedTeam, people.deputy.pk)).toContain(
+      'highest MMR',
     );
   });
 });
@@ -45,12 +73,14 @@ describe('captain-dropping actions point to Replace captain', () => {
   it('sub in replacing the captain carries the hint', () => {
     const request = subInRequest(managedTeam, people.standin);
     expect(request.replacingCaptain?.pk).toBe(people.captain.pk);
-    expect(request.replacingCaptain?.warning).toBe(CAPTAIN_SUCCESSION_WARNING);
+    expect(request.replacingCaptain?.warning).toBe(
+      captainSuccessionWarning(managedTeam, people.captain.pk),
+    );
   });
 
   it('mark dropout of the captain carries the hint', () => {
     expect(markDropoutRequest(managedTeam, people.captain).warning).toBe(
-      CAPTAIN_SUCCESSION_WARNING,
+      captainSuccessionWarning(managedTeam, people.captain.pk),
     );
   });
 

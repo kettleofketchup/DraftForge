@@ -90,12 +90,20 @@ export function useTeamActionMutation(
 export function useSetTeamPlacement(teamId: number, tournamentId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (placement: number | null) =>
-      setTeamPlacement(tournamentId, teamId, placement),
+    mutationFn: ({
+      placement,
+      reason,
+    }: {
+      placement: number | null;
+      reason: string;
+    }) => setTeamPlacement(tournamentId, teamId, placement, reason),
     onSuccess: ({ placement }) => {
       queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
       queryClient.invalidateQueries({
         queryKey: teamManageKeys.managed(teamId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: teamManageKeys.history(teamId),
       });
       log.info('Team placement set', { teamId, placement });
     },

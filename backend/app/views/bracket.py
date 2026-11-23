@@ -9,7 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import Game, Team, Tournament
+from app.models import Game, Team, TeamLogAction, TeamLogVia, Tournament
 from app.permissions_tournament import IsTournamentStaff
 from app.serializers import (
     TEAM_USER_INDEX,
@@ -18,8 +18,10 @@ from app.serializers import (
     BracketSaveSerializer,
     build_team_user_index,
 )
+from app.services.team_audit import log_snapshot_fields, write_team_log
 from app.services.team_management import live_conflicts, roster_conflict_body
 from draft.models import HeroDraft
+from events.overrides import REASON_MAX_LENGTH
 from lobby.models import GameLobby
 from telemetry.logging import get_logger
 
@@ -685,6 +687,17 @@ def set_team_placement(request: Request, tournament_id: int, team_id: int) -> Re
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+    reason = request.data.get("reason", "")
+    if not isinstance(reason, str) or len(reason.strip()) > REASON_MAX_LENGTH:
+        return Response(
+            {
+                "error": f"Reason must be text of at most {REASON_MAX_LENGTH} characters",
+                "code": "invalid_reason",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    reason = reason.strip()
+
     previous_placement = team.placement
     if placement is None and previous_placement is not None:
         conflicts = live_conflicts(team)
@@ -701,8 +714,22 @@ def set_team_placement(request: Request, tournament_id: int, team_id: int) -> Re
                 roster_conflict_body(team, conflicts),
                 status=status.HTTP_409_CONFLICT,
             )
-    team.placement = placement
-    team.save()
+    with transaction.atomic():
+        team.placement = placement
+        team.save()
+        if placement != previous_placement:
+            write_team_log(
+                team,
+                snapshot=log_snapshot_fields(team),
+                action=TeamLogAction.SET_PLACEMENT,
+                via=TeamLogVia.WEB,
+                actor=request.user,
+                reason=reason,
+                details={
+                    "before": {"placement": previous_placement},
+                    "after": {"placement": placement},
+                },
+            )
 
     log.info(
         "bracket_placement_set",

@@ -16,7 +16,7 @@ that apply to that player:
 |--------|--------------|
 | Make captain | Makes a member or stand-in the captain. |
 | Make deputy / Clear deputy | Sets or clears the deputy captain. |
-| Mark dropout | Moves a member to the dropouts. If they were captain, a new captain is picked automatically (highest MMR). |
+| Mark dropout | Moves a member to the dropouts. If they were captain, the deputy becomes captain; with no deputy, the remaining member with the highest MMR does. |
 | Restore | Brings a dropout back as a member. |
 | Add stand-in | Adds a player from the tournament or organization as a stand-in. |
 | Sub in | Swaps a stand-in in for a member. |
@@ -60,8 +60,9 @@ captain who came from another team can be replaced the same way later.
 
 !!! tip "Mark dropout versus Replace captain"
 
-    **Mark dropout** on a captain picks the next captain by MMR. Use Replace captain when
-    you want to pick the new captain yourself.
+    **Mark dropout** (or **Sub in** replacing the captain) promotes the deputy, or the
+    highest-MMR member when there is no deputy. The confirmation names who that will be.
+    Use Replace captain when you want to pick the new captain yourself.
 
 If the new captain doesn't meet the event's signup requirements, the dialog asks you to
 confirm the [staff override](../development/staff-overrides.md) before it saves.
@@ -107,6 +108,10 @@ records stay as they were, so the player is listed on both teams.
 **Set placement** in the dialog header sets the team's final placement (a whole number,
 1 or more) or clears it with **Clear (back in tournament)**. Use it to mark a team
 eliminated when the bracket didn't, or to fix a wrong placement.
+
+Before it saves, a confirmation step names the team and what happens. Marking a team
+eliminated frees its players to join other teams. Every placement change needs a reason
+and appears in the team's **History** tab as **Set placement**.
 
 Clearing a placement is refused if one of the team's players has since joined another
 team that is still in the tournament. Otherwise that player would be on two live teams.

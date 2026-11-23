@@ -331,6 +331,7 @@ export function TeamManageDialog({
                 <TeamPlacementControl
                   tournamentId={placementTournamentPk}
                   teamId={team.pk}
+                  teamName={team.name}
                   placement={team.placement}
                 />
               ) : null}

@@ -20,17 +20,19 @@ export type SetTeamPlacementResponse = z.infer<
 >;
 
 /**
- * Set or clear (`null`) a team's placement. Clearing returns 409
+ * Set or clear (`null`) a team's placement; a change with a `reason` is
+ * recorded in the team history. Clearing returns 409
  * `roster_conflict` when it would put a player on two live teams.
  */
 export async function setTeamPlacement(
   tournamentId: number,
   teamId: number,
   placement: number | null,
+  reason?: string,
 ): Promise<SetTeamPlacementResponse> {
   const response = await api.patch(
     `/bracket/tournaments/${tournamentId}/teams/${teamId}/placement/`,
-    { placement },
+    reason === undefined ? { placement } : { placement, reason },
   );
   return SetTeamPlacementResponseSchema.parse(response.data);
 }
