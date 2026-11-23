@@ -31,13 +31,14 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Game
+from app.models import CustomUser
 from lobby import broadcast, events, refs, services, states
 from lobby.models import GameLobby, GameLobbyEvent
 from lobby.schemas import LobbyEvent, LobbyView
 from lobby.tasks import backfill_lobby_events
 from lobby.webhook import verify_signature
 from telemetry.logging import get_logger
+from tournament.models import Game
 
 log = get_logger(__name__)
 

@@ -13,7 +13,7 @@ from datetime import date
 
 from django.db import transaction
 
-from app.models import CustomUser, PositionsModel, Team, Tournament
+from app.models import CustomUser, PositionsModel
 from draft.models import Draft, DraftOptions, TeamDraftState
 from league.models import League, LeagueUser
 from org.models import Organization
@@ -42,6 +42,7 @@ from tests.data.leagues import SHOWCASE_LEAGUE, STRIP_STATS_LEAGUE
 from tests.data.models import TestLeague, TestOrganization, TestUser
 from tests.data.organizations import SHOWCASE_ORG, STRIP_STATS_ORG
 from tests.data.users import ADMIN_USER
+from tournament.models import Team, Tournament
 
 from .utils import delete_ledger_for_users, ensure_org_user, flush_redis_cache
 

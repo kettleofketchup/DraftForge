@@ -13,7 +13,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from app.permissions_steam import can_verify_steam_account
 from app.steam_accounts import mark_steam_account_verified
 from draft.models import Draft, DraftRound
@@ -112,6 +112,7 @@ from tests.test_org_features import (
     org_features_data,
     reset_org_features,
 )
+from tournament.models import Tournament
 
 
 def _released_captains(event_pk: int) -> set[int]:

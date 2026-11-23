@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events', '0039_alter_signupledgerentry_action'),
+        ('events', '0040_retarget_tournament_to_tournament'),
     ]
 
     operations = [

@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('app', '0114_copy_profile_friend_ids'),
+        ('app', '0115_move_tournament_models_to_tournament'),
         ('org', '0019_remove_unverified_friend_id'),
     ]
 

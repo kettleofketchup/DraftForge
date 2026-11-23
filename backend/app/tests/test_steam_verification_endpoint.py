@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app import export_steam_verification_schema
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from app.steam_accounts import mark_steam_account_verified
 from app.steam_verification_schemas import SteamVerificationOut
 from app.user_cache import serialize_user_core
@@ -23,6 +23,7 @@ from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.membership import resolve_or_create_org_user
 from org.models import Organization
+from tournament.models import Tournament
 from user.tests.test_cacheops_integration import _redis_reachable
 
 SCRIPT = Path(export_steam_verification_schema.__file__)

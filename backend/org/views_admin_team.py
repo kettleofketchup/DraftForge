@@ -12,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from app.permissions_steam import VerifyGrant
 from app.serializers import TournamentUserSerializer
 from app.steam_accounts import (
@@ -46,6 +46,7 @@ from org.permissions import (
     is_org_owner,
 )
 from org.serializers import OrgUserSerializer
+from tournament.models import Tournament
 from user.querysets import with_user_profiles
 
 

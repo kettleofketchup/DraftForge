@@ -6,8 +6,9 @@ from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 from django.utils import timezone
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftRound
+from tournament.models import Game, Team, Tournament
 
 HERO_MODELS = ("herodraft", "draftteam", "herodraftround", "herodraftevent")
 HERO_TABLES = (

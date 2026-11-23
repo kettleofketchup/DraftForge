@@ -31,13 +31,13 @@ const referencesError = {
       error: 'Teams are used by games or other records.',
       code: 'draft_reset_has_references',
       references: {
-        'app.Game.radiant_team': 2,
-        'app.Game.dire_team': 2,
-        'app.Game.winning_team': 2,
+        'tournament.Game.radiant_team': 2,
+        'tournament.Game.dire_team': 2,
+        'tournament.Game.winning_team': 2,
       },
       usage: [
         {
-          model: 'app.Game',
+          model: 'tournament.Game',
           label: 'game',
           label_plural: 'games',
           count: 2,

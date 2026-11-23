@@ -1,12 +1,15 @@
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, DraftStyles, GameType, PositionsModel, Tournament
+from app.models import CustomUser, PositionsModel
+from common.game import GameType
 from league.models import League
 from org.models import Organization
+from tournament.choices import DraftStyles
+from tournament.models import Tournament
 
 
-class TournamentNewFieldsTests(TestCase):
+class TournamentFieldsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.positions = PositionsModel.objects.create()
