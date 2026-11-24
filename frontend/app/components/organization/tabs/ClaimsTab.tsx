@@ -1,6 +1,6 @@
 import { AlertCircle, Check, Clock, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { approveClaimRequest, rejectClaimRequest } from '~/components/api/api';
+import { rejectClaimRequest } from '~/components/api/api';
 import { Alert, AlertDescription } from '~/components/ui/alert';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { Input } from '~/components/ui/input';
@@ -10,6 +10,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import {
   PendingClaimsBadge,
+  useApproveClaim,
   useClaimRequests,
   useInvalidateClaims,
   usePendingClaimsCount,
@@ -57,21 +58,18 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
   // Approval confirmation state
   const [approvingClaim, setApprovingClaim] =
     useState<ProfileClaimRequest | null>(null);
-  const [isApproving, setIsApproving] = useState(false);
+  const approveClaim = useApproveClaim(organizationId);
 
   const handleApprove = async () => {
     if (!approvingClaim) return;
 
-    setIsApproving(true);
     try {
-      await approveClaimRequest(approvingClaim.id);
+      await approveClaim.mutateAsync(approvingClaim);
       setActionError(null);
-      await invalidateClaims();
     } catch (err) {
       log.error('approve claim failed', { err });
       setActionError('Failed to approve claim request');
     } finally {
-      setIsApproving(false);
       setApprovingClaim(null);
     }
   };
@@ -187,7 +185,7 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
         description={`${approvingClaim?.claimer_username} will receive the profile data from ${approvingClaim?.target_nickname || `Steam ID ${approvingClaim?.target_steamid}`}. This action will merge the profiles and cannot be undone.`}
         confirmLabel="Approve"
         variant="default"
-        isLoading={isApproving}
+        isLoading={approveClaim.isPending}
         onConfirm={handleApprove}
         confirmTestId="confirm-approve-claim"
       />
