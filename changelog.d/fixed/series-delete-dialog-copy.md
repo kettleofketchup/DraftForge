@@ -1,1 +1,0 @@
-- The confirmation for deleting an event series now says that its upcoming and open events are deleted too, and that only in-progress, completed and cancelled events are kept.

@@ -1,4 +1,0 @@
-- CI test jobs pull only the three images the test stack runs (backend-dev, frontend-dev and nginx) through the new `just docker::test-pull`, instead of every production and dev image.
-- The test-database and main image builds run only on a push to `main` or a dispatch from `main`, the test-database job no longer builds an unused backend image, and a dispatched release refuses to publish unless it runs from a tag.
-- Preview image builds read the build cache that `main` writes, which speeds them up without letting pull-request code write a cache other builds read.
-- Release images build with `--no-cache` (`just docker::release::push`), so a release neither reads nor overwrites the shared `:buildcache`; `docker::*::build` accepts `--no-cache` too.
