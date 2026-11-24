@@ -1,1 +1,0 @@
-- The organization Claims tab no longer shows "Failed to load claim requests" on the Approved filter. An approved claim now reads "Merged into" the claimer, because approving merges and removes the claimed profile.
