@@ -489,6 +489,41 @@ test.describe('Promotion SFG contact history @cicd', () => {
     await expect(ops).toContainText('Read promotion recipients');
     await expect(ops).toContainText('Import SFG contact history');
     await expect(ops).toContainText('Read contribution totals');
+    // The name keeps a readable width next to the token and its operations,
+    // and no cell's content is clipped or spills into its neighbour, at both
+    // screenshot sizes.
+    for (const [, size] of VIEWPORTS) {
+      await page.setViewportSize(size);
+      const name = page.getByTestId(`api-token-name-${created.id}`);
+      await expect(name).toHaveText('SFG adaptor');
+      const box = await name.boundingBox();
+      const lineHeight = await name.evaluate((el) =>
+        parseFloat(getComputedStyle(el).lineHeight),
+      );
+      expect(box!.height).toBeLessThanOrEqual(lineHeight * 1.5);
+      const overflowing = await page
+        .getByTestId(`api-token-row-${created.id}`)
+        .evaluate((row) =>
+          Array.from(row.querySelectorAll('td')).flatMap((td) => {
+            const cell = td.getBoundingClientRect();
+            if (cell.width === 0) return [];
+            return Array.from(td.querySelectorAll('*'))
+              .filter((el) => {
+                const r = el.getBoundingClientRect();
+                if (r.width === 0 || r.height === 0) return false;
+                return (
+                  r.left < cell.left - 1 ||
+                  r.right > cell.right + 1 ||
+                  el.scrollWidth > el.clientWidth + 1
+                );
+              })
+              .map((el) => el.textContent?.slice(0, 40) ?? el.tagName);
+          }),
+        );
+      expect(overflowing).toEqual([]);
+    }
+    await page.setViewportSize(VIEWPORTS[0][1]);
+
     const section = page.getByTestId('org-settings-api-access');
     const secretPart = created.token.split('_').slice(2).join('_');
     await expect(section).not.toContainText(secretPart);

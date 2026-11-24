@@ -68,6 +68,30 @@ function OperationList({
   );
 }
 
+function TokenStatus({
+  token: t,
+  'data-testid': testId,
+}: {
+  token: ApiToken;
+  'data-testid': string;
+}) {
+  return t.revoked_at ? (
+    <Badge
+      variant="outline"
+      title={
+        t.revoked_by ? `Revoked by ${DisplayName(t.revoked_by)}` : undefined
+      }
+      data-testid={testId}
+    >
+      Revoked
+    </Badge>
+  ) : (
+    <Badge variant="secondary" data-testid={testId}>
+      Active
+    </Badge>
+  );
+}
+
 const time = (iso: string | null): number =>
   iso ? new Date(iso).getTime() : 0;
 
@@ -97,7 +121,12 @@ export function makeApiTokenColumns({
         const t = row.original;
         return (
           <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="break-words font-medium">{t.name}</span>
+            <span
+              className="break-words font-medium"
+              data-testid={`${testIdPrefix}-name-${t.id}`}
+            >
+              {t.name}
+            </span>
             <span className="font-mono text-xs break-all text-muted-foreground sm:hidden">
               {maskedToken(t.prefix)}
             </span>
@@ -106,6 +135,13 @@ export function makeApiTokenColumns({
               {relativeTime(t.last_used_at).toLowerCase()}
             </span>
             <OperationList operations={t.operations} className="sm:hidden" />
+            {/* On phones the status sits here so the name keeps its width. */}
+            <span className="mt-1 sm:hidden">
+              <TokenStatus
+                token={t}
+                data-testid={`${testIdPrefix}-status-mobile-${t.id}`}
+              />
+            </span>
           </div>
         );
       },
@@ -127,6 +163,12 @@ export function makeApiTokenColumns({
           >
             {maskedToken(row.original.prefix)}
           </code>
+          <span
+            className="text-xs text-muted-foreground"
+            data-testid={`${testIdPrefix}-created-${row.original.id}`}
+          >
+            Created {relativeTime(row.original.created_at).toLowerCase()}
+          </span>
           <OperationList
             operations={row.original.operations}
             data-testid={`${testIdPrefix}-operations-${row.original.id}`}
@@ -191,32 +233,15 @@ export function makeApiTokenColumns({
       accessorFn: (t) => (t.revoked_at ? 'Revoked' : 'Active'),
       enableSorting: false,
       header: 'Status',
-      cell: ({ row }) => {
-        const t = row.original;
-        return t.revoked_at ? (
-          <Badge
-            variant="outline"
-            title={
-              t.revoked_by
-                ? `Revoked by ${DisplayName(t.revoked_by)}`
-                : undefined
-            }
-            data-testid={`${testIdPrefix}-status-${t.id}`}
-          >
-            Revoked
-          </Badge>
-        ) : (
-          <Badge
-            variant="secondary"
-            data-testid={`${testIdPrefix}-status-${t.id}`}
-          >
-            Active
-          </Badge>
-        );
-      },
+      cell: ({ row }) => (
+        <TokenStatus
+          token={row.original}
+          data-testid={`${testIdPrefix}-status-${row.original.id}`}
+        />
+      ),
       meta: {
-        headClassName: 'w-24',
-        cellClassName: 'w-24',
+        headClassName: 'hidden w-24 sm:table-cell',
+        cellClassName: 'hidden w-24 sm:table-cell',
       },
     },
     actions: onRevoke
