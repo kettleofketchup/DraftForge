@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,6 +21,7 @@ from lobby.bot_access.schemas import (
     BotIdentity,
     BotStatus,
     PlatformLink,
+    RefreshOutcome,
     RowRefresh,
     ServiceState,
 )
@@ -127,6 +129,45 @@ class DotaBotAccess:
         return str(league.steam_league_id)
 
     def snapshot(self, external_league_id: str) -> BotAccessSnapshot:
+        ready = self._prepare(external_league_id)
+        if isinstance(ready, BotAccessSnapshot):
+            return ready
+        client, league_id = ready
+        return self._snapshot(client, league_id, None)
+
+    def refresh(self, external_league_id: str) -> BotAccessSnapshot:
+        ready = self._prepare(external_league_id)
+        if isinstance(ready, BotAccessSnapshot):
+            return ready
+        client, league_id = ready
+        refresh_by_name: dict[str, RowRefresh] = {}
+        try:
+            result = client.refresh_leagues()
+        except DotaLobbyError as exc:
+            self._log_failure(league_id, "refresh_leagues", exc)
+            outcome = _refresh_outcome(exc)
+        else:
+            outcome = "ok"
+            for item in result.results:
+                refresh_by_name[_key(item.bot)] = _row_refresh(item.status)
+        counts = Counter(refresh_by_name.values())
+        log.info(
+            "bot_access_refreshed",
+            system="lobby",
+            subsystem="bot_access",
+            league_id=league_id,
+            outcome=outcome,
+            ok=counts["ok"],
+            failed=counts["failed"],
+            not_ready=counts["not_ready"],
+        )
+        snap = self._snapshot(client, league_id, refresh_by_name)
+        snap.refresh_outcome = outcome
+        return snap
+
+    def _prepare(
+        self, external_league_id: str
+    ) -> tuple[DotaLobbyClient, int] | BotAccessSnapshot:
         league_id = _parse_league_id(external_league_id)
         if league_id is None:
             return empty_snapshot(self, external_league_id, "league_not_linked")
@@ -136,10 +177,7 @@ class DotaBotAccess:
             client = self._client_factory()
         except DotaLobbyNotConfigured:
             return empty_snapshot(self, external_league_id, "not_configured")
-        return self._snapshot(client, league_id, None)
-
-    def refresh(self, external_league_id: str) -> BotAccessSnapshot:
-        raise NotImplementedError
+        return client, league_id
 
     def _snapshot(
         self,
@@ -284,6 +322,22 @@ class DotaBotAccess:
             upstream_status=exc.status,
             retryable=exc.retryable,
         )
+
+
+def _refresh_outcome(exc: DotaLobbyError) -> RefreshOutcome:
+    if exc.status == 409 and exc.code == "invalid_state":
+        return "not_supported_upstream"
+    if isinstance(exc, DotaLobbyUnavailable) and exc.detail == "ReadTimeout":
+        return "timed_out"
+    return "unavailable"
+
+
+def _row_refresh(status: str) -> RowRefresh:
+    if status == "ok":
+        return "ok"
+    if status == "not_ready":
+        return "not_ready"
+    return "failed"
 
 
 def _from_inventory(
