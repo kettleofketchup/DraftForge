@@ -53,11 +53,10 @@ def is_site_admin() -> Callable[..., Any]:
     return app_commands.check(predicate)
 
 
-# Emoji mappings for RSVP
 RSVP_EMOJIS = {
-    "✅": "yes",  # checkmark
-    "❓": "maybe",  # question mark
-    "❌": "no",  # x mark
+    "✅": "yes",
+    "❓": "maybe",
+    "❌": "no",
 }
 
 
@@ -136,7 +135,6 @@ class KettleBot(discord.Client):
         self, payload: discord.RawReactionActionEvent
     ) -> None:
         """Track RSVP when user reacts."""
-        # Ignore bot's own reactions
         if payload.user_id == self.user.id:
             return
 
@@ -279,7 +277,6 @@ class KettleBot(discord.Client):
             )
 
 
-# Create bot instance
 bot = KettleBot()
 
 

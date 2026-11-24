@@ -586,7 +586,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             realign_schedule=schedule_changed,
             policy_changed=policy_changed,
         )
-        # Single batched invalidation — repeater + every cascaded child
         invalidate_after_commit(repeater, *future_events)
 
     @action(
@@ -908,7 +907,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return serializer.data
 
         # cacheops returns a fresh deserialization on every hit; safe to mutate in place.
-        data = list(get_data())  # shallow-copy the outer container
+        data = list(get_data())
         _attach_user_can_manage(data, request.user)
         return Response(data)
 
@@ -934,7 +933,7 @@ class EventViewSet(viewsets.ModelViewSet):
             instance = self.get_object()
             return self.get_serializer(instance).data
 
-        data = dict(get_data())  # shallow-copy
+        data = dict(get_data())
         _attach_user_can_manage(data, request.user)
         data.update(
             standing.event_viewer_flags(data["id"], data["organization"], request.user)
@@ -951,7 +950,6 @@ class EventViewSet(viewsets.ModelViewSet):
         create_tournament_for_event(event)
         # Auto-create DiscordEvent if org has Discord configured
         ensure_discord_event(event)
-        # Auto-open signups if requested via query param
         if self.request.query_params.get("open_signups") == "true":
             try:
                 event.transition_state(EventState.SIGNUPS_OPEN)
@@ -2013,7 +2011,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
 
     now = tz.now()
 
-    # Check which log sources have already fired
     fired_sources = set(
         DiscordMessageLog.objects.filter(
             source_id=event.pk,
@@ -2033,7 +2030,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
     except Exception:
         pass
 
-    # Check subscriber DMs
     has_dms = False
     try:
         has_dms = DiscordEventDM.objects.filter(
@@ -2043,7 +2039,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
     except Exception:
         pass
 
-    # Last fired timestamps + fired_by from logs
     last_fired_map = {}
     for row in (
         DiscordMessageLog.objects.filter(source_id=event.pk, success=True)

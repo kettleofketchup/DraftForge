@@ -52,7 +52,6 @@ def populate_events_data(force: bool = False) -> None:
     """Create dedicated Events Test Org, League, users, and a sample event."""
     print("  Populating events E2E data...")
 
-    # 1. Create org
     org, _ = Organization.objects.update_or_create(
         name=EVENTS_ORG.name,
         defaults={
@@ -63,7 +62,6 @@ def populate_events_data(force: bool = False) -> None:
         },
     )
 
-    # 2. Create league
     league, _ = League.objects.update_or_create(
         steam_league_id=EVENTS_LEAGUE.steam_league_id,
         defaults={
@@ -83,7 +81,6 @@ def populate_events_data(force: bool = False) -> None:
         },
     )
 
-    # 3. Create admin user
     admin_positions = PositionsModel.objects.create(
         carry=EVENT_ADMIN_USER.positions.carry if EVENT_ADMIN_USER.positions else 3,
         mid=EVENT_ADMIN_USER.positions.mid if EVENT_ADMIN_USER.positions else 3,
@@ -112,7 +109,6 @@ def populate_events_data(force: bool = False) -> None:
     admin_org_user = ensure_org_user(admin_user, org, mmr=EVENT_ADMIN_USER.mmr or 4500)
     ensure_league_user(admin_user, admin_org_user, league)
 
-    # 3b. Create player users with varied MMR
     for i, user_data in enumerate(EVENTS_USERS):
         positions = PositionsModel.objects.create(
             carry=user_data.positions.carry if user_data.positions else 3,
@@ -201,7 +197,6 @@ def populate_events_data(force: bool = False) -> None:
         )
     print(f"    Created {len(dota_profiles)} Dota 2 profiles with rank data")
 
-    # 4. Grant admin access
     event_admin = CustomUser.objects.filter(pk=EVENT_ADMIN_USER.pk).first()
     site_admin = CustomUser.objects.filter(pk=ADMIN_USER.pk).first()
     org.admins.clear()
@@ -313,7 +308,6 @@ def populate_events_data(force: bool = False) -> None:
         event=demo_signup_event,
         defaults={"guild_id": EVENTS_ORG.discord_server_id},
     )
-    # Add signups from first 6 players
     for user_data in EVENTS_USERS[:6]:
         user = CustomUser.objects.get(pk=user_data.pk)
         EventSignup.objects.update_or_create(
@@ -391,7 +385,6 @@ def populate_events_data(force: bool = False) -> None:
         event=demo_rollcall_event,
         defaults={"guild_id": EVENTS_ORG.discord_server_id},
     )
-    # Add signups — 6 confirmed, 4 approved (waiting)
     for i, user_data in enumerate(EVENTS_USERS[:10]):
         user = CustomUser.objects.get(pk=user_data.pk)
         status = SignupStatus.CONFIRMED if i < 6 else SignupStatus.APPROVED
@@ -481,7 +474,6 @@ def populate_events_data(force: bool = False) -> None:
         event=demo_past_event,
         defaults={"guild_id": EVENTS_ORG.discord_server_id},
     )
-    # Add past signups — all confirmed
     for user_data in EVENTS_USERS[:8]:
         user = CustomUser.objects.get(pk=user_data.pk)
         EventSignup.objects.update_or_create(
@@ -583,12 +575,10 @@ def populate_events_data(force: bool = False) -> None:
             "draft_order": 2,
         },
     )
-    # Add captains as team members
     team_a.members.add(site_admin)
     team_b.members.add(CustomUser.objects.get(pk=EVENTS_USERS[0].pk))
     print("    Created Draft Test Tournament (pk=100) with 10 players, 2 captains")
 
-    # 6. Create org event defaults
     OrgEventDefaults.objects.update_or_create(
         organization=org,
         defaults={
