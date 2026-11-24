@@ -39,6 +39,32 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Frontend typecheck, split out of `unit`; it needs no toolchain or registry access.
+  typecheck:
+    name: Typecheck (frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Typecheck frontend
+        run: npm --prefix frontend run typecheck
+
   unit:
     name: Unit tests (Vitest, slot guards)
     runs-on: ubuntu-latest
@@ -65,9 +91,6 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
-
-      - name: Typecheck frontend
-        run: npm --prefix frontend run typecheck
 
       - name: Run frontend Vitest
         env:
