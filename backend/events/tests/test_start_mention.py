@@ -293,6 +293,24 @@ class FireStartMentionEndpointTest(EventTestCase):
         resp = self.client.post(self.url)
         self.assertEqual(resp.status_code, 403)
 
+    @patch("events.views.current_app")
+    def test_org_member_cannot_fire(self, mock_app: MagicMock) -> None:
+        self.client.force_authenticate(user=self.make_user())
+        resp = self.client.post(self.url)
+        self.assertEqual(resp.status_code, 403)
+        mock_app.send_task.assert_not_called()
+
+    @patch("events.views.current_app")
+    def test_league_staff_can_fire(self, mock_app: MagicMock) -> None:
+        self.client.force_authenticate(user=self.league_staff)
+        resp = self.client.post(self.url)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        mock_app.send_task.assert_called_once_with(
+            "events.tasks.send_start_mention",
+            args=[self.event.pk],
+            kwargs={"fired_by_user_id": self.league_staff.pk},
+        )
+
     def test_schedule_lists_start_mention(self) -> None:
         self.event.discord_start_mention = True
         self.event.discord_start_mention_minutes = 30

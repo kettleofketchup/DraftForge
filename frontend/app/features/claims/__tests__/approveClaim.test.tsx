@@ -79,10 +79,10 @@ describe('useApproveClaim', () => {
     expect(useUserCacheStore.getState().entities[TARGET]).toBeUndefined();
   });
 
-  it('skips target eviction when the merged target is null', async () => {
+  it('skips target eviction when the merged profile is already absent', async () => {
     vi.mocked(approveClaimRequest).mockResolvedValue('approved');
     const { qc, wrapper } = setup();
-    const removeQueries = vi.spyOn(qc, 'removeQueries');
+    qc.setQueryData(['user', null], { placeholder: true });
     const { result } = renderHook(() => useApproveClaim(ORG), { wrapper });
     await act(async () => {
       await result.current.mutateAsync({
@@ -91,7 +91,7 @@ describe('useApproveClaim', () => {
         target_user: null,
       });
     });
-    expect(removeQueries).not.toHaveBeenCalled();
+    expect(qc.getQueryData(['user', null])).toEqual({ placeholder: true });
     expect(qc.getQueryData(['user', TARGET])).toEqual({ pk: TARGET });
     expect(qc.getQueryState(ORG_KEY)?.isInvalidated).toBe(true);
     expect(qc.getQueryState(['user', CLAIMER])?.isInvalidated).toBe(true);
