@@ -12,6 +12,7 @@ from league.models import League
 from org.models import Organization, OrgUser, PromoSend
 from org.promotion.recipients import (
     DEFAULT_POOL_N,
+    MAX_DAYS,
     MAX_POOL_N,
     CandidateRow,
     candidate_pool,
@@ -224,11 +225,11 @@ class CandidatePoolTest(_PoolFixture):
         self.assertNotIn("seventh", self._pool_usernames(3))
         self.assertTrue(in_pool(self.org, self.event, seventh))
 
-    def test_in_pool_false_beyond_max_n(self) -> None:
+    def test_in_pool_false_beyond_max_n_and_active_window(self) -> None:
         eleventh = self._user("eleventh")
         for i in range(11):
             players = [eleventh] if i == 10 else [self._user(f"filler_{i}")]
-            self._tournament(players, days_ago=i + 1, league=self.league)
+            self._tournament(players, days_ago=MAX_DAYS + i + 1, league=self.league)
 
         self.assertFalse(in_pool(self.org, self.event, eleventh))
 
@@ -305,6 +306,8 @@ class CandidatesTest(_PoolFixture):
                 "discordId",
                 "avatarUrl",
                 "recent_count",
+                "last_active_at",
+                "discord_joined_at",
                 "last_messaged",
                 "earning_send_exists",
                 "signed_up",
