@@ -55,6 +55,13 @@ from league.views_admin_team import (
     remove_league_admin,
     remove_league_staff,
 )
+from org.api_tokens.views import (
+    org_api_limits,
+    org_api_tokens,
+    org_api_usage,
+    org_mmr_sync,
+    revoke_org_api_token,
+)
 from org.ssr import OrganizationSSRView
 from org.views import ClaimRequestViewSet
 from org.views_admin_team import (
@@ -213,6 +220,31 @@ urlpatterns = [
         "api/organizations/<int:org_id>/features/",
         org_features,
         name="org-features",
+    ),
+    path(
+        "api/organizations/<int:org_id>/api-tokens/",
+        org_api_tokens,
+        name="org-api-tokens",
+    ),
+    path(
+        "api/organizations/<int:org_id>/api-tokens/usage/",
+        org_api_usage,
+        name="org-api-usage",
+    ),
+    path(
+        "api/organizations/<int:org_id>/api-tokens/<int:token_id>/",
+        revoke_org_api_token,
+        name="org-api-token-revoke",
+    ),
+    path(
+        "api/organizations/<int:org_id>/api-limits/",
+        org_api_limits,
+        name="org-api-limits",
+    ),
+    path(
+        "api/organizations/<int:org_id>/mmr-sync/",
+        org_mmr_sync,
+        name="org-mmr-sync",
     ),
     path(
         "api/organizations/<int:org_id>/settings/",

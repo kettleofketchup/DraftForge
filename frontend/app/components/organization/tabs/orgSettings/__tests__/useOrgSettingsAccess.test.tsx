@@ -103,6 +103,23 @@ describe('useOrgSettingsAccess', () => {
     ).toEqual(['staff-placement']);
   });
 
+  it('shows the api access section only while mmr_sync is on', () => {
+    expect(
+      access(org({ owner_id: VIEWER, features: ['mmr_sync'] }))
+        .visibleSectionIds,
+    ).toEqual(['staff-placement', 'api-access']);
+    expect(
+      access(org({ owner_id: VIEWER, features: [] })).visibleSectionIds,
+    ).toEqual(['staff-placement']);
+  });
+
+  it('shows the api access section to a site admin while locked', () => {
+    setViewer(VIEWER, true);
+    expect(access(org({ features: [] })).visibleSectionIds).toContain(
+      'api-access',
+    );
+  });
+
   it('allows an org admin', () => {
     expect(access(org({ admin_ids: [VIEWER] })).canOpen).toBe(true);
   });
