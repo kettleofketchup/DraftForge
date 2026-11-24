@@ -12,6 +12,12 @@ STRIP_STATS_START_TIME_BASE = 1760000000
 
 
 class StripStatsPlayer(BaseModel):
+    """league_mmr is the seed a league join gives (org MMR, or 0 without one).
+
+    The stats update then sets it to org MMR plus the best adjustment; players
+    with no org MMR keep 0 and show no L: badge.
+    """
+
     user: TestUser
     sequence: str
     org_mmr: int
@@ -57,38 +63,38 @@ STRIP_STATS_PLAYERS: list[StripStatsPlayer] = [
     StripStatsPlayer(
         user=_user(7004, "strip_cold", "Strip Cold"),
         sequence="WWWLLL",
-        org_mmr=3300,
+        org_mmr=0,
         league_mmr=0,
     ),
     StripStatsPlayer(
         user=_user(7005, "strip_mid", "Strip Mid"),
         sequence="LWLLWLL",
-        org_mmr=3200,
+        org_mmr=0,
         league_mmr=0,
     ),
     StripStatsPlayer(
         user=_user(7006, "strip_rookie", "Strip Rookie"),
         sequence="WLW",
-        org_mmr=3100,
+        org_mmr=0,
         league_mmr=0,
     ),
     StripStatsPlayer(
         user=_user(7007, "strip_zero", "Strip Zero"),
         sequence="",
-        org_mmr=3000,
+        org_mmr=0,
         league_mmr=0,
     ),
     StripStatsPlayer(
         user=_user(7008, "strip_capt_a", "Strip Capt A"),
         sequence="LLWLL",
         org_mmr=2900,
-        league_mmr=0,
+        league_mmr=2900,
         captain=True,
     ),
     StripStatsPlayer(
         user=_user(7009, "strip_capt_b", "Strip Capt B"),
         sequence="",
-        org_mmr=2800,
+        org_mmr=0,
         league_mmr=0,
         captain=True,
     ),

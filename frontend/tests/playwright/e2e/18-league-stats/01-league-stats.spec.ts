@@ -433,20 +433,23 @@ test.describe('Strip league stats (@cicd)', () => {
         await expect(strip, name).toContainText('L:');
         await expect(strip, name).toContainText('B:');
       }
+      // No org MMR means no league MMR, even with a league stats column.
       for (const name of NO_L_BADGE_NAMES) {
         const strip = availableStrip(dialog, name);
         await expect(strip, name).toHaveCount(1);
         await expect(strip, name).not.toContainText('L:');
-        await expect(strip, name).toContainText('B:');
+        await expect(strip, name).not.toContainText('B:');
       }
 
       await openTeamsTab(page, tournament);
-      for (const name of [NAMES.captA, NAMES.captB]) {
-        const strip = teamCard(page, name);
-        await expect(strip, name).toHaveCount(1);
-        await expect(strip, name).not.toContainText('L:');
-        await expect(strip, name).toContainText('B:');
-      }
+      const captA = teamCard(page, NAMES.captA);
+      await expect(captA).toHaveCount(1);
+      await expect(captA).toContainText('L:');
+      await expect(captA).toContainText('B:');
+      const captB = teamCard(page, NAMES.captB);
+      await expect(captB).toHaveCount(1);
+      await expect(captB).not.toContainText('L:');
+      await expect(captB).not.toContainText('B:');
     });
   });
 
