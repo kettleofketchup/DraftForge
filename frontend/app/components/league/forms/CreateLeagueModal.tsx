@@ -1,8 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { createLeague } from '~/components/api/api';
 import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
@@ -14,7 +12,7 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
-import { useUserStore } from '~/store/userStore';
+import { useCreateLeagueMutation } from '../hooks/useCreateLeagueMutation';
 import { CreateLeagueSchema, type CreateLeagueInput } from '../schemas';
 
 interface CreateLeagueModalProps {
@@ -28,8 +26,8 @@ export function CreateLeagueModal({
   onOpenChange,
   organizationId,
 }: CreateLeagueModalProps) {
-  const getLeagues = useUserStore((state) => state.getLeagues);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const createLeague = useCreateLeagueMutation(organizationId);
+  const isSubmitting = createLeague.isPending;
 
   const form = useForm<CreateLeagueInput>({
     resolver: zodResolver(CreateLeagueSchema),
@@ -44,17 +42,13 @@ export function CreateLeagueModal({
 
   async function onSubmit(data: CreateLeagueInput) {
     if (isSubmitting) return;
-    setIsSubmitting(true);
     try {
-      await createLeague({ ...data, organization_id: organizationId });
+      await createLeague.mutateAsync(data);
       toast.success('League created successfully');
-      getLeagues(organizationId);
       onOpenChange(false);
       form.reset();
     } catch {
       toast.error('Failed to create league');
-    } finally {
-      setIsSubmitting(false);
     }
   }
 
