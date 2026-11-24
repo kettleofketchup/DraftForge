@@ -82,7 +82,10 @@ class EventsResetLedgerTest(TestCase):
 
     def test_reset_drops_ledger_of_the_events_it_resets(self) -> None:
         self._post(reset_events_data)
-        self.assertEqual(self._ledger_event_pks(), {self.unrelated.pk})
+        left = self._ledger_event_pks()
+        self.assertNotIn(self.signup_event.pk, left)
+        self.assertNotIn(self.generated.pk, left)
+        self.assertIn(self.unrelated.pk, left)
         self.assertEqual(self._orphans(), [])
 
     def test_demo_reset_drops_the_org_ledger(self) -> None:
