@@ -12,7 +12,7 @@ from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
 from app.cache_utils import invalidate_obj
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.constants import EventState, RepeatFrequency
 from events.models import Event, EventRepeater
 from events.serializers import ONE_OFF_OVERRIDE_FIELDS, EventSlimSerializer
@@ -24,7 +24,7 @@ from org.contributions.services import award_entry
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.models import Organization
-from user.models import BaseUserProfile
+from user.models import BaseUserProfile, PositionsModel
 from user.tests.test_cacheops_integration import _redis_reachable
 
 

@@ -1,7 +1,8 @@
 from django.test import TestCase
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from org.models import Organization, OrgUser
+from user.models import PositionsModel
 
 
 class PlayerDotaProfileTest(TestCase):

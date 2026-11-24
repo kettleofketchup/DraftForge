@@ -6,12 +6,13 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from events.models import Event
 from events.services import create_tournament_for_event
 from org.mmr import org_mmr_for
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
+from user.models import PositionsModel
 from user.tests.test_cacheops_integration import _redis_reachable
 
 

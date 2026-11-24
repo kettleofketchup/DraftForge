@@ -8,11 +8,12 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
 from org.models import Organization, OrgUser, PromoSend
 from tests.data.org_features import OF_PROMOTER, ORG_FEATURES_DISCORD_BASE
+from user.models import PositionsModel
 
 GUILD_ID: Final[str] = "730000000000009901"
 _original_discord_settings: tuple[str | None, str] | None = None

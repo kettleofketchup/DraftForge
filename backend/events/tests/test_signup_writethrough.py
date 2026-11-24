@@ -8,7 +8,7 @@ from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone as tz
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from common.game import GameType
 from events.constants import SignupStatus
 from events.eligibility import claim_friend_id
@@ -21,6 +21,7 @@ from org.membership import resolve_or_create_org_user
 from org.mmr import org_mmr_for, set_org_mmr
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
+from user.models import PositionsModel
 
 
 class SignupWritethroughTest(TestCase):

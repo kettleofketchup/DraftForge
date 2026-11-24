@@ -5,10 +5,15 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from org.models import Organization
 from telemetry.logging import get_logger
-from user.models import BaseUserProfile, DeadlockUserProfile, DotaUserProfile
+from user.models import (
+    BaseUserProfile,
+    DeadlockUserProfile,
+    DotaUserProfile,
+    PositionsModel,
+)
 
 log = get_logger(__name__)
 

@@ -13,7 +13,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from league.models import LeagueUser
 from org.mmr import (
     LEAGUE_GAME,
@@ -28,6 +28,7 @@ from telemetry.logging import get_logger
 from tournament.models import Team, Tournament
 from tournament.permissions import can_edit_tournament
 from user.display_names import user_display_name
+from user.models import PositionsModel
 from user.serializers import TournamentUserSerializer
 
 if TYPE_CHECKING:

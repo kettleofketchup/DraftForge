@@ -6,8 +6,9 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Create your views here.
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from telemetry.logging import get_logger
+from user.models import PositionsModel
 from user.serializers import (
     PositionsSerializer,
     UserSerializer,
