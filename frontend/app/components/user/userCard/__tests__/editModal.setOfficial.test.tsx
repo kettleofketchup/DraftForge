@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import { TooltipProvider } from '~/components/ui/tooltip';
-import type { UserClassType } from '~/components/user/types';
+import type { UserClassType, UserType } from '~/components/user/types';
+import { useUserStore } from '~/store/userStore';
 import { UserEditModal } from '../editModal';
 import type { EditUserScope } from '../editUserSchema';
 
@@ -18,9 +19,14 @@ globalThis.ResizeObserver ??=
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
 vi.mock('../editForm', () => ({ UserEditForm: () => null }));
-vi.mock('../editUserSchema', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../editUserSchema')>();
-  return { ...actual, useScopedEditPermission: () => true };
+beforeEach(() => {
+  useUserStore.setState({
+    currentUser: { pk: 1, username: 'staff', is_staff: true } as UserType,
+  });
+});
+
+afterEach(() => {
+  useUserStore.setState({ currentUser: undefined });
 });
 vi.mock('~/features/mmr-requests', () => ({
   SetOfficialMmrDialog: (props: {
@@ -59,12 +65,34 @@ function renderModal(scope: EditUserScope) {
       </TooltipProvider>
     </QueryClientProvider>,
   );
+}
+
+function openModal(scope: EditUserScope) {
+  renderModal(scope);
   fireEvent.click(screen.getByTestId('edit-user-btn'));
 }
 
 describe('UserEditModal set official MMR', () => {
+  it.each([ORG_SCOPE, LEAGUE_SCOPE, { kind: 'global' } as const])(
+    'hides editing in $kind scope without permission',
+    (scope) => {
+      useUserStore.setState({
+        currentUser: { pk: 1, username: 'member' } as UserType,
+      });
+      renderModal(scope);
+      expect(screen.queryByTestId('edit-user-btn')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('edit-user-modal')).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId('set-official-mmr-btn'),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId('set-official-dialog-stub'),
+      ).not.toBeInTheDocument();
+    },
+  );
+
   it('offers the button in org scope and opens the dialog prefilled', async () => {
-    renderModal(ORG_SCOPE);
+    openModal(ORG_SCOPE);
     fireEvent.click(await screen.findByTestId('set-official-mmr-btn'));
     const stub = await screen.findByTestId('set-official-dialog-stub');
     expect(JSON.parse(stub.textContent!)).toEqual({
@@ -74,14 +102,14 @@ describe('UserEditModal set official MMR', () => {
   });
 
   it('offers the button in league scope', async () => {
-    renderModal(LEAGUE_SCOPE);
+    openModal(LEAGUE_SCOPE);
     fireEvent.click(await screen.findByTestId('set-official-mmr-btn'));
     const stub = await screen.findByTestId('set-official-dialog-stub');
     expect(JSON.parse(stub.textContent!).scope).toEqual({ league: 5 });
   });
 
   it('has no button in global scope', async () => {
-    renderModal({ kind: 'global' });
+    openModal({ kind: 'global' });
     expect(await screen.findByTestId('edit-user-modal')).toBeInTheDocument();
     expect(
       screen.queryByTestId('set-official-mmr-btn'),
