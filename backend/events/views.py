@@ -52,13 +52,22 @@ from draft.models import Draft, HeroDraft
 from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
-from events.constants import ActorRole, Commitment, EventState
+from events.constants import ActorRole, Commitment, EventState, SignupAction
 from events.discord import notify_create_discord_event, notify_signup_changed
 from events.eligibility import (
     EligibilityResult,
     evaluate_signup,
     has_registered_steam_id,
     recheck_signup,
+)
+from events.history import (
+    HISTORY_MAX_PAGE_SIZE,
+    HISTORY_PAGE_SIZE,
+    MAX_DB_INT,
+    HistoryCursor,
+    decode_history_cursor,
+    history_after_q,
+    signup_history_queryset,
 )
 from events.ledger import SignupActor
 from events.models import (
@@ -109,6 +118,7 @@ from events.serializers import (
     ReadyCheckResolveInputSerializer,
     ReadyCheckSerializer,
     RepeaterSubscriptionSerializer,
+    SignupLedgerEntrySerializer,
 )
 from events.services import (
     OccurrenceCollision,
@@ -145,6 +155,7 @@ from events.services import (
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS
 from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
+from org.display_names import guild_nicknames
 from org.feature_errors import not_permitted
 from org.mmr import OrgMmrError, game_for_event, validate_org_mmr
 from org.models import Organization, OrgLog, OrgUser, OrgUserGameMmr
@@ -154,6 +165,7 @@ from org.permissions import (
 )
 from org.standing import api as standing
 from telemetry.logging import get_logger
+from tournament.listing import build_cursor_envelope
 from tournament.models import Game
 from user.models import BaseUserProfile, DotaUserProfile
 from user.querysets import with_user_profiles
@@ -378,6 +390,45 @@ def _pk_or_none(pk: str | None) -> int | None:
         return int(pk) if pk is not None else None
     except ValueError:
         return None
+
+
+def _bounded_int(text: str, low: int, high: int) -> int | None:
+    try:
+        value = int(text)
+    except ValueError:
+        return None
+    return value if low <= value <= high else None
+
+
+def _history_params(
+    params: QueryDict,
+) -> tuple[dict[str, Any], dict[str, list[str]]]:
+    parsed: dict[str, Any] = {
+        "user_id": None,
+        "action": None,
+        "cursor": None,
+        "page_size": HISTORY_PAGE_SIZE,
+    }
+    errors: dict[str, list[str]] = {}
+    if user := params.get("user"):
+        parsed["user_id"] = _bounded_int(user, 1, MAX_DB_INT)
+        if parsed["user_id"] is None:
+            errors["user"] = ["Invalid user."]
+    if action_value := params.get("action"):
+        if action_value in SignupAction.values:
+            parsed["action"] = action_value
+        else:
+            errors["action"] = ["Invalid action."]
+    if token := params.get("cursor"):
+        try:
+            parsed["cursor"] = decode_history_cursor(token)
+        except ValueError:
+            errors["cursor"] = ["Invalid cursor."]
+    if size := params.get("page_size"):
+        parsed["page_size"] = _bounded_int(size, 1, HISTORY_MAX_PAGE_SIZE)
+        if parsed["page_size"] is None:
+            errors["page_size"] = ["Invalid page size."]
+    return parsed, errors
 
 
 def _no_lobby_password() -> Response:
@@ -1019,6 +1070,82 @@ class EventViewSet(viewsets.ModelViewSet):
 
     @action(
         detail=True,
+        methods=["get"],
+        url_path="signup-history",
+        permission_classes=[permissions.AllowAny],
+    )
+    def signup_history(self, request: Request, pk: str | None = None) -> Response:
+        """Staff-only signup ledger for the event, newest first (keyset paged)."""
+        event = (
+            Event.objects.nocache()
+            .select_related("organization", "tournament_league")
+            .filter(pk=_pk_or_none(pk))
+            .first()
+        )
+        if event is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not has_event_staff_access(request.user, event):
+            logger.info(
+                "signup_history_denied",
+                system="events",
+                subsystem="ledger",
+                event_id=event.pk,
+                user_id=request.user.pk,
+            )
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        params, errors = _history_params(request.query_params)
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        size: int = params["page_size"]
+        cursor: HistoryCursor | None = params["cursor"]
+        qs = signup_history_queryset(
+            event, user_id=params["user_id"], action=params["action"]
+        )
+        count = qs.count()
+        if cursor is not None:
+            qs = qs.filter(history_after_q(cursor))
+        rows = list(qs[: size + 1])
+        next_token = (
+            HistoryCursor(rows[size - 1].occurred_at, rows[size - 1].pk).token
+            if len(rows) > size
+            else None
+        )
+        rows = rows[:size]
+        user_ids = {
+            uid
+            for row in rows
+            for uid in (row.subject_user_id, row.actor_user_id)
+            if uid
+        }
+        serializer = SignupLedgerEntrySerializer(
+            rows,
+            many=True,
+            context={
+                "request": request,
+                "_history_guild_nicknames": guild_nicknames(
+                    event.organization_id, user_ids
+                ),
+            },
+        )
+        logger.info(
+            "signup_history_viewed",
+            system="events",
+            subsystem="ledger",
+            event_id=event.pk,
+            user_id=request.user.pk,
+            filter_user=params["user_id"],
+            filter_action=params["action"],
+            page_size=size,
+            has_cursor=cursor is not None,
+        )
+        return Response(
+            build_cursor_envelope(
+                request, count=count, next_cursor=next_token, results=serializer.data
+            )
+        )
+
+    @action(
+        detail=True,
         methods=["post"],
         url_path="lobby-password/regenerate",
         permission_classes=[permissions.IsAuthenticated],
@@ -1057,13 +1184,6 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         body = request.data or {}
         intent = body.get("intent")
-        try:
-            ensure_self_serve(event, request.user, intent=_intent_commitment(intent))
-        except SignupRefused as exc:
-            return _signup_refusal(event, request.user, intent, str(exc), exc.result)
-        except ValueError as exc:
-            return _signup_refusal(event, request.user, intent, str(exc))
-
         if not isinstance(intent, str) or intent not in _SIGNUP_INTENT_COMMITMENT:
             return _signup_refusal(
                 event, request.user, intent, "intent must be 'rsvp' or 'tentative'"
@@ -1076,10 +1196,9 @@ class EventViewSet(viewsets.ModelViewSet):
             msg = first.get("msg") or str(exc)
             return _signup_refusal(event, request.user, intent, msg)
 
-        org_user = resolve_or_create_org_user(request.user, event.organization)
-
         try:
             with transaction.atomic():
+                org_user = resolve_or_create_org_user(request.user, event.organization)
                 apply_signup_input(org_user=org_user, event=event, patch=patch)
                 if intent == "rsvp":
                     signup = process_rsvp(
@@ -1089,6 +1208,8 @@ class EventViewSet(viewsets.ModelViewSet):
                     signup = create_tentative_signup(
                         event, request.user, actor=SignupActor.from_request(request)
                     )
+        except SignupRefused as exc:
+            return _signup_refusal(event, request.user, intent, str(exc), exc.result)
         except DjangoValidationError as exc:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
             return _signup_refusal(event, request.user, intent, msg)
@@ -1211,7 +1332,7 @@ class EventViewSet(viewsets.ModelViewSet):
     def start_tournament(self, request: Request, pk: str | None = None) -> Response:
         """Start the tournament (after roll call or directly).
 
-        Self-heals legacy events whose tournament is missing or empty (#200).
+        Self-heals events whose tournament is missing or has an empty roster.
         """
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
@@ -1566,29 +1687,28 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                     )
 
         try:
-            result = approve_signup(
-                signup,
-                mmr_override=mmr_override,
-                actor=SignupActor.for_request_on(
-                    request, signup.user, signup.event, staff_only=True
-                ),
-            )
+            with transaction.atomic():
+                result = approve_signup(
+                    signup,
+                    mmr_override=mmr_override,
+                    actor=SignupActor.for_request_on(
+                        request, signup.user, signup.event, staff_only=True
+                    ),
+                )
+                if mmr_override is not None:
+                    OrgLog.objects.create(
+                        organization=signup.event.organization,
+                        actor=request.user,
+                        action="set_mmr",
+                        target_user=signup.user,
+                        details={
+                            "mmr": mmr_override,
+                            "event_id": signup.event.pk,
+                            "game_type": int(game_type),
+                        },
+                    )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Audit log for MMR override
-        if mmr_override is not None:
-            OrgLog.objects.create(
-                organization=signup.event.organization,
-                actor=request.user,
-                action="set_mmr",
-                target_user=signup.user,
-                details={
-                    "mmr": mmr_override,
-                    "event_id": signup.event.pk,
-                    "game_type": int(game_type),
-                },
-            )
 
         return Response(
             EventSignupSerializer(result, context={"request": request}).data
@@ -2053,7 +2173,7 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
         _task(
             "signup_update",
             "Signup Update",
-            enabled=event.discord_announcement and has_channel,
+            enabled=has_signup_post,
             log_source=None,
             check_interval="On signup change",
             description="Edits announcement embed with updated signup counts",

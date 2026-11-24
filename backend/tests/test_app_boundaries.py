@@ -533,6 +533,7 @@ _TOURNAMENT_RETIRED_DEFS = {
     ),
     "app.tests.test_team_signals": (
         "EmptyTeamAuditTests",
+        "KnockedOutRosterCascadeTests",
         "SuccessionAuditTests",
         "SuccessorAfterRemovalTests",
         "SystemRowSignalTests",
@@ -902,13 +903,16 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                 {
                     "OrgUser",
                     "api",
+                    "delete_counts",
                     "demote_colliding_earning_sends",
+                    "merge_member_dependents",
                     "merge_org_mmrs",
                     "repoint_org_attribution",
                 }
             ),
-            "user account merge pairs org memberships, merges per-game org MMR "
-            "and standing, and repoints org contribution and promo attribution",
+            "user account merge pairs org memberships, moves their dependents, "
+            "merges per-game org MMR and standing, and repoints org "
+            "contribution and promo attribution",
         ),
         "app/management/commands/sync_prod_users.py": BackEdge(
             frozenset(

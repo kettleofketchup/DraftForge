@@ -17,6 +17,10 @@ import {
   eventListItemSchema,
   eventResponseSchema,
 } from '~/components/events/schemas';
+import {
+  signupHistoryPageSchema,
+  type SignupHistoryPage,
+} from '~/components/events/signupHistorySchemas';
 
 import axios from './axios';
 
@@ -600,4 +604,18 @@ export async function getDiscordRoles(
     `/discord/organizations/${orgId}/roles/${params}`,
   );
   return data.roles;
+}
+
+export async function getEventSignupHistory(
+  eventId: number,
+  params: { user?: number; action?: string; cursor?: string },
+): Promise<SignupHistoryPage> {
+  const { data } = await axios.get(`/events/${eventId}/signup-history/`, {
+    params: {
+      ...(params.user !== undefined && { user: params.user }),
+      ...(params.action !== undefined && { action: params.action }),
+      ...(params.cursor !== undefined && { cursor: params.cursor }),
+    },
+  });
+  return signupHistoryPageSchema.parse(data);
 }

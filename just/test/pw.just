@@ -19,6 +19,15 @@ run *args:
     pw_env=$({{quote(python)}} -m scripts.compose env)
     eval "$pw_env"
     {{quote(python)}} -m scripts.compose flush-redis
+    # Locally each run gets its own results dir, so a second run cannot wipe
+    # the first one's output; CI keeps the flat test-results/ its uploads read.
+    if [[ -z "${DF_PW_RUN_DIR-}" && -z "${CI-}" && "${GITHUB_ACTIONS-}" != true ]]; then
+        DF_PW_RUN_DIR=$(scripts/pw-run-dir.sh frontend)
+        echo "[pw] results: ${DF_PW_RUN_DIR#"$PWD/"} (frontend/test-results/latest)" >&2
+    fi
+    if [[ -n "${DF_PW_RUN_DIR-}" ]]; then
+        export DF_PW_RUN_DIR
+    fi
     cd frontend
     if [[ "${DF_PW_CONTAINER-}" != 1 ]]; then
         exec npx playwright test "$@"
@@ -27,7 +36,7 @@ run *args:
     # frontend/node_modules must resolve inside the image (CI links it to /app/node_modules).
     pass=(DF_BASE_URL DF_BASE_URL_SOURCE CI GITHUB_ACTIONS GITHUB_WORKSPACE
         PLAYWRIGHT_WORKERS PLAYWRIGHT_HEALTH_URL PLAYWRIGHT_CACHED_LEAGUES
-        NAVBAR_SHOT_DIR DOTA_LOBBY_SIMULATOR_REQUIRED)
+        NAVBAR_SHOT_DIR DOTA_LOBBY_SIMULATOR_REQUIRED DF_PW_RUN_DIR)
     env_args=()
     for name in "${pass[@]}"; do
         env_args+=(-e "$name")
@@ -68,9 +77,18 @@ grep pattern *args:
 install:
     cd {{quote(root / "frontend")}} && npx playwright install
 
+# The newest local run's HTML report (or one given: test-results/runs/<id>/report)
 [group('test::pw')]
-report:
-    cd {{quote(root / "frontend")}} && npx playwright show-report
+report dir="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{quote(root / "frontend")}}
+    dir=$1
+    if [[ -z "$dir" ]]; then
+        dir=playwright-report
+        [[ -d test-results/latest/report ]] && dir=test-results/latest/report
+    fi
+    exec npx playwright show-report "$dir"
 
 [group('test::pw')]
 navigation *args:
@@ -160,15 +178,20 @@ with-simulator *args:
     exec {{pw}} "$@"
 
 # Run the headless suite while streaming backend logs + health probes to
-# frontend/test-results/run-logs/ for diagnosing transient first-attempt
-# timeouts. Combine with playwright's `trace: 'retain-on-failure'` and the
-# health-probe reporter for full evidence on every failure.
+# the run's run-logs/ (frontend/test-results/latest/run-logs/) for diagnosing
+# transient first-attempt timeouts. Combine with playwright's
+# `trace: 'retain-on-failure'` and the health-probe reporter for full
+# evidence on every failure.
 [group('test::pw')]
 headless-with-logs *args:
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{quote(root)}}
-    LOG_DIR="frontend/test-results/run-logs"
+    if [[ -z "${DF_PW_RUN_DIR-}" ]]; then
+        DF_PW_RUN_DIR=$(scripts/pw-run-dir.sh frontend)
+    fi
+    export DF_PW_RUN_DIR
+    LOG_DIR="$DF_PW_RUN_DIR/run-logs"
     mkdir -p "$LOG_DIR"
     STAMP=$(date -u +"%Y%m%dT%H%M%SZ")
     BACKEND_LOG="$LOG_DIR/backend-$STAMP.log"
