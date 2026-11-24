@@ -1,5 +1,5 @@
 Two migrations run on deploy: `app.0116_customuser_steam_account_verified` adds four
-nullable verification columns to users, and `events.0041_eventsignup_self_made` adds
+nullable verification columns to users, and `events.0042_eventsignup_self_made` adds
 `EventSignup.self_made` (default `False`, with a database default so containers still on
 the old image can insert signups during the deploy). Neither backfills anything.
 

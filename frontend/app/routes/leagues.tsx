@@ -2,7 +2,7 @@ import { Plus, Trophy } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
-import type { LeagueType } from '~/components/league/schemas';
+import type { LeagueListItem } from '~/components/league/schemas';
 import { useOrganizations } from '~/components/organization';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
@@ -68,7 +68,7 @@ const EmptyLeagues = ({ hasOrgFilter }: { hasOrgFilter: boolean }) => (
 );
 
 /** Memoized wrapper for individual league cards */
-const LeagueCardWrapper = memo(({ league }: { league: LeagueType }) => {
+const LeagueCardWrapper = memo(({ league }: { league: LeagueListItem }) => {
   return <LeagueCard league={league} />;
 });
 

@@ -31,12 +31,12 @@ export const ActiveDraftSchema = z.discriminatedUnion('type', [
 export type ActiveDraftType = z.infer<typeof ActiveDraftSchema>;
 
 export const UserSchema = z.object({
-  positions: PositionSchema.optional(),
+  positions: PositionSchema.nullable().optional(),
   // Nullable because ``CustomUser.username`` is ``null=True`` at the model
   // level (Steam-only signups). Form schemas (EditUserSchema) still enforce
   // non-null + length when a user is editing their own profile.
   username: z.string().min(2).max(100).nullable(),
-  avatarUrl: z.string().url().optional(),
+  avatarUrl: z.string().url().nullable().optional(),
   is_staff: z.boolean().optional(),
   is_superuser: z.boolean().optional(),
   nickname: z.string().min(2).max(100).nullable().optional(),

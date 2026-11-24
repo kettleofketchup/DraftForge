@@ -5,9 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ('events', '0040_retarget_tournament_to_tournament'),
-    ]
+    dependencies = [('events', '0041_voice_presence_source')]
 
     operations = [
         migrations.AddField(

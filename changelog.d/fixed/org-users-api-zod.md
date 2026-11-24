@@ -1,0 +1,1 @@
+- Organization member lists now check the server's reply, so a malformed response shows a load error instead of filling the member list with incomplete data.
