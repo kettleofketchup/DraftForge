@@ -454,7 +454,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [app, migrations, rest]
+        group: [app, migrations-draft, migrations-user, rest]
     steps:
       - uses: actions/checkout@v4
 
@@ -471,6 +471,7 @@ jobs:
         run: |
           labels="$(just ci::backend-test-labels ${{ matrix.group }})"
           echo "Labels: $labels"
+          [ -n "$labels" ] || exit 0
           # Dump every test process's stacks well before the 25-minute job timeout.
           # shellcheck disable=SC2086 # one label per word
           docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T \

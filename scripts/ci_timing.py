@@ -21,7 +21,9 @@ from pathlib import Path
 
 REPO = "kettleofketchup/DraftForge"
 TS_RE = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+)Z (.*)$")
-SHARD_RE = re.compile(r"\s*\((?:shard )?\d+/\d+\)|\s*\((app|rest|migrations)\)")
+SHARD_RE = re.compile(
+    r"\s*\((?:shard )?\d+/\d+\)|\s*\((app|rest|migrations(?:-[a-z]+)?)\)"
+)
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 BUILD_HEAD_RE = re.compile(
     r"── slowest build steps \(buildx (.+?)(?:: (\d+)m(\d+)s)?\) ──"
@@ -67,7 +69,7 @@ def family(job_name: str) -> str:
 def norm_cmd(cmd: str) -> str:
     cmd = ANSI_RE.sub("", cmd).strip()
     cmd = re.sub(r"--shard=\d+/\d+", "--shard=N", cmd)
-    cmd = re.sub(r"\b(app|rest|migrations)\b(?=\)|$)", "<group>", cmd)
+    cmd = re.sub(r"\b(app|rest|migrations(?:-[a-z]+)?)\b(?=\)|$)", "<group>", cmd)
     return cmd[:110]
 
 
