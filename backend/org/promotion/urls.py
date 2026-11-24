@@ -2,6 +2,7 @@ from django.urls import path
 
 from org.promotion.views import (
     promotion_candidates,
+    promotion_discord_member,
     promotion_events,
     promotion_placeholders,
     promotion_render,
@@ -28,6 +29,11 @@ urlpatterns = [
         "events/<int:event_id>/candidates/",
         promotion_candidates,
         name="org-promotion-candidates",
+    ),
+    path(
+        "events/<int:event_id>/candidates/discord/",
+        promotion_discord_member,
+        name="org-promotion-discord-member",
     ),
     path(
         "events/<int:event_id>/render/",

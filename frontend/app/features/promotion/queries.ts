@@ -17,12 +17,14 @@ import {
   getPromoEvents,
   getPromoTemplates,
   renderPromo,
+  resolveDiscordMember,
   sendPromo,
   undoPromoSend,
   updatePromoTemplate,
 } from './api';
 import type {
   CandidateFilters,
+  CandidateRow,
   CandidatesResponse,
   PromoEvent,
   PromoSendInput,
@@ -143,6 +145,18 @@ export function useSendPromo(
   const invalidate = useInvalidatePromoLedger(orgId, access);
   return useMutation({
     mutationFn: (input) => sendPromo(orgId, eventId, input),
+    onSettled: invalidate,
+  });
+}
+
+export function useResolveDiscordMember(
+  orgId: number,
+  access: OrgFeatureAccess,
+  eventId: number,
+): UseMutationResult<CandidateRow, unknown, string> {
+  const invalidate = useInvalidatePromotion(orgId, access);
+  return useMutation({
+    mutationFn: (discordId) => resolveDiscordMember(orgId, eventId, discordId),
     onSettled: invalidate,
   });
 }
