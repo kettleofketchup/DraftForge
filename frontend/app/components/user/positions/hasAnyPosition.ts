@@ -1,7 +1,7 @@
 import type { PositionsType } from '~/store/userCacheTypes';
 
 /** True if the user has rated any role above 0. */
-export function hasAnyPosition(p: PositionsType | undefined): boolean {
+export function hasAnyPosition(p: PositionsType | null | undefined): boolean {
   if (!p) return false;
   return (
     (p.carry ?? 0) > 0 ||

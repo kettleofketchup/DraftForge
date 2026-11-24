@@ -75,6 +75,7 @@ from events.models import (
     EventRepeater,
     EventSignup,
     EventTeam,
+    EventVoicePresence,
     OrgEventDefaults,
     ReadyCheck,
     ReadyCheckEntry,
@@ -119,6 +120,7 @@ from events.serializers import (
     ReadyCheckSerializer,
     RepeaterSubscriptionSerializer,
     SignupLedgerEntrySerializer,
+    VoicePresenceOverrideInputSerializer,
 )
 from events.services import (
     OccurrenceCollision,
@@ -154,6 +156,7 @@ from events.services import (
 )
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS
 from events.utils import starts_in_future
+from events.voice_presence import set_presence_manually, voice_feed_age_seconds
 from lobby.passwords import PasswordMode
 from org.display_names import guild_nicknames
 from org.feature_errors import not_permitted
@@ -583,7 +586,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             realign_schedule=schedule_changed,
             policy_changed=policy_changed,
         )
-        # Single batched invalidation — repeater + every cascaded child
         invalidate_after_commit(repeater, *future_events)
 
     @action(
@@ -606,6 +608,8 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     def subscribers(self, request: Request, pk: str | None = None) -> Response:
         """List all subscribers for this repeater."""
         repeater = self.get_object()
+        if not has_event_staff_access(request.user, repeater):
+            return Response(status=status.HTTP_403_FORBIDDEN)
         # RepeaterSubscriptionSerializer reads user.nickname + user.avatar,
         # which go through the @property on CustomUser → base_profile. Without
         # this prefetch the list view is N+1 cold-cache.
@@ -905,7 +909,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return serializer.data
 
         # cacheops returns a fresh deserialization on every hit; safe to mutate in place.
-        data = list(get_data())  # shallow-copy the outer container
+        data = list(get_data())
         _attach_user_can_manage(data, request.user)
         return Response(data)
 
@@ -931,7 +935,7 @@ class EventViewSet(viewsets.ModelViewSet):
             instance = self.get_object()
             return self.get_serializer(instance).data
 
-        data = dict(get_data())  # shallow-copy
+        data = dict(get_data())
         _attach_user_can_manage(data, request.user)
         data.update(
             standing.event_viewer_flags(data["id"], data["organization"], request.user)
@@ -948,7 +952,6 @@ class EventViewSet(viewsets.ModelViewSet):
         create_tournament_for_event(event)
         # Auto-create DiscordEvent if org has Discord configured
         ensure_discord_event(event)
-        # Auto-open signups if requested via query param
         if self.request.query_params.get("open_signups") == "true":
             try:
                 event.transition_state(EventState.SIGNUPS_OPEN)
@@ -1365,6 +1368,76 @@ class EventViewSet(viewsets.ModelViewSet):
             raise PermissionDenied()
         return event
 
+    @action(detail=True, methods=["get", "post"], url_path="voice-presence")
+    def voice_presence(self, request: Request, pk: str | None = None) -> Response:
+        event = self._ready_check_operator_event(request)
+        fields = (
+            "user_id",
+            "present",
+            "source",
+            "first_joined_at",
+            "last_joined_at",
+            "last_left_at",
+            "last_seen_at",
+        )
+        if request.method == "GET":
+            guild_id = event.organization.discord_server_id or None
+            channel_id = event.event_voice_channel_id
+            return Response(
+                {
+                    "feed": {
+                        "guild_id": guild_id,
+                        "age_seconds": voice_feed_age_seconds(guild_id)
+                        if guild_id
+                        else None,
+                        "channel_age_seconds": (
+                            voice_feed_age_seconds(guild_id, channel_id)
+                            if guild_id and channel_id
+                            else None
+                        ),
+                    },
+                    "voice_channel_id": channel_id,
+                    "presences": list(
+                        EventVoicePresence.objects.filter(event=event)
+                        .order_by("user_id")
+                        .values(*fields)
+                    ),
+                }
+            )
+        body = VoicePresenceOverrideInputSerializer(data=request.data)
+        if not body.is_valid():
+            return Response({"code": "invalid", "error": body.errors}, status=400)
+        member = (
+            CustomUser.objects.nocache()
+            .filter(pk=body.validated_data["user_id"])
+            .first()
+        )
+        if member is None:
+            return Response({"error": "User not found."}, status=404)
+        try:
+            result = set_presence_manually(
+                event,
+                member,
+                present=body.validated_data["present"],
+                reason=body.validated_data["reason"],
+                actor=SignupActor.from_request(request, role=ActorRole.STAFF),
+            )
+        except ValueError as exc:
+            if str(exc) != "not_signed_up":
+                raise
+            return Response(
+                {"code": "not_signed_up", "error": "User is not signed up."}, status=400
+            )
+        return Response(
+            {
+                "presence": {
+                    field: getattr(result.presence, field) for field in fields
+                },
+                "ledger_entry_id": result.ledger_entry_id,
+                "confirm": str(result.confirm) if result.confirm is not None else None,
+            }
+        )
+
     @action(detail=True, methods=["get"], url_path="ready-check")
     def ready_check(self, request: Request, pk: str | None = None) -> Response:
         event = self._ready_check_operator_event(request)
@@ -1583,6 +1656,8 @@ class EventViewSet(viewsets.ModelViewSet):
         GET /api/events/<pk>/discord/
         """
         event = self.get_object()
+        if not has_event_staff_access(request.user, event):
+            return Response(status=status.HTTP_403_FORBIDDEN)
 
         try:
             discord_event = event.discord_event
@@ -1933,14 +2008,15 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
 
     try:
         event = Event.objects.select_related(
-            "organization", "event_repeater", "tournament"
+            "organization", "event_repeater", "tournament", "tournament_league"
         ).get(pk=event_id)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
+    if not has_event_staff_access(request.user, event):
+        return Response(status=status.HTTP_403_FORBIDDEN)
 
     now = tz.now()
 
-    # Check which log sources have already fired
     fired_sources = set(
         DiscordMessageLog.objects.filter(
             source_id=event.pk,
@@ -1960,7 +2036,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
     except Exception:
         pass
 
-    # Check subscriber DMs
     has_dms = False
     try:
         has_dms = DiscordEventDM.objects.filter(
@@ -1970,7 +2045,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
     except Exception:
         pass
 
-    # Last fired timestamps + fired_by from logs
     last_fired_map = {}
     for row in (
         DiscordMessageLog.objects.filter(source_id=event.pk, success=True)
@@ -2232,13 +2306,15 @@ TASK_LOG_SOURCES = {
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def fire_event_task(request: Request, event_id: int, task_name: str) -> Response:
-    """Manually fire a scheduled task for an event. Requires org staff access."""
+    """Manually fire a scheduled task for an event. Requires event staff access."""
     try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
+        event = Event.objects.select_related("organization", "tournament_league").get(
+            pk=event_id
+        )
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    if not has_org_staff_access(request.user, event.organization):
+    if not has_event_staff_access(request.user, event):
         return Response(
             {"error": "Staff access required"}, status=status.HTTP_403_FORBIDDEN
         )

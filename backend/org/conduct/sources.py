@@ -2,7 +2,7 @@ from collections.abc import Mapping, Sequence
 
 from django.db.models import Q
 
-from events.constants import SignupStatus
+from events.constants import SignupStatus, VoicePresenceSource
 from events.models import (
     Event,
     EventSignup,
@@ -71,7 +71,10 @@ def _voice_user_ids(event: Event, user_ids: set[int]) -> set[int]:
         return set()
     return set(
         EventVoicePresence.objects.filter(event_id=event.pk, user_id__in=user_ids)
-        .filter(Q(present=True) | Q(first_joined_at__isnull=False))
+        .filter(
+            Q(present=True, source=VoicePresenceSource.FEED)
+            | Q(first_joined_at__isnull=False)
+        )
         .values_list("user_id", flat=True)
     )
 
