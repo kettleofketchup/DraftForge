@@ -1,5 +1,5 @@
 import { Plus, Trophy } from 'lucide-react';
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import type { LeagueType } from '~/components/league/schemas';
@@ -72,31 +72,14 @@ const LeagueCardWrapper = memo(({ league }: { league: LeagueType }) => {
   return <LeagueCard league={league} />;
 });
 
-// Try to get cached leagues from sessionStorage (client-side only)
-const getCachedLeagues = (): LeagueType[] => {
-  try {
-    const stored = sessionStorage.getItem('dtx-storage');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return parsed?.state?.leagues || [];
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return [];
-};
-
 export default function LeaguesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedOrgId = searchParams.get('organization');
   const selectedOrgIdNum = selectedOrgId ? parseInt(selectedOrgId, 10) : null;
 
-  const { leagues: storeLeagues, isLoading } = useLeagues(
-    selectedOrgIdNum ?? undefined,
-  );
+  const { leagues, isLoading } = useLeagues(selectedOrgIdNum ?? undefined);
   const { organizations } = useOrganizations();
   const currentUser = useUserStore((state) => state.currentUser);
-  const hasHydrated = useUserStore((state) => state.hasHydrated);
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   // Get selected organization for permission checks
@@ -105,23 +88,6 @@ export default function LeaguesPage() {
     [organizations, selectedOrgIdNum],
   );
   const isOrgAdmin = useIsOrganizationAdmin(selectedOrg);
-
-  // Read cached leagues after mount to avoid hydration mismatch
-  const [mounted, setMounted] = useState(false);
-  const [cachedLeagues, setCachedLeagues] = useState<LeagueType[]>([]);
-
-  useEffect(() => {
-    setMounted(true);
-    setCachedLeagues(getCachedLeagues());
-  }, []);
-
-  // Use cached leagues after mount, then switch to store after hydration
-  // Note: useLeagues hook already filters by organizationId, so no additional filtering needed
-  const leagues = hasHydrated
-    ? storeLeagues
-    : mounted && cachedLeagues.length > 0
-      ? cachedLeagues
-      : storeLeagues;
 
   // Can create leagues when org is selected AND user is org admin (includes owner, superuser)
   const canCreate = isOrgAdmin && selectedOrgIdNum;
@@ -150,11 +116,10 @@ export default function LeaguesPage() {
     }
 
     // No leagues yet - show skeleton while loading
-    if (!mounted || !hasHydrated || isLoading) {
+    if (isLoading) {
       return <LeagueGridSkeleton count={6} />;
     }
 
-    // Hydrated but no leagues
     return <EmptyLeagues hasOrgFilter={!!selectedOrgId} />;
   };
 
