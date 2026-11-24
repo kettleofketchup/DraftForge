@@ -188,25 +188,6 @@ def ensure_org_user(
     return org_user
 
 
-@contextmanager
-def without_task_publishing() -> Iterator[None]:
-    """Send task publishes to an in-memory broker that nothing consumes.
-
-    Populate seeds rows; signals it trips (an org's Discord server id, say)
-    must not queue jobs on a real broker, which the host often cannot reach.
-    CELERY_BROKER_WRITE_URL outranks every other broker setting.
-    """
-    saved = os.environ.get("CELERY_BROKER_WRITE_URL")
-    os.environ["CELERY_BROKER_WRITE_URL"] = "memory://"
-    try:
-        yield
-    finally:
-        if saved is None:
-            del os.environ["CELERY_BROKER_WRITE_URL"]
-        else:
-            os.environ["CELERY_BROKER_WRITE_URL"] = saved
-
-
 def delete_ledger_for_users(pks: Iterable[int]) -> None:
     """Drop these users' ledger rows and promo sends so the users can be deleted.
 
@@ -416,6 +397,25 @@ def fetch_discord_avatars_for_users(users: Iterable[CustomUser]) -> None:
             updated += 1
     if updated:
         print(f"  Updated {updated} avatars")
+
+
+@contextmanager
+def without_task_publishing() -> Iterator[None]:
+    """Send task publishes to an in-memory broker that nothing consumes.
+
+    Populate seeds rows; signals it trips (an org's Discord server id, say)
+    must not queue jobs on a real broker, which the host often cannot reach.
+    CELERY_BROKER_WRITE_URL outranks every other broker setting.
+    """
+    saved = os.environ.get("CELERY_BROKER_WRITE_URL")
+    os.environ["CELERY_BROKER_WRITE_URL"] = "memory://"
+    try:
+        yield
+    finally:
+        if saved is None:
+            del os.environ["CELERY_BROKER_WRITE_URL"]
+        else:
+            os.environ["CELERY_BROKER_WRITE_URL"] = saved
 
 
 # Backwards compatibility aliases (with underscore prefix)
