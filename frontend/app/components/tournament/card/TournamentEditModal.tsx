@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 import { updateTournament } from '~/components/api/api';
 import { useLeagues } from '~/components/league/hooks/useLeagues';
-import type { LeagueType } from '~/components/league/schemas';
+import type { LeagueListItem } from '~/components/league/schemas';
 import { Button } from '~/components/ui/button';
 import { Calendar } from '~/components/ui/calendar';
 import { FormDialog } from '~/components/ui/dialogs';
@@ -431,14 +431,6 @@ export function TournamentEditModal({
                 onValueChange={(value) => {
                   const leagueId = value === 'none' ? null : Number(value);
                   field.onChange(leagueId);
-                  if (leagueId && leagues) {
-                    const selectedLeague = leagues.find(
-                      (l: LeagueType) => l.pk === leagueId,
-                    );
-                    if (selectedLeague?.timezone) {
-                      form.setValue('timezone', selectedLeague.timezone);
-                    }
-                  }
                 }}
                 value={field.value?.toString() ?? 'none'}
               >
@@ -449,13 +441,11 @@ export function TournamentEditModal({
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="none">No League</SelectItem>
-                  {leagues
-                    ?.filter((league: LeagueType) => league.pk != null)
-                    .map((league: LeagueType) => (
-                      <SelectItem key={league.pk} value={league.pk!.toString()}>
-                        {league.name}
-                      </SelectItem>
-                    ))}
+                  {leagues?.map((league: LeagueListItem) => (
+                    <SelectItem key={league.pk} value={league.pk.toString()}>
+                      {league.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <FormDescription>

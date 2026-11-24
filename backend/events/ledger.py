@@ -64,6 +64,15 @@ class SignupActor:
         )
 
     @classmethod
+    def voice(cls, user: CustomUser, *, correlation_id: str = "") -> SignupActor:
+        return cls(
+            user=user,
+            role=ActorRole.MEMBER,
+            means=SignupMeans.DISCORD_VOICE,
+            correlation_id=correlation_id,
+        )
+
+    @classmethod
     def from_request(
         cls, request: HttpRequest, *, role: ActorRole = ActorRole.MEMBER
     ) -> SignupActor:

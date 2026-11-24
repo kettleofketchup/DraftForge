@@ -1,0 +1,93 @@
+name: Unit tests
+
+# Separate from playwright.yml so editing either workflow does not run the other.
+# paths-ignore skips a run only when EVERY changed file matches.
+on:
+  push:
+    branches: [main]
+    paths-ignore: &not-unit
+      - 'docs/**'
+      - 'changelog.d/**'
+      - '*.md'
+      - 'mkdocs.yml'
+      - 'LICENSE'
+      - '.claude/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.pre-commit-config.yaml'
+      - 'helm/**'
+      - 'scripts/helm_*'
+      - 'scripts/preview_tests/**'
+      - '.github/workflows/changelog.yml'
+      - '.github/workflows/docs.yml'
+      - '.github/workflows/frontend-format.yml'
+      - '.github/workflows/frontend-shadcn-lint.yml'
+      - '.github/workflows/helm-chart.yml'
+      - '.github/workflows/issue-labeler.yml'
+      - '.github/workflows/playwright.yml'
+      - '.github/workflows/pr-labeler.yml'
+      - '.github/workflows/preview-queue.yml'
+      - '.github/workflows/record-demos.yml'
+      - '.github/workflows/shellcheck.yml'
+  pull_request:
+    branches:
+      - main
+      - 'fix/**'
+    paths-ignore: *not-unit
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unit:
+    name: Unit tests (Vitest, slot guards)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          github-actor: ${{ github.actor }}
+          buildx: 'false'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Typecheck frontend
+        run: npm --prefix frontend run typecheck
+
+      - name: Run frontend Vitest
+        env:
+          CI: 'true'
+        run: npm --prefix frontend test -- --run
+
+      - name: Check the generated message types are current
+        run: just py::gen-message-types --check
+
+      - name: Check the generated Discord connect API is current
+        run: just py::gen-discord-connect-api --check
+
+      - name: Check the promotion render fixture copies match
+        run: cmp backend/org/tests/render_fixture.json frontend/app/features/promotion/__tests__/render_fixture.json
+
+      - name: Check the signup history fixture copies match
+        run: cmp backend/events/tests/signup_history_page.json frontend/app/components/api/__tests__/fixtures/signup-history-page.json
+
+      - name: Check the generated notice types are current
+        run: just py::notice-types-check
+
+      - name: Run slot guards
+        run: just test::slots-unit
