@@ -427,10 +427,15 @@ def sync_discord_events() -> str:
         has_signup = (
             pk in events_with_signup_post or ("event_announcement", pk) in existing_logs
         )
+        signup_available = bool(
+            event["discord_post_signups"] and event["discord_post_signups_channel_id"]
+        )
+        announcement_available = bool(
+            event["discord_announcement"] and event["discord_announcement_channel_id"]
+        )
         signup_eligible = (
             event["state"] == "signups_open"
-            and event["discord_announcement"]
-            and event["discord_announcement_channel_id"]
+            and (signup_available or announcement_available)
             and not has_signup
         )
         if signup_eligible:
@@ -439,7 +444,11 @@ def sync_discord_events() -> str:
                 system="events",
                 subsystem="discord",
                 event_id=pk,
-                channel_id=str(event.get("discord_announcement_channel_id") or ""),
+                channel_id=str(
+                    event["discord_post_signups_channel_id"]
+                    if signup_available
+                    else event["discord_announcement_channel_id"]
+                ),
             )
             try:
                 send_event_announcement(pk)
@@ -519,15 +528,15 @@ def sync_discord_events() -> str:
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
 def send_event_announcement(event_id: int, interaction_id: str | None = None) -> str:
-    """Create event signup post + announcement.
+    """Create an event signup post and an optional announcement.
 
     1. Signup post: full embed + buttons in the signups channel (forum thread
        or regular message). This is where users sign up. Updated on changes.
     2. Announcement: lightweight message in the announcement channel linking
        to the signup post. Posted once, not updated.
 
-    If no signups channel is configured, the signup post goes to the
-    announcement channel instead (no separate announcement needed).
+    If no signup destination is available, use the enabled announcement
+    destination instead (no separate announcement needed).
 
     All DB writes go through the internal HTTP API — no direct ORM access.
     """
@@ -545,8 +554,14 @@ def _send_event_announcement_impl(event_id: int) -> str:
         return f"Failed: event {event_id} not found"
     if event.state != "signups_open":
         return f"Skipped: event state is {event.state}, not signups_open"
-    if not event.discord_announcement or not event.discord_announcement_channel_id:
-        return "Skipped: announcement disabled"
+    signup_available = bool(
+        event.discord_post_signups and event.discord_post_signups_channel_id
+    )
+    announcement_available = bool(
+        event.discord_announcement and event.discord_announcement_channel_id
+    )
+    if not (signup_available or announcement_available):
+        return "Skipped: no signup or announcement destination"
 
     try:
         result = build_announcement_v2(event)
@@ -574,7 +589,7 @@ def _send_event_announcement_impl(event_id: int) -> str:
     signup_post_result = None
     signup_message_link = None
 
-    if event.discord_post_signups and event.discord_post_signups_channel_id:
+    if signup_available:
         # Signups channel configured — post there (forum thread or regular)
         # DiscordMessageLog is written by sync_send_embed_with_components via HTTP
         signup_post_result = sync_send_embed_with_components(
@@ -600,6 +615,8 @@ def _send_event_announcement_impl(event_id: int) -> str:
             )
 
     if not signup_post_result:
+        if not announcement_available:
+            return f"Signup post for event {event.pk}: no send result"
         # No signups channel or it failed — post to announcement channel
         fallback_result = sync_send_embed_with_components(
             channel_id=event.discord_announcement_channel_id,
@@ -618,6 +635,9 @@ def _send_event_announcement_impl(event_id: int) -> str:
             )
 
         return f"Announced event {event.pk}"
+
+    if not announcement_available:
+        return f"Posted signup for event {event.pk}"
 
     # Step 2: Post lightweight announcement linking to the signup post
     notice_result = build_announcement_notice(event, signup_message_link)
