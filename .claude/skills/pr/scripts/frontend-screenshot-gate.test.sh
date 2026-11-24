@@ -49,6 +49,19 @@ done
 out=$(printf '%s\n' backend/x.py frontend/app/lib/a.ts frontend/tests/b.spec.ts | "$gate")
 [ "$out" = "frontend/app/lib/a.ts" ] || { echo "FAIL: stdin mode printed '$out'"; fail=1; }
 
+mixed=$(printf '%s\n' \
+  frontend/app/components/events/DiscordConfigSection.tsx \
+  frontend/app/components/events/__tests__/DiscordConfigSection.test.tsx \
+  frontend/app/features/events/settingsFields.ts \
+  frontend/app/features/events/__tests__/settingsFields.test.ts | "$gate")
+want=$(printf '%s\n' frontend/app/components/events/DiscordConfigSection.tsx frontend/app/features/events/settingsFields.ts)
+[ "$mixed" = "$want" ] || { echo "FAIL: mixed component + __tests__ diff printed '$mixed'"; fail=1; }
+
+printf '%s\n' \
+  frontend/app/components/events/__tests__/DiscordConfigSection.test.tsx \
+  frontend/app/features/events/__tests__/settingsFields.test.ts \
+  frontend/tests/playwright/e2e/events.spec.ts | "$gate" >/dev/null && { echo "FAIL: tests-only diff should exit 1"; fail=1; }
+
 printf '' | "$gate" >/dev/null && { echo "FAIL: empty input should exit 1"; fail=1; }
 
 [ "$fail" = 0 ] && echo "ok"

@@ -11,7 +11,8 @@ export const meta = {
     { title: 'Execute', detail: 'implement + review each task sequentially' },
     { title: 'Verify', detail: 'full verification and final adversarial code review' },
     { title: 'PR preflight', detail: 'verify comment receipt, check final HEAD and scrub publication content' },
-    { title: 'Open PR', detail: 'push reviewed HEAD, create or reuse the PR, hand off to /pr' },
+    { title: 'Open PR', detail: 'push reviewed HEAD, create or reuse the PR' },
+    { title: 'Screenshots', detail: 'capture before/after for non-test frontend changes, verify the PR comment exists' },
   ],
 }
 
@@ -176,17 +177,38 @@ if (!blocked) {
   }
   phase('Open PR')
   const publication = await agent(
-    `${CTX}\nYou are the sole Open PR publication agent. The user has authorized automatic push and PR creation after successful comment and sensitive-information review; do not ask again unless an explicit no-push/no-PR request or a real blocker applies. Use the pr and github skills. Work only in ${WT}, branch ${A.branch}. Preflight approval: ${JSON.stringify(preflight)}.\n\nBefore any publication, verify HEAD still equals the approved hash, the tree/index are clean, the comment gate receipt remains valid, origin is the intended repository, and the title/body file contents still match the reviewed material (if uncertain, re-review them locally). Any code/history/body changes invalidate approval: stop rather than publish. Do not add commits or change code. Check for an existing PR for this repository and exact head branch before pushing; reuse an OPEN PR, but stop and report a MERGED/CLOSED one instead of reopening or duplicating it. Never force-push or bypass hooks. Push only the reviewed feature branch, then verify its remote OID still matches approved HEAD. Create the PR with the approved title and --body-file, --base main and the explicit head branch; use --draft when preflight.draft is true. If creation reports a duplicate, query and reuse the existing PR. Report the URL and any actual auth/hook failure, without blind retries. Never merge the PR. Run 'git -C ${WT} diff --name-only ${BASE}...HEAD | ${WT}/.claude/skills/pr/scripts/frontend-screenshot-gate.sh' and return its output lines as screenshotFiles ([] when it exits 1). Return the PR URL/number/head and a handoff to the coordinating session to run the remaining /pr coverage, screenshots and progressive CI/conflict monitoring phases; do not start a session-only monitor or capture screenshots inside this short-lived agent.${FG}`,
+    `${CTX}\nYou are the sole Open PR publication agent. The user has authorized automatic push and PR creation after successful comment and sensitive-information review; do not ask again unless an explicit no-push/no-PR request or a real blocker applies. Use the pr and github skills. Work only in ${WT}, branch ${A.branch}. Preflight approval: ${JSON.stringify(preflight)}.\n\nBefore any publication, verify HEAD still equals the approved hash, the tree/index are clean, the comment gate receipt remains valid, origin is the intended repository, and the title/body file contents still match the reviewed material (if uncertain, re-review them locally). Any code/history/body changes invalidate approval: stop rather than publish. Do not add commits or change code. Check for an existing PR for this repository and exact head branch before pushing; reuse an OPEN PR, but stop and report a MERGED/CLOSED one instead of reopening or duplicating it. Never force-push or bypass hooks. Push only the reviewed feature branch, then verify its remote OID still matches approved HEAD. Create the PR with the approved title and --body-file, --base main and the explicit head branch; use --draft when preflight.draft is true. If creation reports a duplicate, query and reuse the existing PR. Report the URL and any actual auth/hook failure, without blind retries. Never merge the PR. Run 'git -C ${WT} diff --name-only ${BASE}...HEAD | ${WT}/.claude/skills/pr/scripts/frontend-screenshot-gate.sh' and return its output lines as screenshotFiles ([] when it exits 1). Do not capture screenshots or post any screenshot comment; the Screenshots phase does that. Do not start a session-only monitor inside this short-lived agent. Return the PR URL/number/head.${FG}`,
     { label: 'open-pr', phase: 'Open PR', schema: { type: 'object', properties: {
       status: { type: 'string', enum: ['opened', 'reused', 'blocked'] }, url: { type: 'string' }, number: { type: 'integer' }, head: { type: 'string' },
       screenshotFiles: { type: 'array', items: { type: 'string' } }, report: { type: 'string' },
     }, required: ['status', 'url', 'number', 'head', 'screenshotFiles', 'report'] } })
   if (!publication || publication.status === 'blocked') return { ...summary, preflight, publication, monitoringHandoff: null }
+  const n = publication.number
   const shots = publication.screenshotFiles || []
-  const screenshots = shots.length
-    ? `Screenshots REQUIRED: the diff changes non-test frontend code (${shots.join(', ')}); post the before/after comment (Phase 4), never the skip comment.`
-    : 'Screenshots: no non-test frontend code changed; post the "No screenshots:" comment.'
-  const monitoringHandoff = `Coordinator: in the parent session, invoke /pr for PR #${publication.number} (${publication.url}) from ${WT}. Push and PR creation are already authorized for this branch. Run its E2E coverage, screenshot and CI phases, and arm the 30-minute progressive CI/CD and main merge-conflict monitor, re-arming each window until the PR is merged or closed. ${screenshots}`
-  return { ...summary, preflight, publication, screenshotsRequired: shots.length > 0, monitoringHandoff }
+  phase('Screenshots')
+  let capture = null
+  if (shots.length) {
+    capture = await agent(
+      `${CTX}\nYou are the Screenshots agent for PR #${n} (${publication.url}), head worktree ${WT}. The diff changes non-test frontend code: ${shots.join(', ')}. Use the pr skill and follow ${WT}/.claude/skills/pr/references/screenshots.md end to end: a shot list covering every changed file (for files with no UI of their own, the pages and states that run them), before from the merge-base in a detached base worktree, after from ${WT}, headless capture on each worktree's own test stack slot, every PNG viewed, images on the pr-assets/${n} branch, ONE "## Screenshots" comment. For this phase you are authorized to push the pr-assets/${n} branch and comment on PR #${n}; do not push the feature branch, change code or touch other PRs. Tear down both stacks and release both slots, also on failure. If capture cannot finish (no free slot, stack failure), post "Screenshots pending: <reason>" instead and return status=pending. Never post a "No screenshots:" comment on this PR.${FG}`,
+      { label: 'screenshots', phase: 'Screenshots', schema: { type: 'object', properties: {
+        status: { type: 'string', enum: ['posted', 'pending'] }, commentUrl: { type: 'string' }, report: { type: 'string' },
+      }, required: ['status', 'commentUrl', 'report'] } })
+  }
+  const listed = shots.slice(0, 5).join(', ') + (shots.length > 5 ? ', ...' : '')
+  const fallback = shots.length
+    ? `Screenshots are REQUIRED (non-test frontend files: ${shots.join(', ')}). If kind is none or skip, post exactly one comment: gh pr comment ${n} --body "Screenshots pending: this PR changes non-test frontend code (${listed}); before/after capture did not complete." and return kind=pending.`
+    : `No non-test frontend code changed. If kind is none, post exactly one comment: gh pr comment ${n} --body "No screenshots: this PR changes no non-test frontend code." and return kind=skip.`
+  const shotCheck = await agent(
+    `Work in ${WT}. Run gh pr view ${n} --json comments. Classify the newest comment whose body starts with "## Screenshots" (kind=screenshots), "No screenshots:" (kind=skip) or "Screenshots pending:" (kind=pending); kind=none when there is none. ${fallback} Post nothing else. Return the kind and the comment URL. No AI attribution.`,
+    { label: 'screenshot-check', phase: 'Screenshots', schema: { type: 'object', properties: {
+      kind: { type: 'string', enum: ['screenshots', 'skip', 'pending', 'none'] }, commentUrl: { type: 'string' },
+    }, required: ['kind', 'commentUrl'] } })
+  const shotsDone = !!shotCheck && (shots.length ? shotCheck.kind === 'screenshots' : shotCheck.kind !== 'none')
+  const incomplete = shotsDone ? [] : ['screenshots']
+  const screenshots = shotsDone
+    ? (shots.length ? 'Screenshots: before/after comment posted; re-run /pr Phase 4 after any later commit that touches non-test frontend code.' : 'Screenshots: none required (no non-test frontend code changed).')
+    : `Screenshots PENDING and REQUIRED for ${shots.join(', ') || 'this PR'}: capture and post the before/after comment via /pr Phase 4 first; the PR is not ready until it exists.`
+  const monitoringHandoff = `Coordinator: in the parent session, invoke /pr for PR #${n} (${publication.url}) from ${WT}. Push and PR creation are already authorized for this branch. Run its E2E coverage and CI phases, and arm the 30-minute progressive CI/CD and main merge-conflict monitor, re-arming each window until the PR is merged or closed. ${screenshots}`
+  return { ...summary, preflight, publication, capture, shotCheck, screenshotsRequired: shots.length > 0, incomplete, monitoringHandoff }
 }
 return { spec: SPEC, plan: PLAN, specOut, specRevised, results, blocked }

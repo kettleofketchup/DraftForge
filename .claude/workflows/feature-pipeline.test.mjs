@@ -30,6 +30,10 @@ async function run(overrides = {}) {
     if (options.label === 'comment-review') return 'Final HEAD receipt';
     if (options.label === 'pr-preflight') return approved;
     if (options.label === 'open-pr') return published;
+    if (options.label === 'screenshots') return { status: 'posted', commentUrl: 'c', report: 'Posted' };
+    if (options.label === 'screenshot-check') {
+      return { kind: calls.some(call => call.label === 'screenshots') ? 'screenshots' : 'skip', commentUrl: 'c' };
+    }
     return { report: 'Checks passed' };
   }, thunks => Promise.all(thunks.map(fn => fn())), () => {}, () => {});
   return { result, calls };
@@ -50,17 +54,39 @@ test('opens a PR only after comments and publication preflight', async () => {
   assert.match(result.monitoringHandoff, /30-minute/);
   assert.doesNotMatch(result.monitoringHandoff, /five-minute/);
   assert.equal(result.screenshotsRequired, false);
-  assert.match(result.monitoringHandoff, /No screenshots:/);
+  assert.deepEqual(result.incomplete, []);
+  assert.equal(calls.some(call => call.label === 'screenshots'), false);
+  assert.match(calls.find(call => call.label === 'screenshot-check').prompt, /No screenshots:/);
 });
 
-test('hands off required screenshots when non-test frontend code changed', async () => {
-  const files = ['frontend/app/lib/logger.ts', 'frontend/app/routes/home.tsx'];
-  const { result } = await run({ 'open-pr': { ...published, screenshotFiles: files } });
+const files = ['frontend/app/lib/logger.ts', 'frontend/app/routes/home.tsx'];
+
+test('captures screenshots in the pipeline when non-test frontend code changed', async () => {
+  const { result, calls } = await run({ 'open-pr': { ...published, screenshotFiles: files } });
+  const labels = calls.map(call => call.label);
+  assert(labels.indexOf('open-pr') < labels.indexOf('screenshots'));
+  assert(labels.indexOf('screenshots') < labels.indexOf('screenshot-check'));
+  const prompt = calls.find(call => call.label === 'screenshots').prompt;
+  assert.match(prompt, /frontend\/app\/lib\/logger\.ts/);
+  assert.match(prompt, /references\/screenshots\.md/);
+  assert.match(prompt, /Never post a "No screenshots:" comment/);
   assert.equal(result.screenshotsRequired, true);
-  assert.match(result.monitoringHandoff, /Screenshots REQUIRED/);
-  assert.match(result.monitoringHandoff, /frontend\/app\/lib\/logger\.ts/);
-  assert.match(result.monitoringHandoff, /never the skip comment/);
+  assert.deepEqual(result.incomplete, []);
 });
+
+for (const [name, overrides] of [
+  ['capture is pending', { screenshots: { status: 'pending', commentUrl: 'c', report: 'No slot' }, 'screenshot-check': { kind: 'pending', commentUrl: 'c' } }],
+  ['the screenshot agent dies', { screenshots: null, 'screenshot-check': { kind: 'pending', commentUrl: 'c' } }],
+  ['only a skip comment exists', { 'screenshot-check': { kind: 'skip', commentUrl: 'c' } }],
+  ['the check agent dies', { 'screenshot-check': null }],
+]) {
+  test(`marks screenshots incomplete when ${name}`, async () => {
+    const { result, calls } = await run({ 'open-pr': { ...published, screenshotFiles: files }, ...overrides });
+    assert.deepEqual(result.incomplete, ['screenshots']);
+    assert.match(result.monitoringHandoff, /Screenshots PENDING and REQUIRED/);
+    assert.match(calls.find(call => call.label === 'screenshot-check').prompt, /Screenshots pending:/);
+  });
+}
 
 test('preflight and publication prompts run the frontend screenshot gate', async () => {
   const { calls } = await run();
@@ -107,5 +133,5 @@ test('publication prompt pins approval, prohibits force push and delegates monit
   assert.match(prompt, /abc123/);
   assert.match(prompt, /HEAD still equals the approved hash/);
   assert.match(prompt, /Never force-push/);
-  assert.match(prompt, /do not start a session-only monitor or capture screenshots inside this short-lived agent/);
+  assert.match(prompt, /Do not start a session-only monitor inside this short-lived agent/);
 });
