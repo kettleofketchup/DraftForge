@@ -106,22 +106,41 @@ timezone and language so you can check the result.
 
 ### Sending a message
 
-1. Pick an event, then a template.
-2. Pick a player from the candidate list. The list is the Discord-linked players of the
-   org's most recent past tournaments (3 by default, adjustable from 1 to 10). It never
-   includes upcoming tournaments, tournaments of cancelled events or the promoted
-   event's own tournament. By default it hides people already signed up and people
-   already messaged for this event; there is also a name search. You never appear in
+1. Pick an event.
+2. Pick an audience: **Recent players** (the Discord-linked players of the org's most
+   recent past tournaments, 3 by default, adjustable from 1 to 10; never upcoming
+   tournaments, tournaments of cancelled events or the promoted event's own
+   tournament), **Active members** (anyone who signed up for or played an org event in
+   the last 7/14/30/90 days) or **New on Discord** (people who recently joined the
+   org's Discord server, newest first, including members without a DraftForge account).
+3. Narrow the table if you want. By default it hides people already signed up and
+   people already messaged for this event; switches show them again. **Min** and
+   **Max MMR** filter on the organization's MMR for the event's game (the MMR column
+   and the **Unknown** shown when the org has set none). While either bound is set,
+   players with an Unknown MMR, including Discord members without an account, are
+   left out. Search matches names, Discord handles and guild nicknames. The chips above
+   the table show what is applied and **Reset filters** clears it. You never appear in
    your own list.
-3. Edit the filled-in message if you want. Edits apply to this message only. The
-   counter warns past 2000 characters (Discord's limit without Nitro); the server
-   refuses anything over 4000.
-4. **Copy** the text and send it to the player in Discord yourself. DraftForge never
+4. Press **Message** on a player. A dialog opens with the template picker, the
+   filled-in message, a Discord preview, **Copy** and a link to their Discord profile.
+   For a Discord member without an account, the account is created from Discord only
+   when you press **Message** or **Mark as sent**, never by listing or filtering.
+5. Edit the message if you want. Edits apply to this message only. The counter warns
+   past 2000 characters (Discord's limit without Nitro); the server refuses anything
+   over 4000.
+6. **Copy** the text and send it to the player in Discord yourself. DraftForge never
    sends the DM.
-5. Press **Mark sent** to record it.
+7. Press **Mark sent** in the dialog to record it. If you already sent a DM, the row's
+   **Mark as sent** action opens the same dialog to record it: pick the template you
+   used, make the text match, then press **Record as sent**. Closing the dialog
+   records nothing.
 
-Each candidate row shows who already messaged that player for this event and when. The
-sender can undo their own send while they still have promoter access; staff and above
+On a phone the row actions sit in a menu at the end of each row, and MMR, activity and
+status show under the player's name.
+
+Each row's status shows who already messaged that player for this event and when. The
+sender can undo their own send (from the dialog right after sending, or the row's
+**Undo send** action) while they still have promoter access; staff and above
 can undo anyone's. Undo deletes the send and its points.
 
 !!! warning "One point per player per event"

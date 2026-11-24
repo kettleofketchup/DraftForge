@@ -12,9 +12,12 @@ from app.models import GameType
 from discordbot.components import (
     BattleCupTierSelect,
     DeadlockComponents,
+    DeadlockSignupModal,
     DeclineButton,
     DefaultComponents,
+    DefaultSignupModal,
     DotaComponents,
+    DotaSignupModal,
     EventSignupView,
     MedalSelect,
     PositionConfirmButton,
@@ -410,8 +413,13 @@ def _component_interaction() -> MagicMock:
     interaction.user.id = 7
     interaction.response.is_done = MagicMock(return_value=False)
     interaction.response.edit_message = AsyncMock()
-    interaction.response.defer = AsyncMock()
+
+    async def _defer(*_args: object, **_kwargs: object) -> None:
+        interaction.response.is_done.return_value = True
+
+    interaction.response.defer = AsyncMock(side_effect=_defer)
     interaction.response.send_message = AsyncMock()
+    interaction.followup.send = AsyncMock()
     interaction.edit_original_response = AsyncMock()
     return interaction
 
@@ -598,9 +606,10 @@ class UnexpectedModalResultTest(IsolatedAsyncioTestCase):
             await modal.on_submit(interaction)
 
         self.assertEqual(submit.call_args.kwargs["game_type"], GameType.DEADLOCK)
-        interaction.response.send_message.assert_awaited_once_with(
+        interaction.followup.send.assert_awaited_once_with(
             STALE_SIGNUP_MESSAGE, ephemeral=True
         )
+        interaction.response.send_message.assert_not_awaited()
 
     async def test_dota_modal_replies_on_unknown_action(self) -> None:
         from discordbot.components.base import STALE_SIGNUP_MESSAGE
@@ -622,9 +631,10 @@ class UnexpectedModalResultTest(IsolatedAsyncioTestCase):
             await modal.on_submit(interaction)
 
         self.assertEqual(submit.call_args.kwargs["game_type"], GameType.DOTA2)
-        interaction.response.send_message.assert_awaited_once_with(
+        interaction.followup.send.assert_awaited_once_with(
             STALE_SIGNUP_MESSAGE, ephemeral=True
         )
+        interaction.response.send_message.assert_not_awaited()
 
     def test_stale_messages_share_one_text(self) -> None:
         from discordbot.components.base import STALE_SIGNUP_MESSAGE
@@ -652,6 +662,76 @@ class UnexpectedModalResultTest(IsolatedAsyncioTestCase):
             await modal.on_submit(interaction)
 
         self.assertIsNone(submit.call_args.kwargs["game_type"])
-        interaction.response.send_message.assert_awaited_once_with(
+        interaction.followup.send.assert_awaited_once_with(
             STALE_SIGNUP_MESSAGE, ephemeral=True
         )
+        interaction.response.send_message.assert_not_awaited()
+
+
+class SignupModalDeferTest(IsolatedAsyncioTestCase):
+    """Signup modals ACK with a thinking defer before the backend call, which
+    may run a Steam lookup, so every later reply goes through followup."""
+
+    MODALS = (
+        ("deadlock", DeadlockSignupModal),
+        ("dota", DotaSignupModal),
+        ("default", DefaultSignupModal),
+    )
+
+    async def _submit(
+        self, module: str, modal_cls: type, result: dict[str, object]
+    ) -> tuple[MagicMock, list[bool]]:
+        modal = modal_cls(event_id=9, prefill={}, config={})
+        interaction = _component_interaction()
+        deferred_at_call: list[bool] = []
+
+        def backend(**_kwargs: object) -> dict[str, object]:
+            deferred_at_call.append(interaction.response.defer.await_count == 1)
+            return result
+
+        with (
+            mock_patch(
+                f"discordbot.components.{module}.signup_modal_submit",
+                side_effect=backend,
+            ),
+            mock_patch(
+                f"discordbot.components.{module}.discord_log_context",
+                _fake_log_context,
+            ),
+        ):
+            await modal.on_submit(interaction)
+        return interaction, deferred_at_call
+
+    async def test_on_submit_defers_before_backend(self) -> None:
+        for module, modal_cls in self.MODALS:
+            with self.subTest(module=module):
+                interaction, deferred_at_call = await self._submit(
+                    module, modal_cls, {"action": "error", "message": "nope"}
+                )
+                interaction.response.defer.assert_awaited_once_with(
+                    ephemeral=True, thinking=True
+                )
+                self.assertEqual(deferred_at_call, [True])
+
+    async def test_on_submit_error_uses_followup(self) -> None:
+        for module, modal_cls in self.MODALS:
+            with self.subTest(module=module):
+                interaction, _ = await self._submit(
+                    module, modal_cls, {"action": "error", "message": "nope"}
+                )
+                interaction.followup.send.assert_awaited_once_with(
+                    "❌ nope", ephemeral=True
+                )
+                interaction.response.send_message.assert_not_awaited()
+
+    async def test_dota_rank_views_use_followup(self) -> None:
+        for action in ("needs_rank_details", "needs_rank_status"):
+            with self.subTest(action=action):
+                interaction, _ = await self._submit(
+                    "dota", DotaSignupModal, {"action": action}
+                )
+                interaction.followup.send.assert_awaited_once()
+                kwargs = interaction.followup.send.await_args.kwargs
+                self.assertTrue(kwargs["ephemeral"])
+                self.assertIsNotNone(kwargs["view"])
+                interaction.response.send_message.assert_not_awaited()

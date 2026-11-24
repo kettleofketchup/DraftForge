@@ -1,1 +1,0 @@
-- A newly created organization now shows up on the Organizations page right away, and deleted or renamed organizations update the list without a reload.

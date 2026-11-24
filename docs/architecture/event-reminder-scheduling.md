@@ -145,7 +145,7 @@ Deletes performed by realign go through `services.teardown_event`, not a bare qu
 
 ## Single events vs recurring series
 
-`discord_signup_reminder` DMs every subscriber of the series — a concept that doesn't exist for one-off events *(events created with no series)*. Two layers reject the invalid combination:
+`discord_signup_reminder` DMs the series' subscribers who haven't signed up — a concept that doesn't exist for one-off events *(events created with no series)*. Two layers reject the invalid combination:
 
 - **Backend** — `EventSerializer.validate` rejects `discord_signup_reminder=True` when `event_repeater` is `None` (`backend/events/serializers.py:336`).
 - **Frontend** — `eventSchema.superRefine` mirrors the rule client-side, and `DiscordConfigSection` hides the toggle when `isRepeater={false}` (`frontend/app/components/events/schemas.ts`, `DiscordConfigSection.tsx`).
@@ -155,6 +155,8 @@ The other reminders (`discord_announcement`, `discord_confirm_attendance`, `disc
 ### Start mention
 
 `discord_start_mention` (registry key `start_mention`, `minutes_field="discord_start_mention_minutes"`, default 15) runs `events.tasks.send_start_mention` in `signups_open` and `roll_call`. It mentions the members in `discord_start_mention_scope` who have a Discord ID: `main` is the seat-holding main list without Maybe RSVPs; `all_active` (default) is every signup that is not cancelled, rejected or dropped. Mentions go out as replies to the signup post (inside the thread for forum posts), at most 80 per message and 2000 characters, with `allowed_mentions={"users": [...]}` so no role or `@everyone` ping can leak. One `start_mention` lease row covers every chunk; members skipped for having no Discord ID are counted in the `start_mention_sent` log line and the lease row's `response_data`. Staff can fire it from the task schedule; a second fire returns 409.
+
+Start mention needs a signup post that has already been posted: signup posts on with a signup channel, or the pre-day announcement on with an announcement channel (the signup embed then goes in the announcement channel). Without one, `send_start_mention` logs `start_mention_no_signup_post`, writes no lease, and the dispatcher retries it on later ticks while the event is in `signups_open` or `roll_call`, so the mention can go out late or not at all. The event form's start-mention block warns when neither post is configured (or notes the announcement fallback) using the same rule as `has_signup_post` in `get_event_task_schedule`, and the task schedule marks `start_mention` as `misconfigured` with the reason in its description. Both judge the configuration, not whether a signup post actually exists.
 
 ### Off-schedule events attached to a series
 

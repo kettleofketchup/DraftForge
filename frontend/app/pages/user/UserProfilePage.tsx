@@ -186,7 +186,7 @@ export function UserProfilePage() {
         </ScrollArea>
 
         <TabsContent value="overview" className="mt-4">
-          <OverviewTab user={user} />
+          <OverviewTab user={user} isOwnProfile={isOwnProfile} />
         </TabsContent>
 
         <TabsContent value="tournaments" className="mt-4">
@@ -215,7 +215,13 @@ export function UserProfilePage() {
   );
 }
 
-function OverviewTab({ user }: { user: UserType }) {
+function OverviewTab({
+  user,
+  isOwnProfile,
+}: {
+  user: UserType;
+  isOwnProfile: boolean;
+}) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {/* Positions Card */}
@@ -254,6 +260,16 @@ function OverviewTab({ user }: { user: UserType }) {
               </span>
             </div>
           )}
+          {isOwnProfile &&
+            user.steam_account_id &&
+            user.steam_account_verified === false && (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="profile-friend-id-unverified"
+              >
+                Unverified: an organizer will confirm this ID.
+              </p>
+            )}
         </CardContent>
       </Card>
     </div>

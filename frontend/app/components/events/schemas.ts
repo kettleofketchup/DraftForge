@@ -310,6 +310,10 @@ export const eventSignupSchema = z.object({
         })
         .nullable(),
       steam_account_id: z.number().nullable(),
+      steam_account_verified: z.boolean().optional(),
+      steam_account_verified_at: z.string().nullable().optional(),
+      steam_account_verified_org_name: z.string().nullable().optional(),
+      steam_account_exists_checked: z.boolean().optional(),
       avatarUrl: z.string().nullable(),
       mmr_game_type: z.number().nullable().optional(),
     })
@@ -354,6 +358,7 @@ export const eventSignupSchema = z.object({
   holds_seat: z.boolean().optional(),
   unmet_requirements: z.array(z.string()).optional(),
   eligibility_reasons: z.array(eligibilityReasonSchema).optional(),
+  can_verify_steam_account: z.boolean().optional(),
   waitlist_position: z.number().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
