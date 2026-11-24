@@ -3,7 +3,6 @@ from rest_framework import serializers
 
 from app.models import CustomUser, GameType
 from app.permissions import request_user
-from app.serializers import TournamentUserSerializer, UserPkField
 from draft.models import DraftOptions
 from league.models import League, LeagueUser
 from league.permissions import check_lobby_steam_league_id
@@ -24,6 +23,7 @@ from tournament.serializers.team import (
     TournamentTeamSerializer,
 )
 from tournament.serializers.users import tournament_organization
+from user.serializers import TournamentUserSerializer, UserPkField
 
 log = get_logger(__name__)
 

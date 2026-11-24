@@ -6,7 +6,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
-from app.serializers import UserSerializer
+from user.serializers import UserSerializer
 
 BACKEND_DIR = Path(settings.BASE_DIR)
 

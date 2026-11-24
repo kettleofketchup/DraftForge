@@ -2,8 +2,8 @@ from django.test import TestCase
 from django.utils import timezone
 
 from app.models import CustomUser, PositionsModel
-from app.serializers import UserSerializer
 from tournament.models import Team, Tournament
+from user.serializers import UserSerializer
 
 
 class UserSerializerPayloadTest(TestCase):

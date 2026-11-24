@@ -1,6 +1,6 @@
 from django.test import SimpleTestCase
 
-from app.schemas import TournamentUserSchema
+from user.schemas import TournamentUserSchema
 
 
 class TournamentUserSchemaDisplayNameTest(SimpleTestCase):

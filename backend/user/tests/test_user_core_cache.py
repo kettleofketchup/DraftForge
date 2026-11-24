@@ -1,7 +1,7 @@
 from django.test import TransactionTestCase  # on_commit invalidation
 
 from app.models import CustomUser
-from app.user_cache import serialize_user_core
+from user.cache import serialize_user_core
 
 
 class SerializeUserCoreTests(TransactionTestCase):

@@ -25,7 +25,6 @@ from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
 from app.models import CustomUser, ProfileClaimRequest
-from app.serializers import UserSerializer
 from common.game import GameType
 from common.utils import isTestEnvironment
 from discordbot.models import DiscordEvent, DiscordEventLog
@@ -85,6 +84,7 @@ from tests.test_events_discord import discord_auth_failure
 from tests.test_teamdraft import clear_teamdraft_redis
 from tournament.models import Tournament
 from tournament.serializers.tournament import TournamentSerializer
+from user.serializers import UserSerializer
 
 log = logging.getLogger(__name__)
 

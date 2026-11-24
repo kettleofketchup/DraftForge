@@ -7,11 +7,11 @@ from rest_framework.response import Response
 
 # Create your views here.
 from app.models import CustomUser, PositionsModel
-from app.serializers import (
+from telemetry.logging import get_logger
+from user.serializers import (
     PositionsSerializer,
     UserSerializer,
 )
-from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 

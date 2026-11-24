@@ -25,7 +25,7 @@ from user.display_names import first_name
 
 
 class TournamentUserSchema(BaseModel):
-    """Validates: TournamentUserSerializer (app/serializers.py)"""
+    """Validates: TournamentUserSerializer (user/serializers.py)"""
 
     pk: int
     username: Optional[str] = None

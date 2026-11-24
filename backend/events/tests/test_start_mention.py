@@ -8,7 +8,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
-from app.schemas import TournamentUserSchema
 from discordbot.models import DiscordEventMsgSignup, DiscordMessageLog
 from events.constants import Commitment, SignupStatus, StartMentionScope
 from events.models import EventSignup
@@ -21,6 +20,7 @@ from events.start_mention import (
 from events.tasks import send_start_mention
 from events.tests.base import EventTestCase
 from events.tests.test_discord_tasks import _DiscordTaskTestCase, _ok_response
+from user.schemas import TournamentUserSchema
 
 HEADER = "Weekly Inhouse starts <t:1900000000:R>."
 

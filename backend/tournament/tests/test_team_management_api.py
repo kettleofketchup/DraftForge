@@ -25,7 +25,6 @@ from structlog.testing import capture_logs
 
 from app.exception_handler import exception_handler
 from app.models import CustomUser
-from app.serializers import UserSerializer
 from draft.models import DraftTeam, HeroDraft
 from draft.serializers.hero import HeroDraftSerializer
 from draft.services.team_state import build_draft_state
@@ -54,6 +53,7 @@ from tournament.services.team_references import team_references, team_usage
 from tournament.services.team_signals import TeamRosterChange, team_roster_changed
 from tournament.tests.test_team_management import TeamManagementFixture
 from tournament.views.team import TeamView
+from user.serializers import UserSerializer
 from user.tests.test_cacheops_integration import _redis_reachable
 
 

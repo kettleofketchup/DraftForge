@@ -32,6 +32,7 @@ from org.standing import api as standing
 from telemetry.logging import get_logger
 from tournament.models import Game, Tournament
 from user.avatar import refresh_user_avatar
+from user.cache import serialize_user_core
 
 # BaseUserProfile owns nickname/avatar; DotaUserProfile owns
 # positions/dota-mmr. Every @cached_as site below that ships
@@ -40,14 +41,13 @@ from user.avatar import refresh_user_avatar
 # response. See backend/user/tests/test_cacheops.py for the grep guardrail.
 from user.models import BaseUserProfile, DotaUserProfile
 from user.querysets import with_user_profiles
+from user.serializers import UserSerializer
 from user.steam_accounts import steam_account_id_holder, steam_account_id_identity
 from user.tasks.avatar_refresh import refresh_avatars_batched
 
 from .decorators import render_to
 from .models import CustomUser, ProfileClaimRequest
 from .permissions import IsStaff
-from .serializers import UserSerializer
-from .user_cache import serialize_user_core
 
 log = get_logger(__name__)
 

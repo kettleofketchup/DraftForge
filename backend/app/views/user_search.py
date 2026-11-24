@@ -8,12 +8,12 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.models import CustomUser
-from app.serializers import TournamentUserSerializer
 from league.models import League, LeagueUser
 from org.models import Organization, OrgUser
 from org.permissions import has_org_staff_access
 from org.user_search import user_name_q
 from user.querysets import with_user_profiles
+from user.serializers import TournamentUserSerializer
 
 
 @api_view(["GET"])

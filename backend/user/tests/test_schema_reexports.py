@@ -22,13 +22,13 @@ DROPPED_ALIASES = (
 
 class AppSchemaReexportTests(SimpleTestCase):
     def test_back_compat_aliases_dropped(self) -> None:
-        schemas = importlib.import_module("app.schemas")
+        schemas = importlib.import_module("user.schemas")
         for name in DROPPED_ALIASES:
             with self.subTest(name=name):
                 self.assertFalse(hasattr(schemas, name))
 
     def test_signup_user_data_resolves_tournament_user_schema(self) -> None:
         events_schemas = importlib.import_module("events.schemas")
-        app_schemas = importlib.import_module("app.schemas")
+        user_schemas = importlib.import_module("user.schemas")
         field = events_schemas.EventSignupSchema.model_fields["user_data"]
-        self.assertIn(app_schemas.TournamentUserSchema, field.annotation.__args__)
+        self.assertIn(user_schemas.TournamentUserSchema, field.annotation.__args__)

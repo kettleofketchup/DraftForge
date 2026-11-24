@@ -9,8 +9,6 @@ from rest_framework import serializers
 from app.auth import InternalServiceUser
 from app.models import CustomUser
 from app.permissions import request_user
-from app.serializers import TournamentUserSerializer
-from app.user_cache import serialize_users_core
 from common.game import GameType
 from events.capacity import seat_holding_statuses
 from events.constants import LINE_EXCLUDED_STATUSES, EventState, SignupOpenMode
@@ -57,7 +55,9 @@ from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 from org.permissions import can_view_org_members
 from tournament.serializers.users import _serialize_users_with_mmr
+from user.cache import serialize_users_core
 from user.display_names import user_display_name
+from user.serializers import TournamentUserSerializer
 
 # The lobby password is write-only on every events serializer: event and
 # series payloads are cached, public and handed to Celery. Staff and

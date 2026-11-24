@@ -862,6 +862,31 @@ USER = MovedSlice(
     new_app="user",
     moved=frozenset(
         {
+            ("app.serializers", "UserPkField"),
+            ("app.serializers", "PositionsSerializer"),
+            ("app.serializers", "TournamentUserSerializer"),
+            ("app.serializers", "UserSerializer"),
+            ("app.schemas", "TournamentUserSchema"),
+            ("app.user_cache", "serialize_user_core"),
+            ("app.user_cache", "serialize_users_core"),
+            ("app.tests.test_user_core_cache", "SerializeUserCoreTests"),
+            ("app.tests.test_user_core_cache", "BulkUsersCacheTests"),
+            (
+                "app.tests.test_tournament_user_schema",
+                "TournamentUserSchemaDisplayNameTest",
+            ),
+            (
+                "app.tests.test_user_serializer_discord_names",
+                "UserSerializerDiscordNamesTest",
+            ),
+            (
+                "app.tests.test_user_serializer_discord_names",
+                "NoSerializerEmitsCustomUserGuildNicknameTest",
+            ),
+            ("app.tests.test_user_serializer_discord_names", "_serializer_sources"),
+            ("app.tests.test_user_serializer_discord_names", "_in_customuser_meta"),
+            ("app.tests.test_user_serializer_payload", "UserSerializerPayloadTest"),
+            ("app.tests.test_schema_reexports", "AppSchemaReexportTests"),
             ("app.tasks.avatar_refresh", "_is_test_environment"),
             ("app.tasks.avatar_refresh", "_is_avatar_url_valid"),
             ("app.tasks.avatar_refresh", "_fetch_discord_avatar"),
@@ -936,6 +961,13 @@ USER = MovedSlice(
     ),
     retired_modules=frozenset(
         {
+            "app.schemas",
+            "app.user_cache",
+            "app.tests.test_user_core_cache",
+            "app.tests.test_tournament_user_schema",
+            "app.tests.test_user_serializer_discord_names",
+            "app.tests.test_user_serializer_payload",
+            "app.tests.test_schema_reexports",
             "app.tasks",
             "app.tasks.avatar_refresh",
             "app.tasks.discord_name_sync",
@@ -983,6 +1015,13 @@ RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
 # under the new app; None: no single home file to check (renamed within the
 # source app, or a retired package).
 RETIRED_MODULE_HOMES: dict[str, str | None] = {
+    "app.schemas": "user.schemas",
+    "app.user_cache": "user.cache",
+    "app.tests.test_user_core_cache": "user.tests.test_user_core_cache",
+    "app.tests.test_tournament_user_schema": "user.tests.test_tournament_user_schema",
+    "app.tests.test_user_serializer_discord_names": "user.tests.test_user_serializer_discord_names",
+    "app.tests.test_user_serializer_payload": "user.tests.test_user_serializer_payload",
+    "app.tests.test_schema_reexports": "user.tests.test_schema_reexports",
     "app.tasks": None,
     "app.tasks.avatar_refresh": "user.tasks.avatar_refresh",
     "app.tasks.discord_name_sync": "user.tasks.discord_name_sync",
@@ -1021,11 +1060,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"api", "release_earning_sends"}),
             "CustomUser admin delete checks standing blockers, releases promo "
             "earning sends and records standing on user deletion",
-        ),
-        "app/serializers.py": BackEdge(
-            frozenset({"Organization"}),
-            "UserSerializer.default_organization reads Organization at class "
-            "definition",
         ),
         "app/views/user_search.py": BackEdge(
             frozenset(
@@ -1066,17 +1100,14 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         ),
     },
     "user": {
-        "app/schemas.py": BackEdge(
-            frozenset({"first_name"}), "user display-name schema helper"
+        "app/functions/user.py": BackEdge(
+            frozenset({"PositionsSerializer", "UserSerializer"}),
+            "profile updates remain in app until Task 8",
         ),
         "app/models.py": BackEdge(
             frozenset({"BaseUserProfile", "DotaUserProfile"}),
             "CustomUser profile accessors",
             type_only=frozenset({"DotaUserProfile"}),
-        ),
-        "app/user_cache.py": BackEdge(
-            frozenset({"BaseUserProfile", "DotaUserProfile", "with_user_profiles"}),
-            "user-only code still in app until Task 7",
         ),
         "app/views_main.py": BackEdge(
             frozenset(
@@ -1088,12 +1119,14 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "refresh_user_avatar",
                     "steam_account_id_holder",
                     "steam_account_id_identity",
+                    "UserSerializer",
+                    "serialize_user_core",
                 }
             ),
             "user-only code still in app until Task 8",
         ),
         "app/views/user_search.py": BackEdge(
-            frozenset({"with_user_profiles"}),
+            frozenset({"with_user_profiles", "TournamentUserSerializer"}),
             "user-only code still in app until Task 8",
         ),
     },
