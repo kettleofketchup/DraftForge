@@ -1,0 +1,1 @@
+- The leadership and contributions standings now update straight away after an event is completed, cancelled, reopened, deleted or renamed, without a page reload.

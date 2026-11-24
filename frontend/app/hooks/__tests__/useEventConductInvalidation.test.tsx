@@ -137,7 +137,6 @@ describe('event mutations refresh conduct queries', () => {
     await act(() => hook.result.current.event.deleteEvent.mutateAsync());
     expect(invalid(keys.forecast)).toBe(true);
     expect(invalid(keys.conductBoard)).toBe(true);
-    expect(invalid(keys.contribBoard)).toBe(false);
   });
 
   it('openSignups and setEventStaff leave conduct alone', async () => {

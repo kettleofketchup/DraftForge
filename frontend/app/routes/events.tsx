@@ -100,7 +100,7 @@ function EventCard({ event }: { event: EventType }) {
           <div className="flex items-end justify-between gap-2">
             <div className="flex flex-col gap-1 text-sm text-muted-foreground min-w-0">
               <span>{formattedDate}</span>
-              <span>
+              <span data-testid="event-card-signup-count">
                 {event.signup_count} signup{event.signup_count !== 1 ? 's' : ''}
                 {' / '}
                 {event.confirmed_count} confirmed

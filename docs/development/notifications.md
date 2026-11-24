@@ -76,5 +76,5 @@ just py::gen-message-types --check
 
 This writes nothing and exits 1, naming the first differing line, when the committed
 file differs from what the registry produces. The `unit` job in
-`.github/workflows/playwright.yml` runs it, so a registry change without a regenerated
+`.github/workflows/unit-tests.yml` runs it, so a registry change without a regenerated
 file fails CI.
