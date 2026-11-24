@@ -523,6 +523,10 @@ export async function createSeriesOneOffEvent(
   return data;
 }
 
+export async function deleteEventRepeater(repeaterId: number): Promise<void> {
+  await axios.delete(`/events/repeaters/${repeaterId}/`);
+}
+
 export async function reactivateRepeater(
   repeaterId: number,
 ): Promise<{ detail: string; created_count: number; is_active: boolean }> {
