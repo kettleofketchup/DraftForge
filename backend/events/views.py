@@ -2153,6 +2153,7 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
         return entry
 
     has_channel = bool(event.discord_announcement_channel_id)
+    profile_misconfigured: bool = event.discord_profile_reminder and not has_channel
     # Mirrored in frontend/app/components/events/startMentionPrerequisite.ts
     has_signup_post = (event.discord_announcement and has_channel) or (
         event.discord_post_signups and bool(event.discord_post_signups_channel_id)
@@ -2234,7 +2235,12 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             ),
             log_source="profile_reminder",
             check_interval="Every 30s",
-            description=f"Posts {event.discord_profile_reminder_hours}h before event",
+            misconfigured=profile_misconfigured,
+            description=(
+                "Enabled but no announcement channel is set"
+                if profile_misconfigured
+                else f"Posts in the announcement channel {event.discord_profile_reminder_hours}h before event"
+            ),
         ),
         _task(
             "start_mention",

@@ -12,6 +12,9 @@ export type SectionFieldMeta = Record<
   Record<string, SettingsFieldMeta>
 >;
 
+export const PROFILE_REMINDER_DESCRIPTION: string =
+  'Posts a reminder in the announcement channel asking signed-up members to complete the profile details this event requires (such as Friend ID) before the event. Needs an announcement channel.';
+
 /**
  * Every event-form field, under the section that renders it by default, with the
  * text the settings search matches. A modal that renders a field elsewhere (signup
@@ -327,8 +330,7 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     discord_profile_reminder: {
       label: 'Profile update reminder',
-      description:
-        'DM signed-up users to complete their profile (Steam ID, MMR) before the event',
+      description: PROFILE_REMINDER_DESCRIPTION,
     },
     discord_profile_reminder_hours: { label: 'Profile reminder: when to send' },
     discord_confirm_attendance: {

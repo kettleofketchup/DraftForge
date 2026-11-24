@@ -1,0 +1,1 @@
+- The profile update reminder setting now says it posts in the event's announcement channel (it never sent DMs), and the Discord Tasks panel shows it as misconfigured when it is on but no announcement channel is set.
