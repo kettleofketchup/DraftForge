@@ -31,6 +31,7 @@ from config.discord_api import DISCORD_API_BASE_URL  # noqa: F401
 from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 from config.leagues import app_config
+from config.promotion_sync import PromotionSyncConfig
 from config.redis_host import is_docker, resolve_redis_host
 from config.signup_post import SignupPostConfig
 from telemetry.config import init_telemetry
@@ -332,6 +333,9 @@ REDIS_KEY_SCOPE: str = os.environ.get("REDIS_KEY_SCOPE", "")
 # Discord signup-post debounce and lock (config/signup_post.py), shared with
 # config/settings_celery.py. Off under the test runner unless a test opts in.
 SIGNUP_POST = SignupPostConfig.from_env(disabled_default=RUNNING_TESTS)
+# SFG event-promotion org/guild and event/occasion bindings
+# (config/promotion_sync.py, SFG_PROMOTION_BINDINGS). Empty unless configured.
+SFG_PROMOTION_SYNC = PromotionSyncConfig.from_env()
 
 # Cacheops/Redis cache configuration
 if not env_bool("DISABLE_CACHE"):

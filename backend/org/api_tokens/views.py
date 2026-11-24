@@ -20,11 +20,16 @@ from rest_framework.response import Response
 from app.models import CustomUser
 from common.game import GameType
 from org.api_tokens.auth import OrgApiTokenAuthentication, gate_token_request
+from org.api_tokens.operations import (
+    Operation,
+    default_operations,
+    entitlements_for,
+    parse_operations,
+)
 from org.api_tokens.sync import MAX_ENTRIES, member_rows, sync_mmrs
 from org.api_tokens.throttle import limits_for
 from org.api_tokens.tokens import issue_token, revoke_token
-from org.feature_errors import not_permitted, require_org_admin
-from org.features import FeatureKey
+from org.feature_errors import not_permitted, require_feature, require_org_admin
 from org.models import (
     Organization,
     OrgApiLimits,
@@ -42,6 +47,17 @@ MAX_USAGE_DAYS = 90
 
 class CreateTokenSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=64, trim_whitespace=True)
+    # Omitted means the MMR pair, as before grants existed.
+    operations = serializers.JSONField(required=False)
+
+    def validate_operations(self, value: Any) -> list[str]:
+        try:
+            return parse_operations(value)
+        except ValueError:
+            known = ", ".join(op.value for op in Operation)
+            raise serializers.ValidationError(
+                f"Give a nonempty list of operations from: {known}."
+            ) from None
 
 
 class LimitsSerializer(serializers.Serializer):
@@ -72,6 +88,7 @@ def _token_row(token: OrgApiToken) -> dict[str, Any]:
         "id": token.pk,
         "name": token.name,
         "prefix": token.prefix,
+        "operations": token.operations,
         "user": _user_ref(token.user),
         "created_at": _dt(token.created_at),
         "last_used_at": _dt(token.last_used_at),
@@ -95,10 +112,15 @@ def org_api_tokens(request: Request, org_id: int) -> Response:
         require_org_admin(request.user, org, None)
         return Response([_token_row(t) for t in _org_tokens(org)])
 
-    require_org_admin(request.user, org, FeatureKey.MMR_SYNC)
+    require_org_admin(request.user, org, None)
     serializer = CreateTokenSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    issued = issue_token(org, request.user, serializer.validated_data["name"])
+    operations = serializer.validated_data.get("operations") or default_operations()
+    for feature in entitlements_for(operations):
+        require_feature(org, feature)
+    issued = issue_token(
+        org, request.user, serializer.validated_data["name"], operations=operations
+    )
     return Response(
         {**_token_row(issued.token), "token": issued.raw},
         status=status.HTTP_201_CREATED,
@@ -208,7 +230,8 @@ def org_api_limits(request: Request, org_id: int) -> Response:
 @parser_classes([JSONParser])
 @permission_classes([IsAuthenticated])
 def org_mmr_sync(request: Request, org_id: int) -> Response:
-    org = gate_token_request(request, org_id)
+    operation = Operation.MMR_READ if request.method == "GET" else Operation.MMR_WRITE
+    org = gate_token_request(request, org_id, operation=operation)
     if request.method == "GET":
         game_type = request.query_params.get("game_type", str(GameType.DOTA2))
         if not game_type.isdigit() or int(game_type) not in GameType.values:
