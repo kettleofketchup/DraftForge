@@ -739,7 +739,28 @@ adds `can_review_captains` and `pending_captain_reviews` (captains the signed-in
 can still rate on that event); they are computed per viewer after the cached payload. Review `PUT`/`DELETE` are throttled per user. Leaderboards (`rating`, `points`,
 `rating.<trait>`) go through the [standing endpoints](#organization-standing).
 
+### Event voice presence
+
+Both methods require event operator access (organization or league staff, host or helpers).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/events/{id}/voice-presence/` | Returns `feed` with guild and channel heartbeat ages (seconds, or null), `voice_channel_id` and `presences` with user IDs, source, present flag and feed timestamps. |
+| POST | `/api/events/{id}/voice-presence/` | Body: `{"user_id": int, "present": bool, "reason": str}`; reason is required, stripped, 1–500 characters. Returns `presence`, `ledger_entry_id`, `confirm` (result or null). 400 `invalid` or `not_signed_up`; 403 for non-operators; 404 for an unknown event or user. |
+
+See [Voice presence](../features/events/roll-call.md#voice-presence) for confirmation and manual-pin rules.
+
 ### Internal
+
+Voice feed routes require `X-Internal-Token` and an allowed source IP. Logical outcomes are 200; invalid payloads are 400, unauthorized calls are 401/403. IDs are strings of 1–20 digits.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/internal/discord/voice/watched-channels/` | Returns `channels` (`guild_id`, `channel_id`, `event_ids`), `ttl_seconds` (60), `available`. |
+| POST | `/api/internal/discord/voice/state/` | Body: `guild_id`, `discord_user_id`, nullable `before_channel_id` and `after_channel_id`. |
+| POST | `/api/internal/discord/voice/snapshot/` | Body: `guild_id`, `channels` (`channel_id`, `member_ids`), optional `missing_channel_ids`. Maximum 100 channels and 5000 member IDs per channel; duplicate member IDs are collapsed. |
+
+Both POSTs return `success`, `detail`, and counts (`events`, `joined`, `left`, `confirmed`, `unknown_users`, `not_signed_up`). A snapshot refreshes heartbeat only after each visible channel has applied; missing channels are not cleared.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

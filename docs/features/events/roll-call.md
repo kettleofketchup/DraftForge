@@ -258,7 +258,27 @@ When a check closes, [Conduct](../organization-conduct.md) records members who c
 
 The start cull removes members who are not in the event voice channel a set number of minutes after the start, then fills the open seats from the line or by order of arrival in the call. Voice presence can also count as confirming. The voice channel picker lists the server's voice and stage channels.
 
-Start cull, voice presence confirms and fill by voice arrival all need an event voice channel.
+Start cull, voice presence confirms and fill by voice arrival all need an event voice channel. The start cull and fill by voice arrival are saved settings only; they do not run yet (#533).
+
+### Voice presence
+
+The bot tracks linked members signed up to the event, in the event's voice or stage channel. It watches signups-open and roll-call events scheduled from 24 hours ago to 6 hours ahead, in-progress events started within the last 24 hours, and events with an open, escalated or held ready check even outside that window. Tracking does not depend on **Voice presence confirms** being on. Unknown Discord accounts and people without a signup get no presence row.
+
+Joins and leaves update presence immediately. A full snapshot every 60 seconds repairs missed updates and refreshes a heartbeat per channel and per guild. Missing channels are left alone, not treated as empty. During a gateway disconnect the bot sends no snapshots or heartbeat. Feed ages are available through the operator API; a missing or unavailable heartbeat has age `null`. Consumers checking freshness must use the event's channel age, not just its guild age.
+
+With **Voice presence confirms** on, a join confirms the member while the check is open or escalated and the event is in roll call. The member must be in the check and eligible to confirm, not dropped or excused. This works in staff-verified mode too. Fresh feed presence (seen within 180 seconds) also confirms members when the check opens, and snapshots reconcile pending members. Leaving never un-confirms anyone. Turning the setting on mid-check takes effect only at the next check; turning it off stops voice confirmations immediately.
+
+#### Operator overrides
+
+Staff, the host and helpers can set presence by hand through `POST /api/events/<id>/voice-presence/`, with `user_id`, `present` and a required reason of 1–500 characters. The member must already have a signup. The ledger records `voice_presence_set` with the operator and reason; a confirmation caused by it links back through `caused_by`.
+
+A manual value stays pinned through snapshots until the member's next real gateway join or leave. It writes no feed timestamps and gives no voice attendance credit for Conduct. A manual present override confirms only when it is set during an accepting check with voice confirmations enabled. A pin set before a check opens does not confirm at open; use staff confirmation instead. Marking someone absent never un-confirms them.
+
+`GET /api/events/<id>/voice-presence/` returns `feed` (`guild_id`, `age_seconds`, `channel_age_seconds`), `voice_channel_id`, and `presences` with each member's `user_id`, `present`, `source` (`feed` or `manual`) and feed timestamps. Both methods require operator access; promoters have no access unless they also hold an operator role. This is API-only until the staff board ships (#534).
+
+#### Bot voice states
+
+The bot explicitly enables the non-privileged `voice_states` intent. It caches watched channels for 60 seconds, reports only relevant gateway transitions, and sends an immediate snapshot after connecting or resuming. One bounded serial queue sends reports and builds snapshots when dequeued, preserving gateway order. Recent gateway transitions take precedence over snapshots for 30 seconds. Reports use the internal token- and IP-protected API; the bot never accesses the database.
 
 ### Ready check fields
 
