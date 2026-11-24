@@ -156,12 +156,14 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    *MODEL_APPS,
+    # Preserve web admin autodiscovery order independently of the worker's apps.
+    *(app for app in MODEL_APPS if app != "user.apps.UserConfig"),
     "social_django",
     "rest_framework",
     "django_jinja",
     "corsheaders",
     "bracket.apps.BracketConfig",
+    "user.apps.UserConfig",
     "cacheops",
 ]
 
