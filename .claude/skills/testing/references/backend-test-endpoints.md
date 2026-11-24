@@ -140,6 +140,22 @@ Without this, subsequent API requests (e.g., `GET /organizations/1/`) will retur
 
 **This also applies to production views** — see `backend/org/views_admin_team.py` for the pattern where every M2M mutation (`add_org_admin`, `remove_org_staff`, etc.) calls `invalidate_obj()` after the change.
 
+## Promotion Audience Fixtures
+
+`POST /api/tests/org-features/reset/` accepts an optional boolean `audiences`.
+`resetOrgFeatures(request, { audiences: true })` seeds org 40's signup-only
+activity, linked and unlinked guild joiners, old joiners, a bot, signed-up,
+messaged and declined recipients. The response adds `audiences` refs with
+`pk` (nullable) and `discord_id`; use these rather than hardcoded IDs.
+
+`tests.populate.promotion_audiences` seeds the normal Discord member cache,
+configures a dummy token and loopback-only API URL in the test server process,
+and leaves production candidate/resolve/render/send code untouched. An ordinary
+reset restores the original token/API URL, removes the guild cache and fixture
+accounts, and clears the org's guild ID. Audience specs must call ordinary reset
+in `afterAll` even when tests fail. Use only the org-features sequential project.
+`tests.test_promotion_audience_fixtures` verifies restoration and the test-only gate.
+
 ## Diagnostic Endpoints
 
 | Endpoint | Method | Purpose |

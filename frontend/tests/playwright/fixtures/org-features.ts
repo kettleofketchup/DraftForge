@@ -50,6 +50,7 @@ export interface OrgFeaturesTestData {
   >;
   templates: { pk: number; name: string; org_pk: number }[];
   tournaments: OrgFeaturesRef[];
+  audiences?: Record<string, { pk: number | null; discord_id: string }>;
   conduct: {
     ranked_org_user_pks: number[];
     new_member_org_user_pk: number;
@@ -85,6 +86,7 @@ export async function getOrgFeaturesData(
 export interface ResetOrgFeaturesOptions {
   /** Turn the leadership staff release gate on, leaving closed snapshots pending. */
   releaseGate?: boolean;
+  audiences?: boolean;
 }
 
 /** Rebuild ledger, promo sends, point values, events, templates, switches and roles. */
@@ -93,10 +95,12 @@ export async function resetOrgFeatures(
   options: ResetOrgFeaturesOptions = {},
 ): Promise<OrgFeaturesTestData> {
   return json(
-    await request.post(
-      `${API_URL}/tests/org-features/reset/`,
-      options.releaseGate ? { data: { release_gate: true } } : undefined,
-    ),
+    await request.post(`${API_URL}/tests/org-features/reset/`, {
+      data: {
+        release_gate: options.releaseGate ?? false,
+        audiences: options.audiences ?? false,
+      },
+    }),
     'org-features reset',
   );
 }
