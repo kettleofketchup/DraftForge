@@ -373,7 +373,7 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     discord_announcement_channel_id: {
       label: 'Announcement channel',
       description:
-        'Shared by the pre-day announcement, attendance reminder, profile reminder and series new-event posts ("Message interested users").',
+        'Shared by the pre-day announcement, attendance reminder, profile reminder and series new-event posts.',
     },
     discord_announcement_hours: {
       label: 'Hours before event',

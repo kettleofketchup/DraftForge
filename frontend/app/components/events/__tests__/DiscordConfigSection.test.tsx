@@ -6,6 +6,7 @@ import type { z } from 'zod';
 
 import { Form } from '~/components/ui/form';
 import { DiscordConfigSection } from '../DiscordConfigSection';
+import { EVENT_SECTION_FIELDS } from '../form/settingsFields';
 import { DISCORD_CONFIG_DEFAULTS, type discordConfigSchema } from '../schemas';
 
 vi.mock('../DiscordChannelPicker', () => ({
@@ -62,9 +63,15 @@ function Harness({
 
 const PICKER = 'discord-announcement-channel-select';
 const BLOCK = 'discord-announcement-channel-block';
-const NOTIFY_NOTE =
-  'Message interested users posts new events here only when Pre-day announcement is also on.';
 const usedBy = () => screen.queryByText(/^Used by:/);
+const PRE_DAY = EVENT_SECTION_FIELDS.discord.discord_announcement.label;
+const ATTENDANCE =
+  EVENT_SECTION_FIELDS.discord.discord_confirm_attendance.label;
+const PROFILE = EVENT_SECTION_FIELDS.discord.discord_profile_reminder.label;
+const NOTIFY = EVENT_SECTION_FIELDS.discord.discord_notify_new_events.label;
+const checkboxLabel = (field: string) =>
+  screen.getByTestId(`discord-${field}`).closest('div')?.querySelector('label')
+    ?.textContent;
 
 describe('DiscordConfigSection announcement channel', () => {
   it('hides the picker when no setting uses it', () => {
@@ -76,7 +83,7 @@ describe('DiscordConfigSection announcement channel', () => {
   it('shows the picker for the attendance reminder alone', () => {
     render(<Harness initial={{ discord_confirm_attendance: true }} />);
     expect(screen.getByTestId(PICKER)).toBeInTheDocument();
-    expect(usedBy()).toHaveTextContent(/^Used by: Attendance reminder$/);
+    expect(usedBy()).toHaveTextContent(`Used by: ${ATTENDANCE}`);
     expect(screen.queryByText('Hours before event')).toBeNull();
     expect(screen.queryByText('Mention roles in announcement')).toBeNull();
   });
@@ -84,7 +91,7 @@ describe('DiscordConfigSection announcement channel', () => {
   it('shows the picker for the profile reminder alone', () => {
     render(<Harness initial={{ discord_profile_reminder: true }} />);
     expect(screen.getByTestId(PICKER)).toBeInTheDocument();
-    expect(usedBy()).toHaveTextContent(/^Used by: Profile reminder$/);
+    expect(usedBy()).toHaveTextContent(`Used by: ${PROFILE}`);
   });
 
   it('shows picker, hours and roles for the pre-day announcement', () => {
@@ -94,33 +101,16 @@ describe('DiscordConfigSection announcement channel', () => {
     expect(
       screen.getByText('Mention roles in announcement'),
     ).toBeInTheDocument();
-    expect(usedBy()).toHaveTextContent(/^Used by: Pre-day announcement$/);
+    expect(usedBy()).toHaveTextContent(`Used by: ${PRE_DAY}`);
   });
 
-  it('shows the picker and the gate note for series new-event posts', () => {
+  it('shows the picker for series new-event posts alone', () => {
     render(
       <Harness isRepeater initial={{ discord_notify_new_events: true }} />,
     );
     expect(screen.getByTestId(PICKER)).toBeInTheDocument();
-    expect(usedBy()).toHaveTextContent(
-      /^Used by: Message interested users \(new-event posts\)$/,
-    );
-    expect(screen.getByText(NOTIFY_NOTE)).toBeInTheDocument();
-  });
-
-  it('drops the notify note when pre-day is on', () => {
-    render(
-      <Harness
-        isRepeater
-        initial={{
-          discord_notify_new_events: true,
-          discord_announcement: true,
-        }}
-      />,
-    );
-    expect(
-      screen.queryByText(/only when Pre-day announcement is also on/),
-    ).toBeNull();
+    expect(usedBy()).toHaveTextContent(`Used by: ${NOTIFY}`);
+    expect(screen.queryByText(/only when Pre-day announcement/)).toBeNull();
   });
 
   it('hides the picker when notify is on but not shown', () => {
@@ -137,9 +127,6 @@ describe('DiscordConfigSection announcement channel', () => {
   it('ignores hidden notify on a single event (default prop)', () => {
     render(<Harness initial={{ discord_notify_new_events: true }} />);
     expect(screen.queryByTestId(PICKER)).toBeNull();
-    expect(
-      screen.queryByText(/only when Pre-day announcement is also on/),
-    ).toBeNull();
   });
 
   it('shows only attendance when notify is hidden on a single event', () => {
@@ -152,10 +139,7 @@ describe('DiscordConfigSection announcement channel', () => {
       />,
     );
     expect(screen.getByTestId(PICKER)).toBeInTheDocument();
-    expect(usedBy()).toHaveTextContent(/^Used by: Attendance reminder$/);
-    expect(
-      screen.queryByText(/only when Pre-day announcement is also on/),
-    ).toBeNull();
+    expect(usedBy()).toHaveTextContent(`Used by: ${ATTENDANCE}`);
   });
 
   it('lists every enabled user once and renders one picker', () => {
@@ -172,8 +156,37 @@ describe('DiscordConfigSection announcement channel', () => {
     );
     expect(screen.getAllByTestId(PICKER)).toHaveLength(1);
     expect(usedBy()).toHaveTextContent(
-      /^Used by: Pre-day announcement, Attendance reminder, Profile reminder, Message interested users \(new-event posts\)$/,
+      `Used by: ${[PRE_DAY, ATTENDANCE, PROFILE, NOTIFY].join(', ')}`,
     );
+  });
+
+  it('names each user exactly as its checkbox label', () => {
+    render(
+      <Harness
+        isRepeater
+        initial={{
+          discord_announcement: true,
+          discord_confirm_attendance: true,
+          discord_profile_reminder: true,
+          discord_notify_new_events: true,
+        }}
+      />,
+    );
+    expect(usedBy()?.textContent).toBe(
+      `Used by: ${[
+        'discord_announcement',
+        'discord_confirm_attendance',
+        'discord_profile_reminder',
+        'discord_notify_new_events',
+      ]
+        .map(checkboxLabel)
+        .join(', ')}`,
+    );
+  });
+
+  it('links the used-by line to the picker description', () => {
+    render(<Harness initial={{ discord_confirm_attendance: true }} />);
+    expect(usedBy()?.closest('[id$="-form-item-description"]')).not.toBeNull();
   });
 
   it('shows the shared help and places the block last', () => {
@@ -182,7 +195,7 @@ describe('DiscordConfigSection announcement channel', () => {
     );
     expect(
       screen.getByText(
-        'Shared by the pre-day announcement, attendance reminder, profile reminder and series new-event posts ("Message interested users").',
+        /^Shared by the pre-day announcement, attendance reminder, profile reminder and series new-event posts\./,
       ),
     ).toBeInTheDocument();
     const block = screen.getByTestId(BLOCK);

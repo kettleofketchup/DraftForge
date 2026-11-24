@@ -582,18 +582,11 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
                 </FormControl>
                 <FormDescription>
                   Shared by the pre-day announcement, attendance reminder,
-                  profile reminder and series new-event posts (&quot;Message
-                  interested users&quot;).
+                  profile reminder and series new-event posts.
+                  <span className="block">
+                    {`Used by: ${channelUsers.join(', ')}`}
+                  </span>
                 </FormDescription>
-                <p className="text-sm text-muted-foreground">
-                  {`Used by: ${channelUsers.join(', ')}`}
-                </p>
-                {showNotifyNewEvents && notifyNewEvents && !announcement && (
-                  <p className="text-sm text-muted-foreground">
-                    Message interested users posts new events here only when
-                    Pre-day announcement is also on.
-                  </p>
-                )}
                 <FormMessage />
               </FormItem>
             )}

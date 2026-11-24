@@ -1,3 +1,5 @@
+import { EVENT_SECTION_FIELDS } from './form/settingsFields';
+
 export interface AnnouncementChannelFlags {
   announcement?: boolean;
   confirmAttendance?: boolean;
@@ -5,6 +7,9 @@ export interface AnnouncementChannelFlags {
   notifyNewEvents?: boolean;
   showNotifyNewEvents: boolean;
 }
+
+const label = (field: string): string =>
+  EVENT_SECTION_FIELDS.discord[field].label;
 
 export function announcementChannelUsers({
   announcement,
@@ -14,11 +19,11 @@ export function announcementChannelUsers({
   showNotifyNewEvents,
 }: AnnouncementChannelFlags): string[] {
   const users: string[] = [];
-  if (announcement) users.push('Pre-day announcement');
-  if (confirmAttendance) users.push('Attendance reminder');
-  if (profileReminder) users.push('Profile reminder');
+  if (announcement) users.push(label('discord_announcement'));
+  if (confirmAttendance) users.push(label('discord_confirm_attendance'));
+  if (profileReminder) users.push(label('discord_profile_reminder'));
   if (showNotifyNewEvents && notifyNewEvents) {
-    users.push('Message interested users (new-event posts)');
+    users.push(label('discord_notify_new_events'));
   }
   return users;
 }
