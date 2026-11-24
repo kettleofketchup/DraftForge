@@ -17,6 +17,7 @@ import {
   patchLeadershipSettings,
   putReview,
   putTraits,
+  releaseResults,
   voidReview,
 } from '../api';
 import {
@@ -29,6 +30,7 @@ import {
   usePatchLeadershipSettings,
   usePendingReviews,
   usePutTraits,
+  useReleaseResults,
   useSubmitReview,
   useVoidReview,
   useWithdrawReview,
@@ -54,6 +56,7 @@ vi.mock('../api', () => ({
   patchLeadershipSettings: vi.fn(),
   putReview: vi.fn(),
   putTraits: vi.fn(),
+  releaseResults: vi.fn(),
   unvoidReview: vi.fn(),
   voidReview: vi.fn(),
 }));
@@ -65,7 +68,11 @@ const VIEWER = 9;
 const memberAccess = leadershipFeatureAccess({ viewerPk: VIEWER });
 const adminAccess = leadershipFeatureAccess({
   viewerPk: VIEWER,
-  track: { can_manage: true },
+  track: { can_manage: true, can_moderate: true },
+});
+const staffAccess = leadershipFeatureAccess({
+  viewerPk: VIEWER,
+  track: { can_moderate: true, can_manage: false },
 });
 
 function makeClient() {
@@ -192,6 +199,41 @@ describe('review mutations', () => {
     expect(invalid(keys.leadershipBoard)).toBe(true);
     expect(invalid(keys.event)).toBe(true);
     expect(invalid(keys.conductBoard)).toBe(false);
+  });
+});
+
+describe('release mutation', () => {
+  it('posts the captains and invalidates leadership, standing and the event but not the org', async () => {
+    vi.mocked(releaseResults).mockResolvedValue({ released: [7], skipped: [] });
+    const { wrapper, keys, invalid } = seeded();
+    const hook = renderHook(() => useReleaseResults(ORG, EVENT), { wrapper });
+    await act(() => hook.result.current.mutateAsync({ captains: [7] }));
+    expect(releaseResults).toHaveBeenCalledWith(ORG, EVENT, [7]);
+    expect(invalid(keys.eventReviews)).toBe(true);
+    expect(invalid(keys.member)).toBe(true);
+    expect(invalid(keys.leadershipBoard)).toBe(true);
+    expect(invalid(keys.event)).toBe(true);
+    expect(invalid(keys.org)).toBe(false);
+    expect(invalid(keys.conductBoard)).toBe(false);
+  });
+
+  it('releases the whole event without captains', async () => {
+    vi.mocked(releaseResults).mockResolvedValue({ released: [], skipped: [] });
+    const { wrapper } = seeded();
+    const hook = renderHook(() => useReleaseResults(ORG, EVENT), { wrapper });
+    await act(() => hook.result.current.mutateAsync({}));
+    expect(releaseResults).toHaveBeenCalledWith(ORG, EVENT, undefined);
+  });
+
+  it('invalidates after a refused release', async () => {
+    vi.mocked(releaseResults).mockRejectedValue(new Error('409'));
+    const { wrapper, keys, invalid } = seeded();
+    const hook = renderHook(() => useReleaseResults(ORG, EVENT), { wrapper });
+    await act(async () => {
+      await hook.result.current.mutateAsync({}).catch(() => {});
+    });
+    expect(invalid(keys.eventReviews)).toBe(true);
+    expect(invalid(keys.org)).toBe(false);
   });
 });
 
@@ -342,17 +384,53 @@ describe('query gating', () => {
     expect(getMyReviews).not.toHaveBeenCalled();
   });
 
-  it('does not fetch admin reviews without manage access', async () => {
+  it('does not fetch moderation or settings for a plain member', async () => {
     const { wrapper } = makeClient();
     renderHook(() => useEventReviews(ORG, memberAccess, EVENT, true), {
       wrapper,
     });
     renderHook(() => useLeadershipSettings(ORG, memberAccess), { wrapper });
-    renderHook(() => useLeadershipTraits(ORG, memberAccess), { wrapper });
     await flush();
     expect(getEventReviews).not.toHaveBeenCalled();
     expect(getLeadershipSettings).not.toHaveBeenCalled();
+  });
+
+  it('does not fetch traits for a non-member without staff access', async () => {
+    const { wrapper } = makeClient();
+    const outsider = leadershipFeatureAccess({
+      viewerPk: VIEWER,
+      track: { can_view_own: false },
+    });
+    renderHook(() => useLeadershipTraits(ORG, outsider), { wrapper });
+    await flush();
     expect(getTraits).not.toHaveBeenCalled();
+  });
+
+  it('fetches event reviews and traits for org staff who cannot manage', async () => {
+    vi.mocked(getEventReviews).mockResolvedValue({} as never);
+    vi.mocked(getTraits).mockResolvedValue(traits().traits);
+    const { wrapper } = makeClient();
+    const staffNonMember = leadershipFeatureAccess({
+      viewerPk: VIEWER,
+      track: { can_moderate: true, can_manage: false, can_view_own: false },
+    });
+    renderHook(() => useEventReviews(ORG, staffAccess, EVENT, true), {
+      wrapper,
+    });
+    renderHook(() => useLeadershipTraits(ORG, staffNonMember), { wrapper });
+    renderHook(() => useLeadershipSettings(ORG, staffAccess), { wrapper });
+    await waitFor(() =>
+      expect(getEventReviews).toHaveBeenCalledWith(ORG, EVENT),
+    );
+    await waitFor(() => expect(getTraits).toHaveBeenCalledWith(ORG));
+    expect(getLeadershipSettings).not.toHaveBeenCalled();
+  });
+
+  it('fetches traits for a plain member', async () => {
+    vi.mocked(getTraits).mockResolvedValue(traits().traits);
+    const { wrapper } = makeClient();
+    renderHook(() => useLeadershipTraits(ORG, memberAccess), { wrapper });
+    await waitFor(() => expect(getTraits).toHaveBeenCalledWith(ORG));
   });
 
   it('fetches admin queries with manage access', async () => {

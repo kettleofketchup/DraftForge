@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db import transaction
 
 from app.management.prod_payload import create_positions, steam_account_id
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from common.game import GameType
 from draft.models import Draft, DraftOptions, DraftRound
 from league.models import League
@@ -19,6 +19,7 @@ from tournament.management.prod_payload import (
     parse_date_played,
     resolve_user,
 )
+from tournament.models import Game, Team, Tournament
 
 log = get_logger(__name__)
 

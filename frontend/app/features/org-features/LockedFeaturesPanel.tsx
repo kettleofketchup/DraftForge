@@ -33,6 +33,7 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   conduct: 'Conduct',
   contributions: 'Contributions',
   leadership: 'Leadership',
+  mmr_sync: 'MMR sync API',
   promotion: 'Promotion',
 };
 

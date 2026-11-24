@@ -8,7 +8,7 @@ import {
 } from '../draftResetText';
 
 const games = (count: number): DraftTeamUsage => ({
-  model: 'app.Game',
+  model: 'tournament.Game',
   label: 'game',
   label_plural: 'games',
   count,
@@ -19,7 +19,7 @@ const games = (count: number): DraftTeamUsage => ({
 });
 
 const herodraft: DraftTeamUsage = {
-  model: 'app.HeroDraft',
+  model: 'draft.HeroDraft',
   label: 'HeroDraft',
   label_plural: 'HeroDrafts',
   count: 1,
@@ -77,7 +77,7 @@ describe('forceResetMessage', () => {
   it('falls back when the server sends no usage', () => {
     expect(
       forceResetMessage({
-        references: { 'app.Game.radiant_team': 2 },
+        references: { 'tournament.Game.radiant_team': 2 },
         usage: [],
       }),
     ).toBe(

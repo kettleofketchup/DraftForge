@@ -1,11 +1,35 @@
-export const DEFAULT_EVENT_TAB = 'details';
+export type EventTabCounts = {
+  active: number;
+  tentative: number;
+  waitlisted: number;
+  removed: number;
+};
 
-const STAFF_ONLY_EVENT_TABS: ReadonlySet<string> = new Set(['discord']);
+export type EventTabOption = { value: string; label: string };
 
-export function canViewEventTab(tab: string, isStaff: boolean): boolean {
-  return isStaff || !STAFF_ONLY_EVENT_TABS.has(tab);
+const STAFF_TABS = new Set(['discord', 'history']);
+
+/** Phone page-nav options; Discord and History are staff-only. */
+export function eventTabOptions(
+  isAdmin: boolean,
+  counts: EventTabCounts,
+): EventTabOption[] {
+  return [
+    { value: 'details', label: 'Details' },
+    { value: 'signups', label: `${counts.active} Signups` },
+    ...(counts.tentative > 0
+      ? [{ value: 'tentative', label: `${counts.tentative} Tentative` }]
+      : []),
+    { value: 'waitlist', label: `${counts.waitlisted} Waitlist` },
+    ...(counts.removed > 0
+      ? [{ value: 'removed', label: `${counts.removed} Removed` }]
+      : []),
+    ...(isAdmin ? [{ value: 'discord', label: 'Discord' }] : []),
+    ...(isAdmin ? [{ value: 'history', label: 'History' }] : []),
+  ];
 }
 
-export function visibleEventTab(tab: string, isStaff: boolean): string {
-  return canViewEventTab(tab, isStaff) ? tab : DEFAULT_EVENT_TAB;
+/** Falls back to Details when a non-staff viewer lands on a staff-only tab. */
+export function resolveEventTab(tab: string, isAdmin: boolean): string {
+  return !isAdmin && STAFF_TABS.has(tab) ? 'details' : tab;
 }

@@ -8,8 +8,6 @@ import {
   fetchUsers,
   get_dtx_members,
   getGames,
-  getLeagues,
-  getOrganizations,
   getTeams,
   getTournaments,
   getTournamentsBasic,
@@ -97,22 +95,14 @@ interface UserState {
   setAutoRefreshDraft: (refresh: (() => Promise<void>) | null) => void;
 
   // Organizations
-  organizations: OrganizationType[];
   organization: OrganizationType | null;
   organizationPk: number | null; // Track which org is loaded
-  organizationsLoaded: boolean; // Track if orgs list is loaded
-  setOrganizations: (orgs: OrganizationType[]) => void;
   setOrganization: (org: OrganizationType | null) => void;
-  getOrganizations: () => Promise<void>;
   getOrganization: (pk: number, force?: boolean) => Promise<void>;
 
   // Leagues
-  leagues: LeagueType[];
   league: LeagueType | null;
-  leaguesOrgId: number | null | 'all'; // Track which org's leagues are loaded ('all' for no filter)
-  setLeagues: (leagues: LeagueType[]) => void;
   setLeague: (league: LeagueType | null) => void;
-  getLeagues: (orgId?: number) => Promise<void>;
 }
 export const useUserStore = create<UserState>()(
   persist(
@@ -418,28 +408,10 @@ export const useUserStore = create<UserState>()(
       clearUserAPIError: () => set({ userAPIError: null }),
 
       // Organizations
-      organizations: [] as OrganizationType[],
       organization: null,
       organizationPk: null,
-      organizationsLoaded: false,
-      setOrganizations: (orgs) =>
-        set({ organizations: orgs, organizationsLoaded: true }),
       setOrganization: (org) =>
         set({ organization: org, organizationPk: org?.pk ?? null }),
-      getOrganizations: async () => {
-        // Skip if already loaded
-        if (get().organizationsLoaded && get().organizations.length > 0) {
-          log.debug('Organizations already loaded, skipping fetch');
-          return;
-        }
-        try {
-          const response = await getOrganizations();
-          set({ organizations: response, organizationsLoaded: true });
-          log.debug('Organizations fetched successfully:', response);
-        } catch (error) {
-          log.error('Error fetching organizations:', error);
-        }
-      },
       getOrganization: async (pk: number, force = false) => {
         // Skip if already loaded for this pk (unless forced)
         if (!force && get().organizationPk === pk && get().organization) {
@@ -457,26 +429,8 @@ export const useUserStore = create<UserState>()(
       },
 
       // Leagues
-      leagues: [] as LeagueType[],
       league: null,
-      leaguesOrgId: null,
-      setLeagues: (leagues) => set({ leagues }),
       setLeague: (league) => set({ league }),
-      getLeagues: async (orgId?: number) => {
-        const targetOrgId = orgId ?? 'all';
-        // Skip if already loaded for this org
-        if (get().leaguesOrgId === targetOrgId && get().leagues.length > 0) {
-          log.debug('Leagues already loaded for org:', targetOrgId);
-          return;
-        }
-        try {
-          const response = await getLeagues(orgId);
-          set({ leagues: response, leaguesOrgId: targetOrgId });
-          log.debug('Leagues fetched successfully:', response);
-        } catch (error) {
-          log.error('Error fetching leagues:', error);
-        }
-      },
     }),
     {
       name: 'dtx-storage', // sessionStorage key

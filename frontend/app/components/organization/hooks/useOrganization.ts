@@ -34,3 +34,15 @@ export function useOrganization(pk: number | undefined) {
     refetch,
   };
 }
+
+/** useOrganization for a page that owns orgStore.currentOrg; clears it on pk change and unmount. */
+export function useCurrentOrganization(pk: number | undefined) {
+  const result = useOrganization(pk);
+
+  useEffect(() => {
+    if (!pk) useOrgStore.getState().setCurrentOrg(null);
+    return () => useOrgStore.getState().setCurrentOrg(null);
+  }, [pk]);
+
+  return result;
+}

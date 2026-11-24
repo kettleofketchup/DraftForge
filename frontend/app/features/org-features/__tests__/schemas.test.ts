@@ -15,12 +15,14 @@ describe('OrgFeatureRowsSchema', () => {
       row('conduct'),
       row('contributions'),
       row('leadership'),
+      row('mmr_sync'),
       row('promotion'),
     ]);
     expect(parsed.map((r) => r.feature)).toEqual([
       'conduct',
       'contributions',
       'leadership',
+      'mmr_sync',
       'promotion',
     ]);
   });

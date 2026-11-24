@@ -9,8 +9,15 @@ from django.utils import timezone
 import events.eligibility.store  # noqa: F401
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
-from events.constants import EVENT_STATE_TRANSITIONS, EventState
+from events.constants import (
+    EVENT_STATE_TRANSITIONS,
+    ActorRole,
+    EventState,
+    SignupMeans,
+)
+from events.ledger import SignupActor
 from events.models import Event
+from events.ready_check_core import end_ready_check_on_completion
 from org.models import OrgLog
 from org.standing import api as standing
 from telemetry.logging import get_logger
@@ -22,6 +29,12 @@ CloseSource = Literal["admin", "auto"]
 _CLOSE_STATES: frozenset[EventState] = frozenset(
     {EventState.COMPLETED, EventState.CANCELLED}
 )
+
+
+def _completion_actor(user: CustomUser | None) -> SignupActor:
+    if user is None:
+        return SignupActor.system()
+    return SignupActor(user=user, role=ActorRole.STAFF, means=SignupMeans.WEB)
 
 
 @dataclass(frozen=True)
@@ -79,6 +92,8 @@ def close_event(
         old_state = current
         stale = copy.copy(event)
         event.refresh_from_db(from_queryset=Event.objects.nocache().all())
+        if old_state == EventState.ROLL_CALL:
+            end_ready_check_on_completion(event, actor=_completion_actor(actor))
 
         result = standing.on_event_closed(
             event,

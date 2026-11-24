@@ -23,6 +23,7 @@ export {
   usePatchLeadershipSettings,
   usePendingReviews,
   usePutTraits,
+  useReleaseResults,
   useSubmitReview,
   useUnvoidReview,
   useVoidReview,

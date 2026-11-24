@@ -15,14 +15,10 @@ def player_won(player_slot: int, radiant_win: bool) -> bool:
     return (player_slot < 128) == radiant_win
 
 
-def update_player_league_stats(
+def recompute_player_league_totals(
     user: CustomUser, league_id: int
 ) -> LeaguePlayerStats | None:
-    """
-    Recalculate a player's aggregated stats for a specific league.
-    Creates LeaguePlayerStats if it doesn't exist.
-    """
-    # Get all player's match stats for this league
+    """Save a player's league totals and averages; leaves mmr_adjustment alone."""
     match_stats = PlayerMatchStats.objects.filter(
         user=user,
         match__league_id=league_id,
@@ -38,7 +34,6 @@ def update_player_league_stats(
         )
         return None
 
-    # Calculate aggregates
     totals = match_stats.aggregate(
         total_kills=Sum("kills"),
         total_deaths=Sum("deaths"),
@@ -49,7 +44,6 @@ def update_player_league_stats(
 
     games_played = match_stats.count()
 
-    # Calculate wins/losses
     wins = 0
     losses = 0
     for stat in match_stats:
@@ -58,73 +52,98 @@ def update_player_league_stats(
         else:
             losses += 1
 
-    # Create or update LeaguePlayerStats
-    stats, created = LeaguePlayerStats.objects.update_or_create(
-        user=user,
-        league_id=league_id,
-        defaults={
-            "games_played": games_played,
-            "wins": wins,
-            "losses": losses,
-            "total_kills": totals["total_kills"] or 0,
-            "total_deaths": totals["total_deaths"] or 0,
-            "total_assists": totals["total_assists"] or 0,
-            "total_gpm": totals["total_gpm"] or 0,
-            "total_xpm": totals["total_xpm"] or 0,
-        },
-    )
-
-    # Recalculate averages
+    stats, _ = LeaguePlayerStats.objects.get_or_create(user=user, league_id=league_id)
+    stats.games_played = games_played
+    stats.wins = wins
+    stats.losses = losses
+    stats.total_kills = totals["total_kills"] or 0
+    stats.total_deaths = totals["total_deaths"] or 0
+    stats.total_assists = totals["total_assists"] or 0
+    stats.total_gpm = totals["total_gpm"] or 0
+    stats.total_xpm = totals["total_xpm"] or 0
     stats.recalculate_averages()
-
-    # Calculate MMR adjustment
-    stats.mmr_adjustment = calculate_mmr_adjustment(stats)
     stats.save()
+    return stats
 
-    # Update user's league_mmr
-    update_user_league_mmr(user)
 
+def apply_mmr_adjustment(stats: LeaguePlayerStats) -> None:
+    stats.mmr_adjustment = calculate_mmr_adjustment(stats)
+    stats.save(update_fields=["mmr_adjustment", "last_updated"])
+
+
+def _log_stats_updated(user: CustomUser, stats: LeaguePlayerStats) -> None:
     logger.info(
         "league_stats_updated",
         system="steam",
         subsystem="stats",
         username=user.username,
-        league_id=league_id,
-        games_played=games_played,
-        wins=wins,
-        losses=losses,
+        league_id=stats.league_id,
+        games_played=stats.games_played,
+        wins=stats.wins,
+        losses=stats.losses,
         mmr_adjustment=stats.mmr_adjustment,
     )
 
+
+def update_player_league_stats(
+    user: CustomUser, league_id: int
+) -> LeaguePlayerStats | None:
+    """
+    Recalculate a player's aggregated stats for a specific league.
+    Creates LeaguePlayerStats if it doesn't exist.
+    """
+    stats = recompute_player_league_totals(user, league_id)
+    if stats is None:
+        return None
+
+    apply_mmr_adjustment(stats)
+
+    update_user_league_mmr(user)
+
+    _log_stats_updated(user, stats)
     return stats
+
+
+def league_user_ids(league_id: int) -> list[int]:
+    return list(
+        PlayerMatchStats.objects.filter(match__league_id=league_id, user__isnull=False)
+        .values_list("user_id", flat=True)
+        .distinct()
+    )
 
 
 def update_all_league_stats_for_league(league_id: int) -> int:
     """
     Update league stats for all users who have played in a league.
     Returns count of users updated.
-    """
-    # Find all users with match stats in this league
-    user_ids = (
-        PlayerMatchStats.objects.filter(match__league_id=league_id, user__isnull=False)
-        .values_list("user_id", flat=True)
-        .distinct()
-    )
 
-    updated_count = 0
+    Every player's averages are saved before any adjustment is computed, so
+    each adjustment sees the whole league's current averages.
+    """
+    user_ids = league_user_ids(league_id)
+    users = CustomUser.objects.in_bulk(user_ids)
+
+    updated: list[tuple[CustomUser, LeaguePlayerStats]] = []
     for user_id in user_ids:
-        try:
-            user = CustomUser.objects.get(pk=user_id)
-            update_player_league_stats(user, league_id)
-            updated_count += 1
-        except CustomUser.DoesNotExist:
+        user = users.get(user_id)
+        if user is None:
             continue
+        stats = recompute_player_league_totals(user, league_id)
+        if stats is not None:
+            updated.append((user, stats))
+
+    for _, stats in updated:
+        apply_mmr_adjustment(stats)
+
+    for user, stats in updated:
+        update_user_league_mmr(user)
+        _log_stats_updated(user, stats)
 
     logger.info(
         "league_stats_bulk_updated",
         system="steam",
         subsystem="stats",
         league_id=league_id,
-        count=updated_count,
+        count=len(updated),
     )
-    return updated_count
+    return len(updated)

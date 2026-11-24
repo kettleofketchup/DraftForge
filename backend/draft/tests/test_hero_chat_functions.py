@@ -15,7 +15,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from structlog.testing import capture_logs
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from draft.models import (
     HeroDraft,
     HeroDraftChatMembership,
@@ -50,6 +50,7 @@ from draft.services.hero_chat import (
 )
 from league.models import League
 from org.models import Organization
+from tournament.models import Game, Team, Tournament
 
 Channel = HeroDraftChatMessage.Channel
 Kind = HeroDraftChatMessage.Kind

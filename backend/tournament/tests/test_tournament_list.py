@@ -9,10 +9,10 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import Tournament
 from league.models import League
 from org.models import Organization
 from tournament.buckets import tournament_bucket_cutoff
+from tournament.models import Tournament
 
 LIST_URL = "/api/tournaments-list/"
 PLAYED = datetime(2026, 11, 20, 18, 0, tzinfo=timezone.utc)
@@ -238,7 +238,8 @@ class TournamentListBucketTests(_BucketFixtureMixin):
 
     def test_cutoff_computed_once(self) -> None:
         with mock.patch(
-            "app.views_main.tournament_bucket_cutoff", wraps=tournament_bucket_cutoff
+            "tournament.views.tournament.tournament_bucket_cutoff",
+            wraps=tournament_bucket_cutoff,
         ) as spy:
             for qs in ("", "?bucket=upcoming", "?bucket=archived&page=1"):
                 with self.subTest(qs=qs):

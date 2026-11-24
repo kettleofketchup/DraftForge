@@ -1,7 +1,8 @@
-from app.models import CustomUser, Game, Team
-from app.serializers import tournament_organization
+from app.models import CustomUser
 from org.user_search import user_name_q
 from steam.models import Match, PlayerMatchStats, SuggestionTier
+from tournament.models import Game, Team
+from tournament.serializers.users import tournament_organization
 
 
 def get_team_steam_ids(team: Team) -> set[int]:

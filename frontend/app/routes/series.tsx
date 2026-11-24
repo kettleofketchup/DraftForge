@@ -13,14 +13,11 @@ import {
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import {
-  reactivateRepeater,
-  subscribeToRepeater,
-  unsubscribeFromRepeater,
-} from '~/components/api/api';
+import { reactivateRepeater } from '~/components/api/api';
 import api from '~/components/api/axios';
 import { EventStateBadge } from '~/components/events';
 import { CreateSeriesEventModal } from '~/components/events/CreateSeriesEventModal';
+import { DeleteSeriesDialog } from '~/components/events/DeleteSeriesDialog';
 import { EditRepeaterModal } from '~/components/events/EditRepeaterModal';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import {
@@ -36,9 +33,14 @@ import {
   SecondaryButton,
 } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
-import { ConfirmDialog, DeleteDialog } from '~/components/ui/dialogs';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
-import { useEventRepeater } from '~/hooks/useEvent';
+import {
+  repeaterKeys,
+  useDeleteEventRepeaterMutation,
+  useEventRepeater,
+  useRepeaterSubscriptionMutation,
+} from '~/hooks/useEvent';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import { generateMeta } from '~/lib/seo';
 import { useUserStore } from '~/store/userStore';
@@ -65,7 +67,7 @@ export function meta({ data }: Route.MetaArgs) {
 
 function useRepeaterEvents(repeaterId: number | null) {
   return useQuery<EventType[]>({
-    queryKey: ['repeater-events', repeaterId],
+    queryKey: repeaterKeys.events(repeaterId),
     queryFn: () =>
       api.get(`/events/?event_repeater=${repeaterId}`).then((r) => r.data),
     enabled: !!repeaterId,
@@ -141,51 +143,26 @@ export default function SeriesPage() {
   const { organization } = useOrganization(repeater?.organization);
   const isStaff = useIsOrganizationStaff(organization);
 
-  const subscribeMutation = useMutation({
-    mutationFn: () => subscribeToRepeater(id!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['repeater', id] });
-      queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', id] });
-      toast.success('Subscribed to notifications');
-    },
-  });
+  const { subscribe: subscribeMutation, unsubscribe: unsubscribeMutation } =
+    useRepeaterSubscriptionMutation();
 
   const navigate = useNavigate();
-
-  const unsubscribeMutation = useMutation({
-    mutationFn: () => unsubscribeFromRepeater(id!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['repeater', id] });
-      queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', id] });
-      toast.success('Unsubscribed from notifications');
-    },
-  });
 
   const reactivateMutation = useMutation({
     mutationFn: () => reactivateRepeater(id!),
     onSuccess: (data) => {
       toast.success(data.detail);
-      queryClient.invalidateQueries({ queryKey: ['repeater', id] });
-      queryClient.invalidateQueries({ queryKey: ['repeater-events', id] });
-      queryClient.invalidateQueries({ queryKey: ['repeaters'] });
-      queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
+      queryClient.invalidateQueries({ queryKey: repeaterKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: repeaterKeys.events(id) });
+      queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       setShowReactivate(false);
     },
     onError: () => toast.error('Failed to reactivate series'),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: () => api.delete(`/events/repeaters/${id}/`),
-    onSuccess: () => {
-      toast.success('Event series deleted');
-      queryClient.invalidateQueries({ queryKey: ['repeaters'] });
-      navigate('/events');
-    },
-    onError: () => toast.error('Failed to delete event series'),
-  });
+  const deleteMutation = useDeleteEventRepeaterMutation();
 
-  // Current: signups_open, roll_call, in_progress
   const currentEvents = useMemo(
     () =>
       events?.filter((e) =>
@@ -200,7 +177,6 @@ export default function SeriesPage() {
     [events],
   );
 
-  // Past: completed, cancelled
   const pastEvents = useMemo(
     () =>
       events?.filter((e) => ['completed', 'cancelled'].includes(e.state)) || [],
@@ -258,8 +234,14 @@ export default function SeriesPage() {
             (repeater.is_subscribed ? (
               <SecondaryButton
                 size="sm"
-                onClick={() => unsubscribeMutation.mutate()}
+                onClick={() =>
+                  unsubscribeMutation.mutate(repeater.id, {
+                    onSuccess: () =>
+                      toast.success('Unsubscribed from notifications'),
+                  })
+                }
                 disabled={unsubscribeMutation.isPending}
+                data-testid="unsubscribe-series-btn"
               >
                 <BellOff className="h-4 w-4 mr-1" />
                 Unsubscribe
@@ -267,8 +249,14 @@ export default function SeriesPage() {
             ) : (
               <PrimaryButton
                 size="sm"
-                onClick={() => subscribeMutation.mutate()}
+                onClick={() =>
+                  subscribeMutation.mutate(repeater.id, {
+                    onSuccess: () =>
+                      toast.success('Subscribed to notifications'),
+                  })
+                }
                 disabled={subscribeMutation.isPending}
+                data-testid="subscribe-series-btn"
               >
                 <Bell className="h-4 w-4 mr-1" />
                 Subscribe
@@ -456,9 +444,11 @@ export default function SeriesPage() {
           onOpenChange={(open) => {
             setEditOpen(open);
             if (!open) {
-              queryClient.invalidateQueries({ queryKey: ['repeater', id] });
               queryClient.invalidateQueries({
-                queryKey: ['repeater-events', id],
+                queryKey: repeaterKeys.detail(id),
+              });
+              queryClient.invalidateQueries({
+                queryKey: repeaterKeys.events(id),
               });
             }
           }}
@@ -493,29 +483,24 @@ export default function SeriesPage() {
         cancelTestId="reactivate-series-cancel"
       />
 
-      <DeleteDialog
+      <DeleteSeriesDialog
         open={showDeleteSeries}
         onOpenChange={setShowDeleteSeries}
-        entityKind="Event Series"
-        entityName={repeater.name}
-        description={
-          <>
-            This will delete the series <strong>{repeater.name}</strong>.
-            Existing events that have already been generated are preserved.
-          </>
-        }
+        seriesName={repeater.name}
         isLoading={deleteMutation.isPending}
         onConfirm={async () => {
           try {
-            await deleteMutation.mutateAsync();
+            await deleteMutation.mutateAsync({
+              id: repeater.id,
+              organization: repeater.organization,
+            });
           } catch {
-            // toast handled by mutation onError
+            toast.error('Failed to delete event series');
+            return;
           }
+          toast.success('Event series deleted');
+          navigate('/events');
         }}
-        contentTestId="delete-series-dialog"
-        inputTestId="delete-series-confirm-input"
-        confirmTestId="delete-series-confirm"
-        cancelTestId="delete-series-cancel"
       />
     </div>
   );

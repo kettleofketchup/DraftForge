@@ -28,13 +28,14 @@ APPS = [
     "opsnotices",
     "league",
     "draft",
+    "tournament",
 ]
 
 pytestmark = pytest.mark.skipif(JUST is None, reason="just is not on PATH")
 
 RECORDER = """#!/usr/bin/env bash
 {{
-    printf '%s\\0' "$PWD" "${{DISABLE_CACHE-}}" "${{TEST-}}" "${{DF_BASE_URL-}}" "${{DOTA_LOBBY_SIMULATOR_REQUIRED-}}" "$(basename "$0")" "$@"
+    printf '%s\\0' "$PWD" "${{DISABLE_CACHE-}}" "${{TEST-}}" "${{DF_BASE_URL-}}" "${{DOTA_LOBBY_SIMULATOR_REQUIRED-}}" "${{DF_PW_RUN_DIR-}}" "$(basename "$0")" "$@"
     printf '\\036'
 }} >> {log}
 if [[ "${{1-}} ${{2-}} ${{3-}}" == "-m scripts.compose env" ]]; then
@@ -68,6 +69,7 @@ class Call:
     test: str
     base_url: str
     sim_required: str
+    run_dir: str
     tool: str
     argv: list[str]
 
@@ -97,8 +99,10 @@ class Runner:
         for record in self.log.read_bytes().split(b"\x1e"):
             if not record:
                 continue
-            cwd, cache, test, url, sim, tool, *argv = record.decode().split("\0")[:-1]
-            out.append(Call(Path(cwd), cache, test, url, sim, tool, argv))
+            cwd, cache, test, url, sim, run_dir, tool, *argv = record.decode().split(
+                "\0"
+            )[:-1]
+            out.append(Call(Path(cwd), cache, test, url, sim, run_dir, tool, argv))
         return out
 
     def dry_run(self, *args: str) -> str:
@@ -141,6 +145,7 @@ def run(tmp_path: Path) -> Runner:
         "DF_TEST_DB_FILE": str(test_db),
         "DF_DB_DIR": str(db_dir),
         "DF_BACKEND_ENV_FILE": str(tmp_path / "backend.env"),
+        "DF_PW_RESULTS_DIR": str(tmp_path / "test-results"),
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
     }
     for key in (
@@ -150,6 +155,10 @@ def run(tmp_path: Path) -> Runner:
         "DOTA_LOBBY_SIMULATOR_REQUIRED",
         "DF_PW_CONTAINER",
         "DF_PW_IMAGE",
+        "DF_PW_RUN_DIR",
+        "DF_PW_KEEP_RUNS",
+        "CI",
+        "GITHUB_ACTIONS",
     ):
         env.pop(key, None)
     return Runner(log, env)
@@ -337,14 +346,27 @@ def test_dev_debug_migrates_with_dev_env_then_starts_dev(run: Runner) -> None:
     assert up.test == "false"
 
 
-DB_FILES = {"test.db.sqlite3", "dev.db.sqlite3", "prod.db.sqlite3"}
+DB_FILES = {"test.db.sqlite3", "dev.db.sqlite3", "data"}
 
 
 def test_touch_dbs_creates_the_dbs_in_df_db_dir(run: Runner) -> None:
     before = {p.name for p in (ROOT / "backend").iterdir()}
     assert run("db::touch-dbs").returncode == 0
-    assert {p.name for p in Path(run.env["DF_DB_DIR"]).iterdir()} == DB_FILES
+    db_dir = Path(run.env["DF_DB_DIR"])
+    assert {p.name for p in db_dir.iterdir()} == DB_FILES
+    assert [p.name for p in (db_dir / "data").iterdir()] == ["prod.db.sqlite3"]
     assert {p.name for p in (ROOT / "backend").iterdir()} == before
+
+
+def test_release_refuses_while_the_db_is_outside_the_data_dir(run: Runner) -> None:
+    db_dir = Path(run.env["DF_DB_DIR"])
+    (db_dir / "prod.db.sqlite3").write_bytes(b"x")
+    (db_dir / "data").mkdir()
+    (db_dir / "data" / "prod.db.sqlite3").write_bytes(b"")
+    result = run("dev::release")
+    assert result.returncode == 1
+    assert "data/prod.db.sqlite3" in result.stderr
+    assert run.calls() == []
 
 
 def test_migrate_all_uses_each_env(run: Runner) -> None:
@@ -685,3 +707,62 @@ def test_setup_stops_cleanly_when_no_slot_is_free(run: Runner) -> None:
     assert "all 10 slots are held" in result.stderr
     calls = run.calls()
     assert [c.argv[-1] for c in calls] == ["ensure"]
+
+
+def test_each_local_playwright_run_gets_its_own_results_dir(
+    run: Runner, tmp_path: Path
+) -> None:
+    results = tmp_path / "test-results"
+    dirs = []
+    for _ in range(2):
+        assert run("test::pw::spec", "01-navigation").returncode == 0
+        npx = run.calls()[-1]
+        assert npx.tool == "npx"
+        dirs.append(Path(npx.run_dir))
+    assert dirs[0] != dirs[1]
+    assert all(d.parent == results / "runs" and d.is_dir() for d in dirs)
+    assert (results / "latest").resolve() == dirs[1]
+
+
+def test_playwright_in_ci_keeps_the_flat_results_dir(run: Runner) -> None:
+    assert run("test::pw::cicd-chromium", CI="true").returncode == 0
+    assert run.calls()[-1].run_dir == ""
+
+
+def test_playwright_keeps_a_callers_run_dir(run: Runner, tmp_path: Path) -> None:
+    mine = str(tmp_path / "mine")
+    assert run("test::pw::spec", "x", DF_PW_RUN_DIR=mine).returncode == 0
+    assert run.calls()[-1].run_dir == mine
+    assert not (tmp_path / "test-results").exists()
+
+
+def test_playwright_runner_image_gets_the_run_dir(run: Runner, tmp_path: Path) -> None:
+    _docker_stub(tmp_path)
+    assert run("test::pw::spec", "x", DF_PW_CONTAINER="1").returncode == 0
+    docker = run.calls()[-1]
+    assert docker.tool == "docker" and docker.run_dir
+    i = docker.argv.index("DF_PW_RUN_DIR")
+    assert docker.argv[i - 1] == "-e"
+
+
+def test_pw_run_dir_prunes_old_runs(tmp_path: Path) -> None:
+    runs = tmp_path / "test-results" / "runs"
+    for i in range(4):
+        (runs / f"20200101T00000{i}Z-1").mkdir(parents=True)
+    env = {
+        **os.environ,
+        "DF_PW_RESULTS_DIR": str(tmp_path / "test-results"),
+        "DF_PW_KEEP_RUNS": "2",
+    }
+    out = subprocess.run(
+        [str(ROOT / "scripts" / "pw-run-dir.sh"), str(tmp_path)],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert sorted(p.name for p in runs.iterdir()) == [
+        "20200101T000003Z-1",
+        Path(out).name,
+    ]
+    assert (tmp_path / "test-results" / "latest").resolve() == Path(out)

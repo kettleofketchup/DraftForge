@@ -46,6 +46,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
+import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import {
@@ -120,9 +121,9 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     null,
   );
   const lastTieKeyRef = useRef<string | null>(null);
-  const isStaff = useUserStore((state) => state.isStaff);
+  const canManage = useCanManageCurrentTournament();
   const currentUser = useUserStore((state) => state.currentUser);
-  const timer = useTeamDraftTimerProps(currentUser?.pk, isStaff());
+  const timer = useTeamDraftTimerProps(currentUser?.pk, canManage);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
@@ -146,25 +147,26 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     }
   };
 
-  // Sync URL with modal open/close state
-  // Note: Don't call setLive here - TournamentDetailPage handles live state based on URL
+  // Initialize the local view before the URL navigation can finish.
   const handleOpenChange = useCallback(
     (isOpen: boolean) => {
       // The Activity iframe must stay on /activity: leaving it drops the
       // Activity credential and lands on website routes that need a cookie login.
       if (embedded) return;
+      if (isOpen) setAutoAdvance(true);
+      setLive(isOpen);
       setOpen(isOpen);
       if (pk) {
         if (isOpen) {
-          // Add /draft to URL when opening - TournamentDetailPage will set live=true
+          // Add /draft to URL when opening.
           navigate(`/tournament/${pk}/teams/draft`, { replace: true });
         } else {
-          // Remove /draft from URL when closing - TournamentDetailPage will set live=false
+          // Remove /draft from URL when closing.
           navigate(`/tournament/${pk}/teams`, { replace: true });
         }
       }
     },
-    [embedded, pk, navigate],
+    [embedded, pk, navigate, setAutoAdvance, setLive],
   );
 
   // Auto-open modal when ?draft=open is in URL (from share URL)
@@ -502,7 +504,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
   const mainView = () => {
     // Show start draft UI when no draft exists
     if (!draft || !draft.pk) {
-      if (embedded || !isStaff()) {
+      if (embedded || !canManage) {
         return (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center space-y-2">
@@ -585,7 +587,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
           draftPk={draft.pk}
           teams={tournament?.teams ?? []}
           currentUserPk={currentUser?.pk}
-          isStaff={isStaff()}
+          isStaff={canManage}
         />
       );
     }
@@ -634,7 +636,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
       buttonIcon = <EyeIcon />;
       tooltipText = 'View the completed team draft results';
       testId = 'viewCompletedTeamDraftButton';
-    } else if (isStaff()) {
+    } else if (canManage) {
       buttonLabel = 'Open draft';
       buttonLabelMobile = 'Draft';
       buttonIcon = <ClipboardPen />;
@@ -731,7 +733,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
                   {/* Top row: Moderation (always visible) + Navigation + Actions toggle */}
                   <div className="flex items-center justify-between p-2 gap-2">
                     {/* Moderation actions - always visible on left (staff only) */}
-                    {isStaff() ? (
+                    {canManage ? (
                       <div className="flex items-center gap-1 shrink-0">
                         {!embedded && (
                           <DraftModerationDropdown

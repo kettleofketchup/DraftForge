@@ -8,7 +8,6 @@ from cacheops.redis import redis_client as cacheops_redis
 from django.conf import settings
 from django.test import TransactionTestCase
 
-from app.models import Tournament
 from draft.tasks.draft_tick import (
     conn_count_key,
     get_connection_count,
@@ -17,6 +16,7 @@ from draft.tasks.draft_tick import (
     increment_connection_count,
 )
 from tests.populate.utils import flush_redis_cache
+from tournament.models import Tournament
 from user.tests.test_cacheops_integration import _redis_reachable
 
 
