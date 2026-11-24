@@ -33,6 +33,10 @@ from org.models_promotion import (
     PromoSend,  # noqa: F401
     PromoTemplate,  # noqa: F401
 )
+from org.models_promotion_sync import (
+    ExternalPromotionReceipt,  # noqa: F401
+    PromotionContactOutbox,  # noqa: F401
+)
 from org.models_settings import OrgSettings  # noqa: F401
 
 

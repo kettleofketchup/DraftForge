@@ -1,0 +1,38 @@
+{
+  "description": "Inbound SFG -> DraftForge import source_hash. Covers only immutable source facts (source, source_contact_id, event_id, discord_id, recorded_at, contact_method, linkage); user_id and org_user_id are mutable DraftForge associations and never change the digest. Same canonicalisation as receipt_hash.json.",
+  "source": "sfg",
+  "entries": [
+    {
+      "source_contact_id": "8021",
+      "event_id": "720",
+      "user_id": null,
+      "org_user_id": null,
+      "discord_id": "123456789012345678",
+      "recorded_at": "2026-11-24T11:30:00Z",
+      "contact_method": "DISCORD_DM",
+      "linkage": "occasion"
+    },
+    {
+      "source_contact_id": "8021",
+      "event_id": "720",
+      "user_id": "9001",
+      "org_user_id": null,
+      "discord_id": "123456789012345678",
+      "recorded_at": "2026-11-24T11:30:00Z",
+      "contact_method": "DISCORD_DM",
+      "linkage": "occasion"
+    },
+    {
+      "source_contact_id": "8021",
+      "event_id": "720",
+      "user_id": "9001",
+      "org_user_id": "9100",
+      "discord_id": "123456789012345678",
+      "recorded_at": "2026-11-24T11:30:00.000000Z",
+      "contact_method": "DISCORD_DM",
+      "linkage": "occasion"
+    }
+  ],
+  "canonical": "{\"contact_method\":\"DISCORD_DM\",\"discord_id\":\"123456789012345678\",\"event_id\":\"720\",\"linkage\":\"occasion\",\"recorded_at\":\"2026-11-24T11:30:00.000000Z\",\"source\":\"sfg\",\"source_contact_id\":\"8021\"}",
+  "sha256": "37f7a732b47f786d18aba2293faac2a34c243ae79deae20cbd28bc3df1268b3c"
+}

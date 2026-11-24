@@ -35,7 +35,8 @@ from org.promotion.services import record_promo_send, undo_promo_send
 from tournament.models import Tournament
 
 # Close, reopen, merge and delete counts include the registered conduct and
-# leadership tracks.
+# leadership tracks. Sends add the outbox row (existing-row check, membership
+# lookup, insert); user and membership deletes null the external-receipt links.
 CLOSE_ADMIN_COMPLETE_QUERIES = 46
 CLOSE_AUTO_CANCEL_QUERIES = 42
 CLOSE_ADMIN_CANCEL_QUERIES = 12
@@ -46,14 +47,14 @@ PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 39
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 200
-MERGE_CLAIM_QUERIES = 182
-DELETE_API_QUERIES = 108
-DELETE_ADMIN_QUERIES = 159
+MERGE_DISCORD_QUERIES = 203
+MERGE_CLAIM_QUERIES = 184
+DELETE_API_QUERIES = 110
+DELETE_ADMIN_QUERIES = 161
 DELETE_ADMIN_CONFIRM_QUERIES = 53
-PROMO_SEND_QUERIES = 23
+PROMO_SEND_QUERIES = 26
 PROMO_UNDO_QUERIES = 8
-PROMO_RELEASE_QUERIES = 122
+PROMO_RELEASE_QUERIES = 124
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8

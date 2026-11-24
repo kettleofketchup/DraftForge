@@ -12,6 +12,7 @@ from org.contributions.services import (
     has_promo_entry,
     revoke_promo_entry,
 )
+from org.integration.outbox import enqueue_send
 from org.models import PromoSend, PromoTemplate
 from org.permissions import (
     has_org_promoter_access,
@@ -129,6 +130,7 @@ def record_promo_send(
         text=text,
         earns_points=earns,
     )
+    enqueue_send(send)
     if earns:
         _award_send(send, event, sender)
     log.info(
