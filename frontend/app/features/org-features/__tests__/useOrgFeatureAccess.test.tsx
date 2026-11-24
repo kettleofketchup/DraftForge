@@ -9,6 +9,7 @@ import {
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import {
+  apiTokenKeys,
   conductKeys,
   contributionsKeys,
   orgFeaturesKey,
@@ -79,6 +80,8 @@ const allFalseFlags = {
   canViewOwnConduct: false,
   canViewConductDetails: false,
   canManageConduct: false,
+  mmrSyncEnabled: false,
+  canUseMmrSync: false,
   standingTracks: [],
 };
 
@@ -158,6 +161,8 @@ describe('useOrgFeatureAccess', () => {
       canViewOwnConduct: true,
       canViewConductDetails: true,
       canManageConduct: true,
+      mmrSyncEnabled: false,
+      canUseMmrSync: false,
       standingTracks: allTrue.standing_tracks,
     });
   });
@@ -189,6 +194,64 @@ describe('useOrgFeatureAccess', () => {
   });
 });
 
+describe('useOrgFeatureAccess mmr sync', () => {
+  function mmrOrg(features: string[], extra: Partial<OrganizationType> = {}) {
+    return {
+      ...org(5),
+      features,
+      admin_ids: [],
+      staff_ids: [],
+      ...extra,
+    } as OrganizationType;
+  }
+
+  function setUser(isStaff = false) {
+    useUserStore.setState({
+      currentUser: { pk: 5, username: 'u5', is_staff: isStaff } as UserType,
+    });
+  }
+
+  it('lets org admins use it once the feature is on', () => {
+    setUser();
+    const { result } = renderHook(() =>
+      useOrgFeatureAccess(mmrOrg(['mmr_sync'], { admin_ids: [5] })),
+    );
+    expect(result.current.mmrSyncEnabled).toBe(true);
+    expect(result.current.canUseMmrSync).toBe(true);
+  });
+
+  it('hides it from org admins while the feature is locked', () => {
+    setUser();
+    const { result } = renderHook(() =>
+      useOrgFeatureAccess(mmrOrg([], { admin_ids: [5] })),
+    );
+    expect(result.current.canUseMmrSync).toBe(false);
+  });
+
+  it('hides it from org staff who are not admins', () => {
+    setUser();
+    const { result } = renderHook(() =>
+      useOrgFeatureAccess(mmrOrg(['mmr_sync'], { staff_ids: [5] })),
+    );
+    expect(result.current.canUseMmrSync).toBe(false);
+  });
+
+  it('hides it from plain members', () => {
+    setUser();
+    const { result } = renderHook(() =>
+      useOrgFeatureAccess(mmrOrg(['mmr_sync'])),
+    );
+    expect(result.current.canUseMmrSync).toBe(false);
+  });
+
+  it('shows it to a site admin even while locked', () => {
+    setUser(true);
+    const { result } = renderHook(() => useOrgFeatureAccess(mmrOrg([])));
+    expect(result.current.mmrSyncEnabled).toBe(false);
+    expect(result.current.canUseMmrSync).toBe(true);
+  });
+});
+
 describe('removeFeatureQueries', () => {
   it('removes contributions, promotion and feature-row queries for the org only', () => {
     const qc = new QueryClient();
@@ -212,6 +275,7 @@ describe('removeFeatureQueries', () => {
     qc.setQueryData(conductKeys.settings(7, 5), ['cs']);
     qc.setQueryData(standingKeys.track(8, 5, 'conduct'), ['other-s']);
     qc.setQueryData(conductKeys.settings(8, 5), ['other-c']);
+    qc.setQueryData(apiTokenKeys.tokens(7, 5), ['tok']);
 
     removeFeatureQueries(qc, 7);
 
