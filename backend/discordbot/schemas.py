@@ -15,9 +15,11 @@ transport layer.
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints, field_validator
+
+DiscordId = Annotated[str, StringConstraints(pattern=r"^[0-9]{1,20}$")]
 
 
 class SyncDiscordStateSchema(BaseModel):
@@ -249,4 +251,61 @@ class LegacyEventCreateResponse(BaseModel):
     success: bool = False
     error: str | None = None
     event_id: int | None = None
+    model_config = {"extra": "ignore"}
+
+
+# ---------------------------------------------------------------------------
+# Voice presence feed (``discordbot/internal_voice_views.py``).
+# ---------------------------------------------------------------------------
+
+
+class WatchedChannelSchema(BaseModel):
+    guild_id: DiscordId
+    channel_id: DiscordId
+    event_ids: list[int]
+    model_config = {"extra": "ignore"}
+
+
+class WatchedChannelsResponse(BaseModel):
+    channels: list[WatchedChannelSchema] = []
+    ttl_seconds: int = 60
+    available: bool = True
+    model_config = {"extra": "ignore"}
+
+
+class VoiceStateRequest(BaseModel):
+    guild_id: DiscordId
+    discord_user_id: DiscordId
+    before_channel_id: DiscordId | None = None
+    after_channel_id: DiscordId | None = None
+    model_config = {"extra": "ignore"}
+
+
+class VoiceSnapshotChannel(BaseModel):
+    channel_id: DiscordId
+    member_ids: list[DiscordId] = Field(default_factory=list, max_length=5000)
+    model_config = {"extra": "ignore"}
+
+    @field_validator("member_ids")
+    @classmethod
+    def _dedupe(cls, value: list[str]) -> list[str]:
+        return list(dict.fromkeys(value))
+
+
+class VoiceSnapshotRequest(BaseModel):
+    guild_id: DiscordId
+    channels: list[VoiceSnapshotChannel] = Field(max_length=100)
+    missing_channel_ids: list[DiscordId] = []
+    model_config = {"extra": "ignore"}
+
+
+class VoicePresenceResponse(BaseModel):
+    success: bool = False
+    detail: str = ""
+    events: int = 0
+    joined: int = 0
+    left: int = 0
+    confirmed: int = 0
+    unknown_users: int = 0
+    not_signed_up: int = 0
     model_config = {"extra": "ignore"}

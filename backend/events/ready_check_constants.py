@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Final
 
 from django.db import models
@@ -60,6 +61,7 @@ class ReadyCheckConfirmVia(models.TextChoices):
     STAFF = "staff", "Staff"
 
 
+PRESENCE_FRESH: Final = timedelta(seconds=180)
 DROPPED_SIGNUP_MESSAGE: Final = "You were dropped from this event"
 READY_CHECK_MAX_MINUTES: Final = 1440
 START_CULL_MAX_MINUTES: Final = 120
