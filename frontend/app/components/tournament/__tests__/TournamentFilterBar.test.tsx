@@ -26,8 +26,7 @@ const leagueState = vi.hoisted(() => ({
   ] as Array<{
     pk: number;
     name: string;
-    organization?: { pk: number } | null;
-    organization_id?: number;
+    organization: { pk: number } | null;
   }>,
 }));
 
@@ -380,7 +379,7 @@ describe('TournamentFilterBar leagues under My organizations', () => {
   const MIXED = [
     { pk: 31, name: 'Home League', organization: { pk: 30 } },
     { pk: 32, name: 'Away League', organization: { pk: 31 } },
-    { pk: 33, name: 'Staffed League', organization_id: 30 },
+    { pk: 33, name: 'Staffed League', organization: { pk: 30 } },
   ];
 
   it('lists only leagues of member organizations', () => {
