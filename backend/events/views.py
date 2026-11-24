@@ -2123,7 +2123,10 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             check_interval="Every 30s",
             misconfigured=event.discord_signup_reminder
             and event.event_repeater_id is None,
-            description=f"DMs subscribers who haven't signed up {event.discord_signup_reminder_hours}h before event",
+            description=(
+                "DMs series subscribers who haven't signed up, "
+                f"{event.discord_signup_reminder_hours}h before event"
+            ),
         ),
         _task(
             "confirm_attendance",
