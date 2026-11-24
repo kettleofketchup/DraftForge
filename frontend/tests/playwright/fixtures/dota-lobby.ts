@@ -194,12 +194,13 @@ let simulatorSeen = false;
 /**
  * Whether the simulator can take lobbies. Waits, up to SIMULATOR_WAIT_MS,
  * for one that answers but is not available yet, and skips at once when
- * nothing answers (the CI stack, which does not start it).
+ * nothing answers (a local stack without `just test::dota-lobby up`).
  *
- * DOTA_LOBBY_SIMULATOR_REQUIRED=1 (just test::pw::dota-lobby sets it when
- * this slot's simulator is running) makes a simulator that never becomes
- * available an error, never a skip, so a misconfigured one (a league ID
- * mismatch, a bad secret) cannot pass as a green run.
+ * DOTA_LOBBY_SIMULATOR_REQUIRED=1 (set by just test::pw::dota-lobby when
+ * this slot's simulator is running, and always by the CI dota-lobby step)
+ * makes a simulator that never becomes available an error, never a skip, so
+ * a misconfigured one (a league ID mismatch, a bad secret) cannot pass as a
+ * green run.
  */
 export async function hasSimulator(context: BrowserContext): Promise<boolean> {
   if (simulatorSeen) return true;
