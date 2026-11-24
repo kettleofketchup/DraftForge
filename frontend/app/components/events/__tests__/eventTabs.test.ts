@@ -16,10 +16,10 @@ describe('eventTabOptions', () => {
     ]);
   });
 
-  it('never offers History to members', () => {
+  it('never offers Discord or History to members', () => {
     const values = eventTabOptions(false, COUNTS).map((o) => o.value);
     expect(values).not.toContain('history');
-    expect(values.at(-1)).toBe('discord');
+    expect(values).not.toContain('discord');
   });
 
   it('shows Tentative and Removed only when they have rows', () => {
@@ -29,13 +29,7 @@ describe('eventTabOptions', () => {
       waitlisted: 0,
       removed: 0,
     }).map((o) => o.value);
-    expect(values).toEqual([
-      'details',
-      'signups',
-      'tentative',
-      'waitlist',
-      'discord',
-    ]);
+    expect(values).toEqual(['details', 'signups', 'tentative', 'waitlist']);
   });
 });
 
@@ -44,12 +38,25 @@ describe('resolveEventTab', () => {
     expect(resolveEventTab('history', false)).toBe('details');
   });
 
+  it('sends non-staff on the Discord tab to details', () => {
+    expect(resolveEventTab('discord', false)).toBe('details');
+  });
+
   it('keeps history for staff', () => {
     expect(resolveEventTab('history', true)).toBe('history');
   });
 
   it('leaves other tabs alone', () => {
-    expect(resolveEventTab('waitlist', false)).toBe('waitlist');
+    for (const tab of [
+      'details',
+      'signups',
+      'tentative',
+      'waitlist',
+      'removed',
+    ]) {
+      expect(resolveEventTab(tab, false)).toBe(tab);
+      expect(resolveEventTab(tab, true)).toBe(tab);
+    }
     expect(resolveEventTab('discord', true)).toBe('discord');
   });
 });
