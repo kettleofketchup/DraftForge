@@ -108,6 +108,8 @@ Deleting a series (`events.services.teardown_event_repeater`) also deletes its `
 | Attendance reminder | Post a reminder in the announcement channel N hours before the event. Replies aren't tracked; use the [ready check](events/roll-call.md) to require confirmation |
 | Scheduled-event cleanup | Cancelling or deleting an event deletes its Discord scheduled event (`events.tasks.delete_discord_scheduled_event`), so nothing is left orphaned in the guild |
 
+The pre-day announcement, attendance reminder, profile reminder and series new-event posts (*Message interested users*) share one **announcement channel**. The event form shows its picker whenever any of them is on. New-event posts also need the pre-day announcement to be on.
+
 **Discord signup pipeline** (Dota events): clicking *Sign Up* either signs the user up directly (profile complete) or opens a modal with rank-status select → position select view → optional medal+star follow-up → optional screenshot upload. Each step routes through `events.services.apply_signup_input` — the **same service the web `/signup/` endpoint uses** — so the two paths converge on identical writes. Deadlock signups take a separate Discord-only branch that writes `PlayerDeadlockProfile.rank` directly.
 
 ### RSVP & Signups

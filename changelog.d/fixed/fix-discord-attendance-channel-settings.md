@@ -1,0 +1,1 @@
+- The announcement channel picker now appears whenever the attendance reminder, profile reminder, pre-day announcement or series new-event posts are on, and explains that the channel is shared.
