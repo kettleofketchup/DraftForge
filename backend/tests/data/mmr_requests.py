@@ -4,11 +4,11 @@ Used by frontend/tests/playwright/e2e/11-org-mmr/05-mmr-update-requests.spec.ts.
 Created by tests.populate.mmr_requests.populate_mmr_requests_data.
 
 - Org / league 60 "MMR Requests Org" / "MMR Requests League" (steam league 17945).
-- Members 8100-8102: Dota org MMR 4200 (unverified) and a league row at 4200.
-  - 8100: requests an update that org staff approve.
-  - 8101: requests an update that staff reject; also the league request.
-  - 8102: staff set an official MMR from the edit modal.
-- 8103: org staff. 8104: league staff (not an org member). 8105: outsider.
+- Members 8200-8202: Dota org MMR 4200 (unverified) and a league row at 4200.
+  - 8200: requests an update that org staff approve.
+  - 8201: requests an update that staff reject; also the league request.
+  - 8202: staff set an official MMR from the edit modal.
+- 8203: org staff. 8204: league staff (not an org member). 8205: outsider.
 """
 
 from typing import Final
@@ -17,12 +17,12 @@ from tests.data.models import TestLeague, TestOrganization, TestUser
 
 MMR_REQ_ORG_PK: Final[int] = 60
 MMR_REQ_LEAGUE_PK: Final[int] = 60
-MEMBER_APPROVE_PK: Final[int] = 8100
-MEMBER_REJECT_PK: Final[int] = 8101
-MEMBER_STAFFSET_PK: Final[int] = 8102
-ORG_STAFF_PK: Final[int] = 8103
-LEAGUE_STAFF_PK: Final[int] = 8104
-OUTSIDER_PK: Final[int] = 8105
+MEMBER_APPROVE_PK: Final[int] = 8200
+MEMBER_REJECT_PK: Final[int] = 8201
+MEMBER_STAFFSET_PK: Final[int] = 8202
+ORG_STAFF_PK: Final[int] = 8203
+LEAGUE_STAFF_PK: Final[int] = 8204
+OUTSIDER_PK: Final[int] = 8205
 
 MMR_REQ_BASE_MMR: Final[int] = 4200
 
@@ -40,7 +40,7 @@ MMR_REQ_LEAGUE: TestLeague = TestLeague(
     organization_names=[MMR_REQ_ORG.name],
 )
 
-MMR_REQ_DISCORD_BASE: Final[int] = 810_000_000_000_000_000
+MMR_REQ_DISCORD_BASE: Final[int] = 820_000_000_000_000_000
 
 
 def _user(pk: int, username: str, nickname: str) -> TestUser:

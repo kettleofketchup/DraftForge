@@ -10,6 +10,7 @@ const PROMOTION = 'org-promotion';
 const STANDING = 'org-standing';
 const CONDUCT = 'org-conduct';
 const LEADERSHIP = 'org-leadership';
+const API_TOKENS = 'org-api-tokens';
 
 export const contributionsKeys = {
   all: (orgId: number, viewerPk: ViewerPk) =>
@@ -113,6 +114,17 @@ export const leadershipKeys = {
     [...leadershipKeys.all(orgId, viewerPk), 'traits'] as const,
 };
 
+export const apiTokenKeys = {
+  all: (orgId: number, viewerPk: ViewerPk) =>
+    [API_TOKENS, orgId, viewerPk] as const,
+  tokens: (orgId: number, viewerPk: ViewerPk) =>
+    [...apiTokenKeys.all(orgId, viewerPk), 'tokens'] as const,
+  usage: (orgId: number, viewerPk: ViewerPk, days: number) =>
+    [...apiTokenKeys.all(orgId, viewerPk), 'usage', days] as const,
+  limits: (orgId: number, viewerPk: ViewerPk) =>
+    [...apiTokenKeys.all(orgId, viewerPk), 'limits'] as const,
+};
+
 export async function invalidateContributionQueries(
   queryClient: QueryClient,
   orgId: number,
@@ -212,5 +224,6 @@ export function removeFeatureQueries(
   queryClient.removeQueries({ queryKey: [STANDING, orgId] });
   queryClient.removeQueries({ queryKey: [CONDUCT, orgId] });
   queryClient.removeQueries({ queryKey: [LEADERSHIP, orgId] });
+  queryClient.removeQueries({ queryKey: [API_TOKENS, orgId] });
   queryClient.removeQueries({ queryKey: orgFeaturesKey(orgId) });
 }

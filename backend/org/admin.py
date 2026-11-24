@@ -21,6 +21,9 @@ from org.standing import api as standing
 
 from .models import (
     MmrChangeRequest,
+    OrgApiLimits,
+    OrgApiToken,
+    OrgApiTokenUsage,
     OrgFeature,
     OrgSettings,
     OrgUser,
@@ -248,3 +251,51 @@ class OrgSettingsAdmin(admin.ModelAdmin):
         actions = super().get_actions(request)
         actions.pop("delete_selected", None)
         return actions
+
+
+@admin.register(OrgApiToken)
+class OrgApiTokenAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "prefix",
+        "organization",
+        "user",
+        "created_at",
+        "last_used_at",
+        "revoked_at",
+    )
+    list_filter = ("revoked_at",)
+    raw_id_fields = ["organization", "user", "revoked_by"]
+    search_fields = ["name", "prefix", "organization__name", "user__username"]
+    readonly_fields = ("prefix", "secret_hash", "created_at", "last_used_at")
+
+
+@admin.register(OrgApiTokenUsage)
+class OrgApiTokenUsageAdmin(admin.ModelAdmin):
+    list_display = (
+        "date",
+        "organization",
+        "user",
+        "token",
+        "request_count",
+        "throttled_count",
+    )
+    list_filter = ("date",)
+    raw_id_fields = ["organization", "user", "token"]
+    search_fields = ["organization__name", "user__username", "token__prefix"]
+    readonly_fields = (
+        "token",
+        "organization",
+        "user",
+        "date",
+        "request_count",
+        "throttled_count",
+    )
+    date_hierarchy = "date"
+
+
+@admin.register(OrgApiLimits)
+class OrgApiLimitsAdmin(admin.ModelAdmin):
+    list_display = ("organization", "per_minute", "per_day", "updated_at", "updated_by")
+    raw_id_fields = ["organization", "updated_by"]
+    search_fields = ["organization__name"]

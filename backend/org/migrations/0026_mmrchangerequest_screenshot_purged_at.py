@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("league", "0005_leagueuser_mmr_verification"),
-        ("org", "0024_mmrchangerequest"),
+        ("org", "0025_mmrchangerequest"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

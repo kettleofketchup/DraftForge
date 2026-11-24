@@ -27,7 +27,7 @@ def backfill_dota_verified_at(
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("org", "0022_retarget_tournament_models"),
+        ("org", "0023_api_tokens"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
