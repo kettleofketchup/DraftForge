@@ -1,1 +1,0 @@
-- Event lists now show the new status and signup counts right after you open signups, start roll call or the tournament, sign up or cancel, or manage signups, instead of keeping the old values until a reload.

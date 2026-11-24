@@ -10,6 +10,7 @@
  */
 
 import type { Page } from '@playwright/test';
+import type { TieResolution } from '~/components/teamdraft/types';
 import {
   expect,
   loginAdmin,
@@ -17,6 +18,7 @@ import {
   test,
   type TournamentData,
 } from '../../fixtures';
+import { captureTieRoll, type TieRollSnapshot } from '../../helpers/tie-roll';
 
 const KEY = 'shuffle_tie_resolution';
 
@@ -46,26 +48,31 @@ async function pickFirstPlayer(page: Page): Promise<void> {
   }
 }
 
-async function watchTieRoll(viewer: Page): Promise<string> {
-  const popup = viewer.getByTestId('tie-roll-popup');
-  await expect(popup).toBeVisible({ timeout: 15_000 });
-  await expect(popup).toHaveCount(1);
-  await expect(popup).toHaveAttribute('data-pick-number', '2');
-  await expect(popup).toContainText('Tie for pick #2');
-  await expect(popup.locator('[data-testid^="tie-roll-row-"]')).toHaveCount(3);
-  await expect(popup.getByRole('button', { name: /continue/i })).toHaveCount(0);
-  const winnerId = await popup.getAttribute('data-winner-id');
-  expect(winnerId).toBeTruthy();
-  await expect(viewer.getByTestId('tie-roll-result')).toContainText(
-    'picks next',
-    { timeout: 6_000 },
+function expectTieRoll(
+  snapshot: TieRollSnapshot | null,
+  tie: TieResolution,
+): void {
+  expect(snapshot, 'viewer captured a completed tie roll').not.toBeNull();
+  const observed = snapshot!;
+  expect(observed.count).toBe(1);
+  expect(observed.visible).toBe(true);
+  expect(observed.pickNumber).toBe('2');
+  expect(observed.heading).toContain('Tie for pick #2');
+  expect(observed.continueCount).toBe(0);
+  expect(observed.winnerId).toBe(String(tie.winner_id));
+  expect(observed.result).toContain('picks next');
+  expect(observed.rows.map((row) => row.teamId)).toEqual(
+    tie.tied_teams.map((team) => String(team.id)),
   );
-  await expect(viewer.getByTestId(`tie-roll-row-${winnerId}`)).toHaveAttribute(
-    'data-winner',
-    'true',
-  );
-  await expect(popup).toHaveCount(0, { timeout: 8_000 });
-  return winnerId!;
+  const finalRound = tie.roll_rounds.at(-1)!;
+  for (const row of observed.rows) {
+    expect(row.winner).toBe(String(row.teamId === observed.winnerId));
+    const roll = finalRound.find(
+      (entry) => String(entry.team_id) === row.teamId,
+    );
+    expect(row.face).toBe(roll ? String(roll.roll) : null);
+    if (!roll) expect(row.text).toContain('out');
+  }
 }
 
 test.describe.serial('Shuffle draft - tie roll popup', () => {
@@ -101,15 +108,56 @@ test.describe.serial('Shuffle draft - tie roll popup', () => {
       await openDraft(spectator, t.pk);
       await openDraft(page, t.pk);
 
-      await pickFirstPlayer(page);
-
-      // Each popup closes 5 s after it mounts in its own browser, and the picker's
-      // can mount seconds after the spectator's, so check the viewers concurrently.
-      const [pickerWinner, spectatorWinner] = await Promise.all(
-        [page, spectator].map(watchTieRoll),
+      const viewers = [page, spectator];
+      const captures = await Promise.all(
+        viewers.map((viewer) => viewer.evaluateHandle(captureTieRoll)),
       );
-      expect(spectatorWinner).toBe(pickerWinner);
-      await expect(page.getByRole('dialog').first()).toBeVisible();
+      try {
+        const picked = page.waitForResponse(
+          (response) =>
+            response.request().method() === 'POST' &&
+            new URL(response.url()).pathname === '/api/tournaments/pick_player',
+        );
+        await pickFirstPlayer(page);
+        const response = await picked;
+        expect(response.status()).toBe(201);
+        const { tie_resolution: tie } = (await response.json()) as {
+          tie_resolution: TieResolution;
+        };
+        expect(tie).toBeDefined();
+        expect(tie.pick_number).toBe(2);
+        expect(tie.tied_teams).toHaveLength(3);
+
+        await Promise.all(
+          captures.map((capture) =>
+            capture.evaluate(async (observation) => {
+              await observation.result;
+            }),
+          ),
+        );
+        await Promise.all(
+          viewers.map((viewer) =>
+            expect(viewer.getByTestId('tie-roll-popup')).toHaveCount(0, {
+              timeout: 8_000,
+            }),
+          ),
+        );
+        // Read the retained frame after dismissal to exercise delayed assertions.
+        const snapshots = await Promise.all(
+          captures.map((capture) =>
+            capture.evaluate((observation) => observation.result),
+          ),
+        );
+        for (const snapshot of snapshots) expectTieRoll(snapshot, tie);
+        await expect(page.getByRole('dialog').first()).toBeVisible();
+      } finally {
+        await Promise.all(
+          captures.map(async (capture) => {
+            await capture.evaluate((observation) => observation.cancel());
+            await capture.dispose();
+          }),
+        );
+      }
     } finally {
       await spectatorCtx.close();
     }
