@@ -43,6 +43,23 @@ async def read_until_type(
             return frame
 
 
+async def disconnect_and_wait(
+    comm: WebsocketCommunicator, timeout: float = 10, code: int = 1000
+) -> None:
+    """Close the socket and wait for the consumer's disconnect cleanup to finish.
+
+    `comm.disconnect()` silently cancels a consumer still cleaning up after 1s.
+    """
+    await comm.send_input({"type": "websocket.disconnect", "code": code})
+    try:
+        await asyncio.wait_for(asyncio.shield(comm.future), timeout)
+    except asyncio.TimeoutError:
+        await comm.wait(0)
+        raise AssertionError(
+            f"consumer disconnect did not finish within {timeout}s"
+        ) from None
+
+
 async def next_non_ping_output(
     comm: WebsocketCommunicator, timeout: float = 5
 ) -> dict[str, Any]:
