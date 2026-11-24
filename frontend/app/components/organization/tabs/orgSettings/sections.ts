@@ -1,4 +1,10 @@
-import { ClipboardCheck, Crown, UserCog, type LucideIcon } from 'lucide-react';
+import {
+  ClipboardCheck,
+  Crown,
+  KeyRound,
+  UserCog,
+  type LucideIcon,
+} from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
@@ -6,6 +12,7 @@ import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
 import { leadershipAccess } from '~/features/leadership/access';
 import { useOrgFeatureAccess } from '~/features/org-features';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
+import { useApiAccessSection } from './ApiAccessSection';
 import { useConductSection } from './ConductSection';
 import { useLeadershipSection } from './LeadershipSection';
 import { useStaffPlacementSection } from './StaffPlacementSection';
@@ -35,6 +42,10 @@ export function useCanManageLeadership(
   org: OrganizationType | undefined,
 ): boolean {
   return leadershipAccess(useOrgFeatureAccess(org)).canManage;
+}
+
+export function useCanUseMmrSync(org: OrganizationType | undefined): boolean {
+  return useOrgFeatureAccess(org).canUseMmrSync;
 }
 
 export const ORG_SETTINGS_SECTIONS: readonly OrgSettingsSection[] = [
@@ -70,5 +81,14 @@ export const ORG_SETTINGS_SECTIONS: readonly OrgSettingsSection[] = [
     group: 'Organization',
     useSection: useLeadershipSection,
     useVisible: useCanManageLeadership,
+  },
+  {
+    id: 'api-access',
+    label: 'API access',
+    icon: KeyRound,
+    keywords: ['api', 'token', 'mmr', 'sync', 'rate limit'],
+    group: 'Organization',
+    useSection: useApiAccessSection,
+    useVisible: useCanUseMmrSync,
   },
 ];

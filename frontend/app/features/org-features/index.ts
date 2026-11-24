@@ -1,5 +1,6 @@
 export { LockedFeaturesPanel } from './LockedFeaturesPanel';
 export {
+  apiTokenKeys,
   conductKeys,
   contributionsKeys,
   invalidateConductQueries,

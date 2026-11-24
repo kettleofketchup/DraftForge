@@ -55,6 +55,7 @@ from tests.populate.league_stats import (
     populate_league_stats_data,
     populate_league_stats_showcase,
 )
+from tests.populate.mmr_sync import populate_mmr_sync_data
 from tests.populate.org_delete import populate_org_delete
 from tests.populate.org_features import populate_org_features_data
 from tests.populate.organizations import (
@@ -128,6 +129,8 @@ def populate_all(force: bool = False) -> None:
         # Its tournament (explicit pk 950) brings auto-pk teams, games and
         # matches, so it goes after every pk-sensitive step.
         ("Activity Bracket Data", populate_activity_bracket_data),
+        # Explicit pks (orgs 55-56, users 8100-8104), after Game Org MMR.
+        ("MMR Sync API Data", populate_mmr_sync_data),
     ]
 
     console = Console()
@@ -178,6 +181,7 @@ __all__ = [
     "populate_user_edit_data",
     "populate_events_data",
     "populate_game_org_mmr_data",
+    "populate_mmr_sync_data",
     "populate_signup_history_data",
     "populate_auth_matrix_data",
     "populate_demo_tournaments",
