@@ -95,7 +95,7 @@ just py::gen-lobby-api           # commit the .generated.ts with the model chang
 ```
 
 Add `just py::gen-lobby-api --check` beside the message-types step in the `unit` job of
-`.github/workflows/playwright.yml` (that job has the poetry venv and node). Not
+`.github/workflows/unit-tests.yml` (that job has the poetry venv and node). Not
 `just/ci.just`; those recipes run without `.venv`.
 
 ## 4. Frontend
