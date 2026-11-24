@@ -101,6 +101,7 @@ nav:
       - Organization Leadership: features/organization-leadership.md
       - Organization Settings: features/organization-settings.md
       - Org MMR per Game: features/org-mmr.md
+      - MMR Sync API: features/org-mmr-sync-api.md
       - Planned:
           - Overview: features/planned/index.md
           - Team Management & Seasons: features/planned/team-management.md
