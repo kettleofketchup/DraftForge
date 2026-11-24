@@ -866,7 +866,8 @@ RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
 )
 
 # retired module -> where its defs live now, when that is not the same path
-# under the new app; None means renamed within the source app.
+# under the new app; None: no single home file to check (renamed within the
+# source app, or a retired package).
 RETIRED_MODULE_HOMES: dict[str, str | None] = {
     "app.tests.test_league_rating": None,
     "app.permissions_tournament": "tournament.permissions",
@@ -1345,7 +1346,28 @@ FIXTURE_MIGRATION = ("other", "0003_x")
 FIXTURE_MIGRATION_PATH = "other/migrations/0003_x.py"
 
 
+def _retired_module_present(base: Path, module: str) -> bool:
+    rel = base / Path(*module.split("."))
+    return rel.with_suffix(".py").exists() or (rel.is_dir() and any(rel.rglob("*.py")))
+
+
 class GuardSelfTests(SimpleTestCase):
+    def test_retired_package_with_leftover_py_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            package = base / "pkg"
+            package.mkdir()
+            (package / "x.py").write_text("")
+            self.assertTrue(_retired_module_present(base, "pkg"))
+
+    def test_retired_package_with_only_pycache_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            cache = base / "pkg" / "__pycache__"
+            cache.mkdir(parents=True)
+            (cache / "x.cpython-312.pyc").write_bytes(b"")
+            self.assertFalse(_retired_module_present(base, "pkg"))
+
     def violations(self, source: str, path: str) -> list[str]:
         return find_violations(
             source,
@@ -1714,10 +1736,8 @@ class AppBoundaryTests(SimpleTestCase):
     def test_retired_modules_are_gone(self) -> None:
         for s in MOVED_SLICES:
             for module in s.retired_modules:
-                rel = Path(*module.split("."))
                 with self.subTest(module=module):
-                    self.assertFalse((self.base / rel.with_suffix(".py")).exists())
-                    self.assertFalse((self.base / rel / "__init__.py").exists())
+                    self.assertFalse(_retired_module_present(self.base, module))
 
     def test_retired_module_defs_listed_in_moved(self) -> None:
         self.assertEqual(find_unlisted_retired_defs(MOVED_SLICES, self.base), [])
