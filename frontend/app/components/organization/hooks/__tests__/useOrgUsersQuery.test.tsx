@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getOrganizationUsers } from '~/components/api/api';
-import type { UserType } from '~/components/user/types';
+import type { OrgMemberType } from '~/components/organization/schemas';
 import { useOrgUsers } from '~/hooks/useOrgUsers';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { organizationQueryKey } from '../useOrganization';
@@ -15,8 +15,28 @@ vi.mock('~/components/api/api', () => ({
   fetchOrganization: vi.fn(),
 }));
 
-const alice: UserType = { pk: 1, username: 'alice' };
-const bob: UserType = { pk: 2, username: 'bob' };
+function member(pk: number, username: string): OrgMemberType {
+  return {
+    orgUserPk: pk + 100,
+    pk,
+    username,
+    nickname: null,
+    guildNickname: null,
+    discordNickname: null,
+    avatar: null,
+    discordId: null,
+    positions: null,
+    steam_account_id: null,
+    avatarUrl: null,
+    mmr: 0,
+    mmr_game_type: 0,
+    game_mmrs: {},
+    league_mmr: null,
+  };
+}
+
+const alice = member(1, 'alice');
+const bob = member(2, 'bob');
 
 function setup(): {
   qc: QueryClient;

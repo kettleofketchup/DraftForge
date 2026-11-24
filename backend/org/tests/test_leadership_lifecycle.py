@@ -17,6 +17,9 @@ from org.models import ContributionEntry, ContributionPointValue, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
 from org.standing import api as standing
 from org.tests.leadership_base import LeadershipTestCase
+from tournament.models import Team
+from tournament.models.team_log import TeamLogVia
+from tournament.services.team_management import replace_captain
 
 SNAPSHOT_QUERIES = 18
 
@@ -318,6 +321,57 @@ class ReopenTest(LeadershipTestCase):
             result = lifecycle.void_event(self.event, now=tz.now())
         self.assertEqual(result, lifecycle.VoidResult(reviews_voided=0, revoked=0))
         self.assertEqual(len(ctx.captured_queries), 1)
+
+
+class TakeoverSnapshotTest(LeadershipTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.cap_e = self.make_user("ld_cap_e")
+        self.mates_e = [self.make_user(f"ld_e{i}") for i in range(2)]
+        self.team_e = self.make_team("Echo", self.cap_e, self.mates_e, placement=3)
+        for user in [self.cap_e, *self.mates_e]:
+            self.admit(user)
+        self.assertGreater(self.team_e.pk, self.team_b.pk)
+        Team.objects.filter(pk=self.team_b.pk).invalidated_update(placement=None)
+        replace_captain(
+            self.team_b,
+            self.cap_e,
+            actor=self.admin,
+            via=TeamLogVia.WEB,
+            reason="left",
+        )
+        Team.objects.filter(pk=self.team_b.pk).invalidated_update(placement=2)
+
+    def assert_snapshot_on_original_team(self) -> None:
+        snap = self.snapshot(self.cap_e)
+        self.assertEqual(snap.team_id, self.team_e.pk)
+        self.assertEqual(snap.team_name, "Echo")
+        self.assertEqual(snap.placement, 3)
+        self.assertEqual(pool(snap), {u.pk for u in self.mates_e})
+        self.assertEqual(self.points(self.cap_e, "placement_3"), 3)
+        self.assertIsNone(self.points(self.cap_e, "placement_2"))
+        self.assertFalse(
+            EventCaptain.objects.filter(
+                event=self.event, team=self.team_b, voided_at__isnull=True
+            ).exists()
+        )
+
+    def test_dual_captain_one_snapshot_on_original_team(self) -> None:
+        self.close()
+        self.assertEqual(
+            EventCaptain.objects.filter(captain__user=self.cap_e).count(), 1
+        )
+        self.assert_snapshot_on_original_team()
+
+    def test_reopen_close_keeps_snapshot_on_original_team(self) -> None:
+        self.close()
+        self.event.refresh_from_db()
+        reopen_event(self.event, actor=self.admin)
+        Event.objects.filter(pk=self.event.pk).update(state=EventState.IN_PROGRESS)
+        self.event.refresh_from_db()
+        self.close()
+        self.assertIsNone(self.snapshot(self.cap_e).voided_at)
+        self.assert_snapshot_on_original_team()
 
 
 class DeleteTest(LeadershipTestCase):

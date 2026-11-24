@@ -3,15 +3,14 @@ import { Link } from 'react-router';
 import { Badge } from '~/components/ui/badge';
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
-import type { LeagueType } from './schemas';
+import type { LeagueListItem } from './schemas';
 
 interface LeagueCardProps {
-  league: LeagueType;
+  league: LeagueListItem;
 }
 
 export function LeagueCard({ league }: LeagueCardProps) {
@@ -33,13 +32,6 @@ export function LeagueCard({ league }: LeagueCardProps) {
             {league.tournament_count !== 1 ? 's' : ''}
           </CardDescription>
         </CardHeader>
-        {league.description && (
-          <CardContent>
-            <p className="text-sm text-muted-foreground line-clamp-2">
-              {league.description}
-            </p>
-          </CardContent>
-        )}
       </Card>
     </Link>
   );

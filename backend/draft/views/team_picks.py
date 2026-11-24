@@ -27,7 +27,7 @@ from draft.tasks.draft_tick import evaluate_client_pick_time
 from draft.tasks.team_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
 from tournament.functions import serialize_tournament
-from tournament.models import Team, Tournament
+from tournament.models import LIVE_TEAM_FIRST, Team, Tournament
 from tournament.permissions import can_edit_tournament
 
 log = get_logger(__name__)
@@ -196,6 +196,7 @@ def _pick_under_lock(
     team = (
         Team.objects.select_for_update()
         .filter(tournament=draft.tournament_id, captain_id=draft_round.captain_id)
+        .order_by(*LIVE_TEAM_FIRST)
         .first()
     )
     tournament = draft.tournament
