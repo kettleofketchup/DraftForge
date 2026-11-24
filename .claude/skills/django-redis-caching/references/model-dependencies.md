@@ -232,10 +232,10 @@ These models are NOT in CACHEOPS config:
 - `bracket.TournamentBracket` - Bracket display
 - `bracket.BracketSlot` - Bracket slots
 
-Consider adding to CACHEOPS if performance issues arise:
+`PositionsModel` stays uncached: its `save()` invalidates dependent user payloads.
+Consider adding the bracket model to CACHEOPS if performance issues arise:
 
 ```python
 # In settings.py CACHEOPS
-"app.positionsmodel": {"ops": "all", "timeout": 60 * 60},
 "bracket.tournamentbracket": {"ops": "all", "timeout": 60 * 15},
 ```

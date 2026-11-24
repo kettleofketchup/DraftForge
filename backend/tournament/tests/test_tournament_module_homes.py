@@ -46,11 +46,13 @@ class TournamentModuleHomeTests(SimpleTestCase):
                     getattr(schemas, name).__module__, "tournament.schemas"
                 )
 
-    def test_schemas_not_in_app_schemas(self) -> None:
-        schemas = importlib.import_module("app.schemas")
+    def test_schema_definitions_owned_by_tournament(self) -> None:
+        schemas = importlib.import_module("tournament.schemas")
         for name in TOURNAMENT_SCHEMA_NAMES:
             with self.subTest(name=name):
-                self.assertFalse(hasattr(schemas, name))
+                self.assertEqual(
+                    getattr(schemas, name).__module__, "tournament.schemas"
+                )
 
     def test_domain_helpers_live_in_tournament(self) -> None:
         cases = {

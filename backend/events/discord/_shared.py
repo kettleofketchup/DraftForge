@@ -133,7 +133,7 @@ def _get_org_user(
     auto-created using the Discord username. A button click only carries a
     Discord ID — it can't run the OAuth pipeline — so the phantom holds the
     signup until the person logs in, at which point the social-auth pipeline
-    reclaims this exact row by discordId (see app/pipelines.py). The phantom is
+    reclaims this exact row by discordId (see user/pipelines.py). The phantom is
     a normal, immediately-loginable account — no restrictions.
 
     Returns (org_user, user) or (None, None).
