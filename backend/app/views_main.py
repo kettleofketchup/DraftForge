@@ -40,12 +40,12 @@ from tournament.models import Game, Tournament
 # response. See backend/user/tests/test_cacheops.py for the grep guardrail.
 from user.models import BaseUserProfile, DotaUserProfile
 from user.querysets import with_user_profiles
+from user.steam_accounts import steam_account_id_holder, steam_account_id_identity
 
 from .decorators import render_to
 from .models import CustomUser, ProfileClaimRequest
 from .permissions import IsStaff
 from .serializers import UserSerializer
-from .steam_accounts import steam_account_id_holder, steam_account_id_identity
 from .user_cache import serialize_user_core
 from .utils.avatar_utils import refresh_user_avatar
 

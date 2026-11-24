@@ -2,7 +2,7 @@ from django.test import TestCase
 from social_django.models import UserSocialAuth
 
 from app.models import CustomUser
-from app.pipelines import save_discord
+from user.pipelines import save_discord
 
 DISCORD_ID = "555000111222333999"
 

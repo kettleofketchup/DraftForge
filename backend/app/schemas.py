@@ -21,7 +21,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from app.display_names import first_name
+from user.display_names import first_name
 
 
 class TournamentUserSchema(BaseModel):

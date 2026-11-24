@@ -14,9 +14,9 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
-from app.steam_accounts import steam_account_id_conflict_payload
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
+from user.steam_accounts import steam_account_id_conflict_payload
 
 TAKEN_ID = 765353730
 FREE_ID = 111222333

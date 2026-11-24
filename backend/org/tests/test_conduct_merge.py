@@ -6,7 +6,6 @@ from django.db import transaction
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.discord_accounts import merge_discord_accounts
 from app.models import CustomUser, ProfileClaimRequest
 from events.constants import EventState
 from events.models import Event
@@ -15,6 +14,7 @@ from org.conduct.services import reassign_member
 from org.models import AttendanceOutcome, Organization, OrgConductSettings, OrgUser
 from org.standing import api as standing
 from org.tests.conduct_base import ConductTestCase
+from user.discord_accounts import merge_discord_accounts
 
 
 class _MergeFixture(ConductTestCase):

@@ -284,14 +284,14 @@ SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.user.get_username",
     "social_core.pipeline.mail.mail_validation",
     "social_core.pipeline.social_auth.associate_by_email",
-    "app.pipelines.associate_by_discord_id",
-    "app.pipelines.associate_by_discord_username",
+    "user.pipelines.associate_by_discord_id",
+    "user.pipelines.associate_by_discord_username",
     "social_core.pipeline.user.create_user",
     "social_core.pipeline.social_auth.associate_user",
     "social_core.pipeline.debug.debug",
     "social_core.pipeline.social_auth.load_extra_data",
     "social_core.pipeline.user.user_details",
-    "app.pipelines.save_discord",
+    "user.pipelines.save_discord",
 )
 
 # Database

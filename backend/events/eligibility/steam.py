@@ -10,9 +10,9 @@ from django.db import IntegrityError, transaction
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
-from app.steam_accounts import steam_account_id_holder
 from events.models import Event
 from telemetry.logging import get_logger
+from user.steam_accounts import steam_account_id_holder
 
 log = get_logger(__name__)
 

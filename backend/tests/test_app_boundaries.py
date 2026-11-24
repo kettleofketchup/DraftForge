@@ -862,11 +862,51 @@ USER = MovedSlice(
     new_app="user",
     moved=frozenset(
         {
+            ("app.display_names", "first_name"),
+            ("app.display_names", "user_display_name"),
+            ("app.steam_accounts", "steam_account_id_holder"),
+            ("app.steam_accounts", "steam_account_id_identity"),
+            ("app.steam_accounts", "steam_account_id_conflict_payload"),
+            ("app.discord_accounts", "_GameProfileSnapshot"),
+            ("app.discord_accounts", "_positions_set"),
+            ("app.discord_accounts", "_snapshot_game_profiles"),
+            ("app.discord_accounts", "_carry_over_game_profiles"),
+            ("app.discord_accounts", "merge_discord_accounts"),
+            ("app.discord_accounts", "find_split_discord_accounts"),
+            ("app.pipelines", "save_discord"),
+            ("app.pipelines", "associate_by_discord_id"),
+            ("app.pipelines", "associate_by_discord_username"),
+            ("app.management.commands.reclaim_discord_accounts", "Command"),
+            ("app.tests.test_discord_pipeline_names", "_social"),
+            ("app.tests.test_discord_pipeline_names", "SaveDiscordGlobalNameTest"),
+            ("app.tests.test_discord_reclaim", "_social"),
+            ("app.tests.test_discord_reclaim", "AssociateByDiscordIdTest"),
+            ("app.tests.test_discord_reclaim", "MergeDiscordAccountsTest"),
+            ("app.tests.test_discord_reclaim", "_discarded"),
+            ("app.tests.test_discord_reclaim", "MergeDiscardedRowsTest"),
+            ("app.tests.test_discord_reclaim", "MergeOrgMemberDependentsTest"),
+            ("app.tests.test_discord_reclaim", "MergeProfileCarryoverCoverageTest"),
+            ("app.tests.test_discord_reclaim", "MergeWithoutBaseProfileTest"),
+            ("app.tests.test_discord_reclaim", "GetOrgUserPhantomGuardTest"),
+            ("app.tests.test_discord_reclaim", "SaveDiscordCollisionTest"),
+            ("app.tests.test_display_names", "FirstNameTest"),
+            ("app.tests.test_display_names", "UserDisplayNameTest"),
             ("org.permissions", "is_site_admin"),
             ("app.permissions_org", "is_site_admin"),
         }
     ),
-    retired_modules=frozenset(),
+    retired_modules=frozenset(
+        {
+            "app.steam_accounts",
+            "app.pipelines",
+            "app.tests.test_discord_pipeline_names",
+            "app.tests.test_discord_reclaim",
+            "app.tests.test_display_names",
+            "app.display_names",
+            "app.discord_accounts",
+            "app.management.commands.reclaim_discord_accounts",
+        }
+    ),
     model_labels=frozenset(),
     move_migration=("app", "0116_move_user_models_to_user"),
     cached_labels=frozenset(),
@@ -905,10 +945,6 @@ RETIRED_MODULE_HOMES: dict[str, str | None] = {
 # target app -> production file (relative to backend/) -> what it may import from that app
 ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
     "draft": {
-        "app/discord_accounts.py": BackEdge(
-            frozenset({"repoint_chat_attribution"}),
-            "Discord account merge repoints hero draft chat authorship",
-        ),
         "app/views_main.py": BackEdge(
             frozenset({"DraftRound", "DraftTeam"}),
             "current_user lists the user's pending team-draft pick and the active "
@@ -920,22 +956,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"api", "release_earning_sends"}),
             "CustomUser admin delete checks standing blockers, releases promo "
             "earning sends and records standing on user deletion",
-        ),
-        "app/discord_accounts.py": BackEdge(
-            frozenset(
-                {
-                    "OrgUser",
-                    "api",
-                    "delete_counts",
-                    "demote_colliding_earning_sends",
-                    "merge_member_dependents",
-                    "merge_org_mmrs",
-                    "repoint_org_attribution",
-                }
-            ),
-            "user account merge pairs org memberships, moves their dependents, "
-            "merges per-game org MMR and standing, and repoints org "
-            "contribution and promo attribution",
         ),
         "app/management/commands/sync_prod_users.py": BackEdge(
             frozenset(
@@ -994,6 +1014,9 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         ),
     },
     "user": {
+        "app/schemas.py": BackEdge(
+            frozenset({"first_name"}), "user display-name schema helper"
+        ),
         "app/models.py": BackEdge(
             frozenset({"BaseUserProfile", "DotaUserProfile"}),
             "CustomUser profile accessors",
@@ -1004,7 +1027,15 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "user-only code still in app until Task 7",
         ),
         "app/views_main.py": BackEdge(
-            frozenset({"BaseUserProfile", "DotaUserProfile", "with_user_profiles"}),
+            frozenset(
+                {
+                    "BaseUserProfile",
+                    "DotaUserProfile",
+                    "with_user_profiles",
+                    "steam_account_id_holder",
+                    "steam_account_id_identity",
+                }
+            ),
             "user-only code still in app until Task 8",
         ),
         "app/views/user_search.py": BackEdge(

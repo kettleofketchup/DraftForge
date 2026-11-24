@@ -11,22 +11,24 @@ Dry-run by default. Pass --apply to actually merge.
     python manage.py reclaim_discord_accounts --apply   # merge
 """
 
-from django.core.management.base import BaseCommand
+from typing import Any
 
-from app.discord_accounts import find_split_discord_accounts, merge_discord_accounts
+from django.core.management.base import BaseCommand, CommandParser
+
+from user.discord_accounts import find_split_discord_accounts, merge_discord_accounts
 
 
 class Command(BaseCommand):
     help = "Merge duplicate Discord login accounts back into the phantom-signup account that owns the discordId."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--apply",
             action="store_true",
             help="Actually merge the accounts (default is a dry-run preview).",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         pairs = find_split_discord_accounts()
         if not pairs:
             self.stdout.write(self.style.SUCCESS("No split Discord accounts found."))

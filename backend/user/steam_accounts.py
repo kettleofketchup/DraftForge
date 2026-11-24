@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.display_names import user_display_name
 from app.models import CustomUser
+from user.display_names import user_display_name
 
 
 def steam_account_id_holder(

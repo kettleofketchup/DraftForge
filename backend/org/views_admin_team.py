@@ -13,10 +13,6 @@ from rest_framework.response import Response
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
 from app.serializers import TournamentUserSerializer
-from app.steam_accounts import (
-    steam_account_id_conflict_payload,
-    steam_account_id_holder,
-)
 from common.game import GameType
 from events.eligibility import refresh_unmet_requirements
 from league.models import LeagueUser
@@ -39,6 +35,10 @@ from org.permissions import (
 from org.serializers import OrgUserSerializer
 from tournament.models import Tournament
 from user.querysets import with_user_profiles
+from user.steam_accounts import (
+    steam_account_id_conflict_payload,
+    steam_account_id_holder,
+)
 
 
 @api_view(["POST"])

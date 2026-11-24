@@ -1,7 +1,7 @@
 from django.test import SimpleTestCase, TestCase
 
-from app.display_names import first_name, user_display_name
 from app.models import CustomUser
+from user.display_names import first_name, user_display_name
 
 
 class FirstNameTest(SimpleTestCase):

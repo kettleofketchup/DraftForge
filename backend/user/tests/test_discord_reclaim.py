@@ -3,7 +3,7 @@
 Covers the root cause of `IntegrityError: UNIQUE constraint failed:
 app_customuser.discordId` on /complete/discord/ — a Discord button signup
 creates an account carrying `discordId`, then a login created a duplicate and
-collided. See app/discord_accounts.py and app/pipelines.py.
+collided. See user/discord_accounts.py and user/pipelines.py.
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -13,13 +13,7 @@ from django.test import TestCase
 from django.utils import timezone as tz
 from social_django.models import UserSocialAuth
 
-from app.discord_accounts import (
-    _CARRYOVER_COLUMN_FIELDS,
-    find_split_discord_accounts,
-    merge_discord_accounts,
-)
 from app.models import CustomUser, Joke
-from app.pipelines import associate_by_discord_id, save_discord
 from common.game import GameType
 from discordbot.models import DiscordEvent, DiscordEventDM, DMType
 from events.constants import EventState, SignupAction, SignupStatus
@@ -35,7 +29,13 @@ from org.models import (
     PlayerDotaProfile,
 )
 from tournament.models import Team, Tournament
+from user.discord_accounts import (
+    _CARRYOVER_COLUMN_FIELDS,
+    find_split_discord_accounts,
+    merge_discord_accounts,
+)
 from user.models import BaseUserProfile, DeadlockUserProfile, DotaUserProfile
+from user.pipelines import associate_by_discord_id, save_discord
 
 DISCORD_ID = "555000111222333444"
 
@@ -184,7 +184,7 @@ class MergeDiscordAccountsTest(TestCase):
             user=drop, organization=self.org, guild_nickname="DragonClaw"
         )
 
-        with mock.patch("app.discord_accounts.invalidate_after_commit") as spy:
+        with mock.patch("user.discord_accounts.invalidate_after_commit") as spy:
             merge_discord_accounts(keep=keep, drop=drop)
 
         self.assertEqual(
@@ -331,7 +331,7 @@ class MergeDiscardedRowsTest(TestCase):
         _social(drop)
         drop_pk = drop.pk
 
-        with mock.patch("app.discord_accounts.logger") as spy:
+        with mock.patch("user.discord_accounts.logger") as spy:
             merge_discord_accounts(keep=keep, drop=drop)
 
         rows = _discarded(spy)
@@ -350,7 +350,7 @@ class MergeDiscardedRowsTest(TestCase):
         Joke.objects.create(user=drop, tangoes_purchased=9)
         _social(drop)
 
-        with mock.patch("app.discord_accounts.logger") as spy:
+        with mock.patch("user.discord_accounts.logger") as spy:
             merge_discord_accounts(keep=keep, drop=drop)
 
         self.assertNotIn("app.Joke", {r["model"] for r in _discarded(spy)})
@@ -459,7 +459,7 @@ class MergeDiscardedRowsTest(TestCase):
         drop = CustomUser.objects.create(username="loginrow", steam_account_id=222)
         _social(drop)
 
-        with mock.patch("app.discord_accounts.logger") as spy:
+        with mock.patch("user.discord_accounts.logger") as spy:
             merge_discord_accounts(keep=keep, drop=drop)
 
         self.assertEqual(
@@ -519,7 +519,7 @@ class MergeOrgMemberDependentsTest(TestCase):
         )
         team = self._team_with(lu)
 
-        with mock.patch("app.discord_accounts.logger") as spy:
+        with mock.patch("user.discord_accounts.logger") as spy:
             merge_discord_accounts(keep=self.keep, drop=self.drop)
 
         self.assertEqual(LeagueUser.objects.nocache().get(pk=existing.pk).mmr, 4200)
@@ -587,7 +587,7 @@ class MergeOrgMemberDependentsTest(TestCase):
             org_user=self.drop_ou, rank_medal="Legend"
         )
 
-        with mock.patch("app.discord_accounts.logger") as spy:
+        with mock.patch("user.discord_accounts.logger") as spy:
             merge_discord_accounts(keep=self.keep, drop=self.drop)
 
         self.assertEqual(
@@ -604,7 +604,7 @@ class MergeOrgMemberDependentsTest(TestCase):
             org_user=self.drop_ou, game_type=GameType.DOTA2, mmr=4000
         )
 
-        with mock.patch("app.discord_accounts.logger") as spy:
+        with mock.patch("user.discord_accounts.logger") as spy:
             merge_discord_accounts(keep=self.keep, drop=self.drop)
 
         [row] = [r for r in _discarded(spy) if r["model"] == "org.OrgUser"]
@@ -612,7 +612,7 @@ class MergeOrgMemberDependentsTest(TestCase):
         self.assertEqual(row["deleted"]["org.OrgUserGameMmr"], 1)
 
     def test_discarded_base_profile_reports_its_game_profiles(self) -> None:
-        with mock.patch("app.discord_accounts.logger") as spy:
+        with mock.patch("user.discord_accounts.logger") as spy:
             merge_discord_accounts(keep=self.keep, drop=self.drop)
 
         [row] = [r for r in _discarded(spy) if r["model"] == "user.BaseUserProfile"]
