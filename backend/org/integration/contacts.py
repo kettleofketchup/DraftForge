@@ -52,7 +52,11 @@ from org.integration.parsers import (
     parse_timestamp,
 )
 from org.integration.receipts import format_timestamp, import_source_hash
-from org.integration.subjects import SubjectUniverse, authorized_event_subjects
+from org.integration.subjects import (
+    SubjectUniverse,
+    authorized_event_subjects,
+    guild_snapshot,
+)
 from org.integration.ticks import (
     external_contact_exists,
     external_contact_for,
@@ -265,8 +269,10 @@ def import_contact_receipts(org: Organization, payload: dict) -> dict[str, Any]:
 
     Raises ``IntegrationError``: 400 for any invalid or unauthorized entry,
     403/404 for binding problems, 409 ``mapping_changed`` for a stale
-    ``mapping_version`` and 409 ``source_content_conflict`` for changed
-    source facts. Nothing is written when it raises.
+    ``mapping_version``, 409 ``source_content_conflict`` for changed
+    source facts, 409 ``import_conflict_retry`` when a concurrent import
+    stored one of the source IDs first, and 503 ``subject_source_unavailable``
+    when the guild cannot be read. Nothing is written when it raises.
     """
     version, entries = _parse(payload)
     if not entries:
@@ -274,10 +280,18 @@ def import_contact_receipts(org: Organization, payload: dict) -> dict[str, Any]:
         return _result([], 0)
     event_id = entries[0].event_id
     get_event_binding(org.pk, event_id)
+    # The guild read is network I/O; on SQLite the locked transaction below
+    # holds the database-wide write lock, so it must happen first. Inside
+    # the lock only the database sources and the version are re-checked.
+    try:
+        event = Event.objects.nocache().get(pk=event_id, organization=org)
+    except Event.DoesNotExist:
+        raise IntegrationError("not_found", 404) from None
+    guild = guild_snapshot(org, event)
 
     def locked() -> dict[str, Any]:
         event = Event.objects.nocache().get(pk=event_id, organization=org)
-        universe = authorized_event_subjects(org, event)
+        universe = authorized_event_subjects(org, event, guild=guild)
         if universe.mapping_version != version:
             raise IntegrationError("mapping_changed", 409)
         _authorize(universe, entries)
@@ -288,10 +302,17 @@ def import_contact_receipts(org: Organization, payload: dict) -> dict[str, Any]:
     try:
         result = with_event_mutation(event_id, locked)
     except IntegrityError:
-        # A concurrent import of another event stored one of these source
-        # IDs first. The rolled-back batch is safe to retry and will then
-        # see the stored receipt.
-        raise IntegrationError("mapping_changed", 409) from None
+        # A concurrent import (for example of another event) stored one of
+        # these source IDs first. The batch rolled back; a retry sees the
+        # stored receipt and reports unchanged or source_content_conflict.
+        log.warning(
+            "integration_contacts_import_conflict",
+            system="org",
+            subsystem="integration",
+            org_id=org.pk,
+            event_id=event_id,
+        )
+        raise IntegrationError("import_conflict_retry", 409) from None
     log.info(
         "integration_contacts_imported",
         system="org",

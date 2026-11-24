@@ -20,16 +20,19 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
+from django.db import IntegrityError
 from django.test import override_settings
 from django.utils import timezone
 
 from app.discord_accounts import merge_discord_accounts
 from app.models import CustomUser
+from discordbot.services.discord_members import DiscordMembersFetchError
 from events.constants import EventState
 from events.models import Event
 from org.api_tokens.tokens import issue_token
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
+from org.integration import contacts
 from org.integration.contacts import external_contact_for
 from org.integration.lifecycle import reconcile_promotion_identity
 from org.integration.subjects import authorized_event_subjects
@@ -43,6 +46,7 @@ from org.models_promotion_sync import (
 from org.promotion.recipients import user_for_guild_member
 from org.promotion.services import record_promo_send, undo_promo_send
 from org.tests.test_integration_recipients import (
+    FETCH,
     GUILD_ONLY_ID,
     _RecipientsBase,
     bindings,
@@ -242,6 +246,50 @@ class ImportTests(_ImportBase):
         self.members = [*self.members, guild_member("990000000000000077", days_ago=1)]
         resp = self.post([self.entry(8021, self.recipient)], version=stale)
         self._assert_rejected(resp, 409, "mapping_changed")
+
+    def test_source_id_collision_is_a_retryable_import_conflict(self) -> None:
+        # A concurrent import stored one of these source IDs first, so the
+        # insert fails after validation. That is not a mapping change.
+        with patch(
+            "org.integration.contacts._apply_entries",
+            side_effect=IntegrityError("unique constraint"),
+        ):
+            resp = self.post([self.entry(8021, self.recipient)])
+        self._assert_rejected(resp, 409, "import_conflict_retry")
+
+    def test_guild_is_read_before_the_event_lock(self) -> None:
+        lock = {"held": False}
+        reads: list[bool] = []
+        original = contacts.with_event_mutation
+
+        def tracking(event_id: int, operation: Any) -> Any:
+            lock["held"] = True
+            try:
+                return original(event_id, operation)
+            finally:
+                lock["held"] = False
+
+        def fetch(**_: Any) -> list[dict]:
+            reads.append(lock["held"])
+            return list(self.members)
+
+        version = self.version()
+        with (
+            patch.object(contacts, "with_event_mutation", tracking),
+            patch(FETCH, side_effect=fetch),
+        ):
+            self.imported([self.entry(8021, GUILD_ONLY_ID)], version=version)
+        self.assertEqual(reads, [False])
+
+    def test_unavailable_guild_is_503_before_locking(self) -> None:
+        version = self.version()
+        with (
+            patch(FETCH, side_effect=DiscordMembersFetchError("down")),
+            patch.object(contacts, "with_event_mutation") as locked,
+        ):
+            resp = self.post([self.entry(8021, self.recipient)], version=version)
+        self._assert_rejected(resp, 503, "subject_source_unavailable")
+        locked.assert_not_called()
 
     def test_multiple_events_in_one_batch_rejected(self) -> None:
         resp = self.post(

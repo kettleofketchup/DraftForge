@@ -142,6 +142,33 @@ class DeletionTests(_ImportBase):
             self.receipt(8021).association_reason, AssociationReason.ACCOUNT_DELETED
         )
 
+    def test_direct_model_delete_runs_the_same_hook(self) -> None:
+        player = self.non_member_player("model_deleted")
+        discord_id = player.discordId
+        self.imported([self.entry(8021, player)])
+        CustomUser.objects.get(pk=player.pk).delete()
+        stored = self.receipt(8021)
+        self.assertEqual(stored.association_state, AssociationState.QUARANTINED)
+        self.assertEqual(stored.association_reason, AssociationReason.ACCOUNT_DELETED)
+        self.assertIsNone(stored.user_id)
+
+        # A later account that owns the same Discord ID gets no tick, and a
+        # replay naming it cannot turn the receipt back into a link.
+        heir = self._user("model_heir")
+        heir.discordId = discord_id
+        heir.save()
+        self.assertFalse(self.ticked(discord_id, heir))
+        body = self.imported([self.entry(8021, heir)])
+        self.assertEqual(self.statuses(body), ["quarantined"])
+
+    def test_queryset_delete_runs_the_same_hook(self) -> None:
+        player = self.non_member_player("bulk_deleted")
+        self.imported([self.entry(8021, player)])
+        CustomUser.objects.filter(pk=player.pk).delete()
+        self.assertEqual(
+            self.receipt(8021).association_reason, AssociationReason.ACCOUNT_DELETED
+        )
+
     @override_settings(DISCORD_BOT_TOKEN="test-bot-token")
     def test_deletion_cancels_unsent_outbox_rows_only(self) -> None:
         send = record_promo_send(

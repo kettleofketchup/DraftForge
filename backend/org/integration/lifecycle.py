@@ -10,7 +10,8 @@ moves, and only to the account that owns that Discord ID:
   otherwise they are quarantined, unlinked, so the generic merge cannot
   hand the tick to a different Discord owner.
 - ``cancel_or_redact_promotion_identity(user)`` runs before an account is
-  deleted. Its receipts are quarantined as ``account_deleted`` and
+  deleted, from a ``pre_delete`` receiver in ``org.signals`` so no delete
+  path can skip it. Its receipts are quarantined as ``account_deleted`` and
   unlinked, so a later replay of the same SFG contact neither ticks a new
   owner nor recreates anything. Its outbox rows that were never sent are
   canceled; applied, canceled and in-flight rows are left alone, and frozen

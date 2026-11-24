@@ -46,6 +46,9 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     "source_content_conflict": (
         "A stored source contact has different source facts; nothing was imported."
     ),
+    "import_conflict_retry": (
+        "A concurrent import stored one of these contacts first; retry the batch."
+    ),
     "subject_source_unavailable": "A subject source is unavailable; retry later.",
     "request_too_large": "Request body too large.",
     "unsupported_media_type": "Content type must be application/json.",

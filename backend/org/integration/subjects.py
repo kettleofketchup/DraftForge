@@ -120,12 +120,21 @@ def _unavailable(org: Organization, event: Event) -> IntegrationError:
     return IntegrationError("subject_source_unavailable", 503)
 
 
-def _guild_discord_ids(org: Organization, event: Event) -> set[str]:
+def guild_snapshot(org: Organization, event: Event) -> frozenset[str]:
+    """Discord IDs of the guild's recent joiners, read from Discord.
+
+    This is network I/O (paginated, with rate-limit sleeps on a cache miss).
+    Call it outside any transaction or lock and pass the result to
+    ``authorized_event_subjects``. Raises 503 ``subject_source_unavailable``
+    when the guild cannot be read.
+    """
     try:
         members = fetch_guild_members(org)
     except DiscordMembersFetchError:
         raise _unavailable(org, event) from None
-    return {j["member"]["user"]["id"] for j in joiners_since(members, days=MAX_DAYS)}
+    return frozenset(
+        j["member"]["user"]["id"] for j in joiners_since(members, days=MAX_DAYS)
+    )
 
 
 def _chunks(values: list[str], size: int) -> Iterable[list[str]]:
@@ -213,15 +222,21 @@ def _mapping_version(binding: EventBinding, subjects: tuple[Subject, ...]) -> st
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def authorized_event_subjects(org: Organization, event: Event) -> SubjectUniverse:
+def authorized_event_subjects(
+    org: Organization, event: Event, *, guild: frozenset[str] | None = None
+) -> SubjectUniverse:
     """Every subject authorized for ``event``, sorted, with its mapping version.
+
+    ``guild`` is a ``guild_snapshot`` taken earlier; with it, only database
+    sources are read here, so a caller holding a transaction or the event
+    lock never waits on Discord. Without it the guild is fetched now.
 
     Raises ``IntegrationError``: 403/404 from the binding lookup, 503
     ``subject_source_unavailable`` if the guild cannot be read, 409
     ``identity_conflict`` if two subjects would share a sort key.
     """
     binding = get_event_binding(org.pk, event.pk)
-    discord_only = _guild_discord_ids(org, event)
+    discord_only = set(guild_snapshot(org, event) if guild is None else guild)
     discord_only.update(
         ExternalPromotionReceipt.objects.filter(organization=org, event=event)
         .values_list("discord_id", flat=True)

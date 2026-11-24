@@ -244,6 +244,36 @@ class SendFirstRaceTests(_RaceBase):
         self.assertEqual(ExternalPromotionReceipt.objects.count(), 1)
 
 
+class GuildFetchOutsideLockTests(_RaceBase):
+    """The Discord guild fetch is network I/O. On SQLite (IMMEDIATE
+    transactions) any fetch inside the import's transaction would hold the
+    database-wide write lock across it, so it must run before the lock."""
+
+    def test_import_fetches_guild_before_taking_the_event_lock(self) -> None:
+        payload = self.payload()
+        held = {"lock": False}
+        seen: list[tuple[bool, bool]] = []
+        original_lock = event_lock.lock_event
+
+        def tracking_lock(event_id: int) -> None:
+            original_lock(event_id)
+            held["lock"] = True
+
+        def fetch(**_: Any) -> list:
+            seen.append((connection.in_atomic_block, held["lock"]))
+            return []
+
+        with (
+            patch.object(event_lock, "lock_event", tracking_lock),
+            patch("org.promotion.recipients.get_discord_members_data", fetch),
+        ):
+            result = import_contact_receipts(self.org, payload)
+
+        self.assertEqual(result["applied"], 1)
+        self.assertTrue(seen, "the import never read the guild")
+        self.assertEqual(seen, [(False, False)] * len(seen))
+
+
 class EventMutationRetryTests(_RaceBase):
     def _flaky(self, failures: int, message: str = "database is locked"):
         calls = {"n": 0}
