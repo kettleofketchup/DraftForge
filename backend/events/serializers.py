@@ -16,6 +16,7 @@ from app.user_cache import serialize_users_core
 from common.game import GameType
 from events.capacity import seat_holding_statuses
 from events.constants import LINE_EXCLUDED_STATUSES, EventState, SignupOpenMode
+from events.history import reduce_history_rules, reduce_history_snapshot
 from events.mmr_suggestions import suggest_mmr
 from events.models import (
     Event,
@@ -26,6 +27,7 @@ from events.models import (
     ReadyCheck,
     ReadyCheckEntry,
     RepeaterSubscription,
+    SignupLedgerEntry,
 )
 from events.permissions import has_event_staff_access
 from events.ready_check_constants import ReadyCheckEntryState
@@ -356,6 +358,75 @@ class EventStaffUserSerializer(serializers.ModelSerializer):
     def get_guildNickname(self, obj: CustomUser) -> str | None:
         nicks: dict[int, str | None] = self.context.get("_staff_guild_nicknames", {})
         return nicks.get(obj.pk)
+
+
+def _history_user(
+    user: CustomUser | None,
+    snapshot: dict[str, Any] | None,
+    nicks: dict[int, str | None],
+) -> dict[str, Any]:
+    if user is not None:
+        return {
+            "user_id": user.pk,
+            "username": user.username,
+            "nickname": user.nickname,
+            "discordNickname": user.discordNickname,
+            "guildNickname": nicks.get(user.pk),
+            "avatarUrl": user.avatarUrl,
+            "discord_id": str(user.discordId) if user.discordId else None,
+        }
+    snap = snapshot if isinstance(snapshot, dict) else {}
+    discord_id = snap.get("discord_id")
+    return {
+        "user_id": snap.get("user_id"),
+        "username": snap.get("username"),
+        "nickname": snap.get("nickname"),
+        "discordNickname": None,
+        "guildNickname": None,
+        "avatarUrl": None,
+        "discord_id": str(discord_id) if discord_id else None,
+    }
+
+
+class SignupLedgerEntrySerializer(serializers.Serializer):
+    """Read-only staff view of one ledger entry; see docs signup-ledger.md."""
+
+    id = serializers.IntegerField(read_only=True)
+    occurred_at = serializers.DateTimeField(read_only=True)
+    action = serializers.CharField(read_only=True)
+    subject = serializers.SerializerMethodField()
+    actor = serializers.SerializerMethodField()
+    means = serializers.CharField(read_only=True)
+    on_behalf = serializers.BooleanField(read_only=True)
+    reason = serializers.CharField(read_only=True)
+    before = serializers.SerializerMethodField()
+    after = serializers.SerializerMethodField()
+    rules_overridden = serializers.SerializerMethodField()
+    caused_by = serializers.SerializerMethodField()
+
+    def _nicks(self) -> dict[int, str | None]:
+        return self.context.get("_history_guild_nicknames") or {}
+
+    def get_subject(self, obj: SignupLedgerEntry) -> dict[str, Any]:
+        return _history_user(obj.subject_user, obj.subject_snapshot, self._nicks())
+
+    def get_actor(self, obj: SignupLedgerEntry) -> dict[str, Any]:
+        data = _history_user(obj.actor_user, obj.actor_snapshot, self._nicks())
+        del data["discord_id"]
+        data["role"] = obj.actor_role
+        return data
+
+    def get_before(self, obj: SignupLedgerEntry) -> dict[str, Any] | None:
+        return reduce_history_snapshot(obj.before, entry_id=obj.pk)
+
+    def get_after(self, obj: SignupLedgerEntry) -> dict[str, Any] | None:
+        return reduce_history_snapshot(obj.after, entry_id=obj.pk)
+
+    def get_rules_overridden(self, obj: SignupLedgerEntry) -> list[str]:
+        return reduce_history_rules(obj.rules_overridden, entry_id=obj.pk)
+
+    def get_caused_by(self, obj: SignupLedgerEntry) -> int | None:
+        return obj.caused_by_id
 
 
 class ReadyCheckEntrySerializer(serializers.ModelSerializer):

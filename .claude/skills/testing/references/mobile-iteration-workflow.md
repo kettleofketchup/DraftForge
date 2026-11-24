@@ -38,9 +38,14 @@ Each pass is one orientation around the same axis. Run from repo root.
    ```
 
 3. **Read evidence, do not guess.** For every failure, read both:
-   - `frontend/test-results/<test-name>/error-context.md` — the offender list
-     serialized from `findOverflow()` (domPath, overshootPx, classes).
-   - `frontend/test-results/<test-name>/test-failed-1.png` — the screenshot.
+   - `frontend/test-results/latest/artifacts/<test-name>/error-context.md` —
+     the offender list serialized from `findOverflow()` (domPath,
+     overshootPx, classes).
+   - `frontend/test-results/latest/artifacts/<test-name>/test-failed-1.png` —
+     the screenshot.
+
+   `latest` is the newest local run; each run has its own
+   `test-results/runs/<id>/` (CI keeps the flat `test-results/<test-name>/`).
 
    Never debug from the test output alone. The error-context names the
    offending element; the screenshot tells you which surface it sits in.

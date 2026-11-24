@@ -233,7 +233,7 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
     claimer_avatar = serializers.CharField(source="claimer.avatarUrl", read_only=True)
 
     target_nickname = serializers.CharField(
-        source="target_user.nickname", read_only=True
+        source="target_user.nickname", read_only=True, allow_null=True
     )
     target_username = serializers.CharField(
         source="target_user.username", read_only=True, allow_null=True
@@ -242,7 +242,7 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
         source="target_user.discordNickname", read_only=True, allow_null=True
     )
     target_steamid = serializers.IntegerField(
-        source="target_user.steamid", read_only=True
+        source="target_user.steamid", read_only=True, allow_null=True
     )
     target_mmr = serializers.SerializerMethodField()
     target_game_mmrs = serializers.SerializerMethodField()
@@ -306,10 +306,14 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             memo[obj.pk] = mmrs
         return memo[obj.pk]
 
-    def get_target_mmr(self, obj: ProfileClaimRequest) -> int:
+    def get_target_mmr(self, obj: ProfileClaimRequest) -> int | None:
+        if obj.target_user_id is None:
+            return None
         return self._target_mmrs(obj)[GameType.DOTA2]
 
-    def get_target_game_mmrs(self, obj: ProfileClaimRequest) -> dict[str, int]:
+    def get_target_game_mmrs(self, obj: ProfileClaimRequest) -> dict[str, int] | None:
+        if obj.target_user_id is None:
+            return None
         return {str(game): mmr for game, mmr in self._target_mmrs(obj).items()}
 
 

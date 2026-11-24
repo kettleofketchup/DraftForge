@@ -27,7 +27,7 @@ from steam.services.account_lookup import SteamLookupRateLimited
 
 
 class SignupWritethroughTest(TestCase):
-    """Regression for #196a — User-level fields must reflect signup-submitted data."""
+    """User-level fields must reflect signup-submitted data."""
 
     def setUp(self):
         self.org = Organization.objects.create(name="WT Org")
@@ -69,14 +69,10 @@ class SignupWritethroughTest(TestCase):
     def test_positions_writethrough_no_longer_runs_here(self):
         """The signup Steam sync MUST NOT touch User.positions.
 
-        Position writethrough used to live here (mapping PlayerDotaProfile.pos_N
-        booleans to PositionsModel priorities flattened at 1). That was removed in
-        PR #217 because it overwrote the real per-role priorities (0..5) that
-        users now pick in the web signup modal — those land on user.positions
-        directly via `apply_signup_input` BEFORE `_create_signup` runs. Discord
-        users with `positions=list[int]` get slot-order-derived priorities
-        through the same `apply_signup_input` path. Re-introducing a flatten-
-        to-1 here would silently clobber both.
+        Flattening PlayerDotaProfile.pos_N booleans to priority 1 would clobber
+        the per-role priorities (0..5) that `apply_signup_input` writes before
+        `_create_signup` runs, from the web modal or a Discord
+        `positions=list[int]` in slot order.
         """
         # Seed user.positions with real priorities (simulating what
         # apply_signup_input wrote during the signup modal flow).
@@ -107,7 +103,7 @@ class SignupWritethroughTest(TestCase):
 
 
 class SignupWritethroughInvariantsTest(SignupWritethroughTest):
-    """MMR isolation + transaction atomicity (#196a)."""
+    """Signup save leaves org MMR alone and rolls back atomically."""
 
     def test_mmr_is_not_touched_on_signup_save(self):
         set_org_mmr(self.org_user, GameType.DOTA2, 4500, mark_verified=False)

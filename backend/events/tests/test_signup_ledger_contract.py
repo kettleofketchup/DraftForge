@@ -450,6 +450,40 @@ class WithdrawRejectLedgerTests(LedgerContractMixin, EventTestCase):
                 self.assertNotEqual(first.status, SignupStatus.WAITLISTED)
                 self.assertIsNone(promoted.after["waitlist_position"])
 
+    def test_demote_leaves_the_seat_for_staff(self, _notify: Any) -> None:
+        event, seated = self._seated_event(waitlisted=2)
+        demote_to_waitlist(seated, actor=self.staff_actor)
+        self.assertEqual([e.action for e in self.ledger(event)], [SignupAction.DEMOTED])
+        self.assertEqual(
+            EventSignup.objects.filter(
+                event=event, status=SignupStatus.WAITLISTED
+            ).count(),
+            3,
+        )
+        seated.refresh_from_db()
+        self.assertEqual(seated.waitlist_position, 3)
+
+    def test_consecutive_demotes_keep_both_waitlisted(self, _notify: Any) -> None:
+        for max_players in (2, None):
+            with self.subTest(max_players=max_players):
+                event = self.make_event(max_players=max_players)
+                a, b = (
+                    EventSignup.objects.create(
+                        event=event, user=self.make_user(), status=SignupStatus.APPROVED
+                    )
+                    for _ in range(2)
+                )
+                demote_to_waitlist(a, actor=self.staff_actor)
+                demote_to_waitlist(b, actor=self.staff_actor)
+                a.refresh_from_db()
+                b.refresh_from_db()
+                self.assertEqual(a.status, SignupStatus.WAITLISTED)
+                self.assertEqual(b.status, SignupStatus.WAITLISTED)
+                self.assertEqual(
+                    [e.action for e in self.ledger(event)],
+                    [SignupAction.DEMOTED, SignupAction.DEMOTED],
+                )
+
     def test_rebalance_promotions_have_no_cause(self, _notify: Any) -> None:
         event = self.make_event(max_players=2)
         EventSignup.objects.create(

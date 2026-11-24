@@ -12,8 +12,11 @@ Algorithm:
   3. For each stale event, find the nearest correct-day event (within 7 days)
      across upcoming/signups_open/roll_call states and:
        - Migrate EventSignup rows to the target (skipping conflicts where the
-         user already has a signup on the target).
-       - Migrate users on the linked future Tournament to the target's tournament.
+         user already has a signup on the target). Seated rows keep a seat
+         while the target has room; the rest join the end of its waitlist,
+         which then promotes into any seats still free.
+       - Migrate users on the linked future Tournament to the target's
+         tournament, except players the move left on the waitlist.
        - Cancel the stale event.
        - Delete the stale event's DiscordEvent row.
        - Delete the stale event's linked Tournament if state == "future".
@@ -43,12 +46,25 @@ import django
 django.setup()
 
 from django.db import transaction  # noqa: E402
+from django.db.models import Max  # noqa: E402
 
+from app.cache_utils import invalidate_after_commit  # noqa: E402
 from discordbot.models import DiscordEvent  # noqa: E402
-from events.constants import EventState, SignupAction  # noqa: E402
+from events.capacity import (  # noqa: E402
+    has_free_seat,
+    lock_event,
+    seat_holding_statuses,
+)
+from events.constants import EventState, SignupAction, SignupStatus  # noqa: E402
 from events.ledger import SignupActor, record_signup_change, snapshot  # noqa: E402
-from events.models import Event, EventRepeater, EventSignup  # noqa: E402
+from events.models import (  # noqa: E402
+    Event,
+    EventRepeater,
+    EventSignup,
+    SignupLedgerEntry,
+)
 from events.services import (  # noqa: E402
+    _promote_from_waitlist,
     _python_weekday,
     generate_events_for_repeater,
 )
@@ -102,28 +118,68 @@ def find_target_event(stale: Event, candidates: list[Event]) -> Event | None:
     return best
 
 
+def _move_order(rows: list[EventSignup], stale: Event) -> list[EventSignup]:
+    """Seated rows in line order, then the waitlist in waitlist order, then the rest."""
+    seated = [r for r in rows if r.status in seat_holding_statuses(stale)]
+    waiting = sorted(
+        (r for r in rows if r.status == SignupStatus.WAITLISTED),
+        key=lambda r: (r.waitlist_position is None, r.waitlist_position or 0, r.pk),
+    )
+    rest = [r for r in rows if r not in seated and r not in waiting]
+    return [*seated, *waiting, *rest]
+
+
+@transaction.atomic
 def migrate_signups(
     stale: Event, target: Event, *, correlation_id: str
 ) -> tuple[int, int]:
+    """Move stale's signups to target. Seated rows keep their seat while target
+    has room; the rest join the end of target's waitlist in their stale order."""
+    locked = lock_event(target)
     existing = set(
-        EventSignup.objects.filter(event=target).values_list("user_id", flat=True)
+        EventSignup.objects.nocache()
+        .filter(event=locked)
+        .values_list("user_id", flat=True)
     )
+    next_position = (
+        EventSignup.objects.nocache()
+        .filter(event=locked, status=SignupStatus.WAITLISTED)
+        .aggregate(max_pos=Max("waitlist_position"))["max_pos"]
+        or 0
+    ) + 1
     actor = SignupActor.system(correlation_id=correlation_id)
-    moved = 0
-    skipped = 0
-    for s in (
+    rows = list(
         EventSignup.objects.nocache()
         .filter(event=stale)
         .select_related("user__base_profile")
-    ):
+    )
+    moved = 0
+    skipped = 0
+    first_waitlisted: SignupLedgerEntry | None = None
+    for s in _move_order(rows, stale):
         if s.user_id in existing:
             print(f"    skip signup user={s.user_id} ({s.user}) — already on target")
             skipped += 1
             continue
         before = snapshot(s, extra={"event_id": stale.pk})
-        s.event = target
+        if s.status in seat_holding_statuses(stale) and not has_free_seat(locked):
+            s.status = SignupStatus.WAITLISTED
+        if s.status == SignupStatus.WAITLISTED:
+            s.waitlist_position = next_position
+            next_position += 1
+        else:
+            s.waitlist_position = None
+        s.event = locked
         s.event_team = None
-        s.save(update_fields=["event", "event_team", "updated_at"])
+        s.save(
+            update_fields=[
+                "event",
+                "event_team",
+                "status",
+                "waitlist_position",
+                "updated_at",
+            ]
+        )
         after = snapshot(s, extra={"event_id": target.pk})
         source = record_signup_change(
             event=stale,
@@ -134,8 +190,8 @@ def migrate_signups(
             before=before,
             after=after,
         )
-        record_signup_change(
-            event=target,
+        dest = record_signup_change(
+            event=locked,
             subject=s.user,
             actor=actor,
             action=SignupAction.MOVED_EVENT,
@@ -144,7 +200,13 @@ def migrate_signups(
             after=after,
             caused_by=source,
         )
+        if s.status == SignupStatus.WAITLISTED and first_waitlisted is None:
+            first_waitlisted = dest
         moved += 1
+    if first_waitlisted is not None:
+        _promote_from_waitlist(locked, cause=first_waitlisted)
+    if moved:
+        invalidate_after_commit(stale, locked)
     return moved, skipped
 
 
@@ -154,9 +216,14 @@ def migrate_tournament_users(stale: Event, target: Event) -> int:
     if not (target.tournament and target.tournament.state == "future"):
         return 0
     existing = set(target.tournament.users.values_list("id", flat=True))
+    waitlisted = set(
+        EventSignup.objects.nocache()
+        .filter(event=target, status=SignupStatus.WAITLISTED)
+        .values_list("user_id", flat=True)
+    )
     moved = 0
     for u in stale.tournament.users.all():
-        if u.id in existing:
+        if u.id in existing or u.id in waitlisted:
             continue
         target.tournament.users.add(u)
         moved += 1
