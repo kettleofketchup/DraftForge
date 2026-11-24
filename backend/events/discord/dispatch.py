@@ -98,12 +98,7 @@ def notify_signup_changed(event: "Event") -> None:
 
 
 def notify_new_event(event: "Event") -> None:
-    """Dispatch new event notification if discord_announcement is enabled."""
-    if not event.discord_announcement:
-        _log_skipped(
-            event, "discord_announcement_disabled", "send_new_event_notification"
-        )
-        return
+    """Dispatch the new-event channel post if an announcement channel is set."""
     if not event.discord_announcement_channel_id:
         _log_skipped(event, "no_channel_id", "send_new_event_notification")
         return

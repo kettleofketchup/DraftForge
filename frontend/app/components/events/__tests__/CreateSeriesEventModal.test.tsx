@@ -208,7 +208,7 @@ describe('CreateSeriesEventModal', () => {
     });
   });
 
-  it('does not render the repeater-only "Message interested users" block', async () => {
+  it('does not render the repeater-only "Post new events" block', async () => {
     renderModal();
     fireEvent.mouseDown(screen.getByTestId('one-off-tab-discord'), {
       button: 0,
@@ -219,6 +219,7 @@ describe('CreateSeriesEventModal', () => {
         'active',
       ),
     );
+    expect(screen.queryByText('Post new events')).toBeNull();
     expect(screen.queryByText('Message interested users')).toBeNull();
   });
 });
