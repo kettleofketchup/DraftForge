@@ -19,6 +19,7 @@ import {
   closeMatchModal,
   expect,
   expectLobbyState,
+  getLobbyRow,
   getSimLobby,
   hasSimulator,
   loginDotaLobby,
@@ -42,11 +43,12 @@ test.describe('Dota lobby: lifecycle with the simulator (e2e)', () => {
     data = await resetDotaLobbyData(context);
   });
 
-  async function reopen(page: Page, gamePk: number): Promise<Locator> {
-    await page.reload();
-    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
-      timeout: 20_000,
-    });
+  async function reopen(
+    page: Page,
+    tournamentPk: number,
+    gamePk: number,
+  ): Promise<Locator> {
+    await openBracket(page, tournamentPk);
     return openMatchModal(page, gamePk);
   }
 
@@ -62,10 +64,13 @@ test.describe('Dota lobby: lifecycle with the simulator (e2e)', () => {
 
     await openBracket(page, tournament.pk);
     let dialog = await openMatchModal(page, game.pk);
+    const before = await getLobbyRow(context, game.pk);
     await dialog.locator('[data-testid="lobby-create-btn"]').click();
 
     // Auto join: every rostered player joins and sits on their side.
-    const row = await waitForLobbyRow(context, game.pk);
+    const row = await waitForLobbyRow(context, game.pk, undefined, {
+      previousId: before?.id,
+    });
     await expectLobbyState(dialog, 'ready', 45_000);
     const seated = await getSimLobby(context, row.lobby_id!);
     const seatOf = (accountId: number) =>
@@ -161,7 +166,7 @@ test.describe('Dota lobby: lifecycle with the simulator (e2e)', () => {
       dialog.locator('[data-testid="radiantWinsButton"]'),
     );
     await closeMatchModal(page);
-    dialog = await reopen(page, game.pk);
+    dialog = await reopen(page, tournament.pk, game.pk);
     await expect(
       dialog.locator('[data-testid="match-status-final"]'),
     ).toBeVisible();
@@ -176,7 +181,7 @@ test.describe('Dota lobby: lifecycle with the simulator (e2e)', () => {
       dialog.locator('[data-testid="unsetWinnerButton"]'),
     );
     await closeMatchModal(page);
-    dialog = await reopen(page, game.pk);
+    dialog = await reopen(page, tournament.pk, game.pk);
     await expect(
       dialog.locator('[data-testid="lobby-replay-btn"]'),
     ).toBeVisible({

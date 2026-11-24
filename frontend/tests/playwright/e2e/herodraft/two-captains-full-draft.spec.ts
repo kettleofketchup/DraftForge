@@ -102,7 +102,7 @@ test.describe('Two Captains Full Draft', () => {
   test.beforeAll(async () => {
     // Always headless — visible browsers steal user focus during local
     // runs. For visual debugging, open the trace via
-    // `npx playwright show-trace test-results/.../trace.zip`.
+    // `npx playwright show-trace test-results/latest/artifacts/.../trace.zip`.
     const browserOptions = {
       headless: true,
       args: [

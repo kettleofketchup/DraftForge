@@ -6,7 +6,7 @@ import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter } from 'react-router';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { updateTournament } from '~/components/api/api';
+import { getLeagues, updateTournament } from '~/components/api/api';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance } from '~/i18n/config';
 import { useUserStore } from '~/store/userStore';
@@ -15,7 +15,12 @@ import { TournamentEditForm } from './editForm';
 
 vi.mock('~/components/api/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('~/components/api/api')>();
-  return { ...actual, updateTournament: vi.fn(), createTournament: vi.fn() };
+  return {
+    ...actual,
+    updateTournament: vi.fn(),
+    createTournament: vi.fn(),
+    getLeagues: vi.fn().mockResolvedValue([]),
+  };
 });
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
@@ -25,9 +30,6 @@ vi.mock('~/store/userStore', async () => {
   return {
     useUserStore: create(() => ({
       currentUser: {},
-      leagues: [],
-      leaguesOrgId: 'all',
-      getLeagues: () => Promise.resolve(),
       getTournaments: () => Promise.resolve(),
     })),
   };
@@ -60,9 +62,8 @@ const siteStaff = { pk: 1, is_staff: true, is_superuser: false };
 function setUser(user: Record<string, unknown>, leagues: unknown[] = []) {
   useUserStore.setState({
     currentUser: user,
-    leagues,
-    leaguesOrgId: 'all',
   } as unknown as Parameters<typeof useUserStore.setState>[0]);
+  vi.mocked(getLeagues).mockResolvedValue(leagues as never);
 }
 
 function tournament(

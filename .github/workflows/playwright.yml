@@ -361,9 +361,10 @@ jobs:
         run: just test::pw::cicd-events --workers=1 --shard=${{ matrix.shard }}/2
 
       # The 18-dota-lobby specs run against the simulated dota_lobby (profile
-      # dota-lobby, image pinned by DOTA_LOBBY_IMAGE_TAG). With it running,
-      # cicd-dota-lobby sets DOTA_LOBBY_SIMULATOR_REQUIRED=1, so a spec that
-      # would skip for lack of the simulator fails instead.
+      # dota-lobby, image pinned by DOTA_LOBBY_IMAGE_TAG). The step sets
+      # DOTA_LOBBY_SIMULATOR_REQUIRED=1 itself rather than leaving it to
+      # cicd-dota-lobby's "is it running" probe, so a simulator that died
+      # after `up` fails the specs instead of skipping them.
       - name: Start the simulated dota_lobby
         if: matrix.shard == 2
         run: just test::dota-lobby up
@@ -372,6 +373,7 @@ jobs:
         if: matrix.shard == 2
         env:
           CI: 'true'
+          DOTA_LOBBY_SIMULATOR_REQUIRED: '1'
         run: just test::pw::cicd-dota-lobby
 
       - name: Dump container logs on failure
@@ -533,6 +535,9 @@ jobs:
 
       - name: Check the promotion render fixture copies match
         run: cmp backend/org/tests/render_fixture.json frontend/app/features/promotion/__tests__/render_fixture.json
+
+      - name: Check the signup history fixture copies match
+        run: cmp backend/events/tests/signup_history_page.json frontend/app/components/api/__tests__/fixtures/signup-history-page.json
 
       - name: Check the generated notice types are current
         run: just py::notice-types-check
