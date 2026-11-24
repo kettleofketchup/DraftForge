@@ -5,7 +5,7 @@ from typing import Any, ClassVar, Protocol
 from cacheops import cached_as
 from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.http import Http404
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, permission_classes
@@ -34,6 +34,7 @@ from tournament.serializers.team import (
     TeamDeputyRequestSerializer,
     TeamLogSerializer,
     TeamRenameRequestSerializer,
+    TeamReplaceCaptainRequestSerializer,
     TeamSerializer,
     TeamSubInRequestSerializer,
     TeamUserActionRequestSerializer,
@@ -49,11 +50,14 @@ from tournament.services.team_management import (
     TeamChange,
     add_standin,
     follow_captain,
+    live_conflicts,
     mark_dropout,
     other_team_user_ids,
     remove_standin,
     rename,
+    replace_captain,
     restore_member,
+    roster_conflict_body,
     set_captain,
     set_deputy,
     sub_in,
@@ -79,6 +83,7 @@ TEAM_MANAGE_ACTIONS: frozenset[str] = frozenset(
         "standins",
         "standins_remove",
         "sub_in",
+        "replace_captain",
         "rename",
         "history",
         "usage",
@@ -246,7 +251,27 @@ class TeamView(viewsets.ModelViewSet):
             "organization_pk": org.pk if org else None,
             "league_pk": team.tournament.league_id if team.tournament else None,
             "other_team_user_pks": sorted(other_team_user_ids(team)),
+            "other_teams": self._other_teams(team),
         }
+
+    def _other_teams(self, team: Team) -> list[dict[str, Any]]:
+        teams = (
+            Team.objects.nocache()
+            .filter(tournament_id=team.tournament_id)
+            .exclude(pk=team.pk)
+            .prefetch_related("members", "dropin_members")
+            .order_by(F("placement").asc(nulls_first=True), "name", "pk")
+        )
+        return [
+            {
+                "pk": other.pk,
+                "name": other.name,
+                "placement": other.placement,
+                "member_pks": sorted(u.pk for u in other.members.all()),
+                "dropin_pks": sorted(u.pk for u in other.dropin_members.all()),
+            }
+            for other in teams
+        ]
 
     def get_permissions(self) -> list[BasePermission]:
         if self.action in TEAM_MANAGE_ACTIONS | {
@@ -380,6 +405,19 @@ class TeamView(viewsets.ModelViewSet):
             TeamSubInRequestSerializer,
             lambda team, data, **kw: sub_in(
                 team, data["standin_id"], data["replacing_id"], **kw
+            ),
+        )
+
+    @action(detail=True, methods=["post"], url_path="replace-captain")
+    def replace_captain(self, request: Request, pk: str | None = None) -> Response:
+        return self._manage(
+            request,
+            TeamReplaceCaptainRequestSerializer,
+            lambda team, data, **kw: replace_captain(
+                team,
+                data["user_id"],
+                mark_outgoing_dropout=data["mark_outgoing_dropout"],
+                **kw,
             ),
         )
 
@@ -551,6 +589,26 @@ class TeamView(viewsets.ModelViewSet):
 
             serializer = self.get_serializer(team, data=request.data, partial=partial)
             serializer.is_valid(raise_exception=True)
+            reopens = (
+                team.placement is not None
+                and "placement" in serializer.validated_data
+                and serializer.validated_data["placement"] is None
+            )
+            conflicts = live_conflicts(team) if reopens else []
+            if conflicts:
+                log.warning(
+                    "team_patch_blocked_roster_conflict",
+                    system="tournament",
+                    subsystem="teams",
+                    team_id=team.pk,
+                    tournament_id=team.tournament_id,
+                    actor_id=request.user.pk,
+                    user_ids=[u.pk for u in conflicts],
+                )
+                return Response(
+                    roster_conflict_body(team, conflicts),
+                    status=status.HTTP_409_CONFLICT,
+                )
             self.perform_update(serializer)
 
             deleted = serializer.instance.pk is None
