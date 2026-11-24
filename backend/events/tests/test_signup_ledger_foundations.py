@@ -44,6 +44,7 @@ EXPECTED_ACTIONS: list[str] = [
     "ready_check_kept",
     "ready_check_withdrawn",
     "ready_check_transition",
+    "voice_presence_set",
 ]
 
 
@@ -57,7 +58,7 @@ class SignupLedgerFoundationsTests(SimpleTestCase):
         self.assertEqual(ActorRole.values, ["member", "staff", "system"])
         self.assertEqual(
             SignupMeans.values,
-            ["web", "discord_button", "discord_reaction", "system"],
+            ["web", "discord_button", "discord_reaction", "discord_voice", "system"],
         )
 
     def test_line_excluded_statuses(self) -> None:

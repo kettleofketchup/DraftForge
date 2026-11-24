@@ -121,7 +121,13 @@ class SignupMeans(models.TextChoices):
     WEB = "web"
     DISCORD_BUTTON = "discord_button"
     DISCORD_REACTION = "discord_reaction"
+    DISCORD_VOICE = "discord_voice"
     SYSTEM = "system"
+
+
+class VoicePresenceSource(models.TextChoices):
+    FEED = "feed"
+    MANUAL = "manual"
 
 
 LINE_EXCLUDED_STATUSES: frozenset[str] = frozenset(
@@ -159,3 +165,4 @@ class SignupAction(models.TextChoices):
     READY_CHECK_KEPT = "ready_check_kept"
     READY_CHECK_WITHDRAWN = "ready_check_withdrawn"
     READY_CHECK_TRANSITION = "ready_check_transition"
+    VOICE_PRESENCE_SET = "voice_presence_set"
