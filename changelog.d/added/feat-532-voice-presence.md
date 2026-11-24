@@ -1,1 +1,0 @@
-- Members in the event voice channel now confirm their ready check when Voice presence confirms is on. The bot tracks joins and leaves and repairs presence with a 60-second snapshot; operators can read feed ages and set presence by hand with a required reason recorded in the signup ledger. Leaving voice never undoes a confirmation.
