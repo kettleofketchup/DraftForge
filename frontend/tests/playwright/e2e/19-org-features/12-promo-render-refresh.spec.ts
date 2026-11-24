@@ -13,22 +13,39 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Pick the first candidate and the template, returning the DM textarea. */
-async function compose(
-  page: Page,
-  eventPk: number,
-  templatePk: number,
-): Promise<Locator> {
+/** Once the event is selected, return the recipient pk behind the first candidate's Message button. */
+async function firstRecipient(page: Page, eventPk: number): Promise<number> {
   await expect(page.getByTestId(`promo-event-${eventPk}`)).toHaveAttribute(
     'aria-pressed',
     'true',
   );
-  const firstSelect = page.locator('[data-testid^="promo-select-"]').first();
-  await expect(firstSelect).toBeVisible();
-  await firstSelect.click();
-  await page.getByTestId('promo-template-select').click();
+  const firstMessage = page
+    .locator('[data-testid^="promo-candidate-message-"]')
+    .first();
+  await expect(firstMessage).toBeVisible();
+  const testId = await firstMessage.getAttribute('data-testid');
+  const recipientPk = Number(testId?.replace('promo-candidate-message-', ''));
+  expect(recipientPk).toBeGreaterThan(0);
+  return recipientPk;
+}
+
+/** Open the message dialog for a candidate and pick the template, returning the DM textarea. */
+async function compose(
+  page: Page,
+  recipientPk: number,
+  templatePk: number,
+): Promise<Locator> {
+  await page.getByTestId(`promo-candidate-message-${recipientPk}`).click();
+  const dialog = page.getByTestId('promo-message-dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByTestId('promo-template-select').click();
   await page.getByTestId(`promo-template-option-${templatePk}`).click();
-  return page.getByTestId('promo-message-text');
+  return dialog.getByTestId('promo-message-text');
+}
+
+async function closeDialog(page: Page): Promise<void> {
+  await page.getByTestId('promo-dialog-close').click();
+  await expect(page.getByTestId('promo-message-dialog')).toHaveCount(0);
 }
 
 test.describe('Org features: promo DMs follow org and event edits @cicd', () => {
@@ -61,10 +78,12 @@ test.describe('Org features: promo DMs follow org and event edits @cicd', () => 
       page,
       `/organizations/${org.pk}?tab=promotion&event=${eventPk}`,
     );
-    const message = await compose(page, eventPk, templatePk);
+    const recipientPk = await firstRecipient(page, eventPk);
+    const message = await compose(page, recipientPk, templatePk);
     await expect(message).toHaveValue(
       new RegExp(`from ${escapeRegExp(org.name)} here\\.`),
     );
+    await closeDialog(page);
 
     await page.getByTestId('org-settings-button').click();
     await expect(page.getByTestId('org-settings-modal')).toBeVisible();
@@ -81,9 +100,7 @@ test.describe('Org features: promo DMs follow org and event edits @cicd', () => 
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('org-settings-modal')).toHaveCount(0);
 
-    if (!(await message.isVisible())) {
-      await compose(page, eventPk, templatePk);
-    }
+    await compose(page, recipientPk, templatePk);
     await expect(message).toHaveValue(
       new RegExp(`from ${escapeRegExp(renamed)} here\\.`),
     );
@@ -102,10 +119,12 @@ test.describe('Org features: promo DMs follow org and event edits @cicd', () => 
     await expect(page).toHaveURL(
       new RegExp(`/organizations/${orgPk}\\?.*tab=promotion`),
     );
-    const message = await compose(page, event.pk, templatePk);
+    const recipientPk = await firstRecipient(page, event.pk);
+    const message = await compose(page, recipientPk, templatePk);
     await expect(message).toHaveValue(
       new RegExp(`\\*\\*${escapeRegExp(event.name)}\\*\\*`),
     );
+    await closeDialog(page);
 
     await page.goBack();
     await expect(page).toHaveURL(new RegExp(`/events/${event.pk}$`));
@@ -125,7 +144,11 @@ test.describe('Org features: promo DMs follow org and event edits @cicd', () => 
 
     await page.goForward();
     await expect(page).toHaveURL(new RegExp(`/organizations/${orgPk}`));
-    await compose(page, event.pk, templatePk);
+    await expect(page.getByTestId(`promo-event-${event.pk}`)).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await compose(page, recipientPk, templatePk);
     await expect(message).toHaveValue(
       new RegExp(`\\*\\*${escapeRegExp(renamed)}\\*\\*`),
     );
