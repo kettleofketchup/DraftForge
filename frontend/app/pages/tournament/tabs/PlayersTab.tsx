@@ -129,6 +129,7 @@ export const PlayersTab: React.FC = memo(() => {
           emptyMessage="No players in this tournament"
           organizationId={organizationId}
           leagueId={leagueId}
+          showSteamVerification={canEdit}
         />
       </div>
 

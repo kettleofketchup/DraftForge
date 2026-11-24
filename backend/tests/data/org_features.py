@@ -163,6 +163,7 @@ ORG_FEATURES_UPCOMING_EVENT_NAME: Final[str] = "Features Upcoming Event"
 ORG_FEATURES_UPCOMING2_EVENT_NAME: Final[str] = "Features Second Upcoming Event"
 ORG_FEATURES_COMPLETED_EVENT_NAME: Final[str] = "Features Completed Event"
 ORG_FEATURES_CONDUCT_EVENT_NAME: Final[str] = "Features Conduct Event"
+ORG_FEATURES_EVENT_TOURNAMENT_NAME: Final[str] = "Features Inhouse"
 ORG_FEATURES_CONDUCT_PAST_EVENT_NAMES: Final[tuple[str, ...]] = (
     "Features Past Event 1",
     "Features Past Event 2",

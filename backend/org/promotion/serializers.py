@@ -1,11 +1,14 @@
-from typing import Any
+from typing import Any, Final
 
 from rest_framework import serializers
 
 from events.models import Event
+from org.mmr import DEFAULT_MMR_BOUNDS
 from org.models import PromoSend, PromoTemplate
 from org.promotion.recipients import CandidateSource
 from org.promotion.services import MAX_SEND_TEXT
+
+MAX_MMR_FILTER: Final[int] = DEFAULT_MMR_BOUNDS[1]
 
 
 class PromoTemplateSerializer(serializers.ModelSerializer):
@@ -18,7 +21,15 @@ class PromoTemplateSerializer(serializers.ModelSerializer):
 class PromoEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
-        fields = ["id", "name", "scheduled_at", "ends_at", "state", "signups_open_at"]
+        fields = [
+            "id",
+            "name",
+            "scheduled_at",
+            "ends_at",
+            "state",
+            "signups_open_at",
+            "game_type",
+        ]
         read_only_fields = fields
 
 
@@ -31,6 +42,20 @@ class CandidatesQuerySerializer(serializers.Serializer):
     hide_signed_up = serializers.BooleanField(default=True)
     hide_messaged = serializers.BooleanField(default=True)
     q = serializers.CharField(required=False, allow_blank=True, default="")
+    min_mmr = serializers.IntegerField(
+        required=False, allow_null=True, min_value=0, max_value=MAX_MMR_FILTER
+    )
+    max_mmr = serializers.IntegerField(
+        required=False, allow_null=True, min_value=0, max_value=MAX_MMR_FILTER
+    )
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        low, high = attrs.get("min_mmr"), attrs.get("max_mmr")
+        if low is not None and high is not None and low > high:
+            raise serializers.ValidationError(
+                {"max_mmr": ["must be at least the minimum MMR"]}
+            )
+        return attrs
 
 
 class DiscordMemberRequestSerializer(serializers.Serializer):

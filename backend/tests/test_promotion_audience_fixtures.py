@@ -32,6 +32,8 @@ class PromotionAudienceFixtureTests(TestCase):
             self.assertEqual(settings.DISCORD_API_BASE_URL, "http://127.0.0.1:9")
             members = get_discord_members_data(GUILD_ID)
             self.assertEqual(len(members), 11)
+            self.assertEqual(data["audiences"]["fresh"]["mmr"], 4500)
+            self.assertIsNone(data["audiences"]["week"]["mmr"])
             unlinked = data["audiences"]["unlinked"]
             member = next(
                 m for m in members if m["user"]["id"] == unlinked["discord_id"]
