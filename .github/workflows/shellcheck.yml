@@ -73,7 +73,7 @@ jobs:
       - name: Shellcheck just recipes
         run: just ci::shellcheck
 
-  # Only the jobs allowlisted in scripts/check-runs-on.sh may use the draftforge-home runner.
+  # Only the jobs allowlisted in scripts/check-runs-on.sh may use a home runner label, each its own.
   runs-on-guard:
     name: runs-on guard (home runner label)
     # Small job, on the home runner to free hosted slots: same-repo PRs from

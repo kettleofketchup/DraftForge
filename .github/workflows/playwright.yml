@@ -59,9 +59,11 @@ env:
 jobs:
   # Builds and pushes (content-hash tag only) any stack image or test DB the registry
   # lacks, once, so the test jobs below only pull. Runs on ubuntu-latest, or on the home
-  # runner (draftforge-home) for an allowlisted same-repo PR when SELF_HOSTED_RUNNERS is
-  # 'true'. There it builds through the home BuildKit and pushes only
-  # draftforge-ci/<img>:pr-<n>-<hash> (PR mode), never a draftforge/ tag or :buildcache.
+  # runner for an allowlisted same-repo PR when SELF_HOSTED_RUNNERS is 'true'. Its home
+  # label is draftforge-home-prepare, a lane of its own, so a burst of small jobs on
+  # draftforge-home cannot keep every test job waiting. There it builds through the home
+  # BuildKit and pushes only draftforge-ci/<img>:pr-<n>-<hash> (PR mode), never a
+  # draftforge/ tag or :buildcache.
   # The runs-on guard is convenience; the runner's job-started hook (home repo) is the
   # boundary. scripts/check-runs-on.sh rejects any other runs-on that is not a hosted label.
   prepare:
@@ -72,7 +74,7 @@ jobs:
       && github.event.pull_request.head.repo.full_name == github.repository
       && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.event.pull_request.user.login))
       && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.triggering_actor)))
-      && 'draftforge-home' || 'ubuntu-latest' }}
+      && 'draftforge-home-prepare' || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       contents: read

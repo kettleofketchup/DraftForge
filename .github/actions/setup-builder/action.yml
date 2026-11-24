@@ -1,7 +1,7 @@
 name: Setup Builder
 description: >
-  Registry auth and the home cluster's remote BuildKit builder, for jobs on the
-  self-hosted draftforge-home runner (no Docker daemon). GHCR is HTTPS, so the
+  Registry auth and the home cluster's remote BuildKit builder, for playwright.yml
+  `prepare` on the self-hosted draftforge-home-prepare runner (no Docker daemon). GHCR is HTTPS, so the
   docker CLI logs in client-side; Zot is plain HTTP on a ClusterIP, so its entry
   is written straight into the client config (`just ci::zot-auth`). BuildKit
   reads both through the buildx session. Needs `just` on PATH.
