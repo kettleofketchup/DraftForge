@@ -16,6 +16,7 @@ from discordbot.components.base import (
     GameComponentProvider,
     build_friend_id_input,
     respond_to_signup_user,
+    send_modal_error,
     send_unexpected_modal_result,
 )
 from discordbot.custom_ids import CustomId
@@ -72,6 +73,7 @@ class DefaultSignupModal(ui.Modal):
             event_id=self.event_id,
             tags=["events", "signup"],
         ) as ctx:
+            await interaction.response.defer(ephemeral=True, thinking=True)
             values = {}
             if self.friend_id_input:
                 values["friend_id"] = self.friend_id_input.value
@@ -92,10 +94,7 @@ class DefaultSignupModal(ui.Modal):
                     content=f"✅ {signed_up_text(result['status'], result.get('unmet_labels'))}",
                 )
             elif result["action"] == "error":
-                await interaction.response.send_message(
-                    f"❌ {result['message']}",
-                    ephemeral=True,
-                )
+                await send_modal_error(interaction, result["message"])
             else:
                 await send_unexpected_modal_result(interaction)
 

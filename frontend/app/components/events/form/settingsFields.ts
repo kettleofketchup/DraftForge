@@ -319,7 +319,8 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     discord_signup_reminder: {
       label: 'Send signup reminder',
-      description: "DM users who haven't signed up yet before the event starts",
+      description:
+        "DM series subscribers who haven't signed up yet, before the event starts",
     },
     discord_signup_reminder_hours: {
       label: 'Signup reminder: hours before event',

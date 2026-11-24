@@ -39,6 +39,40 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Frontend typecheck, its own job so it can run on the home runner (unlike `unit`, it
+  # needs neither setup-toolchain nor `packages: read`). Same guard as playwright.yml
+  # `prepare`; scripts/check-runs-on.sh allowlists this job (docs/development/ci-runners.md).
+  typecheck:
+    name: Typecheck (frontend)
+    runs-on: >-
+      ${{ (vars.SELF_HOSTED_RUNNERS == 'true'
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.event.pull_request.user.login))
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.triggering_actor)))
+      && 'draftforge-home' || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Typecheck frontend
+        run: npm --prefix frontend run typecheck
+
   unit:
     name: Unit tests (Vitest, slot guards)
     runs-on: ubuntu-latest
@@ -66,9 +100,6 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Typecheck frontend
-        run: npm --prefix frontend run typecheck
-
       - name: Run frontend Vitest
         env:
           CI: 'true'
@@ -76,6 +107,9 @@ jobs:
 
       - name: Check the generated message types are current
         run: just py::gen-message-types --check
+
+      - name: Check the generated Steam verification types are current
+        run: just py::gen-steam-verification --check
 
       - name: Check the generated Discord connect API is current
         run: just py::gen-discord-connect-api --check

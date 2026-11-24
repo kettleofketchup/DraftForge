@@ -50,7 +50,10 @@ export interface OrgFeaturesTestData {
   >;
   templates: { pk: number; name: string; org_pk: number }[];
   tournaments: OrgFeaturesRef[];
-  audiences?: Record<string, { pk: number | null; discord_id: string }>;
+  audiences?: Record<
+    string,
+    { pk: number | null; discord_id: string; mmr: number | null }
+  >;
   conduct: {
     ranked_org_user_pks: number[];
     new_member_org_user_pk: number;

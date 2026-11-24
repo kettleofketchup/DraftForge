@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -12,13 +13,21 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
+from app.permissions_steam import VerifyGrant
 from app.serializers import TournamentUserSerializer
 from app.steam_accounts import (
+    log_steam_verification_change,
     steam_account_id_conflict_payload,
     steam_account_id_holder,
 )
 from common.game import GameType
-from events.eligibility import refresh_unmet_requirements
+from events.eligibility import (
+    STEAM_ACCOUNT_ID_RANGE,
+    admin_precheck_steam_account_id,
+    apply_admin_steam_account_id,
+    friend_id_error_status,
+    refresh_unmet_requirements,
+)
 from league.models import LeagueUser
 from league.permissions import has_league_staff_access
 from org.member_resolution import member_nick, resolve_member_user
@@ -395,25 +404,39 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
         return Response({"error": mmr_changes}, status=status.HTTP_400_BAD_REQUEST)
 
     # --- Base CustomUser fields ---
-    USER_FIELDS = {"nickname", "steam_account_id"}
     user = org_user.user
     user_updated = False
-    for field in USER_FIELDS:
-        if field in request.data:
-            new_val = request.data[field]
-            # Coerce empty strings to None for nullable fields
-            if new_val == "" or new_val == "null":
-                new_val = None
-            if field == "steam_account_id" and new_val is not None:
-                holder = steam_account_id_holder(new_val, exclude_pk=user.pk)
-                if holder is not None:
-                    return Response(
-                        steam_account_id_conflict_payload(new_val, holder),
-                        status=status.HTTP_409_CONFLICT,
-                    )
-            if getattr(user, field) != new_val:
-                setattr(user, field, new_val)
-                user_updated = True
+    verify_grant: VerifyGrant | None = None
+    if "nickname" in request.data:
+        nickname = request.data["nickname"]
+        if nickname == "" or nickname == "null":
+            nickname = None
+        if user.nickname != nickname:
+            user.nickname = nickname
+            user_updated = True
+    if "steam_account_id" in request.data:
+        new_id = _coerce_steam_account_id(request.data["steam_account_id"])
+        if isinstance(new_id, Response):
+            return new_id
+        if new_id is not None:
+            holder = steam_account_id_holder(new_id, exclude_pk=user.pk)
+            if holder is not None:
+                return Response(
+                    steam_account_id_conflict_payload(new_id, holder),
+                    status=status.HTTP_409_CONFLICT,
+                )
+        if user.steam_account_id != new_id:
+            try:
+                admin_precheck_steam_account_id(user, new_id, actor=request.user)
+            except ValidationError as exc:
+                return Response(
+                    {"error": exc.messages[0], "code": exc.code},
+                    status=friend_id_error_status(exc.code),
+                )
+            verify_grant = apply_admin_steam_account_id(
+                user, new_id, actor=request.user
+            )
+            user_updated = True
 
     # --- Positions (nested FK) ---
     positions_data = request.data.get("positions")
@@ -463,6 +486,10 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
             )
         if user_updated:
             user.save()  # Full save triggers steamid sync
+            if verify_grant is not None:
+                log_steam_verification_change(
+                    user, request.user, verify_grant.org_id, True
+                )
         refresh_unmet_requirements(org_user)
 
         # Invalidate all cached views affected by this change
@@ -478,7 +505,9 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
         )
 
     written = (
-        with_user_profiles(OrgUser.objects.nocache(), "user", dota=True)
+        with_user_profiles(
+            OrgUser.objects.nocache(), "user", dota=True, steam_verified_org=True
+        )
         .prefetch_related(game_mmrs_prefetch(fresh=True))
         .get(pk=org_user.pk)
     )
@@ -486,8 +515,37 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
     return Response(
         OrgUserSerializer(
             written,
-            context={"game_type": context_game, "include_game_mmrs": True},
+            context={
+                "game_type": context_game,
+                "include_game_mmrs": True,
+                "include_steam_verified_org": True,
+            },
         ).data
+    )
+
+
+def _coerce_steam_account_id(value: Any) -> int | None | Response:
+    if value is None or value == "" or value == "null":
+        return None
+    if not isinstance(value, bool):
+        try:
+            account_id = int(str(value).strip())
+        except ValueError:
+            pass
+        else:
+            if account_id in STEAM_ACCOUNT_ID_RANGE:
+                return account_id
+            return Response(
+                {
+                    "error": "Friend ID must be between 1 and "
+                    f"{STEAM_ACCOUNT_ID_RANGE.stop - 1}.",
+                    "code": "invalid_friend_id",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    return Response(
+        {"error": "Friend ID must be a number.", "code": "invalid_friend_id"},
+        status=status.HTTP_400_BAD_REQUEST,
     )
 
 
