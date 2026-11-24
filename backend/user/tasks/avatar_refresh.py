@@ -10,16 +10,16 @@ from typing import Any
 import requests
 from celery import shared_task
 
-from app.internal_client import (
+from config.discord_api import DISCORD_API_BASE_URL
+from discordbot.services.discord_members import get_discord_members_data
+from telemetry.logging import get_logger
+from user.internal_client import (
     bulk_update_user_avatars,
     get_users_for_avatar_check,
     list_discord_guild_ids,
     list_discord_linked_users,
     update_user_avatar,
 )
-from config.discord_api import DISCORD_API_BASE_URL
-from discordbot.services.discord_members import get_discord_members_data
-from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 

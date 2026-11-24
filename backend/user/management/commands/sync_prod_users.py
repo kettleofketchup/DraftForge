@@ -5,11 +5,6 @@ import requests
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from app.management.prod_payload import (
-    create_positions,
-    position_values,
-    steam_account_id,
-)
 from app.models import CustomUser, PositionsModel
 from org.models import (
     AttendanceOutcome,
@@ -19,6 +14,11 @@ from org.models import (
     PromoSend,
 )
 from telemetry.logging import get_logger
+from user.management.prod_payload import (
+    create_positions,
+    position_values,
+    steam_account_id,
+)
 
 log = get_logger(__name__)
 

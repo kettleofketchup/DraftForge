@@ -1,6 +1,6 @@
 """Internal endpoints for batched Discord-avatar refresh.
 
-Worker flow (see `app/tasks/avatar_refresh.py::refresh_avatars_batched`):
+Worker flow (see `user/tasks/avatar_refresh.py::refresh_avatars_batched`):
 
   1. GET  /api/internal/users/discord-linked/      list candidate users
   2. GET  /api/internal/orgs/discord-guild-ids/    list guilds to fetch

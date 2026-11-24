@@ -22,7 +22,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from social_django.utils import load_strategy
 
-from app.tasks.avatar_refresh import refresh_avatars_batched
 from draft.models import DraftRound, DraftTeam
 from league.models import League
 from org.membership import member_organization_ids
@@ -32,6 +31,7 @@ from org.promotion.services import release_earning_sends
 from org.standing import api as standing
 from telemetry.logging import get_logger
 from tournament.models import Game, Tournament
+from user.avatar import refresh_user_avatar
 
 # BaseUserProfile owns nickname/avatar; DotaUserProfile owns
 # positions/dota-mmr. Every @cached_as site below that ships
@@ -41,13 +41,13 @@ from tournament.models import Game, Tournament
 from user.models import BaseUserProfile, DotaUserProfile
 from user.querysets import with_user_profiles
 from user.steam_accounts import steam_account_id_holder, steam_account_id_identity
+from user.tasks.avatar_refresh import refresh_avatars_batched
 
 from .decorators import render_to
 from .models import CustomUser, ProfileClaimRequest
 from .permissions import IsStaff
 from .serializers import UserSerializer
 from .user_cache import serialize_user_core
-from .utils.avatar_utils import refresh_user_avatar
 
 log = get_logger(__name__)
 
@@ -512,7 +512,7 @@ def refresh_all_avatars(request: Request) -> Response:
 
     Returns immediately (202 Accepted) and dispatches a Celery task that
     fetches Discord guild members in batched calls (1–3 paginated calls per
-    org) and updates avatars in bulk. See `app.tasks.avatar_refresh
+    org) and updates avatars in bulk. See `user.tasks.avatar_refresh
     .refresh_avatars_batched`.
 
     Public on purpose: every users-list page view fires it, so avatars stay

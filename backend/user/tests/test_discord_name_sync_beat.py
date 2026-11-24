@@ -16,6 +16,6 @@ class DiscordNameSyncBeatTests(SimpleTestCase):
                 entry = beat_schedule(filename)["sync-active-org-discord-names"]
                 self.assertEqual(
                     entry["task"],
-                    "app.tasks.discord_name_sync.sync_active_org_discord_names",
+                    "user.tasks.discord_name_sync.sync_active_org_discord_names",
                 )
                 self.assertEqual(entry["schedule"], 1800.0)

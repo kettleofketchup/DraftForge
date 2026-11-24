@@ -862,6 +862,45 @@ USER = MovedSlice(
     new_app="user",
     moved=frozenset(
         {
+            ("app.tasks.avatar_refresh", "_is_test_environment"),
+            ("app.tasks.avatar_refresh", "_is_avatar_url_valid"),
+            ("app.tasks.avatar_refresh", "_fetch_discord_avatar"),
+            ("app.tasks.avatar_refresh", "_check_and_update_user"),
+            ("app.tasks.avatar_refresh", "refresh_discord_avatars"),
+            ("app.tasks.avatar_refresh", "refresh_single_user_avatar"),
+            ("app.tasks.avatar_refresh", "refresh_avatars_batched"),
+            ("app.tasks.avatar_refresh", "refresh_all_discord_data"),
+            ("app.tasks.discord_name_sync", "_sync_targets"),
+            ("app.tasks.discord_name_sync", "sync_active_org_discord_names"),
+            ("app.tasks.discord_name_sync", "sync_org_discord_names"),
+            ("app.internal_client.users", "get_users_for_avatar_check"),
+            ("app.internal_client.users", "update_user_avatar"),
+            ("app.internal_client.users", "list_discord_linked_users"),
+            ("app.internal_client.users", "list_discord_guild_ids"),
+            ("app.internal_client.users", "bulk_update_user_avatars"),
+            ("app.internal_client.users", "list_discord_name_sync_targets"),
+            ("app.internal_client.users", "bulk_update_member_names"),
+            ("app.utils.avatar_utils", "refresh_user_avatar"),
+            ("app.management.prod_payload", "steam_account_id"),
+            ("app.management.prod_payload", "position_values"),
+            ("app.management.prod_payload", "create_positions"),
+            ("app.management.commands.refresh_avatars", "Command"),
+            ("app.management.commands.sync_prod_users", "Command"),
+            ("app.tests.test_avatar_refresh_batched", "_user_row"),
+            ("app.tests.test_avatar_refresh_batched", "AvatarRefreshBatchedTest"),
+            ("app.tests.test_discord_name_sync_task", "_member"),
+            ("app.tests.test_discord_name_sync_task", "DiscordNameSyncTaskTests"),
+            ("app.tests.test_discord_name_sync_beat", "DiscordNameSyncBeatTests"),
+            ("app.tests.test_prod_import_commands", "fake_response"),
+            ("app.tests.test_prod_import_commands", "prod_user"),
+            ("app.tests.test_prod_import_commands", "SyncProdUsersCommandTest"),
+            ("app.internal_client", "bulk_update_member_names"),
+            ("app.internal_client", "bulk_update_user_avatars"),
+            ("app.internal_client", "get_users_for_avatar_check"),
+            ("app.internal_client", "list_discord_guild_ids"),
+            ("app.internal_client", "list_discord_linked_users"),
+            ("app.internal_client", "list_discord_name_sync_targets"),
+            ("app.internal_client", "update_user_avatar"),
             ("app.display_names", "first_name"),
             ("app.display_names", "user_display_name"),
             ("app.steam_accounts", "steam_account_id_holder"),
@@ -897,6 +936,19 @@ USER = MovedSlice(
     ),
     retired_modules=frozenset(
         {
+            "app.tasks",
+            "app.tasks.avatar_refresh",
+            "app.tasks.discord_name_sync",
+            "app.internal_client.users",
+            "app.utils.avatar_utils",
+            "app.management.prod_payload",
+            "app.management.commands.refresh_avatars",
+            "app.management.commands.sync_prod_users",
+            "app.tests.test_avatar_refresh_batched",
+            "app.tests.test_discord_name_sync_task",
+            "app.tests.test_discord_name_sync_beat",
+            "app.tests.test_prod_import_commands",
+            "app.utils",
             "app.steam_accounts",
             "app.pipelines",
             "app.tests.test_discord_pipeline_names",
@@ -931,6 +983,19 @@ RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
 # under the new app; None: no single home file to check (renamed within the
 # source app, or a retired package).
 RETIRED_MODULE_HOMES: dict[str, str | None] = {
+    "app.tasks": None,
+    "app.tasks.avatar_refresh": "user.tasks.avatar_refresh",
+    "app.tasks.discord_name_sync": "user.tasks.discord_name_sync",
+    "app.internal_client.users": "user.internal_client",
+    "app.utils.avatar_utils": "user.avatar",
+    "app.management.prod_payload": "user.management.prod_payload",
+    "app.management.commands.refresh_avatars": "user.management.commands.refresh_avatars",
+    "app.management.commands.sync_prod_users": "user.management.commands.sync_prod_users",
+    "app.tests.test_avatar_refresh_batched": "user.tests.test_avatar_refresh_batched",
+    "app.tests.test_discord_name_sync_task": "user.tests.test_discord_name_sync_task",
+    "app.tests.test_discord_name_sync_beat": "user.tests.test_discord_name_sync_beat",
+    "app.tests.test_prod_import_commands": "user.tests.test_prod_import_commands",
+    "app.utils": None,
     "app.tests.test_league_rating": None,
     "app.permissions_tournament": "tournament.permissions",
     "app.tournament_state": "tournament.state",
@@ -956,19 +1021,6 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"api", "release_earning_sends"}),
             "CustomUser admin delete checks standing blockers, releases promo "
             "earning sends and records standing on user deletion",
-        ),
-        "app/management/commands/sync_prod_users.py": BackEdge(
-            frozenset(
-                {
-                    "AttendanceOutcome",
-                    "ContributionEntry",
-                    "EventCaptain",
-                    "Organization",
-                    "PromoSend",
-                }
-            ),
-            "prod user sync clears org conduct, contribution, leadership and promo "
-            "rows before reloading users, and keeps organization owners",
         ),
         "app/serializers.py": BackEdge(
             frozenset({"Organization"}),
@@ -1032,6 +1084,8 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "BaseUserProfile",
                     "DotaUserProfile",
                     "with_user_profiles",
+                    "refresh_avatars_batched",
+                    "refresh_user_avatar",
                     "steam_account_id_holder",
                     "steam_account_id_identity",
                 }
@@ -1056,7 +1110,12 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
 }
 
 # (file relative to backend/, name) -> why a source-app module may define a moved name
-ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {}
+ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {
+    (
+        "app/views/internal.py",
+        "update_user_avatar",
+    ): "internal endpoint of the same name; moves to user.internal.avatar in Task 8",
+}
 
 GUARD_FILE = "tests/test_app_boundaries.py"
 

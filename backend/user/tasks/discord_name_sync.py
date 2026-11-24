@@ -5,11 +5,6 @@ import time
 import requests
 from celery import shared_task
 
-from app.internal_client import (
-    bulk_update_member_names,
-    list_discord_name_sync_targets,
-)
-from app.tasks.avatar_refresh import _is_test_environment
 from discordbot.services.discord_members import (
     DiscordMembersFetchError,
     get_discord_members_data,
@@ -19,6 +14,11 @@ from discordbot.services.member_names import (
     members_to_json,
 )
 from telemetry.logging import get_logger
+from user.internal_client import (
+    bulk_update_member_names,
+    list_discord_name_sync_targets,
+)
+from user.tasks.avatar_refresh import _is_test_environment
 
 log = get_logger(__name__)
 

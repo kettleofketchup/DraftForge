@@ -13,7 +13,7 @@ LOCMEM = {
         "LOCATION": "test_discord_server_change",
     }
 }
-APPLY = "app.tasks.discord_name_sync.sync_org_discord_names.apply_async"
+APPLY = "user.tasks.discord_name_sync.sync_org_discord_names.apply_async"
 
 
 @override_settings(CACHES=LOCMEM)

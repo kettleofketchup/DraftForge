@@ -1,4 +1,5 @@
-import logging
+from argparse import ArgumentParser
+from typing import Any
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
@@ -9,7 +10,7 @@ User = get_user_model()
 class Command(BaseCommand):
     help = "Refresh Discord avatars for all users"
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument(
             "--check-only",
             action="store_true",
@@ -26,9 +27,8 @@ class Command(BaseCommand):
             help="Refresh avatar for specific user ID only",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         check_only = options["check_only"]
-        force_refresh = options["force"]
         user_id = options["user_id"]
 
         if user_id:

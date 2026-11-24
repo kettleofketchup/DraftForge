@@ -219,7 +219,7 @@ class SyncProdUsersConductTest(_MergeFixture):
         response = MagicMock()
         response.json.return_value = []
         with patch(
-            "app.management.commands.sync_prod_users.requests.get",
+            "user.management.commands.sync_prod_users.requests.get",
             return_value=response,
         ):
             call_command("sync_prod_users")

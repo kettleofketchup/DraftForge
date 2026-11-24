@@ -34,7 +34,7 @@ def update_user_avatar(pk: int, avatar: str | None) -> requests.Response | None:
     return transport.patch(f"/users/{pk}/avatar/", {"avatar": avatar})
 
 
-# ---- Batched avatar refresh (used by app/tasks/avatar_refresh.py) ----
+# ---- Batched avatar refresh (used by user/tasks/avatar_refresh.py) ----
 
 
 def list_discord_linked_users() -> list[dict[str, Any]]:
@@ -98,7 +98,7 @@ def bulk_update_user_avatars(updates: list[dict[str, Any]]) -> int:
         return 0
 
 
-# ---- Discord name sync (used by app/tasks/discord_name_sync.py) ----
+# ---- Discord name sync (used by user/tasks/discord_name_sync.py) ----
 
 
 def list_discord_name_sync_targets(

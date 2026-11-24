@@ -3,14 +3,14 @@ from unittest.mock import MagicMock, call, patch
 from celery.exceptions import SoftTimeLimitExceeded
 from django.test import SimpleTestCase
 
-from app.tasks import discord_name_sync
-from app.tasks.discord_name_sync import (
+from discordbot.services.discord_members import DiscordMembersFetchError
+from user.tasks import discord_name_sync
+from user.tasks.discord_name_sync import (
     sync_active_org_discord_names,
     sync_org_discord_names,
 )
-from discordbot.services.discord_members import DiscordMembersFetchError
 
-MODULE = "app.tasks.discord_name_sync"
+MODULE = "user.tasks.discord_name_sync"
 
 
 def _member(discord_id: str, nick: str | None = None) -> dict:

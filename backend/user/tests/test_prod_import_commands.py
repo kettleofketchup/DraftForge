@@ -5,11 +5,11 @@ from unittest.mock import MagicMock, patch
 from django.core.management import call_command
 from django.test import TestCase
 
-from app.management.commands import sync_prod_users
 from app.models import CustomUser, GameType
 from org.models import Organization
+from user.management.commands import sync_prod_users
 
-USERS_GET = "app.management.commands.sync_prod_users.requests.get"
+USERS_GET = "user.management.commands.sync_prod_users.requests.get"
 
 
 def fake_response(payload: Any) -> MagicMock:

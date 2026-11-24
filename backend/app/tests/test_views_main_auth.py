@@ -10,7 +10,7 @@ from app.models import CustomUser
 REFRESH_URL = "/api/avatars/refresh/"
 RATE_LIMIT_KEY = "avatar_refresh_last_run"
 RATE_LIMIT_MESSAGE = "Avatar refresh can only be run once per hour."
-DELAY_TARGET = "app.tasks.avatar_refresh.refresh_avatars_batched.delay"
+DELAY_TARGET = "user.tasks.avatar_refresh.refresh_avatars_batched.delay"
 LOCMEM_CACHE = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
