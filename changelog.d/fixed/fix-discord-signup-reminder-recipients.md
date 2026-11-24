@@ -1,1 +1,0 @@
-- The signup reminder setting and the task schedule now say the DM goes to the series' subscribers who haven't signed up, instead of just "users".

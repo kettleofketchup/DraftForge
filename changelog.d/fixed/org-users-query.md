@@ -1,1 +1,0 @@
-- New org members added through Admin Team (admin, staff or promoter) or as an event host or helper now show up on the organization's Users tab and in its member count right away, without a page reload
