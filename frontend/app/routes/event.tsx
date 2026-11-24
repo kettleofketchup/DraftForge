@@ -647,9 +647,11 @@ export default function EventPage() {
                 Removed ({removedSignups.length})
               </TabsTrigger>
             )}
-            <TabsTrigger value="discord" data-testid="event-tab-discord">
-              Discord
-            </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="discord" data-testid="event-tab-discord">
+                Discord
+              </TabsTrigger>
+            )}
             {isAdmin && (
               <TabsTrigger value="history" data-testid="event-tab-history">
                 History
@@ -731,13 +733,15 @@ export default function EventPage() {
             />
           </TabsContent>
 
-          <TabsContent value="discord">
-            <DiscordLogSection
-              eventId={event.id}
-              isAdmin={isAdmin}
-              eventTimezone={event.timezone}
-            />
-          </TabsContent>
+          {isAdmin && (
+            <TabsContent value="discord">
+              <DiscordLogSection
+                eventId={event.id}
+                isAdmin={isAdmin}
+                eventTimezone={event.timezone}
+              />
+            </TabsContent>
+          )}
 
           {isAdmin && currentUser && (
             <TabsContent value="history">

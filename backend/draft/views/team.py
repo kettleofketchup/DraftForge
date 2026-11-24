@@ -26,7 +26,7 @@ from draft.services.team_broadcast import atomic_sharing_draft_state
 from draft.tasks.team_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
 from tournament.functions import serialize_tournament
-from tournament.models import Team
+from tournament.models import LIVE_TEAM_FIRST, Team
 from tournament.permissions import can_edit_tournament
 
 log = get_logger(__name__)
@@ -67,9 +67,14 @@ def teamdraft_set_ready(request: Request, draft_pk: int) -> Response:
         draft = Draft.objects.select_for_update().get(pk=draft_pk)
         if draft.state != TeamDraftState.PENDING:
             return _wrong_state(draft)
-        team = Team.objects.select_for_update().get(
-            tournament=draft.tournament, captain=request.user
+        team = (
+            Team.objects.select_for_update()
+            .filter(tournament=draft.tournament, captain=request.user)
+            .order_by(*LIVE_TEAM_FIRST)
+            .first()
         )
+        if team is None:
+            return _error("not_captain", status.HTTP_403_FORBIDDEN)
         team.draft_is_ready = ready
         team.save(update_fields=["draft_is_ready"])
         invalidate_after_commit(draft.tournament)

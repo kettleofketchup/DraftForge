@@ -7,7 +7,9 @@
 import { z } from 'zod';
 import type { GameTypeValue } from '~/components/game/constants';
 import {
+  OrgMemberSchema,
   OrganizationSchema,
+  type OrgMemberType,
   type OrganizationType,
   type OrganizationsType,
 } from '~/components/organization/schemas';
@@ -140,11 +142,11 @@ export async function transferOrgOwnership(
 }
 
 // Organization Users (members via OrgUser)
-export async function getOrganizationUsers(orgId: number): Promise<UserType[]> {
-  const response = await axios.get<UserType[]>(
-    `/organizations/${orgId}/users/`,
-  );
-  return response.data;
+export async function getOrganizationUsers(
+  orgId: number,
+): Promise<OrgMemberType[]> {
+  const response = await axios.get(`/organizations/${orgId}/users/`);
+  return z.array(OrgMemberSchema).parse(response.data);
 }
 
 export async function updateOrgUser(
