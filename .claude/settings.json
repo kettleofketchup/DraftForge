@@ -1,15 +1,11 @@
 {
-    "$schema": "https://json.schemastore.org/claude-code-settings.json",
-
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "hooks": {
-    "PreToolUse": [
-    ]
+    "PreToolUse": []
   },
-
   "enabledPlugins": {
     "ai-ml-tools@claudekit-skills": true
   },
-
   "permissions": {
     "allow": [
       "Bash(just test::restart:*)",
@@ -143,7 +139,22 @@
       "Bash(DISABLE_CACHE=true DJANGO_SETTINGS_MODULE=backend.settings timeout 30 python:*)",
       "Bash(poetry run python:*)",
       "Bash(DISABLE_CACHE=true .venv/bin/python:*)",
-      "Bash(DISABLE_CACHE=true DJANGO_SETTINGS_MODULE=backend.settings python:*)"
+      "Bash(DISABLE_CACHE=true DJANGO_SETTINGS_MODULE=backend.settings python:*)",
+      "Bash(git push:*)",
+      "Skill(pr)",
+      "Bash(.claude/skills/pr/scripts/frontend-screenshot-gate.sh:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force-with-lease:*)",
+      "Bash(git push origin --force:*)",
+      "Bash(git push origin -f:*)",
+      "Bash(git push origin +:*)",
+      "Bash(git push --mirror:*)",
+      "Bash(git push --delete:*)",
+      "Bash(git push origin --delete:*)",
+      "Bash(gh pr merge:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -7,16 +7,23 @@ PR is merged/closed, the user stops it, or the session ends. Do not merge the PR
 ## Arm the monitor
 
 Use `Monitor`, not a cron job or a blocking foreground loop. Set `timeout_ms` to
-1800000 and a description naming the PR. Re-arm on expiry while the PR is open;
-30 minutes is a watch window, not the lifetime of the PR monitor. Tell the user
-this is session-only and checks every five minutes.
+1800000 (the Monitor cap) and a description naming the PR. Each window is one
+30-minute tick: the command checks once when armed, then sleeps 1800 seconds until
+the window expires. Re-arm on every expiry while the PR is open; the expiry notice
+is the cue for the next check, not the end of monitoring. Tell the user this is
+session-only and checks every 30 minutes.
+
+Dedup state must survive re-arms. Create one per-PR state directory with
+`mktemp -d` on first arm, record its path, and pass the same path to every
+re-armed command; read the last reported head/base OIDs, conflict state, CI
+summary and failure keys from it before emitting and write them back after.
 
 Resolve and pin the repository (`gh repo view --json nameWithOwner`), PR number,
 head branch, base branch and owning worktree before starting. Pass explicit
 `--repo OWNER/REPO` and the PR number on every `gh` call. Reject an unexpected
 base rather than silently substituting main; this procedure is for main-based PRs.
 
-Use a read-only shell loop that checks immediately, then sleeps 300 seconds:
+Each tick (on arm, then every re-arm) runs these read-only checks:
 
 1. Read `gh pr view NUMBER --repo OWNER/REPO --json state,mergeable,headRefOid,baseRefOid,headRefName,baseRefName`.
 2. Emit a terminal event and exit when state is `MERGED` or `CLOSED`.
@@ -94,7 +101,8 @@ attempted fixes for this PR so duplicate events do not trigger duplicate work.
    report evidence and the required intervention; do not retry indefinitely.
 5. After each push, discard the prior head's CI summary and watch checks for the
    new head. Handle new failures through this same loop; check main conflicts
-   every five minutes throughout. Re-run coverage/screenshots if fixes change
+   every 30 minutes throughout. A fix push does not wait for the next tick:
+   re-arm immediately so the new head gets checked now. Re-run coverage/screenshots if fixes change
    behaviour or visuals. A report is a checkpoint, not a reason to stop watching.
 6. If the same failure survives two verified repair attempts, or intent is
    ambiguous, pause automatic repair and ask the user with logs and attempted
