@@ -10,7 +10,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from app.models import Team
 from app.redis_keys import namespaced_key
 from draft.models import Draft, DraftRound, TeamDraftState
 from draft.services.team import emit_event, team_for_round, team_payload
@@ -24,6 +23,7 @@ from draft.tasks.draft_tick import (
     heartbeat_key,
 )
 from telemetry.logging import get_logger
+from tournament.models import Team
 
 log = get_logger(__name__)
 

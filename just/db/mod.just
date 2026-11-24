@@ -13,7 +13,7 @@ db_dir := env("DF_DB_DIR", root / "backend")
 
 # makemigrations takes an explicit app list (it does not read INSTALLED_APPS):
 # add new Django apps here.
-apps := "steam app bracket discordbot events org user lobby opsnotices league draft"
+apps := "steam app bracket discordbot events org user lobby opsnotices league draft tournament"
 
 mod migrate 'migrate.just'
 mod populate 'populate.just'
@@ -49,7 +49,7 @@ migrate-env stack:
 
 [private]
 touch-dbs:
-    cd {{quote(db_dir)}} && touch -a test.db.sqlite3 dev.db.sqlite3 prod.db.sqlite3
+    cd {{quote(db_dir)}} && mkdir -p data && touch -a test.db.sqlite3 dev.db.sqlite3 data/prod.db.sqlite3
 
 [group('db')]
 reset-test:

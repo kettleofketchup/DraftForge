@@ -5,9 +5,10 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from draft.models import HeroDraft, HeroDraftChatMembership, HeroDraftChatMessage
 from draft.services.hero import new_herodraft_for_game
+from tournament.models import Game, Team, Tournament
 
 Channel = HeroDraftChatMessage.Channel
 Kind = HeroDraftChatMessage.Kind

@@ -5,11 +5,13 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameMode, GameType, Tournament
+from app.models import CustomUser, GameType
 from events.constants import EventState
 from events.models import Event
 from league.models import League
 from org.models import Organization
+from tournament.choices import GameMode
+from tournament.models import Tournament
 
 
 class TournamentEditConfigBase(TestCase):

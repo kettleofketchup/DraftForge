@@ -277,6 +277,22 @@ class ReopenTest(LeadershipTestCase):
         self.assertEqual(review.void_kind, "")
         self.assertEqual(set(review.scores.values_list("score", flat=True)), {4})
 
+    def test_resnapshot_clears_release(self) -> None:
+        self.close()
+        EventCaptain.objects.filter(event=self.event).update(
+            released_at=tz.now(), released_by=self.admin
+        )
+        self.event.refresh_from_db()
+        reopen_event(self.event, actor=self.admin)
+        Event.objects.filter(pk=self.event.pk).update(state=EventState.IN_PROGRESS)
+        self.event.refresh_from_db()
+        self.close()
+        snaps = EventCaptain.objects.nocache().filter(event=self.event)
+        self.assertTrue(snaps.exists())
+        for snap in snaps:
+            self.assertIsNone(snap.released_at)
+            self.assertIsNone(snap.released_by_id)
+
     def test_reclose_with_new_captain(self) -> None:
         self.close()
         self.review(self.mates_a[0], self.cap_a)

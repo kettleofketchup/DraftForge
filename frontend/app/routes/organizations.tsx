@@ -8,6 +8,7 @@ import {
 import type { OrganizationType } from '~/components/organization/schemas';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
+import { useDiscordConnectResult } from '~/features/discord-connect';
 import { useIsLoggedIn } from '~/hooks/usePermissions';
 import { generateMeta } from '~/lib/seo';
 
@@ -67,6 +68,7 @@ export default function OrganizationsPage() {
   const { organizations, isLoading } = useOrganizations();
   const isLoggedIn = useIsLoggedIn();
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  useDiscordConnectResult();
 
   const renderOrganizationGrid = () => {
     // If we have organizations, show them immediately

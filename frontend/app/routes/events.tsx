@@ -18,10 +18,8 @@ export function meta() {
   });
 }
 
-import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import api from '~/components/api/axios';
 import { EventStateBadge } from '~/components/events';
 import { RepeaterCard } from '~/components/events/RepeaterCard';
 import type { EventType } from '~/components/events/schemas';
@@ -46,7 +44,7 @@ import {
 import { Switch } from '~/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
-import { useEvents } from '~/hooks/useEvent';
+import { useEventRepeaters, useEvents } from '~/hooks/useEvent';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 
 /** Skeleton loader for event cards */
@@ -289,18 +287,6 @@ function FilterControls({
   );
 }
 
-function useRepeaters(orgId?: number) {
-  return useQuery({
-    queryKey: ['repeaters', orgId],
-    queryFn: () =>
-      api
-        .get('/events/repeaters/', {
-          params: orgId ? { organization: orgId } : {},
-        })
-        .then((r) => r.data),
-  });
-}
-
 export default function EventsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedOrgId = searchParams.get('organization');
@@ -308,7 +294,9 @@ export default function EventsPage() {
     ? parseInt(selectedOrgId, 10)
     : undefined;
 
-  const { data: repeaters } = useRepeaters(selectedOrgIdNum);
+  const { data: repeaters } = useEventRepeaters(
+    selectedOrgIdNum ? { organization: selectedOrgIdNum } : undefined,
+  );
   const { organizations } = useOrganizations();
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
@@ -394,20 +382,9 @@ export default function EventsPage() {
     if (repeaters && repeaters.length > 0) {
       return (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {repeaters.map(
-            (repeater: {
-              id: number;
-              name: string;
-              organization: number;
-              organization_name?: string;
-              frequency: string;
-              is_active: boolean;
-              subscriber_count: number;
-              next_event_date: string | null;
-            }) => (
-              <RepeaterCard key={repeater.id} repeater={repeater} />
-            ),
-          )}
+          {repeaters.map((repeater) => (
+            <RepeaterCard key={repeater.id} repeater={repeater} />
+          ))}
         </div>
       );
     }

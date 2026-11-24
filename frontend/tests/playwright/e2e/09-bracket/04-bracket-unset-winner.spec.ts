@@ -1,10 +1,10 @@
 /**
  * Bracket Unset Winner Tests
  *
- * Covers the full lifecycle that was missed by the original suite:
+ * Covers the full set and unset winner lifecycle:
  *
  * Setting or unsetting a winner in the modal persists that match result on
- * its own (issue #466) — no bracket-wide Save.
+ * its own, with no bracket-wide Save.
  *
  *  1. Sanity: set → Unset Winner button appears → unset.
  *  2. Persistence: set → reload → bracket card shows the winner check, the
@@ -12,7 +12,7 @@
  *     Unset Winner.
  *  3. Unset: set → reload → Unset → reload → bracket card has no winner
  *     check, downstream slots are cleared, modal shows Set Winner again.
- *  4. Stuck-state recovery (issue #235): force the prod scenario where
+ *  4. Stuck-state recovery: force the scenario where
  *     ``status=completed`` but ``winning_team`` no longer matches either
  *     team in the slots. Unset Winner must still be visible and clicking
  *     it must unstick the row.
@@ -20,7 +20,7 @@
  * Uses deterministic match selection via the
  * ``[data-bracket-type][data-round][data-position]`` attributes on each
  * ``bracket-match-node`` rather than iterating + reopening (the close-and-
- * re-click pattern was flaky against React Flow's pan/zoom).
+ * re-click pattern raced React Flow's pan/zoom).
  *
  * The bracket UI exposes ``data-testid="bracket-team-slot-{slot}"`` with
  * ``data-team-status`` of ``winner | loser | pending | empty`` and (when
@@ -50,21 +50,15 @@ const TARGET_MATCH_SELECTOR =
   '[data-testid="bracket-match-node"][data-bracket-type="winners"][data-round="1"][data-position="0"]';
 
 test.describe('Bracket Unset Winner (e2e)', () => {
-  // All four tests reset and rebind the *same* tournament key in
-  // beforeEach (the endpoint deletes + recreates it). Default workers=1
-  // serializes this fine, but the project allows PLAYWRIGHT_WORKERS=2
-  // and fullyParallel is on globally, which would let two tests in this
-  // file race on the shared reset endpoint and the module-scoped
-  // tournamentPk. Pin to serial — the cost is zero at workers=1 and
-  // correctness insurance at workers>1.
+  // Every test resets the same tournament and rebinds the module-scoped
+  // tournamentPk; fullyParallel with PLAYWRIGHT_WORKERS=2 would race them.
+  // Serial costs nothing at workers=1.
   test.describe.configure({ mode: 'serial' });
 
   test.beforeEach(async ({ loginStaff, page }) => {
     await loginStaff();
-    // Reset the dedicated tournament between tests so each one starts from
-    // the populated baseline (all games pending). The endpoint returns the
-    // freshly-created tournament — we re-bind tournamentPk from its body
-    // because the delete-and-recreate gives it a new pk.
+    // Reset to the populated baseline (all games pending); the response
+    // carries the recreated tournament's new pk.
     const resetResp = await page
       .context()
       .request.post('/api/tests/reset-tournament/bracket_unset_winner/');
@@ -85,29 +79,21 @@ test.describe('Bracket Unset Winner (e2e)', () => {
   async function openTargetModal(page: Page): Promise<Locator> {
     const node = page.locator(TARGET_MATCH_SELECTOR);
     await expect(node).toBeVisible({ timeout: 10000 });
-    await node.click({ force: true });
+    await node.click();
     const dialog = page.locator('[data-testid="matchStatsModal"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
     return dialog;
   }
 
   async function closeModal(page: Page): Promise<void> {
-    // Use the dialog's explicit close button — Escape was flaky when focus
-    // landed on something non-dismissable inside the modal, leaving the
-    // backdrop overlaying the Save button so the next click timed out.
+    // Close via the button: Escape is ignored when focus sits on a
+    // non-dismissable element, leaving the backdrop over Save and timing out
+    // the next click.
     const dialog = page.locator('[data-testid="matchStatsModal"]');
     await dialog.locator('[data-testid="dialog-close-button"]').click();
     await expect(dialog).toBeHidden({ timeout: 5000 });
-    // A reload before the URL drops /match/<id> deep-links the dialog open again.
+    // The dialog deep-links via /match/<id>; the next load must not reopen it.
     await expect(page).not.toHaveURL(/\/bracket\/match\//);
-  }
-
-  async function reloadBracket(page: Page): Promise<void> {
-    await page.reload();
-    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
-      timeout: 15000,
-    });
-    await page.waitForLoadState('networkidle');
   }
 
   type ApiTeam = { pk: number } | null;
@@ -184,7 +170,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     );
     await closeModal(page);
 
-    await reloadBracket(page);
+    await loadBracket(page);
 
     // The server placed the winner in the next game and the loser in the
     // losers bracket.
@@ -237,7 +223,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       dialog.locator('[data-testid="radiantWinsButton"]'),
     );
     await closeModal(page);
-    await reloadBracket(page);
+    await loadBracket(page);
 
     dialog = await openTargetModal(page);
     await clickAndPersistMatchResult(
@@ -245,7 +231,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       dialog.locator('[data-testid="unsetWinnerButton"]'),
     );
     await closeModal(page);
-    await reloadBracket(page);
+    await loadBracket(page);
 
     // The advanced teams were pulled back out of the downstream slots.
     const games = await fetchGames(page);
@@ -307,11 +293,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     expect(forcedBody.winning_team_id).not.toBe(forcedBody.radiant_team_id);
     expect(forcedBody.winning_team_id).not.toBe(forcedBody.dire_team_id);
 
-    await page.reload();
-    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
-      timeout: 15000,
-    });
-    await page.waitForLoadState('networkidle');
+    await loadBracket(page);
 
     // Bracket card: neither team is marked as winner since the FK doesn't
     // resolve to either slot. (The defining trait of the stuck state.)
@@ -343,7 +325,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       dialog.locator('[data-testid="unsetWinnerButton"]'),
     );
     await closeModal(page);
-    await reloadBracket(page);
+    await loadBracket(page);
 
     const recoveredDialog = await openTargetModal(page);
     await expect(

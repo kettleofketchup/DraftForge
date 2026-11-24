@@ -9,9 +9,10 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from league.models import League
 from league.permissions import has_league_staff_access
+from tournament.models import Game, Team, Tournament
 from tournament.permissions import CanEditTournament, CanManageGame, can_manage_game
 from tournament.serializers.game import GameSerializer
 from user.models import BaseUserProfile, DotaUserProfile

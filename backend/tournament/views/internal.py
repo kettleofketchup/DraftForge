@@ -13,7 +13,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
-from app.models import CustomUser, Game, Tournament
+from app.models import CustomUser
+from tournament.models import Game, Tournament
 
 _auth = [InternalServiceAuth]
 _perm = [IsInternalService]

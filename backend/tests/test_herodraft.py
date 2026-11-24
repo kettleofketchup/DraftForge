@@ -17,7 +17,6 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from app.models import Game
 from app.redis_keys import namespaced_key
 from common.utils import isTestEnvironment
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent
@@ -28,6 +27,7 @@ from draft.services.hero_chat import reset_draft_chat
 from draft.tasks.draft_tick import get_redis_client
 from draft.tasks.hero_tick import captain_heartbeat_key
 from telemetry.logging import get_logger
+from tournament.models import Game, Team, Tournament
 
 log = get_logger(__name__)
 
@@ -292,8 +292,6 @@ def get_herodraft_by_key(request, key: str):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from app.models import Tournament
-
     config = HERODRAFT_TEST_KEYS.get(key)
     if not config:
         return Response(
@@ -327,8 +325,6 @@ def get_herodraft_by_key(request, key: str):
 
     # If specific teams are required, find game with those teams
     if "teams" in config:
-        from app.models import Team
-
         team_names = config["teams"]
         teams = Team.objects.filter(tournament=tournament, name__in=team_names)
         if teams.count() >= 2:

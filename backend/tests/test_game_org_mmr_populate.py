@@ -3,7 +3,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory
 
-from app.models import CustomUser, Tournament
+from app.models import CustomUser
 from common.game import GameType
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
@@ -22,6 +22,7 @@ from tests.populate.game_org_mmr import (
     reset_game_org_mmr_approve,
 )
 from tests.test_game_org_mmr import game_org_mmr_approve_setup, game_org_mmr_data
+from tournament.models import Tournament
 
 
 def _ratings(game: int) -> dict[int, int]:

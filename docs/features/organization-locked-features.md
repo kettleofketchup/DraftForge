@@ -1,11 +1,13 @@
 # Organization Locked Features
 
-Four locked features can be unlocked per organization: **Promotion** (a dashboard for
+Five locked features can be unlocked per organization: **Promotion** (a dashboard for
 inviting past players to upcoming events over Discord DMs), **Contributions** (a
 points ledger and leaderboard for the people who host, help and promote),
 **Conduct** (attendance records, show rates and turnout forecasts; see
-[Organization Conduct](organization-conduct.md)) and **Leadership** (captain points
-and teammate ratings; see [Organization Leadership](organization-leadership.md)).
+[Organization Conduct](organization-conduct.md)), **Leadership** (captain points
+and teammate ratings; see [Organization Leadership](organization-leadership.md)) and
+**MMR sync API** (app tokens for pushing member MMRs from an external service; see
+[MMR sync API](org-mmr-sync-api.md)).
 This page is the guide for org owners and admins. The API is listed in
 [API Endpoints: Organization locked features](../api/endpoints.md#organization-locked-features),
 and the permission rules in [Roles & Permission Matrix](../dev/auth/roles.md#promoter-and-locked-features).
@@ -214,6 +216,10 @@ event.
 Host and helper points are written when the event closes (below). After that, changing
 the host or helpers updates the ledger straight away, so mistakes can be fixed later.
 Changing an awarded event's name, start or end time moves its points with it.
+
+The host and helpers can also run the event's [ready check](events/roll-call.md#the-ready-check)
+(through the API until the staff board ships in #534) and see and resolve the event's
+ops notices. This gives them no other staff rights on the event or the organization.
 
 ---
 

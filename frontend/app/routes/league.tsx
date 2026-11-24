@@ -2,9 +2,26 @@ import { Building2, Loader2, Pencil, Trophy } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { fetchLeague } from '~/components/api/api';
+import { LEAGUE_MMR_GAME } from '~/components/game/constants';
+import { EditLeagueModal, LeagueTabs, useLeague } from '~/components/league';
+import { useCurrentOrganization } from '~/components/organization/hooks/useOrganization';
+import { Badge } from '~/components/ui/badge';
+import { PrimaryButton } from '~/components/ui/buttons';
+import {
+  EntityBreadcrumb,
+  type BreadcrumbSegment,
+} from '~/components/ui/entity-breadcrumb';
+import { useProvideGameType } from '~/hooks/useGameType';
+import { useMemberAccess } from '~/hooks/useMemberAccess';
+import { usePageNav } from '~/hooks/usePageNav';
+import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { generateMeta } from '~/lib/seo';
 import type { LeagueSSR } from '~/lib/ssr-types';
+import { useLeagueStore } from '~/store/leagueStore';
+import { useOrgStore } from '~/store/orgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { useUserStore } from '~/store/userStore';
 import type { Route } from './+types/league';
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -43,23 +60,6 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-import { LEAGUE_MMR_GAME } from '~/components/game/constants';
-import { EditLeagueModal, LeagueTabs, useLeague } from '~/components/league';
-import { Badge } from '~/components/ui/badge';
-import { PrimaryButton } from '~/components/ui/buttons';
-import {
-  EntityBreadcrumb,
-  type BreadcrumbSegment,
-} from '~/components/ui/entity-breadcrumb';
-import { useProvideGameType } from '~/hooks/useGameType';
-import { useMemberAccess } from '~/hooks/useMemberAccess';
-import { usePageNav } from '~/hooks/usePageNav';
-import { useIsLeagueAdmin } from '~/hooks/usePermissions';
-import { useLeagueStore } from '~/store/leagueStore';
-import { useOrgStore } from '~/store/orgStore';
-import { useUserCacheStore } from '~/store/userCacheStore';
-import { useUserStore } from '~/store/userStore';
-
 export default function LeaguePage() {
   const { leagueId, tab } = useParams<{ leagueId: string; tab?: string }>();
   const navigate = useNavigate();
@@ -87,22 +87,15 @@ export default function LeaguePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  // Set org and league context for child components (e.g. UsersTab)
+  // league.organization is the slim schema; children (e.g. UsersTab) need the full org.
+  useCurrentOrganization(league?.organization?.pk ?? undefined);
+
   useEffect(() => {
     if (league) {
-      // league.organization is the lightweight LeagueOrganizationSchema (no
-      // discord_server_id), so it cannot stand in for the full OrganizationType
-      // the store's consumers read; getOrganization no-ops if already current.
-      if (league.organization?.pk) {
-        void useOrgStore.getState().getOrganization(league.organization.pk);
-      } else {
-        useOrgStore.getState().setCurrentOrg(null);
-      }
       useLeagueStore.getState().setCurrentLeague(league);
     }
 
     return () => {
-      useOrgStore.getState().setCurrentOrg(null);
       useLeagueStore.getState().setCurrentLeague(null);
     };
   }, [league]);
@@ -137,8 +130,13 @@ export default function LeaguePage() {
       return leagueId === pk || t.league_pk === pk;
     }) || [];
 
-  // Permission check for edit - includes org admins via useIsLeagueAdmin
-  const canEdit = useIsLeagueAdmin(league);
+  // league.organization carries no admin ids; the full org in orgStore does.
+  const currentOrg = useOrgStore((s) => s.currentOrg);
+  const leagueOrg =
+    currentOrg && currentOrg.pk === league?.organization?.pk
+      ? currentOrg
+      : null;
+  const canEdit = useIsLeagueAdmin(league, leagueOrg);
 
   const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
     if (!league) return [];

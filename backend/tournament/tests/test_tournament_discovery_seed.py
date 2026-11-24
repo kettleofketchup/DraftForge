@@ -1,15 +1,18 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from unittest import mock
 
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from app.models import Tournament
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from league.models import League
 from org.models import Organization, OrgUser
+from tests.populate.activity import populate_activity_bracket_data
 from tests.populate.tournament_discovery import populate_tournament_discovery
+from tournament.models import Tournament
 
 LIST_URL = "/api/tournaments-list/"
 NOW = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
@@ -77,6 +80,57 @@ class TournamentDiscoverySeedTests(TestCase):
             )
         )
         self.assertEqual(org_ids, [30])
+
+    def test_activity_population_preserves_discovery_membership(self) -> None:
+        org, _ = Organization.objects.update_or_create(pk=1, defaults={"name": "DTX"})
+        League.objects.update_or_create(
+            pk=1,
+            defaults={
+                "name": "DTX League",
+                "organization": org,
+                "steam_league_id": 17929,
+            },
+        )
+        base_users = [
+            CustomUser.objects.create(
+                pk=2000 + index,
+                username=f"activity_base_{index}",
+                steam_account_id=2000 + index,
+            )
+            for index in range(20)
+        ]
+        for user in base_users:
+            OrgUser.objects.create(user=user, organization=org)
+        member = CustomUser.objects.get(pk=1100)
+        member.steam_account_id = 1100
+        member.save(update_fields=["steam_account_id"])
+
+        def discovery_first(population: Sequence[object], count: int) -> list[object]:
+            return sorted(
+                population, key=lambda item: getattr(item, "pk", None) != 1100
+            )[:count]
+
+        with mock.patch(
+            "tests.populate.tournaments.random.sample", side_effect=discovery_first
+        ):
+            populate_activity_bracket_data(force=True)
+
+        self.assertEqual(
+            list(
+                OrgUser.objects.filter(user=member).values_list(
+                    "organization_id", flat=True
+                )
+            ),
+            [30],
+        )
+        tournament = Tournament.objects.get(pk=950)
+        self.assertSetEqual(
+            set(tournament.users.values_list("pk", flat=True)),
+            {user.pk for user in base_users},
+        )
+        self.assertEqual(tournament.teams.count(), 4)
+        self.assertFalse(tournament.teams.filter(members=member).exists())
+        self.assertEqual(tournament.games.count(), 6)
 
     def test_upcoming_bucket_holds_future_and_live_rows(self) -> None:
         upcoming = self._pks("?bucket=upcoming") & set(EXPECTED_TOURNAMENTS)

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render } from '@testing-library/react';
 import {
   MemoryRouter,
@@ -39,12 +40,14 @@ function CaptureNavigate() {
 
 function renderAt(pk: number) {
   return render(
-    <MemoryRouter initialEntries={[`/tournament/${pk}`]}>
-      <CaptureNavigate />
-      <Routes>
-        <Route path="tournament/:pk/*" element={<TournamentDetailPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter initialEntries={[`/tournament/${pk}`]}>
+        <CaptureNavigate />
+        <Routes>
+          <Route path="tournament/:pk/*" element={<TournamentDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

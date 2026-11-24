@@ -15,6 +15,7 @@ from app.user_cache import serialize_users_core
 from common.game import GameType
 from events.capacity import seat_holding_statuses
 from events.constants import LINE_EXCLUDED_STATUSES, EventState, SignupOpenMode
+from events.history import reduce_history_rules, reduce_history_snapshot
 from events.mmr_suggestions import suggest_mmr
 from events.models import (
     Event,
@@ -22,9 +23,13 @@ from events.models import (
     EventSignup,
     EventTeam,
     OrgEventDefaults,
+    ReadyCheck,
+    ReadyCheckEntry,
     RepeaterSubscription,
+    SignupLedgerEntry,
 )
 from events.permissions import has_event_staff_access
+from events.ready_check_constants import ReadyCheckEntryState
 from events.ready_check_settings import (
     READY_CHECK_FIELD_KWARGS,
     READY_CHECK_SETTINGS_FIELDS,
@@ -354,6 +359,158 @@ class EventStaffUserSerializer(serializers.ModelSerializer):
         return nicks.get(obj.pk)
 
 
+def _history_user(
+    user: CustomUser | None,
+    snapshot: dict[str, Any] | None,
+    nicks: dict[int, str | None],
+) -> dict[str, Any]:
+    if user is not None:
+        return {
+            "user_id": user.pk,
+            "username": user.username,
+            "nickname": user.nickname,
+            "discordNickname": user.discordNickname,
+            "guildNickname": nicks.get(user.pk),
+            "avatarUrl": user.avatarUrl,
+            "discord_id": str(user.discordId) if user.discordId else None,
+        }
+    snap = snapshot if isinstance(snapshot, dict) else {}
+    discord_id = snap.get("discord_id")
+    return {
+        "user_id": snap.get("user_id"),
+        "username": snap.get("username"),
+        "nickname": snap.get("nickname"),
+        "discordNickname": None,
+        "guildNickname": None,
+        "avatarUrl": None,
+        "discord_id": str(discord_id) if discord_id else None,
+    }
+
+
+class SignupLedgerEntrySerializer(serializers.Serializer):
+    """Read-only staff view of one ledger entry; see docs signup-ledger.md."""
+
+    id = serializers.IntegerField(read_only=True)
+    occurred_at = serializers.DateTimeField(read_only=True)
+    action = serializers.CharField(read_only=True)
+    subject = serializers.SerializerMethodField()
+    actor = serializers.SerializerMethodField()
+    means = serializers.CharField(read_only=True)
+    on_behalf = serializers.BooleanField(read_only=True)
+    reason = serializers.CharField(read_only=True)
+    before = serializers.SerializerMethodField()
+    after = serializers.SerializerMethodField()
+    rules_overridden = serializers.SerializerMethodField()
+    caused_by = serializers.SerializerMethodField()
+
+    def _nicks(self) -> dict[int, str | None]:
+        return self.context.get("_history_guild_nicknames") or {}
+
+    def get_subject(self, obj: SignupLedgerEntry) -> dict[str, Any]:
+        return _history_user(obj.subject_user, obj.subject_snapshot, self._nicks())
+
+    def get_actor(self, obj: SignupLedgerEntry) -> dict[str, Any]:
+        data = _history_user(obj.actor_user, obj.actor_snapshot, self._nicks())
+        del data["discord_id"]
+        data["role"] = obj.actor_role
+        return data
+
+    def get_before(self, obj: SignupLedgerEntry) -> dict[str, Any] | None:
+        return reduce_history_snapshot(obj.before, entry_id=obj.pk)
+
+    def get_after(self, obj: SignupLedgerEntry) -> dict[str, Any] | None:
+        return reduce_history_snapshot(obj.after, entry_id=obj.pk)
+
+    def get_rules_overridden(self, obj: SignupLedgerEntry) -> list[str]:
+        return reduce_history_rules(obj.rules_overridden, entry_id=obj.pk)
+
+    def get_caused_by(self, obj: SignupLedgerEntry) -> int | None:
+        return obj.caused_by_id
+
+
+class ReadyCheckEntrySerializer(serializers.ModelSerializer):
+    signup_id = serializers.IntegerField(read_only=True, allow_null=True)
+    user = EventStaffUserSerializer(read_only=True)
+
+    class Meta:
+        model = ReadyCheckEntry
+        fields = [
+            "id",
+            "signup_id",
+            "user",
+            "state",
+            "confirmed_via",
+            "confirmed_at",
+            "nudged_at",
+            "dropped_at",
+        ]
+        read_only_fields = fields
+
+
+class ReadyCheckSerializer(serializers.ModelSerializer):
+    mode = serializers.SerializerMethodField()
+    min_completion_pct = serializers.SerializerMethodField()
+    low_completion_action = serializers.SerializerMethodField()
+    counts = serializers.SerializerMethodField()
+    opened_by = EventStaffUserSerializer(read_only=True, allow_null=True)
+    resolved_by = EventStaffUserSerializer(read_only=True, allow_null=True)
+    entries = ReadyCheckEntrySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ReadyCheck
+        fields = [
+            "id",
+            "phase",
+            "outcome",
+            "mode",
+            "completion_pct",
+            "min_completion_pct",
+            "low_completion_action",
+            "counts",
+            "opened_at",
+            "escalated_at",
+            "chased_at",
+            "closed_at",
+            "cancelled_at",
+            "last_progress_at",
+            "opened_by",
+            "resolved_by",
+            "resolve_reason",
+            "entries",
+        ]
+        read_only_fields = fields
+
+    def get_mode(self, obj: ReadyCheck) -> str:
+        return obj.settings_snapshot["effective_mode"]
+
+    def get_min_completion_pct(self, obj: ReadyCheck) -> int:
+        return int(obj.settings_snapshot["ready_check_min_completion_pct"])
+
+    def get_low_completion_action(self, obj: ReadyCheck) -> str:
+        return obj.settings_snapshot["ready_check_low_completion_action"]
+
+    def get_counts(self, obj: ReadyCheck) -> dict[str, int]:
+        entries = list(obj.entries.all())
+        counts = {"asked": len(entries)}
+        for state in ReadyCheckEntryState:
+            counts[state.value] = sum(1 for e in entries if e.state == state)
+        return counts
+
+
+class ReadyCheckResolveInputSerializer(serializers.Serializer):
+    apply_drops = serializers.BooleanField()
+    keep_signup_ids = serializers.ListField(
+        child=serializers.IntegerField(), allow_empty=True, required=False, default=list
+    )
+    reason = serializers.CharField(
+        max_length=500, allow_blank=False, trim_whitespace=True
+    )
+
+
+class ReadyCheckConfirmInputSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+
+
 class EventSlimSerializer(serializers.ModelSerializer):
     """Lightweight serializer for event list views — only fields needed for cards."""
 
@@ -422,6 +579,7 @@ class EventSerializer(
     user_can_manage_event_staff = serializers.BooleanField(
         read_only=True, default=False
     )
+    user_is_event_operator = serializers.BooleanField(read_only=True, default=False)
     host = EventStaffUserSerializer(read_only=True)
     helpers = EventStaffUserSerializer(many=True, read_only=True)
 
@@ -552,6 +710,7 @@ class EventSerializer(
             "dota_lobby_password",
             "user_can_manage",
             "user_can_manage_event_staff",
+            "user_is_event_operator",
             "is_off_schedule",
         ]
         read_only_fields = [

@@ -1,4 +1,4 @@
-from typing import Final
+from typing import Final, Literal
 
 from django.db import models
 
@@ -16,7 +16,7 @@ DEFAULT_TRAITS: Final[tuple[tuple[str, str], ...]] = (
     ("sportsmanship", "Sportsmanship"),
 )
 
-SETTINGS_DEFAULTS: Final[dict[str, int | float | bool]] = {
+SETTINGS_DEFAULTS: Final[dict[str, int | float | bool | None]] = {
     "review_window_hours": 72,
     "rating_max_points": 10,
     "rating_min_reviewers": 2,
@@ -26,6 +26,8 @@ SETTINGS_DEFAULTS: Final[dict[str, int | float | bool]] = {
     "half_life_days": 180,
     "max_age_days": 730,
     "leaderboard_public": False,
+    "require_staff_release": False,
+    "auto_release_after_hours": None,
 }
 
 SETTINGS_RANGES: Final[dict[str, tuple[int | float, int | float]]] = {
@@ -37,9 +39,17 @@ SETTINGS_RANGES: Final[dict[str, tuple[int | float, int | float]]] = {
     "prior_strength": (0.0, 20.0),
     "half_life_days": (7, 730),
     "max_age_days": (30, 1825),
+    "auto_release_after_hours": (1, 720),
 }
 
 EDITABLE_SETTINGS_FIELDS: Final[tuple[str, ...]] = tuple(SETTINGS_DEFAULTS)
+NULLABLE_SETTINGS: Final[frozenset[str]] = frozenset({"auto_release_after_hours"})
+BOOL_SETTINGS: Final[frozenset[str]] = frozenset(
+    {"leaderboard_public", "require_staff_release"}
+)
+
+ReleaseState = Literal["voided", "open", "short", "pending", "released"]
+ModerationReleaseState = ReleaseState | Literal["hidden"]
 
 
 class VoidKind(models.TextChoices):

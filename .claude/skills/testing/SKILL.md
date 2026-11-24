@@ -45,6 +45,10 @@ just test::run 'python manage.py test -v 2'
 just test::pw::headless              # All tests
 just test::pw::spec csv-import       # Specific suite
 just test::pw::ui                    # Interactive UI mode
+just test::pw::report                # Newest run's HTML report
+# Each local run writes to its own frontend/test-results/runs/<id>/
+# (artifacts/, report/, run-logs/); frontend/test-results/latest is the newest.
+# CI keeps the flat frontend/test-results/.
 
 # Full setup (down, update, build, populate, up)
 just test::setup
@@ -119,6 +123,8 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | League | Discovery Home / Away / Open League | 30 / 31 / 32 | 17950 / 17951 / 17952 |
 | Tournament | Discovery tournaments (906 has open signups, org 32) | 900-906 | - |
 | Org / League | Game MMR Org / Game MMR League (per-game org MMR) | 50 | 17944 |
+| Org | Signup History Org (signup history, no league) | 60 | - |
+| Tournament | Activity Bracket Test (Discord Activity bracket, DTX League, 2 of 6 games done) | 950 | - |
 
 | User | PK | Role | Login fixture |
 |------|----|------|--------------|
@@ -137,5 +143,6 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | of_player_1 .. of_player_10 | 7310-7319 | Discord-linked players of org 40's past tournaments (260-263) (promotion candidates) | — |
 | discovery_member | 1100 | member of org 30 only (tournament discovery) | `loginAsUser(context, 1100)` |
 | gom_player_1..5, gom_display, gom_edit, gom_approve | 8000-8007 | per-game org MMR (org 50) | `loginAdmin()` drives the specs |
+| hist_staff, hist_withdrawer, hist_button, hist_reaction, hist_staff_added, hist_long_nick, hist_outsider | 9000-9006 | signup history (org 60): 9000 org admin, 9006 non-member | `loginAsUser(context, pk)` |
 
 > **NOTE**: When this table drifts from source, read `backend/tests/data/users.py` and `backend/tests/data/organizations.py` for truth.

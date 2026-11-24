@@ -21,7 +21,8 @@ vi.mock('~/components/api/api', async (importOriginal) => ({
   getLeagues: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('~/hooks/useEvent', () => ({
+vi.mock('~/hooks/useEvent', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/hooks/useEvent')>()),
   useUpdateOrgDefaultsMutation: () => ({
     mutateAsync: api.mutateAsync,
     isPending: false,
