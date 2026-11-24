@@ -3,7 +3,7 @@
  *
  * A team knocked out of a bracket gets its Team.placement through every
  * result-entry path. The UI shows placement nowhere yet, so these tests read
- * it from the tournament payload the tournament page loads.
+ * it from the persisted tournament API payload.
  *
  * Uses dedicated 4-team tournaments reset per test:
  *  - 'bracket_placement_single': single elimination, semis W-R1 P0/P1 feed the final.
@@ -73,19 +73,13 @@ async function slotTeamPk(
   return Number(pk);
 }
 
-/** Reload the page and read team placements from the tournament fetch it makes. */
-async function placementsFromPage(
+async function persistedPlacements(
   page: Page,
   tournamentPk: number,
 ): Promise<PlacedTeam[]> {
-  const tournamentFetch = page.waitForResponse(
-    (r) =>
-      r.request().method() === 'GET' &&
-      new URL(r.url()).pathname === `/api/tournaments/${tournamentPk}/`,
-    { timeout: 15000 },
-  );
-  await page.reload();
-  const response = await tournamentFetch;
+  const response = await page
+    .context()
+    .request.get(`/api/tournaments/${tournamentPk}/`);
   expect(response.status()).toBe(200);
   const body = await response.json();
   return body.teams as PlacedTeam[];
@@ -125,15 +119,12 @@ test.describe('Bracket placement on elimination (e2e)', () => {
     );
     await closeMatch(page);
 
-    let teams = await placementsFromPage(page, tournamentPk);
+    let teams = await persistedPlacements(page, tournamentPk);
     expect(placementOf(teams, semi1Loser)).toBe(3);
     expect(placementOf(teams, semi1Winner)).toBeNull();
-    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
-      timeout: 15000,
-    });
-    await page.waitForLoadState('networkidle');
 
     const semi2 = matchNode(page, 'winners', 1, 1);
+    const semi2Winner = await slotTeamPk(semi2, 'radiant');
     const semi2Loser = await slotTeamPk(semi2, 'dire');
     dialog = await openMatch(page, semi2);
     await clickAndPersistMatchResult(
@@ -141,13 +132,14 @@ test.describe('Bracket placement on elimination (e2e)', () => {
       dialog.locator('[data-testid="radiantWinsButton"]'),
     );
     await closeMatch(page);
-    await page.reload();
-    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
-      timeout: 15000,
-    });
-    await page.waitForLoadState('networkidle');
 
     const final = matchNode(page, 'winners', 2, 0);
+    await expect(
+      final.locator('[data-testid="bracket-team-slot-radiant"]'),
+    ).toHaveAttribute('data-team-pk', String(semi1Winner));
+    await expect(
+      final.locator('[data-testid="bracket-team-slot-dire"]'),
+    ).toHaveAttribute('data-team-pk', String(semi2Winner));
     const finalWinner = await slotTeamPk(final, 'radiant');
     const finalLoser = await slotTeamPk(final, 'dire');
     dialog = await openMatch(page, final);
@@ -157,7 +149,7 @@ test.describe('Bracket placement on elimination (e2e)', () => {
     );
     await closeMatch(page);
 
-    teams = await placementsFromPage(page, tournamentPk);
+    teams = await persistedPlacements(page, tournamentPk);
     expect(placementOf(teams, finalWinner)).toBe(1);
     expect(placementOf(teams, finalLoser)).toBe(2);
     expect(placementOf(teams, semi1Loser)).toBe(3);
@@ -224,7 +216,7 @@ test.describe('Bracket placement on elimination (e2e)', () => {
       page.locator('[data-testid="bracket-unsaved-changes"]'),
     ).toBeHidden({ timeout: 10000 });
 
-    const teams = await placementsFromPage(page, tournamentPk);
+    const teams = await persistedPlacements(page, tournamentPk);
     expect(placementOf(teams, eliminated)).toBe(4);
     expect(placementOf(teams, survivor)).toBeNull();
     expect(teams.filter((t) => t.placement !== null)).toHaveLength(1);
