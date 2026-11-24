@@ -55,3 +55,25 @@ describe('ClaimCard target org MMR', () => {
     expect(screen.getByText('No MMR')).toBeTruthy();
   });
 });
+
+describe('ClaimCard approved claim with merged target', () => {
+  it('describes the merge instead of the deleted profile', () => {
+    renderCard(
+      claim({
+        status: 'approved',
+        target_user: null,
+        target_nickname: null,
+        target_steamid: null,
+        target_mmr: null,
+        target_game_mmrs: null,
+        reviewed_by_username: 'admin',
+        reviewed_at: '2026-01-02T00:00:00Z',
+      }),
+    );
+    expect(screen.getByTestId('claim-target-merged').textContent).toBe(
+      'Merged into claimer',
+    );
+    expect(screen.queryByText(/Steam ID: null/)).toBeNull();
+    expect(screen.queryByText('No MMR')).toBeNull();
+  });
+});

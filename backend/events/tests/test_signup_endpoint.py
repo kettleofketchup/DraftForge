@@ -1,11 +1,13 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, GameType
-from events.models import Event, EventState
+from events import admission
+from events.models import Event, EventSignup, EventState
 from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.models import Organization, OrgUser
@@ -376,6 +378,70 @@ class SignupRefusalReasonsTests(EventTestCase):
                 body = resp.json()
                 self.assertIn("intent", body["error"])
                 self.assertEqual(body["reasons"], [])
+
+
+class SignupEndpointAdmissionOnceTests(EventTestCase):
+    """The service is the admission choke point; the view must not pre-check."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.api = APIClient()
+
+    def _post(self, event: Event, intent: str, **extra: object) -> object:
+        return self.api.post(
+            f"/api/events/{event.pk}/signup/",
+            {"intent": intent, **extra},
+            format="json",
+        )
+
+    def test_rsvp_evaluates_admission_once(self) -> None:
+        ev = self.make_event()
+        self.api.force_authenticate(self.make_user())
+        with patch(
+            "events.admission.evaluate_signup", wraps=admission.evaluate_signup
+        ) as evaluated:
+            resp = self._post(ev, "rsvp")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(evaluated.call_count, 1)
+
+    def test_tentative_evaluates_admission_once(self) -> None:
+        ev = self.make_event()
+        self.api.force_authenticate(self.make_user())
+        with patch(
+            "events.admission.evaluate_signup", wraps=admission.evaluate_signup
+        ) as evaluated:
+            resp = self._post(ev, "tentative")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(evaluated.call_count, 1)
+
+    def test_closed_event_is_refused_by_the_service_only(self) -> None:
+        ev = self.make_event(state=EventState.CANCELLED)
+        self.api.force_authenticate(self.make_user())
+        with (
+            patch("events.views.ensure_self_serve") as view_check,
+            patch(
+                "events.admission.self_serve_refusal",
+                wraps=admission.self_serve_refusal,
+            ) as refused,
+        ):
+            resp = self._post(ev, "rsvp")
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("not accepting signups", resp.json()["error"])
+        view_check.assert_not_called()
+        self.assertEqual(refused.call_count, 1)
+
+    def test_closed_event_refusal_writes_no_org_user_or_profile(self) -> None:
+        """Guard: the refusal rolls back the membership and profile input."""
+        ev = self.make_event(state=EventState.CANCELLED)
+        user = CustomUser.objects.create_user(username="no_org_user", password="pw")
+        self.api.force_authenticate(user)
+        resp = self._post(ev, "rsvp", profile={"steam_account_id": "98765"})
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("not accepting signups", resp.json()["error"])
+        self.assertFalse(OrgUser.objects.filter(user=user).exists())
+        self.assertFalse(EventSignup.objects.filter(event=ev).exists())
+        user.refresh_from_db()
+        self.assertIsNone(user.steam_account_id)
 
 
 class EventEligibilityEndpointTests(EventTestCase):
