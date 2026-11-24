@@ -6,9 +6,14 @@ from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, PositionsModel
+from events.eligibility.steam import (
+    STEAM_ACCOUNT_ID_RANGE,
+    apply_admin_steam_account_id,
+)
 from org.models import Organization
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile, DeadlockUserProfile, DotaUserProfile
+from user.steam_accounts import log_steam_verification_change
 
 log = get_logger(__name__)
 
@@ -42,10 +47,20 @@ class PositionsSerializer(serializers.ModelSerializer):
         fields = ["pk", "carry", "mid", "offlane", "soft_support", "hard_support"]
 
 
+STEAM_VERIFICATION_READ_FIELDS: Final[tuple[str, ...]] = (
+    "steam_account_verified",
+    "steam_account_verified_at",
+    "steam_account_exists_checked",
+)
+
+
 class TournamentUserSerializer(serializers.ModelSerializer):
     positions = PositionsSerializer(many=False, read_only=True)
     # Auto-computed 32-bit Steam Account ID from 64-bit Friend ID
     steam_account_id = serializers.IntegerField(read_only=True)
+    steam_account_verified = serializers.BooleanField(read_only=True)
+    steam_account_verified_at = serializers.DateTimeField(read_only=True)
+    steam_account_exists_checked = serializers.BooleanField(read_only=True)
     # Writable fields use CustomUser's profile-backed properties.
     nickname = serializers.CharField(
         allow_null=True,
@@ -69,6 +84,7 @@ class TournamentUserSerializer(serializers.ModelSerializer):
             "discordNickname",
             "positions",
             "steam_account_id",
+            *STEAM_VERIFICATION_READ_FIELDS,
             "avatarUrl",
             "positions",
         )
@@ -87,6 +103,8 @@ class UserSerializer(serializers.ModelSerializer):
     steam_account_id = serializers.IntegerField(
         required=False,
         allow_null=True,
+        min_value=STEAM_ACCOUNT_ID_RANGE.start,
+        max_value=STEAM_ACCOUNT_ID_RANGE.stop - 1,
         validators=[
             UniqueValidator(
                 queryset=CustomUser.objects.all(),
@@ -98,6 +116,9 @@ class UserSerializer(serializers.ModelSerializer):
     # actions without needing a follow-up fetch (e.g. Create Tournament
     # button on the global /tournaments/ page). Empty lists for users with
     # no affiliations — never null.
+    steam_account_verified = serializers.BooleanField(read_only=True)
+    steam_account_verified_at = serializers.DateTimeField(read_only=True)
+    steam_account_exists_checked = serializers.BooleanField(read_only=True)
     admin_organization_ids = serializers.SerializerMethodField()
     staff_organization_ids = serializers.SerializerMethodField()
     admin_league_ids = serializers.SerializerMethodField()
@@ -127,6 +148,7 @@ class UserSerializer(serializers.ModelSerializer):
             "avatar",
             "discordId",
             "steam_account_id",
+            *STEAM_VERIFICATION_READ_FIELDS,
             "avatarUrl",
             "email",
             "date_joined",
@@ -180,6 +202,10 @@ class UserSerializer(serializers.ModelSerializer):
             fields=dropped,
         )
 
+    def _actor(self) -> CustomUser | None:
+        actor = getattr(self.context.get("request"), "user", None)
+        return actor if isinstance(actor, CustomUser) else None
+
     def update(self, instance: CustomUser, validated_data: dict) -> CustomUser:
         self._strip_privilege_fields(validated_data, instance.pk)
         validated_data.pop("discordNickname", None)
@@ -203,10 +229,23 @@ class UserSerializer(serializers.ModelSerializer):
                     )
             except KeyError:
                 pass
+            has_steam_id = "steam_account_id" in validated_data
+            new_steam_id = validated_data.pop("steam_account_id", None)
             for key, value in validated_data.items():
                 setattr(instance, key, value)
+            grant = (
+                apply_admin_steam_account_id(
+                    instance, new_steam_id, actor=self._actor()
+                )
+                if has_steam_id
+                else None
+            )
 
             instance.save()
+            if grant is not None:
+                log_steam_verification_change(
+                    instance, self._actor(), grant.org_id, True
+                )
             log.debug(
                 "user_updated",
                 system="api",
@@ -243,19 +282,26 @@ class UserSerializer(serializers.ModelSerializer):
                 if key not in fields:
                     raise KeyError(f"Invalid field: {key}")
 
+            has_steam_id = "steam_account_id" in validated_data
+            new_steam_id = validated_data.pop("steam_account_id", None)
             if "positions" in validated_data:
                 positions_data = validated_data.pop("positions")
                 positions = PositionsModel.objects.create(**positions_data)
-                user = CustomUser.objects.create(positions=positions, **validated_data)
-
             else:
                 log.debug(
                     "user_create_no_positions", system="api", subsystem="serializer"
                 )
                 positions = PositionsModel.objects.create()
-                user = CustomUser(positions=positions, **validated_data)
+            user = CustomUser(positions=positions, **validated_data)
+            grant = (
+                apply_admin_steam_account_id(user, new_steam_id, actor=self._actor())
+                if has_steam_id
+                else None
+            )
 
             user.save()
+            if grant is not None:
+                log_steam_verification_change(user, self._actor(), grant.org_id, True)
             return user
 
 

@@ -305,6 +305,7 @@ class CandidatesTest(_PoolFixture):
                 "guildNickname",
                 "discordId",
                 "avatarUrl",
+                "mmr",
                 "recent_count",
                 "last_active_at",
                 "discord_joined_at",

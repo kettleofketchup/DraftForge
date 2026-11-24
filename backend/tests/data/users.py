@@ -879,6 +879,26 @@ EVENTS_USERS: list[TestUser] = [
     EVENT_PLAYER_NO_PROFILE,  # Loop 2 ([:4]) skips this naturally — no PlayerDotaProfile created.
 ]
 
+STEAM_VERIFY_UNVERIFIED_USER: TestUser = TestUser(
+    pk=5101,
+    username="steam_verify_unverified",
+    nickname="Unverified Friend ID",
+    discord_id="880000000000101001",
+    steam_id_64=76561198900190101,
+    mmr=3300,
+    positions=TestPositions(),
+)
+
+STEAM_VERIFY_VERIFIED_USER: TestUser = TestUser(
+    pk=5102,
+    username="steam_verify_verified",
+    nickname="Verified Friend ID",
+    discord_id="880000000000101002",
+    steam_id_64=76561198900190102,
+    mmr=3400,
+    positions=TestPositions(),
+)
+
 # =============================================================================
 # Auth Test Users (for iteration)
 # =============================================================================

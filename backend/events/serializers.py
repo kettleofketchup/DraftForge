@@ -9,6 +9,7 @@ from rest_framework import serializers
 from app.auth import InternalServiceUser
 from app.models import CustomUser
 from app.permissions import request_user
+from app.permissions_steam import VOUCH_EXCLUDED_STATUSES
 from common.game import GameType
 from events.capacity import seat_holding_statuses
 from events.constants import LINE_EXCLUDED_STATUSES, EventState, SignupOpenMode
@@ -1001,6 +1002,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
     unmet_requirements = serializers.SerializerMethodField()
     eligibility_reasons = serializers.SerializerMethodField()
     line_rank = serializers.SerializerMethodField()
+    can_verify_steam_account = serializers.SerializerMethodField()
 
     class Meta:
         model = EventSignup
@@ -1028,6 +1030,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "holds_seat",
             "unmet_requirements",
             "eligibility_reasons",
+            "can_verify_steam_account",
             "created_at",
             "updated_at",
             "signed_up_at",
@@ -1171,7 +1174,23 @@ class EventSignupSerializer(serializers.ModelSerializer):
                 "game_mmrs",
             ):
                 data.pop(key, None)
+        data["steam_account_verified_org_name"] = (
+            obj.user.steam_account_verified_org_name
+            if self._viewer_sees_eligibility(obj)
+            else None
+        )
         return data
+
+    def get_can_verify_steam_account(self, signup: EventSignup) -> bool:
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return False
+        viewer = request.user
+        if viewer.pk == signup.user_id or not self._viewer_sees_eligibility(signup):
+            return False
+        if viewer.is_staff or viewer.is_superuser:
+            return True
+        return signup.self_made and signup.status not in VOUCH_EXCLUDED_STATUSES
 
     def get_holds_seat(self, signup: EventSignup) -> bool:
         return signup.status in seat_holding_statuses(signup.event)

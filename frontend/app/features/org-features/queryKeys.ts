@@ -166,6 +166,14 @@ export async function invalidateOrgStandingQueries(
   ]);
 }
 
+/** Every promotion query of an org (templates, events, candidates, rendered DMs), for all viewers. */
+export async function invalidatePromotionQueries(
+  queryClient: QueryClient,
+  orgId: number,
+): Promise<void> {
+  await queryClient.invalidateQueries({ queryKey: [PROMOTION, orgId] });
+}
+
 function startsWith(key: QueryKey, prefix: QueryKey): boolean {
   return (
     prefix.length <= key.length &&

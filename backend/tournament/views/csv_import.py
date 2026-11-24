@@ -14,6 +14,7 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser, GameType, PositionsModel
+from events.eligibility import apply_admin_steam_account_id
 from league.models import LeagueUser
 from org.mmr import (
     LEAGUE_GAME,
@@ -29,6 +30,7 @@ from tournament.models import Team, Tournament
 from tournament.permissions import can_edit_tournament
 from user.display_names import user_display_name
 from user.serializers import TournamentUserSerializer
+from user.steam_accounts import log_steam_verification_change
 
 if TYPE_CHECKING:
     from league.models import League
@@ -105,7 +107,7 @@ def _update_positions_if_empty(
 
 
 def _resolve_user_for_csv_row(
-    row: dict[str, Any],
+    row: dict[str, Any], actor: CustomUser
 ) -> tuple[CustomUser | None, bool, str | None, list[CustomUser] | None]:
     """Resolve or create a user from a CSV row.
 
@@ -196,10 +198,12 @@ def _resolve_user_for_csv_row(
             with transaction.atomic():
                 positions = PositionsModel.objects.create()
                 user = CustomUser(positions=positions)
+                verify_grant = None
                 if steam_id is not None:
-                    # steam_friend_id from CSV is 64-bit Steam ID;
-                    # save() syncs to steam_account_id automatically
-                    user.steamid = steam_id
+                    # steam_friend_id from CSV is the 64-bit Steam ID
+                    verify_grant = apply_admin_steam_account_id(
+                        user, steam_id - CustomUser.STEAM_ID_64_BASE, actor=actor
+                    )
                     user.username = f"steam_{steam_id}"
                 if discord_id is not None:
                     user.discordId = discord_id
@@ -216,6 +220,8 @@ def _resolve_user_for_csv_row(
                         user.nickname = name
                 user.save()
                 created = True
+            if verify_grant is not None:
+                log_steam_verification_change(user, actor, verify_grant.org_id, True)
         except IntegrityError:
             # Race condition: another row created the same user — retry lookup
             if steam_id is not None:
@@ -294,7 +300,9 @@ def import_csv_org(request: Request, org_id: int) -> Response:
             )
             summary["errors"] += 1
             continue
-        user, created, error, conflict_users = _resolve_user_for_csv_row(row)
+        user, created, error, conflict_users = _resolve_user_for_csv_row(
+            row, request.user
+        )
 
         if error:
             err_result = {"row": i + 1, "status": "error", "reason": error}
@@ -540,7 +548,9 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
             )
             summary["errors"] += 1
             continue
-        user, created, error, conflict_users = _resolve_user_for_csv_row(row)
+        user, created, error, conflict_users = _resolve_user_for_csv_row(
+            row, request.user
+        )
 
         if error:
             err_result = {"row": i + 1, "status": "error", "reason": error}

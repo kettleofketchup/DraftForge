@@ -18,6 +18,7 @@ from events.constants import (
     SignupStatus,
     VoicePresenceSource,
 )
+from events.ledger import SignupActor
 from events.models import (
     Event,
     EventRepeater,
@@ -32,6 +33,7 @@ from events.ready_check_constants import (
     ReadyCheckLowCompletionAction,
     ReadyCheckScope,
 )
+from events.services import process_rsvp
 from league.models import League
 from org.models import Organization
 from org.models_profiles import PlayerDotaProfile
@@ -43,9 +45,19 @@ from tests.data import (
     EVENTS_ORG,
     EVENTS_USERS,
 )
-from tests.data.users import EVENT_LEAGUE_STAFF_USER
+from tests.data.models import TestUser
+from tests.data.users import (
+    EVENT_LEAGUE_STAFF_USER,
+    STEAM_VERIFY_UNVERIFIED_USER,
+    STEAM_VERIFY_VERIFIED_USER,
+)
+from tests.populate.constants import STEAM_VERIFY_EVENT_NAME
 from tests.populate.utils import ensure_league_user, ensure_org_user
 from tournament.models import Team, Tournament
+from user.steam_accounts import (
+    clear_steam_account_verification,
+    mark_steam_account_verified,
+)
 
 
 def populate_events_data(force: bool = False) -> None:
@@ -599,6 +611,8 @@ def populate_events_data(force: bool = False) -> None:
         },
     )
 
+    populate_steam_verification_data(org, league, admin_user)
+
     print(
         f"    Created org={org.name} (pk={org.pk}), league={league.name} (pk={league.pk})"
     )
@@ -606,3 +620,70 @@ def populate_events_data(force: bool = False) -> None:
         f"    Created repeater={repeater.name}, event={event.name} (state={event.state})"
     )
     print("    Created org event defaults with discord channels")
+
+
+def _ensure_steam_verify_user(
+    data: TestUser, org: Organization, league: League
+) -> CustomUser:
+    user = CustomUser.objects.filter(pk=data.pk).first()
+    if user is None:
+        user = CustomUser(pk=data.pk, positions=PositionsModel.objects.create())
+        user.set_unusable_password()
+    user.username = data.username
+    user.nickname = data.nickname
+    user.discordId = data.discord_id
+    user.steamid = data.steam_id_64
+    user.has_active_dota_mmr = True
+    user.save()
+    org_user = ensure_org_user(user, org, mmr=data.mmr)
+    ensure_league_user(user, org_user, league)
+    return user
+
+
+def _ensure_self_made_signup(event: Event, user: CustomUser) -> None:
+    signup = EventSignup.objects.filter(event=event, user=user).first()
+    if signup is None:
+        process_rsvp(event, user, actor=SignupActor.system())
+        return
+    if signup.status != SignupStatus.RSVP or not signup.self_made:
+        signup.status = SignupStatus.RSVP
+        signup.self_made = True
+        signup.save(update_fields=["status", "self_made"])
+
+
+def populate_steam_verification_data(
+    org: Organization, league: League, verifier: CustomUser
+) -> None:
+    """One self-signed-up member with an unverified Friend ID, one verified by org staff."""
+    event, _ = Event.objects.update_or_create(
+        organization=org,
+        name=STEAM_VERIFY_EVENT_NAME,
+        defaults={
+            "description": "Pending self signups for Friend ID verification E2E.",
+            "scheduled_at": tz.now() + timedelta(days=10),
+            "state": EventState.SIGNUPS_OPEN,
+            "created_by": verifier,
+            "tournament_name": "Steam Friend ID Verify Tournament",
+            "tournament_league": league,
+            "tournament_type": "single_elimination",
+            "game_type": GameType.DOTA2,
+            "draft_type": "shuffle",
+            "people_per_team": 5,
+            "number_of_teams": 2,
+            "timezone": EVENTS_ORG.timezone,
+            "auto_approve": False,
+            "max_players": 10,
+        },
+    )
+
+    unverified = _ensure_steam_verify_user(STEAM_VERIFY_UNVERIFIED_USER, org, league)
+    if unverified.steam_account_verified:
+        clear_steam_account_verification(unverified, actor=verifier)
+    _ensure_self_made_signup(event, unverified)
+
+    verified = _ensure_steam_verify_user(STEAM_VERIFY_VERIFIED_USER, org, league)
+    mark_steam_account_verified(verified, verifier, org_id=org.pk)
+    _ensure_self_made_signup(event, verified)
+
+    invalidate_obj(event)
+    print(f"    Created {event.name} with an unverified and a verified Friend ID")

@@ -290,7 +290,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
             control={control}
             name="discord_signup_reminder"
             label="Send signup reminder"
-            description="DM users who haven't signed up yet before the event starts"
+            description="DM series subscribers who haven't signed up yet, before the event starts"
           />
           {signupReminder && (
             <HoursSelect
