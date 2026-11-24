@@ -67,6 +67,7 @@ import type { UserType } from '~/components/user/types';
 import {
   invalidateConductQueries,
   invalidateOrgContributionQueries,
+  invalidateOrgStandingQueries,
 } from '~/features/org-features/queryKeys';
 import { nextCursor } from '~/hooks/useTournamentList';
 import { useUserCacheStore } from '~/store/userCacheStore';
@@ -254,15 +255,21 @@ export function useEventActionMutation(eventId: number) {
         void invalidateEventLists(queryClient);
         invalidateSignupHistory(queryClient, eventId);
         void invalidateConductQueries(queryClient, data.organization);
+        void invalidateOrgStandingQueries(queryClient, data.organization);
       },
     }),
     deleteEvent: useMutation({
       mutationFn: () => deleteEventAPI(eventId),
       onSuccess: () => {
+        const orgId = queryClient.getQueryData<EventType>([
+          'event',
+          eventId,
+        ])?.organization;
         void invalidateEventLists(queryClient);
         queryClient.removeQueries({ queryKey: ['event', eventId] });
         removeSignupHistoryQueries(queryClient, eventId);
         void invalidateConductQueries(queryClient);
+        void invalidateOrgStandingQueries(queryClient, orgId);
       },
     }),
     restartTournament: useMutation({
@@ -272,6 +279,7 @@ export function useEventActionMutation(eventId: number) {
         void invalidateEventLists(queryClient);
         invalidateSignupHistory(queryClient, eventId);
         void invalidateConductQueries(queryClient, data.organization);
+        void invalidateOrgStandingQueries(queryClient, data.organization);
       },
     }),
     completeEvent: useMutation({
@@ -279,8 +287,8 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         void invalidateEventLists(queryClient);
+        void invalidateOrgStandingQueries(queryClient, data.organization);
         invalidateSignupHistory(queryClient, eventId);
-        void invalidateOrgContributionQueries(queryClient, data.organization);
         void invalidateConductQueries(queryClient, data.organization);
       },
     }),
@@ -406,11 +414,12 @@ export function useUpdateEventMutation(eventId: number) {
         queryKey: ['event-lobby-password', eventId],
       });
       void invalidateConductQueries(queryClient, data.organization);
+      void invalidateOrgStandingQueries(queryClient, data.organization);
     },
   });
 }
 
-/** Signup management mutations (approve, reject, confirm, cancel). */
+/** Mutation key shared by the staff signup actions (approve, reject, confirm, cancel). */
 export const signupActionKey = (eventId: number) =>
   ['signup-action', eventId] as const;
 
