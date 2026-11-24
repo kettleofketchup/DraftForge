@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any, Final, TypedDict
 
+from django.conf import settings
 from django.db.models import Count, OuterRef, Q, QuerySet, Subquery
 from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
@@ -190,6 +191,21 @@ def _parse_joined_at(member: dict[str, Any]) -> datetime | None:
         return None
 
 
+def fetch_guild_members(org: Organization) -> list[dict[str, Any]]:
+    """The org's guild members, raising instead of degrading to empty.
+
+    Raises ``DiscordMembersFetchError`` when the org has no guild, the bot
+    token is not configured or Discord fails. The integration subject
+    universe uses this so an unavailable guild is never mistaken for an
+    empty one; the promoter UI uses ``guild_members``.
+    """
+    if not org.discord_server_id:
+        raise DiscordMembersFetchError("organization has no Discord guild")
+    if not settings.DISCORD_BOT_TOKEN:
+        raise DiscordMembersFetchError("Discord bot token is not configured")
+    return get_discord_members_data(guild_id=org.discord_server_id)
+
+
 def guild_members(org: Organization) -> list[dict[str, Any]]:
     if not org.discord_server_id:
         return []
@@ -208,9 +224,14 @@ def guild_members(org: Organization) -> list[dict[str, Any]]:
 
 def recent_guild_joiners(org: Organization, *, days: int) -> list[GuildJoiner]:
     """Human guild members who joined within ``days``, newest first."""
+    return joiners_since(guild_members(org), days=days)
+
+
+def joiners_since(members: list[dict[str, Any]], *, days: int) -> list[GuildJoiner]:
+    """The human members of ``members`` who joined within ``days``, newest first."""
     since = timezone.now() - timedelta(days=days)
     joiners: list[GuildJoiner] = []
-    for member in guild_members(org):
+    for member in members:
         user = member.get("user") or {}
         if user.get("bot") or not user.get("id"):
             continue

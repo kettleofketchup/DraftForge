@@ -42,6 +42,8 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     "method_not_allowed": "Method not allowed.",
     "not_acceptable": "Not acceptable.",
     "mapping_changed": "The mapping changed; restart the read.",
+    "identity_conflict": "Two subjects resolve to the same identity.",
+    "subject_source_unavailable": "A subject source is unavailable; retry later.",
     "request_too_large": "Request body too large.",
     "unsupported_media_type": "Content type must be application/json.",
     "rate_limited": "Request limit exceeded.",
