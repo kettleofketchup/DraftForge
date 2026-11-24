@@ -225,6 +225,14 @@ export {
   type MmrRequestsUser,
   type ResetMmrRequestsOptions,
 } from './mmr-requests';
+// MMR sync API utilities (19-org-features/10-mmr-sync-api spec)
+export {
+  loginMmrSync,
+  mmrSyncRequest,
+  resetMmrSync,
+  type MmrSyncRole,
+  type MmrSyncTestData,
+} from './mmr-sync';
 
 // Discord Activity harness (20-activity specs)
 export {

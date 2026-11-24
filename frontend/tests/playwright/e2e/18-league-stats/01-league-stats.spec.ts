@@ -484,9 +484,9 @@ test.describe('Strip league stats (@cicd)', () => {
     });
   });
 
-  test('no overflow/overlap at 1024, 1280, 1920', async ({ page }) => {
-    const measured: Record<number, number[]> = {};
-    for (const width of [1024, 1280, 1920]) {
+  for (const width of [1024, 1280, 1920]) {
+    test(`no overflow/overlap at ${width}`, async ({ page }) => {
+      const measured: Record<number, number[]> = {};
       await page.setViewportSize({ width, height: 1000 });
       const dialog = await openDraftModal(page, tournament);
       if (width === 1920) {
@@ -506,16 +506,16 @@ test.describe('Strip league stats (@cicd)', () => {
           layouts.some((l) => l.fits.some((f) => f.label === 'stats badge')),
         ).toBe(true);
       }
-    }
-    test.info().annotations.push({
-      type: 'strip-widths',
-      description: JSON.stringify(measured),
+      test.info().annotations.push({
+        type: 'strip-widths',
+        description: JSON.stringify(measured),
+      });
+      test.info().annotations.push({
+        type: 'stats-geometry',
+        description: STATS_ONLY_AT_1920,
+      });
     });
-    test.info().annotations.push({
-      type: 'stats-geometry',
-      description: STATS_ONLY_AT_1920,
-    });
-  });
+  }
 
   test.describe('375 wide', () => {
     test.use({ viewport: { width: 375, height: 1000 } });

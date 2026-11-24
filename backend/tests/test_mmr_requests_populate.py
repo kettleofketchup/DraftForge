@@ -21,7 +21,9 @@ from tests.data.mmr_requests import (
     ORG_STAFF_PK,
     OUTSIDER_PK,
 )
+from tests.data.mmr_sync import MMR_SYNC_ROLE_USERS
 from tests.populate.mmr_requests import populate_mmr_requests_data, reset_mmr_requests
+from tests.populate.mmr_sync import populate_mmr_sync_data
 from tests.test_mmr_requests import mmr_requests_data, mmr_requests_reset
 
 MEMBER_PKS = (MEMBER_APPROVE_PK, MEMBER_REJECT_PK, MEMBER_STAFFSET_PK)
@@ -63,6 +65,21 @@ class MmrRequestsPopulateTest(MmrRequestTestMixin, TestCase):
         self.assertEqual(league_user.mmr, MMR_REQ_BASE_MMR)
         self.assertIsNone(league_user.mmr_verified_at)
         self.assertIsNone(league_user.mmr_verified_by_id)
+
+    def test_mmr_sync_populate_does_not_overwrite_request_users(self) -> None:
+        request_users = dict(
+            CustomUser.objects.filter(
+                pk__in=(*MEMBER_PKS, ORG_STAFF_PK, LEAGUE_STAFF_PK, OUTSIDER_PK)
+            ).values_list("pk", "username")
+        )
+        populate_mmr_sync_data(True)
+        populate_mmr_requests_data(True)
+        for pk, username in request_users.items():
+            self.assertEqual(CustomUser.objects.get(pk=pk).username, username)
+        for user in MMR_SYNC_ROLE_USERS.values():
+            self.assertEqual(CustomUser.objects.get(pk=user.pk).username, user.username)
+        for pk in MEMBER_PKS:
+            self.assert_baseline(pk)
 
     def test_populate_mmr_requests(self) -> None:
         org = Organization.objects.nocache().get(pk=MMR_REQ_ORG_PK)

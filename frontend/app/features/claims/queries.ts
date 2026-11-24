@@ -1,7 +1,9 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
+import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
-import { getClaimRequests } from './api';
+import { approveClaimRequest, getClaimRequests } from './api';
 import { claimKeys } from './queryKeys';
 import type { ClaimStatus, ProfileClaimRequest } from './schemas';
 
@@ -49,4 +51,33 @@ export function useInvalidateClaims(orgId: number): () => Promise<void> {
       }),
     [queryClient, orgId, viewerPk],
   );
+}
+
+export type ApproveClaimInput = Pick<
+  ProfileClaimRequest,
+  'id' | 'claimer' | 'target_user'
+>;
+
+// Approval merges target_user into claimer and deletes target_user.
+export function useApproveClaim(orgId: number) {
+  const queryClient = useQueryClient();
+  const viewerPk = useViewerPk();
+  return useMutation({
+    mutationFn: (claim: ApproveClaimInput) => approveClaimRequest(claim.id),
+    onSuccess: async (_message, claim) => {
+      if (claim.target_user != null) {
+        useUserCacheStore.getState().remove(claim.target_user);
+        queryClient.removeQueries({ queryKey: ['user', claim.target_user] });
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: claimKeys.all(orgId, viewerPk),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: organizationQueryKey(orgId),
+        }),
+        queryClient.invalidateQueries({ queryKey: ['user', claim.claimer] }),
+      ]);
+    },
+  });
 }

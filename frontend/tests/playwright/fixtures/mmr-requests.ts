@@ -1,8 +1,8 @@
 /**
  * MMR update request E2E fixtures (backend tests.data.mmr_requests).
  *
- * MMR Requests Org / League (pk 60). Members 8100-8102 start at an unverified
- * 4200 org (Dota) and league MMR; 8103 is org staff, 8104 league staff, 8105
+ * MMR Requests Org / League (pk 60). Members 8200-8202 start at an unverified
+ * 4200 org (Dota) and league MMR; 8203 is org staff, 8204 league staff, 8205
  * an outsider. Read PKs from getMmrRequestsData, never hardcode them.
  */
 
