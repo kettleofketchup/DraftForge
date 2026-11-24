@@ -84,17 +84,22 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
     sent: boolean;
   } | null>(null);
 
-  // A selected player goes stale when a later refetch of the list they were
-  // picked from shows a recorded SFG contact or, with messaged players hidden,
-  // no longer lists them. Once this panel has marked a send, a missing row is
-  // its own send (or the list catching up after its undo), not staleness.
+  // A selected player goes stale when list data fetched after the pick shows
+  // a recorded SFG contact, under any filters, or when the list they were
+  // picked from, with messaged players hidden, no longer lists them. Other
+  // filters can leave a row out for unrelated reasons, so only the pick's own
+  // filters count a missing row. Once this panel has marked a send, a missing
+  // row is its own send (or the list catching up after its undo).
   const { data: rows, dataUpdatedAt, isPlaceholderData } = candidates;
   useEffect(() => {
     if (candidate == null || justSent != null || picked == null) return;
-    if (!rows || isPlaceholderData || picked.key !== filtersKey) return;
-    if (dataUpdatedAt <= picked.at) return;
+    if (!rows || isPlaceholderData || dataUpdatedAt <= picked.at) return;
     const row = rows.rows.find((r) => r.user_pk === candidate.user_pk);
-    const hidden = row == null && filters.hideMessaged && !picked.sent;
+    const hidden =
+      row == null &&
+      picked.key === filtersKey &&
+      filters.hideMessaged &&
+      !picked.sent;
     if (row?.external_contact || hidden) {
       setCandidate(null);
       setPicked(null);
@@ -117,6 +122,10 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
   // Set before the request: the send's own list refetch can land first.
   const onSending = useCallback(() => {
     setPicked((p) => (p ? { ...p, sent: true } : p));
+  }, []);
+  // A failed send recorded nothing, so a missing row is staleness again.
+  const onSendFailed = useCallback(() => {
+    setPicked((p) => (p ? { ...p, sent: false } : p));
   }, []);
   const onSelectCandidate = (row: LinkedCandidate): void => {
     setCandidate(row);
@@ -209,6 +218,7 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
               templates={templates.data ?? []}
               onSent={onSent}
               onSending={onSending}
+              onSendFailed={onSendFailed}
               syncConfigured={candidates.data?.contact_sync.configured ?? false}
               onStale={onStale}
             />

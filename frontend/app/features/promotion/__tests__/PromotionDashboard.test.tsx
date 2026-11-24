@@ -237,6 +237,100 @@ describe('PromotionDashboard stale recipients', () => {
     expect(screen.getByTestId('promo-select-42')).toBeDisabled();
   });
 
+  it('still drops a stale pick after a failed send', async () => {
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([candidate], { contact_sync: SYNC_CONFIGURED }),
+    );
+    vi.mocked(sendPromo).mockRejectedValue({
+      response: { status: 500, data: { detail: 'boom' } },
+    });
+    const qc = setup();
+    fireEvent.click(await screen.findByTestId('promo-select-42'));
+    fireEvent.change(await screen.findByTestId('promo-message-text'), {
+      target: { value: 'Hey' },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('promo-mark-sent-btn')).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    await waitFor(() => expect(sendPromo).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId('promo-mark-sent-btn')).toBeEnabled(),
+    );
+    expect(screen.queryByTestId('promo-sent-banner')).toBeNull();
+
+    // The failed send recorded nothing, so a later disappearance from the
+    // hidden-messaged list means someone else contacted this player.
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([], { contact_sync: SYNC_CONFIGURED }),
+    );
+    await act(async () => {
+      await qc.invalidateQueries();
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId('promo-message-text')).toBeNull(),
+    );
+  });
+
+  it('drops a stale pick whose SFG contact appears after a filter change', async () => {
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([candidate], { contact_sync: SYNC_CONFIGURED }),
+    );
+    setup();
+    fireEvent.click(await screen.findByTestId('promo-select-42'));
+    expect(await screen.findByTestId('promo-message-text')).toBeInTheDocument();
+
+    // Showing messaged players after picking refetches under new filters,
+    // and that list now carries an imported contact for the pick.
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse(
+        [
+          {
+            ...candidate,
+            contact_recorded: true,
+            external_contact: SFG_CONTACT,
+          },
+        ],
+        { contact_sync: SYNC_CONFIGURED },
+      ),
+    );
+    fireEvent.click(screen.getByTestId('promo-hide-messaged'));
+    await waitFor(() =>
+      expect(vi.mocked(getCandidates).mock.lastCall?.[2]).toMatchObject({
+        hideMessaged: false,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId('promo-message-text')).toBeNull(),
+    );
+    expect(screen.getByTestId('promo-select-42')).toBeDisabled();
+  });
+
+  it('keeps a pick that only a changed search filter leaves out', async () => {
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([candidate], { contact_sync: SYNC_CONFIGURED }),
+    );
+    setup();
+    fireEvent.click(await screen.findByTestId('promo-select-42'));
+    expect(await screen.findByTestId('promo-message-text')).toBeInTheDocument();
+
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([], { contact_sync: SYNC_CONFIGURED }),
+    );
+    fireEvent.change(screen.getByTestId('promo-search'), {
+      target: { value: 'zz' },
+    });
+    await waitFor(() =>
+      expect(vi.mocked(getCandidates).mock.lastCall?.[2]).toMatchObject({
+        q: 'zz',
+      }),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.getByTestId('promo-message-text')).toBeInTheDocument();
+  });
+
   it('keeps the compose panel and its undo after this promoter marks the send', async () => {
     vi.mocked(getCandidates).mockResolvedValue(
       candidatesResponse([candidate], { contact_sync: SYNC_CONFIGURED }),

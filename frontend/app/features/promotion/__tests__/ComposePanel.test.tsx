@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -218,6 +224,46 @@ describe('ComposePanel', () => {
     expect(
       screen.queryByTestId('promo-no-points-note'),
     ).not.toBeInTheDocument();
+  });
+
+  it('shows only the earned outcome after a send, not the refreshed no-points note', async () => {
+    // The send invalidates the render, which now says a repeat would not earn.
+    vi.mocked(renderPromo)
+      .mockResolvedValueOnce({ text: RENDERED, warnings: [], will_earn: true })
+      .mockResolvedValue({ text: RENDERED, warnings: [], will_earn: false });
+    vi.mocked(sendPromo).mockResolvedValue(sendResult('pending'));
+    renderPanel();
+    await loadedText();
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    expect(await screen.findByTestId('promo-earned-hint')).toHaveTextContent(
+      'You earned 1 point.',
+    );
+    await waitFor(() =>
+      expect(vi.mocked(renderPromo).mock.calls.length).toBeGreaterThan(1),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.queryByTestId('promo-no-points-note')).toBeNull();
+    expect(screen.queryByTestId('promo-earn-points-note')).toBeNull();
+  });
+
+  it('pluralizes points earned above one', async () => {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
+    vi.mocked(sendPromo).mockResolvedValue({
+      ...sendResult('pending'),
+      points_awarded: 3,
+    });
+    renderPanel();
+    await loadedText();
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    expect(await screen.findByTestId('promo-earned-hint')).toHaveTextContent(
+      'You earned 3 points.',
+    );
   });
 
   it('links to the recipient Discord profile', async () => {

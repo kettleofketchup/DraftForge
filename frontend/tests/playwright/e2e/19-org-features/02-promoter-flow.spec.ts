@@ -77,8 +77,10 @@ test.describe('Org features: promoter flow @cicd', () => {
     await expect(banner).toBeVisible();
     await expect(banner.getByTestId(`promo-undo-${send.id}`)).toBeVisible();
     await expect(page.getByTestId('promo-earned-hint')).toHaveText(
-      'You earned 1 points.',
+      'You earned 1 point.',
     );
+    // The banner is the outcome; the refreshed render must not contradict it.
+    await expect(page.getByTestId('promo-no-points-note')).toHaveCount(0);
     await expect(page.getByTestId('promo-mark-sent-btn')).toBeDisabled();
 
     // Org staff stands in as the second sender: this player already has an earning send for the event.

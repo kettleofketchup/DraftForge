@@ -54,6 +54,8 @@ export interface ComposePanelProps {
   onSent?: (send: PromoSendResult | null) => void;
   /** Mark sent was pressed; the list may drop this player before onSent. */
   onSending?: () => void;
+  /** Mark sent failed without recording anything; undoes onSending. */
+  onSendFailed?: () => void;
   /** The org records promotion contacts in SFG, so writeback state is shown. */
   syncConfigured?: boolean;
   /** The recipient turned out to be already contacted; close this panel. */
@@ -76,6 +78,7 @@ export function ComposePanel({
   templates,
   onSent,
   onSending,
+  onSendFailed,
   syncConfigured = false,
   onStale,
 }: ComposePanelProps) {
@@ -159,6 +162,7 @@ export function ComposePanel({
             onStale?.();
             return;
           }
+          onSendFailed?.();
           toast.error(message || 'Could not record the message');
         },
       },
@@ -321,7 +325,10 @@ export function ComposePanel({
             </div>
           </div>
 
-          {rendered.data &&
+          {/* Once sent, the banner reports the outcome; the render refetched
+              by that send would otherwise say a repeat earns nothing. */}
+          {sent == null &&
+            rendered.data &&
             !rendered.data.will_earn &&
             access.canViewContributions && (
               <p
@@ -332,14 +339,16 @@ export function ComposePanel({
                 for this event, or your role doesn't earn points.
               </p>
             )}
-          {rendered.data?.will_earn && access.canViewContributions && (
-            <p
-              className="text-sm text-muted-foreground"
-              data-testid="promo-earn-points-note"
-            >
-              Marking this sent earns you contribution points.
-            </p>
-          )}
+          {sent == null &&
+            rendered.data?.will_earn &&
+            access.canViewContributions && (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="promo-earn-points-note"
+              >
+                Marking this sent earns you contribution points.
+              </p>
+            )}
 
           <div className="flex flex-wrap items-center gap-2">
             <SecondaryButton
@@ -374,7 +383,8 @@ export function ComposePanel({
                 className="ml-1 text-primary"
                 data-testid="promo-earned-hint"
               >
-                You earned {sent.points_awarded} points.
+                You earned {sent.points_awarded}{' '}
+                {sent.points_awarded === 1 ? 'point' : 'points'}.
               </span>
             )}
             {syncConfigured && writebackText && (
