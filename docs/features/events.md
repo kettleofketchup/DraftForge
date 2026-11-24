@@ -103,7 +103,7 @@ Deleting a series (`events.services.teardown_event_repeater`) also deletes its `
 | Mark as interested | Players who sign up are marked interested on Discord |
 | Signup channel | Post an embed to a channel for reaction-based signups |
 | Pre-day announcement | Post a reminder in a channel before the event |
-| Signup reminder | DM subscribers who haven't signed up (recurring series only) |
+| Signup reminder | DM series subscribers who haven't signed up (recurring series only) |
 | Profile reminder | DM users to complete their profile (Steam ID, MMR) |
 | Attendance reminder | Post a reminder in the announcement channel N hours before the event. Replies aren't tracked; use the [ready check](events/roll-call.md) to require confirmation |
 | Scheduled-event cleanup | Cancelling or deleting an event deletes its Discord scheduled event (`events.tasks.delete_discord_scheduled_event`), so nothing is left orphaned in the guild |
@@ -156,7 +156,9 @@ Users can subscribe to event repeaters (mail icon on repeater cards). Two distin
 | When | What is sent | Gated by |
 |---|---|---|
 | An event is created from the series | A **channel embed** announcing the new event | `EventRepeater.discord_notify_new_events`, then the event's `discord_announcement` **and** `discord_announcement_channel_id` |
-| `discord_signup_reminder_hours` before the event | A **DM to each subscriber** who hasn't signed up yet | `discord_signup_reminder` (series only) |
+| `discord_signup_reminder_hours` before the event | A **DM to each series subscriber** who hasn't signed up yet | `discord_signup_reminder` (series only); sent only while signups are open and the event has a Discord scheduled event |
+
+Subscribers without a linked Discord account get no DM, and a cancelled signup counts as not signed up.
 
 Subscribing is what earns you the pre-event signup-reminder DM. The new-event announcement is a channel post, not a DM, and it is silently skipped when no announcement channel is configured.
 
