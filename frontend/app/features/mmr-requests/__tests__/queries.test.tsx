@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getOrganizationUsers } from '~/components/api/orgAPI';
 import { orgUsersQueryKey } from '~/components/organization/hooks/useOrgUsersQuery';
+import type { OrgMemberType } from '~/components/organization/schemas';
 import type { UserType } from '~/components/user/types';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
@@ -45,6 +46,30 @@ vi.mock('~/components/api/leagueAPI', () => ({
 }));
 
 const VIEWER = 42;
+
+function orgMember(
+  pk: number,
+  username: string,
+  gameMmrs: Record<string, number> = {},
+): OrgMemberType {
+  return {
+    orgUserPk: pk + 100,
+    pk,
+    username,
+    nickname: null,
+    guildNickname: null,
+    discordNickname: null,
+    avatar: null,
+    discordId: null,
+    positions: null,
+    steam_account_id: null,
+    avatarUrl: null,
+    mmr: gameMmrs['1'] ?? 0,
+    mmr_game_type: 1,
+    game_mmrs: gameMmrs,
+    league_mmr: null,
+  };
+}
 
 function setup() {
   const client = new QueryClient({
@@ -159,8 +184,8 @@ describe('useApproveMmrRequest', () => {
       approved_mmr: 4750,
     });
     vi.mocked(getOrganizationUsers).mockResolvedValue([
-      { pk: 42, username: 'member', game_mmrs: { '1': 4750 } } as UserType,
-      { pk: 8, username: 'other' } as UserType,
+      orgMember(42, 'member', { '1': 4750 }),
+      orgMember(8, 'other'),
     ]);
     const upsert = vi.spyOn(useUserCacheStore.getState(), 'upsert');
     const { client, wrapper, invalid } = setup();

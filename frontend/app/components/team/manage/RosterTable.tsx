@@ -17,6 +17,7 @@ export interface RosterTableProps {
   team: ManagedTeam;
   pending: boolean;
   onRequestAction: (request: PendingTeamAction) => void;
+  onReplaceCaptain?: () => void;
   /** Test id namespace: the table is `${prefix}-table`, row menus `${prefix}-actions-<pk>`. */
   testIdPrefix?: string;
   columns?: readonly RosterColumnId[];
@@ -35,6 +36,7 @@ export function RosterTable({
   team,
   pending,
   onRequestAction,
+  onReplaceCaptain,
   testIdPrefix = 'team-roster',
   columns = DEFAULT_ROSTER_COLUMNS,
   toolbarActions,
@@ -46,10 +48,11 @@ export function RosterTable({
         team,
         testIdPrefix,
         onRequestAction,
+        onReplaceCaptain,
         columns,
         pending,
       }),
-    [team, testIdPrefix, onRequestAction, columns, pending],
+    [team, testIdPrefix, onRequestAction, onReplaceCaptain, columns, pending],
   );
   const counts = [
     plural(team.members.length, 'member'),
