@@ -35,13 +35,10 @@ class PositionsModel(models.Model):
 
     def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
-        # Positions live on user.DotaUserProfile (default reverse accessor
-        # dotauserprofile_set). Walk it + bubbled parents. Org positions are
-        # pos_1..5 booleans on org.PlayerDotaProfile (no PositionsModel FK) —
-        # cacheops auto-invalidates that model; not this loop.
-        # .nocache(): invalidation must walk the live rows — a cached join
-        # (invalidated only on DotaUserProfile) could miss a freshly linked
-        # profile and skip its parents.
+        # Invalidate linked DotaUserProfiles and their parents. .nocache():
+        # a cached join (invalidated only on DotaUserProfile) could miss a
+        # freshly linked profile. Org positions are pos_1..5 booleans on
+        # org.PlayerDotaProfile, which cacheops invalidates on its own.
         dota_profiles = list(
             self.dotauserprofile_set.select_related("base_profile__user").nocache()
         )
@@ -228,7 +225,6 @@ class ProfileClaimRequest(models.Model):
                 fields=["claimer", "status"], name="app_profile_claimer_2ce297_idx"
             ),
         ]
-        # Prevent duplicate pending requests for same claimer+target
         constraints = [
             models.UniqueConstraint(
                 fields=["claimer", "target_user"],
