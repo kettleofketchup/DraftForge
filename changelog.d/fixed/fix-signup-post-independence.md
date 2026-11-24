@@ -1,1 +1,0 @@
-- Discord signup posts and their updates now work without enabling announcements.

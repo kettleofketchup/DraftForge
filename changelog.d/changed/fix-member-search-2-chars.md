@@ -1,1 +1,0 @@
-- Member search (Add Member dialog and stand-in picker) now starts at 2 characters, so members with two-letter names can be found. The "Press Enter to search" fallback is gone.

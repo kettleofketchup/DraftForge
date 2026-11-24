@@ -1,1 +1,0 @@
-- The event form now warns when "Mention signed-up members before start" can't send because no signup post will exist, and the task schedule says why start mention is misconfigured.
