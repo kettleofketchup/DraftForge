@@ -89,7 +89,7 @@ A player who is a member, captain or deputy of a team in the tournament is never
 When an event reaches `max_players`, new RSVPs go to the waitlist:
 
 - **Position tracking** — each waitlisted player gets a queue position
-- **Automatic promotion** — when someone cancels or is rejected, the next waitlisted player is promoted
+- **Automatic promotion** — when someone cancels or is rejected, the next waitlisted player is promoted. A seat freed by staff moving a player to the waitlist stays open for staff to fill
 - **Waitlist tab** — always visible on the event page with count, even when empty
 
 ---

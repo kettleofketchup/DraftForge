@@ -8,7 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from django.db import transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Model, Q, QuerySet
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -26,7 +26,11 @@ from events.models import Event
 from events.staff import dedupe_host_helpers
 from league.models import LeagueLog, LeagueUser
 from league.models_rating import LeagueMatchParticipant, LeagueRating
-from org.accounts import repoint_org_attribution
+from org.accounts import (
+    delete_counts,
+    merge_member_dependents,
+    repoint_org_attribution,
+)
 from org.mmr import merge_org_mmrs
 from org.models import OrgLog, OrgUser, PromoSend
 from org.permissions import IsOrgStaff
@@ -273,7 +277,23 @@ class ClaimRequestViewSet(
         standing.merge_users(target_user, claimer, member_pairs=pairs)
         repoint_org_attribution(target_user, claimer)
         repoint_chat_attribution(target_user, claimer)
-        for org_user, _ in pairs:
+
+        def discard(obj: Model) -> None:
+            pk = obj.pk
+            deleted = delete_counts(obj)
+            log.info(
+                "profile_claim_row_discarded",
+                system="org",
+                subsystem="claim",
+                model=obj._meta.label,
+                pk=pk,
+                deleted=deleted,
+                claimer_id=claimer.pk,
+                target_user_id=target_user.pk,
+            )
+
+        for org_user, keep_ou in pairs:
+            merge_member_dependents(org_user, keep_ou, discard=discard)
             org_user.delete()
 
         staffed = Event.objects.nocache().filter(

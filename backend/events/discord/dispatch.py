@@ -55,12 +55,14 @@ def _log_queued(event: "Event", task: str) -> None:
 
 
 def notify_event_announced(event: "Event") -> None:
-    """Dispatch announcement task if discord_announcement is enabled."""
-    if not event.discord_announcement:
-        _log_skipped(event, "discord_announcement_disabled", "send_event_announcement")
-        return
-    if not event.discord_announcement_channel_id:
-        _log_skipped(event, "no_channel_id", "send_event_announcement")
+    """Dispatch the signup post task when either destination is available."""
+    if not (
+        (event.discord_post_signups and event.discord_post_signups_channel_id)
+        or (event.discord_announcement and event.discord_announcement_channel_id)
+    ):
+        _log_skipped(
+            event, "no_signup_or_announcement_destination", "send_event_announcement"
+        )
         return
     # local: cycle: events.tasks -> events.discord -> dispatch
     from events.tasks import send_event_announcement
@@ -71,12 +73,14 @@ def notify_event_announced(event: "Event") -> None:
 
 
 def notify_signup_changed(event: "Event") -> None:
-    """Queue one debounced edit of the announcement embed per burst of changes."""
-    if not event.discord_announcement:
-        _log_skipped(event, "discord_announcement_disabled", "send_signup_update")
-        return
-    if not event.discord_announcement_channel_id:
-        _log_skipped(event, "no_channel_id", "send_signup_update")
+    """Queue one debounced signup post edit per burst of changes."""
+    if not (
+        (event.discord_post_signups and event.discord_post_signups_channel_id)
+        or (event.discord_announcement and event.discord_announcement_channel_id)
+    ):
+        _log_skipped(
+            event, "no_signup_or_announcement_destination", "send_signup_update"
+        )
         return
     mark_dirty(event.pk)
     if not mark_pending(event.pk):

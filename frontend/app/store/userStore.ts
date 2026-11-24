@@ -8,7 +8,6 @@ import {
   fetchUsers,
   get_dtx_members,
   getGames,
-  getLeagues,
   getTeams,
   getTournaments,
   getTournamentsBasic,
@@ -102,12 +101,8 @@ interface UserState {
   getOrganization: (pk: number, force?: boolean) => Promise<void>;
 
   // Leagues
-  leagues: LeagueType[];
   league: LeagueType | null;
-  leaguesOrgId: number | null | 'all'; // Track which org's leagues are loaded ('all' for no filter)
-  setLeagues: (leagues: LeagueType[]) => void;
   setLeague: (league: LeagueType | null) => void;
-  getLeagues: (orgId?: number) => Promise<void>;
 }
 export const useUserStore = create<UserState>()(
   persist(
@@ -434,26 +429,8 @@ export const useUserStore = create<UserState>()(
       },
 
       // Leagues
-      leagues: [] as LeagueType[],
       league: null,
-      leaguesOrgId: null,
-      setLeagues: (leagues) => set({ leagues }),
       setLeague: (league) => set({ league }),
-      getLeagues: async (orgId?: number) => {
-        const targetOrgId = orgId ?? 'all';
-        // Skip if already loaded for this org
-        if (get().leaguesOrgId === targetOrgId && get().leagues.length > 0) {
-          log.debug('Leagues already loaded for org:', targetOrgId);
-          return;
-        }
-        try {
-          const response = await getLeagues(orgId);
-          set({ leagues: response, leaguesOrgId: targetOrgId });
-          log.debug('Leagues fetched successfully:', response);
-        } catch (error) {
-          log.error('Error fetching leagues:', error);
-        }
-      },
     }),
     {
       name: 'dtx-storage', // sessionStorage key

@@ -87,10 +87,10 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
         transition-colors"
       data-testid={`claim-card-${claim.id}`}
     >
-      <div className="flex flex-col gap-2 p-6">
-        <div className="flex items-start gap-4">
+      <div className="flex flex-col gap-2 p-3 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
           {/* Claimer info */}
-          <div className="flex items-center gap-3 flex-1">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <UserAvatar
               user={{
                 pk: claim.claimer,
@@ -101,8 +101,10 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
               size="lg"
               border="primary"
             />
-            <div>
-              <div className="font-medium">{claim.claimer_username}</div>
+            <div className="min-w-0">
+              <div className="font-medium break-words">
+                {claim.claimer_username}
+              </div>
               <div className="text-sm text-muted-foreground">
                 wants to claim
               </div>
@@ -111,33 +113,44 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
 
           {/* Arrow */}
           <div className="flex items-center text-muted-foreground">
-            <span className="text-2xl">&rarr;</span>
+            <span className="rotate-90 text-2xl sm:rotate-0">&rarr;</span>
           </div>
 
           {/* Target profile info */}
-          <div className="flex-1">
-            <div className="font-medium">
-              {claim.target_nickname || `Steam ID: ${claim.target_steamid}`}
+          {claim.target_user === null ? (
+            <div className="min-w-0 flex-1">
+              <div
+                className="font-medium break-words"
+                data-testid="claim-target-merged"
+              >
+                Merged into {claim.claimer_username}
+              </div>
             </div>
-            <div className="text-sm text-muted-foreground">
-              {mmrs.length === 0
-                ? 'No MMR'
-                : mmrs.map(([g, v], i) => (
-                    <Fragment key={g}>
-                      {i > 0 && ' \u00b7 '}
-                      <span data-testid={`claim-target-mmr-${GAME_SLUG[g]}`}>
-                        {`${GAME_LABEL[g]} ${v} MMR`}
-                      </span>
-                    </Fragment>
-                  ))}
-              {claim.target_steamid && (
-                <span className="ml-2">Steam: {claim.target_steamid}</span>
-              )}
+          ) : (
+            <div className="min-w-0 flex-1">
+              <div className="font-medium break-words">
+                {claim.target_nickname || `Steam ID: ${claim.target_steamid}`}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {mmrs.length === 0
+                  ? 'No MMR'
+                  : mmrs.map(([g, v], i) => (
+                      <Fragment key={g}>
+                        {i > 0 && ' \u00b7 '}
+                        <span data-testid={`claim-target-mmr-${GAME_SLUG[g]}`}>
+                          {`${GAME_LABEL[g]} ${v} MMR`}
+                        </span>
+                      </Fragment>
+                    ))}
+                {claim.target_steamid && (
+                  <span className="ml-2">Steam: {claim.target_steamid}</span>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Status and actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {getStatusBadge(claim.status)}
 
             {claim.status === 'pending' && (
