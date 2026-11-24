@@ -17,7 +17,7 @@ const approved = {
 };
 const published = {
   status: 'opened', url: 'https://example.invalid/pull/1', number: 1,
-  head: 'abc123', report: 'Opened',
+  head: 'abc123', screenshotFiles: [], report: 'Opened',
 };
 
 async function run(overrides = {}) {
@@ -46,6 +46,27 @@ test('opens a PR only after comments and publication preflight', async () => {
   assert(labels.indexOf('pr-preflight') < labels.indexOf('open-pr'));
   assert.equal(result.publication.status, 'opened');
   assert.match(result.monitoringHandoff, /parent session/);
+  assert.match(result.monitoringHandoff, /invoke \/pr for PR #1/);
+  assert.match(result.monitoringHandoff, /30-minute/);
+  assert.doesNotMatch(result.monitoringHandoff, /five-minute/);
+  assert.equal(result.screenshotsRequired, false);
+  assert.match(result.monitoringHandoff, /No screenshots:/);
+});
+
+test('hands off required screenshots when non-test frontend code changed', async () => {
+  const files = ['frontend/app/lib/logger.ts', 'frontend/app/routes/home.tsx'];
+  const { result } = await run({ 'open-pr': { ...published, screenshotFiles: files } });
+  assert.equal(result.screenshotsRequired, true);
+  assert.match(result.monitoringHandoff, /Screenshots REQUIRED/);
+  assert.match(result.monitoringHandoff, /frontend\/app\/lib\/logger\.ts/);
+  assert.match(result.monitoringHandoff, /never the skip comment/);
+});
+
+test('preflight and publication prompts run the frontend screenshot gate', async () => {
+  const { calls } = await run();
+  for (const label of ['pr-preflight', 'open-pr']) {
+    assert.match(calls.find(call => call.label === label).prompt, /frontend-screenshot-gate\.sh/);
+  }
 });
 
 for (const label of ['verify:full', 'comment-review', 'final-review:1', 'pr-preflight']) {
@@ -86,5 +107,5 @@ test('publication prompt pins approval, prohibits force push and delegates monit
   assert.match(prompt, /abc123/);
   assert.match(prompt, /HEAD still equals the approved hash/);
   assert.match(prompt, /Never force-push/);
-  assert.match(prompt, /do not start a session-only monitor inside this short-lived agent/);
+  assert.match(prompt, /do not start a session-only monitor or capture screenshots inside this short-lived agent/);
 });
