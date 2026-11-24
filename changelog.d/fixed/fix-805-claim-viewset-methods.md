@@ -1,1 +1,0 @@
-- The claim requests API only lists, shows, approves and rejects claims; creating, editing or deleting one now returns 405 instead of a server error or an unlogged delete (#805)
