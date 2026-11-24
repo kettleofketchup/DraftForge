@@ -752,7 +752,28 @@ throttled per user. Leaderboards (`rating`, `points`, `rating.<trait>`) go throu
 |--------|----------|-------------|
 | POST | `/api/organizations/{id}/leadership/events/{event_id}/release/` | Release an event's captain review results when the org requires staff release. Body `{"captains": [org_user_id, ...]}` (1–64 ids, all or nothing) or `{}` (every pending captain except your own). `200 {"released": [ids], "skipped": [{"org_user_id", "code"}]}` (skip codes: `own_snapshot`, `voided`, `window_open`, `not_enough_reviews`, `already_released`); `400` malformed body, `403 not_permitted` / `cannot_release_own_reviews`, `404` event or captain not in the org, `409 release_not_required` / `already_released` / `window_open` / `not_enough_reviews` / `snapshot_voided` / `nothing_to_release` |
 
+### Event voice presence
+
+Both methods require event operator access (organization or league staff, host or helpers).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/events/{id}/voice-presence/` | Returns `feed` with guild and channel heartbeat ages (seconds, or null), `voice_channel_id` and `presences` with user IDs, source, present flag and feed timestamps. |
+| POST | `/api/events/{id}/voice-presence/` | Body: `{"user_id": int, "present": bool, "reason": str}`; reason is required, stripped, 1–500 characters. Returns `presence`, `ledger_entry_id`, `confirm` (result or null). 400 `invalid` or `not_signed_up`; 403 for non-operators; 404 for an unknown event or user. |
+
+See [Voice presence](../features/events/roll-call.md#voice-presence) for confirmation and manual-pin rules.
+
 ### Internal
+
+Voice feed routes require `X-Internal-Token` and an allowed source IP. Logical outcomes are 200; invalid payloads are 400, unauthorized calls are 401/403. IDs are strings of 1–20 digits.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/internal/discord/voice/watched-channels/` | Returns `channels` (`guild_id`, `channel_id`, `event_ids`), `ttl_seconds` (60), `available`. |
+| POST | `/api/internal/discord/voice/state/` | Body: `guild_id`, `discord_user_id`, nullable `before_channel_id` and `after_channel_id`. |
+| POST | `/api/internal/discord/voice/snapshot/` | Body: `guild_id`, `channels` (`channel_id`, `member_ids`), optional `missing_channel_ids`. Maximum 100 channels and 5000 member IDs per channel; duplicate member IDs are collapsed. |
+
+Both POSTs return `success`, `detail`, and counts (`events`, `joined`, `left`, `confirmed`, `unknown_users`, `not_signed_up`). A snapshot refreshes heartbeat only after each visible channel has applied; missing channels are not cleared.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

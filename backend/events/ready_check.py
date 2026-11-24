@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, Final
 
@@ -12,7 +13,12 @@ from django.utils import timezone as tz
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
 from events.capacity import lock_event
-from events.constants import EventState, SignupAction, SignupStatus
+from events.constants import (
+    EventState,
+    SignupAction,
+    SignupStatus,
+    VoicePresenceSource,
+)
 from events.ledger import (
     SignupActor,
     record_ready_check_transition,
@@ -22,12 +28,14 @@ from events.ledger import (
 from events.models import (
     Event,
     EventSignup,
+    EventVoicePresence,
     ReadyCheck,
     ReadyCheckEntry,
     RollCallMode,
     SignupLedgerEntry,
 )
 from events.ready_check_constants import (
+    PRESENCE_FRESH,
     ReadyCheckConfirmVia,
     ReadyCheckEntryState,
     ReadyCheckLowCompletionAction,
@@ -89,6 +97,7 @@ __all__ = [
     "resolve_held_ready_check",
     "staff_confirm_signup",
     "transition_with_ready_check",
+    "trusted_present_user_ids",
 ]
 
 log = get_logger(__name__)
@@ -188,6 +197,48 @@ def _reset_confirmed(
     )
 
 
+def trusted_present_user_ids(event: Event, now: datetime) -> set[int]:
+    return set(
+        EventVoicePresence.objects.filter(
+            event=event,
+            present=True,
+            source=VoicePresenceSource.FEED,
+            guild_id=event.organization.discord_server_id or "",
+            channel_id=event.event_voice_channel_id,
+            last_seen_at__gte=now - PRESENCE_FRESH,
+        ).values_list("user_id", flat=True)
+    )
+
+
+def _confirm_voice_present(
+    locked: Event,
+    check: ReadyCheck,
+    entries: Sequence[ReadyCheckEntry],
+    now: datetime,
+) -> set[int]:
+    if check.settings_snapshot.get("voice_presence_confirms") is not True:
+        return set()
+    pending = [
+        entry for entry in entries if entry.state == ReadyCheckEntryState.PENDING
+    ]
+    if not pending:
+        return set()
+    present = trusted_present_user_ids(locked, now)
+    confirmed: set[int] = set()
+    for entry in pending:
+        if entry.user_id not in present:
+            continue
+        result = confirm_ready(
+            locked,
+            entry.user,
+            via=ReadyCheckConfirmVia.VOICE,
+            actor=SignupActor.voice(entry.user),
+        )
+        if result == ConfirmResult.CONFIRMED:
+            confirmed.add(entry.user_id)
+    return confirmed
+
+
 @transaction.atomic
 def open_ready_check(event: Event, *, actor: SignupActor) -> OpenResult:
     locked = lock_event(event)
@@ -260,6 +311,7 @@ def open_ready_check(event: Event, *, actor: SignupActor) -> OpenResult:
             correlation_id=correlation_id,
         )
 
+    voice_confirmed = _confirm_voice_present(locked, check, entries, now)
     roster = sync_event_roster(locked)
     invalidate_after_commit(locked, *signups)
 
@@ -267,6 +319,7 @@ def open_ready_check(event: Event, *, actor: SignupActor) -> OpenResult:
         entry.user_id
         for entry in entries
         if entry.state == ReadyCheckEntryState.PENDING
+        and entry.user_id not in voice_confirmed
     )
     confirmed_count = len(entries) - len(pending_user_ids)
     record_ready_check_transition(
@@ -279,6 +332,7 @@ def open_ready_check(event: Event, *, actor: SignupActor) -> OpenResult:
             "asked": len(entries),
             "pending": len(pending_user_ids),
             "confirmed": confirmed_count,
+            "voice_confirmed": len(voice_confirmed),
             "transitioned": transitioned,
         },
     )
@@ -303,6 +357,7 @@ def open_ready_check(event: Event, *, actor: SignupActor) -> OpenResult:
         "asked": len(entries),
         "pending": len(pending_user_ids),
         "confirmed": confirmed_count,
+        "voice_confirmed": len(voice_confirmed),
         "transitioned": transitioned,
         "actor_user_id": _actor_user_id(actor),
     }
@@ -364,6 +419,7 @@ def confirm_ready(
     *,
     via: ReadyCheckConfirmVia | str,
     actor: SignupActor,
+    caused_by: SignupLedgerEntry | None = None,
 ) -> ConfirmResult:
     locked = lock_event(event)
     check = live_ready_check(locked, lock=True)
@@ -420,6 +476,7 @@ def confirm_ready(
         before=before,
         after=snapshot(signup),
         reason="ready_check_confirmed",
+        caused_by=caused_by,
         correlation_id=f"rc{check.pk}:confirm",
     )
     invalidate_after_commit(signup, locked)
