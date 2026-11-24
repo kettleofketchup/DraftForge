@@ -9,8 +9,8 @@ Drive a PR from "branch pushed" to an actionable report without the user babysit
 
 1. Resolve PR state (reuse the open PR or create one).
 2. Check every feature the PR adds has Playwright E2E coverage; flag gaps and offer a subagent to write the specs.
-3. Post before/after screenshots of visual changes as a PR comment, or a one-line comment saying there are none.
-4. Monitor main conflicts and PR CI/CD every five minutes in a progressive diagnose → repair → verify → push → recheck loop; keep watching after green checks until the PR closes or monitoring is stopped.
+3. Post before/after screenshots as a PR comment whenever the diff touches non-test frontend code; a skip comment only when it touches none.
+4. Monitor main conflicts and PR CI/CD every 30 minutes in a progressive diagnose → repair → verify → push → recheck loop; keep watching after green checks until the PR closes or monitoring is stopped.
 5. Pull the failed jobs' error lines and report findings with next steps.
 6. Offer pre-existing problems the branch found as GitHub issues and separate fix PRs.
 
@@ -33,14 +33,14 @@ pr_json=$(gh pr view --json number,state,headRefName,baseRefName,url,comments 2>
 ```
 
 - Empty `pr_json` → Phase 2 (create).
-- `OPEN` → start the [five-minute conflict and CI/CD monitor](references/monitoring-main.md), then Phase 3 (E2E coverage).
+- `OPEN` → start the [30-minute conflict and CI/CD monitor](references/monitoring-main.md), then Phase 3 (E2E coverage).
 - `MERGED` / `CLOSED` → report and stop; ask whether to open a new one.
 
 ### Phase 2 — Create the PR (if missing)
 
 Title/body from commits when the branch has 1–3 commits; otherwise ask the user once for a title. HEREDOC body with `## Summary` and `## Test plan`. Add a `changelog.d/` fragment first if the change is user- or operator-visible ([changelog skill](../changelog/SKILL.md)). Exact commands: [references/creating-the-pr.md](references/creating-the-pr.md).
 
-After creating the PR, start the [five-minute conflict and CI/CD monitor](references/monitoring-main.md). Reuse one active monitor per PR; run it alongside the remaining phases.
+After creating the PR, start the [30-minute conflict and CI/CD monitor](references/monitoring-main.md). Reuse one active monitor per PR; run it alongside the remaining phases.
 
 ### Phase 3 — E2E coverage
 
@@ -50,14 +50,16 @@ Phase 3 is done when every behaviour is covered by a spec, has a dispatched suba
 
 ### Phase 4 — Screenshots
 
-Runs for a new PR, for a reused PR with no screenshot comment yet (no comment body starting `## Screenshots` or `No screenshots:`; a `Screenshots pending:` comment does not count), and after new commits that change the UI. Gate on the diff:
+Runs for a new PR, for a reused PR with no screenshot comment yet (no comment body starting `## Screenshots` or `No screenshots:`; a `Screenshots pending:` comment does not count), and after new commits that touch non-test frontend code. Gate on the diff:
 
 ```bash
-gh pr diff "$PR" --name-only | grep -E '^frontend/app/(components|routes|features)/|^frontend/app/app\.css$|tokens'
+gh pr diff "$PR" --name-only | .claude/skills/pr/scripts/frontend-screenshot-gate.sh
 ```
 
-- No match → `gh pr comment "$PR" --body "No screenshots: this PR has no visual changes (<what it touches instead>)."` and go to Phase 5.
-- Match → follow [references/screenshots.md](references/screenshots.md) end to end: before from the merge-base, after from the PR head, same pages/states/data/viewport, headless capture on each worktree's own test stack slot, every PNG viewed, images on the `pr-assets/<n>` branch, one comment with a before/after table per change, stacks down and slots released.
+The gate prints every changed file under `frontend/` except tests, test utilities, test configs and Markdown (exit 0 = screenshots required). Test: `.claude/skills/pr/scripts/frontend-screenshot-gate.test.sh`.
+
+- No output (exit 1) → `gh pr comment "$PR" --body "No screenshots: this PR changes no non-test frontend code (<what it touches instead>)."` and go to Phase 5.
+- Any output → screenshots are required; a skip comment is not allowed. Files that are not visual on their own (`lib/`, `store/`, `hooks/`, API schemas, `package.json`, build config) still get shots of the pages and states that run the changed code. Follow [references/screenshots.md](references/screenshots.md) end to end: before from the merge-base, after from the PR head, same pages/states/data/viewport, headless capture on each worktree's own test stack slot, every PNG viewed, images on the `pr-assets/<n>` branch, one comment with a before/after table per change, stacks down and slots released.
 
 Every `just` call in that phase is one Bash call of the form `cd <worktree> && just <recipe>  # allow-cd`. A bare `cd` does not carry over to the next call, and a populate recipe that runs in the main checkout wipes its test DB.
 
@@ -69,7 +71,7 @@ Phase 4 is done when the PR has a new screenshot comment (or the skip / pending 
 timeout 30m gh pr checks "$PR" --watch --interval 60
 ```
 
-Run this initial CI watch in the background alongside the five-minute monitor; never block conflict events waiting for it. Narrate in single lines. Polling detail and timeout handling: [references/monitoring-ci.md](references/monitoring-ci.md). A 30-minute CI snapshot does not stop the [progressive monitor](references/monitoring-main.md); diagnose and repair new-head failures through its loop.
+Run this initial CI watch in the background alongside the 30-minute monitor; never block conflict events waiting for it. Narrate in single lines. Polling detail and timeout handling: [references/monitoring-ci.md](references/monitoring-ci.md). A 30-minute CI snapshot does not stop the [progressive monitor](references/monitoring-main.md); diagnose and repair new-head failures through its loop.
 
 ### Phase 6 — Analyse and report
 
@@ -83,7 +85,7 @@ Always run this, even when CI is green. Collect every problem the branch's work 
 
 - Push through creation pre-flight and verified conflict/CI repairs only. Report dirty, divergent or already-unpushed branches rather than overwriting work; honor explicit no-commit/no-push instructions and tool approvals.
 - Repair PR-introduced CI failures progressively; surface pre-existing failures through Phase 7 and pause on ambiguous or infrastructure blockers.
-- Merge main into the PR branch only when conflicts arise. Never merge the PR itself. Monitoring is session-only; re-arm expired Monitor windows while the PR remains open.
+- Merge main into the PR branch only when conflicts arise. Never merge the PR itself. Monitoring is session-only and checks every 30 minutes; re-arm each expired Monitor window while the PR remains open.
 - Extracts error lines; raw `--log-failed` output stays out of the chat.
 
 ## References
