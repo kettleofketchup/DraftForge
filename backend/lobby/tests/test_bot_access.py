@@ -604,12 +604,19 @@ class DotaBotAccessSnapshotTests(SimpleTestCase):
             "765611979602657290",
             "76561190000000001",
             " 76561197960265729",
+            "76561202255233024",
+            "86561197960265729",
         ):
             with self.subTest(value=value):
                 self.assertIsNone(steam_identity(value))
 
     def test_identity_lower_bound_inclusive(self) -> None:
         self.assertIsNotNone(steam_identity("76561197960265728"))
+
+    def test_identity_accepts_full_account_id_range(self) -> None:
+        for value in ("76561201960265729", "76561202255233023"):
+            with self.subTest(value=value):
+                self.assertIsNotNone(steam_identity(value))
 
     def test_identity_null_until_logon(self) -> None:
         row = self.only_row(

@@ -37,8 +37,9 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 MIN_BOT_CALL_SECONDS = 1.0
-STEAM_ID_RE = re.compile(r"^7656119\d{10}$")
+STEAM_ID_RE = re.compile(r"[0-9]{17}")
 STEAM_ID_MIN = 76561197960265728
+STEAM_ID_MAX = STEAM_ID_MIN + 0xFFFFFFFF
 CONNECTING_STATES = frozenset(
     {
         "connecting",
@@ -75,7 +76,11 @@ def bot_status(bot: BotView) -> BotStatus:
 
 
 def steam_identity(steam_id: str | None) -> BotIdentity | None:
-    if not steam_id or not STEAM_ID_RE.match(steam_id) or int(steam_id) < STEAM_ID_MIN:
+    if (
+        not steam_id
+        or not STEAM_ID_RE.fullmatch(steam_id)
+        or not STEAM_ID_MIN <= int(steam_id) <= STEAM_ID_MAX
+    ):
         return None
     return BotIdentity(
         kind="steam",
