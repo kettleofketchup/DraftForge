@@ -81,6 +81,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `lobby` | `api`, `webhook`, `events`, `broadcast`, `signals` | — | `lobby/views_internal.py`, `lobby/events.py`, `lobby/broadcast.py`, `lobby/signals.py` | Internal lobby API (claim/accepted/conflict), webhook receiver (bad signature, ignored, applied), event application (`lobby_gameid_conflict`), websocket broadcast failures, auto-create/close/flip triggers. Never the lobby password |
 | `lobby` | `views` | — | `lobby/views.py` | Organizer and player lobby API: create/close/launch/invite requests and dota_lobby errors they hit (problem `code`, upstream status). Never the lobby password |
 | `lobby` | `tasks`, `reconcile` | — | `lobby/tasks.py` | Create/close/flip/backfill tasks with the dota_lobby problem `code`; the 60 s reconcile sweep (`lobby_reconcile_summary` counts) |
+| `lobby` | `bot_access` | — | `lobby/bot_access/` | Bot league access reads and refreshes: upstream failure `code`/status, refresh counts (`bot_access_refreshed`), provider fallback (`bot_access_provider_fallback`), unknown bot states, throttled requests (`bot_access_throttled`). Never bot names, usernames or Steam IDs; failed per-bot calls log `lobby/client` `http_path` as the template `/v1/bots/{name}/leagues` |
 | `common` | `utils` | — | `common/utils.py` | Shared utility warnings (CI/IP detection) |
 
 Add new systems/subsystems as features grow. Keep systems coarse (feature area), subsystems functional (what role the code plays).
