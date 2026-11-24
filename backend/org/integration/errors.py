@@ -43,6 +43,9 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     "not_acceptable": "Not acceptable.",
     "mapping_changed": "The mapping changed; restart the read.",
     "identity_conflict": "Two subjects resolve to the same identity.",
+    "source_content_conflict": (
+        "A stored source contact has different source facts; nothing was imported."
+    ),
     "subject_source_unavailable": "A subject source is unavailable; retry later.",
     "request_too_large": "Request body too large.",
     "unsupported_media_type": "Content type must be application/json.",

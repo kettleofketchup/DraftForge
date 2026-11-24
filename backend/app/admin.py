@@ -7,6 +7,7 @@ from django.db.models import QuerySet
 from django.http import HttpRequest
 from django.utils.text import capfirst
 
+from org.integration.lifecycle import cancel_or_redact_promotion_identity
 from org.promotion.services import release_earning_sends
 from org.standing import api as standing
 
@@ -45,6 +46,7 @@ class CustomUserAdmin(admin.ModelAdmin):
     def delete_model(self, request: HttpRequest, obj: CustomUser) -> None:
         with transaction.atomic():
             release_earning_sends(obj)
+            cancel_or_redact_promotion_identity(obj)
             standing.on_user_deleted(obj, actor=request.user)
             super().delete_model(request, obj)
 
@@ -54,6 +56,7 @@ class CustomUserAdmin(admin.ModelAdmin):
         with transaction.atomic():
             for user in queryset:
                 release_earning_sends(user)
+                cancel_or_redact_promotion_identity(user)
                 standing.on_user_deleted(user, actor=request.user)
             super().delete_queryset(request, queryset)
 

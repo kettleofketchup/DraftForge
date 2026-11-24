@@ -13,6 +13,7 @@ from events.models import Event
 from org.contributions.services import promo_points
 from org.feature_errors import not_permitted, require_org_staff, require_promoter
 from org.features import FeatureKey, org_has_feature
+from org.integration.contacts import contact_sync_status
 from org.models import Organization, PromoSend, PromoTemplate
 from org.permissions import has_org_staff_access
 from org.promotion.recipients import (
@@ -43,6 +44,7 @@ from org.promotion.serializers import (
 )
 from org.promotion.services import (
     PROMOTABLE_STATES,
+    ContactAlreadyRecorded,
     PromoSendError,
     can_undo,
     record_promo_send,
@@ -213,7 +215,15 @@ def promotion_candidates(request: Request, org_id: int, event_id: int) -> Respon
         q=params["q"],
     )
     _fill_can_undo(rows, request.user, org)
-    return Response({"source": source, "n": n, "days": days, "rows": rows})
+    return Response(
+        {
+            "source": source,
+            "n": n,
+            "days": days,
+            "rows": rows,
+            "contact_sync": contact_sync_status(org, event),
+        }
+    )
 
 
 @api_view(["POST"])
@@ -305,6 +315,10 @@ def promotion_sends(request: Request, org_id: int, event_id: int) -> Response:
             recipient=recipient,
             template=template,
             text=data["text"],
+        )
+    except ContactAlreadyRecorded as exc:
+        return Response(
+            {"code": exc.code, "detail": str(exc)}, status=status.HTTP_409_CONFLICT
         )
     except PromoSendError as exc:
         raise ValidationError({exc.field: [str(exc)]}) from exc

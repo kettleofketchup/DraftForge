@@ -37,6 +37,10 @@ from tournament.models import Tournament
 # Close, reopen, merge and delete counts include the registered conduct and
 # leadership tracks. Sends add the outbox row (existing-row check, membership
 # lookup, insert); user and membership deletes null the external-receipt links.
+# A send also takes the event mutation lock (SQLite: an early event write,
+# then the event read) and checks for an imported SFG contact. A merge looks
+# up the dropped account's receipts; a user delete quarantines its receipts
+# and cancels its unsent outbox rows (one UPDATE each).
 CLOSE_ADMIN_COMPLETE_QUERIES = 46
 CLOSE_AUTO_CANCEL_QUERIES = 42
 CLOSE_ADMIN_CANCEL_QUERIES = 12
@@ -47,14 +51,14 @@ PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 39
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 203
-MERGE_CLAIM_QUERIES = 184
-DELETE_API_QUERIES = 110
-DELETE_ADMIN_QUERIES = 161
+MERGE_DISCORD_QUERIES = 204
+MERGE_CLAIM_QUERIES = 185
+DELETE_API_QUERIES = 112
+DELETE_ADMIN_QUERIES = 163
 DELETE_ADMIN_CONFIRM_QUERIES = 53
-PROMO_SEND_QUERIES = 26
+PROMO_SEND_QUERIES = 28
 PROMO_UNDO_QUERIES = 8
-PROMO_RELEASE_QUERIES = 124
+PROMO_RELEASE_QUERIES = 126
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8

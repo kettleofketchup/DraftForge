@@ -25,6 +25,7 @@ from social_django.utils import load_strategy
 from app.tasks.avatar_refresh import refresh_avatars_batched
 from draft.models import DraftRound, DraftTeam
 from league.models import League
+from org.integration.lifecycle import cancel_or_redact_promotion_identity
 from org.membership import member_organization_ids
 from org.models import Organization, OrgUser
 from org.permissions import has_org_staff_access
@@ -219,6 +220,7 @@ class UserView(viewsets.ModelViewSet):
     def perform_destroy(self, instance: CustomUser) -> None:
         with transaction.atomic():
             release_earning_sends(instance)
+            cancel_or_redact_promotion_identity(instance)
             standing.on_user_deleted(instance, actor=self.request.user)
             instance.delete()
 

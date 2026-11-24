@@ -17,8 +17,9 @@ from events.models import Event
 from org.api_tokens.auth import gate_token_request
 from org.api_tokens.operations import Operation
 from org.integration.base import IntegrationAPIView
+from org.integration.contacts import import_contact_receipts
 from org.integration.errors import invalid
-from org.integration.parsers import parse_limit
+from org.integration.parsers import json_body, parse_limit
 from org.integration.subjects import list_event_recipients
 from telemetry.logging import get_logger
 
@@ -64,3 +65,13 @@ class EventRecipientsView(IntegrationAPIView):
             has_more=page["next_cursor"] is not None,
         )
         return Response(page)
+
+
+class ContactReceiptsView(IntegrationAPIView):
+    """POST one atomic batch of SFG contact receipts for a bound event."""
+
+    def post(self, request: Request, org_id: int) -> Response:
+        org = gate_token_request(request, org_id, operation=Operation.PROMOTION_IMPORT)
+        query_params(request, ())
+        result = import_contact_receipts(org, json_body(request))
+        return Response(result)

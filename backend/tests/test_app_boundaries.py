@@ -894,9 +894,12 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
     },
     "org": {
         "app/admin.py": BackEdge(
-            frozenset({"api", "release_earning_sends"}),
+            frozenset(
+                {"api", "cancel_or_redact_promotion_identity", "release_earning_sends"}
+            ),
             "CustomUser admin delete checks standing blockers, releases promo "
-            "earning sends and records standing on user deletion",
+            "earning sends, quarantines SFG promotion receipts and records "
+            "standing on user deletion",
         ),
         "app/discord_accounts.py": BackEdge(
             frozenset(
@@ -907,6 +910,7 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "demote_colliding_earning_sends",
                     "merge_member_dependents",
                     "merge_org_mmrs",
+                    "reconcile_promotion_identity",
                     "repoint_org_attribution",
                 }
             ),
@@ -949,13 +953,15 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
                     "OrgUser",
                     "Organization",
                     "api",
+                    "cancel_or_redact_promotion_identity",
                     "has_org_staff_access",
                     "member_organization_ids",
                     "release_earning_sends",
                 }
             ),
-            "UserView org-staff checks, profile claims and deletion standing; "
-            "current_user membership ids; home stats counts Organization",
+            "UserView org-staff checks, profile claims, deletion standing and "
+            "SFG promotion receipts; current_user membership ids; home stats "
+            "counts Organization",
         ),
     },
     "league": {
