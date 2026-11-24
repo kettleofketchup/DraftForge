@@ -6,6 +6,7 @@ import random
 from datetime import date, datetime, timedelta
 
 from django.db import transaction
+from django.db.models import QuerySet
 from django.utils import timezone
 
 from app.models import CustomUser, PositionsModel
@@ -30,7 +31,12 @@ OWN_STEP_CONFIG_PKS: frozenset[int] = frozenset(
 )
 
 
-def create_dynamic_tournament(config: DynamicTournamentConfig, force: bool = False):
+def create_dynamic_tournament(
+    config: DynamicTournamentConfig,
+    force: bool = False,
+    *,
+    users: QuerySet[CustomUser] | None = None,
+) -> Tournament | None:
     """Create a tournament from a DynamicTournamentConfig.
 
     Args:
@@ -61,13 +67,12 @@ def create_dynamic_tournament(config: DynamicTournamentConfig, force: bool = Fal
         )
         return None
 
+    users = CustomUser.objects.all() if users is None else users
     # Get users with Steam IDs for team membership
     users_with_steam = list(
-        CustomUser.objects.filter(steam_account_id__isnull=False).exclude(
-            steam_account_id=0
-        )
+        users.filter(steam_account_id__isnull=False).exclude(steam_account_id=0)
     )
-    all_users = list(CustomUser.objects.all())
+    all_users = list(users)
 
     if len(all_users) < config.user_count:
         print(

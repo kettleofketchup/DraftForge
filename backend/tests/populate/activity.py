@@ -1,5 +1,6 @@
 """Discord Activity bracket fixture: "Activity Bracket Test" with bracket games."""
 
+from app.models import CustomUser
 from tests.data.tournaments import ACTIVITY_BRACKET_CONFIG
 from tests.populate.steam import populate_bracket_games_for_tournament
 from tests.populate.tournaments import create_dynamic_tournament
@@ -19,7 +20,12 @@ DOUBLE_ELIM_4_TEAMS: list[dict[str, object]] = [
 
 
 def populate_activity_bracket_data(force: bool = False) -> None:
-    tournament = create_dynamic_tournament(ACTIVITY_BRACKET_CONFIG, force=force)
+    users = CustomUser.objects.filter(
+        org_memberships__organization_id=ACTIVITY_BRACKET_CONFIG.organization_pk
+    )
+    tournament = create_dynamic_tournament(
+        ACTIVITY_BRACKET_CONFIG, force=force, users=users
+    )
     if tournament is None:
         return
     games = Game.objects.filter(tournament=tournament)
