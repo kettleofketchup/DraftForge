@@ -23,7 +23,7 @@ import { SubscriberList } from '~/components/events/SubscriberList';
 import {
   DAY_LABELS,
   FREQUENCY_LABELS,
-  type EventType,
+  type EventListItem,
 } from '~/components/events/schemas';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
@@ -70,7 +70,7 @@ function EventGrid({
   events,
   opacity,
 }: {
-  events: EventType[];
+  events: EventListItem[];
   opacity?: boolean;
 }) {
   if (events.length === 0) return null;

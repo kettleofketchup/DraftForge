@@ -22,7 +22,7 @@ import {
   EditEventModal,
   EditRepeaterModal,
   EventStrip,
-  type EventType,
+  type EventListItem,
 } from '~/components/events';
 import { RepeatersList } from '~/components/events/RepeatersList';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
@@ -164,9 +164,9 @@ function EventsList({
   onEdit,
   onEditSeries,
 }: {
-  events: EventType[];
+  events: EventListItem[];
   loading: boolean;
-  onEdit?: (event: EventType) => void;
+  onEdit?: (event: EventListItem) => void;
   onEditSeries?: (repeaterId: number) => void;
 }) {
   if (loading) {
@@ -212,7 +212,7 @@ export default function OrganizationDetailPage() {
   const currentUser = useUserStore((state) => state.currentUser);
   const [createLeagueOpen, setCreateLeagueOpen] = useState(false);
   const [createEventOpen, setCreateEventOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<EventType | null>(null);
+  const [editingEvent, setEditingEvent] = useState<EventListItem | null>(null);
   const [editingRepeaterId, setEditingRepeaterId] = useState<number | null>(
     null,
   );
