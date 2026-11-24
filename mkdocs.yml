@@ -102,6 +102,7 @@ nav:
       - Organization Settings: features/organization-settings.md
       - Org MMR per Game: features/org-mmr.md
       - MMR Sync API: features/org-mmr-sync-api.md
+      - Lobby Bot League Access: features/lobby-bot-league-access.md
       - Planned:
           - Overview: features/planned/index.md
           - Team Management & Seasons: features/planned/team-management.md
