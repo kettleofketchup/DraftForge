@@ -451,6 +451,11 @@ class TeamSubInRequestSerializer(TeamActionRequestSerializer):
     )
 
 
+class TeamReplaceCaptainRequestSerializer(TeamActionRequestSerializer):
+    user_id = serializers.PrimaryKeyRelatedField(queryset=CustomUser.objects.all())
+    mark_outgoing_dropout = serializers.BooleanField(required=False, default=True)
+
+
 class TeamRenameRequestSerializer(TeamActionRequestSerializer):
     # Blank/length/unchanged checks belong to the service so codes have one source.
     name = serializers.CharField(allow_blank=True, trim_whitespace=False)

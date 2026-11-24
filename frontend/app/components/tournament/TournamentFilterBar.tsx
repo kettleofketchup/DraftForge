@@ -109,7 +109,7 @@ export function TournamentFilterBar({
   const leagues =
     scope.kind === 'mine'
       ? loadedLeagues.filter((l) => {
-          const orgId = l.organization?.pk ?? l.organization_id;
+          const orgId = l.organization?.pk;
           return orgId != null && (memberOrgIds ?? []).includes(orgId);
         })
       : loadedLeagues;

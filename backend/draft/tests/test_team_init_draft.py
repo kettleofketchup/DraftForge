@@ -17,6 +17,7 @@ from tests.populate.utils import ensure_org_user
 from tournament.models import Game, Team, TeamLog, Tournament
 from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.serializers.draft import users_remaining_pks
+from tournament.services.team_management import replace_captain
 from tournament.state import tournament_state_queryset
 from user.tests.test_cacheops_integration import _redis_reachable
 
@@ -413,6 +414,20 @@ class InitDraftEndpointTests(TestCase):
             {self.cap_a.pk, self.cap_b.pk},
         )
         self.assertEqual(draft.draft_rounds.count(), 8)
+
+    def test_rebuild_refused_after_replace_captain(self) -> None:
+        self.assertEqual(self.post(REBUILD_URL).status_code, 201)
+        replace_captain(
+            self.team_a, self.p1, actor=self.admin, via=TeamLogVia.WEB, reason="r"
+        )
+        before = self.team_snapshot()
+
+        resp = self.post(REBUILD_URL)
+
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.data["code"], "team_changes_logged")
+        self.assertEqual(self.team_snapshot(), before)
+        self.assertEqual(Team.objects.get(pk=self.team_a.pk).captain_id, self.p1.pk)
 
     def test_draft_teams_are_the_eligible_teams(self) -> None:
         outsider = self.make_user("teams_outsider", 1000)

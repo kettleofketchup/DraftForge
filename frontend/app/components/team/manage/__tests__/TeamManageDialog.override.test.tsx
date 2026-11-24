@@ -124,6 +124,43 @@ describe('TeamManageDialog overrides', () => {
     expectReasonNeverLogged(REASON);
   });
 
+  it('retries a replace captain override with the acknowledged codes', async () => {
+    const path = `/teams/${TEAM_ID}/replace-captain/`;
+    const eligibility: OverrideRequired = {
+      code: 'override_required',
+      blocked: false,
+      violations: [
+        {
+          ...violation,
+          code: 'event_unmet',
+          rule: 'staff-override',
+          category: 'eligibility' as const,
+          message: 'Not signed up for the event',
+        },
+      ],
+    };
+    axiosMock.post
+      .mockRejectedValueOnce(axiosError(409, eligibility))
+      .mockResolvedValueOnce({ data: managedTeam });
+    renderDialog();
+    fireEvent.click(await screen.findByTestId('team-replace-captain-trigger'));
+    fireEvent.click(await screen.findByTestId('team-captain-team-row-4'));
+    await screen.findByTestId('team-action-dialog');
+    await typeReasonAndConfirm(REASON);
+    await screen.findByTestId('override-warning-dialog');
+    fireEvent.click(screen.getByTestId('override-confirm'));
+    await waitFor(() => expect(axiosMock.post).toHaveBeenCalledTimes(2));
+    expect(axiosMock.post.mock.calls[1]).toEqual([
+      path,
+      {
+        reason: REASON,
+        acknowledged_codes: ['event_unmet'],
+        user_id: 4,
+        mark_outgoing_dropout: true,
+      },
+    ]);
+  });
+
   it('sends the edited override reason as the recorded reason', async () => {
     axiosMock.post
       .mockRejectedValueOnce(axiosError(409, confirmable))
